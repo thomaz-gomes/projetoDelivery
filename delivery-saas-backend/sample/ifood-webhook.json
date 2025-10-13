@@ -1,0 +1,15 @@
+{
+  "merchantId": "3366226",
+  "order": {
+    "displayId": "#1001",
+    "customer": { "name": "Cliente Teste", "phone": "55999999999" },
+    "delivery": {
+      "deliveryAddress": {
+        "formattedAddress": "Rua A, 123 - Centro",
+        "coordinates": { "latitude": -29.686, "longitude": -53.806 }
+      }
+    },
+    "items": [{ "name": "Pizza", "quantity": 1, "price": 45.5 }],
+    "total": { "orderAmount": 55.5, "deliveryFee": 10 }
+  }
+}

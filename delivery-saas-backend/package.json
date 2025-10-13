@@ -1,0 +1,43 @@
+{
+  "name": "delivery-saas-backend",
+  "version": "1.0.0",
+  "description": "Backend do sistema delivery SAAS com iFood integration",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "prisma:generate": "prisma generate",
+    "migrate": "prisma migrate dev --name init",
+    "db:seed": "node src/seed.js",
+    "seed:manual": "node src/seed.js",
+    "worker:ifood": "node src/workers/ifoodPoller.js"
+  },
+  "keywords": [
+    "delivery",
+    "saas",
+    "ifood",
+    "express",
+    "prisma",
+    "vue"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^6.17.0",
+    "axios": "^1.12.2",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "qrcode": "^1.5.4",
+    "xlsx": "^0.18.5",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "prisma": "^6.17.0"
+  }
+}

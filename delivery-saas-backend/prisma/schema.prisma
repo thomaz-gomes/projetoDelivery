@@ -1,0 +1,200 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  RIDER
+}
+
+enum OrderStatus {
+  EM_PREPARO
+  SAIU_PARA_ENTREGA
+  CONCLUIDO
+  CANCELADO
+}
+
+model Company {
+  id                String             @id @default(uuid())
+  name              String
+  createdAt         DateTime           @default(now())
+  users             User[]
+  riders            Rider[]
+  orders            Order[]
+  whatsAppInstances WhatsAppInstance[]
+  Customer          Customer[]
+  apiIntegrations   ApiIntegration[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
+  role      Role
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  rider     Rider?
+}
+
+model Rider {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  name      String
+  whatsapp  String
+  dailyRate Decimal?
+  active    Boolean  @default(true)
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id])
+  orders    Order[]
+}
+
+model Order {
+  id            String               @id @default(uuid())
+  companyId     String
+  company       Company              @relation(fields: [companyId], references: [id])
+  externalId    String?              @unique
+  displayId     String?
+  status        OrderStatus          @default(EM_PREPARO)
+  customerName  String?
+  customerPhone String?
+  customerId    String?
+  customer      Customer?            @relation(fields: [customerId], references: [id])
+  address       String?
+  latitude      Float?
+  longitude     Float?
+  total         Decimal              @default(0)
+  deliveryFee   Decimal?
+  payload       Json?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  items         OrderItem[]
+  riderId       String?
+  rider         Rider?               @relation(fields: [riderId], references: [id])
+  tickets       Ticket[]
+  histories     OrderStatusHistory[]
+}
+
+model OrderItem {
+  id       String  @id @default(uuid())
+  orderId  String
+  order    Order   @relation(fields: [orderId], references: [id])
+  name     String
+  quantity Int
+  price    Decimal
+  notes    String?
+}
+
+model Ticket {
+  id        String    @id @default(uuid())
+  orderId   String
+  order     Order     @relation(fields: [orderId], references: [id])
+  tokenHash String
+  expiresAt DateTime?
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model OrderStatusHistory {
+  id        String       @id @default(uuid())
+  orderId   String
+  order     Order        @relation(fields: [orderId], references: [id])
+  from      OrderStatus?
+  to        OrderStatus
+  byUserId  String?
+  byRiderId String?
+  reason    String?
+  createdAt DateTime     @default(now())
+}
+
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  provider    String
+  eventId     String?   @unique
+  payload     Json
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  status      String    @default("PENDING")
+  error       String?
+}
+
+model WhatsAppInstance {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id])
+  instanceName String   @unique
+  displayName  String?
+  status       String   @default("DISCONNECTED") // CONNECTED / QRCODE / etc.
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Customer {
+  id        String            @id @default(uuid())
+  companyId String
+  company   Company           @relation(fields: [companyId], references: [id])
+  fullName  String
+  cpf       String?           @unique
+  whatsapp  String?           @unique // telefone principal normalizado (somente dígitos e com DDI)
+  phone     String? // opcional (outro telefone)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  addresses CustomerAddress[]
+  orders    Order[]
+}
+
+model CustomerAddress {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  label        String? // ex: Casa, Trabalho
+  street       String?
+  number       String?
+  complement   String?
+  neighborhood String?
+  city         String?
+  state        String?
+  postalCode   String?
+  country      String? @default("BR")
+  latitude     Float?
+  longitude    Float?
+  formatted    String?
+  isDefault    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ApiIntegration {
+  id           String  @id @default(uuid())
+  companyId    String
+  company      Company @relation(fields: [companyId], references: [id])
+  provider     String
+  clientId     String?
+  clientSecret String?
+  merchantId   String?
+  enabled      Boolean @default(true)
+
+  // ---- OAuth (Authorization by store owner) ---- 
+  authMode       String    @default("AUTH_CODE") // AUTH_CODE | CLIENT_CREDENTIALS
+  linkCode       String? // código de vínculo obtido na etapa 1
+  codeVerifier   String? // verificador retornado com o link code
+  authCode       String? // código fornecido pelo lojista (etapa 5)
+  accessToken    String?
+  refreshToken   String?
+  tokenType      String? // Bearer
+  tokenExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, provider], name: "companyId_provider")
+}

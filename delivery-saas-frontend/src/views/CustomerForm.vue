@@ -1,0 +1,121 @@
+<script setup>
+import { ref } from 'vue';
+import { useCustomersStore } from '../stores/customers';
+import { useRouter } from 'vue-router';
+
+const store = useCustomersStore();
+const router = useRouter();
+
+const customer = ref({
+  fullName: '',
+  cpf: '',
+  whatsapp: '',
+  phone: '',
+  addresses: [{ street: '', number: '', city: '', state: '', zip: '' }]
+});
+
+const loading = ref(false);
+const error = ref('');
+
+async function save() {
+  loading.value = true;
+  error.value = '';
+  try {
+    await store.save(customer.value);
+    router.push('/customers');
+  } catch (err) {
+    error.value = err?.response?.data?.message || 'Erro ao salvar cliente';
+  } finally {
+    loading.value = false;
+  }
+}
+
+function addAddress() {
+  customer.value.addresses.push({ street: '', number: '', city: '', state: '', zip: '' });
+}
+
+function removeAddress(index) {
+  customer.value.addresses.splice(index, 1);
+}
+</script>
+
+<template>
+  <div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2 class="h4 fw-semibold m-0">Novo Cliente</h2>
+      <button class="btn btn-outline-secondary btn-sm" @click="$router.back()">Voltar</button>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <form @submit.prevent="save" class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Nome completo</label>
+            <input v-model="customer.fullName" type="text" class="form-control" required />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">CPF</label>
+            <input v-model="customer.cpf" type="text" class="form-control" placeholder="000.000.000-00" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">WhatsApp</label>
+            <input v-model="customer.whatsapp" type="text" class="form-control" placeholder="(00) 00000-0000" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Telefone</label>
+            <input v-model="customer.phone" type="text" class="form-control" placeholder="(00) 0000-0000" />
+          </div>
+
+          <div class="col-12 mt-3">
+            <h5 class="fw-semibold">Endereços</h5>
+          </div>
+
+          <div
+            v-for="(addr, i) in customer.addresses"
+            :key="i"
+            class="border rounded p-3 mb-2 bg-light"
+          >
+            <div class="row g-2">
+              <div class="col-md-5">
+                <label class="form-label">Rua</label>
+                <input v-model="addr.street" type="text" class="form-control" />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Número</label>
+                <input v-model="addr.number" type="text" class="form-control" />
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Cidade</label>
+                <input v-model="addr.city" type="text" class="form-control" />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">UF</label>
+                <input v-model="addr.state" type="text" maxlength="2" class="form-control text-uppercase" />
+              </div>
+            </div>
+
+            <div class="mt-2 d-flex justify-content-between align-items-center">
+              <div class="text-muted small">CEP: <input v-model="addr.zip" type="text" class="form-control form-control-sm d-inline w-auto" /></div>
+              <button type="button" class="btn btn-sm btn-outline-danger" @click="removeAddress(i)">Remover</button>
+            </div>
+          </div>
+
+          <div>
+            <button type="button" class="btn btn-outline-primary btn-sm" @click="addAddress">
+              ➕ Adicionar endereço
+            </button>
+          </div>
+
+          <div v-if="error" class="alert alert-danger mt-3">{{ error }}</div>
+
+          <div class="mt-4">
+            <button type="submit" class="btn btn-primary" :disabled="loading">
+              <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
+              Salvar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</template>
