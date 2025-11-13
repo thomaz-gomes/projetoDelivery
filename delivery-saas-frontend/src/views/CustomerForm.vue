@@ -1,10 +1,13 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useCustomersStore } from '../stores/customers';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 
 const store = useCustomersStore();
 const router = useRouter();
+const route = useRoute();
+
+const isEdit = !!route.params.id;
 
 const customer = ref({
   fullName: '',
@@ -17,11 +20,48 @@ const customer = ref({
 const loading = ref(false);
 const error = ref('');
 
+onMounted(async () => {
+  if (isEdit) {
+    loading.value = true;
+    try {
+      const data = await store.get(route.params.id);
+      // map backend shape to form
+      customer.value.fullName = data.fullName || '';
+      customer.value.cpf = data.cpf || '';
+      customer.value.whatsapp = data.whatsapp || '';
+      customer.value.phone = data.phone || '';
+      customer.value.addresses = (data.addresses || []).map(a => ({
+        id: a.id,
+        label: a.label,
+        street: a.street,
+        number: a.number,
+        complement: a.complement,
+        neighborhood: a.neighborhood,
+        city: a.city,
+        state: a.state,
+        zip: a.postalCode,
+        isDefault: a.isDefault,
+        formatted: a.formatted,
+      }));
+      if (!customer.value.addresses.length) customer.value.addresses = [{ street: '', number: '', city: '', state: '', zip: '' }];
+    } catch (e) {
+      console.error(e);
+      error.value = 'Falha ao carregar cliente';
+    } finally {
+      loading.value = false;
+    }
+  }
+});
+
 async function save() {
   loading.value = true;
   error.value = '';
   try {
-    await store.save(customer.value);
+    if (isEdit) {
+      await store.update(route.params.id, customer.value);
+    } else {
+      await store.create(customer.value);
+    }
     router.push('/customers');
   } catch (err) {
     error.value = err?.response?.data?.message || 'Erro ao salvar cliente';
@@ -42,7 +82,7 @@ function removeAddress(index) {
 <template>
   <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h2 class="h4 fw-semibold m-0">Novo Cliente</h2>
+  <h2 class="h4 fw-semibold m-0">{{ isEdit ? 'Editar Cliente' : 'Novo Cliente' }}</h2>
       <button class="btn btn-outline-secondary btn-sm" @click="$router.back()">Voltar</button>
     </div>
 

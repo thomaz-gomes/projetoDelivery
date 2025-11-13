@@ -1,7 +1,9 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
+import Swal from 'sweetalert2'
 import { useRoute } from 'vue-router';
 import api from '../api';
+import { bindLoading } from '../state/globalLoading.js';
 import QRCode from 'qrcode';
 
 const route = useRoute();
@@ -10,7 +12,9 @@ const orderId = route.params.id;
 const order = ref(null);
 const qrDataUrl = ref('');
 const loading = ref(true);
+bindLoading(loading);
 const error = ref('');
+  const assocLoading = ref(false);
 
 function fmt(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function sum(arr) { return arr.reduce((a, b) => a + Number(b || 0), 0); }
@@ -62,6 +66,19 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+async function associateCustomer() {
+  if (!order.value) return;
+  assocLoading.value = true;
+  try {
+    const { data } = await api.post(`/orders/${orderId}/associate-customer`);
+  if (data && data.order) order.value = data.order;
+  await Swal.fire({ icon: 'success', text: 'Cliente associado: ' + (data.customer?.fullName || 'ok') })
+  } catch (e) {
+  console.error(e);
+  await Swal.fire({ icon: 'error', text: 'Falha ao associar cliente: ' + (e?.response?.data?.message || e?.message || 'erro') })
+  } finally { assocLoading.value = false; }
+}
 </script>
 
 <template>
@@ -71,12 +88,17 @@ onMounted(async () => {
     <div v-else>
       <header class="hdr">
         <h1>{{ order.company?.name || 'Minha Empresa' }}</h1>
-        <div class="muted">Comanda / Pedido {{ order.displayId || order.id.slice(0,6) }}</div>
+  <div class="muted">Comanda / Pedido {{ order.displaySimple != null ? String(order.displaySimple).padStart(2,'0') : (order.displayId != null ? String(order.displayId).padStart(2,'0') : order.id.slice(0,6)) }}</div>
         <div class="muted">{{ new Date(order.createdAt).toLocaleString() }}</div>
+        <div v-if="order.payload && order.payload.nfe && order.payload.nfe.nProt" class="protocol small">Protocolo NFe: {{ order.payload.nfe.nProt }}</div>
       </header>
 
       <section class="sec">
-        <div><b>Cliente:</b> {{ order.customerName || '-' }}</div>
+        <div style="display:flex;gap:8px;align-items:center"><div><b>Cliente:</b> {{ order.customerName || '-' }}</div>
+          <div>
+            <button @click="associateCustomer" :disabled="assocLoading">{{ assocLoading ? 'Associando...' : 'Associar cliente' }}</button>
+          </div>
+        </div>
         <div class="small"><b>Endereço:</b> {{ order.address || '-' }}</div>
       </section>
 
@@ -117,9 +139,9 @@ onMounted(async () => {
         <div class="muted small">Escaneie para despachar</div>
       </section>
 
-      <footer class="center small muted">
-        Status: {{ order.status }} • Pedido: {{ order.displayId || order.id }}
-      </footer>
+    <footer class="center small muted">
+  Status: {{ order.status }} • Pedido: {{ order.displaySimple != null ? String(order.displaySimple).padStart(2,'0') : (order.displayId != null ? String(order.displayId).padStart(2,'0') : order.id) }}
+    </footer>
     </div>
   </div>
 </template>
@@ -141,4 +163,5 @@ onMounted(async () => {
 .totals .total { font-weight:700; border-top:1px solid #000; padding-top:4px; }
 img { margin-top:6px; }
 .err { color:crimson; }
+.protocol { display:inline-block; margin-top:6px; background:#e6f7ea; color:#116633; padding:4px 8px; border-radius:6px; font-weight:600; }
 </style>

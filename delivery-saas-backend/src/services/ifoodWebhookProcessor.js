@@ -105,9 +105,16 @@ async function upsertOrder({ companyId, mapped }) {
   };
 
   if (!exists) {
+    // compute displaySimple for today's orders for this company
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const existingCount = await prisma.order.count({ where: { companyId, createdAt: { gte: startOfDay } } });
+    const displaySimple = existingCount + 1;
+
     return prisma.order.create({
       data: {
         ...baseData,
+        displaySimple,
         items: {
           create: mapped.items.map((i) => ({
             name: i.name,

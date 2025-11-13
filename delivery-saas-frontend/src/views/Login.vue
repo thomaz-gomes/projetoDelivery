@@ -52,7 +52,7 @@ async function onSubmit() {
               v-model="password"
               type="password"
               class="form-control"
-              placeholder="••••••••"
+              placeholder="Digite sua senha"
               required
             />
           </div>

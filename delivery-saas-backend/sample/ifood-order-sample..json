@@ -1,0 +1,100 @@
+{
+  "id": "evt-IFTEST-001",
+  "eventId": "evt-IFTEST-001",
+  "provider": "IFOOD",
+  "type": "ORDER_PLACED",
+  "createdAt": "2025-10-27T15:00:00Z",
+  "order": {
+    "id": "ORD-TEST-123456",
+    "displayId": "XPTO-987",
+    "orderTiming": "IMMEDIATE",
+    "orderType": "DELIVERY",
+    "salesChannel": "IFOOD",
+    "category": "FOOD",
+    "createdAt": "2025-10-27T15:00:00Z",
+    "merchant": {
+      "id": "3366226",
+      "name": "Lanchonete do Teste"
+    },
+    "customer": {
+      "id": "cli-001",
+      "name": "João da Silva",
+      "documentNumber": "12345678900",
+      "phone": {
+        "number": "11987654321"
+      }
+    },
+    "delivery": {
+      "mode": "DEFAULT",
+      "description": "Entrega padrão",
+      "deliveredBy": "IFOOD",
+      "deliveryDateTime": "2025-10-27T15:30:00Z",
+      "deliveryAddress": {
+        "streetName": "Rua dos Testes",
+        "streetNumber": "123",
+        "neighborhood": "Centro",
+        "city": "São Paulo",
+        "state": "SP",
+        "country": "BR",
+        "postalCode": "01000000",
+        "formattedAddress": "Rua dos Testes, 123 - Centro - São Paulo/SP",
+        "coordinates": {
+          "latitude": -23.55052,
+          "longitude": -46.633308
+        }
+      },
+      "pickupCode": "ABCD1234"
+    },
+    "items": [
+      {
+        "index": 0,
+        "id": "item-001",
+        "name": "X-Salada",
+        "externalCode": "LANCHE001",
+        "quantity": 1,
+        "unitPrice": 18.5,
+        "totalPrice": 18.5,
+        "observations": "Sem cebola, por favor"
+      },
+      {
+        "index": 1,
+        "id": "item-002",
+        "name": "Batata Frita Média",
+        "externalCode": "BATATA001",
+        "quantity": 1,
+        "unitPrice": 9.9,
+        "totalPrice": 9.9
+      }
+    ],
+    "total": {
+      "subTotal": 28.4,
+      "deliveryFee": 5.99,
+      "orderAmount": 34.39
+    },
+    "payments": {
+      "prepaid": 34.39,
+      "methods": [
+        {
+          "value": 34.39,
+          "currency": "BRL",
+          "method": "CREDIT",
+          "type": "ONLINE",
+          "prepaid": true,
+          "card": {
+            "brand": "VISA"
+          },
+          "transaction": {
+            "authorizationCode": "999888",
+            "acquirerDocument": "000123456789"
+          }
+        }
+      ]
+    },
+    "additionalInfo": {
+      "metadata": {
+        "codigoInternoPdv": "PDV1234",
+        "nomeVendedor": "Marcos"
+      }
+    }
+  }
+}

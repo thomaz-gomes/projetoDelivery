@@ -1,13 +1,71 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>delivery-saas-frontend</title>
+
+    <title>Delivery SaaS — Painel</title>
+
+    <!-- ============================ -->
+    <!-- 🧩 Dependências do QZ Tray -->
+    <!-- ============================ -->
+
+    <!-- RSVP (Promise polyfill necessário) -->
+    <script src="https://cdn.jsdelivr.net/npm/rsvp@4.8.5/dist/rsvp.min.js"></script>
+
+    <!-- SHA-256 (criptografia usada pelo QZ Tray) -->
+    <script src="https://cdn.jsdelivr.net/npm/js-sha256@0.9.0/src/sha256.min.js"></script>
+
+    <!-- Biblioteca principal do QZ Tray -->
+    <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.1.0/qz-tray.js"></script>
+
+    <!-- Fallback seguro (em caso de falha de conexão) -->
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        if (!window.qz) {
+          console.error("❌ QZ Tray não carregado. Verifique scripts ou permissões.");
+        } else {
+          console.log("✅ QZ Tray carregado com sucesso.");
+        }
+
+        // Permitir auto-reconexão para localhost HTTP (ambiente dev)
+        if (window.qz?.security) {
+          qz.security.setCertificatePromise((resolve, reject) => {
+            // Em dev, usamos o modo sem certificado
+            console.warn("⚠️ Usando certificado inseguro (modo DEV).");
+            resolve();
+          });
+
+          qz.security.setSignaturePromise((toSign) => {
+            // Em dev, retorno vazio (sem assinatura)
+            return (resolve, reject) => {
+              resolve(); // sem assinatura
+            };
+          });
+        }
+
+        // Teste inicial automático (opcional)
+        setTimeout(async () => {
+          try {
+            if (!qz.websocket.isActive()) {
+              await qz.websocket.connect();
+              console.log("🖨️ QZ Tray conectado!");
+            }
+          } catch (err) {
+            console.warn("⚠️ Não foi possível conectar ao QZ Tray:", err.message);
+          }
+        }, 2000);
+      });
+    </script>
+
+    <!-- ============================ -->
+    <!-- ⚙️ Estilos do Vue + App -->
+    <!-- ============================ -->
+    <script type="module" crossorigin src="/src/main.js"></script>
+    <link rel="stylesheet" href="/src/assets/main.css" />
   </head>
+
   <body>
     <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
   </body>
 </html>

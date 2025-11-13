@@ -10,6 +10,12 @@ import {
   getIFoodAccessToken,           // garante accessToken válido
 } from '../integrations/ifood/oauth.js';
 
+import {
+  pollIFoodEvents,
+  acknowledgeIFoodEvents,
+  getIFoodOrderDetails,
+} from '../integrations/ifood/orders.js';
+
 export const integrationsRouter = express.Router();
 integrationsRouter.use(authMiddleware);
 
@@ -62,7 +68,8 @@ integrationsRouter.post('/ifood/link/confirm', requireRole('ADMIN'), async (req,
     const r = await exchangeAuthorizationCode({ companyId, authorizationCode });
     res.json(r);
   } catch (e) {
-    res.status(500).json({ message: 'Falha ao confirmar vínculo', error: e.message });
+    console.error('ifood/link/confirm error:', e?.response?.data ?? e);
+    res.status(500).json({ message: 'Falha ao confirmar vínculo', error: e?.message || String(e), details: e?.response?.data ?? null });
   }
 });
 
@@ -73,7 +80,8 @@ integrationsRouter.post('/ifood/token/refresh', requireRole('ADMIN'), async (req
     const r = await refreshAccessToken({ companyId });
     res.json(r);
   } catch (e) {
-    res.status(500).json({ message: 'Falha ao renovar token', error: e.message });
+    console.error('ifood/token/refresh error:', e?.response?.data ?? e);
+    res.status(500).json({ message: 'Falha ao renovar token', error: e?.message || String(e), details: e?.response?.data ?? null });
   }
 });
 
@@ -139,5 +147,47 @@ integrationsRouter.delete('/:provider', requireRole('ADMIN'), async (req, res) =
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ message: 'Erro ao remover integração', error: e.message });
+  }
+});
+
+/**
+ *  🔁 Poll de pedidos (busca eventos)
+ */
+integrationsRouter.post('/ifood/poll', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const events = await pollIFoodEvents(companyId);
+    res.json({ ok: true, count: events.length, events });
+  } catch (e) {
+    console.error('Erro no polling iFood:', e.response?.data || e.message);
+    res.status(500).json({ message: 'Falha ao buscar eventos', error: e.message });
+  }
+});
+
+/**
+ *  📦 Buscar detalhes de um pedido
+ */
+integrationsRouter.get('/ifood/orders/:id', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const order = await getIFoodOrderDetails(companyId, req.params.id);
+    res.json(order);
+  } catch (e) {
+    console.error('Erro ao buscar pedido iFood:', e.response?.data || e.message);
+    res.status(500).json({ message: 'Falha ao buscar pedido', error: e.message });
+  }
+});
+
+/**
+ *  ✅ Confirmar eventos processados
+ */
+integrationsRouter.post('/ifood/ack', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { events } = req.body || {};
+    const r = await acknowledgeIFoodEvents(companyId, events);
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ message: 'Falha ao confirmar eventos', error: e.message });
   }
 });

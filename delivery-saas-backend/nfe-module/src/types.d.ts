@@ -1,0 +1,5 @@
+declare module 'xml2js'
+declare module 'fs-extra'
+declare module 'node-forge'
+declare module 'xml-crypto'
+declare module 'libxmljs2'

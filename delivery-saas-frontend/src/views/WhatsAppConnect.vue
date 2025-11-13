@@ -152,7 +152,7 @@ onMounted(async () => {
     <div class="card">
       <div class="card-body">
         <!-- Linha de seleção e status -->
-        <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <div v-if="instances.length > 0" class="d-flex flex-wrap align-items-center gap-3 mb-3">
           <label class="form-label mb-0">Instância:</label>
           <select v-model="selected" class="form-select w-auto">
             <option v-for="i in instances" :key="i.id" :value="i.instanceName">
@@ -160,6 +160,9 @@ onMounted(async () => {
             </option>
           </select>
           <button class="btn btn-outline-secondary" @click="fetchStatus">Atualizar status</button>
+        </div>
+        <div v-else class="mb-3 text-secondary">
+          Nenhuma instância criada. Crie uma para começar.
         </div>
 
         <div v-if="selected" class="row g-4">
@@ -214,7 +217,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-else class="text-secondary">
+        <div v-else-if="instances.length > 0" class="text-secondary">
           Nenhuma instância selecionada. Crie uma para começar.
         </div>
       </div>

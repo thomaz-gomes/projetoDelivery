@@ -1,0 +1,1 @@
+{"customer":{"name":"Automated Tester","contact":"5511999999999"},"items":[{"name":"Test item","price":1,"quantity":1}],"payment":{"methodCode":"CASH","amount":1},"orderType":"PICKUP"}

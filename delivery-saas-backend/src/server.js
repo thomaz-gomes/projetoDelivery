@@ -1,61 +1,49 @@
-// src/server.js
-import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
+import https from "https";
+import fs from "fs";
+import { app, attachSocket } from "./index.js"; // attachSocket will bind Socket.IO to the server
+import { startWatching } from './fileWatcher.js';
 
-import { authRouter } from './routes/auth.js';
-import { ordersRouter } from './routes/orders.js';
-import { ticketsRouter } from './routes/tickets.js';
-import { webhooksRouter } from './routes/webhooks.js'; // vamos estender este
-import { ridersRouter } from './routes/riders.js';
-import { waRouter } from './routes/wa.js';
-import { customersRouter } from './routes/customers.js';
-import { integrationsRouter } from './routes/integrations.js';
+const options = {
+  key: fs.readFileSync("./ssl/localhost-key.pem"),
+  cert: fs.readFileSync("./ssl/localhost.pem"),
+};
 
-const app = express();
-
-/* CORS (igual você já tinha) */
-const allowed = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  process.env.FRONTEND_ORIGIN,
-].filter(Boolean);
-
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (allowed.includes(origin)) return cb(null, true);
-    return cb(null, false);
-  },
-  credentials: true,
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','X-Requested-With','X-IFood-Signature','X-Signature'],
-  exposedHeaders: ['Content-Type','Authorization'],
-}));
+const DEFAULT_PORT = Number(process.env.PORT) || 3000;
 
 /**
- * ⚠️ IMPORTANTE:
- * Para validar assinatura precisamos do RAW body.
- * Só para a rota do webhook usamos express.raw(),
- * no restante do app mantemos express.json().
+ * Tenta iniciar o servidor HTTPS em `port`. Se o porto estiver em uso,
+ * tenta o próximo porto (port+1) até `retries` tentativas.
  */
-app.use('/webhooks/ifood', express.raw({ type: '*/*', limit: '2mb' }));
+function startServer(port = DEFAULT_PORT, retries = 3) {
+  const server = https.createServer(options, app);
 
-// Demais body parsers
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true }));
+  server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      console.warn(`⚠️ Porta ${port} em uso.`);
+      if (retries > 0) {
+        console.log(`➡️ Tentando porta ${port + 1} (restam ${retries} tentativas)...`);
+        setTimeout(() => startServer(port + 1, retries - 1), 250);
+        return;
+      }
+      console.error(`❌ Todas as tentativas falharam; porta ${port} continua em uso.`);
+      console.error('Use `netstat -ano | findstr :3000` e mate o processo que está usando a porta, ou defina PORT=XXXX');
+      process.exit(1);
+    }
+    console.error('❌ Erro ao iniciar servidor:', err);
+    process.exit(1);
+  });
 
-// Rotas
-app.use('/auth', authRouter);
-app.use('/orders', ordersRouter);
-app.use('/tickets', ticketsRouter);
-app.use('/webhooks', webhooksRouter);     // aqui estará o /webhooks/ifood
-app.use('/riders', ridersRouter);
-app.use('/wa', waRouter);
-app.use('/customers', customersRouter);
-app.use('/integrations', integrationsRouter);
+  server.listen(port, () => {
+    console.log(`✅ HTTPS rodando em https://localhost:${port}`);
+    try {
+      attachSocket(server);
+      console.log('🔌 Socket.IO anexado ao servidor HTTPS');
+      // start file watcher (if any paths configured)
+      startWatching().catch(e => console.error('Failed to start file watcher:', e));
+    } catch (e) {
+      console.error('❌ Falha ao anexar Socket.IO:', e.message || e);
+    }
+  });
+}
 
-app.get('/health', (_, res) => res.json({ ok: true }));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`API on http://localhost:${PORT}`));
+startServer();
