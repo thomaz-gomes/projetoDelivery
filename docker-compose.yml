@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: appdb
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  backend:
+    build:
+      context: ./delivery-saas-backend
+    environment:
+      DATABASE_URL: postgres://app:changeme@db:5432/appdb
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      - migrate
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./delivery-saas-frontend
+    depends_on:
+      - backend
+    ports:
+      - '8080:80'
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: ./delivery-saas-backend
+    command: node scripts/wait-for-db-and-migrate.js
+    environment:
+      DATABASE_URL: postgres://app:changeme@db:5432/appdb
+    depends_on:
+      - db
+    restart: 'no'
+
+volumes:
+  db_data:

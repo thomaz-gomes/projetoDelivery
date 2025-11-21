@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+import { PrismaClient } from '@prisma/client'
+import { execSync } from 'child_process'
+import fs from 'fs'
+import path from 'path'
+
+const prisma = new PrismaClient()
+
+async function waitForDb(retries = 120, delay = 3000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      // simple query to test connection
+      await prisma.$queryRaw`SELECT 1`
+      console.log('Database reachable')
+      return true
+    } catch (err) {
+      const attempt = i + 1
+      console.log(`Database not ready, retrying (${attempt}/${retries})... - ${err && err.message ? err.message : ''}`)
+      await new Promise((r) => setTimeout(r, delay))
+    }
+  }
+  return false
+}
+
+(async () => {
+  try {
+    const ok = await waitForDb()
+    if (!ok) {
+      console.error('Database did not become ready in time')
+      process.exit(1)
+    }
+
+    // If migrations were generated for a different provider (e.g. sqlite)
+    // and we switched to Postgres, Prisma will refuse to deploy. For
+    // local/dev/testing we detect that situation and remove the old
+    // migration history so we can create a new one against Postgres.
+    // Prisma sometimes keeps migration_lock.toml inside prisma/migrations
+    const lockFileCandidates = [
+      path.join(process.cwd(), 'prisma', 'migration_lock.toml'),
+      path.join(process.cwd(), 'prisma', 'migrations', 'migration_lock.toml'),
+      path.join(process.cwd(), 'prisma', 'migrations', 'migration-lock.toml')
+    ]
+    let lockFile = null
+    for (const candidate of lockFileCandidates) {
+      if (fs.existsSync(candidate)) {
+        lockFile = candidate
+        break
+      }
+    }
+    if (lockFile) {
+      try {
+        const lock = fs.readFileSync(lockFile, 'utf8')
+        const providerMatch = lock.match(/provider\s*=\s*"([^"]+)"/)
+        if (providerMatch && providerMatch[1] !== 'postgresql') {
+          console.log(`Detected migration_lock provider=${providerMatch[1]} != postgresql. Removing old migrations and lock file for fresh migration.`)
+          const migrationsDir = path.join(process.cwd(), 'prisma', 'migrations')
+          if (fs.existsSync(migrationsDir)) {
+            fs.rmSync(migrationsDir, { recursive: true, force: true })
+            console.log('Removed prisma/migrations directory')
+          }
+          fs.rmSync(lockFile, { force: true })
+          console.log('Removed prisma migration lock file:', lockFile)
+        }
+      } catch (err) {
+        console.warn('Could not inspect migration_lock.toml:', err && err.message)
+      }
+    }
+
+    console.log('Running prisma generate...')
+    execSync('npx prisma generate', { stdio: 'inherit' })
+
+    console.log('Running prisma migrate deploy...')
+    execSync('npx prisma migrate deploy', { stdio: 'inherit' })
+
+    console.log('Migrations applied successfully')
+    await prisma.$disconnect()
+    process.exit(0)
+  } catch (err) {
+    console.error('Migration script failed:', err)
+    try {
+      await prisma.$disconnect()
+    } catch (_) {}
+    process.exit(1)
+  }
+})()
