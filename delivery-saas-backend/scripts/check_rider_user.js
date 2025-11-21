@@ -1,5 +1,7 @@
+import ensureDatabaseUrl from '../src/configureDatabaseEnv.js'
 import { PrismaClient } from '@prisma/client';
 
+ensureDatabaseUrl()
 const prisma = new PrismaClient();
 
 async function main() {

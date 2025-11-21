@@ -2,8 +2,11 @@
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+import ensureDatabaseUrl from "../configureDatabaseEnv.js";
 import { PrismaClient } from "@prisma/client";
 
+// ensure DATABASE_URL is set correctly before instantiating Prisma
+ensureDatabaseUrl()
 const prisma = new PrismaClient();
 
 // 🔍 Função auxiliar para mostrar info do arquivo
