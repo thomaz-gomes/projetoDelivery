@@ -1,7 +1,9 @@
 // src/seed.js
 import bcrypt from 'bcryptjs';
+import ensureDatabaseUrl from './configureDatabaseEnv.js'
 import { PrismaClient } from '@prisma/client';
 
+ensureDatabaseUrl()
 const prisma = new PrismaClient();
 
 async function main() {

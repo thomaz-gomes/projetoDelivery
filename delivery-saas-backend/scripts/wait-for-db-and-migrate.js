@@ -1,9 +1,13 @@
 #!/usr/bin/env node
+import 'dotenv/config'
+import ensureDatabaseUrl from '../src/configureDatabaseEnv.js'
 import { PrismaClient } from '@prisma/client'
 import { execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 
+// construct DATABASE_URL from parts if needed before creating PrismaClient
+ensureDatabaseUrl()
 const prisma = new PrismaClient()
 
 async function waitForDb(retries = 120, delay = 3000) {
