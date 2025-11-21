@@ -4,6 +4,9 @@
   "description": "Backend do sistema delivery SAAS com iFood integration",
   "main": "src/server.js",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "nodemon --ignore prisma/dev.db src/server.js",
     "start": "node src/server.js",
