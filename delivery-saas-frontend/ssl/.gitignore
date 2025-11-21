@@ -1,0 +1,4 @@
+/
+# Ignore any local dev certificates. Do NOT commit private keys.
+* 
+!.gitignore

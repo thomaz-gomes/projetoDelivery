@@ -1,0 +1,26 @@
+{
+  "certPath": "./certs/cert.pfx",
+  "certPassword": "senhaDoCertificado",
+  "csc": "SEU_CSC_AQUI",
+  "cscId": "ID_DO_CSC",
+  "environment": "homologation",
+  "xmlDirs": {
+    "emitidas": "./nfe/xmls/emitidas",
+    "retorno": "./nfe/xmls/retorno",
+    "inutilizadas": "./nfe/xmls/inutilizadas",
+    "eventos": "./nfe/xmls/eventos"
+  },
+  "certsDir": "../secure/certs",
+  "sefaz": {
+    "ba": {
+      "homologation": {
+        "nfe": "https://nfeh.sefaz.ba.gov.br/ws/NFeAutorizacao4",
+        "nfeConsulta": "https://nfeh.sefaz.ba.gov.br/ws/NFeConsulta4"
+      },
+      "production": {
+        "nfe": "https://nfe.sefaz.ba.gov.br/ws/NFeAutorizacao4",
+        "nfeConsulta": "https://nfe.sefaz.ba.gov.br/ws/NFeConsulta4"
+      }
+    }
+  }
+}

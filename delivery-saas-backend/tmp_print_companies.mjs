@@ -1,0 +1,1 @@
+import { prisma } from './src/prisma.js'; (async ()=>{ const cs = await prisma.company.findMany(); console.log(JSON.stringify(cs, null, 2)); process.exit(0); })().catch(e=>{ console.error(e); process.exit(2); })

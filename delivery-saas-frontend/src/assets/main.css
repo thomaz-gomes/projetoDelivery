@@ -2,3 +2,8 @@ body {
   background-color: #f8f9fa;
   font-family: "Roboto", sans-serif;
 }
+
+/* Utility: consistent modal content padding used across components */
+.modal-content-padding {
+  padding: 16px !important;
+}

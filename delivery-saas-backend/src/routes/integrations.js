@@ -10,33 +10,75 @@ import {
   getIFoodAccessToken,           // garante accessToken válido
 } from '../integrations/ifood/oauth.js';
 
+import {
+  pollIFoodEvents,
+  acknowledgeIFoodEvents,
+  getIFoodOrderDetails,
+} from '../integrations/ifood/orders.js';
+
 export const integrationsRouter = express.Router();
 integrationsRouter.use(authMiddleware);
 
 // Salvar credenciais de um provider (ex.: IFOOD)
-integrationsRouter.post('/:provider', requireRole('ADMIN'), async (req, res) => {
+// Create a new integration for a provider (allow multiple per provider)
+integrationsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   try {
-    const { provider } = req.params;
-    const { clientId, clientSecret, merchantId, enabled } = req.body || {};
     const companyId = req.user.companyId;
+    const { provider, clientId, clientSecret, merchantId, enabled, storeId, authMode } = req.body || {};
+    if (!provider) return res.status(400).json({ message: 'provider é obrigatório' });
 
-    const integration = await prisma.apiIntegration.upsert({
-      where: { companyId_provider: { companyId, provider: provider.toUpperCase() } },
-      update: { clientId, clientSecret, merchantId, enabled },
-      create: {
-        companyId,
-        provider: provider.toUpperCase(),
-        clientId,
-        clientSecret,
-        merchantId,
-        enabled: enabled ?? true,
-        authMode: 'AUTH_CODE',
-      },
-    });
-
-    res.json(integration);
+    const created = await prisma.apiIntegration.create({ data: {
+      companyId,
+      provider: String(provider).toUpperCase(),
+      clientId: clientId || null,
+      clientSecret: clientSecret || null,
+      merchantId: merchantId || null,
+      enabled: enabled ?? true,
+      storeId: storeId || null,
+      authMode: authMode || 'AUTH_CODE',
+    } });
+    res.status(201).json(created);
   } catch (e) {
-    res.status(500).json({ message: 'Erro ao salvar integração', error: e.message });
+    console.error('POST /integrations failed', e);
+    res.status(500).json({ message: 'Erro ao criar integração', error: e.message });
+  }
+});
+
+// Update an integration by id
+integrationsRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const companyId = req.user.companyId;
+    const body = req.body || {};
+    const existing = await prisma.apiIntegration.findFirst({ where: { id, companyId } });
+    if (!existing) return res.status(404).json({ message: 'Integração não encontrada' });
+    const updated = await prisma.apiIntegration.update({ where: { id }, data: {
+      clientId: body.clientId ?? existing.clientId,
+      clientSecret: body.clientSecret ?? existing.clientSecret,
+      merchantId: body.merchantId ?? existing.merchantId,
+      enabled: body.enabled ?? existing.enabled,
+      storeId: body.storeId ?? existing.storeId,
+      authMode: body.authMode ?? existing.authMode,
+    } });
+    res.json(updated);
+  } catch (e) {
+    console.error('PUT /integrations/:id failed', e);
+    res.status(500).json({ message: 'Erro ao atualizar integração', error: e.message });
+  }
+});
+
+// Delete integration by id
+integrationsRouter.delete('/:id', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const companyId = req.user.companyId;
+    const existing = await prisma.apiIntegration.findFirst({ where: { id, companyId } });
+    if (!existing) return res.status(404).json({ message: 'Integração não encontrada' });
+    await prisma.apiIntegration.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /integrations/:id failed', e);
+    res.status(500).json({ message: 'Erro ao remover integração', error: e.message });
   }
 });
 
@@ -62,7 +104,8 @@ integrationsRouter.post('/ifood/link/confirm', requireRole('ADMIN'), async (req,
     const r = await exchangeAuthorizationCode({ companyId, authorizationCode });
     res.json(r);
   } catch (e) {
-    res.status(500).json({ message: 'Falha ao confirmar vínculo', error: e.message });
+    console.error('ifood/link/confirm error:', e?.response?.data ?? e);
+    res.status(500).json({ message: 'Falha ao confirmar vínculo', error: e?.message || String(e), details: e?.response?.data ?? null });
   }
 });
 
@@ -73,7 +116,8 @@ integrationsRouter.post('/ifood/token/refresh', requireRole('ADMIN'), async (req
     const r = await refreshAccessToken({ companyId });
     res.json(r);
   } catch (e) {
-    res.status(500).json({ message: 'Falha ao renovar token', error: e.message });
+    console.error('ifood/token/refresh error:', e?.response?.data ?? e);
+    res.status(500).json({ message: 'Falha ao renovar token', error: e?.message || String(e), details: e?.response?.data ?? null });
   }
 });
 
@@ -88,25 +132,20 @@ integrationsRouter.get('/', requireRole('ADMIN'), async (req, res) => {
   }
 });
 
-// Detalhe de uma integração
+// Lista integrações por provider (ex: /integrations/IFOOD)
 integrationsRouter.get('/:provider', requireRole('ADMIN'), async (req, res) => {
   try {
     const { provider } = req.params;
     const companyId = req.user.companyId;
-    const integration = await prisma.apiIntegration.findUnique({
-      where: { companyId_provider: { companyId, provider: provider.toUpperCase() } },
-    });
-    if (!integration) return res.status(404).json({ message: 'Integração não encontrada' });
-    res.json(integration);
+    const rows = await prisma.apiIntegration.findMany({ where: { companyId, provider: provider.toUpperCase() }, orderBy: { createdAt: 'asc' } });
+    res.json(rows || []);
   } catch (e) {
-    res.status(500).json({ message: 'Erro ao buscar integração', error: e.message });
+    res.status(500).json({ message: 'Erro ao buscar integrações', error: e.message });
   }
 });
 integrationsRouter.get('/ifood/status', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
-  const i = await prisma.apiIntegration.findUnique({
-    where: { companyId_provider: { companyId, provider: 'IFOOD' } },
-  });
+  const i = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
   if (!i) return res.status(404).json({ message: 'sem integração' });
   res.json({
     enabled: i.enabled,
@@ -117,27 +156,54 @@ integrationsRouter.get('/ifood/status', requireRole('ADMIN'), async (req, res) =
   });
 });
 
+// unlink tokens for the most recently updated iFood integration (backwards compat)
 integrationsRouter.post('/ifood/unlink', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
-  const i = await prisma.apiIntegration.update({
-    where: { companyId_provider: { companyId, provider: 'IFOOD' } },
-    data: {
-      accessToken: null, refreshToken: null, tokenExpiresAt: null,
-      authCode: null, linkCode: null, codeVerifier: null,
-    },
-  });
+  const which = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
+  if (!which) return res.status(404).json({ message: 'sem integração' });
+  const i = await prisma.apiIntegration.update({ where: { id: which.id }, data: { accessToken: null, refreshToken: null, tokenExpiresAt: null, authCode: null, linkCode: null, codeVerifier: null } });
   res.json({ ok: true, integration: i });
 });
-// Remover integração
-integrationsRouter.delete('/:provider', requireRole('ADMIN'), async (req, res) => {
+// Note: individual deletion by id is supported via DELETE /integrations/:id (defined above)
+
+/**
+ *  🔁 Poll de pedidos (busca eventos)
+ */
+integrationsRouter.post('/ifood/poll', requireRole('ADMIN'), async (req, res) => {
   try {
-    const { provider } = req.params;
     const companyId = req.user.companyId;
-    await prisma.apiIntegration.delete({
-      where: { companyId_provider: { companyId, provider: provider.toUpperCase() } },
-    });
-    res.json({ ok: true });
+    const events = await pollIFoodEvents(companyId);
+    res.json({ ok: true, count: events.length, events });
   } catch (e) {
-    res.status(500).json({ message: 'Erro ao remover integração', error: e.message });
+    console.error('Erro no polling iFood:', e.response?.data || e.message);
+    res.status(500).json({ message: 'Falha ao buscar eventos', error: e.message });
+  }
+});
+
+/**
+ *  📦 Buscar detalhes de um pedido
+ */
+integrationsRouter.get('/ifood/orders/:id', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const order = await getIFoodOrderDetails(companyId, req.params.id);
+    res.json(order);
+  } catch (e) {
+    console.error('Erro ao buscar pedido iFood:', e.response?.data || e.message);
+    res.status(500).json({ message: 'Falha ao buscar pedido', error: e.message });
+  }
+});
+
+/**
+ *  ✅ Confirmar eventos processados
+ */
+integrationsRouter.post('/ifood/ack', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { events } = req.body || {};
+    const r = await acknowledgeIFoodEvents(companyId, events);
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ message: 'Falha ao confirmar eventos', error: e.message });
   }
 });

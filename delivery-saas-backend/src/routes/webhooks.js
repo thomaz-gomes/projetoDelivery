@@ -1,149 +1,245 @@
-// src/routes/webhooks.js
-import express from 'express';
-import crypto from 'crypto';
-import { prisma } from '../prisma.js';
+import express from "express";
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { prisma } from "../prisma.js";
+import { upsertCustomerFromIfood } from "../services/customers.js";
+import { emitirNovoPedido } from "../index.js"; // envia o pedido ao front via Socket.IO
 
 export const webhooksRouter = express.Router();
 
+// 📂 Pasta de logs (para debugging)
+const LOG_DIR = path.resolve("logs");
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+
+/**
+ * 🔐 Verifica assinatura do iFood (opcional)
+ */
 function verifySignature(req, secret) {
   try {
-    const sig = req.headers['x-ifood-signature'] || '';
-    if (!sig || !secret) return true;
+    const sig = req.headers["x-ifood-signature"] || "";
+    if (!sig || !secret) return true; // Se não houver segredo, ignora
     const raw = JSON.stringify(req.body);
-    const h = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+    const h = crypto.createHmac("sha256", secret).update(raw).digest("hex");
     return h === sig;
   } catch {
     return false;
   }
 }
 
+/**
+ * 🔍 Busca o primeiro valor válido em uma lista de chaves
+ */
 function pick(obj, keys) {
   for (const k of keys) {
     const v = obj?.[k];
-    if (v !== undefined && v !== null && v !== '') return v;
+    if (v !== undefined && v !== null && v !== "") return v;
   }
   return undefined;
 }
 
-function generateExternalId(fallbackSeed) {
-  const seed = fallbackSeed || String(Date.now());
-  return 'IFD-' + crypto.createHash('md5').update(seed).digest('hex').slice(0, 10);
-}
-
 /**
- * Resolve companyId:
- * - tenta merchantId em header / body / order (várias chaves)
- * - se não encontrar, e existir apenas UMA integração IFOOD habilitada, usa essa
+ * 🏢 Resolve empresa via merchantId
  */
 async function resolveCompanyByMerchant(req, order) {
-  const hdrMerchant = req.headers['x-merchant-id'] || req.headers['x-ifood-merchant-id'];
-
-  const body = req.body || {};
+  const hdrMerchant =
+    req.headers["x-merchant-id"] || req.headers["x-ifood-merchant-id"];
   const merchantId =
     hdrMerchant ||
-    body.merchantId ||
     order?.merchantId ||
     order?.merchant?.id ||
-    body.resource?.merchantId ||
-    body.seller?.id ||
+    req.body?.merchantId ||
     null;
 
   if (merchantId) {
+    // Try matching either merchantId or merchantUuid fields (some integrations store UUID vs numeric id)
     const integ = await prisma.apiIntegration.findFirst({
-      where: { provider: 'IFOOD', merchantId: String(merchantId), enabled: true },
-      select: { companyId: true },
+      where: {
+        provider: "IFOOD",
+        enabled: true,
+        OR: [
+          { merchantId: String(merchantId) },
+          { merchantUuid: String(merchantId) }
+        ]
+      },
+      select: { companyId: true, storeId: true, merchantId: true, merchantUuid: true },
     });
-    if (!integ?.companyId) {
-      throw new Error(`Merchant ${merchantId} não está vinculado (ApiIntegration) ou está desabilitado.`);
+    if (integ?.companyId) {
+      console.log("🏢 Empresa encontrada pelo merchantId/merchantUuid:", integ.companyId, 'storeId:', integ.storeId, 'matched:', integ.merchantId || integ.merchantUuid);
+      // If integration exists but storeId is not set, attempt a best-effort match using payload store info
+      let resolvedStoreId = integ.storeId || null;
+      if (!resolvedStoreId) {
+        try {
+          const payloadStoreId = order?.storeId || order?.store?.id || order?.storeExternalId || null;
+          const payloadStoreName = order?.store?.name || null;
+          if (payloadStoreId) {
+            // try direct match by store.id or slug or cnpj
+            const s = await prisma.store.findFirst({ where: { companyId: integ.companyId, OR: [{ id: payloadStoreId }, { slug: payloadStoreId }, { cnpj: payloadStoreId }] }, select: { id: true } });
+            if (s) resolvedStoreId = s.id;
+          }
+          if (!resolvedStoreId && payloadStoreName) {
+            const s2 = await prisma.store.findFirst({ where: { companyId: integ.companyId, name: payloadStoreName }, select: { id: true } });
+            if (s2) resolvedStoreId = s2.id;
+          }
+        } catch (e) {
+          console.warn('store inference failed:', e?.message || e);
+        }
+      }
+
+      return { companyId: integ.companyId, merchantId: String(merchantId), storeId: resolvedStoreId || null };
     }
-    return { companyId: integ.companyId, merchantId: String(merchantId) };
   }
 
-  // fallback: exatamente 1 integração iFood habilitada -> usar
+  // fallback: se houver apenas uma integração ativa
   const onlyOne = await prisma.apiIntegration.findMany({
-    where: { provider: 'IFOOD', enabled: true },
+    where: { provider: "IFOOD", enabled: true },
     select: { companyId: true, merchantId: true },
   });
-
   if (onlyOne.length === 1) {
-    return { companyId: onlyOne[0].companyId, merchantId: onlyOne[0].merchantId || null };
+    console.log("🏢 Empresa fallback (única integração ativa):", onlyOne[0].companyId);
+    return {
+      companyId: onlyOne[0].companyId,
+      merchantId: onlyOne[0].merchantId || null,
+      storeId: onlyOne[0].storeId || null,
+    };
   }
 
-  // sem merchantId e sem fallback seguro
-  throw new Error('merchantId ausente no webhook e não há fallback único para decidir a empresa');
+  throw new Error("merchantId ausente e não foi possível determinar empresa.");
 }
 
-webhooksRouter.post('/ifood', async (req, res) => {
+/**
+ * 🚀 Webhook iFood (pedido criado)
+ */
+webhooksRouter.post("/ifood", async (req, res) => {
   try {
-    const okSig = verifySignature(req, process.env.IFOOD_WEBHOOK_SECRET);
-    if (!okSig) return res.status(401).json({ ok: false, message: 'Assinatura inválida' });
+    let body = req.body;
 
-    const body = req.body || {};
+    // Se vier como string (PowerShell ou curl), parseia manualmente
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        console.warn("⚠️ Corpo recebido como string inválida");
+        body = {};
+      }
+    }
+
+    // Salva log do corpo original (útil para debug)
+    const logFile = path.join(LOG_DIR, `ifood-${Date.now()}.json`);
+    fs.writeFileSync(logFile, JSON.stringify(body, null, 2), "utf8");
+
+    const okSig = verifySignature(req, process.env.IFOOD_WEBHOOK_SECRET);
+    if (!okSig) {
+      return res.status(401).json({ ok: false, message: "Assinatura inválida" });
+    }
+
+    // Detecta o pedido dentro do corpo
     const order =
       body.order ??
       body.data?.order ??
       body.payload?.order ??
+      body.resource?.order ??
       body;
 
-    // >>> NOVO: resolve company/merchant robusto
-    const { companyId, merchantId } = await resolveCompanyByMerchant(req, order);
+    if (!order || typeof order !== "object") {
+      throw new Error("Payload inválido — corpo sem dados de pedido.");
+    }
 
-    const externalIdRaw =
-      pick(order, ['id', 'orderId', 'code', 'orderCode', 'reference', 'displayId', 'externalId']) ||
-      pick(body, ['id', 'eventId']) ||
-      null;
+    // 🔎 Resolve empresa
+  const { companyId, merchantId, storeId } = await resolveCompanyByMerchant(req, order);
 
-    const externalId = externalIdRaw || generateExternalId(body.eventId || body.id);
+    // 🆔 Dados principais
+    const externalId =
+      pick(order, ["id", "orderId", "code", "orderCode", "reference"]) ||
+      "IFD-" + crypto.randomBytes(5).toString("hex");
     const displayId =
-      order?.displayId ||
-      order?.shortId ||
-      order?.number ||
-      (externalIdRaw && `#${String(externalIdRaw).slice(-6)}`) ||
-      null;
+      order.displayId ||
+      order.shortId ||
+      order.number ||
+      `#${String(externalId).slice(-6)}`;
 
-    const customerName =
-      order?.customer?.name ||
-      order?.consumer?.name ||
-      body?.customer?.name ||
-      'Cliente';
-
+    // 👤 Cliente
+    const customer = order.customer || order.consumer || {};
+    const customerName = customer.name || customer.fullName || "Cliente";
     const customerPhone =
-      order?.customer?.phone ||
-      order?.consumer?.phone ||
-      body?.customer?.phone ||
+      customer.phone?.number ||
+      customer.phoneNumber ||
+      customer.phone ||
       null;
 
+    // Try to persist or upsert a Customer record for this company from the payload.
+    // This is best-effort: failures here should not block order ingestion.
+    let persistedCustomer = null;
+    try {
+      console.log('iFood webhook: customer payload:', JSON.stringify(customer).slice(0, 1000))
+      console.log('iFood webhook: derived customerPhone:', customerPhone)
+      const up = await upsertCustomerFromIfood({ companyId, payload: order });
+      console.log('iFood upsertCustomerFromIfood returned:', up && up.customer ? { id: up.customer.id, whatsapp: up.customer.whatsapp, fullName: up.customer.fullName } : up)
+      if (up && up.customer) persistedCustomer = up.customer;
+    } catch (custErr) {
+      console.warn('Failed to upsert customer from iFood payload:', custErr?.message || custErr);
+    }
+
+    // 📍 Endereço
+    const delivery = order.delivery || {};
     const addr =
-      order?.delivery?.deliveryAddress ||
-      order?.deliveryAddress ||
-      body?.delivery?.deliveryAddress ||
+      delivery.deliveryAddress ||
+      order.deliveryAddress ||
+      body.deliveryAddress ||
       {};
-
     const address =
-      addr.formatted ||
-      [addr.streetName || addr.street, addr.streetNumber || addr.number, addr.neighborhood]
+      addr.formattedAddress ||
+      [addr.streetName, addr.streetNumber, addr.neighborhood]
         .filter(Boolean)
-        .join(', ') || null;
+        .join(", ") ||
+      null;
 
-    const latitude = addr.coordinates?.latitude ?? null;
-    const longitude = addr.coordinates?.longitude ?? null;
+    const latitude = Number(addr.coordinates?.latitude ?? 0) || null;
+    const longitude = Number(addr.coordinates?.longitude ?? 0) || null;
 
-    const total = Number(order?.total?.orderAmount ?? order?.totalAmount ?? order?.amount ?? 0);
-    const deliveryFee = Number(order?.total?.deliveryFee ?? order?.deliveryFee ?? 0);
+    // 💰 Valores
+    const total = Number(
+      order?.total?.orderAmount ?? order?.totalAmount ?? order?.amount ?? 0
+    );
+    const deliveryFee = Number(
+      order?.total?.deliveryFee ?? order?.deliveryFee ?? 0
+    );
 
-    const eventId = body.eventId || body.id || crypto.randomBytes(8).toString('hex');
+    console.log("📋 Dados antes do upsert:", {
+      companyId,
+      externalId,
+      displayId,
+      customerName,
+      total,
+    });
 
+    const eventId = body.eventId || body.id || crypto.randomBytes(8).toString("hex");
+
+    // 🧾 Log de evento
     const ev = await prisma.webhookEvent.upsert({
       where: { eventId },
-      update: { payload: body, status: 'RECEIVED' },
-      create: { provider: 'IFOOD', eventId, payload: body, status: 'RECEIVED' },
+      update: { payload: body, status: "RECEIVED" },
+      create: { provider: "IFOOD", eventId, payload: body, status: "RECEIVED" },
     });
+
+    // 🛒 Cria ou atualiza o pedido
+    // Compute a per-day sequential number to persist as displaySimple for new orders.
+    // We compute the number based on how many orders already exist today for this company.
+    const nowForCreation = new Date();
+    const startOfDayForCreation = new Date(nowForCreation.getFullYear(), nowForCreation.getMonth(), nowForCreation.getDate());
+    const existingTodayCount = await prisma.order.count({
+      where: { companyId, createdAt: { gte: startOfDayForCreation } },
+    });
+    const displaySimpleForCreate = existingTodayCount + 1;
 
     const saved = await prisma.order.upsert({
       where: { externalId },
       update: {
         companyId,
+        storeId: storeId || undefined,
         displayId,
+        customerId: persistedCustomer ? persistedCustomer.id : undefined,
+        customerSource: 'IFOOD',
         customerName,
         customerPhone,
         address,
@@ -155,9 +251,12 @@ webhooksRouter.post('/ifood', async (req, res) => {
       },
       create: {
         companyId,
+        storeId: storeId || null,
         externalId,
         displayId,
-        status: 'EM_PREPARO',
+        status: "EM_PREPARO",
+  customerId: persistedCustomer ? persistedCustomer.id : undefined,
+  customerSource: 'IFOOD',
         customerName,
         customerPhone,
         address,
@@ -166,36 +265,149 @@ webhooksRouter.post('/ifood', async (req, res) => {
         total,
         deliveryFee,
         payload: order,
+        displaySimple: displaySimpleForCreate,
         histories: {
-          create: [{ from: null, to: 'EM_PREPARO', reason: 'Webhook iFood' }],
+          create: [{ from: null, to: "EM_PREPARO", reason: "Webhook iFood" }],
         },
         items: {
-          create:
-            (order?.items || []).map((it) => ({
-              name: it.name || it.description || 'Item',
-              quantity: Number(it.quantity || 1),
-              price: Number(it.price || it.totalPrice || 0),
-            })) || [],
+          create: (order.items || []).map((it) => ({
+            name: it.name || "Item",
+            quantity: Number(it.quantity || 1),
+            price: Number(it.totalPrice || it.price || 0),
+          })),
         },
       },
       include: { items: true },
     });
 
+    // ✅ Atualiza evento
     await prisma.webhookEvent.update({
       where: { id: ev.id },
-      data: { status: 'PROCESSED', processedAt: new Date() },
+      data: { status: "PROCESSED", processedAt: new Date() },
     });
 
-    res.json({
+    // 🔊 Ensure emitted object carries a human friendly padded displaySimple (e.g. "01")
+    try {
+      if (saved.displaySimple != null) {
+        saved.displaySimple = String(saved.displaySimple).padStart(2, '0');
+      } else {
+        const createdAt = saved.createdAt || new Date();
+        const startOfDay = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+        // count how many orders for this company were created up to this one (inclusive)
+        const count = await prisma.order.count({
+          where: {
+            companyId: saved.companyId,
+            createdAt: { gte: startOfDay, lte: createdAt }
+          }
+        });
+        saved.displaySimple = String(count).padStart(2, '0');
+      }
+    } catch (e) {
+      console.warn('Failed to compute displaySimple for emitted order', e?.message || e);
+    }
+
+    // 🔊 Envia o pedido para o painel via Socket.IO
+    emitirNovoPedido(saved);
+    console.log(`📦 Pedido salvo e emitido ao painel: ${displayId} (simple:${saved.displaySimple || 'N/A'})`);
+
+    return res.json({
       ok: true,
-      message: 'Pedido processado',
+      message: "Pedido processado e enviado ao painel",
       orderId: saved.id,
-      externalId: saved.externalId,
       displayId: saved.displayId,
-      merchantId, // útil para log
+      merchantId,
     });
+
   } catch (e) {
-    console.error('Erro ao processar webhook IFOOD:', e);
-    res.status(400).json({ ok: false, message: 'Falha ao processar pedido', error: String(e.message || e) });
+    console.error("❌ Erro ao processar webhook IFOOD:");
+    console.error("Mensagem:", e.message);
+    if (e.code) console.error("Código Prisma:", e.code);
+    if (e.meta) console.error("Meta Prisma:", e.meta);
+    if (e.stack) console.error(e.stack);
+    return res.status(400).json({
+      ok: false,
+      message: "Falha ao processar pedido",
+      error: e.message || String(e),
+    });
+  }
+});
+
+/**
+ * 🧪 Endpoint de teste manual
+ */
+webhooksRouter.get("/generate-test", async (req, res) => {
+  try {
+    const company = await prisma.company.findFirst();
+    if (!company) return res.status(404).json({ message: "Nenhuma empresa encontrada" });
+
+    // load sample payload and use the iFood upsert logic to create a customer
+    const samplePath = path.resolve('sample', 'ifood-webhook.json');
+    if (!fs.existsSync(samplePath)) return res.status(500).json({ message: 'Sample payload not found: sample/ifood-webhook.json' });
+    const raw = fs.readFileSync(samplePath, 'utf8');
+    let sample = {};
+    try { sample = JSON.parse(raw); } catch (e) { return res.status(500).json({ message: 'Invalid sample JSON' }); }
+
+    const orderPayload = sample.order || sample;
+
+    // try to upsert a customer using the same service used for real webhooks
+    let upsertResult = null;
+    try {
+      upsertResult = await upsertCustomerFromIfood({ companyId: company.id, payload: orderPayload });
+    } catch (e) {
+      console.warn('generate-test: upsertCustomerFromIfood failed:', e?.message || e);
+    }
+
+    const externalId = orderPayload.id || 'TEST-' + Date.now();
+    const displayId = orderPayload.displayId || `SIMULADO-${new Date().toISOString().slice(11,19).replace(/:/g,'')}`;
+
+    // Compute displaySimple for today
+    const displaySimple = (await prisma.order.count({ where: { companyId: company.id, createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) } } })) + 1;
+
+    // Use upsert to avoid unique constraint failures when sample.externalId already exists
+    const saved = await prisma.order.upsert({
+      where: { externalId },
+      update: {
+        companyId: company.id,
+        displayId,
+        customerId: upsertResult && upsertResult.customer ? upsertResult.customer.id : undefined,
+        customerSource: 'IFOOD',
+        customerName: (orderPayload.customer && (orderPayload.customer.name || orderPayload.customer.fullName)) || 'Cliente',
+        customerPhone: orderPayload.customer && (orderPayload.customer.phone?.number || orderPayload.customer.phone || null),
+        address: orderPayload.delivery && orderPayload.delivery.deliveryAddress && (orderPayload.delivery.deliveryAddress.formattedAddress || [orderPayload.delivery.deliveryAddress.streetName, orderPayload.delivery.deliveryAddress.streetNumber].filter(Boolean).join(', ')) || null,
+        latitude: Number(orderPayload.delivery?.deliveryAddress?.coordinates?.latitude ?? null) || null,
+        longitude: Number(orderPayload.delivery?.deliveryAddress?.coordinates?.longitude ?? null) || null,
+        total: Number(orderPayload.total?.orderAmount ?? orderPayload.totalAmount ?? orderPayload.amount ?? 0),
+        deliveryFee: Number(orderPayload.total?.deliveryFee ?? orderPayload.deliveryFee ?? 0),
+        payload: orderPayload,
+      },
+      create: {
+        companyId: company.id,
+        externalId,
+        displayId,
+        displaySimple,
+        status: 'EM_PREPARO',
+        customerId: upsertResult && upsertResult.customer ? upsertResult.customer.id : undefined,
+        customerSource: 'IFOOD',
+        customerName: (orderPayload.customer && (orderPayload.customer.name || orderPayload.customer.fullName)) || 'Cliente',
+        customerPhone: orderPayload.customer && (orderPayload.customer.phone?.number || orderPayload.customer.phone || null),
+        address: orderPayload.delivery && orderPayload.delivery.deliveryAddress && (orderPayload.delivery.deliveryAddress.formattedAddress || [orderPayload.delivery.deliveryAddress.streetName, orderPayload.delivery.deliveryAddress.streetNumber].filter(Boolean).join(', ')) || null,
+        latitude: Number(orderPayload.delivery?.deliveryAddress?.coordinates?.latitude ?? null) || null,
+        longitude: Number(orderPayload.delivery?.deliveryAddress?.coordinates?.longitude ?? null) || null,
+        total: Number(orderPayload.total?.orderAmount ?? orderPayload.totalAmount ?? orderPayload.amount ?? 0),
+        deliveryFee: Number(orderPayload.total?.deliveryFee ?? orderPayload.deliveryFee ?? 0),
+        payload: orderPayload,
+        items: {
+          create: (orderPayload.items || []).map((it) => ({ name: it.name || 'Item', quantity: Number(it.quantity || it.qtd || 1), price: Number(it.totalPrice || it.unitPrice || it.price || 0) }))
+        },
+        histories: { create: [{ to: 'EM_PREPARO', reason: 'Teste iFood (generate-test)' }] }
+      },
+      include: { items: true }
+    });
+
+    emitirNovoPedido(saved);
+    return res.json({ ok: true, message: 'Simulated iFood order created/upserted and upsert executed', upsertResult, order: saved });
+  } catch (err) {
+    console.error('generate-test failed:', err);
+    return res.status(500).json({ message: 'generate-test failed', error: String(err?.message || err) });
   }
 });

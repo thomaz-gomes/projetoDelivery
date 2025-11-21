@@ -132,3 +132,54 @@ export async function evoSendLocation({ instanceName, to, latitude, longitude, a
   }
   throw last || new Error('Falha ao enviar localização (Evolution)');
 }
+
+// enviar arquivo/documento (base64) - tenta endpoints conhecidos
+export async function evoSendDocument({ instanceName, to, base64, filename = 'file.pdf', mimeType = 'application/pdf', caption = '' }) {
+  const number = normalizePhone(to);
+  if (!number) throw new Error('Telefone inválido');
+
+  const attempts = [
+    { url: '/message/sendFile', body: { instanceName, to: number, fileBase64: base64, filename, mimeType, caption } },
+    { url: '/message/sendDocument', body: { instanceName, to: number, base64, filename, mimeType, caption } },
+    { url: '/message/sendMedia', body: { instanceName, to: number, base64, filename, mimeType, caption } },
+    // some builds expect number key instead of to
+    { url: `/message/sendFile/${encodeURIComponent(instanceName)}`, body: { number, fileBase64: base64, filename, mimeType, caption } },
+  ];
+
+  let last;
+  for (const a of attempts) {
+    try {
+      // try endpoint
+      console.log('evoSendDocument try', a.url);
+      const { data } = await http.post(a.url, a.body);
+      console.log('evoSendDocument success', a.url);
+      return data;
+    } catch (e) { last = e; }
+  }
+  throw last || new Error('Falha ao enviar documento (Evolution)');
+}
+
+// send media by public URL (preferred for larger files). Tries known endpoints.
+export async function evoSendMediaUrl({ instanceName, to, mediaUrl, filename = 'file.pdf', mimeType = 'application/pdf', caption = '' }) {
+  const number = normalizePhone(to);
+  if (!number) throw new Error('Telefone inválido');
+
+  const attempts = [
+    // instance in path, media property is public url
+    { url: `/message/sendMedia/${encodeURIComponent(instanceName)}`, body: { number, mediatype: 'file', mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
+    { url: `/message/sendMedia`, body: { instanceName, to: number, mediatype: 'file', mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
+    // alternative keys/names
+    { url: `/message/sendMedia/${encodeURIComponent(instanceName)}`, body: { number, mediatype: 'document', mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
+  ];
+
+  let last;
+  for (const a of attempts) {
+    try {
+      console.log('evoSendMediaUrl try', a.url);
+      const { data } = await http.post(a.url, a.body);
+      console.log('evoSendMediaUrl success', a.url);
+      return data;
+    } catch (e) { last = e; }
+  }
+  throw last || new Error('Falha ao enviar mídia por URL (Evolution)');
+}

@@ -1,0 +1,175 @@
+<template>
+  <ListCard title="Cupons" icon="bi bi-ticket-detailed" :subtitle="total ? `${total} itens` : ''">
+    <template #actions>
+      <button @click="goNew" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Novo Cupom</button>
+    </template>
+
+    <template #filters>
+      <div class="filters row g-2">
+        <div class="col-md-4">
+          <input class="form-control" v-model="q" placeholder="Pesquisar código..." @keyup.enter="load" />
+        </div>
+        <div class="col-md-2">
+          <select class="form-select" v-model="filterActive" @change="load">
+            <option value="">Todos</option>
+            <option value="true">Ativos</option>
+            <option value="false">Inativos</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <select class="form-select" v-model="filterType" @change="load">
+            <option value="">Todos</option>
+            <option value="true">Percentual</option>
+            <option value="false">Valor</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select" v-model="filterAffiliate" @change="load">
+            <option value="">Todos afiliados</option>
+            <option v-for="a in affiliates" :key="a.id" :value="a.id">{{ a.name }}</option>
+          </select>
+        </div>
+        <div class="col-md-1 d-flex align-items-center">
+          <button class="btn btn-outline-secondary w-100" @click="resetFilters">Limpar</button>
+        </div>
+      </div>
+    </template>
+
+    <template #default>
+      <div v-if="loading" class="text-center py-4">Carregando...</div>
+      <div v-else-if="error" class="alert alert-danger">{{ error }}</div>
+      <div v-else>
+        <div class="table-responsive">
+          <table class="table table-striped align-middle">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Tipo</th>
+                <th>Valor</th>
+                <th>Afiliado</th>
+                <th>Status</th>
+                <th style="width:120px">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in coupons" :key="c.id">
+                <td>
+                  <div><strong>{{ c.code }}</strong></div>
+                  <div class="desc small text-muted">{{ c.description || '' }}</div>
+                </td>
+                <td>{{ c.isPercentage ? 'Percentual' : 'Valor' }}</td>
+                <td>{{ formatValue(c) }}</td>
+                <td>{{ c.affiliate?.name || '-' }}</td>
+                <td>
+                  <span :class="c.isActive ? 'text-success' : 'text-danger'">{{ c.isActive ? 'Ativo' : 'Inativo' }}</span>
+                </td>
+                <td>
+                  <div class="d-flex">
+                    <button @click="edit(c)" class="btn btn-sm btn-light me-2"><i class="bi bi-pencil-square"></i></button>
+                    <button @click="remove(c)" class="btn btn-sm btn-outline-danger" v-if="isAdmin"><i class="bi bi-trash"></i></button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-between mt-3">
+          <div>
+            <small>Mostrando {{ offset + 1 }} - {{ Math.min(offset + limit, total) }} de {{ total }}</small>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-outline-secondary me-2" @click="prevPage" :disabled="offset===0">Anterior</button>
+            <button class="btn btn-sm btn-secondary" @click="nextPage" :disabled="offset+limit >= total">Próxima</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </ListCard>
+</template>
+
+<script>
+import { ref, onMounted } from 'vue'
+import { bindLoading } from '../state/globalLoading.js'
+import api from '@/api.js'
+import { useRouter } from 'vue-router'
+import ListCard from '@/components/ListCard.vue'
+import Swal from 'sweetalert2'
+
+export default {
+  name: 'CouponsList',
+  components: { ListCard },
+  setup() {
+    const coupons = ref([])
+  const loading = ref(false)
+  bindLoading(loading)
+    const error = ref('')
+    const router = useRouter()
+  const q = ref('')
+  const filterActive = ref('')
+  const filterType = ref('')
+  const filterAffiliate = ref('')
+  const affiliates = ref([])
+    const limit = ref(20)
+    const offset = ref(0)
+    const total = ref(0)
+
+    const isAdmin = true // TODO: use actual role from auth
+
+    const load = async () => {
+      loading.value = true
+      error.value = ''
+      try {
+        const params = { limit: limit.value, offset: offset.value }
+        if (q.value) params.code = q.value
+  if (filterActive.value !== '') params.active = filterActive.value
+  if (filterType.value !== '') params.isPercentage = filterType.value
+  if (filterAffiliate.value !== '') params.affiliateId = filterAffiliate.value
+
+        const res = await api.get('/coupons', { params })
+        coupons.value = res.data.data || []
+        total.value = res.data.total || 0
+      } catch (e) {
+        console.error(e)
+        error.value = e.response?.data?.message || 'Erro ao carregar cupons'
+      } finally { loading.value = false }
+    }
+
+    const formatValue = (c) => {
+      if (!c) return ''
+      if (c.isPercentage) return (Number(c.value) * 100).toFixed(1) + '%'
+      return 'R$ ' + Number(c.value).toFixed(2)
+    }
+
+    const goNew = () => router.push('/coupons/new')
+    const edit = (c) => router.push(`/coupons/${c.id}/edit`)
+    const remove = async (c) => {
+      const r = await Swal.fire({ title: 'Excluir cupom?', text: `Excluir cupom ${c.code}?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Excluir', cancelButtonText: 'Cancelar' })
+      if(!r.isConfirmed) return
+      try { await api.delete(`/coupons/${c.id}`); load(); Swal.fire({ icon: 'success', text: 'Cupom removido' }) } catch (e) { Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro' }) }
+    }
+
+    const resetFilters = () => { q.value=''; filterActive.value=''; filterType.value=''; filterAffiliate.value=''; offset.value=0; load() }
+    const nextPage = () => { if (offset.value + limit.value < total.value) { offset.value += limit.value; load() } }
+    const prevPage = () => { offset.value = Math.max(0, offset.value - limit.value); load() }
+
+    const loadAffiliates = async () => {
+      try {
+        const res = await api.get('/affiliates')
+        affiliates.value = res.data || []
+      } catch (e) { console.error('Failed loading affiliates for filter', e) }
+    }
+
+    onMounted(() => { load(); loadAffiliates() })
+    return { coupons, loading, error, formatValue, goNew, edit, remove, isAdmin, q, filterActive, filterType, filterAffiliate, affiliates, resetFilters, nextPage, prevPage, offset, limit, total }
+  }
+}
+</script>
+
+<style scoped>
+.coupons-listing { padding: 20px }
+table { width: 100%; border-collapse: collapse }
+th, td { padding: 10px; border-bottom: 1px solid #eee }
+.desc { color: #666; font-size: 12px }
+.btn-icon { padding: 6px; border: none; background: #f8f9fa; border-radius: 4px; margin-right: 6px }
+</style>

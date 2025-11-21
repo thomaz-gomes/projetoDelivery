@@ -1,7 +1,9 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
+import Swal from 'sweetalert2'
 import { useRoute } from 'vue-router';
 import api from '../api';
+import { bindLoading } from '../state/globalLoading.js';
 import QRCode from 'qrcode';
 
 const route = useRoute();
@@ -10,10 +12,55 @@ const orderId = route.params.id;
 const order = ref(null);
 const qrDataUrl = ref('');
 const loading = ref(true);
+bindLoading(loading);
 const error = ref('');
+  const assocLoading = ref(false);
 
 function fmt(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function sum(arr) { return arr.reduce((a, b) => a + Number(b || 0), 0); }
+
+function prettyProvider(p) {
+  if (!p) return null;
+  const s = String(p).trim();
+  const map = { IFOOD: 'iFood', UBER: 'Uber', UBEREATS: 'UberEats', RAPPI: 'Rappi' };
+  const up = s.toUpperCase();
+  if (map[up]) return map[up];
+  const lower = s.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+function getOrderStoreLabel(order) {
+  if (!order) return null;
+  // prefer explicit store relation
+  const storeName = order.store?.name || order.company?.store?.name || order.payload?.store?.name || order.payload?.merchant?.name || order.payload?.restaurantName || order.payload?.storeName || null;
+  const channel = order.payload?.integration?.provider || order.payload?.provider || order.payload?.adapter || order.payload?.platform || order.payload?.source?.provider || order.payload?.channel || order.integration?.provider || order.adapter || null;
+  if (!storeName) return null;
+  const pretty = prettyProvider(channel);
+  return pretty ? `${storeName} (${pretty})` : storeName;
+}
+
+function getOrderStoreName(order) {
+  if (!order) return null;
+  return order.store?.name || order.company?.store?.name || order.payload?.store?.name || order.payload?.merchant?.name || order.payload?.restaurantName || order.payload?.storeName || null;
+}
+
+function getOrderChannelLabel(order) {
+  if (!order) return null;
+  const raw = order.payload?.integration?.provider || order.payload?.provider || order.payload?.adapter || order.payload?.platform || order.payload?.source?.provider || order.payload?.channel || order.integration?.provider || order.adapter || order.payload?.source || null;
+  const map = { IFOOD: 'iFood', UBER: 'Uber', UBEREATS: 'UberEats', RAPPI: 'Rappi', PDV: 'PDV', POS: 'PDV', PUBLIC: 'Cardápio digital', WEB: 'Cardápio digital', MENU: 'Cardápio digital', 'CARDAPIO_DIGITAL': 'Cardápio digital' };
+  if (!raw) {
+    const src = order.customerSource || order.payload?.source || null;
+    if (src) {
+      const up = String(src).toUpperCase();
+      if (map[up]) return map[up];
+    }
+    return null;
+  }
+  const up = String(raw).toUpperCase();
+  if (map[up]) return map[up];
+  const s = String(raw).toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 const totals = computed(() => {
   if (!order.value) return null;
@@ -62,6 +109,19 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+async function associateCustomer() {
+  if (!order.value) return;
+  assocLoading.value = true;
+  try {
+    const { data } = await api.post(`/orders/${orderId}/associate-customer`);
+  if (data && data.order) order.value = data.order;
+  await Swal.fire({ icon: 'success', text: 'Cliente associado: ' + (data.customer?.fullName || 'ok') })
+  } catch (e) {
+  console.error(e);
+  await Swal.fire({ icon: 'error', text: 'Falha ao associar cliente: ' + (e?.response?.data?.message || e?.message || 'erro') })
+  } finally { assocLoading.value = false; }
+}
 </script>
 
 <template>
@@ -70,13 +130,20 @@ onMounted(async () => {
     <div v-else-if="error" class="center err">{{ error }}</div>
     <div v-else>
       <header class="hdr">
-        <h1>{{ order.company?.name || 'Minha Empresa' }}</h1>
-        <div class="muted">Comanda / Pedido {{ order.displayId || order.id.slice(0,6) }}</div>
+  <h1>
+    {{ (getOrderStoreName(order) ? (getOrderStoreName(order) + (getOrderChannelLabel(order) ? ' | ' + getOrderChannelLabel(order) : '')) : (order.company?.name || 'Minha Empresa')) }}
+  </h1>
+  <div class="muted">Comanda / Pedido {{ order.displaySimple != null ? String(order.displaySimple).padStart(2,'0') : (order.displayId != null ? String(order.displayId).padStart(2,'0') : order.id.slice(0,6)) }}</div>
         <div class="muted">{{ new Date(order.createdAt).toLocaleString() }}</div>
+        <div v-if="order.payload && order.payload.nfe && order.payload.nfe.nProt" class="protocol small">Protocolo NFe: {{ order.payload.nfe.nProt }}</div>
       </header>
 
       <section class="sec">
-        <div><b>Cliente:</b> {{ order.customerName || '-' }}</div>
+        <div style="display:flex;gap:8px;align-items:center"><div><b>Cliente:</b> {{ order.customerName || '-' }}</div>
+          <div>
+            <button @click="associateCustomer" :disabled="assocLoading">{{ assocLoading ? 'Associando...' : 'Associar cliente' }}</button>
+          </div>
+        </div>
         <div class="small"><b>Endereço:</b> {{ order.address || '-' }}</div>
       </section>
 
@@ -117,9 +184,9 @@ onMounted(async () => {
         <div class="muted small">Escaneie para despachar</div>
       </section>
 
-      <footer class="center small muted">
-        Status: {{ order.status }} • Pedido: {{ order.displayId || order.id }}
-      </footer>
+    <footer class="center small muted">
+  Status: {{ order.status }} • Pedido: {{ order.displaySimple != null ? String(order.displaySimple).padStart(2,'0') : (order.displayId != null ? String(order.displayId).padStart(2,'0') : order.id) }}
+    </footer>
     </div>
   </div>
 </template>
@@ -141,4 +208,5 @@ onMounted(async () => {
 .totals .total { font-weight:700; border-top:1px solid #000; padding-top:4px; }
 img { margin-top:6px; }
 .err { color:crimson; }
+.protocol { display:inline-block; margin-top:6px; background:#e6f7ea; color:#116633; padding:4px 8px; border-radius:6px; font-weight:600; }
 </style>

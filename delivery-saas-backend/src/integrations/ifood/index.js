@@ -7,60 +7,27 @@ import { prisma } from '../../prisma.js';
  * Cria/atualiza pedidos no banco
  */
 export async function pollIFood(companyId) {
-  console.log(`🔄 iFood Poll → Empresa ${companyId}`);
+  const integration = await prisma.apiIntegration.findUnique({
+    where: { companyId_provider: { companyId, provider: 'IFOOD' } },
+  });
 
-  const events = await ifoodGet(companyId, '/order/v1.0/events');
-  if (!Array.isArray(events) || events.length === 0) {
-    console.log('Nenhum evento novo');
-    return [];
+  if (!integration?.accessToken) {
+    throw new Error('Sem token. Finalize a vinculação com o iFood primeiro.');
   }
 
-  const ackList = [];
+  // ✅ usa o UUID salvo, não o merchantId numérico
+  const merchantHeader = integration.merchantUuid || integration.merchantId;
 
-  for (const ev of events) {
-    try {
-      ackList.push({ id: ev.id });
-      const { orderId, code } = ev;
-
-      // 🔹 Eventos de criação de pedido
-      if (code === 'PLACED') {
-        const orderData = await ifoodGet(companyId, `/order/v1.0/orders/${orderId}`);
-        await upsertIFoodOrder(companyId, orderData);
-      }
-
-      // 🔹 Atualiza status conforme eventos
-      if (['CONFIRMED', 'DISPATCHED', 'DELIVERED', 'CANCELLED'].includes(code)) {
-        const statusMap = {
-          CONFIRMED: 'EM_PREPARO',
-          DISPATCHED: 'SAIU_PARA_ENTREGA',
-          DELIVERED: 'CONCLUIDO',
-          CANCELLED: 'CANCELADO',
-        };
-
-        const order = await prisma.order.findUnique({ where: { externalId: orderId } });
-        if (order) {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { status: statusMap[code] || 'EM_PREPARO' },
-          });
-        }
-      }
-    } catch (e) {
-      console.error('Erro ao processar evento iFood', e);
-    }
+  try {
+    const data = await ifoodGet(companyId, '/order/v1.0/events:polling', {}, {
+      'x-polling-merchants': merchantHeader
+    });
+    console.log('[iFood Polling] OK:', data);
+    return data;
+  } catch (e) {
+    console.error('[iFood Polling] Falha:', e.response?.data || e.message);
+    throw e;
   }
-
-  // 🔹 Confirma processamento (ack)
-  if (ackList.length > 0) {
-    try {
-      await ifoodPost(companyId, '/order/v1.0/events/acknowledgment', ackList);
-      console.log(`✅ ${ackList.length} eventos confirmados`);
-    } catch (ackErr) {
-      console.error('Erro no ACK iFood:', ackErr);
-    }
-  }
-
-  return events;
 }
 
 /**
@@ -76,9 +43,14 @@ async function upsertIFoodOrder(companyId, orderData) {
   const lat = parseFloat(location.latitude || 0);
   const lng = parseFloat(location.longitude || 0);
 
+  // try to detect a store bound to this company's IFOOD integration
+  const integration = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, select: { storeId: true }, orderBy: { updatedAt: 'desc' } });
+  const storeId = integration?.storeId || null;
+
   const order = await prisma.order.upsert({
     where: { externalId },
     update: {
+      storeId: storeId || undefined,
       status: 'EM_PREPARO',
       customerName: customer?.name,
       customerPhone: customer?.phones?.[0]?.number,
@@ -89,6 +61,7 @@ async function upsertIFoodOrder(companyId, orderData) {
       total: Number(total?.orderAmount || 0),
     },
     create: {
+      storeId: storeId || null,
       companyId,
       externalId,
       displayId,

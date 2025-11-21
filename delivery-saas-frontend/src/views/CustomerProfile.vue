@@ -84,7 +84,7 @@ onMounted(() => store.get(route.params.id));
                 class="list-group-item d-flex justify-content-between align-items-center"
               >
                 <span>
-                  #{{ o.displayId || o.id.slice(0, 6) }} — {{ o.status }}
+                  #{{ o.displaySimple != null ? String(o.displaySimple).padStart(2,'0') : (o.displayId != null ? String(o.displayId).padStart(2,'0') : o.id.slice(0, 6)) }} — {{ o.status }}
                 </span>
                 <span class="fw-medium">
                   R$ {{ Number(o.total || o.total?.orderAmount || 0).toFixed(2) }}

@@ -152,7 +152,7 @@ onMounted(async () => {
     <div class="card">
       <div class="card-body">
         <!-- Linha de seleção e status -->
-        <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <div v-if="instances.length > 0" class="d-flex flex-wrap align-items-center gap-3 mb-3">
           <label class="form-label mb-0">Instância:</label>
           <select v-model="selected" class="form-select w-auto">
             <option v-for="i in instances" :key="i.id" :value="i.instanceName">
@@ -161,39 +161,80 @@ onMounted(async () => {
           </select>
           <button class="btn btn-outline-secondary" @click="fetchStatus">Atualizar status</button>
         </div>
+        <div v-else class="mb-3 text-secondary">
+          Nenhuma instância criada. Crie uma para começar.
+        </div>
 
         <div v-if="selected" class="row g-4">
-          <!-- Coluna esquerda: status + QR -->
-          <div class="col-12 col-md-6 d-flex flex-column align-items-center">
-            <div class="small text-muted mb-2">
+          <!-- Coluna esquerda: instruções em formato WhatsApp -->
+          <div class="col-12 col-md-7">
+            <h3 class="h5 mb-3">Etapas para acessar</h3>
+
+            <div class="wa-steps">
+              <div class="wa-step">
+                <div class="step-num">1</div>
+                <div class="step-text">Abra o WhatsApp no seu celular.</div>
+              </div>
+
+              <div class="wa-step">
+                <div class="step-num">2</div>
+                <div class="step-text">Toque em <b>Mais opções</b> • no Android ou em <b>Configurações</b> ⚙️ no iPhone.</div>
+              </div>
+
+              <div class="wa-step">
+                <div class="step-num">3</div>
+                <div class="step-text">Toque em <b>Dispositivos conectados</b> e, em seguida, em <b>Conectar dispositivo</b>.</div>
+              </div>
+
+              <div class="wa-step">
+                <div class="step-num">4</div>
+                <div class="step-text">Escaneie o QR code para confirmar.</div>
+              </div>
+
+              <!-- Removed persistent-login checkbox and phone-entry link per request -->
+
+              <div class="mt-4">
+                <p class="mb-2 text-muted"><b class="text-dark">Dicas</b></p>
+                <ul class="ms-3">
+                  <li>Mantenha o aparelho conectado à internet.</li>
+                  <li>Evite abrir o WhatsApp Web em outros PCs ao mesmo tempo.</li>
+                  <li>Se o status travar em <i>QRCODE/PAIRING</i>, recarregue o QR.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Coluna direita: QR centralizado -->
+          <div class="col-12 col-md-5 d-flex flex-column align-items-center justify-content-center">
+            <div class="small text-muted mb-2 text-center">
               Status: <b class="text-dark">{{ status || '...' }}</b>
             </div>
 
-            <div v-if="status === 'CONNECTED'" class="text-success fw-medium">
+            <div v-if="status === 'CONNECTED'" class="text-success fw-medium mb-3">
               Conectado ✓
             </div>
-            <div v-else-if="status === 'QRCODE' || status === 'PAIRING'" class="text-warning fw-medium">
+
+            <div v-else-if="status === 'QRCODE' || status === 'PAIRING'" class="text-warning fw-medium mb-3">
               Aguardando leitura do QR
             </div>
-            <div v-else class="text-secondary fw-medium">
+
+            <div v-else class="text-secondary fw-medium mb-3">
               Aguardando...
             </div>
 
-            <!-- QR -->
-            <div v-if="status !== 'CONNECTED'" class="mt-3 d-flex flex-column align-items-center">
+            <div v-if="status !== 'CONNECTED'" class="qr-box mb-3 d-flex align-items-center justify-content-center">
               <img
                 v-if="qrDataUrl"
                 :src="qrDataUrl || undefined"
                 alt="QR"
-                class="img-thumbnail bg-white"
-                style="width: 16rem; height: 16rem; object-fit: contain;"
+                class="qr-image"
               />
-              <div v-else class="small text-secondary mt-2">
+              <div v-else class="small text-secondary">
                 QR não disponível. Clique em “Carregar QR”.
               </div>
             </div>
 
-            <div class="d-flex gap-2 mt-3">
+            <div class="d-flex gap-2">
               <button class="btn btn-outline-secondary" @click="fetchQr" :disabled="status === 'CONNECTED'">
                 Carregar QR
               </button>
@@ -202,22 +243,37 @@ onMounted(async () => {
               </button>
             </div>
           </div>
-
-          <!-- Coluna direita: dicas -->
-          <div class="col-12 col-md-6">
-            <p class="mb-2 text-muted"><b class="text-dark">Dicas</b></p>
-            <ul class="ms-3">
-              <li>Mantenha o aparelho conectado à internet.</li>
-              <li>Evite abrir o WhatsApp Web em outros PCs ao mesmo tempo.</li>
-              <li>Se o status travar em <i>QRCODE/PAIRING</i>, recarregue o QR.</li>
-            </ul>
-          </div>
         </div>
 
-        <div v-else class="text-secondary">
+        <div v-else-if="instances.length > 0" class="text-secondary">
           Nenhuma instância selecionada. Crie uma para começar.
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* WhatsApp-style steps & QR layout */
+.wa-steps { display: flex; flex-direction: column; gap: 1rem; }
+.wa-step { display: flex; gap: 1rem; align-items: flex-start; }
+.step-num {
+  min-width: 36px; min-height: 36px; border-radius: 50%;
+  border: 2px solid #1f7a5a; color: #0b6b52; display: inline-flex;
+  align-items: center; justify-content: center; font-weight: 700;
+  background: #fff; box-shadow: none;
+}
+.step-text { color: #222; line-height: 1.25; }
+/* removed .wa-continue checkbox rule (element removed) */
+.qr-box {
+  width: 100%; max-width: 320px; height: auto; padding: 12px; border-radius: 12px;
+  background: #fff; border: 1px solid #e9ecef; box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+.qr-image { width: 100%; height: auto; max-width: 280px; object-fit: contain; display: block; }
+
+/* Responsive tweaks */
+@media (max-width: 767px) {
+  .step-num { min-width: 32px; min-height: 32px; }
+  .qr-box { max-width: 220px; }
+}
+</style>

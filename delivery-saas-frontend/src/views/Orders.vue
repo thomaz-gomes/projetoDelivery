@@ -1,46 +1,913 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed, onUnmounted, nextTick, watch } from 'vue';
+import { normalizeOrderItems } from '../utils/orderUtils.js';
 import { useOrdersStore } from '../stores/orders';
 import { useAuthStore } from '../stores/auth';
 import { useRouter } from 'vue-router';
 import Swal from 'sweetalert2';
+import { io } from 'socket.io-client';
 import 'sweetalert2/dist/sweetalert2.min.css';
+import printService from "../services/printService.js";
+import PrinterStatus from '../components/PrinterStatus.vue';
+import PrinterConfig from '../components/PrinterConfig.vue';
 
+import api from '../api';
+import QRCode from 'qrcode';
+import { bindLoading } from '../state/globalLoading.js';
+import Sortable from 'sortablejs';
 const store = useOrdersStore();
 const auth = useAuthStore();
 const router = useRouter();
 
+// helper para formatar displayId com dois dígitos e garantir consistência
+function padNumber(n) {
+  if (n == null || n === '') return null;
+  return String(n).toString().padStart(2, '0');
+}
+
+function formatDisplay(o) {
+  if (!o) return '';
+  if (o.displaySimple) return o.displaySimple;
+  if (o.displayId !== undefined && o.displayId !== null) {
+    const p = padNumber(o.displayId);
+    return p ? p : String(o.displayId);
+  }
+  // fallback para id curto
+  return o.id ? o.id.slice(0, 6) : '';
+}
+
 const loading = ref(false);
+bindLoading(loading);
+const socket = ref(null);
+const sortableInstances = [];
+const playSound = ref(true);
+const selectedStatus = ref('TODOS');
+const selectedRider = ref('TODOS');
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+const statusFiltersMobile = computed(() => statusFilters.filter(s => s.value !== 'TODOS'));
+// extra filters
+const searchOrderNumber = ref('');
+const searchCustomerName = ref('');
+let audio = null;
+const now = ref(Date.now());
+// connection state for a dev-friendly badge (moved to module scope so computed can access it)
+const connectionState = ref({ status: 'idle', since: Date.now(), url: null });
+const showPrinterConfig = ref(false);
 
-// mapeamento de status + labels
-const statusActions = [
-  { to: 'EM_PREPARO', label: 'Em preparo' },
-  { to: 'SAIU_PARA_ENTREGA', label: 'Saiu p/ entrega' },
-  { to: 'CONCLUIDO', label: 'Concluído' },
-  { to: 'CANCELADO', label: 'Cancelar' },
-];
+// atualiza 'now' a cada 30s para que durações sejam atualizadas na interface
+let nowTimer = null;
+let resizeHandler = null;
 
+// =============================
+// 🎧 Som de novo pedido
+// =============================
+function beep() {
+  if (!playSound.value) return;
+  if (!audio) audio = new Audio('/sounds/new-order.mp3');
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+}
+
+// =============================
+// 🔔 Notificações do navegador
+// =============================
+
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) {
+    console.warn("🔕 Este navegador não suporta notificações nativas.");
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission === "granted") {
+    console.log("✅ Permissão para notificações concedida.");
+  } else {
+    console.warn("🚫 Permissão de notificações negada ou não respondida.");
+  }
+}
+
+/**
+ * Exibe uma notificação nativa do navegador.
+ * @param {object} pedido - Dados do pedido
+ */
+function showNotification(pedido) {
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  const title = "Novo pedido recebido!";
+  const options = {
+    body: `${pedido.customerName || "Cliente"} — R$${Number(pedido.total || 0).toFixed(2)}`,
+    icon: "/icons/order.png", // você pode adicionar um ícone na pasta public/icons
+    badge: "/icons/badge.png",
+  };
+
+  const notif = new Notification(title, options);
+
+  notif.onclick = () => {
+    window.focus();
+    notif.close();
+  };
+}
+
+
+// =============================
+// 🧠 Lifecycle: iniciar conexões e dados
+// =============================
 onMounted(async () => {
+  await requestNotificationPermission();
+
   try {
     await store.fetch();
+    // ensure store names are hydrated when backend omitted the relation
+    await hydrateMissingStores();
     await store.fetchRiders();
   } catch (e) {
     console.error(e);
     Swal.fire('Erro', 'Falha ao carregar pedidos/entregadores.', 'error');
   }
+
+  // 🔌 Conectar ao servidor (tempo real)
+  // Build API URL: prefer VITE_API_URL, else build from current page origin with port 3000.
+  const API_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== 'https://localhost:3000')
+    ? import.meta.env.VITE_API_URL
+    : `${location.protocol}//${location.hostname}:3000`;
+  console.log('Socket connecting to API_URL:', API_URL);
+  // Prefer websocket transport to avoid polling/upgrade flapping; increase reconnection patience
+  socket.value = io(API_URL, {
+    transports: ['websocket'],
+    timeout: 30000,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    randomizationFactor: 0.2
+  });
+
+  // update connection state for a dev-friendly badge
+  connectionState.value = { status: 'connecting', since: Date.now(), url: API_URL };
+
+  socket.value.on('connect', () => {
+    connectionState.value = { status: 'connected', since: Date.now(), url: API_URL };
+    console.log('📡 Conectado ao servidor de pedidos.');
+  });
+  // Debug: log any socket event to help identify what backend is emitting
+  try {
+    socket.value.onAny((event, ...args) => {
+      try { console.debug('[socket:onAny]', event, args); } catch (e) {}
+    });
+  } catch (e) { /* some older socket builds may not support onAny; ignore */ }
+  socket.value.on('disconnect', (reason) => {
+    connectionState.value = { status: 'disconnected', reason: reason || 'unknown', since: Date.now(), url: API_URL };
+    console.warn('⚠️ Desconectado do servidor de pedidos.', reason);
+  });
+  socket.value.on('connect_error', (err) => {
+    connectionState.value = { status: 'error', reason: String(err || ''), since: Date.now(), url: API_URL };
+    console.error('❌ Socket connect error', err);
+  });
+  socket.value.on('reconnect_attempt', (n) => {
+    connectionState.value = { status: 'reconnecting', attempt: n, since: Date.now(), url: API_URL };
+    console.log('🔁 Socket reconnect attempt', n);
+  });
+
+  socket.value.on("novo-pedido", async (pedido) => {
+    console.log("🆕 Novo pedido recebido via socket:", pedido);
+    // se o payload do socket não trouxer displayId, buscar o pedido completo no backend
+    let full = pedido;
+    if (!full.displayId && full.id) {
+      try {
+        const { data } = await api.get(`/orders/${full.id}`);
+        if (data) full = data;
+      } catch (err) {
+        console.warn('⚠️ Não foi possível obter pedido completo do backend, usando payload do socket.', err);
+      }
+    }
+
+    // marca pedido como novo para aplicar animação de entrada
+    full._isNew = true;
+    store.orders.unshift(full);
+  // hydrate store name for the newly arrived order if missing
+  try { await hydrateMissingStore(full); } catch (e) {}
+    // remove a marcação após a animação
+    nextTick(() => setTimeout(() => { full._isNew = false; }, 900));
+    beep();
+    pulseButton();
+    showNotification(full);
+
+    try {
+      await printService.enqueuePrint(full);
+      console.log(`🖨️ Impressão automática enviada: ${formatDisplay(full)}`);
+    } catch (err) {
+      console.error("⚠️ Falha ao imprimir automaticamente:", err);
+    }
+
+    Swal.fire({
+      icon: "info",
+      title: "Novo pedido recebido!",
+      text: `${full.customerName || "Cliente"} - ${formatDisplay(full)}`,
+      timer: 4000,
+      toast: true,
+      position: "top-end",
+      showConfirmButton: false,
+    });
+  });
+
+  // Listen for order update events from backend (support multiple event names used by integrations)
+  async function handleOrderUpdateEvent(payload, eventName) {
+    try {
+      // Debug: log incoming payloads to help find event shapes
+      try { console.debug('[socket] order update event', eventName || '', payload); } catch (e) {}
+
+      // attempt to find an id from many possible shapes
+      let id = null;
+      if (!payload) id = null;
+      else if (typeof payload === 'string' || typeof payload === 'number') id = payload;
+      else {
+        id = payload.id || payload.orderId || payload.order_id || payload._id || payload.data?.id || payload.order?.id || payload.payload?.order?.id || payload.orderId;
+      }
+      if (!id) return;
+      // If the payload already contains the full order or status, merge optimistically to avoid extra roundtrip
+      let updated = null;
+      if (payload && (payload.order || payload.data || payload.payload || payload.status || payload.statusName)) {
+        // try common locations for full order
+        updated = payload.order || payload.data || payload.payload || null;
+        // If we only have status, build a minimal updated object
+        if (!updated && (payload.status || payload.statusName)) {
+          updated = { id, status: payload.status || payload.statusName };
+        }
+      }
+
+      // If we don't have a full updated object, fetch from store/api
+      if (!updated) {
+        try {
+          updated = await store.fetchOne(id);
+        } catch (e) {
+          console.warn('Falha ao buscar pedido atualizado via store.fetchOne, tentando API direto', e);
+          try {
+            const { data } = await api.get(`/orders/${id}`);
+            updated = data;
+          } catch (err) {
+            console.warn('Falha ao buscar pedido atualizado', err);
+          }
+        }
+      }
+      if (!updated) return;
+      // ensure related store info hydrated if missing
+      try { await hydrateMissingStore(updated); } catch (e) { /* ignore */ }
+
+      const idx = store.orders.findIndex(o => o && o.id === updated.id);
+      const old = idx !== -1 ? store.orders[idx] : null;
+      if (idx !== -1) {
+        // clear any cached normalized data so helpers recompute
+        try { if (old && old._normalized) delete old._normalized; } catch (e) {}
+        try { if (updated && updated._normalized) delete updated._normalized; } catch (e) {}
+
+        // If updated contains only partial fields (like only status), merge into existing object to preserve other fields
+        if (!updated.items && !updated.histories && (updated.status && old)) {
+          // merge into a fresh object and ensure no stale _normalized remains
+          const merged = Object.assign({}, old, updated);
+          try { if (merged && merged._normalized) delete merged._normalized; } catch (e) {}
+          store.orders.splice(idx, 1, merged);
+        } else {
+          // replace in-place to keep reactivity
+          store.orders.splice(idx, 1, updated);
+        }
+      } else {
+        // if not present, refresh full list to ensure ordering and filters match backend
+        try {
+          await store.fetch();
+        } catch (e) {
+          // final fallback: insert the item at top
+          store.orders.unshift(updated);
+        }
+      }
+
+      // re-init drag/drop to ensure DOM reflects any structural changes
+      try { await nextTick(); initDragAndDrop(); } catch (e) { /* ignore */ }
+
+      // notify only when status changed
+      try {
+        if (old && old.status !== updated.status) {
+          Swal.fire({ icon: 'info', title: 'Pedido atualizado', text: `Pedido ${formatDisplay(updated)} mudou para ${updated.status}`, toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+          beep();
+        }
+      } catch (e) { /* ignore notify errors */ }
+    } catch (e) {
+      console.warn('Erro ao processar evento de pedido atualizado', e);
+    }
+  }
+
+  // Register many common event names emitted by backend/integrations
+  const orderUpdateEvents = ['pedido-atualizado', 'order-updated', 'order:updated', 'order-status-changed', 'pedido-status', 'update-order'];
+  orderUpdateEvents.forEach(ev => socket.value.on(ev, (p) => handleOrderUpdateEvent(p, ev)));
+
+  socket.value.on('disconnect', () => {
+    // keep connectionState in sync when disconnected via other paths
+    connectionState.value = { status: 'disconnected', since: Date.now(), url: API_URL };
+    console.warn('⚠️ Desconectado do servidor de pedidos.');
+  });
+  // init drag & drop after DOM rendered
+  await nextTick();
+  initDragAndDrop();
+  // if mobile, default to Novos / Em preparo
+  try {
+    if (isMobile.value && selectedStatus.value === 'TODOS') selectedStatus.value = 'EM_PREPARO';
+  } catch (e) {}
+  // listen to resize to update mobile flag
+  try {
+    resizeHandler = () => { isMobile.value = window.innerWidth < 768 };
+    window.addEventListener('resize', resizeHandler);
+  } catch (e) {}
+  // inicia atualização de tempo para durações
+  nowTimer = setInterval(() => (now.value = Date.now()), 30 * 1000);
 });
 
+// expose connection state to template
+const socketConnection = computed(() => socket.value ? connectionState.value : { status: 'idle', url: null });
+
+// Portuguese labels for socket states (dev badge)
+const socketStatusLabel = computed(() => {
+  const s = (socketConnection.value && socketConnection.value.status) || 'idle';
+  const map = {
+    connecting: 'conectando',
+    connected: 'conectado',
+    disconnected: 'desconectado',
+    error: 'erro',
+    reconnecting: 'reconectando',
+    idle: 'inativo'
+  };
+  return map[s] || s;
+});
+
+// re-init drag/drop when orders list changes
+watch(() => store.orders.length, async () => {
+  await nextTick();
+  initDragAndDrop();
+});
+
+onUnmounted(() => {
+  if (socket.value) {
+    try { socket.value.offAny && socket.value.offAny(); } catch (e) {}
+    socket.value.disconnect();
+  }
+  try { if (resizeHandler) window.removeEventListener('resize', resizeHandler); } catch (e) {}
+  clearInterval(nowTimer);
+  // destroy Sortable instances
+  for (const s of sortableInstances) {
+    try { s.destroy(); } catch (e) {}
+  }
+});
+
+function onPrinterSaved(cfg){
+  console.log('Printer configuration saved:', cfg);
+}
+
+// =============================
+// 💡 Computed: aplicar filtros (inclui filtro de 24h)
+// =============================
+function getCreatedAt(o) {
+  // tenta diferentes campos comuns
+  const val = o.createdAt || o.created_at || o.created || o.createdAtTimestamp || o.created_at_timestamp;
+  if (!val) return null;
+  if (typeof val === 'number') return new Date(val);
+  return new Date(val);
+}
+
+function parseDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  if (typeof val === 'number') return new Date(val);
+  return new Date(val);
+}
+
+function formatDateShort(d) {
+  if (!d) return '-';
+  const dt = parseDate(d);
+  const day = dt.getDate();
+  let month = dt.toLocaleString('pt-BR', { month: 'short' });
+  month = month.replace('.', '');
+  const time = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  return `${day}/${month}, ${time}`;
+}
+
+function formatTimeOnly(d) {
+  if (!d) return '-';
+  const dt = parseDate(d);
+  return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+function formatCurrency(v){
+  try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)); }catch(e){ return 'R$ ' + (Number(v||0).toFixed(2)); }
+}
+
+function humanDuration(ms) {
+  if (ms == null || isNaN(ms)) return '-';
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}:${String(minutes).padStart(2, '0')}`; // e.g. 1:05
+}
+
+function getStatusStart(o) {
+  // procura último history onde to === current status
+  const hs = (o.histories || []).slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  for (let i = hs.length - 1; i >= 0; i--) {
+    if (hs[i].to === o.status) return parseDate(hs[i].createdAt);
+  }
+  // fallback: se não achar, usa createdAt do pedido
+  return getCreatedAt(o) || null;
+}
+
+function getOrderTotalDuration(o) {
+  const created = getCreatedAt(o);
+  if (!created) return '-';
+  return humanDuration(now.value - created.getTime());
+}
+
+function getCreatedDurationDisplay(o) {
+  const created = getCreatedAt(o);
+  if (!created) return `${formatDateShort(null)} (-)`;
+  return `${formatDateShort(created)} (${humanDuration(now.value - created.getTime())})`;
+}
+
+function getStatusStartDurationDisplay(o) {
+  const start = getStatusStart(o);
+  if (!start) return '';
+  return `Desde ${formatTimeOnly(start)} (${humanDuration(now.value - start.getTime())})`;
+}
+
+function getPaymentMethod(o) {
+  const p = o.payload?.payments;
+  if (!p) return '—';
+  // try structured methods
+  const m = p.methods && p.methods[0];
+  if (m) {
+    if (m.method) return m.method + (m.card?.brand ? ` (${m.card.brand})` : '');
+    if (m.type) return m.type;
+  }
+  // fallback: prepaid flag
+  if (p.prepaid) return 'Pré-pago';
+  return '—';
+}
+
+function getOrderNotes(o) {
+  return o.payload?.notes || o.payload?.observations || o.payload?.additionalInfo?.notes || '';
+}
+
+// Normalize items from different integration payload shapes to a common structure
+// normalizeOrderItems is shared from ../utils/orderUtils.js
+
+// Normaliza um pedido inteiro para um shape consistente usado pela UI
+function normalizeOrder(o){
+  if(!o) return {};
+  if (o._normalized) return o._normalized;
+
+  const items = normalizeOrderItems(o);
+  // payment method: try common places
+  let paymentMethod = '—';
+  if (o.payment && (o.payment.methodCode || o.payment.method)) {
+    paymentMethod = o.payment.methodCode || o.payment.method || String(o.payment.amount || '');
+  } else if (o.payload && o.payload.payment) {
+    paymentMethod = o.payload.payment.methodCode || o.payload.payment.method || o.payload.payment.type || paymentMethod;
+  } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0]) {
+    const m = o.payload.payments[0];
+    paymentMethod = m.method || m.type || paymentMethod;
+  } else {
+    // fallback to existing helper
+    try { paymentMethod = getPaymentMethod(o); } catch(e) {}
+  }
+
+  // coupon
+  const couponCode = o.couponCode || (o.coupon && (o.coupon.code || o.couponId)) || (o.payload && o.payload.coupon && (o.payload.coupon.code || o.payload.couponId)) || null;
+  const couponDiscount = Number(o.couponDiscount ?? o.coupon?.discountAmount ?? o.discountAmount ?? o.discount ?? o.payload?.coupon?.discountAmount ?? 0) || 0;
+  // capture any customer-provided 'troco' (change) from common payload locations
+  let paymentChange = null;
+  try {
+    if (o.payment && (o.payment.changeFor || o.payment.change_for || o.payment.change)) {
+      paymentChange = Number((o.payment.changeFor ?? o.payment.change_for ?? o.payment.change) || 0) || null;
+    } else if (o.payload && o.payload.payment && (o.payload.payment.changeFor || o.payload.payment.change_for || o.payload.payment.change)) {
+      paymentChange = Number((o.payload.payment.changeFor ?? o.payload.payment.change_for ?? o.payload.payment.change) || 0) || null;
+    } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0] && (o.payload.payments[0].changeFor || o.payload.payments[0].change_for || o.payload.payments[0].change)) {
+      paymentChange = Number((o.payload.payments[0].changeFor ?? o.payload.payments[0].change_for ?? o.payload.payments[0].change) || 0) || null;
+    }
+  } catch (e) { /* ignore */ }
+
+  const total = Number(o.total ?? o.amount ?? (o.payment ? o.payment.amount : undefined) ?? 0) || 0;
+
+  const normalized = {
+    id: o.id,
+    display: formatDisplay(o),
+    customerName: o.customerName || o.name || (o.customer && (o.customer.name || o.customer.fullName)) || '',
+    customerPhone: o.customerPhone || o.contact || (o.customer && o.customer.contact) || '',
+    address: o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || o.rawPayload?.neighborhood || '',
+    total,
+    paymentMethod,
+    // storeName and channelLabel: prefer explicit store name and a human-friendly channel label
+    // prefer the related store name from the related store object, or from the
+    // payload (public orders may include payload.store.name). Do NOT fallback to company.
+    storeName: (function() {
+      try {
+        return (o.store && o.store.name) || (o.payload && o.payload.store && o.payload.store.name) || (o.payload && o.payload.rawPayload && o.payload.rawPayload.store && o.payload.rawPayload.store.name) || null;
+      } catch (e) { return null; }
+    })(),
+    channelLabel: (function() {
+      // try common locations for integration/channel/provider
+      const raw = o.payload?.integration?.provider || o.payload?.provider || o.payload?.adapter || o.payload?.platform || o.payload?.source?.provider || o.payload?.channel || o.integration?.provider || o.adapter || o.payload?.source || null;
+
+      function prettyChannel(p) {
+        if (!p) return null;
+        const s = String(p).trim();
+        const up = s.toUpperCase();
+        const map = {
+          IFOOD: 'iFood',
+          UBER: 'Uber',
+          UBEREATS: 'UberEats',
+          RAPPI: 'Rappi',
+          PDV: 'PDV',
+          POS: 'PDV',
+          PUBLIC: 'Cardápio digital',
+          WEB: 'Cardápio digital',
+          MENU: 'Cardápio digital',
+          'CARDAPIO_DIGITAL': 'Cardápio digital'
+        };
+        if (map[up]) return map[up];
+        // fallback: title case a cleaned token
+        const lower = s.toLowerCase();
+        return lower.charAt(0).toUpperCase() + lower.slice(1);
+      }
+
+      // Prefer explicit payload hints (customerSource/public orders)
+      if (!raw) {
+        const src = (o.customerSource || (o.payload && o.payload.source) || null);
+        if (src) {
+          const guessed = prettyChannel(src);
+          if (guessed) return guessed;
+        }
+      }
+
+      return prettyChannel(raw);
+    })(),
+    couponCode,
+    couponDiscount,
+    paymentChange,
+    items
+  };
+
+  // cache on object to avoid recomputing while the object is unchanged
+  try { o._normalized = normalized; } catch (e) {}
+  return normalized;
+}
+
+// If backend didn't include the related store object, fetch it by storeId as a fallback.
+async function fetchStoreById(id) {
+  if (!id) return null;
+  try {
+    const { data } = await api.get(`/stores/${id}`);
+    return data;
+  } catch (e) {
+    // ignore failure, return null
+    return null;
+  }
+}
+
+async function hydrateMissingStore(o) {
+  try {
+    if (!o) return;
+    if (o.store && o.store.name) return;
+    if (!o.storeId) return;
+    const s = await fetchStoreById(o.storeId);
+    if (s) o.store = s;
+  } catch (e) {
+    // swallow
+  }
+}
+
+async function hydrateMissingStores() {
+  const toFetch = (store.orders || []).filter(o => o && o.storeId && (!o.store || !o.store.name));
+  await Promise.all(toFetch.map(o => hydrateMissingStore(o)));
+}
+
+function reprintOrder(o) {
+  printReceipt(o);
+}
+
+function sendWhatsAppAction(o) {
+  console.log('Enviar WhatsApp para pedido', o.id);
+  // stub: could open modal to send message
+}
+
+function markAsConcludedAction(o) {
+  changeStatus(o, 'CONCLUIDO');
+}
+
+function cancelOrderAction(o) {
+  changeStatus(o, 'CANCELADO');
+}
+
+// compute next status in the happy path pipeline
+function getNextStatus(current) {
+  const pipeline = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONCLUIDO'];
+  const idx = pipeline.indexOf((current || '').toUpperCase());
+  if (idx === -1) return null;
+  if (idx === pipeline.length - 1) return null;
+  return pipeline[idx + 1];
+}
+
+async function advanceStatus(order) {
+  const next = getNextStatus(order.status);
+  if (!next) return;
+  // reuse existing changeStatus to preserve assign-modal behaviour for SAIU_PARA_ENTREGA
+  await changeStatus(order, next);
+}
+
+const filteredOrders = computed(() => {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  return store.orders.filter((o) => {
+    // filtro de status/entregador
+    const statusMatch = selectedStatus.value === 'TODOS' || o.status === selectedStatus.value;
+    // compare as strings to avoid numeric/string id mismatches
+    const riderMatch = selectedRider.value === 'TODOS' || (o.rider && String(o.rider.id) === String(selectedRider.value));
+
+    // order number filter (match display or id)
+    const qOrder = String(searchOrderNumber.value || '').trim().toLowerCase();
+    const display = String(formatDisplay(o) || '').toLowerCase();
+    const idStr = String(o.id || '').toLowerCase();
+    const orderNumberMatch = !qOrder || display.includes(qOrder) || idStr.includes(qOrder);
+
+    // customer name filter
+    const qName = String(searchCustomerName.value || '').trim().toLowerCase();
+    const customerMatch = !qName || String(o.customerName || '').toLowerCase().includes(qName);
+
+    if (!statusMatch || !riderMatch || !orderNumberMatch || !customerMatch) return false;
+
+    // filtro: pedidos com mais de 24h não devem ser exibidos
+    const created = getCreatedAt(o);
+    if (created && (now - created.getTime() > dayMs)) return false;
+
+    return true;
+  });
+});
+
+// debug: log quando o filtro de entregador mudar (ajuda a depurar reatividade)
+// debug: log changes in filters to help debugging filter behaviour
+watch([selectedRider, searchOrderNumber, searchCustomerName, selectedStatus], ([rider, orderQ, nameQ, status]) => {
+  try {
+    const counts = COLUMNS.map(c => ({ key: c.key, count: columnOrders(c.key).length }));
+    console.log('[debug] filters ->', { rider, orderQ, nameQ: nameQ, status, filtered: filteredOrders.value.length, columnCounts: counts });
+  } catch (e) {
+    console.log('[debug] filters changed', { rider, orderQ, nameQ: nameQ, status });
+  }
+});
+
+// timeline UI state
+const openTimeline = ref({});
+
+function toggleTimeline(id) {
+  openTimeline.value[id] = !openTimeline.value[id];
+}
+
+const STATUS_LABEL = {
+  EM_PREPARO: 'Em preparo',
+  SAIU_PARA_ENTREGA: 'Saiu para entrega',
+  CONCLUIDO: 'Concluído',
+  CANCELADO: 'Cancelado',
+  INVOICE_AUTHORIZED: 'NFC-e Autorizada',
+};
+
+// columns to render (order matters)
+const COLUMNS = [
+  { key: 'EM_PREPARO', label: 'Novos / Em preparo' },
+  { key: 'SAIU_PARA_ENTREGA', label: 'Saiu para entrega' },
+  { key: 'CONCLUIDO', label: 'Concluído' }
+];
+
+function columnOrders(key) {
+  // derive column items from the already-filteredOrders to keep filters consistent
+  try {
+    return filteredOrders.value.filter((o) => {
+      if (!o) return false;
+      return (o.status || '').toUpperCase() === (key || '').toUpperCase();
+    });
+  } catch (e) {
+    // fallback: if filteredOrders isn't ready for some reason, filter raw store.orders
+    const nowTs = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    return store.orders.filter((o) => {
+      if (!o) return false;
+      if ((o.status || '').toUpperCase() !== (key || '').toUpperCase()) return false;
+      if (selectedRider.value !== 'TODOS' && o.rider && String(o.rider.id) !== String(selectedRider.value)) return false;
+      const created = getCreatedAt(o);
+      if (created && (nowTs - created.getTime() > dayMs)) return false;
+      return true;
+    });
+  }
+}
+
+function initDragAndDrop(){
+  // remove any existing instances
+  for (const s of sortableInstances) try { s.destroy() } catch(e) {}
+  sortableInstances.length = 0;
+
+  const groups = document.querySelectorAll('.orders-column .list');
+  groups.forEach((el) => {
+    const s = Sortable.create(el, {
+      group: 'orders',
+      animation: 150,
+      handle: '.card-body',
+      fallbackOnBody: true,
+      swapThreshold: 0.65,
+      onAdd: function (evt) {
+        const li = evt.item;
+        const orderId = li.dataset.orderId;
+  const toCol = evt.to.closest('.orders-column')?.getAttribute('data-status');
+        if(!orderId || !toCol) return;
+        // find order
+        const order = store.orders.find(o => o.id === orderId) || { id: orderId };
+        // confirmation for moving to concluded or canceled
+        // call changeStatus which already handles assign modal for SAIU_PARA_ENTREGA
+        (async () => {
+          if (toCol === 'CONCLUIDO'){
+            const conf = await Swal.fire({ title: 'Marcar como concluído?', text: 'Deseja marcar este pedido como CONCLUÍDO?', icon: 'question', showCancelButton: true, confirmButtonText: 'Sim', cancelButtonText: 'Cancelar' })
+            if(!conf.isConfirmed){ evt.from.insertBefore(li, evt.from.children[evt.oldIndex] || null); return }
+          }
+          if (toCol === 'CANCELADO'){
+            const conf = await Swal.fire({ title: 'Cancelar pedido?', text: 'Tem certeza que deseja cancelar este pedido?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sim, cancelar', cancelButtonText: 'Manter' })
+            if(!conf.isConfirmed){ evt.from.insertBefore(li, evt.from.children[evt.oldIndex] || null); return }
+          }
+          await changeStatus(order, toCol);
+        })();
+      }
+    });
+    sortableInstances.push(s);
+  });
+}
+
+function buildTimeline(o) {
+  const created = parseDate(getCreatedAt(o));
+  const histories = (o.histories || []).slice().sort((a, b) => parseDate(a.createdAt) - parseDate(b.createdAt));
+
+  const entries = [];
+  if (histories.length === 0) {
+    // ensure start is a Date (fallback to now)
+    entries.push({ status: o.status, start: created || new Date(), end: null });
+    return entries;
+  }
+
+  // Determine initial start time: prefer order.createdAt, else first history.createdAt
+  let prevStatus = histories[0].to || o.status;
+  let prevTime = created || parseDate(histories[0].createdAt) || new Date();
+
+  for (let i = 1; i < histories.length; i++) {
+    const h = histories[i];
+    const t = parseDate(h.createdAt) || new Date();
+    entries.push({ status: prevStatus, start: prevTime, end: t });
+    prevStatus = h.to;
+    prevTime = t;
+  }
+
+  // last entry - until now
+  entries.push({ status: prevStatus, start: prevTime, end: null });
+  return entries;
+}
+
+// =============================
+// 🧭 Ações de interface
+// =============================
 function logout() {
   auth.logout();
   location.href = '/login';
 }
 
-function printReceipt(o) {
-  router.push(`/orders/${o.id}/receipt`);
+async function printReceipt(order) {
+    try {
+      await printService.enqueuePrint(order);
+      console.log(`🧾 Impressão solicitada manualmente: ${formatDisplay(order)}`);
+
+      Swal.fire({
+        icon: "success",
+        title: "Impressão enviada!",
+        text: `Comanda do pedido ${formatDisplay(order)} enviada à impressora.`,
+        timer: 2500,
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+      });
+    } catch (err) {
+    console.error("❌ Erro ao imprimir manualmente:", err);
+    Swal.fire({
+      icon: "error",
+      title: "Erro ao imprimir",
+      text:
+        "Falha ao imprimir comanda. Verifique se o QZ Tray está aberto e autorizado.",
+      timer: 4000,
+      toast: true,
+      position: "top-end",
+      showConfirmButton: false,
+    });
+  }
+}
+
+// Abre uma pré-visualização da comanda em nova aba com texto pré-formatado
+function escapeHtml(unsafe) {
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+async function viewReceipt(order) {
+  try {
+    // 1) generate ticket QR on the server so token is fresh/unique
+    let qrDataUrl = null;
+    try {
+      const { data: t } = await api.post(`/orders/${order.id}/tickets`);
+      if (t && t.qrUrl) {
+        qrDataUrl = await QRCode.toDataURL(t.qrUrl, { width: 220, margin: 2 });
+      }
+    } catch (e) {
+      // ignore ticket generation failure and fallback to no-QR preview
+      console.warn('Falha ao gerar ticket/QR para pré-visualização', e);
+    }
+
+    // use printService's formatter when available
+    const text = (printService && printService.formatOrderText) ? printService.formatOrderText(order) : null;
+    const content = text || (`Comanda: ${formatDisplay(order)}\n\n` + JSON.stringify(order, null, 2));
+
+    // show QR and receipt directly in a modal (no separate page)
+    try {
+      let modalHtml = '';
+      modalHtml += `<div style="max-width:520px;margin:0 auto;text-align:left"><div style="white-space:pre-wrap;font-family:monospace;margin-bottom:12px">${escapeHtml(content)}</div>`;
+      if (qrDataUrl) {
+        modalHtml += `<div style="display:flex;justify-content:center;margin-top:6px"><img src="${qrDataUrl}" alt="QR do pedido" style="width:220px;height:220px;object-fit:contain;border:0;border-radius:8px"/></div>`;
+        // small tip for riders explaining how to claim the order
+        modalHtml += `<div style="margin-top:8px;padding:10px;border-radius:8px;background:#f8f9fa;border:1px solid #e9ecef;color:#333;font-size:13px;text-align:center;">`;
+        modalHtml += `<strong>Como o motoboy deve proceder:</strong><br/>Abra o app "Painel do Motoboy" e toque em <em>Ler pedido (QR)</em>. Aponte a câmera para este QR; ao escanear, o pedido será atribuído a você automaticamente.`;
+        modalHtml += `</div>`;
+        modalHtml += `<div style="text-align:center;font-size:12px;color:#666;margin-top:6px">Escaneie para despachar</div>`;
+      }
+      modalHtml += `</div>`;
+
+      await Swal.fire({
+        title: `Comanda ${escapeHtml(formatDisplay(order))}`,
+        html: modalHtml,
+        width: Math.min(window.innerWidth - 40, 560),
+        showCloseButton: true,
+        confirmButtonText: 'Fechar',
+        focusConfirm: false,
+      });
+    } catch (e) {
+      console.warn('Falha ao abrir modal de visualização, tentando abrir em nova aba', e);
+      const w = window.open('', '_blank');
+      if (!w) {
+        Swal.fire('Bloqueado', 'Não foi possível abrir a janela de visualização (bloqueador de popups).', 'warning');
+        return;
+      }
+      let html = `<!doctype html><html><head><meta charset="utf-8"><title>Comanda ${escapeHtml(formatDisplay(order))}</title>
+        <style>body{font-family:monospace;white-space:pre-wrap;padding:16px} .qr-wrap{display:flex;justify-content:center;margin-top:12px} .receipt-box{max-width:520px;margin:0 auto}</style></head><body><div class="receipt-box"><pre>${escapeHtml(content)}</pre>`;
+      if (qrDataUrl) {
+        html += `<div class="qr-wrap"><img src="${qrDataUrl}" alt="QR do pedido" style="width:180px;height:180px;object-fit:contain;border:0;" /></div><div style="text-align:center;font-size:12px;color:#666;margin-top:6px;">Escaneie para despachar</div>`;
+      }
+      html += `</div></body></html>`;
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    }
+  } catch (e) {
+    console.error('Erro ao abrir pré-visualização da comanda', e);
+    Swal.fire('Erro', 'Falha ao gerar pré-visualização da comanda.', 'error');
+  }
+}
+
+// Dev helper: send a canned test order to the print service
+async function sendTestPrint() {
+  const testOrder = {
+    id: `dev-test-${Date.now()}`,
+    displaySimple: 'TT',
+    customerName: 'Cliente Teste',
+    address: 'Rua Exemplo, 123',
+    items: [
+      { name: 'Pizza Margherita', quantity: 1, unitPrice: 29.9 },
+      { name: 'Coca-Cola 350ml', quantity: 1, unitPrice: 6.5 }
+    ],
+    total: 36.4,
+  };
+
+  try {
+    await printService.enqueuePrint(testOrder);
+    Swal.fire({ icon: 'success', title: 'Enviado', text: 'Comanda de teste enfileirada para impressão.', timer: 2000, toast: true, position: 'top-end', showConfirmButton: false });
+    console.log('🧾 Test print enqueued', testOrder);
+  } catch (e) {
+    console.error('❌ Falha ao enfileirar teste de impressão', e);
+    Swal.fire({ icon: 'error', title: 'Erro', text: 'Falha ao enfileirar teste de impressão. Veja console.', timer: 4000, toast: true, position: 'top-end', showConfirmButton: false });
+  }
 }
 
 async function openAssignModal(order) {
-  // garante lista atual
   const riders = (await store.fetchRiders()) || [];
   const options = riders.reduce((acc, r) => {
     acc[r.id] = `${r.name} — ${r.whatsapp || 'sem WhatsApp'}`;
@@ -55,21 +922,17 @@ async function openAssignModal(order) {
     showCancelButton: true,
     confirmButtonText: 'Atribuir',
     cancelButtonText: 'Cancelar',
-    footer: 'Se o entregador não estiver cadastrado, você poderá digitar um WhatsApp.',
   });
 
   if (riderId) {
-    // atribui e muda status para SAIU_PARA_ENTREGA (notify rider + cliente)
     await store.assignOrder(order.id, { riderId, alsoSetStatus: true });
     await store.fetch();
     Swal.fire('OK', 'Pedido atribuído e notificado via WhatsApp.', 'success');
     return;
   }
 
-  // Digitar WhatsApp manualmente
   const { value: phone } = await Swal.fire({
     title: 'WhatsApp do entregador',
-    text: 'Formato: 55DDXXXXXXXXX',
     input: 'text',
     inputPlaceholder: '5599999999999',
     showCancelButton: true,
@@ -99,111 +962,353 @@ async function changeStatus(order, to) {
     loading.value = false;
   }
 }
+
+const statusActions = [
+  { to: 'EM_PREPARO', label: 'Em preparo' },
+  { to: 'SAIU_PARA_ENTREGA', label: 'Saiu p/ entrega' },
+  { to: 'CONCLUIDO', label: 'Concluído' },
+  { to: 'CANCELADO', label: 'Cancelar' },
+];
+
+const statusFilters = [
+  { value: 'TODOS', label: 'Todos', color: 'secondary' },
+  { value: 'EM_PREPARO', label: 'Em preparo', color: 'warning' },
+  { value: 'SAIU_PARA_ENTREGA', label: 'Saiu p/ entrega', color: 'primary' },
+  { value: 'CONCLUIDO', label: 'Concluído', color: 'success' },
+  { value: 'CANCELADO', label: 'Cancelado', color: 'danger' },
+  { value: 'INVOICE_AUTHORIZED', label: 'NFC-e aut.', color: 'info' },
+];
+
+// predefined WhatsApp messages for riders (placeholders — will be replaced later)
+const riderWhatsAppMessages = {
+  'msg1': 'Olá, seu pedido está a caminho.',
+  'msg2': 'Olá, precisa de ajuda com o pedido?',
+  'msg3': 'Pedido entregue. Obrigado!'
+};
+
+async function openWhatsAppToRider(order) {
+  if (!order || !order.rider) {
+    Swal.fire('Sem entregador', 'Este pedido não possui entregador atribuído.', 'info');
+    return;
+  }
+  const phone = order.rider.whatsapp || order.rider.phone || order.rider.mobile;
+  const opts = {};
+  Object.keys(riderWhatsAppMessages).forEach((k) => { opts[k] = riderWhatsAppMessages[k]; });
+  // build html with buttons for preview
+  const choicesHtml = Object.keys(riderWhatsAppMessages).map(k => {
+    const txt = String(riderWhatsAppMessages[k]).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // button full width, text aligned left so preview is easier to read
+    return `<button type="button" data-key="${k}" data-txt="${encodeURIComponent(String(riderWhatsAppMessages[k]))}" class="wa-choose btn btn-outline-primary w-100 text-start mb-2">${txt}</button>`;
+  }).join('');
+
+  const html = `
+    <div class="wa-choices">
+      <div class="mb-2 small text-muted">Escolha uma mensagem:</div>
+      <div id="wa_preview" class="wa-preview mb-2 small text-muted">(nenhuma mensagem selecionada)</div>
+      <div>${choicesHtml}</div>
+      <input type="hidden" id="wa_selected" />
+    </div>
+  `;
+
+  const result = await Swal.fire({
+    title: 'Enviar WhatsApp para ' + (order.rider.name || 'entregador'),
+    html,
+    showCancelButton: true,
+    confirmButtonText: 'Enviar',
+    focusConfirm: false,
+    preConfirm: () => {
+      const v = document.getElementById('wa_selected')?.value;
+      if (!v) {
+        Swal.showValidationMessage('Selecione uma mensagem');
+      }
+      return v;
+    },
+    didOpen: () => {
+      const popup = Swal.getPopup();
+      if (!popup) return;
+      popup.querySelectorAll('.wa-choose').forEach((btn) => {
+        btn.addEventListener('click', (ev) => {
+          // mark selection
+          popup.querySelectorAll('.wa-choose').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const key = btn.getAttribute('data-key');
+          const hid = popup.querySelector('#wa_selected');
+          if (hid) hid.value = key;
+          // update preview area with original text (decoded)
+          const raw = btn.getAttribute('data-txt') || '';
+          const decoded = decodeURIComponent(raw);
+          const preview = popup.querySelector('#wa_preview');
+          if (preview) preview.innerText = decoded;
+        });
+      });
+    }
+  });
+
+  if (!result || !result.isConfirmed) return;
+  const value = result.value;
+  const text = riderWhatsAppMessages[value] || '';
+  if (!phone) {
+    Swal.fire('Sem número', 'O entregador não possui número de WhatsApp cadastrado.', 'warning');
+    return;
+  }
+  // open WhatsApp Web with prefilled message
+  const cleaned = String(phone).replace(/[^0-9]/g, '');
+  const url = `https://wa.me/${encodeURIComponent(cleaned)}?text=${encodeURIComponent(text)}`;
+  window.open(url, '_blank');
+}
+
+// =============================
+// 🔊 Controle visual do botão de som (pulse)
+// =============================
+const soundButton = ref(null);
+
+function toggleSound() {
+  playSound.value = !playSound.value;
+}
+
+function pulseButton() {
+  if (!soundButton.value) return;
+  soundButton.value.classList.add('btn-pulse');
+  setTimeout(() => soundButton.value?.classList.remove('btn-pulse'), 800);
+}
+
+// duplicate real-time handler removed (handled inside onMounted)
+
 </script>
 
 <template>
+  <div>
   <div class="container py-4">
-    <header class="d-flex align-items-center justify-content-between mb-4">
-      <h2 class="fs-4 fw-semibold m-0">Pedidos</h2>
-      <div class="d-flex gap-2">
-        <BaseButton variant="primary" @click="store.fetch">Atualizar</BaseButton>
-
-        <button type="button" class="btn btn-danger" @click="logout">
-          Sair
+    <header class="d-flex flex-wrap align-items-center justify-content-between mb-4 gap-3">
+      <div class="d-flex align-items-center">
+        <h2 class="fs-4 fw-semibold m-0">Pedidos</h2>
+        <!-- dev-only socket status badge -->
+        <span v-if="socketConnection" class="ms-3 badge" :class="{
+          'bg-success': socketConnection.status === 'connected',
+          'bg-warning text-dark': socketConnection.status === 'reconnecting',
+          'bg-danger': socketConnection.status === 'error' || socketConnection.status === 'disconnected',
+          'bg-secondary': socketConnection.status === 'connecting' || socketConnection.status === 'idle'
+        }">
+          {{ 'Socket: ' + socketStatusLabel }}
+          <small v-if="socketConnection.url" class="d-block text-truncate" style="max-width:200px;">{{ socketConnection.url.replace(/^https?:\/\//, '') }}</small>
+        </span>
+      </div>
+      <PrinterWatcher />
+      <PrinterStatus />
+      <!-- Dev: quick test print button -->
+      <div class="ms-2 d-flex gap-2 align-items-center">
+        <button type="button" class="btn btn-sm btn-outline-primary" @click="showPrinterConfig = true" title="Configurar impressora">
+          <i class="bi bi-gear"></i>&nbsp;Configurar Impressora
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
+          <i class="bi bi-printer"></i>&nbsp;Teste Impressão
         </button>
       </div>
     </header>
+    <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
 
-    <div class="card">
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover table-bordered align-middle mb-0">
-            <thead class="table-light">
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">Cliente</th>
-                <th scope="col">Endereço</th>
-                <th scope="col">Total</th>
-                <th scope="col">Status</th>
-                <th scope="col">Entregador</th>
-                <th scope="col" style="width: 320px;">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="o in store.orders" :key="o.id">
-                <td class="text-nowrap">
-                  {{ o.displayId || o.id.slice(0,6) }}
-                </td>
-
-                <td>
-                  <div class="fw-medium">{{ o.customerName || '-' }}</div>
-                  <div class="small text-muted">{{ o.customerPhone || '' }}</div>
-                </td>
-
-                <td>
-                  <div class="small">
-                    {{ o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || '-' }}
-                  </div>
-                </td>
-
-                <td class="text-nowrap">
-                  R$ {{ Number(o.total || o.total?.orderAmount || 0).toFixed(2) }}
-                </td>
-
-                <td>
-                  <span
-                    class="badge"
-                    :class="{
-                      'bg-warning text-dark': o.status === 'EM_PREPARO',
-                      'bg-primary': o.status === 'SAIU_PARA_ENTREGA',
-                      'bg-success': o.status === 'CONCLUIDO',
-                      'bg-danger': o.status === 'CANCELADO',
-                    }"
-                  >
-                    {{ o.status }}
-                  </span>
-                </td>
-
-                <td>
-                  <div class="small">
-                    <span v-if="o.rider">{{ o.rider.name }}</span>
-                    <span v-else class="text-muted">—</span>
-                  </div>
-                </td>
-
-                <td>
-                  <div class="d-flex flex-wrap gap-2">
-                    <button
-                      v-for="a in statusActions"
-                      :key="a.to"
-                      type="button"
-                      class="btn btn-outline-secondary btn-sm"
-                      :disabled="!store.canTransition(o.status, a.to) || loading"
-                      @click="changeStatus(o, a.to)"
-                    >
-                      {{ a.label }}
-                    </button>
-
-                    <button
-                      type="button"
-                      class="btn btn-dark btn-sm"
-                      @click="printReceipt(o)"
-                    >
-                      Imprimir comanda
-                    </button>
-                  </div>
-                </td>
-              </tr>
-
-              <tr v-if="store.orders.length === 0">
-                <td colspan="7" class="text-center text-secondary py-4">
-                  Nenhum pedido encontrado.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div> <!-- /.table-responsive -->
+    <!-- 🔍 Filtros + Som -->
+    <div
+      class="filters-bar d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4"
+    >
+  <!-- Filtros de status (visível apenas em dispositivos pequenos) -->
+  <div class="btn-group flex-wrap d-flex d-md-none">
+        <button
+          v-for="s in statusFiltersMobile"
+          :key="s.value"
+          type="button"
+          class="btn"
+          :class="[
+            selectedStatus === s.value ? `btn-${s.color}` : 'btn-outline-secondary',
+          ]"
+          @click="selectedStatus = s.value"
+        >
+          {{ s.label }}
+        </button>
       </div>
+
+      <!-- Filtros adicionais -->
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <select
+          v-model="selectedRider"
+          class="form-select form-select-sm"
+          style="min-width: 200px;"
+        >
+          <option value="TODOS">Todos os entregadores</option>
+          <!-- normalize option values to strings to avoid type-mismatch when comparing ids -->
+          <option v-for="r in store.riders" :key="r.id" :value="String(r.id)">
+            {{ r.name }}
+          </option>
+        </select>
+
+        <input v-model="searchOrderNumber" class="form-control form-control-sm" placeholder="Nº pedido" style="max-width:140px;" />
+        <input v-model="searchCustomerName" class="form-control form-control-sm" placeholder="Nome do cliente" style="min-width:200px; max-width:280px;" />
+
+        <!-- 🔊 Botão de som -->
+        <button
+          ref="soundButton"
+          type="button"
+          class="btn position-relative"
+          :class="playSound ? 'btn-primary' : 'btn-outline-secondary'"
+          @click="toggleSound"
+          title="Som de novos pedidos"
+        >
+          <i
+            :class="playSound ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute-fill'"
+            class="fs-5"
+          ></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Orders board: columns with drag & drop -->
+    <div v-if="store.orders && store.orders.length > 0" class="orders-board">
+      <div class="boards d-flex gap-3 overflow-auto py-2">
+        <div class="orders-column card" v-for="col in (isMobile ? COLUMNS.filter(c => c.key === selectedStatus) : COLUMNS)" :key="col.key" :data-status="col.key">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <div class="fw-semibold">{{ col.label }}</div>
+            <div><span class="badge bg-secondary">{{ columnOrders(col.key).length }}</span></div>
+          </div>
+          <div class="list mt-2  p-2" style="min-height:120px">
+            <div v-for="o in columnOrders(col.key)" :key="o.id" class="card mb-2 order-card" :class="{ 'fade-in': o._isNew }" :data-order-id="o.id">
+              <div class="card-body p-2 d-flex align-items-start gap-2">
+                <div class="flex-grow-1">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                          <div class="fw-semibold">#{{ formatDisplay(o) }} — {{ o.customerName || 'Cliente' }}</div>
+                          <div class="text-muted small">{{ o.customerPhone || '' }}</div>
+                          <div class="small text-muted mt-1 d-flex align-items-center">
+                            <i class="bi bi-credit-card me-1"></i>
+                            <span>
+                              {{ normalizeOrder(o).paymentMethod }}
+                              <span v-if="normalizeOrder(o).paymentChange" class="ms-2 text-muted">• Troco: {{ formatCurrency(normalizeOrder(o).paymentChange) }}</span>
+                            </span>
+                          </div>
+                          <div class="mt-1 small text-muted d-flex align-items-center">
+                            <i class="bi bi-person-badge me-1"></i>
+                            <span v-if="o.rider">{{ o.rider.name }}</span>
+                            <span v-else class="text-muted">—</span>
+                            <button v-if="o.rider" class="btn btn-sm btn-link p-0 ms-2" @click.stop="openWhatsAppToRider(o)" title="WhatsApp do entregador">
+                              <i class="bi bi-whatsapp text-success"></i>
+                            </button>
+                          </div>
+                    </div>
+                    <!-- status badge removed from card; column header indicates status -->
+                  </div>
+                  <div class="small text-muted mt-1">{{ o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || '-' }}</div>
+                  <div class="d-flex justify-content-between align-items-center mt-2">
+                    <div class="small text-muted">{{ getCreatedDurationDisplay(o) }}</div>
+                    <div class="fw-semibold text-success">R$ {{ Number(o.total || 0).toFixed(2) }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="card-footer bg-transparent py-1 d-flex justify-content-between align-items-center">
+                <div class="small text-muted">
+                  {{ normalizeOrder(o).storeName ? (normalizeOrder(o).storeName + (normalizeOrder(o).channelLabel ? ' | ' + normalizeOrder(o).channelLabel : '')) : (normalizeOrder(o).channelLabel ? normalizeOrder(o).channelLabel : '—') }}
+                </div>
+                <div>
+                  <button class="btn btn-sm btn-outline-secondary me-1" @click="viewReceipt(o)" title="Visualizar comanda"><i class="bi bi-eye"></i></button>
+                  <button class="btn btn-sm btn-light me-1" @click="printReceipt(o)" title="Imprimir comanda"><i class="bi bi-printer"></i></button>
+                  <button class="btn btn-sm btn-primary me-1" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status) || !store.canTransition(o.status, getNextStatus(o.status)) || loading" title="Avançar status">
+                    <i class="bi bi-arrow-right"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary" @click="toggleTimeline(o.id)">Detalhes</button>
+                </div>
+              </div>
+              <div v-if="openTimeline[o.id]" class="p-2 bg-light small border-top">
+                <div class="fw-semibold">Itens</div>
+                <ul class="mb-1">
+                  <li v-for="it in normalizeOrderItems(o)" :key="it.id + it.name">
+                    <div class="fw-semibold">{{ it.quantity || 1 }}x {{ it.name }} <span class="text-success ms-2">{{ formatCurrency(it.unitPrice || 0) }}</span></div>
+                    <div v-if="it.options && it.options.length" class="small text-muted ms-3 mt-1">
+                      <div v-for="(opt, idx) in it.options" :key="(opt.name || idx) + idx">
+                        <span v-if="opt.quantity">{{ opt.quantity }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+                <div v-if="normalizeOrder(o).couponCode || normalizeOrder(o).couponDiscount" class="mt-2 small">
+                  <div v-if="normalizeOrder(o).couponCode"><strong>Cupom:</strong> {{ normalizeOrder(o).couponCode }}</div>
+                  <div v-if="normalizeOrder(o).couponDiscount"><strong>Desconto:</strong> -{{ formatCurrency(normalizeOrder(o).couponDiscount) }}</div>
+                </div>
+                <div v-if="normalizeOrder(o).paymentChange" class="mt-2 small">
+                  <strong>Troco:</strong> {{ formatCurrency(normalizeOrder(o).paymentChange) }}
+                </div>
+                <div v-if="getOrderNotes(o)" class="text-muted mt-2">{{ getOrderNotes(o) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else class="text-center text-secondary py-5">
+      <i class="bi bi-bag-x fs-1 d-block mb-2"></i>
+      <p class="mb-0">Nenhum pedido encontrado.</p>
+    </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 🔄 Animação de "pulse" do botão de som */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.4);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 8px 4px rgba(13, 110, 253, 0.2);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(13, 110, 253, 0);
+  }
+}
+
+.btn-pulse {
+  animation: pulse 0.8s ease;
+}
+
+/* Fade-in para novos pedidos */
+@keyframes fadeInCard {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeInCard 0.9s ease forwards;
+}
+
+/* Boards layout */
+.orders-board .boards { padding: 8px 0; }
+.orders-column {background-color: #E6E6E6; flex: 0 0 32%; }
+.orders-column .list { max-height: 70vh; overflow:auto; }
+.orders-column .card-header {
+  background: #FFF;
+  border: none;
+}
+.order-card { border: none;}
+.orders-column .card-body { cursor: grab; }
+
+/* responsive: horizontal scroll on small screens */
+@media (max-width: 768px) {
+  .orders-column { min-width: 260px; flex: 0 0 260px; }
+  .orders-board .boards { padding-bottom: 12px; }
+}
+
+/* SweetAlert WA chooser styles */
+.wa-choices .wa-preview {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  padding: 8px;
+  border-radius: 6px;
+  min-height: 44px;
+  white-space: pre-wrap; /* preserve line breaks */
+}
+.wa-choose.active {
+  background-color: #0d6efd !important;
+  color: #fff !important;
+}
+.wa-choose { text-align: left; }
+</style>

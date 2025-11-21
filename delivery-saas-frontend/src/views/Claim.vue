@@ -12,7 +12,7 @@ onMounted(async () => {
   try {
     const { data } = await api.post(`/tickets/${token}/claim`);
     ok.value = true;
-    msg.value = `Pedido ${data.order.displayId || data.order.id.slice(0,6)} atribuído e DESPACHADO!`;
+  msg.value = `Pedido ${data.order.displaySimple != null ? String(data.order.displaySimple).padStart(2,'0') : (data.order.displayId != null ? String(data.order.displayId).padStart(2,'0') : data.order.id.slice(0,6))} atribuído e DESPACHADO!`;
   } catch (e) {
     msg.value = e?.response?.data?.message || 'Falha ao atribuir';
   }

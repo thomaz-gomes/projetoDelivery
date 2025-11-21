@@ -52,15 +52,25 @@ export async function findOrCreateCustomer({ companyId, fullName, cpf, whatsapp,
 
   // 3) cria se não houver
   if (!customer) {
-    customer = await prisma.customer.create({
-      data: {
-        companyId,
-        fullName: fullName || 'Cliente',
-        cpf: cpfClean || null,
-        whatsapp: whatsappClean || null,
-        phone: phoneClean || null,
-      },
-    });
+    try {
+      customer = await prisma.customer.create({
+        data: {
+          companyId,
+          fullName: fullName || 'Cliente',
+          cpf: cpfClean || null,
+          whatsapp: whatsappClean || null,
+          phone: phoneClean || null,
+        },
+      });
+    } catch (err) {
+      // handle unique constraint races (Prisma P2002). If another transaction created the
+      // same customer concurrently, try to find it and return that instead of failing.
+      if (err?.code === 'P2002') {
+        const existing = await prisma.customer.findFirst({ where: { companyId, OR: [ { whatsapp: whatsappClean }, { cpf: cpfClean } ] } });
+        if (existing) customer = existing;
+        else throw err;
+      } else throw err;
+    }
   } else {
     // atualiza dados básicos se vierem (sem sobrescrever agressivamente)
     const patch = {};
@@ -121,4 +131,90 @@ export async function upsertCustomerFromIfood({ companyId, payload }) {
   });
 
   return { customer, addressId: defaultAddr?.id || null };
+}
+
+/**
+ * Transactional variant: given an active Prisma transaction (tx), try to find or create
+ * a Customer and CustomerAddress from a normalized payload. Returns { customerId, customer }
+ * or null when no suitable data is present to create a customer.
+ * This mirrors the matching priority used elsewhere: PHONE -> ADDRESS -> NAME -> CREATE
+ */
+export async function upsertCustomerFromPayloadTx(tx, { companyId, payload }) {
+  const name = payload?.customer?.name ? String(payload.customer.name).trim() : null;
+  const formatted = payload?.delivery?.deliveryAddress?.formattedAddress ? String(payload.delivery.deliveryAddress.formattedAddress).trim() : null;
+  const lat = payload?.delivery?.deliveryAddress?.coordinates?.latitude ?? null;
+  const lng = payload?.delivery?.deliveryAddress?.coordinates?.longitude ?? null;
+  const phoneRaw = payload?.customer?.phones?.[0]?.number || payload?.customer?.phone || null;
+  const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
+
+  // 1) match by phone (whatsapp or phone)
+  if (phone) {
+    const foundByPhone = await tx.customer.findFirst({ where: { companyId, OR: [{ whatsapp: phone }, { phone: phone }] } });
+    if (foundByPhone) {
+      // ensure address exists
+      if (formatted) {
+        const existsAddr = await tx.customerAddress.findFirst({ where: { formatted, customerId: foundByPhone.id } });
+        if (!existsAddr) {
+          await tx.customerAddress.create({ data: { customerId: foundByPhone.id, formatted, latitude: lat ?? null, longitude: lng ?? null } }).catch(() => {});
+        }
+      }
+      return { customerId: foundByPhone.id, customer: foundByPhone };
+    }
+  }
+
+  // 2) match by formatted address
+  if (formatted) {
+    const existingAddr = await tx.customerAddress.findFirst({ where: { formatted }, include: { customer: true } });
+    if (existingAddr) {
+      // if customer lacks phone, try to set it
+      if (phone && (!existingAddr.customer.whatsapp && !existingAddr.customer.phone)) {
+        await tx.customer.update({ where: { id: existingAddr.customerId }, data: { whatsapp: phone } }).catch(() => {});
+      }
+      return { customerId: existingAddr.customerId, customer: existingAddr.customer };
+    }
+  }
+
+  // 3) match by name (case-insensitive)
+  if (name) {
+    const found = await tx.customer.findFirst({ where: { companyId, fullName: { equals: name, mode: 'insensitive' } } });
+    if (found) {
+      if (formatted) {
+        const existsAddr = await tx.customerAddress.findFirst({ where: { formatted, customerId: found.id } });
+        if (!existsAddr) {
+          await tx.customerAddress.create({ data: { customerId: found.id, formatted, latitude: lat ?? null, longitude: lng ?? null } }).catch(() => {});
+        }
+      }
+      if (phone && (!found.whatsapp && !found.phone)) {
+        await tx.customer.update({ where: { id: found.id }, data: { whatsapp: phone } }).catch(() => {});
+      }
+      return { customerId: found.id, customer: found };
+    }
+  }
+
+  // 4) create when we have at least a name or phone
+  if (name || phone) {
+    let created;
+    try {
+      created = await tx.customer.create({ data: { companyId, fullName: name || 'Importado', whatsapp: phone ?? null, phone: phone ?? null } });
+    } catch (err) {
+      // inside transaction: handle unique constraint (another tx may have created concurrently)
+      if (err?.code === 'P2002') {
+        const found = await tx.customer.findFirst({ where: { companyId, OR: [ { whatsapp: phone }, { cpf: null } ] } });
+        if (found) {
+          // ensure address
+          if (formatted) {
+            try { await tx.customerAddress.create({ data: { customerId: found.id, formatted, latitude: lat ?? null, longitude: lng ?? null } }); } catch(_){}
+          }
+          return { customerId: found.id, customer: found };
+        }
+        throw err;
+      } else throw err;
+    }
+    if (formatted) {
+      try { await tx.customerAddress.create({ data: { customerId: created.id, formatted, latitude: lat ?? null, longitude: lng ?? null } }); } catch(_){}
+    }
+    return { customerId: created.id, customer: created };
+  }
+
+  return null;
 }
