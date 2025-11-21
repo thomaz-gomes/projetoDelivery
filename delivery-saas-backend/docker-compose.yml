@@ -1,25 +1,14 @@
 FROM node:20-bullseye-slim AS builder
 WORKDIR /app
-
-# Install dependencies (including devDeps to allow prisma generate)
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
-
-# Copy source and generate Prisma client (if Prisma schema exists)
 COPY . .
 RUN if [ -f prisma/schema.prisma ]; then npx prisma generate; fi
-
 FROM node:20-bullseye-slim AS runtime
 WORKDIR /app
-
-# Copy node modules and built app from builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app .
-
 ENV NODE_ENV=production
 ENV PORT=3000
-
 EXPOSE 3000
-
-# Keep container stateless: run migrations outside the image or via a one-shot job.
 CMD ["node", "src/server.js"]
