@@ -8,6 +8,10 @@ import Riders from './views/Riders.vue';
 import RiderForm from './views/RiderForm.vue';
 import Neighborhoods from './views/Neighborhoods.vue';
 import RiderAccount from './views/RiderAccount.vue';
+import RiderAccountAdmin from './views/RiderAccountAdmin.vue';
+import RiderAccountRider from './views/RiderAccountRider.vue';
+import api from './api';
+import { useAuthStore } from './stores/auth';
 import RiderAdjustments from './views/RiderAdjustments.vue';
 import CustomersList from './views/CustomersList.vue';
 import CustomerForm from './views/CustomerForm.vue';
@@ -61,7 +65,7 @@ const router = createRouter({
   { path: '/riders', component: Riders, meta: { requiresAuth: true } },
   { path: '/riders/new', component: RiderForm, meta: { requiresAuth: true } },
   { path: '/riders/:id', component: RiderForm, meta: { requiresAuth: true } },
-  { path: '/riders/:id/account', component: RiderAccount, meta: { requiresAuth: true } },
+  { path: '/riders/:id/account', component: RiderAccountAdmin, meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/rider-adjustments', component: RiderAdjustments, meta: { requiresAuth: true } },
   { path: '/settings/neighborhoods', component: Neighborhoods, meta: { requiresAuth: true } },
   { path: '/settings/company', component: CompanySettings, meta: { requiresAuth: true } },
@@ -105,7 +109,7 @@ const router = createRouter({
   ,{ path: '/settings/access-control', component: AccessControl, meta: { requiresAuth: true } }
   ,{ path: '/rider/orders', component: RiderOrders, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/rider/home', component: RiderQrCode, meta: { requiresAuth: true, noSidebar: true } }
-  ,{ path: '/rider/account', component: RiderAccountSelf, meta: { requiresAuth: true, noSidebar: true } }
+  ,{ path: '/rider/account', component: RiderAccountRider, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/menu/products/new', component: ProductForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/products/:id', component: ProductForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/categories/new', component: CategoryForm, meta: { requiresAuth: true } }
@@ -113,10 +117,32 @@ const router = createRouter({
   ]
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const token = localStorage.getItem('token');
   if (to.meta.requiresAuth && !token) {
     return { path: '/login', query: { redirect: to.fullPath } };
+  }
+
+  // role-based guard: if route requires a role, ensure current user has it
+  if (to.meta && to.meta.role) {
+    const auth = useAuthStore();
+    // try to populate user if token exists but store is empty
+    if (!auth.user && token) {
+      try {
+        const { data } = await api.get('/auth/me');
+        if (data && data.user) auth.user = data.user;
+      } catch (e) {
+        // ignore — user will be treated as not authorized
+        console.warn('router.beforeEach: /auth/me failed', e?.message || e);
+      }
+    }
+    const roleNeeded = String(to.meta.role || '').toUpperCase();
+    const userRole = String(auth.user?.role || '').toUpperCase();
+    if (!auth.user || userRole !== roleNeeded) {
+      // if rider trying to access admin route, send them to rider self page
+      if (userRole === 'RIDER') return { path: '/rider/account' };
+      return { path: '/' };
+    }
   }
 });
 

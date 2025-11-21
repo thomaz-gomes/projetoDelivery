@@ -2263,7 +2263,7 @@ try{
 .public-hero { background: #222; color: #fff; }
 .public-hero h3 { font-weight:700; color:#fff }
 .nav-pills { position: sticky; top: 0; z-index: 5; padding-bottom: 8px; background: transparent; }
-.nav-pills.stuck { background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.06); padding-top: 8px; padding-bottom: 8px; z-index: 1075; }
+.nav-pills.stuck { background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.06); padding-top: 8px; padding-bottom: 8px; z-index: 1040; }
 
 /* hero overlapping white panel */
 .hero-panel { background: transparent; margin-top: -90px; padding: 18px; border-radius: 12px; max-width: 980px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); background: #fff; position: relative; z-index: 1046 }

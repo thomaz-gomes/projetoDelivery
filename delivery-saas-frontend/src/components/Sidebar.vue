@@ -49,7 +49,10 @@ const showSidebar = computed(() => {
   try {
     if (route.meta && route.meta.noSidebar) return false;
   } catch (e) {}
-  return !route.path.startsWith('/rider');
+  // Hide sidebar only for singular '/rider' app routes (e.g. '/rider', '/rider/orders', '/rider/home', '/rider/account').
+  // Do NOT hide sidebar for '/riders' (admin list of riders).
+  const p = route.path || '';
+  return !(p === '/rider' || p.startsWith('/rider/'));
 });
 
 function logout() {
