@@ -35,12 +35,12 @@
             <div class="row">
               <div class="col-md-6 mb-3">
                 <label class="form-label">Banner do topo</label>
-                <div v-if="form.bannerUrl" class="mb-2"><img :src="form.bannerUrl" style="width:100%;height:120px;object-fit:cover;border:1px solid #eee;border-radius:6px" /></div>
+                <div v-if="form.bannerUrl" class="mb-2"><img :src="assetUrl(form.bannerUrl)" style="width:100%;height:120px;object-fit:cover;border:1px solid #eee;border-radius:6px" /></div>
                 <input type="file" @change="onCompanyFileChange('banner', $event)" accept="image/*" />
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Logotipo (450x450)</label>
-                <div v-if="form.logoUrl" class="mb-2"><img :src="form.logoUrl" style="width:120px;height:120px;object-fit:cover;border:1px solid #eee;border-radius:8px" /></div>
+                <div v-if="form.logoUrl" class="mb-2"><img :src="assetUrl(form.logoUrl)" style="width:120px;height:120px;object-fit:cover;border:1px solid #eee;border-radius:8px" /></div>
                 <input type="file" @change="onCompanyFileChange('logo', $event)" accept="image/*" />
               </div>
             </div>
@@ -120,7 +120,7 @@
   </div>
   <!-- Cropper modal (shared with product form) -->
   <div v-if="showCropper" class="cropper-modal" role="dialog" aria-modal="true">
-    <div class="cropper-modal-content">
+  <div class="cropper-modal-content modal-content-padding">
       <div class="cropper-canvas-wrapper">
         <div ref="cropContainer" class="crop-image-container">
           <img ref="cropperImage" :src="currentObjectUrl" alt="Preview" class="crop-image" @load="onImageLoaded" />
@@ -143,6 +143,7 @@
 import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import api from '../api'
 import { bindLoading } from '../state/globalLoading.js'
+import { assetUrl } from '../utils/assetUrl.js'
 
 export default {
   name: 'CompanySettings',
@@ -584,7 +585,7 @@ export default {
 <style scoped>
 .form-text code{background:#f1f1f1;padding:2px 6px;border-radius:4px}
 .cropper-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:2000 }
-.cropper-modal-content { background: #fff; padding: 16px; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
+.cropper-modal-content { background: #fff; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
 .cropper-canvas-wrapper { width:100%; height: auto; display:flex; align-items:center; justify-content:center }
 .crop-image-container { position: relative; width:100%; max-height:64vh; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f5f5f5 }
 .crop-image { max-width:100%; max-height:64vh; user-select:none; -webkit-user-drag:none }

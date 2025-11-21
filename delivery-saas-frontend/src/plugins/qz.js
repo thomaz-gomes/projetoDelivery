@@ -2,8 +2,10 @@
 // Use the QZ Tray instance provided by the script tags in index.html (window.qz)
 // This avoids bundling a second copy of qz-tray and ensures the global
 // dependencies loaded via CDN (RSVP, js-sha256) are available.
+import { connectQZ } from "../services/printService.js";
+
+const qz = window.qz;
 export async function initQZ() {
-  const qz = window.qz;
   if (!qz) return console.warn("⚠️ QZ Tray não encontrado em window.qz (verifique index.html)");
 
   // Define uso de Promises nativas
@@ -16,10 +18,10 @@ export async function initQZ() {
       qz.security.setSignaturePromise(() => Promise.resolve(""));
     }
 
-    if (!qz.websocket.isActive()) {
-      await qz.websocket.connect();
-      console.log("✅ QZ Tray conectado!");
-    }
+    // Use the centralized connectQZ from printService which implements
+    // a concurrency guard and backoff to avoid overlapping connect attempts.
+    const ok = await connectQZ();
+    if (ok) console.log("✅ QZ Tray conectado!");
   } catch (e) {
     console.error("❌ Erro ao conectar ao QZ Tray:", e);
   }
@@ -31,6 +33,7 @@ export async function initQZ() {
 export async function printComanda(order) {
   if (!order) return console.warn("⚠️ Pedido indefinido");
 
+  if (!window.qz) return console.warn("⚠️ QZ Tray não disponível");
   const config = qz.configs.create(order.printer || "EPSON");
 
   const display = order.displaySimple != null ? String(order.displaySimple).padStart(2,'0') : (order.displayId != null ? String(order.displayId).padStart(2,'0') : order.id.slice(0,6));

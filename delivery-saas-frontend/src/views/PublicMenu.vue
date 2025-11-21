@@ -2,7 +2,7 @@
   <div class="container-fluid px-0">
     <!-- Hero banner -->
   <div class="public-hero position-relative text-white" style="height:220px;overflow:hidden" ref="heroRef">
-      <div class="hero-image" :style="{ backgroundImage: 'url(' + (company?.banner || '/public/default-banner.jpg') + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
+  <div class="hero-image" :style="{ backgroundImage: 'url(' + assetUrl(menu?.banner || company?.banner || 'default-banner.jpg') + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
      
     </div>
     <!-- migration toast: shown when persisted cart was reconciled and items/options were removed -->
@@ -16,13 +16,16 @@
       <div class="d-flex align-items-start justify-content-between gap-3">
         <div class="d-flex align-items-start gap-3">
           <div class="company-logo-wrapper d-flex d-md-none d-lg-flex align-items-center justify-content-center">
-            <img :src="company?.logo || '/default-logo.svg'" alt="logo" class="company-logo" />
+            <img :src="assetUrl(menu?.logo || company?.logo || 'default-logo.svg')" alt="logo" class="company-logo" />
           </div>
           <div>
-            <h3 class="mb-1 company-name">{{ company?.name || 'Cardápio' }}</h3>
+            <h3 class="mb-1 company-name">{{ company?.store?.name || company?.name || 'Cardápio' }}</h3>
             <div class="small company-address text-muted">{{ company?.pickupInfo || company?.address || '' }}</div>
             <div class="small mt-1"><a href="#" class="text-muted">Mais informações</a></div>
-            <div class="store-closed-panel mt-2"><strong>Loja Fechada no momento, abre hoje às {{ company?.opensAt || '10:30' }}</strong></div>
+            <div class="store-closed-panel mt-2">
+              <strong v-if="isOpen" class="text-success">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</strong>
+              <strong v-else>Fechado no momento{{ nextOpenText ? (', ' + nextOpenText) : '' }}</strong>
+            </div>
           </div>
         </div>
         <div class="d-flex align-items-start">
@@ -32,18 +35,23 @@
       
     </div>
     <!-- Mobile compact cart bar (visible on small screens) -->
-  <div v-if="cart.length > 0 && !cartModalOpen && !modalOpen" class="mobile-cart-bar d-lg-none d-flex justify-content-between align-items-center px-3 py-2" style="background:#fff; border-top:1px solid rgba(0,0,0,0.06); z-index:1070">
+  <div v-if="cart.length > 0 && !cartModalOpen && !modalOpen && !checkoutModalOpen" class="mobile-cart-bar d-lg-none d-flex justify-content-between align-items-center px-3 py-2" style="background:#fff; border-top:1px solid rgba(0,0,0,0.06); z-index:1070">
       <div>
         <strong>{{ formatCurrency(subtotal) }}</strong> / {{ cart.length }} item{{ cart.length>1 ? 's' : '' }}
         <div class="small text-muted">Total sem entrega</div>
       </div>
       <div>
-        <button class="btn btn-primary" @click="openCartModal">Ver carrinho</button>
+        <template v-if="isOpen">
+          <button class="btn btn-primary" @click="openCartModal">Ver carrinho</button>
+        </template>
+        <template v-else>
+          <div class="text-muted small">Fora do horário de atendimento</div>
+        </template>
       </div>
     </div>
 
   <!-- Mobile bottom navigation (fixed) -->
-  <nav class="mobile-bottom-nav d-lg-none" v-show="!modalOpen">
+  <nav class="mobile-bottom-nav d-lg-none" v-show="!modalOpen && !cartModalOpen && !checkoutModalOpen">
       <button class="nav-item" @click.prevent="goProfile" aria-label="Perfil">
         <i class="bi bi-person nav-icon" aria-hidden="true"></i>
         <div class="nav-label">Perfil</div>
@@ -88,7 +96,7 @@
               <h5 class="mb-3">{{ cat.name }}</h5>
               <div class="row gx-3 gy-3">
                 <div class="col-12 col-lg-6" v-for="p in cat.products" :key="p.id">
-                  <div class="product-card d-flex justify-content-between align-items-start p-3" @click="openProductModal(p, true)" tabindex="0" @keydown.enter="openProductModal(p, true)">
+                  <div class="product-card d-flex justify-content-between align-items-start p-3" @click="openProductModal(p)" tabindex="0" @keydown.enter="openProductModal(p)">
                     <div class="product-card-body">
                       <h6 class="mb-1 product-title">{{ p.name }}</h6>
                       <div class="small text-muted product-desc">{{ p.description }}</div>
@@ -99,7 +107,7 @@
                     </div>
                     <div class="product-card-media text-end">
                       <div>
-                        <img v-if="p.image" :src="p.image" class="product-image" />
+                        <img v-if="p.image" :src="assetUrl(p.image)" class="product-image" />
                         <div v-else class="bg-light product-image-placeholder"></div>
                       </div>
                       <div v-if="p.cashback" class="badge bg-success mt-2">{{ p.cashback }}% cashback</div>
@@ -120,11 +128,16 @@
         <!-- desktop sticky bottom cart bar when there are items -->
   <div v-if="cart.length > 0 && !cartModalOpen" class="desktop-cart-bar d-none d-lg-flex justify-content-between align-items-center">
           <div class="cart-info">
-            <strong>{{ formatCurrency(subtotal) }}</strong>
+            <strong>{{ formatCurrency(finalTotal) }}</strong>
             <div class="small text-muted">/ {{ cart.length }} item{{ cart.length>1 ? 's' : '' }}</div>
           </div>
           <div class="cart-action">
-            <button class="btn btn-advance" @click="openCartModal">Ver carrinho</button>
+            <template v-if="isOpen">
+              <button class="btn btn-advance" @click="openCartModal">Ver carrinho</button>
+            </template>
+            <template v-else>
+              <div class="text-muted small">Fora do horário de atendimento</div>
+            </template>
           </div>
         </div>
         
@@ -136,7 +149,7 @@
               <!-- product image hero inside modal -->
               <div class="col-12 col-sm-6">
                   <div v-if="selectedProduct?.image" class="modal-product-hero mb-3 position-relative">
-                    <img :src="selectedProduct.image" alt="Imagem do produto" class="modal-product-img" />
+                    <img :src="assetUrl(selectedProduct.image)" alt="Imagem do produto" class="modal-product-img" />
                   <div class="hero-down">▾</div>
                   </div>
                   <div>
@@ -181,9 +194,9 @@
                   <div>
                     <template v-if="g.max === 1 && (g.min || 0) > 0">
                       <div v-for="opt in filterOptions(g)" :key="opt.id" class="mb-2">
-                        <div class="d-flex justify-content-between align-items-center" style="padding: 0px 16px;font-size: 14px;">
+                        <div class="d-flex justify-content-between align-items-center option-row">
                           <div class="d-flex align-items-center gap-2" >
-                            <img v-if="opt.image" :src="opt.image" style="width:40px;height:40px;object-fit:cover;border-radius:6px" />
+                            <img v-if="opt.image" :src="optionThumbUrl(opt)" @error="onOptionThumbError($event,opt)" style="width:40px;height:40px;object-fit:cover;border-radius:6px" />
                             <div>
                               <div>{{ opt.name }}</div>
                               <div class="small text-muted">{{ Number(opt.price) > 0 ? '' + formatCurrency(opt.price) : 'Grátis' }}</div>
@@ -198,9 +211,9 @@
                     </template>
                     <template v-else>
                       <div v-for="opt in filterOptions(g)" :key="opt.id" class="mb-2">
-                        <div class="d-flex justify-content-between align-items-center" style="padding: 0px 16px;font-size: 14px;">
+                        <div class="d-flex justify-content-between align-items-center option-row">
                           <div class="d-flex align-items-center gap-2 option-left">
-                            <img v-if="opt.image" :src="opt.image" class="option-thumb" />
+                            <img v-if="opt.image" :src="optionThumbUrl(opt)" @error="onOptionThumbError($event,opt)" class="option-thumb" />
                             <div class="option-meta">
                               <div class="option-name">{{ opt.name }}</div>
                               <div class="small text-muted option-price">{{ Number(opt.price) > 0 ? formatCurrency(opt.price) : 'Grátis' }}</div>
@@ -264,32 +277,29 @@
           <div class="drawer-body p-3" style="overflow:auto;">
             <div v-if="cart.length===0" class="text-muted">Sua sacola está vazia.</div>
             <ul v-else class="list-group mb-3">
-              <li class="list-group-item py-3" v-for="(it, i) in cart" :key="it.lineId">
-                <div class="d-flex align-items-start gap-3">
-                  <div style="flex:1">
-                    <div class="d-flex justify-content-between align-items-start">
-                      <div>
-                        <div><strong>{{ it.quantity }}x {{ it.name }}</strong></div>
-                        <div v-if="it.options && it.options.length" class="small text-muted mt-1">
-                          <div v-for="(opt, oi) in it.options" :key="opt.id || oi" class="option-line">
-                            <div class="option-name">
-                              {{ opt.name }} — <span class="option-unit">{{ formatCurrency(Number(opt.price || 0)) }}</span>
-                              <span v-if="Number(it.quantity || 1) > 1" class="text-muted"> (x{{ it.quantity }} = {{ formatCurrency(Number(opt.price || 0) * Number(it.quantity || 1)) }})</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="text-end">
-                        <div class="fw-bold">{{ formatCurrency(it.price * it.quantity) }}</div>
-                      </div>
-                    </div>
-                    <div class="mt-2">
-                      <button class="btn btn-link p-0 me-3 text-danger" @click="editCartItem(i)">Editar</button>
-                      <button class="btn btn-link p-0 text-muted" @click="removeItem(i)">Remover</button>
-                    </div>
+              <li class="list-group-item cart-line" v-for="(it, i) in cart" :key="it.lineId">
+                <div class="d-flex align-items-start">
+                  <div class="cart-item-qty text-muted me-3">{{ it.quantity }}x</div>
+                  <div class="d-flex flex-column w-100">
+                  <div class="d-flex w-100">
+                  <div class="cart-item-name flex-fill me-3" style="min-width:0">
+                    <div class="product-name">{{ it.name }}</div>
                   </div>
-                  <div style="width:84px;flex-shrink:0">
-                    <img v-if="it.image || (it.options && it.options[0] && it.options[0].image)" :src="it.image || (it.options && it.options[0] && it.options[0].image)" class="cart-thumb" />
+                  <div class="cart-item-price text-end me-3">{{ formatCurrency(it.price * it.quantity) }}</div>
+                  </div>
+                  <div class="d-flex w-100 justify-content-between">
+                    <div class="small text-muted option-summary drawer-wrap">{{ optionsSummaryNoPrice(it) }}</div>
+                  <div class="cart-item-actions d-flex flex-row align-items-end">
+                    <button class="action-btn edit btn btn-link p-0 small" @click="editCartItem(i)" aria-label="Editar item" title="Editar item">
+                      <i class="bi bi-pencil action-icon" aria-hidden="true"></i>
+                      <span class="action-text">Editar</span>
+                    </button>
+                    <button class="action-btn remove btn btn-link p-0 small" @click="removeItem(i)">
+                      <i class="bi bi-trash action-icon" aria-hidden="true"></i>
+                      <span class="action-text">Remover</span>
+                    </button>
+                  </div>
+                  </div>
                   </div>
                 </div>
               </li>
@@ -298,9 +308,22 @@
             <!-- summary and coupon area -->
             <div class="cart-summary p-3 border-top">
                         <div class="d-flex justify-content-between mb-2"><div>Subtotal</div><div>{{ formatCurrency(subtotal) }}</div></div>
-                        <div class="d-flex justify-content-between mb-2"><div>Taxa de entrega</div><div>{{ formatCurrency(deliveryFee) }}</div></div>
+                        <div class="d-flex justify-content-between mb-2"><div>Taxa de entrega</div><div>
+                          <template v-if="orderType==='DELIVERY'">
+                            <template v-if="neighborhood && String(neighborhood).trim() !== ''">
+                              {{ Number(deliveryFee) === 0 ? 'Grátis' : formatCurrency(deliveryFee) }}
+                            </template>
+                            <template v-else>
+                              Será calculada após escolher o endereço
+                            </template>
+                          </template>
+                          <template v-else>
+                            —
+                          </template>
+                        </div></div>
                         <hr />
-                        <div class="d-flex justify-content-between fw-bold mb-2"><div>Total</div><div>{{ formatCurrency(subtotal + deliveryFee) }}</div></div>
+                        <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
+                        <div class="d-flex justify-content-between fw-bold mb-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0)) + deliveryFee) }}</div></div>
 
               <div class="coupon-block mt-3">
                 <div class="d-flex justify-content-between align-items-center">
@@ -310,19 +333,30 @@
                 <div v-show="openCoupon" class="mt-2">
                   <div class="input-group">
                     <input v-model="couponCode" class="form-control" placeholder="Código do cupom" />
-                    <button class="btn btn-primary" @click="applyCoupon">Aplicar</button>
+                    <button class="btn btn-primary" @click="applyCoupon" :disabled="couponLoading">
+                      <span v-if="couponLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Aplicar
+                    </button>
+                  </div>
+                  <div class="mt-2">
+                    <div v-if="tipMessages['coupon']" class="small text-danger">{{ tipMessages['coupon'] }}</div>
+                    <div v-if="tipMessages['coupon-success']" class="small text-success">{{ tipMessages['coupon-success'] }}</div>
+                    <div v-if="couponApplied" class="mt-2 d-flex align-items-center gap-2">
+                      <small class="text-success">Cupom aplicado: <strong>{{ couponInfo?.code }} — {{ formatCurrency(couponDiscount) }}</strong></small>
+                      <button class="btn btn-sm btn-outline-secondary" @click="removeCoupon">Remover</button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
           <div class="drawer-footer p-3 border-top d-flex justify-content-end align-items-center">
-            <div class="d-flex flex-column gap-2 w-100">
-              <button class="btn btn-outline-secondary w-100" @click="closeCartModal">Continuar comprando</button>
-              <button class="btn btn-primary d-flex align-items-center w-100" style="justify-content: space-between;align-items: center;" :disabled="cart.length===0 || submitting || !isOpen" @click="proceedFromCart">
-                <div class="d-flex flex-column align-items-end me-3" >
-                  <strong>{{ formatCurrency(subtotal) }}</strong>
-                  <small class="text-white">{{ cart.length }} item{{ cart.length>1 ? 's' : '' }}</small>
+            <div class="d-flex gap-2 w-100">
+              <button class="btn btn-outline-secondary flex-fill" @click="closeCartModal">Continuar comprando</button>
+              <button class="btn btn-primary flex-fill d-flex align-items-center justify-content-center" :disabled="cart.length===0 || submitting || !isOpen" @click="proceedFromCart">
+                <div class="d-flex flex-column align-items-end me-3" style="line-height:1">
+                  <strong style="display:block">{{ formatCurrency(finalTotal) }}</strong>
+                  <small class="text-white" style="display:block">{{ cart.length }} item{{ cart.length>1 ? 's' : '' }}</small>
                 </div>
                 <span>Avançar</span>
               </button>
@@ -330,25 +364,40 @@
           </div>
         </aside>
         
-        <!-- Multi-step checkout modal -->
-  <div v-if="checkoutModalOpen" class="product-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:11000">
-          <div class="bg-white rounded shadow p-4" style="width:720px;max-width:96%;max-height:90vh;overflow:auto">
+  <!-- Multi-step checkout modal -->
+  <div v-if="checkoutModalOpen" class="product-modal checkout-modal full-mobile" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:11000">
+  <div :class="['modal-content','bg-white','rounded','shadow','modal-content-padding']">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h5 class="m-0">Checkout — {{ checkoutStep }}</h5>
               <div><button class="btn btn-sm btn-outline-secondary close-x" @click="closeCheckout" aria-label="Fechar">&times;</button></div>
             </div>
 
             <div v-if="checkoutStep === 'customer'">
-              <div class="mb-2"><label class="form-label">Nome</label><input v-model="customer.name" class="form-control" /></div>
-              <div class="mb-2"><label class="form-label">WhatsApp / Telefone</label><input v-model="customer.contact" class="form-control" /></div>
-              <div class="d-flex justify-content-end gap-2">
-                <button class="btn btn-secondary" @click="closeCheckout">Cancelar</button>
+              <!-- Match spacing and rhythm used in the review step -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div class="d-flex align-items-center">
+                    <i class="bi bi-person me-2 text-muted" aria-hidden="true"></i>
+                    <div>
+                      <div class="fw-bold">Cliente</div>
+                      <div class="small text-muted">Preencha seu nome e WhatsApp para prosseguir</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mb-2"><label class="form-label">Nome</label><input v-model="customer.name" class="form-control" /></div>
+                <div class="mb-2"><label class="form-label">WhatsApp / Telefone</label><input v-model="customer.contact" class="form-control" /></div>
+              </div>
+
+              <div class="d-flex justify-content-between mt-3">
+                <button class="btn btn-outline-secondary" @click="closeCheckout">Cancelar</button>
                 <button class="btn btn-primary" @click="nextFromCustomer">Próximo</button>
               </div>
             </div>
 
             <div v-if="checkoutStep === 'delivery'">
-              <div class="mb-2">
+              <!-- Mirror review spacing: group controls and content into tidy vertical rhythm -->
+              <div class="mb-3">
                 <div class="form-check form-check-inline">
                   <input class="form-check-input" type="radio" id="modalOrderTypeDelivery" value="DELIVERY" v-model="orderType">
                   <label class="form-check-label" for="modalOrderTypeDelivery">Entrega</label>
@@ -432,9 +481,20 @@
 
             <div v-if="checkoutStep === 'payment'">
               <div class="mb-2"><label class="form-label">Forma de pagamento</label>
-                <select v-model="paymentMethod" class="form-select">
-                  <option v-for="m in paymentMethods" :key="m.code" :value="m.code">{{ m.name }}</option>
-                </select>
+                <div>
+                  <div v-for="m in paymentMethods" :key="m.code" class="form-check mb-3">
+                    <input class="form-check-input" type="radio" :id="`pm_${m.code}`" :value="m.code" v-model="paymentMethod" />
+                    <label class="form-check-label" :for="`pm_${m.code}`">{{ m.name }}</label>
+                    <div class="small text-muted" v-if="m.description">{{ m.description }}</div>
+                  </div>
+
+                  <div v-if="paymentMethod === 'CASH'" class="mt-2">
+                    <div class="input-group">
+                      <span class="input-group-text">R$</span>
+                      <input v-model="changeFor" type="number" step="0.01" min="0" class="form-control" placeholder="Troco para (ex: 50.00)" />
+                    </div>
+                  </div>
+                </div>
               </div>
               <div class="d-flex justify-content-between mt-3">
                 <button class="btn btn-outline-secondary" @click="goToDelivery">Voltar</button>
@@ -444,38 +504,71 @@
 
             <div v-if="checkoutStep === 'review'">
               <h6>Resumo</h6>
-              <ul class="list-group mb-2">
-                <li class="list-group-item" v-for="it in cart" :key="it.lineId">
-                  <div class="d-flex justify-content-between align-items-start">
+
+              <!-- Customer & Address quick-edit rows (matches drawer spacing) -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div class="d-flex align-items-center">
+                    <i class="bi bi-person me-2 text-muted" aria-hidden="true"></i>
                     <div>
-                      <div>{{ it.quantity }} x {{ it.name }}</div>
-                      <div v-if="it.options && it.options.length" class="small text-muted mt-1">
-                        <div v-for="(opt, oi) in it.options" :key="opt.id || oi" class="option-line">
-                          <div class="option-name">
-                            {{ opt.name }} — <span class="option-unit">{{ formatCurrency(Number(opt.price || 0)) }}</span>
-                            <span v-if="Number(it.quantity || 1) > 1" class="text-muted"> (x{{ it.quantity }} = {{ formatCurrency(Number(opt.price || 0) * Number(it.quantity || 1)) }})</span>
-                          </div>
-                        </div>
-                      </div>
+                      <div class="fw-bold">{{ customer.name || '' }}</div>
+                      <div class="small text-muted">{{ customer.contact || '' }}</div>
                     </div>
-                    <div class="text-end">{{ formatCurrency(it.price * it.quantity) }}</div>
+                  </div>
+                  <button class="btn btn-link p-0" @click="checkoutStep = 'customer'" aria-label="Editar cliente"><i class="bi bi-pencil"></i></button>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-start">
+                  <div class="d-flex align-items-center">
+                    <i class="bi bi-geo-alt me-2 text-muted" aria-hidden="true"></i>
+                    <div>
+                      <div class="fw-bold">{{ (addresses.find(a=>a.id===selectedAddressId) || {}).formattedAddress || '' }}</div>
+                      <div class="small text-muted">{{ (addresses.find(a=>a.id===selectedAddressId) || {}).neighborhood || '' }}</div>
+                    </div>
+                  </div>
+                  <button class="btn btn-link p-0" @click="checkoutStep = 'delivery'" aria-label="Editar endereço"><i class="bi bi-pencil"></i></button>
+                </div>
+              </div>
+
+              <!-- Cart items: single-line, qty badge, name + wrapped options, price on right -->
+              <ul class="list-group mb-2">
+                <li class="list-group-item py-2 cart-line" v-for="(it, i) in cart" :key="it.lineId">
+                  <div class="d-flex align-items-start">
+                    <div class="cart-item-qty text-muted me-3">{{ it.quantity }}x</div>
+                    <div class="cart-item-name flex-fill me-3" style="min-width:0">
+                      <div class="product-name">{{ it.name }}</div>
+                      <div v-if="it.options && it.options.length" class="small text-muted option-summary drawer-wrap">{{ optionsSummaryNoPrice(it) }}</div>
+                    </div>
+                    <div class="cart-item-price text-end">{{ formatCurrency(it.price * it.quantity) }}</div>
                   </div>
                 </li>
               </ul>
+
+              <!-- Totals (use same spacing as drawer) -->
               <div class="checkout-totals mb-2" style="max-width:420px">
                 <div class="d-flex justify-content-between"><div class="text-muted">Subtotal</div><div>{{ formatCurrency(subtotal) }}</div></div>
+                <div v-if="couponApplied" class="d-flex justify-content-between text-success"><div>Cupom</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
                 <div v-if="orderType==='DELIVERY'">
-                  <div class="d-flex justify-content-between"><div class="text-muted">Taxa de entrega</div><div>{{ formatCurrency(deliveryFee) }}</div></div>
-                  <div class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(subtotal + deliveryFee) }}</div></div>
+                  <div class="d-flex justify-content-between"><div class="text-muted">Taxa de entrega</div><div>{{ Number(deliveryFee) === 0 ? 'Grátis' : formatCurrency(deliveryFee) }}</div></div>
+                  <div class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0)) + deliveryFee) }}</div></div>
                 </div>
-                <div v-else class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(subtotal) }}</div></div>
+                <div v-else class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0))) }}</div></div>
               </div>
-              <div v-if="orderType==='DELIVERY'">
-                <div class="mb-2"><strong>Endereço de entrega:</strong></div>
-                <div class="small mb-2">{{ (addresses.find(a=>a.id===selectedAddressId) || {}).formattedAddress }} — {{ (addresses.find(a=>a.id===selectedAddressId) || {}).neighborhood }}</div>
-                <div class="mb-2"><strong>Pagamento:</strong> {{ (paymentMethods.find(m=>m.code===paymentMethod) || {}).name }}</div>
+
+              <!-- Payment row with quick edit -->
+              <div class="d-flex justify-content-between align-items-center mt-3">
+                <div class="d-flex align-items-center">
+                  <i class="bi bi-credit-card me-2 text-muted" aria-hidden="true"></i>
+                  <div>
+                    <div class="fw-bold">Pagamento</div>
+                    <div class="small text-muted">{{ (paymentMethods.find(m=>m.code===paymentMethod) || {}).name }}</div>
+                    <div class="small text-muted" v-if="Number(changeFor) > 0">Troco para: {{ formatCurrency(Number(changeFor) || 0) }}</div>
+                  </div>
+                </div>
+                <button class="btn btn-link p-0" @click="checkoutStep = 'payment'" aria-label="Editar pagamento"><i class="bi bi-pencil"></i></button>
               </div>
-                <div class="d-flex justify-content-between mt-3">
+
+              <div class="d-flex justify-content-between mt-3">
                 <button class="btn btn-outline-secondary" @click="backFromReview">Voltar</button>
                 <button class="btn btn-success" @click="performOrderFromModal">Confirmar pedido</button>
               </div>
@@ -492,10 +585,18 @@ import { ref, onMounted, onBeforeUnmount, computed, reactive, watch } from 'vue'
 import { bindLoading } from '../state/globalLoading.js';
 import api from '../api';
 import { useRoute, useRouter } from 'vue-router';
+import { assetUrl } from '../utils/assetUrl.js';
 
 const route = useRoute();
 const router = useRouter();
 const companyId = route.params.companyId || '1';
+// support store-scoped and menu-scoped public views via query params
+// persist storeId in localStorage per company so selection survives navigation
+const storeStorageKey = `public_store_${companyId}`
+const storeId = ref(route.query.storeId || localStorage.getItem(storeStorageKey) || null);
+// persist menuId similarly so the selected menu survives navigation
+const menuStorageKey = `public_menu_${companyId}`
+const menuId = ref(route.query.menuId || localStorage.getItem(menuStorageKey) || null);
 
 const loading = ref(true);
 bindLoading(loading);
@@ -503,6 +604,7 @@ const categories = ref([]);
 const uncategorized = ref([]);
 const paymentMethods = ref([]);
 const company = ref(null)
+const menu = ref(null)
 const orderType = ref('DELIVERY') // 'DELIVERY' or 'PICKUP'
 
 // Sticky categories bar state
@@ -607,7 +709,9 @@ function toggleOrderType(){
 const checkoutModalOpen = ref(false)
 const checkoutStep = ref('customer') // 'customer' | 'delivery' | 'payment' | 'review'
 // persist customer and addresses in localStorage for convenience
-const LOCAL_CUSTOMER_KEY = `public_customer_${companyId}`
+// namespace localStorage by company + optional store + optional menu so carts don't collide
+const PUBLIC_NS = [companyId, storeId.value || '', menuId.value || ''].filter(Boolean).join('_') || companyId
+const LOCAL_CUSTOMER_KEY = `public_customer_${PUBLIC_NS}`
 const LOCAL_ADDR_KEY = `public_addresses_${companyId}`
 // load persisted customer/address
 const addresses = ref(JSON.parse(localStorage.getItem(LOCAL_ADDR_KEY) || '[]'))
@@ -675,7 +779,7 @@ function updateActiveCategory(){
 
 const cart = ref([]);
 // storage key per company so different menus don't clash
-const CART_STORAGE_KEY = `public_cart_${companyId}`
+const CART_STORAGE_KEY = `public_cart_${PUBLIC_NS}`
 // try to restore cart from localStorage (keep numeric types safe)
 try{
   const raw = localStorage.getItem(CART_STORAGE_KEY)
@@ -716,10 +820,25 @@ const deliveryFee = computed(() => {
   }catch(e){ return 0 }
 })
 const paymentMethod = ref('CASH');
+// when paying with cash, customer may provide a 'troco' amount
+const changeFor = ref('');
 const submitting = ref(false);
 const serverError = ref('');
 const clientError = ref('');
 const orderResponse = ref(null);
+const isDev = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV
+
+// helper to build public API paths with optional storeId/menuId query params
+function publicPath(path){
+  try{
+    const params = new URLSearchParams()
+    if(storeId.value) params.set('storeId', storeId.value)
+  if(menuId.value) params.set('menuId', menuId.value)
+    const qs = params.toString()
+    if(!qs) return path
+    return `${path}${path.includes('?') ? '&' : '?'}${qs}`
+  }catch(e){ return path }
+}
 
 const visibleCategories = computed(() => {
   // show all categories — navigation is handled via anchors now
@@ -731,6 +850,7 @@ const isOpen = computed(() => {
   const c = company.value
   if(!c) return true
   if(c.alwaysOpen) return true
+
   const parseHM = (s) => {
     if(!s) return null
     const parts = String(s).split(':').map(x=>Number(x))
@@ -739,6 +859,46 @@ const isOpen = computed(() => {
     if(Number.isNaN(hh) || Number.isNaN(mm)) return null
     return { hh, mm }
   }
+
+  // Prefer weeklySchedule when provided (more precise). weeklySchedule is an array with { day, from, to, enabled }
+  try{
+    if(Array.isArray(c.weeklySchedule) && c.weeklySchedule.length){
+      const tz = c.timezone || 'America/Sao_Paulo'
+      const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+      const parts = fmt.format(new Date()).split('/')
+      const [dd, mm, yyyy] = parts
+      const tzDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
+      const weekDay = tzDate.getUTCDay()
+      const today = c.weeklySchedule.find(d => Number(d?.day) === Number(weekDay))
+      if(!today || !today.enabled) return false
+      const from = parseHM(today.from)
+      const to = parseHM(today.to)
+      if(!from || !to) return false
+
+      // compute current time in store timezone
+      let nowParts
+      try{
+        const fmt2 = new Intl.DateTimeFormat(undefined, { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' })
+        if(fmt2.formatToParts){
+          const p = fmt2.formatToParts(new Date())
+          nowParts = { hh: Number(p.find(x=>x.type==='hour')?.value), mm: Number(p.find(x=>x.type==='minute')?.value) }
+        } else {
+          const s = fmt2.format(new Date())
+          const [hh, mm] = s.split(':').map(x=>Number(x))
+          nowParts = { hh, mm }
+        }
+      }catch(e){ const d = new Date(); nowParts = { hh: d.getHours(), mm: d.getMinutes() } }
+
+      const toMinutes = (p) => p.hh*60 + p.mm
+      const nowM = toMinutes(nowParts)
+      const fromM = toMinutes(from)
+      const toM = toMinutes(to)
+      if(fromM <= toM) return nowM >= fromM && nowM <= toM
+      return (nowM >= fromM) || (nowM <= toM)
+    }
+  }catch(e){ console.warn('weeklySchedule parse failed', e) }
+
+  // fallback: use openFrom/openTo fields
   const from = parseHM(c.openFrom)
   const to = parseHM(c.openTo)
   if(!from || !to) return false
@@ -780,8 +940,89 @@ const companyHoursText = computed(() => {
   const c = company.value
   if(!c) return ''
   if(c.alwaysOpen) return '24h'
+
+  // If weeklySchedule is present, prefer today's schedule range
+  try{
+    if(Array.isArray(c.weeklySchedule) && c.weeklySchedule.length){
+      const tz = c.timezone || 'America/Sao_Paulo'
+      const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+      const parts = fmt.format(new Date()).split('/')
+      const [dd, mm, yyyy] = parts
+      const tzDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
+      const weekDay = tzDate.getUTCDay()
+      const today = c.weeklySchedule.find(d => Number(d?.day) === Number(weekDay))
+      if(today && today.enabled){
+        return `${today.from || '--:--'} — ${today.to || '--:--'}`
+      }
+    }
+  }catch(e){ /* ignore and fallback */ }
+
+  // fallback to simple openFrom/openTo fields
   return `${c.openFrom || '--:--'} — ${c.openTo || '--:--'}`
 })
+
+const nextOpenText = computed(() => {
+  const c = company.value
+  if(!c) return ''
+  if(c.alwaysOpen) return ''
+
+  const padTime = (s) => s || '--:--'
+
+  // If weeklySchedule present, find the next enabled day
+  try{
+    if(Array.isArray(c.weeklySchedule) && c.weeklySchedule.length){
+      const tz = c.timezone || 'America/Sao_Paulo'
+      const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+      const parts = fmt.format(new Date()).split('/')
+      const [dd, mm, yyyy] = parts
+      const tzDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
+      const weekDay = tzDate.getUTCDay()
+      const schedule = c.weeklySchedule
+      // check today first
+      const today = schedule.find(d => Number(d?.day) === Number(weekDay))
+      if(today && today.enabled){
+        return `abre hoje às ${padTime(today.from)}`
+      }
+      // search next enabled day
+      const names = ['domingo','segunda','terça','quarta','quinta','sexta','sábado']
+      for(let i=1;i<7;i++){
+        const idx = (weekDay + i) % 7
+        const d = schedule.find(sch => Number(sch?.day) === Number(idx))
+        if(d && d.enabled){
+          if(i === 1) return `amanhã às ${padTime(d.from)}`
+          return `abre ${names[idx]} às ${padTime(d.from)}`
+        }
+      }
+    }
+  }catch(e){ /* ignore */ }
+
+  // fallback: use openFrom if present
+  if(c.openFrom) return `abre às ${c.openFrom}`
+  return ''
+})
+
+  const openUntilText = computed(() => {
+    // when store is open, return a friendly 'Aberto até as HH:MM' when possible
+    try{
+      const c = company.value
+      if(!c) return ''
+      if(c.alwaysOpen) return 'Aberto — 24h'
+      // prefer weeklySchedule today's 'to'
+      if(Array.isArray(c.weeklySchedule) && c.weeklySchedule.length){
+        const tz = c.timezone || 'America/Sao_Paulo'
+        const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+        const parts = fmt.format(new Date()).split('/')
+        const [dd, mm, yyyy] = parts
+        const tzDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
+        const weekDay = tzDate.getUTCDay()
+        const today = c.weeklySchedule.find(d => Number(d?.day) === Number(weekDay))
+        if(today && today.enabled && today.to) return `Aberto até as ${today.to}`
+      }
+      // fallback to openTo
+      if(c.openTo) return `Aberto até as ${c.openTo}`
+      return ''
+    }catch(e){ return '' }
+  })
 
 // product options modal state
 const modalOpen = ref(false)
@@ -874,6 +1115,39 @@ function onPointerUp(e){
     setTimeout(()=>{ try{ el.style.transition = ''; }catch(e){} }, 180)
   }
 }
+
+// Helper to prefer a thumbnail URL for option images when available.
+// Strategy: try the 'thumbs' subfolder variant first, fall back to the original
+// image URL on error. This keeps frontend resilient regardless of backend
+// thumbnail generation.
+function optionThumbUrl(opt){
+  try{
+    if(!opt) return ''
+    const s = String(opt.image || '')
+    if(!s) return ''
+    // If path contains '/public/uploads/options/', insert 'thumbs/' segment
+    // Works for full absolute URLs and relative paths.
+    if(s.includes('/public/uploads/options/')){
+      return assetUrl(s.replace('/public/uploads/options/', '/public/uploads/options/thumbs/'))
+    }
+    // also handle when path starts with 'public/uploads/options/' (no leading slash)
+    if(s.startsWith('public/uploads/options/')){
+      return assetUrl(s.replace('public/uploads/options/', 'public/uploads/options/thumbs/'))
+    }
+    // fallback: return original image URL via assetUrl
+    return assetUrl(s)
+  }catch(e){ return assetUrl(opt.image) }
+}
+
+function onOptionThumbError(evt, opt){
+  try{
+    if(!evt || !evt.target) return
+    // prevent infinite loop by clearing onerror before changing src
+    try{ evt.target.onerror = null }catch(e){}
+    // set to the original image (non-thumb) so browser will try that
+    evt.target.src = assetUrl(opt && opt.image ? opt.image : '')
+  }catch(e){ /* ignore */ }
+}
 // cart modal (view-only) so users can inspect the bag without entering data
 // restore persisted modal state and auto-open preference
 const persistedCartModal = localStorage.getItem('public_cart_modal_open')
@@ -929,6 +1203,54 @@ function _optionsKey(opts){ try{ return JSON.stringify((opts||[]).map(o=>({ id: 
 function findCartIndex(productId, options){
   const key = _optionsKey(options)
   return cart.value.findIndex(i => i.productId === productId && _optionsKey(i.options) === key)
+}
+
+function optionsSummary(it){
+  try{
+    if(!it || !it.options || !it.options.length) return ''
+    // group by option id to preserve distinct prices
+    const map = {}
+    for(const o of it.options){
+      if(!o) continue
+      const id = String(o.id || o.name || Math.random())
+      const name = String(o.name || '').trim()
+      const price = Number(o.price || 0)
+      if(!map[id]) map[id] = { name, unitPrice: price, count: 0 }
+      map[id].count += 1
+    }
+    const parts = []
+    for(const k of Object.keys(map)){
+      const entry = map[k]
+      if(!entry.name) continue
+      const cnt = entry.count
+      if(entry.unitPrice && entry.unitPrice > 0){
+        // show total price for the option group (count * unitPrice)
+        const total = entry.unitPrice * cnt
+        parts.push(cnt > 1 ? `${cnt}x ${entry.name} ${formatCurrency(total)}` : `${entry.name} ${formatCurrency(entry.unitPrice)}`)
+      } else {
+        parts.push(cnt > 1 ? `${cnt}x ${entry.name}` : entry.name)
+      }
+    }
+    return parts.join(', ')
+  }catch(e){ return '' }
+}
+
+function optionsSummaryNoPrice(it){
+  try{
+    if(!it || !it.options || !it.options.length) return ''
+    const counts = {}
+    for(const o of it.options){
+      if(!o) continue
+      const name = String(o.name || '').trim()
+      if(!name) continue
+      counts[name] = (counts[name] || 0) + 1
+    }
+    const parts = []
+    for(const [name, cnt] of Object.entries(counts)){
+      parts.push(cnt > 1 ? `${cnt}x ${name}` : name)
+    }
+    return parts.join(', ')
+  }catch(e){ return '' }
 }
 
 // Validate the persisted cart against the loaded menu.
@@ -1304,19 +1626,59 @@ function getCartQty(productId){
 
 const subtotal = computed(()=> cart.value.reduce((s,it)=> s + (it.price * it.quantity),0));
 
+// Final total after coupon discount. Delivery fee is calculated only after the
+// customer selects an address (neighborhood). The CTA and cart should not
+// include delivery fee until a neighborhood is chosen.
+const finalTotal = computed(() => {
+  try{
+    const base = Math.max(0, subtotal.value - (couponDiscount.value || 0))
+    // include delivery only when a neighborhood is selected and order is DELIVERY
+    const includeDelivery = orderType.value === 'DELIVERY' && neighborhood.value && String(neighborhood.value).trim() !== ''
+    return base + (includeDelivery ? Number(deliveryFee.value || 0) : 0)
+  }catch(e){ return subtotal.value }
+})
+
 const openCoupon = ref(false)
 const couponCode = ref('')
+const couponApplied = ref(false)
+const couponDiscount = ref(0)
+const couponInfo = ref(null)
+const couponLoading = ref(false)
 
-function applyCoupon(){
-  // placeholder: just close the coupon input for now
-  try{ if(couponCode.value && couponCode.value.trim()){
-    // TODO: validate coupon with API
-    openCoupon.value = false
-  } else {
-    // empty: keep open or show tip
-    showTip('coupon','Insira um código válido',1200)
-  }}catch(e){ console.warn('applyCoupon', e) }
+async function applyCoupon(){
+    try{
+      if(!couponCode.value || !couponCode.value.trim()){
+        // show inline message under coupon input
+        tipMessages['coupon'] = 'Insira um código válido'
+        setTimeout(()=>{ try{ delete tipMessages['coupon'] }catch(e){} }, 1600)
+        return
+      }
+      couponLoading.value = true
+      // call public coupon validation endpoint
+  const res = await api.post(publicPath(`/public/${companyId}/coupons/validate`), { code: couponCode.value.trim(), subtotal: subtotal.value, customerPhone: (customer.value && customer.value.contact) ? customer.value.contact : undefined })
+      const data = res.data || {}
+      if(data && data.valid){
+        couponApplied.value = true
+        couponDiscount.value = Number(data.discountAmount || 0)
+        couponInfo.value = data.coupon || null
+        openCoupon.value = false
+        tipMessages['coupon-success'] = `Cupom aplicado: -${formatCurrency(couponDiscount.value)}`
+        setTimeout(()=>{ try{ delete tipMessages['coupon-success'] }catch(e){} }, 2000)
+        return
+      }
+      tipMessages['coupon'] = 'Cupom inválido'
+      setTimeout(()=>{ try{ delete tipMessages['coupon'] }catch(e){} }, 1600)
+    }catch(e){
+      const msg = e?.response?.data?.message || 'Erro ao validar cupom'
+      tipMessages['coupon'] = msg
+      setTimeout(()=>{ try{ delete tipMessages['coupon'] }catch(e){} }, 2000)
+      console.warn('applyCoupon error', e)
+    } finally {
+      couponLoading.value = false
+    }
 }
+
+function removeCoupon(){ couponApplied.value = false; couponDiscount.value = 0; couponInfo.value = null }
 
 function editCartItem(i){
   try{
@@ -1526,7 +1888,7 @@ async function useMyLocation(){
     // try to match the geocoded neighborhood to our canonical list via public match endpoint
     try{
       if(_newAddrNeighborhood.value && neighborhoodsList.value && neighborhoodsList.value.length){
-        const mr = await api.post(`/public/${companyId}/neighborhoods/match`, { text: _newAddrNeighborhood.value })
+  const mr = await api.post(publicPath(`/public/${companyId}/neighborhoods/match`), { text: _newAddrNeighborhood.value })
         const md = mr && mr.data ? mr.data : null
         if(md && md.match){
           // use the canonical match name so select will resolve correctly
@@ -1639,7 +2001,7 @@ function backFromReview(){ checkoutStep.value = (orderType.value === 'DELIVERY' 
 onMounted(async ()=>{
   loading.value = true;
   try{
-    const res = await api.get(`/public/${companyId}/menu`);
+  const res = await api.get(publicPath(`/public/${companyId}/menu`));
   const data = res.data || {};
   // filter out inactive categories and inactive products
   const rawCategories = data.categories || []
@@ -1648,6 +2010,28 @@ onMounted(async ()=>{
   // if a previously selected/active category is now inactive/absent, reset active state
   if(activeCategoryId.value && !categories.value.find(c => c.id === activeCategoryId.value)) activeCategoryId.value = null
   company.value = data.company || null
+  menu.value = data.menu || null
+    // set page title and social meta tags, prefer store name when available
+    try{
+      const title = (company.value && company.value.store && company.value.store.name) || (menu.value && menu.value.name) || (company.value && company.value.name) || 'Cardápio'
+      try{ document.title = title }catch(e){}
+      const setMeta = (prop, val, isProperty=false) => {
+        try{
+          if(!val) return
+          const selector = isProperty ? `meta[property="${prop}"]` : `meta[name="${prop}"]`
+          let m = document.querySelector(selector)
+          if(!m){ m = document.createElement('meta'); if(isProperty) m.setAttribute('property', prop); else m.setAttribute('name', prop); document.getElementsByTagName('head')[0].appendChild(m) }
+          m.setAttribute(isProperty ? 'content' : 'content', val)
+        }catch(e){ }
+      }
+      setMeta('og:title', title, true)
+      setMeta('twitter:title', title)
+      // image: prefer menu banner, then store banner, then company banner
+      try{
+        const imgPath = (menu.value && menu.value.banner) || (company.value && company.value.store && company.value.store.banner) || (company.value && company.value.banner) || null
+        if(imgPath){ setMeta('og:image', assetUrl(imgPath), true); setMeta('twitter:image', assetUrl(imgPath)) }
+      }catch(e){}
+    }catch(e){ /* ignore meta tag errors */ }
     // after menu loaded, validate any persisted cart to remove stale items/options
     try{ validatePersistedCart() }catch(e){ console.warn('validatePersistedCart failed', e) }
     // prefer payment methods provided by public endpoint if available
@@ -1670,7 +2054,7 @@ onMounted(async ()=>{
     }
     // fetch public neighborhoods for this company (used to compute delivery fee)
     try{
-      const nr = await api.get(`/public/${companyId}/neighborhoods`)
+  const nr = await api.get(publicPath(`/public/${companyId}/neighborhoods`))
       neighborhoodsList.value = Array.isArray(nr.data) ? nr.data : []
     }catch(e){ console.warn('failed to load public neighborhoods', e) }
     
@@ -1705,9 +2089,24 @@ function selectCategory(id){
   }catch(e){ console.warn('selectCategory err', e) }
 }
 
-function goHome(){ try{ router.push({ path: `/public/${companyId}` }) }catch(e){ console.warn('goHome', e) } }
-function goOrders(){ try{ router.push({ path: `/public/${companyId}/orders` }) }catch(e){ console.warn('goOrders', e) } }
-function goProfile(){ try{ router.push({ path: `/public/${companyId}/profile` }) }catch(e){ console.warn('goProfile', e) } }
+function _publicNavigate(pathSuffix, extraQuery = {}){
+  try{
+    // preserve the current route params (companyId is treated as the slug)
+    const base = `/public/${route.params.companyId || companyId}`;
+    // merge existing query params so we don't lose the slug-scoped store/menu identification
+    const mergedQuery = Object.assign({}, route.query || {}, extraQuery || {});
+    // ensure we include persisted storeId when present
+  if (storeId.value && !mergedQuery.storeId) mergedQuery.storeId = storeId.value
+  if (menuId.value && !mergedQuery.menuId) mergedQuery.menuId = menuId.value
+    // remove undefined values to keep the URL clean
+    Object.keys(mergedQuery).forEach(k => { if (mergedQuery[k] === undefined) delete mergedQuery[k]; });
+    router.push({ path: `${base}${pathSuffix || ''}`, query: mergedQuery });
+  }catch(e){ console.warn('_publicNavigate', e) }
+}
+
+function goHome(){ _publicNavigate('', { storeId: storeId.value || undefined, menuId: menuId.value || undefined }) }
+function goOrders(){ _publicNavigate('/orders', { storeId: storeId.value || undefined, menuId: menuId.value || undefined }) }
+function goProfile(){ _publicNavigate('/profile', { storeId: storeId.value || undefined, menuId: menuId.value || undefined }) }
 
 function scrollToCheckout(){
   // scroll to checkout card (mobile) or to sidebar (desktop)
@@ -1762,12 +2161,85 @@ async function submitOrder(){
         quantity: Number(i.quantity || 0),
         options: (i.options || []).map(o => ({ id: o.id, name: o.name, price: Number(o.price || 0) }))
       })),
-      payment: { methodCode: String(paymentMethod.value || ''), amount: Number(subtotal.value || 0) },
+  // payment.amount should reflect the final total (subtotal minus coupon + delivery)
+  // we'll attach a payment object right after creating the payload to include optional troco information
       neighborhood: String(neighborhood.value || ''),
       orderType: String(orderType.value || '')
     };
 
-  const res = await api.post(`/public/${companyId}/orders`, payload);
+  // build payment object and include optional 'changeFor' when customer requested troco
+  try{
+    const paymentObj = {
+      methodCode: String(paymentMethod.value || ''),
+      // also include the human-friendly method name when available so backend
+      // can prefer/store the name without relying only on codes
+      method: (paymentMethods.value || []).find(m => m.code === paymentMethod.value)?.name || null,
+      amount: Number(Math.max(0, subtotal.value - (couponDiscount.value || 0)) + Number(deliveryFee.value || 0))
+    };
+    if (Number(changeFor.value) > 0) paymentObj.changeFor = Number(changeFor.value);
+    payload.payment = paymentObj;
+  }catch(e){ /* ignore */ }
+
+  // include coupon information when applied so backend can persist and track usage
+  if (couponApplied.value && couponInfo.value) {
+    payload.coupon = { code: couponInfo.value.code, discountAmount: Number(couponDiscount.value || 0) }
+  }
+
+  // Include canonical store/menu identifiers when present so the backend
+  // can persist the relation and the Orders board will show the store name.
+  if (storeId.value) {
+    try {
+      // keep both forms for compatibility: payload.store (object) and payload.storeId (flat)
+      payload.store = { id: String(storeId.value) }
+      payload.storeId = String(storeId.value)
+    } catch(e) { /* ignore */ }
+  }
+  if (menuId.value) {
+    try { payload.menuId = String(menuId.value) } catch(e) { /* ignore */ }
+  }
+
+  // If the page didn't include storeId/menuId query params, try to derive them
+  // from the loaded `menu` or `company` objects returned by the public menu API.
+  try {
+    // prefer existing payload values; only set when missing
+    if (!payload.menuId && menu && menu.value && menu.value.id) {
+      payload.menuId = String(menu.value.id)
+      // persist derived menuId for session continuity
+      try { menuId.value = String(menu.value.id); localStorage.setItem(menuStorageKey, String(menu.value.id)) } catch(e){}
+    }
+    // menu may include menu.value.storeId linking it to a store
+    if (!payload.storeId && menu && menu.value && menu.value.storeId) {
+      payload.storeId = String(menu.value.storeId)
+      payload.store = payload.store || { id: String(menu.value.storeId) }
+      // persist derived storeId for session continuity
+      try { storeId.value = String(menu.value.storeId); localStorage.setItem(storeStorageKey, String(menu.value.storeId)) } catch(e){}
+    }
+    // as a last resort, if the public API returned a store in company context, use it
+    if (!payload.storeId && company && company.value && company.value.store && company.value.store.id) {
+      payload.storeId = String(company.value.store.id)
+      payload.store = payload.store || { id: String(company.value.store.id) }
+      try { storeId.value = String(company.value.store.id); localStorage.setItem(storeStorageKey, String(company.value.store.id)) } catch(e){}
+    }
+    // If we have a store id and the loaded company/menu returned a store name,
+    // attach the canonical store name to the payload for deterministic display.
+    try {
+      const storeNameFromMenu = menu && menu.value && menu.value.store && menu.value.store.name;
+      const storeNameFromCompany = company && company.value && company.value.store && company.value.store.name;
+      const candidateName = storeNameFromMenu || storeNameFromCompany || null;
+      if (candidateName && payload.storeId) {
+        payload.store = payload.store || { id: String(payload.storeId) };
+        payload.store.name = String(candidateName);
+      }
+    } catch (e) { /* ignore */ }
+  } catch(e) { /* ignore derivation errors */ }
+
+// persist store/menu ids when route query provides them (keep storage updated)
+try{
+  if(route.query && route.query.storeId){ localStorage.setItem(storeStorageKey, String(route.query.storeId)) }
+  if(route.query && route.query.menuId){ localStorage.setItem(menuStorageKey, String(route.query.menuId)) }
+}catch(e){}
+
+  const res = await api.post(publicPath(`/public/${companyId}/orders`), payload);
   orderResponse.value = res.data;
   cart.value = [];
   // persist customer contact so user can view history/status later
@@ -1775,12 +2247,14 @@ async function submitOrder(){
   // redirect to public order status page (include phone for verification)
   const phone = encodeURIComponent(String(customer.value.contact || ''))
   const oid = encodeURIComponent(String(res.data.id || ''))
-  try { router.push({ path: `/public/${companyId}/order/${oid}`, query: { phone } }) } catch(e) { console.warn('Redirect failed', e) }
+  try { _publicNavigate(`/order/${oid}`, { phone, storeId: storeId.value || undefined, menuId: menuId.value || undefined }) } catch(e) { console.warn('Redirect failed', e) }
   }catch(err){
     console.error(err);
     serverError.value = err?.response?.data?.message || err.message || 'Erro ao enviar pedido';
   }finally{ submitting.value = false; }
 }
+
+// Dev helper removed: sendDevTestOrder has been removed to avoid accidental test orders
 
 
 </script>
@@ -1849,6 +2323,8 @@ async function submitOrder(){
 .option-thumb { width:48px; height:48px; object-fit:cover; border-radius:8px }
 .option-meta .option-name { font-weight:600 }
 .group-header{ background-color:#FAFAFA; padding:8px 16px; border-radius:16px; font-size:14px;}
+/* replace inline padding used in option rows */
+.option-row { padding: 0 16px; font-size: 14px }
 .group-header .badge.bg-primary { background-color:#0d6efd; color:#fff }
 /* highlight failing required group briefly */
 .required-fail { box-shadow: 0 0 0 3px rgba(220,53,69,0.06); border-radius: 12px }
@@ -1861,21 +2337,49 @@ async function submitOrder(){
   100% { box-shadow: 0 0 0 0 rgba(220,53,69,0); }
 }
 
-/* modal content sizing */
-.product-modal .modal-content { width:920px; max-width:95%; max-height:90vh; overflow:auto }
-
-/* enforce stacking: product modal should be above mobile nav and page content */
+/* modal sizing: centered on desktop, fullscreen on small screens */
 .product-modal { z-index: 11000 !important }
+.product-modal .modal-content {
+  /* centered desktop modal */
+  width: 920px;
+  max-width: 95%;
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 12px;
+  margin: 0 auto;
+  padding: 0;
+}
 
-/* fullscreen modal on small screens */
-@media (max-width: 767px){
-  .modal-product-hero { height:160px }
-  .product-modal { align-items:stretch }
-  .product-modal .modal-content { width:100vw; height:100vh; max-height:100vh; border-radius:0; margin:0; padding:0 }
-  .product-modal .modal-content { max-width: 100%; border-radius: 0px !important }
-  /* slide up animation for mobile modal */
-  @keyframes slideUpModal { from { transform: translateY(100%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
-  .product-modal .modal-content { transform: translateY(100%); animation: slideUpModal .28s ease forwards }
+/* checkout modal: use a slightly narrower width on desktop but remain fullscreen on mobile
+   (mobile fullscreen is handled by the existing @media (max-width: 767px) rules) */
+.product-modal.checkout-modal .modal-content {
+  width: 720px;
+  max-width: 96%;
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 12px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+/* slide up animation for mobile modal entrance */
+@keyframes slideUpModal { from { transform: translateY(100%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+
+/* mobile: make modals fullscreen and use slide-up animation */
+@media (max-width: 767px) {
+  .product-modal { align-items: stretch }
+  .product-modal .modal-content {
+    width: 100vw;
+    height: 100vh;
+    max-width: 100%;
+    max-height: 100vh;
+    overflow: auto;
+    border-radius: 0 !important;
+    margin: 0;
+    padding: 0;
+    transform: translateY(100%);
+    animation: slideUpModal .28s ease forwards;
+  }
 
   /* mobile floating close button styling */
   .modal-close-mobile { display:flex; position:absolute; top:12px; right:12px; width:44px; height:44px; border-radius:50%; background:#fff; border:none; align-items:center; justify-content:center; font-size:20px; line-height:1; box-shadow: 0 6px 18px rgba(0,0,0,0.14); z-index:20 }
@@ -1884,13 +2388,98 @@ async function submitOrder(){
 
   /* ensure modal body reserves space for the fixed footer on small screens */
   .product-modal .modal-body { padding-bottom: 100px }
+  .product-modal .modal-footer { position: fixed }
+}
 
-  /* desktop two-column modal grid */
-  @media (min-width: 992px){
-    /* keep default modal sizing on desktop */
-    .product-modal .modal-footer { position:absolute;}
+/* Ensure the checkout steps (customer, delivery, payment) are forced fullscreen on small screens.
+   This overrides any narrower desktop rules that might otherwise apply. */
+@media (max-width: 767px) {
+  .product-modal.checkout-modal.full-mobile {
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+  }
+  .product-modal.checkout-modal.full-mobile .modal-content {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100% !important;
+    max-height: 100vh !important;
+    overflow: auto !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    /* match drawer padding for visual parity */
+    padding: 16px !important;
+    transform: translateY(0) !important;
+    animation: slideUpModal .28s ease forwards !important;
+  }
+  /* ensure modal body reserves space for fixed footer and uses drawer-like inner padding */
+  .product-modal.checkout-modal.full-mobile .modal-body {
+    padding: 0 0 100px 0 !important; /* footer space reserved; header uses modal-content padding */
+  }
+
+  /* Title/header spacing: make the checkout modal header match the drawer spacing
+     (reduce the mb-3 gap and match h5 size/weight) */
+  .product-modal.checkout-modal.full-mobile .modal-content .d-flex.justify-content-between.align-items-center.mb-3 {
+    margin-bottom: 8px !important; /* drawer uses tighter spacing */
+    padding-top: 0 !important;
+  }
+  .product-modal.checkout-modal.full-mobile .modal-content h5 {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    margin: 0 0 4px 0 !important;
+    line-height: 1.1 !important;
   }
 }
+
+/* Checkout review (centered) spacing adjustments to match drawer visual rhythm
+   Make the review header, item spacing and totals align with drawer styling. */
+.product-modal.checkout-modal.not-full-mobile .modal-content .d-flex.justify-content-between.align-items-center.mb-3 {
+  margin-bottom: 8px !important;
+  padding-top: 0 !important;
+}
+.product-modal.checkout-modal.not-full-mobile .modal-content h6,
+.product-modal.checkout-modal.not-full-mobile .modal-content h5 {
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  margin: 0 0 6px 0 !important;
+  line-height: 1.12 !important;
+}
+.product-modal.checkout-modal.not-full-mobile .modal-content .checkout-totals { max-width: 420px; padding-top: 6px }
+.product-modal.checkout-modal.not-full-mobile .modal-content .list-group-item { padding: 10px 12px !important }
+.product-modal.checkout-modal.not-full-mobile .modal-content .cart-item-price { width: 100px }
+
+/* Ensure centered review modal visually matches drawer: padding, footer inside modal and reserved space */
+.product-modal.checkout-modal.not-full-mobile .modal-content {
+  padding: 16px !important; /* match drawer inner padding */
+}
+.product-modal.checkout-modal.not-full-mobile .modal-body {
+  padding-bottom: 92px !important; /* reserve space for footer inside modal */
+  max-height: calc(90vh - 120px) !important;
+}
+/* put footer inside modal content for review so it's part of the flow (not fixed) */
+.product-modal.checkout-modal.not-full-mobile .modal-footer {
+  position: relative !important;
+  box-shadow: none !important;
+  margin-top: 12px !important;
+}
+
+/* If checkout modal is open but on 'review', keep it centered on mobile.
+   For steps customer/delivery/payment the modal should be fullscreen. */
+@media (max-width: 767px) {
+  .product-modal.checkout-modal.not-full-mobile .modal-content {
+    width: auto !important;
+    height: auto !important;
+    max-height: 90vh !important;
+    overflow: auto !important;
+    border-radius: 12px !important;
+    margin: 0 auto !important;
+    transform: none !important;
+    animation: none !important;
+  }
+  .product-modal.checkout-modal.not-full-mobile { align-items: center !important; justify-content: center !important; }
+}
+
+/* keep modal footer fixed at bottom inside modal */
+.product-modal .modal-footer { left: 0; transform: none; bottom: 0; width: 100%; max-width: 100%; padding: 12px; background: #fff; box-shadow:none; z-index: 30; display:flex; justify-content:space-between; align-items:center }
 
 /* quantity control tweaks */
 /* unified qty visuals for buttons used across options, modal footer and cart */
@@ -1951,6 +2540,56 @@ async function submitOrder(){
 .option-price { color: #666; margin-left: 12px }
 .option-unit { color: #666; margin-left: 6px }
 
+/* Compact single-line cart item in review */
+.cart-item-row .cart-item-name .text-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.cart-item-row { gap: 8px }
+.cart-item-actions .btn { padding: 6px 8px; line-height: 1 }
+.cart-line { padding-top: 8px; padding-bottom: 8px }
+.icon-only { width:32px; height:32px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:8px }
+.icon-only .bi { font-size: 16px; line-height:1 }
+.option-summary { font-size: 0.82rem; color: #666 }
+/* ensure truncation works inside the drawer context too */
+.cart-drawer .cart-item-name .text-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+
+/* Drawer specific tweaks to match provided mock */
+.cart-drawer .cart-item-qty { width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid rgba(0,0,0,0.06); background:#fafafa; font-weight:700; margin-right:12px }
+.cart-drawer .product-name { font-size:0.95rem; font-weight:700 }
+.cart-drawer .option-summary { font-size:0.82rem; color: #6c757d; margin-top:4px; line-height:1.3 }
+.cart-drawer .drawer-wrap { white-space: normal }
+.cart-drawer .cart-item-price { font-weight:600; font-size:0.9rem }
+.cart-drawer .cart-item-actions { min-width:64px }
+.cart-drawer .cart-item-actions .btn { padding: 6px 4px !important; margin-bottom: 2px;}
+
+@media (max-width: 767px){
+  .cart-drawer .product-name { font-size:0.9rem }
+  .cart-drawer .option-summary { font-size:0.75rem }
+  .cart-drawer .cart-item-qty { width:36px; height:36px }
+}
+
+/* hide thumbnails inside drawer (photos not required) */
+.cart-drawer .cart-thumb, .cart-drawer img { display: none !important }
+
+/* slightly tighten list-group item paddings to match mock */
+.cart-drawer .list-group-item { padding: 12px; border-radius: 10px; }
+
+/* Action button responsive: show text on small screens, icons on larger screens */
+.action-btn { color: inherit }
+.action-btn .action-icon { display: inline-block; margin-right: 6px; vertical-align: middle }
+.action-btn .action-text { display: none !important }
+
+@media (min-width: 768px){
+  .action-btn .action-icon { display: inline-block }
+}
+
+/* micro-typography: spacing and weight for action links */
+.cart-item-actions .action-btn { line-height: 1.08; margin-bottom: 4px }
+.action-btn.edit .action-text, .action-btn.edit .action-icon { color: #b81b1b !important; font-weight: 800 }
+/* slightly lighter grey for "Remover" to match mock */
+.action-btn.remove .action-text, .action-btn.remove .action-icon { color: #9aa0a6 !important }
+
+/* small adjustment to option summary line spacing */
+.option-summary { line-height: 1.35 }
+
 /* Drawer styles for large screens */
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1050 }
 .cart-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: #fff; z-index: 1060; transform: translateX(100%); transition: transform .28s ease; display:flex; flex-direction:column }
@@ -1967,7 +2606,7 @@ async function submitOrder(){
 @media (max-width: 767px){
   .drawer-backdrop { z-index: 1050 }
   .cart-drawer {
-    /* bottom-sheet style */
+    /* bottom-sheet style by default; on small screens we'll switch to full-screen */
     position: fixed;
     left: 0;
     right: 0;
@@ -1987,12 +2626,23 @@ async function submitOrder(){
   .cart-drawer .drawer-header { padding: 12px 16px }
   .cart-drawer .drawer-header h5 { font-size: 1.05rem }
   .cart-thumb { width:56px; height:56px }
-  .list-group-item.py-3 { padding-top:10px; padding-bottom:10px }
-  .cart-summary { font-size: 0.95rem }
-  .cart-summary .fw-bold { font-size: 1rem }
-  .drawer-footer .btn { font-size: 0.95rem; padding:10px 12px }
-  /* ensure the drawer body scrolls inside the sheet and leaves room for footer */
-  .drawer-body { overflow:auto; max-height: calc(68vh - 160px) }
+  .list-group-item.py-3 { padding-top:8px; padding-bottom:8px }
+  .cart-drawer .list-group-item { padding: 10px }
+  .icon-only { width:28px; height:28px }
+  .cart-summary { font-size: 0.92rem }
+  .cart-summary .fw-bold { font-size: 0.98rem }
+  .drawer-footer .btn { font-size: 0.9rem; padding:8px 10px }
+  .cart-drawer .drawer-header h5 { font-size: 1rem }
+  /* make drawer full screen on mobile when opened */
+  .cart-drawer {
+    top: 0;
+    bottom: 0;
+    height: 100vh;
+    border-radius: 0;
+    transform: translateY(100%);
+  }
+  .cart-drawer.open { transform: translateY(0) }
+  .drawer-body { overflow:auto; max-height: calc(100vh - 140px) }
   /* reduce cart bar conflicts: hide mobile-cart-bar when drawer is open */
   .mobile-cart-bar { bottom: calc(68vh + 8px) }
 }
@@ -2090,5 +2740,21 @@ body { padding-bottom: 110px; }
   font-size: 0.95rem;
 }
 .migration-toast .mt-1{ margin-top:6px }
+
+/* Checkout modal / review styling to match drawer visual */
+.product-modal .cart-item-qty { width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid rgba(0,0,0,0.06); background:#fafafa; font-weight:700; margin-right:12px }
+.product-modal .product-name { font-size:0.95rem; font-weight:700 }
+.product-modal .option-summary { font-size:0.82rem; color:#6c757d; margin-top:4px; line-height:1.3; white-space:normal }
+.product-modal .cart-item-price { width:110px; font-weight:700; font-size:1rem }
+.product-modal .cart-item-actions { min-width:64px }
+.product-modal .cart-item-actions .btn { padding:0; margin:0; text-decoration:none }
+/*.product-modal img, .product-modal .cart-thumb { display:none !important }*/
+.product-modal .list-group-item { padding: 12px; border-radius: 10px }
+
+@media (max-width:767px){
+  .product-modal .product-name { font-size:0.95rem }
+  .product-modal .option-summary { font-size:0.8rem }
+  .product-modal .cart-item-qty { width:36px; height:36px }
+}
 </style>
 

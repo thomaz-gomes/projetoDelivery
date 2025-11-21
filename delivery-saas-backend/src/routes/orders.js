@@ -3,6 +3,7 @@ import { prisma } from '../prisma.js';
 import { emitirPedidoAtualizado } from '../index.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { upsertCustomerFromIfood } from '../services/customers.js';
+import { trackAffiliateSale } from '../services/affiliates.js';
 import { canTransition } from '../stateMachine.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
 import riderAccountService from '../services/riderAccount.js';
@@ -22,7 +23,7 @@ ordersRouter.get('/', async (req, res) => {
   const orders = await prisma.order.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: { items: true, rider: true, histories: true }
+    include: { items: true, rider: true, histories: true, store: true, company: true }
   });
 
   // compute a daily sequential visual id (displaySimple) per order date
@@ -168,6 +169,23 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
     console.error('Failed to add rider transaction:', e?.message || e);
   }
 
+  // If order was completed, attempt to track affiliate commission for coupon owner
+  try {
+    if (status === 'CONCLUIDO') {
+      // avoid duplicate affiliate sales: only track if no affiliateSale exists for this order
+      const existingCount = await prisma.affiliateSale.count({ where: { orderId: updated.id } });
+      if (existingCount === 0) {
+        try {
+          await trackAffiliateSale(updated, updated.companyId);
+        } catch (afErr) {
+          console.warn('Failed to track affiliate sale on order completion', updated.id, afErr?.message || afErr);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error while attempting affiliate tracking on order status change:', e?.message || e);
+  }
+
   return res.json(updated);
 });
 
@@ -211,6 +229,82 @@ ordersRouter.post('/:id/assign', requireRole('ADMIN'), async (req, res) => {
   return res.json({ ok: true, order });
 });
 
+// Rider: mark order as delivered (complete) - rider must be assigned to the order
+ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
+  const { id } = req.params;
+  const riderId = req.user.riderId;
+  if (!riderId) return res.status(403).json({ message: 'Rider inválido' });
+
+  const existing = await prisma.order.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ message: 'Pedido não encontrado' });
+  if (existing.riderId !== riderId) return res.status(403).json({ message: 'Pedido não atribuído a este entregador' });
+
+  try {
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        status: 'CONCLUIDO',
+        histories: { create: { from: existing.status, to: 'CONCLUIDO', byRiderId: riderId, reason: 'Entregue pelo motoboy' } }
+      },
+      include: { rider: true }
+    });
+
+    // notify customer and emit socket
+    notifyCustomerStatus(updated.id, 'CONCLUIDO').catch(() => {});
+    try { emitirPedidoAtualizado(updated) } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e) }
+
+    // credit rider account (reuse same logic as status patch)
+    try {
+      let neighborhoodName = null;
+      function extractAddressTextFromPayload(payload) {
+        if (!payload) return null;
+        try {
+          const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
+          const candidates = [];
+          if (p.delivery && p.delivery.deliveryAddress) {
+            const d = p.delivery.deliveryAddress;
+            if (d.formattedAddress) candidates.push(d.formattedAddress);
+            if (d.formatted_address) candidates.push(d.formatted_address);
+            if (d.address) candidates.push(typeof d.address === 'string' ? d.address : (d.address.formatted || ''));
+          }
+          if (p.formattedAddress) candidates.push(p.formattedAddress);
+          if (p.formatted_address) candidates.push(p.formatted_address);
+          if (p.address) candidates.push(typeof p.address === 'string' ? p.address : (p.address.formatted || ''));
+          const txt = candidates.filter(Boolean).join(' ');
+          return txt || null;
+        } catch (e) { return null; }
+      }
+
+      const addrCandidates = [];
+      if (updated.address) addrCandidates.push(String(updated.address));
+      const payloadText = extractAddressTextFromPayload(updated.payload);
+      if (payloadText) addrCandidates.push(payloadText);
+
+      if (addrCandidates.length) {
+        const addrText = addrCandidates.join(' ').toLowerCase();
+        const neighs = await prisma.neighborhood.findMany({ where: { companyId: updated.companyId } });
+        const matched = neighs.find(n => {
+          if (!n || !n.name) return false;
+          const name = String(n.name).toLowerCase();
+          if (addrText.includes(name)) return true;
+          if (n.aliases) {
+            try { const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases); if (arr.some(a => addrText.includes(String(a||'').toLowerCase()))) return true; } catch (e) {}
+          }
+          return false;
+        });
+        if (matched) neighborhoodName = matched.name;
+      }
+
+      await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId: updated.companyId, riderId: updated.riderId, orderId: updated.id, neighborhoodName, orderDate: updated.updatedAt || new Date() });
+    } catch (e) { console.error('Failed to add rider transaction on complete:', e?.message || e); }
+
+    return res.json({ ok: true, order: updated });
+  } catch (e) {
+    console.error('Failed to mark order complete', e);
+    return res.status(500).json({ message: 'Falha ao marcar pedido como entregue' });
+  }
+});
+
 ordersRouter.post('/:id/tickets', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params;
   const companyId = req.user.companyId;
@@ -225,7 +319,10 @@ ordersRouter.post('/:id/tickets', requireRole('ADMIN'), async (req, res) => {
 
   await prisma.ticket.create({ data: { orderId: id, tokenHash, expiresAt } });
 
-  const qrUrl = `${process.env.PUBLIC_FRONTEND_URL}/claim/${token}`;
+  // Generate a rider-specific claim URL so that when a logged-in rider opens it
+  // the frontend will call the authenticated claim endpoint and assign the order
+  // to the currently logged-in rider. Keep the public /claim route for other flows.
+  const qrUrl = `${process.env.PUBLIC_FRONTEND_URL}/rider/claim/${token}`;
   res.json({ qrUrl });
 });
 
@@ -236,7 +333,7 @@ ordersRouter.get('/:id', async (req, res) => {
 
   const order = await prisma.order.findFirst({
     where: { id, companyId },
-    include: { items: true, rider: true, company: true }
+    include: { items: true, rider: true, company: true, store: true }
   });
   if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
 

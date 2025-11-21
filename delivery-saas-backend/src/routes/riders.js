@@ -1,8 +1,8 @@
 import express from 'express';
 import { prisma } from '../prisma.js';
-import { authMiddleware, requireRole } from '../auth.js';
+import { authMiddleware, requireRole, createUser } from '../auth.js';
 import riderAccountService from '../services/riderAccount.js';
-import { evoSendDocument, evoSendMediaUrl } from '../wa.js';
+import { evoSendDocument, evoSendMediaUrl, evoSendText, normalizePhone } from '../wa.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -172,8 +172,26 @@ ridersRouter.post('/:id/account/adjust', requireRole('ADMIN'), async (req, res) 
 
 ridersRouter.post('/', async (req, res) => {
   const companyId = req.user.companyId;
-  const { name, whatsapp, dailyRate, active } = req.body || {};
+  const { name, whatsapp, dailyRate, active, password } = req.body || {};
   const created = await prisma.rider.create({ data: { companyId, name, whatsapp, dailyRate: dailyRate ? Number(dailyRate) : undefined, active: active !== false } });
+
+  // If a password was provided, create a linked User record with role RIDER
+  if (password) {
+    try {
+      // generate a deterministic unique email for the rider user (not used for contact)
+      const fakeEmail = `rider+${created.id}@${companyId}.local`;
+      const user = await createUser({ name: String(name || ''), email: fakeEmail, password: String(password), role: 'RIDER', companyId });
+      // link rider -> user
+      await prisma.rider.update({ where: { id: created.id }, data: { userId: user.id } });
+      // include userId in returned payload
+      created.userId = user.id;
+    } catch (e) {
+      console.error('Failed to create linked rider user', e);
+      // don't fail the whole request; return rider created but inform about user creation failure
+      return res.status(201).json({ rider: created, warning: 'Rider criado, porém falha ao criar usuário vinculado' });
+    }
+  }
+
   res.json(created);
 });
 
@@ -184,6 +202,24 @@ ridersRouter.patch('/:id', async (req, res) => {
   const existing = await prisma.rider.findFirst({ where: { id, companyId } });
   if (!existing) return res.status(404).json({ message: 'Entregador não encontrado' });
   const updated = await prisma.rider.update({ where: { id }, data: { name, whatsapp, dailyRate: dailyRate ? Number(dailyRate) : existing.dailyRate, active: typeof active === 'boolean' ? active : existing.active } });
+  // if password present in update body, attempt to update linked user's password (if exists)
+  const { password } = req.body || {};
+  if (password) {
+    try {
+      if (existing.userId) {
+        const hash = await (await import('bcryptjs')).hash(String(password), 10);
+        await prisma.user.update({ where: { id: existing.userId }, data: { password: hash } });
+      } else {
+        // create a new linked user if none exists
+        const fakeEmail = `rider+${existing.id}@${companyId}.local`;
+        const user = await createUser({ name: String(updated.name || ''), email: fakeEmail, password: String(password), role: 'RIDER', companyId });
+        await prisma.rider.update({ where: { id: existing.id }, data: { userId: user.id } });
+      }
+    } catch (e) {
+      console.error('Failed to set/update rider password', e);
+    }
+  }
+
   res.json(updated);
 });
 
@@ -483,4 +519,85 @@ ridersRouter.patch('/:id/transactions/:txId', requireRole('ADMIN'), async (req, 
   }
 
   res.json({ ok: true, tx: updated });
+});
+
+// Get orders assigned to the authenticated rider (convenience endpoint)
+ridersRouter.get('/me/orders', async (req, res) => {
+  try {
+    const userId = req.user && req.user.id;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    const user = await prisma.user.findUnique({ where: { id: userId }, include: { rider: true } });
+    if (!user || !user.rider) return res.status(404).json({ message: 'Rider profile not found for this user' });
+    const riderId = user.rider.id;
+    const orders = await prisma.order.findMany({ where: { riderId, companyId: req.user.companyId }, orderBy: { createdAt: 'desc' }, take: 200 });
+    return res.json({ items: orders });
+  } catch (e) {
+    console.error('GET /riders/me/orders error', e);
+    return res.status(500).json({ message: 'Erro ao buscar pedidos do entregador' });
+  }
+});
+
+// Admin: reset or set rider password (creates linked user if missing)
+ridersRouter.post('/:id/reset-password', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const rider = await prisma.rider.findFirst({ where: { id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+  let { password } = req.body || {};
+
+  // generate a random password if none provided
+  if (!password) {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let pw = '';
+    for (let i = 0; i < 10; i++) pw += chars.charAt(Math.floor(Math.random() * chars.length));
+    password = pw;
+  }
+
+  try {
+    if (rider.userId) {
+      const bcrypt = await import('bcryptjs');
+      const hash = await bcrypt.hash(String(password), 10);
+      await prisma.user.update({ where: { id: rider.userId }, data: { password: hash } });
+    } else {
+      // create linked user
+      const fakeEmail = `rider+${rider.id}@${companyId}.local`;
+      const user = await createUser({ name: String(rider.name || ''), email: fakeEmail, password: String(password), role: 'RIDER', companyId });
+      await prisma.rider.update({ where: { id: rider.id }, data: { userId: user.id } });
+    }
+    // attempt sending password by WhatsApp if rider has a phone and there is a connected instance
+    let waSendResult = null;
+    try {
+      // destination phone: prefer rider.whatsapp, fall back to explicit phone in body
+      const toPhone = (rider.whatsapp && String(rider.whatsapp).trim()) || (req.body && req.body.phone);
+      // allow caller to override instanceName
+      let instanceName = req.body && req.body.instanceName;
+      if (!instanceName) {
+        const inst = await prisma.whatsAppInstance.findFirst({ where: { companyId, status: 'CONNECTED' } });
+        if (inst) instanceName = inst.instanceName;
+      }
+
+      if (toPhone && instanceName) {
+        const text = `Olá ${rider.name || ''}, sua nova senha de acesso ao painel é: ${password}\nRecomendamos alterar a senha no primeiro login.`;
+        // evoSendText will normalize the phone, but we still validate here
+        const normalized = normalizePhone(toPhone);
+        if (normalized) {
+          waSendResult = await evoSendText({ instanceName, to: toPhone, text }).catch(e => ({ error: String(e) }));
+        } else {
+          waSendResult = { error: 'Telefone inválido para envio via WhatsApp' };
+        }
+      }
+    } catch (e) {
+      console.error('Failed to send reset password via WhatsApp', e);
+      waSendResult = { error: String(e) };
+    }
+
+  // For security, do NOT return the plaintext password in the API response.
+  // The password is sent to the rider's WhatsApp when possible. Return only the
+  // WhatsApp send result to avoid leaking credentials to callers.
+  res.json({ ok: true, wa: waSendResult });
+  } catch (e) {
+    console.error('Failed to reset rider password', e);
+    res.status(500).json({ ok: false, message: 'Falha ao resetar senha' });
+  }
 });

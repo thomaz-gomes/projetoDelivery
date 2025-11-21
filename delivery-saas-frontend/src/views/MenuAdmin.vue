@@ -1,6 +1,6 @@
 <template>
   <div class="container py-4">
-    <h2>Cardápio (Admin)</h2>
+  <h2>Cardápio (Admin) <small v-if="menuInfo">- {{ menuInfo.name }}</small></h2>
 
     <div class="row">
       <div class="col-12">
@@ -68,7 +68,7 @@
                 </div>
 
                 <div class="product-thumb me-3">
-                  <img v-if="p.image" :src="p.image" class="admin-product-image" loading="lazy" />
+                  <img v-if="p.image" :src="assetUrl(p.image)" class="admin-product-image" loading="lazy" />
                   <div v-else class="bg-light admin-product-image-placeholder d-flex align-items-center justify-content-center" role="button" tabindex="0" @click.stop.prevent="fileInputClick(p)" @keydown.enter.stop.prevent="fileInputClick(p)" aria-label="Adicionar imagem para produto">
                     <i class="bi bi-camera" style="font-size:20px;color:#6c6c6c"></i>
                   </div>
@@ -99,7 +99,7 @@
     <input ref="fileInput" type="file" accept="image/*" @change="onFileChange" style="display:none" aria-label="Selecionar imagem" />
 
     <div v-if="showCropper" class="cropper-modal" role="dialog" aria-modal="true">
-      <div class="cropper-modal-content">
+  <div class="cropper-modal-content modal-content-padding">
         <div class="cropper-canvas-wrapper">
           <div ref="cropContainer" class="crop-image-container">
             <img ref="cropperImage" :src="currentObjectUrl" alt="Preview" class="crop-image" @load="onImageLoaded" />
@@ -122,8 +122,9 @@
 
 <script setup>
 import { ref, onMounted, computed, reactive, nextTick, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import api from '../api'
+import { assetUrl } from '../utils/assetUrl.js'
 import { bindLoading } from '../state/globalLoading.js'
 
 const loading = ref(false)
@@ -137,6 +138,9 @@ const groups = ref([])
 const togglingIds = ref([])
 const togglingCategoryIds = ref([])
 const error = ref('')
+const route = useRoute()
+const menuId = computed(() => route.query.menuId || null)
+const menuInfo = ref(null)
 
 // image / crop state for product thumbnails
 const fileInput = ref(null)
@@ -157,12 +161,18 @@ const currentProd = ref(null)
 async function load(){
   loading.value = true
   try{
-    const res = await api.get('/menu/products')
+    const params = {}
+    if(menuId.value) params.menuId = menuId.value
+    const res = await api.get('/menu/products', { params })
     products.value = res.data || []
     // load option groups for assignment UI
-    try{ const gr = await api.get('/menu/options'); groups.value = gr.data || [] }catch(e){ groups.value = [] }
+    try{ const gr = await api.get('/menu/options', { params }); groups.value = gr.data || [] }catch(e){ groups.value = [] }
     // load categories for grouping and names
-    try{ const cr = await api.get('/menu/categories'); categoriesList.value = cr.data || [] }catch(e){ categoriesList.value = [] }
+    try{ const cr = await api.get('/menu/categories', { params }); categoriesList.value = cr.data || [] }catch(e){ categoriesList.value = [] }
+    // if menuId provided, fetch menu info
+    if(menuId.value){
+      try{ const mi = await api.get(`/menu/menus/${menuId.value}`); menuInfo.value = mi.data }catch(e){ menuInfo.value = null }
+    } else { menuInfo.value = null }
     // initialize collapsed state for categories (expanded by default)
     // try to restore from localStorage
     try{
@@ -186,8 +196,16 @@ function edit(p){
   router.push({ path: `/menu/products/${p.id}` })
 }
 
-function goNewProduct(){ router.push({ path: '/menu/products/new' }) }
-function goNewCategory(){ router.push({ path: '/menu/categories/new' }) }
+function goNewProduct(){
+  const q = {}
+  if(menuId.value) q.menuId = menuId.value
+  router.push({ path: '/menu/products/new', query: q })
+}
+function goNewCategory(){
+  const q = {}
+  if(menuId.value) q.menuId = menuId.value
+  router.push({ path: '/menu/categories/new', query: q })
+}
 // Product create/edit functionality moved to separate ProductForm view
 
 import Swal from 'sweetalert2'
@@ -329,6 +347,7 @@ onBeforeUnmount(()=>{ if(currentObjectUrl){ try{ URL.revokeObjectURL(currentObje
 
 function newProductForCategory(cat){
   const q = cat && cat.id ? { categoryId: cat.id } : {}
+  if(menuId.value) q.menuId = menuId.value
   router.push({ path: '/menu/products/new', query: q })
 }
 
@@ -444,7 +463,7 @@ async function deleteCategory(cat){
 <style scoped>
 /* reuse admin shared styles for upload/crop visuals */
 .cropper-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:2000 }
-.cropper-modal-content { background: #fff; padding: 16px; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
+.cropper-modal-content { background: #fff; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
 .cropper-canvas-wrapper { width:100%; height: auto; display:flex; align-items:center; justify-content:center }
 .crop-image-container { position: relative; width:100%; max-height:64vh; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f5f5f5 }
 .crop-image { max-width:100%; max-height:64vh; user-select:none; -webkit-user-drag:none }

@@ -25,9 +25,8 @@ function http() {
 // 1️⃣ Iniciar fluxo distribuído (gera userCode + verifier)
 // ================================================================
 export async function startDistributedAuth({ companyId }) {
-  const integ = await prisma.apiIntegration.findUnique({
-    where: { companyId_provider: { companyId, provider: 'IFOOD' } },
-  });
+  // pick the most recently updated iFood integration for the company (if multiple exist)
+  const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
   if (!integ?.clientId) {
     throw new Error('Defina clientId antes de iniciar o vínculo');
   }
@@ -53,7 +52,7 @@ export async function startDistributedAuth({ companyId }) {
       );
 
     const saved = await prisma.apiIntegration.update({
-      where: { companyId_provider: { companyId, provider: 'IFOOD' } },
+      where: { id: integ.id },
       data: {
         authMode: 'AUTH_CODE',
         linkCode: userCode,
@@ -85,9 +84,7 @@ export async function startDistributedAuth({ companyId }) {
 // 2️⃣ Trocar authorizationCode + verifier por tokens
 // ================================================================
 export async function exchangeAuthorizationCode({ companyId, authorizationCode }) {
-  const integ = await prisma.apiIntegration.findUnique({
-    where: { companyId_provider: { companyId, provider: 'IFOOD' } },
-  });
+  const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
   if (!integ?.clientId || !integ?.clientSecret || !integ?.codeVerifier) {
     throw new Error('Integração incompleta. Gere o código de vínculo primeiro.');
   }
@@ -117,7 +114,7 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
   }
 
   const updated = await prisma.apiIntegration.update({
-    where: { companyId_provider: { companyId, provider: 'IFOOD' } },
+    where: { id: integ.id },
     data: {
       authCode: authorizationCode,
       accessToken,
@@ -135,9 +132,7 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
 // 3️⃣ Atualizar access_token usando refresh_token
 // ================================================================
 export async function refreshAccessToken({ companyId }) {
-  const integ = await prisma.apiIntegration.findUnique({
-    where: { companyId_provider: { companyId, provider: 'IFOOD' } },
-  });
+  const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
 
   if (!integ?.clientId || !integ?.clientSecret || !integ?.refreshToken) {
     throw new Error('Dados insuficientes para refresh');
@@ -169,7 +164,7 @@ export async function refreshAccessToken({ companyId }) {
     }
 
     const updated = await prisma.apiIntegration.update({
-      where: { companyId_provider: { companyId, provider: 'IFOOD' } },
+      where: { id: integ.id },
       data: {
         accessToken,
         refreshToken,
@@ -189,9 +184,7 @@ export async function refreshAccessToken({ companyId }) {
 // 4️⃣ Helper: garante access_token válido
 // ================================================================
 export async function getIFoodAccessToken(companyId) {
-  const integ = await prisma.apiIntegration.findUnique({
-    where: { companyId_provider: { companyId, provider: 'IFOOD' } },
-  });
+  const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD', enabled: true }, orderBy: { tokenExpiresAt: 'desc' } });
 
   if (!integ?.accessToken) {
     throw new Error('Sem token. Finalize o vínculo com o iFood primeiro.');

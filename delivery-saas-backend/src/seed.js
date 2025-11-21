@@ -70,10 +70,10 @@ async function main() {
 
   // 5) Integração iFood (ApiIntegration)
   // clientId/clientSecret podem ser sobrescritos depois via /integrations/IFOOD
-  const ifood = await prisma.apiIntegration.upsert({
-    where: { companyId_provider: { companyId: company.id, provider: 'IFOOD' } },
-    update: {},
-    create: {
+  // Create a default iFood integration if none exists for this company
+  let ifood = await prisma.apiIntegration.findFirst({ where: { companyId: company.id, provider: 'IFOOD' } });
+  if (!ifood) {
+    ifood = await prisma.apiIntegration.create({ data: {
       companyId: company.id,
       provider: 'IFOOD',
       clientId: process.env.IFOOD_CLIENT_ID || 'sandbox_client_id',
@@ -88,8 +88,8 @@ async function main() {
       refreshToken: null,
       tokenType: null,
       tokenExpiresAt: null,
-    },
-  });
+    } });
+  }
 
   // 6) Customer + Address (para pedidos de exemplo)
   const customer = await prisma.customer.upsert({

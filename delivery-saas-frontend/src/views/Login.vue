@@ -5,6 +5,8 @@ import { useRoute, useRouter } from 'vue-router';
 
 const email = ref('admin@example.com');
 const password = ref('admin123');
+const whatsapp = ref('');
+const loginType = ref('operator'); // 'operator' = email, 'rider' = whatsapp/affiliate
 const loading = ref(false);
 const error = ref('');
 
@@ -16,13 +18,44 @@ async function onSubmit() {
   loading.value = true;
   error.value = '';
   try {
-    await auth.login(email.value, password.value);
-    router.push(route.query.redirect || '/orders');
+    if (loginType.value === 'rider') {
+      const digits = (whatsapp.value || '').replace(/\D/g, '');
+      // client-side validation: require 10 or 11 digits
+      if (!(digits.length === 10 || digits.length === 11)) {
+        throw { message: 'Informe um WhatsApp válido com 10 ou 11 dígitos' };
+      }
+      await auth.loginWhatsapp(digits.slice(-11), password.value);
+    } else {
+      await auth.login(email.value, password.value);
+    }
+  // redirect based on role
+  // Riders should land on their orders page directly
+  const destination = auth.user?.role === 'RIDER' ? '/rider/orders' : (route.query.redirect || '/orders');
+  router.push(destination);
   } catch (e) {
     error.value = e?.response?.data?.message || 'Falha ao entrar';
   } finally {
     loading.value = false;
   }
+}
+
+function formatPhone(digits) {
+  if (!digits) return '';
+  // limit to 11 digits
+  const d = digits.slice(0, 11);
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  if (d.length === 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  // 11 digits
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+}
+
+function onWhatsappInput(e) {
+  const raw = (e.target.value || '').replace(/\D/g, '').slice(0, 11);
+  const masked = formatPhone(raw);
+  whatsapp.value = masked;
+  // update the visible value in case v-model is out of sync
+  e.target.value = masked;
 }
 </script>
 
@@ -34,6 +67,17 @@ async function onSubmit() {
 
         <form @submit.prevent="onSubmit" class="needs-validation">
           <div class="mb-3">
+            <label class="form-label d-block">Tipo de login</label>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" id="loginTypeOp" value="operator" v-model="loginType">
+              <label class="form-check-label" for="loginTypeOp">Operador (login com email)</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" id="loginTypeRider" value="rider" v-model="loginType">
+              <label class="form-check-label" for="loginTypeRider">Motoboy/Afiliado (login com whatsapp)</label>
+            </div>
+          </div>
+          <div class="mb-3" v-if="loginType === 'operator'">
             <label for="email" class="form-label">E-mail</label>
             <input
               id="email"
@@ -43,6 +87,20 @@ async function onSubmit() {
               placeholder="admin@example.com"
               required
             />
+          </div>
+
+          <div class="mb-3" v-if="loginType === 'rider'">
+            <label for="whatsapp" class="form-label">WhatsApp (10 ou 11 dígitos, sem DDI)</label>
+            <input
+              id="whatsapp"
+              :value="whatsapp"
+              @input="onWhatsappInput"
+              type="text"
+              class="form-control"
+              placeholder="(73) 99141-29676"
+              required
+            />
+            <div class="form-text small">Digite apenas números; máscara aplicada automaticamente.</div>
           </div>
 
           <div class="mb-3">

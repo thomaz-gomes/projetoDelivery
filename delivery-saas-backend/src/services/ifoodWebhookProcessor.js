@@ -15,11 +15,38 @@ async function resolveCompanyIdFromPayload(payload) {
 
   if (!merchantId) return null;
 
+  // Try matching merchantId against both merchantId and merchantUuid fields
   const integ = await prisma.apiIntegration.findFirst({
-    where: { provider: 'IFOOD', merchantId },
-    select: { companyId: true },
+    where: {
+      provider: 'IFOOD',
+      OR: [
+        { merchantId: String(merchantId) },
+        { merchantUuid: String(merchantId) }
+      ]
+    },
+    select: { companyId: true, storeId: true },
   });
-  return integ?.companyId ?? null;
+  if (!integ) return null;
+
+  // If integration exists but storeId not set, attempt to infer from payload store info
+  if (!integ.storeId) {
+    try {
+      const payloadStoreId = payload?.storeId || payload?.store?.id || null;
+      const payloadStoreName = payload?.store?.name || null;
+      if (payloadStoreId) {
+        const s = await prisma.store.findFirst({ where: { companyId: integ.companyId, OR: [{ id: payloadStoreId }, { slug: payloadStoreId }, { cnpj: payloadStoreId }] }, select: { id: true } });
+        if (s) return { companyId: integ.companyId || null, storeId: s.id || null };
+      }
+      if (payloadStoreName) {
+        const s2 = await prisma.store.findFirst({ where: { companyId: integ.companyId, name: payloadStoreName }, select: { id: true } });
+        if (s2) return { companyId: integ.companyId || null, storeId: s2.id || null };
+      }
+    } catch (e) {
+      console.warn('Failed to infer storeId from payload in iFood webhook processor:', e?.message || e);
+    }
+  }
+
+  return { companyId: integ.companyId || null, storeId: integ.storeId || null };
 }
 
 /**
@@ -84,7 +111,7 @@ function mapIFoodOrder(payload) {
 /**
  * Upsert do pedido no nosso banco
  */
-async function upsertOrder({ companyId, mapped }) {
+async function upsertOrder({ companyId, mapped, storeId = null }) {
   const exists = mapped.externalId
     ? await prisma.order.findUnique({ where: { externalId: mapped.externalId } })
     : null;
@@ -114,6 +141,7 @@ async function upsertOrder({ companyId, mapped }) {
     return prisma.order.create({
       data: {
         ...baseData,
+        storeId: storeId || null,
         displaySimple,
         items: {
           create: mapped.items.map((i) => ({
@@ -149,15 +177,16 @@ export async function processIFoodWebhook(eventId) {
   try {
     const payload = evt.payload;
 
-    // Descobre empresa
-    const companyId = await resolveCompanyIdFromPayload(payload);
-    if (!companyId) {
-      throw new Error('Não foi possível determinar companyId a partir do payload (merchantId ausente).');
-    }
+      // Descobre empresa + storeId
+      const resolved = await resolveCompanyIdFromPayload(payload);
+      if (!resolved || !resolved.companyId) {
+        throw new Error('Não foi possível determinar companyId a partir do payload (merchantId ausente).');
+      }
+      const { companyId, storeId } = resolved;
 
-    // Mapeia e upsert
-    const mapped = mapIFoodOrder(payload);
-    await upsertOrder({ companyId, mapped });
+      // Mapeia e upsert (propaga storeId quando disponível)
+      const mapped = mapIFoodOrder(payload);
+      await upsertOrder({ companyId, mapped, storeId });
 
     // Marca como processado
     await prisma.webhookEvent.update({

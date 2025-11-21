@@ -51,6 +51,45 @@ const remove = async (r) => {
   try{ await api.delete(`/riders/${r.id}`); await load(); Swal.fire({ icon:'success', text:'Entregador removido' }) }catch(e){ console.error(e); Swal.fire({ icon:'error', text: e.response?.data?.message || 'Erro ao remover' }) }
 }
 
+const resetPassword = async (r) => {
+  const { value: pw } = await Swal.fire({
+    title: `Resetar senha - ${r.name}`,
+    input: 'text',
+    inputLabel: 'Nova senha (deixe em branco para gerar automaticamente)',
+    inputPlaceholder: 'Digite a nova senha ou deixe em branco',
+    showCancelButton: true,
+    confirmButtonText: 'Resetar',
+    preConfirm: (v) => v
+  });
+  if (pw === undefined) return; // cancelled
+  try {
+    const body = (pw && pw.trim()) ? { password: pw.trim() } : {};
+    const { data } = await api.post(`/riders/${r.id}/reset-password`, body);
+
+    // data.wa contains the WhatsApp send result (or null/undefined)
+    const wa = data && data.wa ? data.wa : null;
+
+    function escapeHtml(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    if (!wa) {
+      // password updated but no WA send attempted (no instance or phone)
+      await Swal.fire({ icon: 'warning', title: 'Senha resetada', text: 'Senha atualizada, mas não foi possível enviar via WhatsApp (instância ou telefone indisponível).' });
+    } else if (wa && wa.error) {
+      await Swal.fire({ icon: 'warning', title: 'Senha resetada', html: `Senha atualizada. Falha ao enviar via WhatsApp:<br/><pre>${escapeHtml(wa.error)}</pre>` });
+    } else {
+      // success: show a compact summary of the WA response
+      const pretty = typeof wa === 'string' ? escapeHtml(wa) : escapeHtml(JSON.stringify(wa, null, 2));
+      await Swal.fire({ icon: 'success', title: 'Senha resetada e enviada', html: `Senha enviada via WhatsApp. Resposta:<br/><pre style="text-align:left;">${pretty}</pre>` });
+    }
+  } catch (e) {
+    console.error(e);
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao resetar senha' });
+  }
+}
+
 const resetFilters = () => { q.value=''; filterActive.value=''; offset.value=0; load() }
 const nextPage = () => { if(offset.value + limit.value < total.value) { offset.value += limit.value } }
 const prevPage = () => { offset.value = Math.max(0, offset.value - limit.value) }
@@ -122,6 +161,7 @@ const formatBalance = (id) => {
                   <div class="d-flex">
                     <button class="btn btn-sm btn-light me-2" @click="goAccount(r.id)">Conta</button>
                     <button class="btn btn-sm btn-outline-secondary me-2" @click="goEdit(r.id)"><i class="bi bi-pencil-square"></i></button>
+                    <button class="btn btn-sm btn-outline-warning me-2" v-if="isAdmin" @click="resetPassword(r)">Reset Senha</button>
                     <button class="btn btn-sm btn-outline-danger" v-if="isAdmin" @click="remove(r)"><i class="bi bi-trash"></i></button>
                   </div>
                 </td>

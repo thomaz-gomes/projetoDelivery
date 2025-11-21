@@ -436,10 +436,13 @@ async function processFile(companyId, filePath) {
     // debug summary
     try { console.log('FileWatcher: normalized payload summary for', externalId, JSON.stringify({ displayId: payload.displayId, customerName: payload?.customer?.name, items: Array.isArray(payload?.items) ? payload.items.length : 0, total: payload?.total?.orderAmount }, null, 2)); } catch(_){}
 
-    const customerName = payload?.customer?.name || null;
-    const total = payload?.total?.orderAmount ?? 0;
-    const address = payload?.delivery?.deliveryAddress?.formattedAddress || null;
-    const items = Array.isArray(payload?.items) ? payload.items : [];
+  const customerName = payload?.customer?.name || null;
+  const total = payload?.total?.orderAmount ?? 0;
+  const address = payload?.delivery?.deliveryAddress?.formattedAddress || null;
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  // try to extract storeId from normalized payload (some importers include store id in metadata)
+  const rawStoreId = payload?.additionalInfo?.metadata?.storeId || payload?.additionalInfo?.metadata?.idStore || payload?.storeId || payload?.additionalInfo?.storeId || null;
+  const storeId = rawStoreId != null ? String(rawStoreId) : null;
 
     // transactional upsert: check+update or create
     try {
@@ -457,6 +460,7 @@ async function processFile(companyId, filePath) {
           const updated = await tx.order.update({
             where: { id: existing.id },
             data: {
+              storeId: storeId || existing.storeId,
               customerName: customerName || existing.customerName,
               customerId: customerAssocId || existing.customerId,
               customerPhone: payload?.customer?.phones?.[0]?.number || existing.customerPhone,
@@ -479,6 +483,7 @@ async function processFile(companyId, filePath) {
 
         const o = await tx.order.create({ data: {
           companyId: company,
+          storeId: storeId || null,
           externalId,
           displayId: payload?.displayId || null,
           customerId: customerAssocId || null,
@@ -520,7 +525,7 @@ async function processFile(companyId, filePath) {
       console.error('FileWatcher: failed to create/update order transactionally', filePath, e?.message || e);
       // fallback attempt
       try {
-        const created = await prisma.order.create({ data: { companyId: company, externalId, customerName: customerName || 'Importado', address: address || null, total: total || 0, payload } });
+  const created = await prisma.order.create({ data: { companyId: company, storeId: storeId || null, externalId, customerName: customerName || 'Importado', address: address || null, total: total || 0, payload } });
         if (items.length) {
           for (const it of items) {
             try { await prisma.orderItem.create({ data: { orderId: created.id, name: it.name || it.title || 'Item', quantity: it.quantity || it.qte || 1, price: it.price ?? it.unitPrice ?? 0 } }); } catch(_){}

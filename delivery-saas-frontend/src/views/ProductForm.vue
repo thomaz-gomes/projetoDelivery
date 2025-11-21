@@ -24,6 +24,13 @@
             </select>
           </div>
           <div class="col-md-4">
+            <label class="form-label">Menu (opcional)</label>
+            <select v-model="form.menuId" class="form-control">
+              <option :value="null">-- Nenhum --</option>
+              <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
+            </select>
+          </div>
+          <div class="col-md-4">
             <label class="form-label">Posição</label>
             <input v-model.number="form.position" type="number" class="form-control" />
           </div>
@@ -48,55 +55,12 @@
 
         <div class="mb-3">
           <label class="form-label">Imagem do produto</label>
-          <div class="upload-dropzone" :class="{ 'drag-over': isDragOver }" @click="fileInputClick" @dragover.prevent="onDragOver" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
-            <div class="upload-inner text-center">
-              <template v-if="!form.image">
-                <div class="upload-illustration">
-                  <!-- simple cloud upload SVG -->
-                  <svg width="72" height="56" viewBox="0 0 72 56" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M36 8v20" stroke="#7b61ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 20l12-12 12 12" stroke="#7b61ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M60 32c0-7.732-6.268-14-14-14-1.9 0-3.72.36-5.36 1.03C38.66 12.53 30.8 8 22 8 11.5 8 3 16.5 3 27s8.5 19 19 19h38c6.627 0 12-5.373 12-12 0-6.627-5.373-12-12-12z" stroke="#bfbffb" stroke-width="0" fill="#efe9ff"/></svg>
-                </div>
-                <div class="upload-message small text-muted">No file chosen, yet!</div>
-                <div class="mt-3">
-                  <button type="button" class="btn btn-upload" @click.stop="fileInputClick">CHOOSE A FILE</button>
-                </div>
-              </template>
-              <template v-else>
-                <div class="upload-preview">
-                  <img :src="form.image" alt="Preview" class="upload-preview-img" />
-                  <div class="image-preview-overlay">TROCAR IMAGEM</div>
-                </div>
-              </template>
-            </div>
-          </div>
-          <!-- always-available hidden file input -->
-          <input ref="fileInput" type="file" accept="image/*" @change="onFileChange" style="display:none" aria-label="Selecionar imagem" />
-          <!-- always-available hidden file input (placed after templates so it's present whether or not an image exists) -->
-          <input ref="fileInput" type="file" accept="image/*" @change="onFileChange" style="display:none" aria-label="Selecionar imagem" />
-          <!-- Cropper modal -->
-          <div v-if="showCropper" class="cropper-modal" role="dialog" aria-modal="true">
-            <div class="cropper-modal-content">
-              <div class="cropper-canvas-wrapper">
-                <div ref="cropContainer" class="crop-image-container">
-                  <img ref="cropperImage" :src="currentObjectUrl" alt="Preview" class="crop-image" @load="onImageLoaded" />
-                  <div ref="cropBox" class="crop-box" :style="cropBoxStyle" @pointerdown.stop.prevent="startDrag"></div>
-                </div>
-              </div>
-              <div class="mt-2 d-flex align-items-center" style="gap:8px;">
-                <label class="small text-muted mb-0">Tamanho</label>
-                <input type="range" min="50" max="100" v-model.number="cropSizePct" @input="onSizeChange" />
-              </div>
-              <div class="cropper-actions mt-3 d-flex justify-content-end" style="gap:8px;">
-                <button type="button" class="btn btn-secondary" @click="cancelCrop">Cancelar</button>
-                <button type="button" class="btn btn-primary" @click="confirmCrop">Usar imagem</button>
-              </div>
-            </div>
-          </div>
+          <ImageUploader :initialUrl="form.image" label="Imagem do produto" :aspect="1" :targetWidth="600" :targetHeight="600" @cropped="onProductImageCropped" />
           <div v-if="isUploading" class="mt-2">
             <div class="progress">
               <div class="progress-bar" role="progressbar" :style="{ width: uploadProgress + '%' }">{{ uploadProgress }}%</div>
             </div>
           </div>
-          
         </div>
 
         <div class="d-flex justify-content-between align-items-center">
@@ -119,6 +83,7 @@ import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
+import ImageUploader from '../components/ImageUploader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -128,23 +93,11 @@ const isEdit = Boolean(id)
 const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null })
 const groups = ref([])
 const categories = ref([])
+const menus = ref([])
 const saving = ref(false)
 const error = ref('')
-const fileInput = ref(null)
-const showCropper = ref(false)
-const cropperImage = ref(null)
-const cropContainer = ref(null)
-const cropBox = ref(null)
-let currentObjectUrl = null
-// crop box state: percentage-based relative to displayed image
-const cropSizePct = ref(80) // percent of the smaller dimension
-const cropPos = ref({ x: 0, y: 0 })
-let dragging = false
-let dragStart = null
-let imgDisplay = { w: 0, h: 0, left: 0, top: 0, naturalW: 0, naturalH: 0 }
-  const uploadProgress = ref(0)
+const uploadProgress = ref(0)
 const isUploading = ref(false)
-  const isDragOver = ref(false)
 
 async function load(){
   try{
@@ -160,12 +113,23 @@ async function load(){
     }
     // load categories for select
     try{ const cr = await api.get('/menu/categories'); categories.value = cr.data || [] }catch(e){ categories.value = [] }
-    // prefill category if passed in query
-    if(!isEdit && route.query.categoryId){ form.value.categoryId = route.query.categoryId }
+    // load menus for select
+    try{ const mr = await api.get('/menu/menus'); menus.value = mr.data || [] }catch(e){ menus.value = [] }
+    // prefill category and menu if passed in query
+    if(!isEdit){
+      if(route.query.categoryId){ form.value.categoryId = route.query.categoryId }
+      if(route.query.menuId){ form.value.menuId = route.query.menuId }
+    }
   }catch(e){ console.error(e); error.value = 'Falha ao carregar dados' }
 }
 
-function cancel(){ router.push({ path: '/menu/admin' }) }
+function cancel(){
+  // preserve menuId query when returning to the admin structure view
+  const q = {}
+  const mid = form.value.menuId || route.query.menuId
+  if(mid) q.menuId = mid
+  router.push({ path: '/menu/admin', query: q })
+}
 
 async function save(){
   error.value = ''
@@ -173,16 +137,20 @@ async function save(){
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
     if(isEdit){
-      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive }
+      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId }
       await api.patch(`/menu/products/${id}`, payload)
-      // update category if present
-      try{ await api.patch(`/menu/products/${id}`, { categoryId: form.value.categoryId }) }catch(e){}
       // sync groups
       try{ await api.post(`/menu/products/${id}/option-groups`, { groupIds: form.value.optionGroupIds || [] }) }catch(e){ console.warn('Failed to sync groups', e) }
       Swal.fire({ icon: 'success', text: 'Produto atualizado' })
-      router.push({ path: '/menu/admin' })
+      // preserve menuId when navigating back to admin
+      try{
+        const q = {}
+        const mid = form.value.menuId || route.query.menuId
+        if(mid) q.menuId = mid
+        router.push({ path: '/menu/admin', query: q })
+      }catch(e){ router.push({ path: '/menu/admin' }) }
     } else {
-  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId }
+  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId }
       const res = await api.post('/menu/products', payload)
       const newId = res.data.id
       // attach groups
@@ -196,195 +164,44 @@ async function save(){
         finally{ isUploading.value = false }
       }
       Swal.fire({ icon: 'success', text: 'Produto criado' })
-      router.push({ path: '/menu/admin' })
+      try{
+        const q = {}
+        const mid = form.value.menuId || route.query.menuId
+        if(mid) q.menuId = mid
+        router.push({ path: '/menu/admin', query: q })
+      }catch(e){ router.push({ path: '/menu/admin' }) }
     }
   }catch(e){ console.error(e); error.value = e?.response?.data?.message || e.message || 'Erro' }
   finally{ saving.value = false }
 }
 
-function processFile(file){
-  if(!file) return
-  const objectUrl = URL.createObjectURL(file)
-  currentObjectUrl = objectUrl
-  showCropper.value = true
-  nextTick(() => {
-    cropSizePct.value = 80
-    cropPos.value = { x: 0, y: 0 }
-  })
-}
-
-function onFileChange(e){
-  const f = e.target.files && e.target.files[0]
-  if(!f) return
-  processFile(f)
-}
-
-function fileInputClick(){ if(fileInput.value) fileInput.value.click() }
-
-function onDragOver(e){ isDragOver.value = true }
-function onDragLeave(e){ isDragOver.value = false }
-function onDrop(e){ isDragOver.value = false; const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if(f) processFile(f) }
-
-function onImageLoaded(e){
-  // compute displayed image metrics
-  const img = cropperImage.value
-  if(!img) return
-  const imgRect = img.getBoundingClientRect()
-  const containerRect = cropContainer.value ? cropContainer.value.getBoundingClientRect() : imgRect
-  imgDisplay.w = imgRect.width
-  imgDisplay.h = imgRect.height
-  // left/top relative to container (not viewport) so overlay positioning aligns
-  imgDisplay.leftInContainer = imgRect.left - containerRect.left
-  imgDisplay.topInContainer = imgRect.top - containerRect.top
-  imgDisplay.naturalW = img.naturalWidth || img.width
-  imgDisplay.naturalH = img.naturalHeight || img.height
-  // center crop box and reset pos
-  cropPos.value = { x: 0, y: 0 }
-}
-
-const cropBoxStyle = computed(() => {
-  const dw = imgDisplay.w || 0
-  const dh = imgDisplay.h || 0
-  const side = Math.min(dw, dh) * (cropSizePct.value / 100)
-  const offsetX = imgDisplay.leftInContainer || 0
-  const offsetY = imgDisplay.topInContainer || 0
-  const left = offsetX + (dw - side) / 2 + (cropPos.value.x || 0)
-  const top = offsetY + (dh - side) / 2 + (cropPos.value.y || 0)
-  return { left: `${left}px`, top: `${top}px`, width: `${side}px`, height: `${side}px` }
-})
-
-function startDrag(e){
-  // pointerdown on crop box
-  const p = e
-  dragging = true
-  dragStart = { x: p.clientX, y: p.clientY, startPos: { ...cropPos.value } }
-  window.addEventListener('pointermove', onPointerMove)
-  window.addEventListener('pointerup', endDrag)
-}
-
-function onPointerMove(e){
-  if(!dragging || !dragStart) return
-  const dx = e.clientX - dragStart.x
-  const dy = e.clientY - dragStart.y
-  const dw = imgDisplay.w || 0
-  const dh = imgDisplay.h || 0
-  const side = Math.min(dw, dh) * (cropSizePct.value / 100)
-  const limitX = Math.max(0, (dw - side) / 2)
-  const limitY = Math.max(0, (dh - side) / 2)
-  let nx = dragStart.startPos.x + dx
-  let ny = dragStart.startPos.y + dy
-  nx = Math.max(-limitX, Math.min(limitX, nx))
-  ny = Math.max(-limitY, Math.min(limitY, ny))
-  cropPos.value = { x: nx, y: ny }
-}
-
-function endDrag(){
-  dragging = false
-  dragStart = null
-  window.removeEventListener('pointermove', onPointerMove)
-  window.removeEventListener('pointerup', endDrag)
-}
-
-function onSizeChange(){
-  // ensure position remains valid after size change
-  const dw = imgDisplay.w || 0
-  const dh = imgDisplay.h || 0
-  const side = Math.min(dw, dh) * (cropSizePct.value / 100)
-  const limitX = Math.max(0, (dw - side) / 2)
-  const limitY = Math.max(0, (dh - side) / 2)
-  cropPos.value.x = Math.max(-limitX, Math.min(limitX, cropPos.value.x || 0))
-  cropPos.value.y = Math.max(-limitY, Math.min(limitY, cropPos.value.y || 0))
-}
-
-async function applyCrop(){
-  try{
-    // compute crop in image coordinates using displayed image box
-    const img = cropperImage.value
-    if(!img) return null
-  const { w: dw, h: dh, leftInContainer: dl, topInContainer: dt, naturalW, naturalH } = imgDisplay
-  const sideDisplay = Math.min(dw, dh) * (cropSizePct.value / 100)
-  const cx = (dl || 0) + (dw - sideDisplay) / 2 + (cropPos.value.x || 0)
-  const cy = (dt || 0) + (dh - sideDisplay) / 2 + (cropPos.value.y || 0)
-  // relative to displayed image
-  const sx = Math.max(0, Math.round((cx - (dl || 0)) * (naturalW / dw)))
-  const sy = Math.max(0, Math.round((cy - (dt || 0)) * (naturalH / dh)))
-  const sSide = Math.max(1, Math.round(sideDisplay * (naturalW / dw)))
-    const canvas = document.createElement('canvas')
-    canvas.width = 600; canvas.height = 600
-    const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,600,600)
-    ctx.drawImage(img, sx, sy, sSide, sSide, 0, 0, 600, 600)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
-    return dataUrl
-  }catch(e){ console.error('Failed to crop', e); return null }
-}
-
-async function confirmCrop(){
-  // convert cropped area to dataUrl and assign
-  try{
-    isUploading.value = true
-    const dataUrl = await applyCrop()
-    if(dataUrl){
-      form.value.image = dataUrl
-      // upload immediately if editing
-      if(isEdit && form.value.id){
-        try{ await api.post(`/menu/products/${id}/image`, { imageBase64: dataUrl, filename: 'crop.jpg' }) }catch(e){ console.warn('upload failed', e) }
-      }
-    }
-  }catch(e){ console.error(e); error.value = 'Falha ao processar imagem' }
-  finally{
-    isUploading.value = false
-    closeCropper()
+// receive cropped image from ImageUploader
+async function onProductImageCropped(dataUrl){
+  try{ console.log('[ProductForm] onProductImageCropped received length=', dataUrl ? dataUrl.length : 0) }catch(e){}
+  form.value.image = dataUrl
+  // if editing, upload immediately
+  if(isEdit){
+    try{
+      isUploading.value = true
+      const res = await api.post(`/menu/products/${id}/image`, { imageBase64: dataUrl, filename: 'crop.jpg' })
+      try{ console.log('[ProductForm] upload response', res && res.data) }catch(e){}
+    }catch(e){ console.warn('upload failed', e) }
+    finally{ isUploading.value = false }
   }
 }
 
-function cancelCrop(){
-  // close modal and clean up
-  closeCropper()
-}
-
-function closeCropper(){
-  showCropper.value = false
-  if(currentObjectUrl){ try{ URL.revokeObjectURL(currentObjectUrl) }catch(e){} currentObjectUrl = null }
-  // reset file input so same file can be reselected
-  if(fileInput.value){ fileInput.value.value = '' }
-}
-
-// resize helper
-async function cropAndResizeImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.8){
-  const objectUrl = URL.createObjectURL(file)
-  const img = await new Promise((resolve,reject)=>{
-    const i = new Image(); i.onload = ()=>resolve(i); i.onerror = e=>reject(e); i.src = objectUrl
-  })
-  // center-crop to square (1:1)
-  const side = Math.min(img.width, img.height)
-  const sx = Math.round((img.width - side) / 2)
-  const sy = Math.round((img.height - side) / 2)
-  // target size: do not upscale, respect provided max dims
-  const target = Math.min(maxWidth, maxHeight, side)
-  const canvas = document.createElement('canvas'); canvas.width = target; canvas.height = target
-  const ctx = canvas.getContext('2d')
-  // white background for JPEG
-  ctx.fillStyle = '#fff'
-  ctx.fillRect(0,0,target,target)
-  // draw the cropped region scaled to target
-  ctx.drawImage(img, sx, sy, side, side, 0, 0, target, target)
-  const dataUrl = canvas.toDataURL('image/jpeg', Math.max(0.5, Math.min(quality,0.95)))
-  URL.revokeObjectURL(objectUrl)
-  return dataUrl
-}
-
 onMounted(()=> load())
-
 onBeforeUnmount(()=>{
-  // nothing to destroy from vue-cropperjs; component will be unmounted normally
-  if(currentObjectUrl){ try{ URL.revokeObjectURL(currentObjectUrl) }catch(e){} currentObjectUrl = null }
+  // nothing to clean here; ImageUploader handles object URLs
 })
+
+// register components
+const __components = { ImageUploader }
 </script>
 
 <style scoped>
 .cropper-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:2000 }
-.cropper-modal-content { background: #fff; padding: 16px; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
+.cropper-modal-content { background: #fff; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
 .cropper-canvas-wrapper { width:100%; height: auto; display:flex; align-items:center; justify-content:center }
 .crop-image-container { position: relative; width:100%; max-height:64vh; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f5f5f5 }
 .crop-image { max-width:100%; max-height:64vh; user-select:none; -webkit-user-drag:none }

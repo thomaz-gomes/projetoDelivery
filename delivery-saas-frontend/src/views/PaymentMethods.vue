@@ -1,49 +1,41 @@
 <template>
   <div class="container py-4">
-    <h2>Formas de pagamento</h2>
-
-    <div class="row">
-      <div class="col-md-6">
-        <h5>Formas existentes</h5>
-        <div v-if="loading" class="text-center py-3">Carregando...</div>
-        <ul class="list-group" v-else>
-          <li class="list-group-item d-flex justify-content-between align-items-center" v-for="m in methods" :key="m.id">
-            <div>
-              <strong>{{ m.name }}</strong>
-              <div class="small text-muted">{{ m.code }} {{ m.isActive ? '' : '(inativo)' }}</div>
-            </div>
-            <div>
-              <button class="btn btn-sm btn-outline-primary me-2" @click="edit(m)">Editar</button>
-              <button class="btn btn-sm btn-danger" @click="remove(m)">Remover</button>
-            </div>
-          </li>
-        </ul>
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h2 class="m-0">Formas de pagamento</h2>
+      <div>
+        <router-link class="btn btn-primary" :to="{ path: '/settings/payment-methods/new' }">Criar nova forma</router-link>
       </div>
+    </div>
 
-      <div class="col-md-6">
-        <h5>{{ form.id ? 'Editar forma' : 'Nova forma' }}</h5>
-        <form @submit.prevent="save">
-          <div class="mb-2">
-            <input v-model="form.name" class="form-control" placeholder="Nome (ex: Dinheiro, PIX)" required />
-          </div>
-          <div class="mb-2 row">
-            <div class="col-md-6"><input v-model="form.code" class="form-control" placeholder="Código (ex: CASH, PIX)" required /></div>
-            <div class="col-md-6">
-              <select v-model="form.isActive" class="form-select">
-                <option :value="true">Ativo</option>
-                <option :value="false">Inativo</option>
-              </select>
-            </div>
-          </div>
+    <div v-if="loading" class="text-center py-3">Carregando...</div>
 
-          <div class="d-flex gap-2">
-            <button class="btn btn-primary" :disabled="saving">Salvar</button>
-            <button class="btn btn-secondary" type="button" @click="resetForm">Limpar</button>
-          </div>
-
-          <div v-if="error" class="alert alert-danger mt-2">{{ error }}</div>
-          <div v-if="success" class="alert alert-success mt-2">{{ success }}</div>
-        </form>
+    <div v-else>
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Código</th>
+              <th>Estado</th>
+              <th style="width:220px">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="m in methods" :key="m.id">
+              <td><strong>{{ m.name }}</strong></td>
+              <td class="text-muted">{{ m.code }}</td>
+              <td>
+                <span v-if="m.isActive" class="badge bg-success">Ativo</span>
+                <span v-else class="badge bg-secondary">Inativo</span>
+              </td>
+              <td>
+                <router-link class="btn btn-sm btn-outline-primary me-2" :to="{ path: `/settings/payment-methods/${m.id}` }">Editar</router-link>
+                <button v-if="m.code !== 'CASH'" class="btn btn-sm btn-danger" @click="remove(m)">Remover</button>
+                <button v-else class="btn btn-sm btn-outline-secondary" disabled title="A forma 'Dinheiro' não pode ser removida">Remover</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -54,46 +46,45 @@ import { ref, onMounted } from 'vue'
 import { bindLoading } from '../state/globalLoading.js'
 import api from '../api'
 import Swal from 'sweetalert2'
+import { useRouter } from 'vue-router'
 
 const loading = ref(false)
 bindLoading(loading)
 const methods = ref([])
-const saving = ref(false)
-const error = ref('')
-const success = ref('')
-
-const form = ref({ id: null, name: '', code: '', isActive: true, config: {} })
+const router = useRouter()
 
 async function load(){
   loading.value = true
   try{
     const res = await api.get('/menu/payment-methods')
     methods.value = res.data || []
-  }catch(e){ console.error(e); error.value = 'Falha ao carregar formas' }
+
+    // ensure default Dinheiro (CASH) exists — if not, create it and reload
+    const hasCash = methods.value.some(m => String(m.code || '').toUpperCase() === 'CASH')
+    if(!hasCash){
+      try{
+        await api.post('/menu/payment-methods', { name: 'Dinheiro', code: 'CASH', isActive: true, config: {} })
+        // reload list after creation
+        const r2 = await api.get('/menu/payment-methods')
+        methods.value = r2.data || []
+      }catch(createErr){ console.warn('failed to create default CASH payment method', createErr) }
+    }
+
+  }catch(e){ console.error(e); Swal.fire({ icon: 'error', text: 'Falha ao carregar formas' }) }
   finally{ loading.value = false }
 }
 
-function edit(m){ form.value = { ...m } }
-function resetForm(){ form.value = { id: null, name: '', code: '', isActive: true, config: {} }; error.value = ''; success.value = '' }
-
-async function save(){
-  error.value = ''; success.value = ''; saving.value = true
-  try{
-    if(!form.value.name || !form.value.code) { error.value = 'Nome e código são obrigatórios'; return }
-    if(form.value.id){
-      await api.patch(`/menu/payment-methods/${form.value.id}`, { name: form.value.name, code: form.value.code, isActive: form.value.isActive, config: form.value.config })
-      success.value = 'Atualizado'
-    }else{
-      await api.post('/menu/payment-methods', { name: form.value.name, code: form.value.code, isActive: form.value.isActive, config: form.value.config })
-      success.value = 'Criado'
-    }
-    await load()
-    resetForm()
-  }catch(e){ console.error(e); error.value = e?.response?.data?.message || e.message }
-  finally{ saving.value = false }
+function edit(m){
+  // navigate to edit page
+  router.push({ path: `/settings/payment-methods/${m.id}` })
 }
 
 async function remove(m){
+  if(String(m.code || '').toUpperCase() === 'CASH'){
+    // do not allow deletion of default method
+    Swal.fire({ icon: 'info', text: "A forma 'Dinheiro' não pode ser removida — você pode apenas desativá-la." })
+    return
+  }
   const r = await Swal.fire({ title: 'Remover forma?', text: `Remover "${m.name}"?`, icon: 'warning', showCancelButton:true, confirmButtonText:'Sim', cancelButtonText:'Cancelar' })
   if(!r.isConfirmed) return
   try{ await api.delete(`/menu/payment-methods/${m.id}`); await load(); Swal.fire({ icon:'success', text: 'Forma removida' }) }catch(e){ console.error(e); Swal.fire({ icon:'error', text: 'Falha ao remover' }) }

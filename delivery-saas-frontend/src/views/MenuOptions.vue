@@ -53,7 +53,7 @@
                       </div>
 
                       <div class="product-thumb me-3">
-                        <img v-if="opt.image" :src="opt.image" class="admin-product-image" loading="lazy" />
+                        <img v-if="opt.image" :src="assetUrl(opt.image)" class="admin-product-image" loading="lazy" />
                         <div v-else class="bg-light admin-product-image-placeholder d-flex align-items-center justify-content-center" role="button" tabindex="0" @click.stop="fileInputClick(opt)" @keydown.enter.stop.prevent="fileInputClick(opt)" aria-label="Adicionar imagem para opção">
                           <i class="bi bi-camera" style="font-size:20px;color:#6c6c6c"></i>
                         </div>
@@ -89,7 +89,7 @@
     <input ref="fileInput" type="file" accept="image/*" @change="onFileChange" style="display:none" aria-label="Selecionar imagem" />
 
     <div v-if="showCropper" class="cropper-modal" role="dialog" aria-modal="true">
-      <div class="cropper-modal-content">
+  <div class="cropper-modal-content modal-content-padding">
         <div class="cropper-canvas-wrapper">
           <div ref="cropContainer" class="crop-image-container">
             <img ref="cropperImage" :src="currentObjectUrl" alt="Preview" class="crop-image" @load="onImageLoaded" />
@@ -115,6 +115,7 @@ import api from '../api'
 import { bindLoading } from '../state/globalLoading.js'
 import Swal from 'sweetalert2'
 import { useRouter } from 'vue-router'
+import { assetUrl } from '../utils/assetUrl.js'
 
 const groups = ref([])
 const productsList = ref([])
@@ -177,7 +178,12 @@ async function removeGroup(g){
     await api.delete(`/menu/options/${g.id}`)
     await load()
     Swal.fire({ icon: 'success', text: 'Grupo removido' })
-  }catch(e){ console.error(e); Swal.fire({ icon: 'error', text: 'Falha ao remover grupo' }) }
+  }catch(e){
+    console.error('removeGroup failed', e)
+    // prefer backend-provided message when available
+    const msg = (e && e.response && (e.response.data && (e.response.data.message || e.response.data.error))) || e.message || 'Falha ao remover grupo'
+    Swal.fire({ icon: 'error', text: String(msg) })
+  }
 }
 
 async function removeOption(opt){
@@ -286,7 +292,7 @@ onBeforeUnmount(()=>{ if(currentObjectUrl){ try{ URL.revokeObjectURL(currentObje
 <style scoped>
 /* reuse admin shared styles for upload/crop visuals */
 .cropper-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:2000 }
-.cropper-modal-content { background: #fff; padding: 16px; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
+.cropper-modal-content { background: #fff; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
 .cropper-canvas-wrapper { width:100%; height: auto; display:flex; align-items:center; justify-content:center }
 .crop-image-container { position: relative; width:100%; max-height:64vh; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f5f5f5 }
 .crop-image { max-width:100%; max-height:64vh; user-select:none; -webkit-user-drag:none }

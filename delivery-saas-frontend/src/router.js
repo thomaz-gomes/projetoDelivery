@@ -13,6 +13,9 @@ import CustomersList from './views/CustomersList.vue';
 import CustomerForm from './views/CustomerForm.vue';
 import CustomerProfile from './views/CustomerProfile.vue';
 import IFoodIntegration from './views/IFoodIntegration.vue';
+import Stores from './views/Stores.vue';
+import TestTools from './views/TestTools.vue';
+import StoreForm from './views/StoreForm.vue';
 import FileSourceSettings from './views/FileSourceSettings.vue';
 import CompanySettings from './views/CompanySettings.vue';
 import FileSourcePreview from './views/FileSourcePreview.vue';
@@ -25,15 +28,24 @@ import AffiliateStatement from './views/AffiliateStatement.vue';
 import CouponsList from './views/CouponsList.vue';
 import CouponForm from './views/CouponForm.vue';
 import PublicMenu from './views/PublicMenu.vue';
+import PublicSlugResolver from './views/PublicSlugResolver.vue';
 import OrderStatus from './views/OrderStatus.vue';
 import OrderHistory from './views/OrderHistory.vue';
 import MenuAdmin from './views/MenuAdmin.vue';
+import Menus from './views/Menus.vue';
+import MenuEdit from './views/MenuEdit.vue';
 import MenuOptions from './views/MenuOptions.vue';
 import OptionGroupForm from './views/OptionGroupForm.vue';
 import OptionForm from './views/OptionForm.vue';
 import PaymentMethods from './views/PaymentMethods.vue';
+import PaymentMethodForm from './views/PaymentMethodForm.vue';
 import ProductForm from './views/ProductForm.vue';
 import CategoryForm from './views/CategoryForm.vue';
+import Users from './views/Users.vue';
+import AccessControl from './views/AccessControl.vue';
+import RiderOrders from './views/RiderOrders.vue';
+import RiderQrCode from './views/RiderQrCode.vue';
+import RiderAccountSelf from './views/RiderAccountSelf.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -54,7 +66,11 @@ const router = createRouter({
   { path: '/settings/neighborhoods', component: Neighborhoods, meta: { requiresAuth: true } },
   { path: '/settings/company', component: CompanySettings, meta: { requiresAuth: true } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true } },
-    { path: '/settings/ifood', component: IFoodIntegration }, // 👈 AQUI
+  { path: '/settings/ifood', component: IFoodIntegration }, // 👈 AQUI
+  { path: '/settings/stores', component: Stores, meta: { requiresAuth: true } },
+  { path: '/settings/stores/new', component: StoreForm, meta: { requiresAuth: true } },
+  { path: '/settings/stores/:id', component: StoreForm, meta: { requiresAuth: true } },
+  { path: '/settings/devtools', component: TestTools, meta: { requiresAuth: true } },
   { path: '/settings/file-source', component: FileSourceSettings, meta: { requiresAuth: true } },
   { path: '/settings/file-source/preview', component: FileSourcePreview, meta: { requiresAuth: true } },
   { path: '/affiliates', component: AffiliateListing, meta: { requiresAuth: true } },
@@ -66,17 +82,30 @@ const router = createRouter({
   { path: '/coupons', component: CouponsList, meta: { requiresAuth: true } },
   { path: '/coupons/new', component: CouponForm, meta: { requiresAuth: true } },
   { path: '/coupons/:id/edit', component: CouponForm, meta: { requiresAuth: true } },
-    { path: '/claim/:token', component: Claim, meta: { requiresAuth: true } }
-  ,{ path: '/public/:companyId/menu', component: PublicMenu }
+  { path: '/claim/:token', component: Claim, meta: { requiresAuth: true } }
+   ,{ path: '/rider/claim/:token', component: () => import('./views/RiderClaim.vue'), meta: { requiresAuth: true, noSidebar: true } }
+   ,{ path: '/public/:storeSlug', component: PublicSlugResolver }
+   ,{ path: '/public/:companyId/menu', component: PublicMenu }
   ,{ path: '/public/:companyId/order/:orderId', component: OrderStatus }
   ,{ path: '/public/:companyId/history', component: OrderHistory }
   ,{ path: '/menu/admin', component: MenuAdmin, meta: { requiresAuth: true } }
+  ,{ path: '/menu/menus', component: Menus, meta: { requiresAuth: true } }
+  ,{ path: '/menu/menus/new', component: MenuEdit, meta: { requiresAuth: true } }
+  ,{ path: '/menu/menus/:id', component: MenuEdit, meta: { requiresAuth: true } }
    ,{ path: '/menu/options', component: MenuOptions, meta: { requiresAuth: true } }
   ,{ path: '/menu/options/groups/new', component: OptionGroupForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/options/groups/:id', component: OptionGroupForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/options/new', component: OptionForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/options/:id', component: OptionForm, meta: { requiresAuth: true } }
-   ,{ path: '/menu/payment-methods', component: PaymentMethods, meta: { requiresAuth: true } }
+  ,{ path: '/menu/payment-methods', redirect: '/settings/payment-methods' }
+  ,{ path: '/settings/payment-methods', component: PaymentMethods, meta: { requiresAuth: true } }
+  ,{ path: '/settings/payment-methods/new', component: PaymentMethodForm, meta: { requiresAuth: true } }
+  ,{ path: '/settings/payment-methods/:id', component: PaymentMethodForm, meta: { requiresAuth: true } }
+  ,{ path: '/settings/users', component: Users, meta: { requiresAuth: true } }
+  ,{ path: '/settings/access-control', component: AccessControl, meta: { requiresAuth: true } }
+  ,{ path: '/rider/orders', component: RiderOrders, meta: { requiresAuth: true, noSidebar: true } }
+  ,{ path: '/rider/home', component: RiderQrCode, meta: { requiresAuth: true, noSidebar: true } }
+  ,{ path: '/rider/account', component: RiderAccountSelf, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/menu/products/new', component: ProductForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/products/:id', component: ProductForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/categories/new', component: CategoryForm, meta: { requiresAuth: true } }

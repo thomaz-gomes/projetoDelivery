@@ -23,9 +23,7 @@ export async function ifoodPoll(companyId) {
   const http = makeIFoodHttp();
 
   // 🔹 busca integração no banco para pegar o merchant UUID real
-  const integration = await prisma.apiIntegration.findUnique({
-    where: { companyId_provider: { companyId, provider: 'IFOOD' } },
-  });
+  const integration = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
 
   if (!integration) throw new Error('Integração iFood não encontrada');
   if (!integration.accessToken) throw new Error('Sem token ativo para o iFood');

@@ -55,6 +55,42 @@
             </div>
           </div>
 
+          <div class="row g-3 mt-3">
+            <div class="col-md-6">
+              <label class="form-label">Data de expiração (opcional)</label>
+              <div class="date-picker-wrapper" style="position:relative">
+                <!-- visible formatted display (dd/mm/YYYY) - not interactive, overlay receives clicks -->
+                <input class="form-control" type="text" placeholder="dd/mm/YYYY" :value="form.expiresAtLocal" readonly style="pointer-events:none;position:relative;z-index:1;padding-right:40px" />
+                <!-- small calendar icon (visual hint) -->
+                <span class="calendar-icon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 11H9V13H7V11Z" fill="currentColor"/>
+                    <path d="M11 11H13V13H11V11Z" fill="currentColor"/>
+                    <path d="M15 11H17V13H15V11Z" fill="currentColor"/>
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M7 3C6.44772 3 6 3.44772 6 4V5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V7C21 5.89543 20.1046 5 19 5H18V4C18 3.44772 17.5523 3 17 3C16.4477 3 16 3.44772 16 4V5H8V4C8 3.44772 7.55228 3 7 3ZM5 9H19V19H5V9Z" fill="currentColor"/>
+                  </svg>
+                </span>
+                <!-- native date input overlay (transparent) - opens native picker on mobile -->
+                <input class="native-date-input" type="date" v-model="internalDate" aria-label="Escolher data de expiração" style="position:absolute;inset:0;opacity:0;border:none;background:transparent;z-index:2;cursor:pointer" />
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Subtotal mínimo (opcional)</label>
+              <input class="form-control" v-model.number="form.minSubtotal" type="number" step="0.01" min="0" />
+            </div>
+          </div>
+
+          <div class="row g-3 mt-3">
+            <div class="col-md-6">
+              <label class="form-label">Máximo de usos (global) (opcional)</label>
+              <input class="form-control" v-model.number="form.maxUses" type="number" min="0" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Máximo de usos por cliente (opcional)</label>
+              <input class="form-control" v-model.number="form.maxUsesPerCustomer" type="number" min="0" />
+            </div>
+          </div>
+
           <div class="form-actions mt-4 d-flex gap-2">
             <button class="btn btn-primary" type="submit">Salvar</button>
             <button class="btn btn-outline-secondary" type="button" @click="cancel">Cancelar</button>
@@ -66,7 +102,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import api from '@/api.js'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -90,12 +126,39 @@ export default {
       if (!isEdit) return
       try {
         const res = await api.get(`/coupons/${route.params.id}`)
-        form.value = { ...res.data }
+        // normalize fields for form inputs
+        const src = { ...res.data }
+        // convert expiresAt to dd/mm/YYYY string if present
+        if (src.expiresAt) {
+          try{
+            const d = new Date(src.expiresAt)
+            const pad = (n)=>String(n).padStart(2,'0')
+            const yyyy = d.getFullYear()
+            const mm = pad(d.getMonth()+1)
+            const dd = pad(d.getDate())
+            src.expiresAtLocal = `${dd}/${mm}/${yyyy}`
+            internalDate.value = `${yyyy}-${mm}-${dd}`
+          }catch(e){ src.expiresAtLocal = ''; internalDate.value = '' }
+        } else { src.expiresAtLocal = ''; internalDate.value = '' }
+        form.value = src
       } catch (e) { console.error(e); alert('Erro ao carregar cupom') }
     }
 
   const validationErrors = ref([])
   const serverError = ref('')
+  const internalDate = ref('') // yyyy-mm-dd used by native date input
+
+  // keep display (dd/mm/YYYY) in sync when native picker changes
+  watch(internalDate, (val) => {
+    try{
+      if (!val) { form.value.expiresAtLocal = ''; return }
+      const parts = String(val).split('-')
+      if (parts.length === 3) {
+        const yyyy = parts[0]; const mm = parts[1]; const dd = parts[2]
+        form.value.expiresAtLocal = `${dd}/${mm}/${yyyy}`
+      }
+    }catch(e){ /* ignore */ }
+  })
 
     const validate = () => {
       validationErrors.value = []
@@ -105,6 +168,33 @@ export default {
       } else {
         if (Number(form.value.value) < 0) validationErrors.value.push('Valor absoluto deve ser >= 0')
       }
+      // optional numeric rules
+      if (form.value.minSubtotal !== undefined && form.value.minSubtotal !== null) {
+        if (Number(form.value.minSubtotal) < 0) validationErrors.value.push('Subtotal mínimo deve ser >= 0')
+      }
+      if (form.value.maxUses !== undefined && form.value.maxUses !== null) {
+        if (!Number.isFinite(Number(form.value.maxUses)) || Number(form.value.maxUses) < 0) validationErrors.value.push('Máximo de usos inválido')
+      }
+      if (form.value.maxUsesPerCustomer !== undefined && form.value.maxUsesPerCustomer !== null) {
+        if (!Number.isFinite(Number(form.value.maxUsesPerCustomer)) || Number(form.value.maxUsesPerCustomer) < 0) validationErrors.value.push('Máximo de usos por cliente inválido')
+      }
+      // expiresAtLocal validation (dd/mm/YYYY)
+      if (form.value.expiresAtLocal) {
+        const s = String(form.value.expiresAtLocal).trim()
+        const parts = s.split('/')
+        if (parts.length !== 3) validationErrors.value.push('Data de expiração inválida (use dd/mm/YYYY)')
+        else {
+          const day = Number(parts[0])
+          const month = Number(parts[1])
+          const year = Number(parts[2])
+          const ok = Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year) && day >=1 && month >=1 && month <=12 && year > 1900
+          if (!ok) validationErrors.value.push('Data de expiração inválida (use dd/mm/YYYY)')
+          else {
+            const d = new Date(year, month-1, day)
+            if (Number.isNaN(d.getTime())) validationErrors.value.push('Data de expiração inválida')
+          }
+        }
+      }
       return validationErrors.value.length === 0
     }
 
@@ -112,11 +202,42 @@ export default {
       serverError.value = ''
       try {
         if (!validate()) return
+        // prepare payload: map expiresAtLocal -> expiresAt ISO if provided
+        const payload = { ...form.value }
+        // prefer internalDate (native yyyy-mm-dd) when available
+        if (internalDate.value) {
+          try{
+            const parts = String(internalDate.value).split('-')
+            if (parts.length === 3) {
+              const yyyy = Number(parts[0])
+              const mm = Number(parts[1])
+              const dd = Number(parts[2])
+              const d = new Date(yyyy, mm-1, dd)
+              payload.expiresAt = Number.isFinite(d.getTime()) ? d.toISOString() : null
+            } else payload.expiresAt = null
+          }catch(e){ payload.expiresAt = null }
+        } else if (payload.expiresAtLocal) {
+          try{
+            const s = String(payload.expiresAtLocal).trim()
+            const parts = s.split('/')
+            if (parts.length === 3) {
+              const day = Number(parts[0])
+              const month = Number(parts[1])
+              const year = Number(parts[2])
+              const d = new Date(year, month-1, day)
+              payload.expiresAt = Number.isFinite(d.getTime()) ? d.toISOString() : null
+            } else payload.expiresAt = null
+          }catch(e){ payload.expiresAt = null }
+        } else {
+          payload.expiresAt = null
+        }
+        // remove helper local field before sending
+        delete payload.expiresAtLocal
 
         if (isEdit) {
-          await api.put(`/coupons/${route.params.id}`, form.value)
+          await api.put(`/coupons/${route.params.id}`, payload)
         } else {
-          await api.post('/coupons', form.value)
+          await api.post('/coupons', payload)
         }
         router.push('/coupons')
       } catch (e) {
@@ -129,7 +250,8 @@ export default {
 
     onMounted(() => { loadAffiliates(); load() })
 
-    return { isEdit, form, affiliates, save, cancel, validationErrors, serverError }
+    // expose internalDate so the template's v-model can bind to it
+    return { isEdit, form, affiliates, save, cancel, validationErrors, serverError, internalDate, load }
   }
 }
 </script>
@@ -138,4 +260,7 @@ export default {
 .coupon-form { padding: 20px }
 .form-group { margin-bottom: 12px }
 .form-actions { margin-top: 16px }
+.date-picker-wrapper { min-width: 220px }
+.calendar-icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); z-index: 3; pointer-events: none; color: #6c757d; }
+.calendar-icon svg { display: block }
 </style>

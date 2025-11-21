@@ -56,13 +56,41 @@ router.delete('/:id', requireRole('ADMIN'), async (req, res) => {
   const existing = await prisma.optionGroup.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Grupo não encontrado' })
   try {
-    // delete options first
-    await prisma.option.deleteMany({ where: { groupId: id } })
-    await prisma.optionGroup.delete({ where: { id } })
+    // load related options so we can clean up any stored image files safely
+    const relatedOptions = await prisma.option.findMany({ where: { groupId: id } })
+    // attempt best-effort file cleanup for option images stored under our uploads folder
+    for (const opt of relatedOptions) {
+      try {
+        if (opt && opt.image && typeof opt.image === 'string' && opt.image.includes('/public/uploads/options/')) {
+          const filename = path.basename(opt.image)
+          const filePath = path.join(process.cwd(), 'public', 'uploads', 'options', filename)
+          try {
+            if (fs.existsSync(filePath)) {
+              await fs.promises.unlink(filePath)
+            }
+          } catch (unlinkErr) {
+            // non-fatal: log and continue
+            console.warn('Failed to remove option image file during group delete:', filePath, unlinkErr)
+          }
+        }
+      } catch (inner) {
+        console.warn('Error while attempting to cleanup option image for group delete', inner)
+      }
+    }
+
+    // perform DB deletes in a transaction for atomicity
+    // also remove any Product<->OptionGroup associations to avoid FK violations
+    await prisma.$transaction([
+      prisma.productOptionGroup.deleteMany({ where: { groupId: id } }),
+      prisma.option.deleteMany({ where: { groupId: id } }),
+      prisma.optionGroup.delete({ where: { id } })
+    ])
     res.json({ message: 'Removido' })
   } catch (e) {
     console.error('Error deleting option group', e)
-    res.status(500).json({ message: 'Erro ao remover grupo' })
+    // return a clearer message to the frontend to aid debugging while avoiding stack leakage
+    const msg = (e && (e.message || (e.response && e.response.data && e.response.data.message))) || 'Erro ao remover grupo'
+    res.status(500).json({ message: String(msg) })
   }
 })
 

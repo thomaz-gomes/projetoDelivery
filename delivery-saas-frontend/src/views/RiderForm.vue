@@ -11,7 +11,7 @@ const isEdit = !!route.params.id;
 const loading = ref(false);
 const error = ref('');
 
-const rider = ref({ name: '', whatsapp: '', dailyRate: '', active: true });
+const rider = ref({ name: '', whatsapp: '', dailyRate: '', active: true, password: '' });
 
 onMounted(async () => {
   if (isEdit) {
@@ -33,9 +33,14 @@ async function save() {
   error.value = '';
   try {
     if (isEdit) {
-      await store.update(route.params.id, rider.value);
+      // send password only if provided
+      const body = { name: rider.value.name, whatsapp: rider.value.whatsapp, dailyRate: rider.value.dailyRate, active: rider.value.active };
+      if (rider.value.password) body.password = rider.value.password;
+      await store.update(route.params.id, body);
     } else {
-      await store.create(rider.value);
+      const body = { name: rider.value.name, whatsapp: rider.value.whatsapp, dailyRate: rider.value.dailyRate, active: rider.value.active };
+      if (rider.value.password) body.password = rider.value.password;
+      await store.create(body);
     }
     router.push('/riders');
   } catch (e) {
@@ -68,6 +73,10 @@ async function save() {
           <div class="col-md-3">
             <label class="form-label">Diária</label>
             <input v-model="rider.dailyRate" type="number" class="form-control" step="0.01" />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Senha (para o app do motoboy)</label>
+            <input v-model="rider.password" type="password" class="form-control" placeholder="Deixe em branco para não criar/alterar senha" />
           </div>
 
           <div class="col-12">

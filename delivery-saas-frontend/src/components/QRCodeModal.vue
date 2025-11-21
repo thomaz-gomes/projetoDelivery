@@ -13,7 +13,7 @@ watch(() => props.url, async (u) => {
 
 <template>
   <div v-if="open" class="overlay">
-    <div class="modal">
+  <div class="modal modal-content-padding">
       <h3>Comanda (QR Code)</h3>
       <img v-if="dataUrl" :src="dataUrl" alt="QR" />
       <p class="small">{{ url }}</p>
@@ -24,7 +24,7 @@ watch(() => props.url, async (u) => {
 
 <style scoped>
 .overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; }
-.modal { background:#fff; padding:16px; border-radius:8px; width:320px; text-align:center; }
+.modal { background:#fff; border-radius:8px; width:320px; text-align:center; }
 .small { font-size:11px; word-break:break-all; color:#666; }
 button { margin-top:10px; }
 </style>

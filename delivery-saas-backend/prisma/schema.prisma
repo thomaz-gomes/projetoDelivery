@@ -8,8 +8,10 @@ generator client {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   RIDER
+  ATTENDANT
 }
 
 enum OrderStatus {
@@ -29,6 +31,8 @@ enum CustomerSource {
 model Company {
   id                String             @id @default(uuid())
   name              String
+  // optional URL-friendly slug (ex: "nomedaloja")
+  slug              String?            @unique
   createdAt         DateTime           @default(now())
   users             User[]
   riders            Rider[]
@@ -38,6 +42,8 @@ model Company {
   whatsAppInstances WhatsAppInstance[]
   Customer          Customer[]
   apiIntegrations   ApiIntegration[]
+  // stores associated to this company (multi-store support)
+  stores            Store[]
   affiliates        Affiliate[]
   coupons           Coupon[]
   // relations for menu / payments (inverse relation fields required by Prisma)
@@ -86,6 +92,9 @@ model Order {
   id                String               @id @default(uuid())
   companyId         String
   company           Company              @relation(fields: [companyId], references: [id])
+  // optional: associate this order to a specific store (useful for multistore / multi-CNPJ setups)
+  storeId           String?
+  store             Store?               @relation(fields: [storeId], references: [id])
   externalId        String?              @unique
   displayId         String?
   // Per-day sequential visual number (1,2,3...). Persisted as integer.
@@ -103,6 +112,9 @@ model Order {
   latitude          Float?
   longitude         Float?
   total             Decimal              @default(0)
+  // persisted coupon information (nullable - may be null for older orders)
+  couponCode        String?
+  couponDiscount    Decimal?
   deliveryFee       Decimal?
   payload           Json?
   createdAt         DateTime             @default(now())
@@ -115,13 +127,17 @@ model Order {
   riderTransactions RiderTransaction[]
   affiliateSales    AffiliateSale[]
   nfeProtocols      NfeProtocol[]
-}
 
+// Index to speed up queries by company + couponCode
+    @@index([companyId, couponCode], name: "idx_order_company_coupon")
+}
 // NFC-e / NFe protocol records (stores SEFAZ responses such as protNFe)
 model NfeProtocol {
   id        String   @id @default(uuid())
   companyId String
   company   Company  @relation(fields: [companyId], references: [id])
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id])
   orderId   String?  
   order     Order?   @relation(fields: [orderId], references: [id])
   nProt     String?  @unique
@@ -240,6 +256,9 @@ model ApiIntegration {
   companyId    String
   company      Company @relation(fields: [companyId], references: [id])
   provider     String
+  // optional: if this integration is bound to a specific store
+  storeId      String?
+  store        Store?   @relation(fields: [storeId], references: [id])
   clientId     String?
   clientSecret String?
   merchantId   String?
@@ -258,7 +277,52 @@ model ApiIntegration {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([companyId, provider], name: "companyId_provider")
+  // previously there was a unique constraint companyId+provider; removed to allow
+  // multiple integrations of the same provider per company (multi-store setups)
+}
+
+// Optional mapping of an API integration to a specific Store (for multi-store setups)
+model Store {
+  id            String    @id @default(uuid())
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id])
+  name          String
+  // optional URL-friendly slug (ex: "nomedaloja")
+  slug          String?   @unique
+  cnpj          String?   @unique
+  logoUrl       String?
+  bannerUrl     String?
+  timezone      String?
+  open24Hours   Boolean   @default(false)
+  weeklySchedule Json?
+  address       String?
+  isActive      Boolean   @default(true)
+  menus         Menu[]
+  // integrations that are bound to this store
+  apiIntegrations ApiIntegration[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orders        Order[]
+  nfeProtocols  NfeProtocol[]
+}
+
+model Menu {
+  id        String    @id @default(uuid())
+  storeId   String
+  store     Store     @relation(fields: [storeId], references: [id])
+  name      String
+  // optional URL-friendly slug for menu (ex: "festival-de-verao")
+  slug      String?   @unique
+  description String?
+  logoUrl   String?
+  isActive  Boolean   @default(true)
+  position  Int       @default(0)
+  categories MenuCategory[]
+  // products optionally assigned to this menu
+  products   Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 // File system based order sources (local folder monitored by backend)
@@ -359,6 +423,11 @@ model Coupon {
   isActive     Boolean    @default(true)
   affiliateId  String? // optional association
   affiliate    Affiliate? @relation(fields: [affiliateId], references: [id])
+  // Advanced validation rules
+  expiresAt    DateTime?  // optional expiration date/time
+  maxUses      Int?       // maximum number of times this coupon can be used globally
+  maxUsesPerCustomer Int? // maximum uses per customer (phone/whatsapp)
+  minSubtotal  Decimal?   // minimum subtotal required to apply coupon
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -400,6 +469,9 @@ model MenuCategory {
   id        String    @id @default(uuid())
   companyId String
   company   Company   @relation(fields: [companyId], references: [id])
+  // optional: associate category to a specific Menu (for multi-menu support)
+  menuId    String?
+  menu      Menu?     @relation(fields: [menuId], references: [id])
   name      String
   isActive  Boolean   @default(true)
   position  Int       @default(0)
@@ -414,6 +486,9 @@ model Product {
   id                  String               @id @default(uuid())
   companyId           String
   company             Company              @relation(fields: [companyId], references: [id])
+  // optional: menu association for multi-menu setups
+  menuId              String?
+  menu                Menu?                @relation(fields: [menuId], references: [id])
   categoryId          String?
   category            MenuCategory?        @relation(fields: [categoryId], references: [id])
   image               String?

@@ -43,9 +43,14 @@ async function upsertIFoodOrder(companyId, orderData) {
   const lat = parseFloat(location.latitude || 0);
   const lng = parseFloat(location.longitude || 0);
 
+  // try to detect a store bound to this company's IFOOD integration
+  const integration = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, select: { storeId: true }, orderBy: { updatedAt: 'desc' } });
+  const storeId = integration?.storeId || null;
+
   const order = await prisma.order.upsert({
     where: { externalId },
     update: {
+      storeId: storeId || undefined,
       status: 'EM_PREPARO',
       customerName: customer?.name,
       customerPhone: customer?.phones?.[0]?.number,
@@ -56,6 +61,7 @@ async function upsertIFoodOrder(companyId, orderData) {
       total: Number(total?.orderAmount || 0),
     },
     create: {
+      storeId: storeId || null,
       companyId,
       externalId,
       displayId,

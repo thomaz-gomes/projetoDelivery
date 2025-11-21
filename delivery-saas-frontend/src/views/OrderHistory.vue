@@ -23,7 +23,7 @@
                   <div class="small text-muted">Total: R$ {{ Number(o.total || 0).toFixed(2) }} — {{ new Date(o.createdAt).toLocaleString() }}</div>
                 </div>
                 <div>
-                  <router-link :to="`/public/${companyId}/order/${o.id}`" class="btn btn-sm btn-primary">Ver</router-link>
+                  <router-link :to="{ path: `/public/${companyId}/order/${o.id}`, query: { storeId: storeId, menuId: menuId } }" class="btn btn-sm btn-primary">Ver</router-link>
                 </div>
               </div>
             </li>
@@ -43,6 +43,15 @@ import api from '../api'
 const route = useRoute()
 const router = useRouter()
 const companyId = route.params.companyId
+
+// persist storeId across public views so navigation keeps the selected store
+const storeStorageKey = `public_store_${companyId}`
+const storeId = ref(route.query.storeId || localStorage.getItem(storeStorageKey) || null)
+try{ if(route.query && route.query.storeId) localStorage.setItem(storeStorageKey, String(route.query.storeId)) }catch(e){}
+// persist menuId similarly so the selected menu survives navigation
+const menuStorageKey = `public_menu_${companyId}`
+const menuId = ref(route.query.menuId || localStorage.getItem(menuStorageKey) || null)
+try{ if(route.query && route.query.menuId) localStorage.setItem(menuStorageKey, String(route.query.menuId)) }catch(e){}
 
 const phone = ref(route.query.phone || '')
 const loading = ref(false)

@@ -4,23 +4,29 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+  "dev": "vite",
+  "print-mock:ws": "node dev-tools/print-mock/qz-mock-server.js",
+  "print-mock:http": "node dev-tools/print-mock/http-print-receiver.js",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
     "axios": "^1.12.2",
+    "body-parser": "^2.2.0",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
+    "express": "^5.1.0",
     "pinia": "^3.0.3",
     "qrcode": "^1.5.4",
+  "qr-scanner": "^1.4.2",
     "qz-tray": "^2.2.5",
     "socket.io-client": "^4.8.1",
     "sortablejs": "^1.15.0",
     "sweetalert2": "^11.25.0",
     "vue": "^3.5.22",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.14",

@@ -3,6 +3,7 @@ import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { sha256 } from '../utils.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
+import { emitirPedidoAtualizado } from '../index.js';
 
 export const ticketsRouter = express.Router();
 
@@ -67,12 +68,15 @@ ticketsRouter.post('/:token/claim', authMiddleware, requireRole('RIDER'), async 
       return updatedOrder;
     });
 
-    // resposta imediata
-    res.json({ ok: true, order: result });
+  // resposta imediata
+  res.json({ ok: true, order: result });
 
-    // notificações assíncronas (não bloqueiam a resposta)
-    notifyRiderAssigned(result.id).catch(() => {});
-    notifyCustomerStatus(result.id, 'SAIU_PARA_ENTREGA').catch(() => {});
+  // Emit socket event so the admin panel updates immediately
+  try { emitirPedidoAtualizado(result); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e); }
+
+  // notificações assíncronas (não bloqueiam a resposta)
+  notifyRiderAssigned(result.id).catch(() => {});
+  notifyCustomerStatus(result.id, 'SAIU_PARA_ENTREGA').catch(() => {});
   } catch (e) {
     res.status(400).json({ message: e.message || 'Falha ao atribuir pedido' });
   }

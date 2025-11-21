@@ -7,19 +7,6 @@ import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const riderId = route.params.id;
-
-const loading = ref(false);
-bindLoading(loading);
-const loadingTx = ref(false);
-const error = ref('');
-const success = ref('');
-const balance = ref(0);
-const periodBalance = ref(0);
-const transactions = ref([]);
-const exporting = ref(false);
-const auth = useAuthStore();
-
-// rider info
 const rider = ref(null);
 
 // inline edit
@@ -32,6 +19,8 @@ const savingEdit = ref(false);
 const phoneTo = ref('');
 const sendingPdf = ref(false);
 const useMockUrl = ref(true);
+// compact UI toggle for phone input on small screens
+const showPhoneInput = ref(false);
 
 // paging & filters
 const page = ref(1);
@@ -350,7 +339,7 @@ function nextPage() {
 </script>
 
 <template>
-  <div class="p-4">
+  <div class="p-4 rider-account">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h2 class="h4 m-0">Extrato do entregador</h2>
       <div>
@@ -362,21 +351,36 @@ function nextPage() {
   <div v-if="success" class="alert alert-success">{{ success }}</div>
 
     <div class="card mb-3">
-      <div class="card-body d-flex align-items-center justify-content-between">
+      <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-2">
           <div>
           <div class="small text-muted">Saldo no período</div>
           <div class="h3">R$ {{ periodBalance.toFixed(2) }}</div>
         </div>
         <div>
-          <button class="btn btn-primary me-2" @click="fetchBalance" :disabled="loading">Atualizar</button>
-          <button class="btn btn-outline-secondary me-2" @click="exportCsv" :disabled="exporting || !datesAreValid">{{ exporting ? 'Exportando...' : 'Exportar CSV' }}</button>
-          <div class="d-inline-flex align-items-center">
-            <input v-model="phoneTo" type="text" placeholder="+5511999999999" class="form-control form-control-sm me-2" style="width:180px" />
-            <div class="form-check form-check-inline me-2">
+          <!-- full controls for md+ (desktop/tablet) -->
+          <div class="d-none d-md-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-primary" @click="fetchBalance" :disabled="loading">Atualizar</button>
+            <button class="btn btn-sm btn-outline-secondary" @click="exportCsv" :disabled="exporting || !datesAreValid">{{ exporting ? 'Exportando...' : 'Exportar CSV' }}</button>
+            <input v-model="phoneTo" type="text" placeholder="+5511999999999" class="form-control form-control-sm phone-input" style="max-width:160px;" />
+            <div class="form-check form-check-inline">
               <input class="form-check-input" type="checkbox" id="mockUrlCheckbox" v-model="useMockUrl" />
               <label class="form-check-label small text-muted" for="mockUrlCheckbox">Usar URL mockada</label>
             </div>
-            <button class="btn btn-success btn-sm" @click="sendPdf" :disabled="sendingPdf || !datesAreValid">{{ sendingPdf ? 'Enviando...' : 'Enviar PDF (WhatsApp)' }}</button>
+            <button class="btn btn-sm btn-success" @click="sendPdf" :disabled="sendingPdf || !datesAreValid">{{ sendingPdf ? 'Enviando...' : 'Enviar PDF (WhatsApp)' }}</button>
+          </div>
+          <!-- compact icon controls for small screens -->
+          <div class="d-flex d-md-none align-items-center gap-2">
+            <button class="btn btn-sm btn-primary" title="Atualizar" @click="fetchBalance" :disabled="loading"><i class="bi bi-arrow-clockwise"></i></button>
+            <button class="btn btn-sm btn-outline-secondary" title="Exportar" @click="exportCsv" :disabled="exporting || !datesAreValid"><i class="bi bi-download"></i></button>
+            <button class="btn btn-sm btn-success" title="Enviar" @click="sendPdf" :disabled="sendingPdf || !datesAreValid"><i class="bi bi-send"></i></button>
+            <button class="btn btn-sm btn-outline-secondary" @click.prevent="showPhoneInput = !showPhoneInput" title="Telefone"><i class="bi bi-telephone"></i></button>
+          </div>
+          <div v-if="showPhoneInput" class="d-md-none mt-2">
+            <input v-model="phoneTo" type="text" placeholder="+5511999999999" class="form-control form-control-sm" />
+            <div class="form-check mt-1">
+              <input class="form-check-input" type="checkbox" id="mockUrlCheckboxMobile" v-model="useMockUrl" />
+              <label class="form-check-label small text-muted" for="mockUrlCheckboxMobile">Usar URL mockada</label>
+            </div>
           </div>
         </div>
       </div>
@@ -435,8 +439,8 @@ function nextPage() {
                   <button class="btn btn-sm btn-link p-0 ms-2" title="Editar" @click="startEdit(t)">✎</button>
                 </div>
                 <div v-else>
-                  <div class="d-flex gap-2 align-items-center">
-                    <input class="form-control form-control-sm" style="width:110px" v-model="editAmount" />
+                  <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <input class="form-control form-control-sm" style="max-width:110px; width:100%" v-model="editAmount" />
                     <button class="btn btn-sm btn-primary" :disabled="savingEdit" @click.prevent="saveEdit(riderId, t)">{{ savingEdit ? 'Salvando...' : 'Salvar' }}</button>
                     <button class="btn btn-sm btn-outline-secondary" @click.prevent="cancelEdit">Cancelar</button>
                   </div>
@@ -503,3 +507,29 @@ function nextPage() {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Rider account responsive tweaks */
+.rider-account { overflow-x: hidden; }
+.rider-account .card-body.flex-wrap { gap: .5rem; }
+.rider-account .phone-input { max-width: 180px; }
+@media (max-width: 576px) {
+  .rider-account { padding: 12px !important; }
+  .rider-account .card { margin-bottom: 0.75rem; }
+  .rider-account .table-responsive { font-size: 13px; }
+}
+
+/* small adjustments to inputs/buttons to avoid overflow */
+.rider-account .form-control { min-width: 0; }
+.rider-account .d-inline-flex { flex-wrap: wrap; }
+
+/* compact layout tweaks */
+.rider-account h2 { font-size: 1rem; }
+.rider-account .card-body { padding: 0.65rem; }
+.rider-account .card { margin-bottom: 0.6rem; }
+.rider-account .table-sm td, .rider-account .table-sm th { padding: .35rem .5rem; }
+.rider-account .table-responsive { font-size: 13px; }
+@media (max-width: 576px) {
+  .rider-account .h3 { font-size: 1.05rem; }
+}
+</style>

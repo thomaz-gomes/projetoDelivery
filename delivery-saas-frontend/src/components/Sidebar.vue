@@ -17,20 +17,21 @@ const nav = [
   ] },
   { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill' },
   { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated' },
-  { name: 'Cardápio', to: '/menu/admin', icon: 'bi bi-list-ul', children: [
-    { name: 'Produtos', to: '/menu/admin', icon: 'bi bi-box' },
-    { name: 'Opções / Complementos', to: '/menu/options', icon: 'bi bi-plus-circle' },
-    { name: 'Formas de pagamento', to: '/menu/payment-methods', icon: 'bi bi-credit-card-2-front' }
-  ] },
-  { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp' },
+    { name: 'Lista de cardápios', to: '/menu/menus', icon: 'bi bi-list' },
+ 
+  
   // Configurações has sub-items
-  { name: 'Configurações', to: '/settings/company', icon: 'bi bi-gear', children: [
+    { name: 'Configurações', to: '/settings/company', icon: 'bi bi-gear', children: [
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt' },
     { name: 'iFood', to: '/settings/ifood', icon: 'bi bi-shop' },
+    { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
     { name: 'Pasta (import)', to: '/settings/file-source', icon: 'bi bi-folder' },
     { name: 'Preview (pasta)', to: '/settings/file-source/preview', icon: 'bi bi-eye' },
+    { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp' },
     { name: 'Geral', to: '/settings/company', icon: 'bi bi-sliders' },
-    { name: 'Loja', to: '/settings/company', icon: 'bi bi-shop-window' },
+    { name: 'Dev Tools', to: '/settings/devtools', icon: 'bi bi-tools' },
+    { name: 'Formas de pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card-2-front' },
+    { name: 'Gestão de Acessos', to: '/settings/access-control', icon: 'bi bi-shield-lock' },
   ] },
 ];
 
@@ -44,13 +45,20 @@ function toggleParent(to){
 
 const isActive = (to) => computed(() => route.path.startsWith(to));
 
+const showSidebar = computed(() => {
+  try {
+    if (route.meta && route.meta.noSidebar) return false;
+  } catch (e) {}
+  return !route.path.startsWith('/rider');
+});
+
 function logout() {
   auth.logout();
   router.replace('/login');
 }
 </script>
 <template>
-  <aside class="d-none d-md-flex flex-column border-end" style="width: 240px; min-height: 100vh;">
+  <aside v-if="showSidebar" class="d-none d-md-flex flex-column border-end" style="width: 240px; min-height: 100vh;">
     <!-- Header -->
     <div class="border-bottom p-3">
       <h5 class="mb-0">Delivery SaaS</h5>

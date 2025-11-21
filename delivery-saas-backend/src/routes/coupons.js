@@ -72,7 +72,7 @@ couponsRouter.get('/:id', async (req, res) => {
 // POST /coupons - create (admin)
 couponsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
-  const { code, description, isPercentage, value, affiliateId, isActive } = req.body
+  const { code, description, isPercentage, value, affiliateId, isActive, expiresAt, maxUses, maxUsesPerCustomer, minSubtotal } = req.body
 
   if (!code) return res.status(400).json({ message: 'Código é obrigatório' })
 
@@ -91,7 +91,11 @@ couponsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         isPercentage: isPercentage !== undefined ? isPercentage : true,
         value: value !== undefined ? value : 0,
         affiliateId: affiliateId || null,
-        isActive: isActive !== undefined ? isActive : true
+        isActive: isActive !== undefined ? isActive : true,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        maxUses: maxUses !== undefined ? (Number.isFinite(Number(maxUses)) ? Number(maxUses) : null) : null,
+        maxUsesPerCustomer: maxUsesPerCustomer !== undefined ? (Number.isFinite(Number(maxUsesPerCustomer)) ? Number(maxUsesPerCustomer) : null) : null,
+        minSubtotal: minSubtotal !== undefined && minSubtotal !== null ? Number(minSubtotal) : null
       }
     })
 
@@ -107,7 +111,7 @@ couponsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
 couponsRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId
-  const { code, description, isPercentage, value, affiliateId, isActive } = req.body
+  const { code, description, isPercentage, value, affiliateId, isActive, expiresAt, maxUses, maxUsesPerCustomer, minSubtotal } = req.body
 
   try {
     const existing = await prisma.coupon.findFirst({ where: { id, companyId } })
@@ -126,7 +130,11 @@ couponsRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
         isPercentage: isPercentage !== undefined ? isPercentage : undefined,
         value: value !== undefined ? value : undefined,
         affiliateId: affiliateId === null ? null : affiliateId || undefined,
-        isActive: isActive !== undefined ? isActive : undefined
+        isActive: isActive !== undefined ? isActive : undefined,
+        expiresAt: expiresAt !== undefined ? (expiresAt ? new Date(expiresAt) : null) : undefined,
+        maxUses: maxUses !== undefined ? (Number.isFinite(Number(maxUses)) ? Number(maxUses) : null) : undefined,
+        maxUsesPerCustomer: maxUsesPerCustomer !== undefined ? (Number.isFinite(Number(maxUsesPerCustomer)) ? Number(maxUsesPerCustomer) : null) : undefined,
+        minSubtotal: minSubtotal !== undefined ? (minSubtotal !== null ? Number(minSubtotal) : null) : undefined
       }
     })
 

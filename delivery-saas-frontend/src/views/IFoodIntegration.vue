@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, onUnmounted } from 'vue';
 import api from '../api';
 
-const form = ref({ clientId: '', clientSecret: '', merchantId: '' });
+const form = ref({ clientId: '', clientSecret: '', merchantId: '', storeId: null });
 const integ = ref(null);
 const statusMsg = ref('');
 // computed status for visual feedback
@@ -124,6 +124,7 @@ async function load() {
     form.value.clientId = integ.value.clientId || '';
     form.value.clientSecret = integ.value.clientSecret || '';
     form.value.merchantId = integ.value.merchantId || '';
+    form.value.storeId = integ.value.storeId || null;
     // schedule token refresh when integration info loaded
     scheduleRefreshFromInteg();
   }
@@ -135,9 +136,19 @@ async function save() {
     clientSecret: form.value.clientSecret,
     merchantId: form.value.merchantId,
     enabled: true,
+    storeId: form.value.storeId || null,
   });
   await load();
   statusMsg.value = 'Credenciais salvas.';
+}
+
+// load available stores for this company so user can bind integration to a store
+const stores = ref([]);
+async function loadStores() {
+  try {
+    const { data } = await api.get('/stores');
+    stores.value = data || [];
+  } catch (e) { console.warn('Failed to load stores', e); }
 }
 
 const linking = ref(false);
@@ -195,6 +206,7 @@ async function testPoll() {
 }
 
 onMounted(load);
+onMounted(loadStores);
 </script>
 
 <template>
@@ -219,6 +231,13 @@ onMounted(load);
         <div class="col-md-4">
           <label class="form-label">Merchant ID (opcional)</label>
           <input class="form-control" v-model="form.merchantId" :readonly="integrationActive" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Vincular a Loja (opcional)</label>
+          <select class="form-select" v-model="form.storeId" :disabled="integrationActive">
+            <option :value="null">-- Nenhuma --</option>
+            <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }} {{ s.cnpj ? ' - ' + s.cnpj : '' }}</option>
+          </select>
         </div>
         <div class="col-12">
           <button class="btn btn-primary" @click="save" :disabled="integrationActive">Salvar</button>

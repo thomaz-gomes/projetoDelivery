@@ -1,0 +1,12 @@
+{
+  "users:read": { "label": "Ler usuários", "description": "Permite visualizar detalhes de usuários" },
+  "users:create": { "label": "Criar usuários", "description": "Permite criar novos usuários no sistema" },
+  "users:update": { "label": "Atualizar usuários", "description": "Permite editar dados e roles de usuários" },
+  "users:delete": { "label": "Remover usuários", "description": "Permite excluir usuários" },
+  "orders:view": { "label": "Visualizar pedidos", "description": "Acessar lista e detalhes de pedidos" },
+  "orders:update": { "label": "Atualizar pedidos", "description": "Alterar status e dados de pedidos" },
+  "menu:edit": { "label": "Editar cardápio", "description": "Criar e editar produtos, categorias e opções" },
+  "settings:update": { "label": "Atualizar configurações", "description": "Alterar configurações da loja e integrações" },
+  "customers:view": { "label": "Visualizar clientes", "description": "Ver informações dos clientes" },
+  "*": { "label": "Acesso total", "description": "Permissão que concede todos os acessos" }
+}

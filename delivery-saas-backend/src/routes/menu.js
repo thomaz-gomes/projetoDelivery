@@ -1,11 +1,101 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
+import { normalizeSlug, isValidSlug, isReservedSlug } from '../utils/slug.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import fs from 'fs'
 import path from 'path'
 
 const router = express.Router()
 router.use(authMiddleware)
+
+// ------- Menus (multi-menu support) -------
+// NOTE: This router is mounted under both `/menu` and `/settings` in
+// `src/index.js` to preserve backwards compatibility with existing
+// clients. Keep route paths relative (no leading prefix) so they work
+// correctly regardless of which mount point the app uses.
+// GET /menu/menus
+router.get('/menus', async (req, res) => {
+  const companyId = req.user.companyId
+  const rows = await prisma.menu.findMany({ where: { store: { companyId } }, orderBy: { position: 'asc' } })
+  res.json(rows)
+})
+
+// POST /menu/menus - create a new menu (optionally link to a store)
+router.post('/menus', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const { name, description = null, storeId = null, logoUrl = null, position = 0, isActive = true, slug = null } = req.body || {}
+  if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
+  // if storeId is provided, ensure it belongs to the same company
+  if (storeId) {
+    const st = await prisma.store.findUnique({ where: { id: storeId } })
+    if (!st || st.companyId !== companyId) return res.status(400).json({ message: 'Loja inválida' })
+  }
+
+  // validate slug when provided
+  let normalized = null
+  if (slug !== null && slug !== undefined && String(slug || '').trim() !== '') {
+    normalized = normalizeSlug(slug)
+    if (!isValidSlug(normalized) || isReservedSlug(normalized)) return res.status(400).json({ message: 'Slug inválido' })
+    const exists = await prisma.menu.findFirst({ where: { slug: normalized } })
+    if (exists) return res.status(400).json({ message: 'Slug já em uso' })
+  }
+
+  const created = await prisma.menu.create({ data: { name, description, storeId, logoUrl, position: Number(position || 0), isActive: Boolean(isActive), slug: normalized } })
+  res.status(201).json(created)
+})
+
+// GET /menu/menus/:id
+router.get('/menus/:id', async (req, res) => {
+  const { id } = req.params
+  const companyId = req.user.companyId
+  const row = await prisma.menu.findFirst({ where: { id }, include: { store: true } })
+  if (!row) return res.status(404).json({ message: 'Menu não encontrado' })
+  // ensure company scoping: menu.store.companyId should match or categories/products belong to company
+  // allow admins to fetch regardless, but be conservative and check store->companyId when store linked
+  if (row.store && row.store.companyId !== companyId) return res.status(404).json({ message: 'Menu não encontrado' })
+  res.json(row)
+})
+
+// PATCH /menu/menus/:id
+router.patch('/menus/:id', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params
+  const companyId = req.user.companyId
+  const existing = await prisma.menu.findUnique({ where: { id }, include: { store: true } })
+  if (!existing) return res.status(404).json({ message: 'Menu não encontrado' })
+  if (existing.store && existing.store.companyId !== companyId) return res.status(404).json({ message: 'Menu não encontrado' })
+  const { name, description, storeId, logoUrl, isActive, position, slug = undefined } = req.body || {}
+  if (storeId) {
+    const st = await prisma.store.findUnique({ where: { id: storeId } })
+    if (!st || st.companyId !== companyId) return res.status(400).json({ message: 'Loja inválida' })
+  }
+  // handle slug updates (allow clearing when empty string provided)
+  let slugValue = existing.slug || null
+  if (slug !== undefined) {
+    if (slug === null || String(slug || '').trim() === '') {
+      slugValue = null
+    } else {
+      const normalized = normalizeSlug(slug)
+      if (!isValidSlug(normalized) || isReservedSlug(normalized)) return res.status(400).json({ message: 'Slug inválido' })
+      const conflict = await prisma.menu.findFirst({ where: { slug: normalized, NOT: { id } } })
+      if (conflict) return res.status(400).json({ message: 'Slug já em uso' })
+      slugValue = normalized
+    }
+  }
+
+  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue } })
+  res.json(updated)
+})
+
+// DELETE /menu/menus/:id
+router.delete('/menus/:id', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params
+  const companyId = req.user.companyId
+  const existing = await prisma.menu.findUnique({ where: { id }, include: { store: true } })
+  if (!existing) return res.status(404).json({ message: 'Menu não encontrado' })
+  if (existing.store && existing.store.companyId !== companyId) return res.status(404).json({ message: 'Menu não encontrado' })
+  await prisma.menu.delete({ where: { id } })
+  res.json({ message: 'Removido' })
+})
 
 // ------- Categories -------
 router.get('/categories', async (req, res) => {
@@ -16,9 +106,15 @@ router.get('/categories', async (req, res) => {
 
 router.post('/categories', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
-  const { name, position = 0, isActive = true } = req.body || {}
+  const { name, position = 0, isActive = true, menuId = null } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
-  const created = await prisma.menuCategory.create({ data: { companyId, name, position: Number(position || 0), isActive: Boolean(isActive) } })
+  // if menuId provided, validate it belongs to a menu whose store is in this company
+  if (menuId) {
+    const menu = await prisma.menu.findUnique({ where: { id: menuId }, include: { store: true } })
+    if (!menu) return res.status(400).json({ message: 'Menu inválido' })
+    if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
+  }
+  const created = await prisma.menuCategory.create({ data: { companyId, name, position: Number(position || 0), isActive: Boolean(isActive), menuId } })
   res.status(201).json(created)
 })
 
@@ -27,8 +123,13 @@ router.patch('/categories/:id', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const existing = await prisma.menuCategory.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Categoria não encontrada' })
-  const { name, position, isActive } = req.body || {}
-  const updated = await prisma.menuCategory.update({ where: { id }, data: { name: name ?? existing.name, position: position !== undefined ? Number(position) : existing.position, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive } })
+  const { name, position, isActive, menuId } = req.body || {}
+  if (menuId) {
+    const menu = await prisma.menu.findUnique({ where: { id: menuId }, include: { store: true } })
+    if (!menu) return res.status(400).json({ message: 'Menu inválido' })
+    if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
+  }
+  const updated = await prisma.menuCategory.update({ where: { id }, data: { name: name ?? existing.name, position: position !== undefined ? Number(position) : existing.position, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, menuId: menuId !== undefined ? menuId : existing.menuId } })
   res.json(updated)
 })
 
@@ -123,6 +224,9 @@ router.get('/products', async (req, res) => {
   const { categoryId } = req.query
   const where = { companyId }
   if (categoryId) where.categoryId = categoryId
+  // support filtering by menuId
+  const { menuId } = req.query
+  if (menuId) where.menuId = menuId
   const rows = await prisma.product.findMany({ where, orderBy: { position: 'asc' } })
   res.json(rows)
 })
@@ -134,7 +238,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-    const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image } = body
+  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -142,7 +246,13 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       return res.status(400).json({ message: 'Empresa (companyId) ausente no token' })
     }
 
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null } })
+    // validate menuId if provided
+    if (menuId) {
+      const menu = await prisma.menu.findUnique({ where: { id: menuId }, include: { store: true } })
+      if (!menu) return res.status(400).json({ message: 'Menu inválido' })
+      if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
+    }
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -197,7 +307,7 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const existing = await prisma.product.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Produto não encontrado' })
-  const { name, description, price, categoryId, position, isActive, image } = req.body || {}
+  const { name, description, price, categoryId, position, isActive, image, menuId } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -242,6 +352,13 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
     }
   }
 
+  // validate menuId if provided
+  if (menuId) {
+    const menu = await prisma.menu.findUnique({ where: { id: menuId }, include: { store: true } })
+    if (!menu) return res.status(400).json({ message: 'Menu inválido' })
+    if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
+  }
+
   const updated = await prisma.product.update({ where: { id }, data: {
     name: name ?? existing.name,
     description: description ?? existing.description,
@@ -249,7 +366,8 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
     categoryId: categoryId !== undefined ? categoryId : existing.categoryId,
     position: position !== undefined ? Number(position) : existing.position,
     isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
-    image: imageValue
+    image: imageValue,
+    menuId: menuId !== undefined ? menuId : existing.menuId
   } })
   res.json(updated)
 })
@@ -401,6 +519,13 @@ router.delete('/payment-methods/:id', requireRole('ADMIN'), async (req, res) => 
   const companyId = req.user.companyId
   const existing = await prisma.paymentMethod.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Método não encontrado' })
+  // Prevent hard-deletion of the default CASH payment method. Prefer deactivation.
+  try{
+    if(String((existing.code || '')).toUpperCase() === 'CASH'){
+      return res.status(400).json({ message: "A forma 'Dinheiro' (CASH) não pode ser removida. Desative-a em vez disso." })
+    }
+  }catch(e){ /* ignore and continue */ }
+
   await prisma.paymentMethod.delete({ where: { id } })
   res.json({ message: 'Removido' })
 })

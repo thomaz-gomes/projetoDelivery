@@ -52,13 +52,41 @@ async function resolveCompanyByMerchant(req, order) {
     null;
 
   if (merchantId) {
+    // Try matching either merchantId or merchantUuid fields (some integrations store UUID vs numeric id)
     const integ = await prisma.apiIntegration.findFirst({
-      where: { provider: "IFOOD", merchantId: String(merchantId), enabled: true },
-      select: { companyId: true },
+      where: {
+        provider: "IFOOD",
+        enabled: true,
+        OR: [
+          { merchantId: String(merchantId) },
+          { merchantUuid: String(merchantId) }
+        ]
+      },
+      select: { companyId: true, storeId: true, merchantId: true, merchantUuid: true },
     });
     if (integ?.companyId) {
-      console.log("🏢 Empresa encontrada pelo merchantId:", integ.companyId);
-      return { companyId: integ.companyId, merchantId: String(merchantId) };
+      console.log("🏢 Empresa encontrada pelo merchantId/merchantUuid:", integ.companyId, 'storeId:', integ.storeId, 'matched:', integ.merchantId || integ.merchantUuid);
+      // If integration exists but storeId is not set, attempt a best-effort match using payload store info
+      let resolvedStoreId = integ.storeId || null;
+      if (!resolvedStoreId) {
+        try {
+          const payloadStoreId = order?.storeId || order?.store?.id || order?.storeExternalId || null;
+          const payloadStoreName = order?.store?.name || null;
+          if (payloadStoreId) {
+            // try direct match by store.id or slug or cnpj
+            const s = await prisma.store.findFirst({ where: { companyId: integ.companyId, OR: [{ id: payloadStoreId }, { slug: payloadStoreId }, { cnpj: payloadStoreId }] }, select: { id: true } });
+            if (s) resolvedStoreId = s.id;
+          }
+          if (!resolvedStoreId && payloadStoreName) {
+            const s2 = await prisma.store.findFirst({ where: { companyId: integ.companyId, name: payloadStoreName }, select: { id: true } });
+            if (s2) resolvedStoreId = s2.id;
+          }
+        } catch (e) {
+          console.warn('store inference failed:', e?.message || e);
+        }
+      }
+
+      return { companyId: integ.companyId, merchantId: String(merchantId), storeId: resolvedStoreId || null };
     }
   }
 
@@ -72,6 +100,7 @@ async function resolveCompanyByMerchant(req, order) {
     return {
       companyId: onlyOne[0].companyId,
       merchantId: onlyOne[0].merchantId || null,
+      storeId: onlyOne[0].storeId || null,
     };
   }
 
@@ -117,7 +146,7 @@ webhooksRouter.post("/ifood", async (req, res) => {
     }
 
     // 🔎 Resolve empresa
-    const { companyId, merchantId } = await resolveCompanyByMerchant(req, order);
+  const { companyId, merchantId, storeId } = await resolveCompanyByMerchant(req, order);
 
     // 🆔 Dados principais
     const externalId =
@@ -207,6 +236,7 @@ webhooksRouter.post("/ifood", async (req, res) => {
       where: { externalId },
       update: {
         companyId,
+        storeId: storeId || undefined,
         displayId,
         customerId: persistedCustomer ? persistedCustomer.id : undefined,
         customerSource: 'IFOOD',
@@ -219,8 +249,9 @@ webhooksRouter.post("/ifood", async (req, res) => {
         deliveryFee,
         payload: order,
       },
-  create: {
+      create: {
         companyId,
+        storeId: storeId || null,
         externalId,
         displayId,
         status: "EM_PREPARO",

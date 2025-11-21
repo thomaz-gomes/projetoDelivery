@@ -76,22 +76,43 @@ affiliatesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   }
 
   try {
-    const affiliate = await prisma.affiliate.create({
-      data: {
-        companyId,
-        name,
-        email: email || null,
-        whatsapp: whatsapp || null,
-        commissionRate: commissionRate || 0,
-        couponCode,
-        currentBalance: 0,
-        isActive: true
-      }
+    // Create affiliate and its default coupon in a single transaction to ensure consistency.
+    const result = await prisma.$transaction(async (tx) => {
+      const affiliate = await tx.affiliate.create({
+        data: {
+          companyId,
+          name,
+          email: email || null,
+          whatsapp: whatsapp || null,
+          commissionRate: commissionRate || 0,
+          couponCode,
+          currentBalance: 0,
+          isActive: true
+        }
+      });
+
+      // Create a default coupon associated with this affiliate. Use the affiliate's commissionRate
+      // as the default discount percentage (so a 0.1 commission -> 10% off for customers). This
+      // can be adjusted later via the coupon admin UI.
+      await tx.coupon.create({
+        data: {
+          companyId,
+          code: couponCode,
+          description: `Cupom do afiliado ${name}`,
+          isPercentage: true,
+          value: commissionRate || 0,
+          isActive: true,
+          affiliateId: affiliate.id
+        }
+      });
+
+      return affiliate;
     });
 
-    res.status(201).json(affiliate);
+    res.status(201).json(result);
   } catch (e) {
     console.error('Error creating affiliate:', e);
+    // Unique constraint on Coupon.code or Affiliate.couponCode
     if (e.code === 'P2002') {
       return res.status(400).json({ message: 'Código do cupom já existe' });
     }
@@ -342,3 +363,29 @@ affiliatesRouter.get('/:id/statement', async (req, res) => {
     res.status(500).json({ message: 'Erro ao buscar extrato' });
   }
 });
+
+// DELETE /affiliates/:id - Remover afiliado e seu cupom padrão
+affiliatesRouter.delete('/:id', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params
+  const companyId = req.user.companyId
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // ensure affiliate belongs to company
+      const aff = await tx.affiliate.findFirst({ where: { id, companyId } })
+      if (!aff) throw new Error('Afiliado não encontrado')
+
+      // delete coupons associated to this affiliate
+      await tx.coupon.deleteMany({ where: { affiliateId: id } })
+
+      // delete affiliate
+      await tx.affiliate.delete({ where: { id } })
+
+      return true
+    })
+
+    res.json({ success: true })
+  } catch (e) {
+    console.error('Error deleting affiliate:', e)
+    return res.status(500).json({ message: e.message || 'Erro ao remover afiliado' })
+  }
+})

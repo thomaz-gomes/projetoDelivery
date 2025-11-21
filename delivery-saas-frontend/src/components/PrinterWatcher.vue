@@ -1,7 +1,8 @@
 <!-- src/components/PrinterWatcher.vue -->
 <template>
   <div class="printer-status">
-    <p v-if="!connected">⚠️ Desconectado do servidor de pedidos</p>
+    <p v-if="connecting">⏳ Conectando à impressora...</p>
+    <p v-else-if="!connected">⚠️ Desconectado do servidor de pedidos</p>
     <p v-else>🖨️ Monitorando pedidos...</p>
   </div>
 </template>
@@ -9,9 +10,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
 import { io } from "socket.io-client";
-import printService from "../services/printService.js";
+import printService, { isConnecting } from "../services/printService.js";
+import { computed } from 'vue';
 
 const connected = ref(false);
+const connecting = computed(() => isConnecting());
 let socket;
 let reconnectTimer;
 
@@ -27,11 +30,17 @@ onMounted(async () => {
   await ensureQZConnected();
   reconnectTimer = setInterval(ensureQZConnected, 15000); // tenta reconectar a cada 15s
 
-  // ⚡ conectar ao backend via Socket.IO
-  socket = io("https://localhost:3000", {
-    transports: ["websocket", "polling"],
+  // ⚡ conectar ao backend via Socket.IO (use VITE_API_URL or derive from page)
+  const API_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== 'https://localhost:3000')
+    ? import.meta.env.VITE_API_URL
+    : `${location.protocol}//${location.hostname}:3000`;
+
+  // prefer polling first for better resilience on some networks
+  socket = io(API_URL, {
+    transports: ['polling', 'websocket'],
     reconnectionAttempts: Infinity,
     reconnectionDelay: 2000,
+    timeout: 30000
   });
 
   socket.on("connect", () => {

@@ -1,0 +1,104 @@
+<template>
+  <div class="container py-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h2 class="m-0">{{ isEdit ? 'Editar forma' : 'Nova forma' }}</h2>
+      <div>
+        <router-link class="btn btn-outline-secondary" to="/settings/payment-methods">Voltar</router-link>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <form @submit.prevent="save">
+          <div class="mb-3">
+            <label class="form-label">Nome</label>
+            <input v-model="form.name" class="form-control" placeholder="Nome (ex: Dinheiro, PIX)" required autofocus />
+          </div>
+
+          <div class="mb-3 row">
+            <div class="col-md-6">
+              <label class="form-label">Código</label>
+              <input v-model="form.code" class="form-control" placeholder="Código (ex: CASH, PIX)" :disabled="isCash" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Estado</label>
+              <select v-model="form.isActive" class="form-select">
+                <option :value="true">Ativo</option>
+                <option :value="false">Inativo</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" :disabled="saving">Salvar</button>
+            <button class="btn btn-secondary" type="button" @click="resetForm">Limpar</button>
+          </div>
+
+          <div v-if="error" class="alert alert-danger mt-2">{{ error }}</div>
+          <div v-if="success" class="alert alert-success mt-2">{{ success }}</div>
+        </form>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import api from '../api'
+import Swal from 'sweetalert2'
+
+const route = useRoute()
+const router = useRouter()
+const id = route.params.id || null
+const isEdit = Boolean(id)
+
+const loading = ref(false)
+const saving = ref(false)
+const error = ref('')
+const success = ref('')
+
+const form = ref({ id: null, name: '', code: '', isActive: true, config: {} })
+
+const isCash = computed(() => String(form.value.code || '').toUpperCase() === 'CASH')
+
+async function load(){
+  if(!isEdit) return
+  loading.value = true
+  try{
+    const res = await api.get(`/menu/payment-methods/${id}`)
+    form.value = res.data || form.value
+  }catch(e){ console.error(e); Swal.fire({ icon: 'error', text: 'Falha ao carregar forma' }) }
+  finally{ loading.value = false }
+}
+
+function resetForm(){
+  form.value = { id: null, name: '', code: '', isActive: true, config: {} }
+  error.value = ''
+  success.value = ''
+}
+
+async function save(){
+  error.value = ''
+  success.value = ''
+  saving.value = true
+  try{
+    if(!form.value.name || !form.value.code) { error.value = 'Nome e código são obrigatórios'; return }
+    if(isEdit){
+      await api.patch(`/menu/payment-methods/${id}`, { name: form.value.name, code: form.value.code, isActive: form.value.isActive, config: form.value.config })
+      success.value = 'Atualizado'
+    } else {
+      await api.post('/menu/payment-methods', { name: form.value.name, code: form.value.code, isActive: form.value.isActive, config: form.value.config })
+      success.value = 'Criado'
+    }
+    // navigate back to list after short delay
+    setTimeout(()=> router.push('/settings/payment-methods'), 600)
+  }catch(e){ console.error(e); error.value = e?.response?.data?.message || e.message }
+  finally{ saving.value = false }
+}
+
+onMounted(()=> load())
+</script>
+
+<style scoped>
+</style>

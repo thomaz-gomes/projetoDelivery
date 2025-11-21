@@ -17,6 +17,13 @@
                 <label class="form-label">Posição</label>
                 <input v-model.number="position" type="number" class="form-control" />
               </div>
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label">Menu (opcional)</label>
+                          <select class="form-select" v-model="menuId">
+                            <option :value="null">-- Nenhum --</option>
+                            <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }} (loja: {{ storesMap[m.storeId]?.name || m.storeId }})</option>
+                          </select>
+                        </div>
               <div class="col-md-6 mb-3 d-flex align-items-center">
                 <div class="form-check form-switch ms-2">
                   <input class="form-check-input" type="checkbox" id="isActive" v-model="isActive">
@@ -52,6 +59,9 @@ const saving = ref(false)
 const error = ref('')
 const id = route.params.id || null
 const isEdit = Boolean(id)
+const menus = ref([])
+const storesMap = {}
+const menuId = ref(null)
 
 async function load(){
   if(!isEdit) return
@@ -62,7 +72,20 @@ async function load(){
   }catch(e){ console.error(e); error.value = 'Falha ao carregar categoria' }
 }
 
+async function loadMenus(){
+  try{
+    const r = await api.get('/menu/menus')
+    menus.value = r.data || []
+    // fetch stores to build a simple map for display
+    try{ const st = await api.get('/stores'); (st.data||[]).forEach(s=>storesMap[s.id]=s) }catch(e){}
+    if(isEdit){
+      try{ const res = await api.get(`/menu/categories/${id}`); menuId.value = res.data.menuId || null }catch(e){}
+    }
+  }catch(e){ console.warn('Failed to load menus', e) }
+}
+
 onMounted(()=> load())
+onMounted(()=> loadMenus())
 
 function cancel(){ router.push({ path: '/menu/admin' }) }
 
@@ -71,7 +94,7 @@ async function save(){
   saving.value = true
   try{
     if(!name.value) { error.value = 'Nome é obrigatório'; return }
-    const payload = { name: name.value, position: position.value, description: description.value, isActive: isActive.value }
+    const payload = { name: name.value, position: position.value, description: description.value, isActive: isActive.value, menuId: menuId.value }
     if(isEdit){
       await api.patch(`/menu/categories/${id}`, payload)
       Swal.fire({ icon: 'success', text: 'Categoria atualizada' })
