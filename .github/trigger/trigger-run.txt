@@ -1,4 +1,0 @@
-Trigger file to force GitHub Actions run
-Created: 2025-11-21T16:40:00-03:00
-
-Edit this file or change its contents to create a new commit/PR that will trigger workflows.
