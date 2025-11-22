@@ -1,4 +1,4 @@
-FROM node:18-alpine AS builder
+FROM node:20-bullseye AS builder
 WORKDIR /app
 
 # Allow build-time API URL injection. Set VITE_API_URL as a build-arg in CI (e.g. GH Actions)
