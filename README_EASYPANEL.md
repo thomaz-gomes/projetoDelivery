@@ -64,3 +64,30 @@ Notas e recomendações
 Próximos passos que posso fazer por você
 - Gerar um `docker-compose.prod.yml` exemplo e um pequeno script de deploy para o servidor EasyPanel.
 - Criar um arquivo com a lista de variáveis de ambiente necessárias (posso inspecionar o código para descobrir variáveis usadas).
+
+## Variáveis de ambiente (backend)
+Seguem as variáveis de ambiente usadas pelo backend, com explicação e valores de exemplo. Marque como "secret" aquelas que devem ficar somente no painel (EasyPanel) ou em um cofre.
+
+- DATABASE_URL (required) — string de conexão do Prisma. Exemplo: `postgres://app:strongpass@db:5432/appdb` ou `file:./prisma/prisma/dev.db` para dev. (secret)
+- PORT — porta onde o backend escuta (padrão: `3000`).
+- HOST — host label para logs/URL do servidor (usado apenas para imprimir a URL em logs). Exemplo: `example.com`.
+- JWT_SECRET (required) — segredo para assinar JWTs (usado em `src/auth.js`). Exemplo: `your-very-secret-key` (secret)
+- PUBLIC_FRONTEND_URL — URL pública do frontend (usada para gerar links públicos, ex.: `/rider/claim`). Exemplo: `https://app.example.com`.
+- FRONTEND_ORIGIN — origem permitida para CORS/headers (ex.: `https://app.example.com`).
+- IFOOD_WEBHOOK_SECRET — segredo para validar assinaturas de webhooks do iFood (secret).
+- IFOOD_CLIENT_ID, IFOOD_CLIENT_SECRET, IFOOD_MERCHANT_ID — credenciais usadas para integrações com iFood (client id/secret + merchant opcional). (secret)
+- IFOOD_BASE_URL, IFOOD_AUTH_BASE, IFOOD_USER_CODE_PATH, IFOOD_TOKEN_PATH, IFOOD_VERIFICATION_URL_DEFAULT — endpoints configuráveis da API iFood (padrões já presentes no `.env`).
+- IFOOD_POLL_INTERVAL_MS, IFOOD_POLL_MAX_CONCURRENCY — configuração do worker de polling do iFood (intervalo em ms e concorrência).
+- EVOLUTION_API_BASE_URL, EVOLUTION_API_API_KEY — URL e chave da API Evolution (WhatsApp integration). (secret)
+- CERT_STORE_KEY — chave usada para criptografar segredos do store de certificados (base64/hex raw). Necessário para `src/utils/secretStore.js`. (secret)
+- SSL_KEY_PATH, SSL_CERT_PATH, SSL_CA_PATH — caminhos para arquivos SSL (PEM). Se não informados, o servidor procura arquivos na pasta `ssl/`.
+- NODE_ENV — ambiente (`development` | `production`). Afeta comportamento (ex.: respostas com menos dados em produção).
+- OPENAI_API_KEY — chave para integração com OpenAI (se usada). (secret)
+- USE_AI_PARSER — flag para habilitar parser AI (ex.: `true`/`false`).
+- PRINTER_INTERFACE, PRINTER_TYPE, PRINTER_WIDTH — configuração de impressoras/receivers.
+
+Notas:
+- Valores sensíveis (DATABASE_URL, JWT_SECRET, IFOOD_CLIENT_SECRET, EVOLUTION_API_API_KEY, CERT_STORE_KEY, OPENAI_API_KEY, IFOOD_WEBHOOK_SECRET) devem ser definidos apenas no EasyPanel como secrets e nunca comitados no repositório.
+- Para ambientes com DB externo (RDS, Cloud SQL), a `DATABASE_URL` deve apontar para o serviço gerenciado e o container do backend deve ter a variável definida no painel.
+
+Se quiser, posso gerar um arquivo de exemplo `prod.env.example` com todas essas variáveis listadas (sem valores sensíveis). Quer que eu adicione esse arquivo ao repositório?
