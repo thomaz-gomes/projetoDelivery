@@ -50,21 +50,29 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS
 );
 console.log('CORS allowed origins:', allowedOrigins.join(', '));
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      // DEV convenience: allow any origin when not in production to avoid frequent CORS pain
-      if (process.env.NODE_ENV !== 'production') {
-        try { console.log('CORS check (dev) - incoming Origin:', origin); } catch(_){}
-        return cb(null, true);
-      }
-      // allow requests with no origin (mobile apps, curl) or if origin is in the list
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) return cb(null, true);
-      return cb(new Error('CORS not allowed for origin: ' + origin));
-    },
-    credentials: true,
-  })
-);
+// CORS configuration
+const ALLOW_ALL_CORS = String(process.env.ALLOW_ALL_CORS || '').toLowerCase() === '1' || String(process.env.ALLOW_ALL_CORS || '').toLowerCase() === 'true';
+
+if (ALLOW_ALL_CORS) {
+  console.warn('⚠️ ALLOW_ALL_CORS is enabled — allowing all origins (for debugging only).');
+  app.use(cors({ origin: true, credentials: true }));
+} else {
+  app.use(
+    cors({
+      origin: (origin, cb) => {
+        // DEV convenience: allow any origin when not in production to avoid frequent CORS pain
+        if (process.env.NODE_ENV !== 'production') {
+          try { console.log('CORS check (dev) - incoming Origin:', origin); } catch(_){ }
+          return cb(null, true);
+        }
+        // allow requests with no origin (mobile apps, curl) or if origin is in the list
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) return cb(null, true);
+        return cb(new Error('CORS not allowed for origin: ' + origin));
+      },
+      credentials: true,
+    })
+  );
+}
 // capture raw body for debugging parsing errors (verify is called before parsing)
 app.use(bodyParser.json({ limit: "10mb", verify: (req, _res, buf) => { try { req.rawBody = buf && buf.toString ? buf.toString() : null } catch(_) { req.rawBody = null } } }));
 
