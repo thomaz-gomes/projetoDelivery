@@ -15,8 +15,31 @@ export function ensureDatabaseUrl() {
   const current = process.env.DATABASE_URL ? stripQuotes(process.env.DATABASE_URL) : undefined
   const nodeEnv = (process.env.NODE_ENV || 'development').toLowerCase()
 
+  // Normalize environment variable keys that may have accidental surrounding
+  // whitespace from some control panels. For example a panel that saved
+  // "DB_HOST " or " DB_NAME" will not populate process.env.DB_HOST normally.
+  // Copy any such values to their trimmed key so subsequent lookups work.
+  for (const k of Object.keys(process.env)) {
+    const kt = k.trim()
+    if (kt !== k && !Object.prototype.hasOwnProperty.call(process.env, kt)) {
+      process.env[kt] = process.env[k]
+      console.log(`🔁 Normalized env var key "${k}" -> "${kt}"`)
+    }
+  }
+
   const hasDbParts = !!(process.env.DB_HOST || process.env.POSTGRES_HOST || process.env.PGHOST)
   const hasDbUser = !!(process.env.DB_USER || process.env.POSTGRES_USER || process.env.PGUSER)
+
+  // Diagnostic snapshot of important DB-related env vars (trimmed)
+  const envSample = {
+    DB_HOST: stripQuotes(process.env.DB_HOST || process.env.POSTGRES_HOST || process.env.PGHOST || ''),
+    DB_USER: stripQuotes(process.env.DB_USER || process.env.POSTGRES_USER || process.env.PGUSER || ''),
+    DB_NAME: stripQuotes(process.env.DB_NAME || process.env.POSTGRES_DB || process.env.PGDATABASE || ''),
+    DB_PORT: stripQuotes(process.env.DB_PORT || process.env.POSTGRES_PORT || process.env.PGPORT || ''),
+    DATABASE_URL: current || ''
+  }
+  // Avoid printing secrets (we intentionally don't include DB_PASS)
+  console.log('🔎 DB env detection (masked):', { DB_HOST: envSample.DB_HOST || '<missing>', DB_USER: envSample.DB_USER || '<missing>', DB_NAME: envSample.DB_NAME || '<missing>', DB_PORT: envSample.DB_PORT || '<missing>' })
 
   if (current && !current.startsWith('file:') && !current.startsWith('sqlite:') && !current.startsWith('file:')) {
     // already a non-sqlite DATABASE_URL
@@ -31,24 +54,48 @@ export function ensureDatabaseUrl() {
       // ignore parse errors; we'll still set the raw value below as a best-effort
     }
 
-    process.env.DATABASE_URL = current
+    // ensure an application_name is present so Postgres logs show which app connected
+    try {
+      const u = new URL(current)
+      const appName = `delivery-backend-pid-${process.pid}`
+      if (!u.searchParams.has('application_name')) u.searchParams.set('application_name', appName)
+      process.env.DATABASE_URL = u.toString()
+      console.log(`🔗 DATABASE_URL application_name set to ${appName}`)
+    } catch (e) {
+      process.env.DATABASE_URL = current
+    }
     return
   }
 
   // If individual DB parts are provided, build a Postgres URL from them
   if (hasDbParts && hasDbUser) {
-  // stripQuotes already trims, so this guards against leading/trailing spaces
-  const user = stripQuotes(process.env.DB_USER || process.env.POSTGRES_USER || process.env.PGUSER)
-  const pass = stripQuotes(process.env.DB_PASS || process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD || '')
-  const host = stripQuotes(process.env.DB_HOST || process.env.POSTGRES_HOST || process.env.PGHOST || 'localhost')
-  const port = stripQuotes(process.env.DB_PORT || process.env.POSTGRES_PORT || process.env.PGPORT || '5432')
-  const db = stripQuotes(process.env.DB_NAME || process.env.POSTGRES_DB || process.env.PGDATABASE || 'postgres')
+    // stripQuotes already trims, so this guards against leading/trailing spaces
+    const user = stripQuotes(process.env.DB_USER || process.env.POSTGRES_USER || process.env.PGUSER)
+    const pass = stripQuotes(process.env.DB_PASS || process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD || '')
+    const host = stripQuotes(process.env.DB_HOST || process.env.POSTGRES_HOST || process.env.PGHOST || 'localhost')
+    const port = stripQuotes(process.env.DB_PORT || process.env.POSTGRES_PORT || process.env.PGPORT || '5432')
+    const db = stripQuotes(process.env.DB_NAME || process.env.POSTGRES_DB || process.env.PGDATABASE || '')
 
     const encodedUser = encodeURIComponent(user)
     const encodedPass = encodeURIComponent(pass)
 
-    process.env.DATABASE_URL = `postgres://${encodedUser}:${encodedPass}@${host}:${port}/${db}`
-    console.log('🔧 Built DATABASE_URL from DB_* env vars')
+    if (!db || db === '' || db === '/') {
+      console.warn('⚠️ DB_NAME is empty; building a URL without a database name will make Postgres try to connect to a DB named after the user. Please set DB_NAME / POSTGRES_DB / PGDATABASE.')
+    }
+
+    // append an application_name parameter so Postgres logs include this client id
+    try {
+      const base = `postgres://${encodedUser}:${encodedPass}@${host}:${port}/${db || ''}`
+      const appName = `delivery-backend-pid-${process.pid}`
+      const urlObj = new URL(base)
+      if (urlObj.search) urlObj.search += `&application_name=${encodeURIComponent(appName)}`
+      else urlObj.search = `?application_name=${encodeURIComponent(appName)}`
+      process.env.DATABASE_URL = urlObj.toString()
+      console.log('🔧 Built DATABASE_URL from DB_* env vars (dbname:', db || '<empty>', ')', 'app:', appName + ')')
+    } catch (e) {
+      process.env.DATABASE_URL = `postgres://${encodedUser}:${encodedPass}@${host}:${port}/${db || ''}`
+      console.log('🔧 Built DATABASE_URL from DB_* env vars (dbname:', db || '<empty>', ')')
+    }
     return
   }
 
