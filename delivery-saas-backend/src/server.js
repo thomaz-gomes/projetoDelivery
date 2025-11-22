@@ -1,4 +1,5 @@
 import https from "https";
+import http from "http";
 import tls from 'tls';
 import fs from "fs";
 import path from "path";
@@ -42,6 +43,9 @@ const envKey = process.env.SSL_KEY_PATH;
 const envCert = process.env.SSL_CERT_PATH;
 const envCa = process.env.SSL_CA_PATH;
 
+// If set to '1' or 'true' (case-insensitive) the server will run in HTTP mode
+const DISABLE_SSL = String(process.env.DISABLE_SSL || '').toLowerCase() === '1' || String(process.env.DISABLE_SSL || '').toLowerCase() === 'true';
+
 const keyPath = (envKey && fs.existsSync(envKey)) ? envKey : pickFirstExisting(SSL_DIR, keyCandidates);
 const certPath = (envCert && fs.existsSync(envCert)) ? envCert : pickFirstExisting(SSL_DIR, certCandidates);
 const caPath = (envCa && fs.existsSync(envCa)) ? envCa : pickFirstExisting(SSL_DIR, caCandidates);
@@ -49,8 +53,12 @@ const pfxPath = pickFirstExisting(SSL_DIR, pfxCandidates);
 
 let options = {};
 let usedPfx = false;
-// Prefer explicit PFX when present -- but validate it before handing to https
-if (pfxPath && !envCert && !envKey) {
+// If SSL is disabled we skip PFX/key/cert validation and run in plain HTTP instead
+if (DISABLE_SSL) {
+  console.log('DISABLE_SSL is set — starting server in plain HTTP mode (no SSL files required).');
+} else {
+  // Prefer explicit PFX when present -- but validate it before handing to https
+  if (pfxPath && !envCert && !envKey) {
   try {
     const pfxBuf = fs.readFileSync(pfxPath);
     try {
@@ -67,9 +75,8 @@ if (pfxPath && !envCert && !envKey) {
     console.error('Failed to read PFX file:', pfxPath, e.message || e);
   }
 }
-
-if (!usedPfx) {
-  if (keyPath && certPath) {
+  if (!usedPfx) {
+    if (keyPath && certPath) {
     try {
       options.key = fs.readFileSync(keyPath);
       options.cert = fs.readFileSync(certPath);
@@ -81,12 +88,14 @@ if (!usedPfx) {
       console.error('Failed to read key/cert/ca files:', e.message || e);
     }
   } else {
-    console.error('❌ SSL key or certificate not found. Looked for:');
-    console.error('   key candidates:', keyCandidates.join(', '));
-    console.error('   cert candidates:', certCandidates.join(', '));
-    console.error('   pfx candidates:', pfxCandidates.join(', '));
-    console.error('Place your key/cert/pfx files in', SSL_DIR);
-    process.exit(1);
+      console.error('❌ SSL key or certificate not found. Looked for:');
+      console.error('   key candidates:', keyCandidates.join(', '));
+      console.error('   cert candidates:', certCandidates.join(', '));
+      console.error('   pfx candidates:', pfxCandidates.join(', '));
+      console.error('Place your key/cert/pfx files in', SSL_DIR);
+      console.error('If you want to let the reverse proxy (EasyPanel) terminate TLS and run the app over HTTP, set DISABLE_SSL=1 in the container environment.');
+      process.exit(1);
+  }
   }
 }
 if (envKey || envCert || envCa) {
@@ -101,10 +110,16 @@ const DEFAULT_PORT = Number(process.env.PORT) || 3000;
  */
 function startServer(port = DEFAULT_PORT, retries = 3) {
   let server;
+  const useHttp = DISABLE_SSL;
   try {
-    server = https.createServer(options, app);
+    if (useHttp) {
+      server = http.createServer(app);
+      console.log('Starting HTTP server (DISABLE_SSL active)');
+    } else {
+      server = https.createServer(options, app);
+    }
   } catch (e) {
-    console.error('❌ Failed to create HTTPS server with the provided SSL options:', e && e.message ? e.message : e);
+    console.error('❌ Failed to create server with the provided options:', e && e.message ? e.message : e);
     // If we tried a PFX earlier and it failed here, try to give a hint
     if (pfxPath) console.error('The PFX file may be invalid or password protected:', pfxPath);
     process.exit(1);
