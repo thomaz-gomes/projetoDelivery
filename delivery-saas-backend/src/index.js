@@ -41,10 +41,14 @@ const app = express();
 // 🌐 Middleware global
 // ==============================
 // Allow the frontend origin(s). Prefer explicit origins for CORS + credentials.
-const allowedOrigins = [
-  process.env.FRONTEND_ORIGIN || 'https://localhost:5173',
-  'https://dev.redemultilink.com.br:5173'
-];
+// You can set FRONTEND_ORIGIN for a single origin or FRONTEND_ORIGINS as a
+// comma-separated list (useful for CI/staging/prod variations).
+const defaultOrigins = ['https://localhost:5173', 'https://dev.redemultilink.com.br:5173'];
+const allowedOrigins = (process.env.FRONTEND_ORIGINS
+  ? process.env.FRONTEND_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+  : (process.env.FRONTEND_ORIGIN ? [process.env.FRONTEND_ORIGIN] : defaultOrigins)
+);
+console.log('CORS allowed origins:', allowedOrigins.join(', '));
 
 app.use(
   cors({
