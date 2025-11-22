@@ -1,14 +1,24 @@
-FROM node:20-bullseye-slim AS builder
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci --silent
-COPY . .
-RUN if [ -f prisma/schema.prisma ]; then npx prisma generate; fi
-FROM node:20-bullseye-slim AS runtime
-WORKDIR /app
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app .
-ENV NODE_ENV=production
-ENV PORT=3000
-EXPOSE 3000
-CMD ["node", "src/server.js"]
+version: '3.8'
+
+services:
+  delivery-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: appdb
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
