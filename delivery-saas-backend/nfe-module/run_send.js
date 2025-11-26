@@ -9,7 +9,7 @@ async function run() {
   const COMPANY_ID = 'bd6a5381-6b90-4cc9-bc8f-24890c491693'; // alterar se precisar
   const ORDER_ID = null; // opcional: id do pedido para anexar protocolo (se quiser testar integração com pedidos)
   const UF = 'ba'; // estado da SEFAZ
-  const BACKEND_URL = 'https://localhost:3000'; // URL do seu backend (usar https se seu backend expõe https)
+  const BACKEND_URL = 'http://localhost:3000'; // URL do seu backend (usar https se seu backend expõe https)
 
   try {
     const cfg = loadConfig();

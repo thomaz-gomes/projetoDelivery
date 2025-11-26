@@ -30,7 +30,7 @@ async function run(){
     const company = await ensureCompany()
     // try a set of candidate base URLs (localhost, 127.0.0.1 and local network IP)
     const candidates = [
-      `https://localhost:3000`,
+      `http://localhost:3000`,
       `https://127.0.0.1:3000`,
       `https://192.168.1.102:3000`
     ]

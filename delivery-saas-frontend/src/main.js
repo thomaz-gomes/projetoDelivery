@@ -20,6 +20,15 @@ const app = createApp(App);
 
 initQZ();
 
+// During local development, if a dev JWT is provided via VITE_DEV_JWT,
+// populate localStorage so the dev session is authenticated automatically.
+try {
+  const devToken = import.meta.env.VITE_DEV_JWT || '';
+  if (devToken && typeof window !== 'undefined') {
+    try { if (!localStorage.getItem('token')) localStorage.setItem('token', devToken); } catch(e){}
+  }
+} catch(e) {}
+
 async function handleNovoPedido(pedido) {
   await printComanda(pedido);
 }

@@ -55,6 +55,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import api from '../api'
 import { io } from 'socket.io-client'
+import { SOCKET_URL } from '@/config'
 import { normalizeOrderItems } from '../utils/orderUtils.js'
 
 const orders = ref([])
@@ -113,10 +114,7 @@ function viewOrder(o){
 
 function ensureSocket(){
   try{
-    const API_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== 'https://localhost:3000')
-      ? import.meta.env.VITE_API_URL
-      : `${location.protocol}//${location.hostname}:3000`;
-    socket = io(API_URL, { transports: ['websocket'] });
+    socket = io(SOCKET_URL, { transports: ['websocket'] });
     socket.on('connect', () => console.log('RiderOrders socket connected', socket.id));
     socket.on('disconnect', () => console.log('RiderOrders socket disconnected'));
     socket.on('order-updated', async (payload) => {

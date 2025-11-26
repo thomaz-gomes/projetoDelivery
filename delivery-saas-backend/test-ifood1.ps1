@@ -9,7 +9,7 @@ Write-Host " Iniciando teste de autenticação iFood"
 Write-Host "========================================"
 
 # CONFIGURAÇÕES
-$baseUrl = "https://localhost:3000"
+$baseUrl = "http://localhost:3000"
 $email = "admin@example.com"
 $password = "admin123"
 

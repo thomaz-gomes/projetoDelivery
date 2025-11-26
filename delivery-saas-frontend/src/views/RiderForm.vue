@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRidersStore } from '../stores/riders';
 import { useRoute, useRouter } from 'vue-router';
+import { applyPhoneMask } from '../utils/phoneMask';
 
 const store = useRidersStore();
 const route = useRoute();
@@ -27,6 +28,10 @@ onMounted(async () => {
     }
   }
 });
+
+function handleWhatsAppInput(e) {
+  rider.value.whatsapp = applyPhoneMask(e.target.value);
+}
 
 async function save() {
   loading.value = true;
@@ -68,7 +73,7 @@ async function save() {
           </div>
           <div class="col-md-3">
             <label class="form-label">WhatsApp</label>
-            <input v-model="rider.whatsapp" type="text" class="form-control" />
+            <input v-model="rider.whatsapp" @input="handleWhatsAppInput" type="tel" class="form-control" maxlength="16" placeholder="(00) 0 0000-0000" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Diária</label>

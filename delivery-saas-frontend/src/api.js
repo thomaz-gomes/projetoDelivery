@@ -1,8 +1,9 @@
 import axios from 'axios';
+import { API_URL } from './config';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://localhost:3000',
-  withCredentials: false, // não precisamos de cookies; usamos Bearer
+  baseURL: API_URL,
+  withCredentials: true, // permitir envio de cookie public_phone para sessão pública
   timeout: 15000,
 });
 

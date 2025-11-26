@@ -1,0 +1,928 @@
+[2025-11-24T14:36:59.097Z] Printing order null - length 258
+[2025-11-24T14:37:31.543Z] Printing order null - length 258
+[2025-11-24T14:46:20.724Z] Printing order null - length 258
+[2025-11-24T14:46:27.624Z] Printing order null - length 258
+[2025-11-24T14:51:50.575Z] Printing order null - length 258
+[2025-11-24T14:51:50.589Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T14:51:50.593Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T14:56:25.206Z] Printing order null - length 258
+[2025-11-24T14:56:25.210Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T14:56:25.217Z] printerApiType: unknown
+[2025-11-24T14:56:25.218Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T15:36:44.248Z] Printing order null - length 254
+[2025-11-24T15:36:44.252Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T15:36:44.258Z] printerApiType: unknown
+[2025-11-24T15:36:44.259Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T15:38:26.184Z] Printing order null - length 254
+[2025-11-24T15:38:26.185Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T15:38:26.187Z] printerApiType: unknown
+[2025-11-24T15:38:26.189Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T16:03:28.684Z] Printing order null - length 258
+[2025-11-24T16:03:28.694Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T16:03:28.700Z] printerApiType: unknown
+[2025-11-24T16:03:28.701Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T16:04:12.346Z] Printing order null - length 258
+[2025-11-24T16:04:12.347Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T16:04:12.350Z] printerApiType: unknown
+[2025-11-24T16:04:12.351Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T16:05:17.581Z] Printing order null - length 258
+[2025-11-24T16:05:17.583Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T16:05:17.585Z] printerApiType: unknown
+[2025-11-24T16:05:17.586Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T16:05:20.025Z] Printing order null - length 258
+[2025-11-24T16:05:20.025Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T16:05:20.029Z] printerApiType: unknown
+[2025-11-24T16:05:20.030Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T16:17:02.634Z] Printing order null - length 254
+[2025-11-24T16:17:02.638Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T16:17:02.641Z] printerApiType: unknown
+[2025-11-24T16:17:02.642Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T17:52:52.936Z] Printing order null - length 254
+[2025-11-24T17:52:52.944Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T17:52:52.947Z] printerApiType: unknown
+[2025-11-24T17:52:52.948Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:03:14.887Z] Printing order null - length 254
+[2025-11-24T18:03:14.889Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:03:14.893Z] printerApiType: unknown
+[2025-11-24T18:03:14.894Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:19:47.338Z] Printing order null - length 258
+[2025-11-24T18:19:47.618Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:19:47.626Z] printerApiType: unknown
+[2025-11-24T18:19:47.627Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:19:58.312Z] Printing order null - length 258
+[2025-11-24T18:19:58.313Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:19:58.315Z] printerApiType: unknown
+[2025-11-24T18:19:58.316Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:22:08.330Z] Printing order null - length 254
+[2025-11-24T18:22:08.333Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:22:08.337Z] printerApiType: unknown
+[2025-11-24T18:22:08.339Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:27:42.011Z] Printing order null - length 259
+[2025-11-24T18:27:42.017Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:27:42.028Z] printerApiType: unknown
+[2025-11-24T18:27:42.029Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:27:54.338Z] Printing order null - length 259
+[2025-11-24T18:27:54.338Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:27:54.341Z] printerApiType: unknown
+[2025-11-24T18:27:54.342Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:28:47.332Z] Printing order null - length 254
+[2025-11-24T18:28:47.332Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:28:47.334Z] printerApiType: unknown
+[2025-11-24T18:28:47.335Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:28:47.408Z] Printing order null - length 254
+[2025-11-24T18:28:47.487Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:28:47.625Z] printerApiType: unknown
+[2025-11-24T18:28:47.632Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:28:47.693Z] Printing order null - length 254
+[2025-11-24T18:28:47.812Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:28:47.980Z] printerApiType: unknown
+[2025-11-24T18:28:47.987Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:28:48.022Z] Printing order null - length 254
+[2025-11-24T18:28:48.023Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:28:48.026Z] printerApiType: unknown
+[2025-11-24T18:28:48.028Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:28:48.080Z] Printing order null - length 254
+[2025-11-24T18:28:48.120Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:28:48.206Z] printerApiType: unknown
+[2025-11-24T18:28:48.233Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:37:16.485Z] Printing order null - length 258
+[2025-11-24T18:37:16.491Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:37:16.513Z] printerApiType: unknown
+[2025-11-24T18:37:16.518Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:37:16.592Z] Printing order null - length 258
+[2025-11-24T18:37:16.593Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:37:16.623Z] printerApiType: unknown
+[2025-11-24T18:37:16.626Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:37:16.808Z] Printing order null - length 258
+[2025-11-24T18:37:16.808Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:37:16.810Z] printerApiType: unknown
+[2025-11-24T18:37:16.811Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:37:17.299Z] Printing order null - length 258
+[2025-11-24T18:37:17.300Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:37:17.302Z] printerApiType: unknown
+[2025-11-24T18:37:17.303Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T18:37:17.340Z] Printing order null - length 258
+[2025-11-24T18:37:17.499Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T18:37:17.959Z] printerApiType: unknown
+[2025-11-24T18:37:17.960Z] Print failed: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T19:50:41.746Z] Printing order null - length 258
+[2025-11-24T19:50:41.969Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T19:50:42.041Z] printerApiType: unknown
+[2025-11-24T19:50:42.042Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T19:50:42.044Z] Shim2 wrote output to C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764013842043.txt
+[2025-11-24T19:50:42.045Z] Shim2 execute result: true
+[2025-11-24T19:51:48.620Z] Printing order null - length 258
+[2025-11-24T19:51:48.620Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T19:51:48.623Z] printerApiType: unknown
+[2025-11-24T19:51:48.623Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T19:51:48.624Z] Shim2 wrote output to C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764013908624.txt
+[2025-11-24T19:51:48.625Z] Shim2 execute result: true
+[2025-11-24T19:51:53.809Z] Printing order null - length 258
+[2025-11-24T19:51:53.810Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T19:51:53.812Z] printerApiType: unknown
+[2025-11-24T19:51:53.813Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T19:51:53.855Z] Shim2 wrote output to C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764013913814.txt
+[2025-11-24T19:51:53.856Z] Shim2 execute result: true
+[2025-11-24T19:52:00.707Z] Printing order null - length 258
+[2025-11-24T19:52:00.707Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T19:52:00.710Z] printerApiType: unknown
+[2025-11-24T19:52:00.711Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T19:52:00.713Z] Shim2 wrote output to C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764013920712.txt
+[2025-11-24T19:52:00.714Z] Shim2 execute result: true
+[2025-11-24T19:58:07.267Z] Printing order null - length 258
+[2025-11-24T19:58:07.442Z] PrinterTypes shape: object - resolvedType: EPSON
+[2025-11-24T19:58:07.445Z] printerApiType: unknown
+[2025-11-24T19:58:07.446Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T19:58:07.448Z] Shim2 wrote output to C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764014287447.txt
+[2025-11-24T19:58:07.449Z] Shim2 execute result: true
+[2025-11-24T21:59:16.258Z] Printing order null - length 258
+[2025-11-24T21:59:17.425Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-24T21:59:17.428Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-24T21:59:38.275Z] Shim2 Windows Out-Printer attempt failed: spawnSync powershell ETIMEDOUT
+[2025-11-24T21:59:38.276Z] Shim2 execute result: false
+[2025-11-24T22:01:13.735Z] Printing order null - length 258
+[2025-11-24T22:01:14.393Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:01:14.466Z] Printer execute result: Print done
+[2025-11-24T22:08:22.812Z] Printing order null - length 258
+[2025-11-24T22:08:23.235Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:08:23.237Z] Printer execute result: Print done
+[2025-11-24T22:26:41.269Z] Printing order null - length 258
+[2025-11-24T22:26:41.280Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:26:41.284Z] Printer execute result: Print done
+[2025-11-24T22:26:41.287Z] Printing order null - length 258
+[2025-11-24T22:26:41.288Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:26:41.291Z] Printer execute result: Print done
+[2025-11-24T22:28:08.285Z] Printing order null - length 258
+[2025-11-24T22:28:08.361Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:28:08.366Z] Printer execute result: Print done
+[2025-11-24T22:28:08.369Z] Printing order null - length 258
+[2025-11-24T22:28:08.370Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:28:08.372Z] Printer execute result: Print done
+[2025-11-24T22:33:25.473Z] Printing order null - length 258
+[2025-11-24T22:33:25.474Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:33:25.476Z] Printer execute result: Print done
+[2025-11-24T22:33:25.479Z] Printing order null - length 258
+[2025-11-24T22:33:25.479Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:33:25.481Z] Printer execute result: Print done
+[2025-11-24T22:33:40.327Z] Printing order null - length 258
+[2025-11-24T22:33:40.969Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-24T22:33:40.974Z] Printer execute result: Print done
+[2025-11-24T22:33:40.981Z] Printing order null - length 258
+[2025-11-24T22:33:40.983Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-24T22:33:40.985Z] Printer execute result: Print done
+[2025-11-24T22:33:52.374Z] Printing order null - length 258
+[2025-11-24T22:33:52.375Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:33:52.377Z] Printer execute result: Print done
+[2025-11-24T22:33:52.381Z] Printing order null - length 258
+[2025-11-24T22:33:52.382Z] printerApiType: module-object - interface:Print iD type:EPSON
+[2025-11-24T22:33:52.384Z] Printer execute result: Print done
+[2025-11-24T22:42:22.264Z] Printing order null - length 258
+[2025-11-24T22:42:22.267Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-24T22:42:22.269Z] Printer execute result: Print done
+[2025-11-24T22:42:22.273Z] Printing order null - length 258
+[2025-11-24T22:42:22.277Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-24T22:42:22.279Z] Printer execute result: Print done
+[2025-11-24T22:44:41.878Z] Printing order null - length 258
+[2025-11-24T22:44:41.881Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-24T22:44:41.897Z] Printer execute result: Print done
+[2025-11-24T22:44:41.898Z] Printing order null - length 258
+[2025-11-24T22:44:41.900Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-24T22:44:41.903Z] Printer execute result: Print done
+[2025-11-24T22:44:45.432Z] Printing order null - length 258
+[2025-11-24T22:44:45.434Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-24T22:44:45.435Z] Printer execute result: Print done
+[2025-11-24T22:44:45.437Z] Printing order null - length 258
+[2025-11-24T22:44:45.439Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-24T22:44:45.442Z] Printer execute result: Print done
+[2025-11-25T00:56:10.060Z] Printing order null - length 258
+[2025-11-25T00:56:23.186Z] Printing order null - length 258
+[2025-11-25T00:56:35.761Z] Printing order null - length 258
+[2025-11-25T00:57:46.063Z] Printing order null - length 258
+[2025-11-25T00:57:46.072Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-25T00:57:51.480Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-25T00:57:51.481Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-25T00:59:56.753Z] Printing order null - length 258
+[2025-11-25T00:59:56.801Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-25T00:59:57.969Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-25T00:59:57.970Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-25T03:19:41.595Z] Printing order null - length 258
+[2025-11-25T03:19:41.601Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-25T03:19:43.570Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-25T03:19:43.570Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-25T03:23:48.601Z] Printing order ce7fd18d-7f0b-41dd-af4e-e272726f54d1 - length 369
+[2025-11-25T03:23:48.605Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T03:23:48.891Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T03:23:48.892Z] raw-spooler returned status 5
+[2025-11-25T03:23:48.893Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T03:23:49.098Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T03:23:49.098Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T03:23:49.098Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T03:23:49.936Z] powershell stderr: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T03:23:49.936Z] Out-Printer failed with status 1: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T03:23:49.937Z] Shim2 Windows Out-Printer attempt failed: Out-Printer failed: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T03:23:49.938Z] Shim2 execute result: false
+[2025-11-25T03:26:13.480Z] Printing order null - length 258
+[2025-11-25T03:26:24.383Z] Printing order null - length 258
+[2025-11-25T03:26:27.379Z] Printing order null - length 258
+[2025-11-25T03:26:27.382Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-25T03:26:27.696Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-25T03:26:27.697Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-25T03:27:07.297Z] Printing order 97c72b0c-b0ec-4da3-9c38-9121bef734a8 - length 294
+[2025-11-25T03:27:07.302Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T03:27:07.540Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T03:27:07.541Z] raw-spooler returned status 5
+[2025-11-25T03:27:07.543Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T03:27:07.750Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T03:27:07.750Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T03:27:07.751Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T03:27:08.354Z] powershell stderr: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T03:27:08.355Z] Out-Printer failed with status 1: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T03:27:08.355Z] Shim2 Windows Out-Printer attempt failed: Out-Printer failed: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T03:27:08.356Z] Shim2 execute result: false
+[2025-11-25T09:56:20.019Z] Printing order null - length 258
+[2025-11-25T09:57:05.253Z] Printing order 6501bad2-bcf0-4b50-b403-cff8223fab34 - length 346
+[2025-11-25T09:57:05.259Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T09:57:07.540Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T09:57:07.541Z] raw-spooler returned status 5
+[2025-11-25T09:57:07.542Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T09:57:07.677Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T09:57:07.677Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T09:57:07.678Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T09:57:09.005Z] powershell stderr: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T09:57:09.006Z] Out-Printer failed with status 1: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T09:57:09.006Z] Shim2 Windows Out-Printer attempt failed: Out-Printer failed: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T09:57:09.007Z] Shim2 execute result: false
+[2025-11-25T10:07:48.149Z] Printing order 841c625c-0137-4220-b121-8f0875c4e859 - length 293
+[2025-11-25T10:07:48.161Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T10:07:48.449Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T10:07:48.450Z] raw-spooler returned status 5
+[2025-11-25T10:07:48.455Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T10:07:48.661Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T10:07:48.661Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T10:07:48.662Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T10:07:49.417Z] powershell stderr: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T10:07:49.417Z] Out-Printer failed with status 1: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T10:07:49.418Z] Shim2 Windows Out-Printer attempt failed: Out-Printer failed: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-11-25T10:07:49.422Z] Shim2 execute result: false
+[2025-11-25T10:15:50.486Z] Printing order null - length 258
+[2025-11-25T10:15:50.492Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-25T10:15:50.764Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-25T10:15:50.765Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-25T11:47:21.917Z] Printing order null - length 258
+[2025-11-25T11:47:21.923Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-25T11:47:43.730Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-25T11:47:43.730Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-25T13:03:51.430Z] Printing order null - length 258
+[2025-11-25T13:03:51.435Z] printerApiType: null - interface:printer: Print iD type:EPSON
+[2025-11-25T13:03:51.982Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-25T13:03:51.982Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-25T13:20:01.424Z] Printing order null - length 258
+[2025-11-25T13:20:02.693Z] printerApiType: null - interface:printer: Print iD type:EPSON
+[2025-11-25T13:20:09.616Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-25T13:20:09.616Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-25T20:48:46.043Z] Printing order dd65915f-b551-4749-b44d-b7b64eff69df - length 258
+[2025-11-25T20:48:46.110Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T20:49:04.081Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T20:49:04.081Z] raw-spooler returned status 5
+[2025-11-25T20:49:04.083Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T20:49:04.397Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T20:49:04.398Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T20:49:04.398Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T20:49:08.372Z] powershell stderr: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.Po 
+   werShell.Commands.OutLineOutputCommand
+ 
+
+[2025-11-25T20:49:08.373Z] Out-Printer failed with status 1: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.Po 
+   werShell.Commands.OutLineOutputCommand
+ 
+
+[2025-11-25T20:49:08.373Z] Shim2 Windows Out-Printer attempt failed: Out-Printer failed: out-lineoutput : As configura��es para acessar a impressora 'default' n�o s�o v�lidas.
+No linha:1 caractere:1
++ Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDelivery\deliv ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.Po 
+   werShell.Commands.OutLineOutputCommand
+ 
+
+[2025-11-25T20:49:08.375Z] Shim2 execute result: false
+[2025-11-25T21:19:22.154Z] Printing order dd65915f-b551-4749-b44d-b7b64eff69df - length 258
+[2025-11-25T21:19:22.160Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T21:19:22.562Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T21:19:22.563Z] raw-spooler returned status 5
+[2025-11-25T21:19:22.564Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T21:19:22.706Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T21:19:22.707Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T21:19:22.707Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T21:19:26.598Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764105562565.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-25T21:19:26.599Z] Shim2 execute result: true
+[2025-11-25T21:20:55.325Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 330
+[2025-11-25T21:20:55.328Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T21:20:55.572Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T21:20:55.573Z] raw-spooler returned status 5
+[2025-11-25T21:20:55.574Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T21:20:55.774Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T21:20:55.774Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T21:20:55.775Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T21:20:56.839Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764105655575.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-25T21:20:56.841Z] Shim2 execute result: true
+[2025-11-25T21:20:56.856Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 326
+[2025-11-25T21:20:56.860Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T21:20:57.075Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T21:20:57.075Z] raw-spooler returned status 5
+[2025-11-25T21:20:57.076Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T21:20:57.235Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T21:20:57.236Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T21:20:57.236Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T21:20:58.309Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764105657077.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-25T21:20:58.311Z] Shim2 execute result: true
+[2025-11-25T21:22:58.243Z] Printing order dev-test-1764105778249 - length 309
+[2025-11-25T21:22:58.256Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T21:22:58.745Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T21:22:58.746Z] raw-spooler returned status 5
+[2025-11-25T21:22:58.747Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T21:22:58.924Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T21:22:58.925Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T21:22:58.925Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T21:23:00.876Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764105778747.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-25T21:23:00.877Z] Shim2 execute result: true
+[2025-11-25T23:19:05.639Z] Printing order 5e19e66e-190a-4e02-9f16-42100384467c - length 258
+[2025-11-25T23:19:05.645Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T23:19:06.577Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T23:19:06.578Z] raw-spooler returned status 5
+[2025-11-25T23:19:06.579Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T23:19:06.741Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T23:19:06.741Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T23:19:06.741Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T23:20:05.397Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764112746580.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-25T23:20:05.398Z] Shim2 execute result: true
+[2025-11-25T23:20:05.418Z] Printing order 5e19e66e-190a-4e02-9f16-42100384467c - length 258
+[2025-11-25T23:20:05.423Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T23:20:05.622Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T23:20:05.623Z] raw-spooler returned status 5
+[2025-11-25T23:20:05.625Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T23:20:05.793Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T23:20:05.793Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T23:20:05.794Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T23:20:06.803Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764112805626.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-25T23:20:06.806Z] Shim2 execute result: true
+[2025-11-25T23:20:06.818Z] Printing order 841c625c-0137-4220-b121-8f0875c4e859 - length 289
+[2025-11-25T23:20:06.824Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-25T23:20:07.127Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T23:20:07.128Z] raw-spooler returned status 5
+[2025-11-25T23:20:07.129Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-25T23:20:07.557Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-25T23:20:07.558Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-25T23:20:07.559Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-25T23:20:09.429Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764112807130.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-25T23:20:09.430Z] Shim2 execute result: true
+[2025-11-26T00:43:17.975Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 301
+[2025-11-26T00:43:17.979Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T00:43:18.494Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:43:18.494Z] raw-spooler returned status 5
+[2025-11-26T00:43:18.495Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T00:43:18.670Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:43:18.671Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T00:43:18.671Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T00:43:20.602Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764117798496.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T00:43:20.603Z] Shim2 execute result: true
+[2025-11-26T00:43:20.612Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 297
+[2025-11-26T00:43:20.615Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T00:43:20.811Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:43:20.812Z] raw-spooler returned status 5
+[2025-11-26T00:43:20.813Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T00:43:21.007Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:43:21.007Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T00:43:21.008Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T00:43:21.957Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764117800814.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T00:43:21.961Z] Shim2 execute result: true
+[2025-11-26T00:44:32.997Z] Printing order 6501bad2-bcf0-4b50-b403-cff8223fab34 - length 346
+[2025-11-26T00:44:33.004Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T00:44:33.258Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:44:33.259Z] raw-spooler returned status 5
+[2025-11-26T00:44:33.260Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T00:44:33.430Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:44:33.431Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T00:44:33.432Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T00:44:34.594Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764117873260.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T00:44:34.595Z] Shim2 execute result: true
+[2025-11-26T00:44:34.605Z] Printing order 6501bad2-bcf0-4b50-b403-cff8223fab34 - length 346
+[2025-11-26T00:44:34.609Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T00:44:34.836Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:44:34.837Z] raw-spooler returned status 5
+[2025-11-26T00:44:34.838Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T00:44:34.988Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:44:34.989Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T00:44:34.989Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T00:44:36.048Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764117874838.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T00:44:36.050Z] Shim2 execute result: true
+[2025-11-26T00:53:33.700Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T00:53:33.705Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T00:53:33.884Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:53:33.884Z] raw-spooler returned status 5
+[2025-11-26T00:53:33.886Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T00:53:34.027Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:53:34.027Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T00:53:34.028Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T00:53:35.011Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764118413887.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T00:53:35.012Z] Shim2 execute result: true
+[2025-11-26T00:55:36.886Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T00:55:36.889Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T00:55:37.047Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:55:37.047Z] raw-spooler returned status 5
+[2025-11-26T00:55:37.049Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T00:55:37.173Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T00:55:37.174Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T00:55:37.174Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T00:55:38.117Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764118537050.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T00:55:38.118Z] Shim2 execute result: true
+[2025-11-26T01:10:29.844Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T01:10:29.851Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T01:10:30.985Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T01:10:30.986Z] raw-spooler returned status 5
+[2025-11-26T01:10:30.989Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T01:10:31.156Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T01:10:31.157Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T01:10:31.157Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T01:10:32.767Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764119430990.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T01:10:32.768Z] Shim2 execute result: true
+[2025-11-26T01:16:18.176Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T01:16:18.179Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T01:16:18.346Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T01:16:18.347Z] raw-spooler returned status 5
+[2025-11-26T01:16:18.349Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T01:16:18.477Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T01:16:18.478Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T01:16:18.478Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T01:16:19.369Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764119778350.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T01:16:19.370Z] Shim2 execute result: true
+[2025-11-26T01:20:04.898Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T01:20:04.906Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T01:20:05.132Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T01:20:05.132Z] raw-spooler returned status 5
+[2025-11-26T01:20:05.136Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T01:20:05.315Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T01:20:05.315Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T01:20:05.316Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T01:20:17.916Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764120005138.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T01:20:17.918Z] Shim2 execute result: true
+[2025-11-26T01:24:23.371Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T01:24:23.374Z] printerApiType: null - interface:printer:default type:EPSON
+[2025-11-26T01:24:39.144Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T01:24:39.145Z] raw-spooler returned status 5
+[2025-11-26T01:24:39.203Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-11-26T01:24:42.918Z] raw-spooler stderr: OpenPrinter failed for: default
+
+[2025-11-26T01:24:42.919Z] raw-spooler failed with status 5: OpenPrinter failed for: default
+
+[2025-11-26T01:24:42.919Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: default
+
+[2025-11-26T01:25:16.309Z] Shim2 printed file C:\Users\gomes\projetoDelivery\delivery-print-agent\failed-print\shim2-1764120279204.txt to printer 'default' via PowerShell Out-Printer
+[2025-11-26T01:25:16.309Z] Shim2 execute result: true
+[2025-11-26T01:55:45.015Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T01:55:45.020Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T01:55:46.327Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T01:55:46.327Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T02:02:53.437Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T02:02:53.440Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T02:02:53.671Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T02:02:53.672Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T02:11:09.010Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T02:11:09.014Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T02:11:09.255Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T02:11:09.256Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T02:13:59.614Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 351
+[2025-11-26T02:13:59.617Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T02:13:59.961Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T02:13:59.961Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T02:23:27.862Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 377
+[2025-11-26T02:23:27.866Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T02:23:28.128Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T02:23:28.128Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T02:27:33.785Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 377
+[2025-11-26T02:27:33.790Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T02:27:34.078Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T02:27:34.079Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T02:58:15.073Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T02:58:15.081Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T02:58:15.628Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T02:58:15.629Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T03:12:18.499Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T03:12:18.506Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T03:12:22.700Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T03:12:22.700Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T03:20:30.809Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T03:20:30.815Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T03:20:31.122Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T03:20:31.123Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T03:24:32.481Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T03:24:32.485Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T03:24:32.741Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T03:24:32.741Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T03:29:55.403Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T03:29:55.405Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T03:29:55.640Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T03:29:55.641Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T03:33:03.730Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T03:33:03.737Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T03:33:04.043Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T03:33:04.044Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T03:49:37.007Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T03:49:37.026Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T03:49:38.122Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T03:49:38.122Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T03:55:17.551Z] Printing order 5e19e66e-190a-4e02-9f16-42100384467c - length 290
+[2025-11-26T03:55:17.556Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T03:55:18.220Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T03:55:18.221Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T03:57:28.143Z] Printing order 5e19e66e-190a-4e02-9f16-42100384467c - length 290
+[2025-11-26T03:57:28.146Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T03:57:28.411Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T03:57:28.411Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T03:59:35.851Z] Printing order 5e19e66e-190a-4e02-9f16-42100384467c - length 290
+[2025-11-26T03:59:35.855Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T03:59:36.428Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T03:59:36.429Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T04:01:15.540Z] Printing order 5e19e66e-190a-4e02-9f16-42100384467c - length 400
+[2025-11-26T04:01:15.549Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T04:01:15.946Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T04:01:15.947Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T04:04:51.490Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 511
+[2025-11-26T04:04:51.496Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T04:04:52.178Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T04:04:52.178Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T04:10:54.940Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 511
+[2025-11-26T04:10:54.945Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T04:10:55.638Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T04:10:55.638Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T11:04:47.237Z] Printing order 850b6485-4537-4893-81ec-3d37c7eb97ef - length 412
+[2025-11-26T11:04:47.244Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T11:05:06.819Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T11:05:06.820Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T11:05:06.844Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 511
+[2025-11-26T11:05:06.847Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T11:05:07.216Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T11:05:07.217Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T12:01:51.516Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 511
+[2025-11-26T12:01:51.578Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T12:01:53.723Z] raster settings targetWidth=576 qrRenderWidth=n/a QR_THRESHOLD=128 esc_t=16
+[2025-11-26T12:02:25.691Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T12:02:25.691Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T12:08:51.958Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 511
+[2025-11-26T12:08:52.437Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T12:08:57.188Z] raster settings targetWidth=576 qrRenderWidth=288 QR_THRESHOLD=128 esc_t=16
+[2025-11-26T12:09:26.688Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T12:09:26.689Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T12:21:29.187Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 529
+[2025-11-26T12:21:29.207Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T12:21:33.127Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T12:21:33.128Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T12:28:48.414Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 529
+[2025-11-26T12:28:48.450Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T12:28:54.458Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T12:28:54.458Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T12:29:40.103Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 529
+[2025-11-26T12:29:40.109Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T12:29:40.614Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T12:29:40.615Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T12:59:11.434Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 529
+[2025-11-26T12:59:11.501Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T12:59:16.019Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T12:59:16.020Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T14:05:20.324Z] Printing order test-automated-1 - length 347
+[2025-11-26T14:05:21.626Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T14:05:38.367Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T14:05:38.368Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T14:09:12.650Z] Printing order test-automated-2 - length 347
+[2025-11-26T14:09:12.780Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T14:09:16.528Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T14:09:16.529Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T14:13:28.088Z] Printing order b-test-automated-1 - length 350
+[2025-11-26T14:13:28.117Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T14:13:35.139Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T14:13:35.139Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T14:18:06.124Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 529
+[2025-11-26T14:18:06.131Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T14:18:09.678Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T14:18:09.679Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T14:18:13.507Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 507
+[2025-11-26T14:18:13.513Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T14:18:13.913Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T14:18:13.913Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T14:22:09.005Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 507
+[2025-11-26T14:22:09.020Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T14:22:13.480Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T14:22:13.480Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T14:23:00.363Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 507
+[2025-11-26T14:23:00.367Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T14:23:02.512Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T14:23:02.513Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T14:27:03.105Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 507
+[2025-11-26T14:27:04.833Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T14:27:28.601Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T14:27:28.602Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T15:07:17.040Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 379
+[2025-11-26T15:07:17.060Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T15:07:21.305Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T15:07:21.305Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T15:38:23.196Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 379
+[2025-11-26T15:38:23.206Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T15:38:23.941Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T15:38:23.942Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T15:52:53.544Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 379
+[2025-11-26T15:52:53.550Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T15:52:54.012Z] Including ESC/POS raster in raw payload (size=6168)
+[2025-11-26T15:52:54.940Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T15:52:54.941Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T17:43:09.501Z] Printing order 6501bad2-bcf0-4b50-b403-cff8223fab34 - length 376
+[2025-11-26T17:43:09.506Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T17:43:09.523Z] Including ESC/POS raster in raw payload (size=6168)
+[2025-11-26T17:43:10.400Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T17:43:10.401Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T17:43:10.436Z] Printing order 6501bad2-bcf0-4b50-b403-cff8223fab34 - length 376
+[2025-11-26T17:43:10.442Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T17:43:10.452Z] Including ESC/POS raster in raw payload (size=6168)
+[2025-11-26T17:43:10.765Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T17:43:10.767Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T17:50:19.841Z] Printing order 54992787-4cc6-4c81-b8b4-4ae9fa21f6b5 - length 379
+[2025-11-26T17:50:19.854Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T17:50:20.017Z] Including ESC/POS raster in raw payload (size=6168)
+[2025-11-26T17:50:20.610Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T17:50:20.611Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T17:50:42.213Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T17:50:42.217Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T17:50:42.224Z] Including ESC/POS raster in raw payload (size=6168)
+[2025-11-26T17:50:42.523Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T17:50:42.524Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T17:51:38.532Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T17:51:38.537Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T17:51:38.560Z] Prepared ESC/POS size header for scale ~2 (PRINTER_SCALE=2)
+[2025-11-26T17:51:38.673Z] Including ESC/POS raster in raw payload (size=6168)
+[2025-11-26T17:51:38.937Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T17:51:38.937Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T18:00:59.281Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T18:00:59.303Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T18:00:59.308Z] Rasterizing full receipt text at scale 1.25 (widthPx=576)
+[2025-11-26T18:01:01.538Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T18:01:01.538Z] Printed raster via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T18:04:44.439Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T18:04:44.632Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T18:04:44.634Z] Rasterizing full receipt text at scale 1.25 (widthPx=576)
+[2025-11-26T18:05:10.914Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T18:05:10.915Z] Printed raster via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T18:08:14.487Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T18:08:14.504Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T18:08:14.575Z] pngToEscposRaster returned null, not including raster
+[2025-11-26T18:08:16.082Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T18:08:16.082Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-11-26T18:19:49.351Z] Printing order 16863694-a8d3-492d-b5b4-69720270ac9b - length 378
+[2025-11-26T18:19:49.362Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-11-26T18:19:49.736Z] Including ESC/POS raster in raw payload (size=6168)
+[2025-11-26T18:19:52.390Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-11-26T18:19:52.391Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'

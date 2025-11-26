@@ -1,0 +1,15 @@
+{
+  "order": {
+    "displayId": "TEST",
+    "customerName": "TEST PRINT",
+    "items": [
+      {
+        "quantity": 1,
+        "name": "Teste DRY_RUN via shim 3",
+        "price": 0
+      }
+    ],
+    "total": 0
+  },
+  "err": "Cannot read properties of undefined (reading 'characterSet')"
+}

@@ -1,0 +1,19 @@
+LOJA TESTE
+Pedido: BTEST1 | ID:b-test-automated-1 | 2025-11-26 11:13:28
+CLIENTE TESTE
+--------------------
+-
+---------------------
+
+Itens e opcionais
+QT  Descrição                Valor
+1   Produto X                   10.00
+
+Quantidade de itens  1
+---------------------------
+Total de itens   10.00
+
+FORMAS DE PAGAMENTO
+QR: https://example.com/test-qr
+
+[QR_PRESENCE] https://example.com/test-qr

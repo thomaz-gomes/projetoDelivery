@@ -2,7 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma.js';
 import { emitirPedidoAtualizado } from '../index.js';
 import { authMiddleware, requireRole } from '../auth.js';
-import { upsertCustomerFromIfood } from '../services/customers.js';
+import { upsertCustomerFromIfood, findOrCreateCustomer } from '../services/customers.js';
 import { trackAffiliateSale } from '../services/affiliates.js';
 import { canTransition } from '../stateMachine.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
@@ -387,5 +387,143 @@ ordersRouter.post('/:id/associate-customer', requireRole('ADMIN'), async (req, r
   } catch (e) {
     console.error('Failed to associate customer for order', id, e?.message || e);
     return res.status(500).json({ message: 'Falha ao associar cliente', error: String(e?.message || e) });
+  }
+});
+
+// POS/PDV: criar pedido manual interno
+// POST /orders  body: { customerName, customerPhone, orderType, address?, items: [{ name, quantity, price, notes?, options?:[{ name, price }] }], payment: { methodCode, amount, changeFor? } }
+ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+  try {
+    const { customerName, customerPhone, orderType = 'BALCAO', address = {}, items = [], payment = null, coupon } = req.body || {};
+    if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Itens são obrigatórios' });
+
+    const type = String(orderType || 'BALCAO').toUpperCase();
+    if (type === 'DELIVERY') {
+      const neigh = String(address.neighborhood || address.neigh || '').trim();
+      const street = String(address.street || '').trim();
+      if (!neigh || !street) return res.status(400).json({ message: 'Endereço (rua e bairro) obrigatório para entrega' });
+    }
+
+    // sanitize items
+    const cleanItems = items.map(it => ({
+      name: String(it.name || it.productName || 'Item'),
+      quantity: Number(it.quantity || 1),
+      price: Number(it.price || 0),
+      notes: it.notes ? String(it.notes) : null,
+      options: Array.isArray(it.options) ? it.options.map(o => ({ name: String(o.name || ''), price: Number(o.price || 0) })) : null
+    }));
+    const subtotal = cleanItems.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+
+    // neighborhood delivery fee
+    let deliveryFee = 0;
+    try {
+      const neighName = String(address.neighborhood || address.neigh || '').trim().toLowerCase();
+      if (neighName) {
+        const neighRows = await prisma.neighborhood.findMany({ where: { companyId } });
+        const matched = neighRows.find(n => {
+          if (!n) return false;
+          const nm = String(n.name || '').toLowerCase();
+          if (nm === neighName) return true;
+          if (n.aliases && Array.isArray(n.aliases) && n.aliases.map(a => String(a).toLowerCase()).includes(neighName)) return true;
+          return false;
+        });
+        if (matched) deliveryFee = Number(matched.deliveryFee || 0);
+      }
+    } catch (e) { deliveryFee = 0; }
+
+    // coupon handling (optional) — mimic public logic simplified
+    let couponDiscount = 0;
+    let couponCode = null;
+    if (coupon && coupon.code) {
+      couponCode = String(coupon.code).trim();
+      try {
+        const row = await prisma.coupon.findFirst({ where: { companyId, code: couponCode, isActive: true } });
+        if (row) {
+          const rawVal = Number(row.value || 0);
+            if (row.isPercentage) {
+              couponDiscount = rawVal > 0 && rawVal <= 1 ? subtotal * rawVal : (subtotal * rawVal) / 100;
+            } else {
+              couponDiscount = rawVal;
+            }
+            if (couponDiscount > subtotal) couponDiscount = subtotal;
+            couponDiscount = Math.round(couponDiscount * 100) / 100;
+        }
+      } catch (e) { couponDiscount = 0; }
+    }
+
+    const total = Math.max(0, subtotal - couponDiscount) + Number(deliveryFee || 0);
+
+    // validate payment method if provided
+    let paymentPayload = null;
+    if (payment && (payment.methodCode || payment.method)) {
+      const code = String(payment.methodCode || payment.method).trim();
+      const pm = await prisma.paymentMethod.findFirst({ where: { companyId, isActive: true, OR: [{ code }, { name: code }] } });
+      if (!pm) return res.status(400).json({ message: 'Método de pagamento inválido' });
+      paymentPayload = {
+        method: pm.name,
+        methodCode: pm.name,
+        amount: Number(payment.amount || total),
+        changeFor: payment.changeFor != null ? Number(payment.changeFor) : null,
+        raw: payment.raw || null
+      };
+    }
+
+    // find or create customer (best-effort)
+    let persistedCustomer = null;
+    try {
+      const contact = String(customerPhone || '').trim();
+      const name = String(customerName || '').trim();
+      if (contact || name) {
+        const addressPayload = address && type === 'DELIVERY' ? {
+          delivery: { deliveryAddress: { formattedAddress: address.formatted || [address.street, address.number].filter(Boolean).join(', '), streetName: address.street || null, streetNumber: address.number || null, neighborhood: address.neighborhood || null } }
+        } : null;
+        persistedCustomer = await findOrCreateCustomer({ companyId, fullName: name || null, whatsapp: contact || null, phone: contact || null, addressPayload });
+      }
+    } catch (e) { console.warn('PDV: falha ao criar/achar cliente', e?.message || e); }
+
+    // resolve store fallback (single store) similar a public route
+    let resolvedStore = null;
+    try {
+      const count = await prisma.store.count({ where: { companyId } });
+      if (count === 1) {
+        resolvedStore = await prisma.store.findFirst({ where: { companyId } });
+      }
+    } catch (e) { /* ignore */ }
+
+    const created = await prisma.order.create({
+      data: {
+        companyId,
+        customerSource: 'MANUAL',
+        customerId: persistedCustomer ? persistedCustomer.id : undefined,
+        customerName: customerName || (persistedCustomer ? persistedCustomer.fullName : null),
+        customerPhone: customerPhone || (persistedCustomer ? (persistedCustomer.whatsapp || persistedCustomer.phone) : null),
+        address: type === 'DELIVERY' ? (address.formatted || [address.street, address.number].filter(Boolean).join(', ')) : null,
+        total,
+        couponCode,
+        couponDiscount: Number(couponDiscount || 0),
+        orderType: type,
+        deliveryFee,
+        status: 'EM_PREPARO',
+        ...(resolvedStore ? { storeId: resolvedStore.id } : {}),
+        payload: {
+          payment: paymentPayload,
+          orderType: type,
+          rawPayload: { source: 'PDV', items: cleanItems, customer: { name: customerName || null, contact: customerPhone || null }, address }
+        },
+        items: {
+          create: cleanItems.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes, options: it.options || null }))
+        },
+        histories: { create: { from: null, to: 'EM_PREPARO', byUserId: req.user.id, reason: 'Criação PDV' } }
+      },
+      include: { items: true, histories: true }
+    });
+
+    try { emitirPedidoAtualizado(created); } catch (e) { /* ignore */ }
+    return res.status(201).json(created);
+  } catch (e) {
+    console.error('Erro ao criar pedido PDV', e);
+    return res.status(500).json({ message: 'Erro interno ao criar pedido PDV' });
   }
 });

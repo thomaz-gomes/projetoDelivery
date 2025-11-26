@@ -17,12 +17,22 @@ customersRouter.get('/', async (req, res) => {
 
   const where = { companyId };
   if (search) {
-    where.OR = [
-      { fullName: { contains: search, mode: 'insensitive' } },
-      { cpf: { contains: search } },
-      { whatsapp: { contains: search } },
-      { phone: { contains: search } },
-    ];
+    // Se a busca parece ser um número (telefone), busca apenas em campos de telefone
+    const isPhone = /^\d+$/.test(search);
+    if (isPhone) {
+      // Busca apenas nos últimos dígitos de whatsapp e phone (ignorando DDI)
+      where.OR = [
+        { whatsapp: { contains: search } },
+        { phone: { contains: search } },
+      ];
+    } else {
+      where.OR = [
+        { fullName: { contains: search } },
+        { cpf: { contains: search } },
+        { whatsapp: { contains: search } },
+        { phone: { contains: search } },
+      ];
+    }
   }
 
   const [rows, total] = await Promise.all([

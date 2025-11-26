@@ -6,6 +6,7 @@ try { debug.disable(); } catch (_) {}
 import express from "express";
 // note: server creation moved to server.js so Socket.IO can attach to the real HTTPS server
 import { Server } from "socket.io";
+import jwt from 'jsonwebtoken';
 import cors from "cors";
 import bodyParser from "body-parser";
 
@@ -31,7 +32,13 @@ import companiesRouter from './routes/companies.js'
 import storesRouter from './routes/stores.js'
 import usersRouter from './routes/users.js'
 import rolesRouter from './routes/rolePermissions.js'
+import agentSetupRouter from './routes/agentSetup.js'
+import agentPrintRouter from './routes/agentPrint.js'
+import qrActionRouter from './routes/qrAction.js'
 import events from './utils/events.js'
+import printQueue from './printQueue.js'
+import { prisma } from './prisma.js'
+import { sha256 } from './utils.js'
 import path from 'path';
 import startReportsCleanup from './cleanupReports.js';
 
@@ -43,7 +50,7 @@ const app = express();
 // Allow the frontend origin(s). Prefer explicit origins for CORS + credentials.
 // You can set FRONTEND_ORIGIN for a single origin or FRONTEND_ORIGINS as a
 // comma-separated list (useful for CI/staging/prod variations).
-const defaultOrigins = ['https://localhost:5173', 'https://dev.redemultilink.com.br:5173'];
+const defaultOrigins = ['http://localhost:5173', 'https://dev.redemultilink.com.br:5173'];
 const allowedOrigins = (process.env.FRONTEND_ORIGINS
   ? process.env.FRONTEND_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
   : (process.env.FRONTEND_ORIGIN ? [process.env.FRONTEND_ORIGIN] : defaultOrigins)
@@ -121,6 +128,20 @@ app.use('/settings', menuAdminRouter);
 app.use('/stores', storesRouter);
 app.use('/users', usersRouter);
 app.use('/roles', rolesRouter);
+// Agent setup endpoint: returns socket URL and store IDs for the authenticated user's company
+app.use('/agent-setup', agentSetupRouter);
+app.use('/agent-print', agentPrintRouter);
+app.use('/qr-action', qrActionRouter);
+// Dev-only debug agent print route (bypass auth for local development convenience)
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    const debugAgentPrintRouter = await import('./routes/debugAgentPrint.js');
+    app.use('/debug/agent-print', debugAgentPrintRouter.default || debugAgentPrintRouter);
+    console.log('Mounted /debug/agent-print (dev only)');
+  } catch (e) {
+    console.warn('Failed to mount debug/agent-print route', e && e.message);
+  }
+}
 
 // Serve public files (e.g., generated reports)
 const publicDir = path.join(process.cwd(), 'public');
@@ -147,6 +168,58 @@ app.get("/", (req, res) => {
   res.send("✅ API Online e funcional");
 });
 
+// Development-only: list connected Socket.IO agents and their metadata
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/debug/agents', (req, res) => {
+    try {
+      const ioInstance = app.locals.io;
+      if (!ioInstance) return res.status(500).json({ message: 'Socket.IO não inicializado' });
+
+      const storeFilter = req.query.storeId;
+      const sockets = Array.from(ioInstance.sockets.sockets.values())
+        .map(s => ({ id: s.id, agent: s.agent || null, connected: s.connected }))
+        .filter(s => {
+          if (!storeFilter) return true;
+          return s.agent && Array.isArray(s.agent.storeIds) && s.agent.storeIds.includes(storeFilter);
+        });
+
+      return res.json({ count: sockets.length, sockets });
+    } catch (e) {
+      console.error('GET /debug/agents failed', e);
+      return res.status(500).json({ message: 'Erro ao listar agentes', error: String(e && e.message) });
+    }
+  });
+
+  // Development-only: disconnect agent sockets for a given storeId (useful to remove stale agents)
+  app.post('/debug/disconnect-agents', (req, res) => {
+    try {
+      if (process.env.NODE_ENV === 'production') return res.status(403).json({ message: 'Not allowed in production' });
+      const ioInstance = app.locals.io;
+      if (!ioInstance) return res.status(500).json({ message: 'Socket.IO não inicializado' });
+
+      const storeId = (req.body && req.body.storeId) || req.query.storeId;
+      if (!storeId) return res.status(400).json({ message: 'storeId é obrigatório' });
+
+      const sockets = Array.from(ioInstance.sockets.sockets.values()).filter(s => s.agent && Array.isArray(s.agent.storeIds) && s.agent.storeIds.includes(storeId));
+      let disconnected = 0;
+      sockets.forEach(s => {
+        try {
+          s.disconnect(true);
+          disconnected++;
+          console.log('Disconnected agent socket', s.id, 'for storeId', storeId);
+        } catch (e) {
+          console.warn('Failed to disconnect socket', s.id, e && e.message);
+        }
+      });
+
+      return res.json({ ok: true, storeId, disconnected });
+    } catch (e) {
+      console.error('POST /debug/disconnect-agents failed', e);
+      return res.status(500).json({ ok: false, error: String(e && e.message) });
+    }
+  });
+}
+
 // Socket.IO instance will be attached by server.js
 let io = null;
 
@@ -168,9 +241,72 @@ export function attachSocket(server) {
     pingTimeout: 60000,
   });
 
+  // Socket-level auth for print agents: if the client provides an auth token
+  // we validate it against the per-company hashed token stored in PrinterSetting.
+  // Regular frontend clients that do not provide `handshake.auth.token` are allowed.
+  io.use(async (socket, next) => {
+    try {
+      const auth = (socket.handshake && socket.handshake.auth) || {};
+      const token = auth.token;
+      if (!token) return next(); // not an agent, allow
+
+      const storeIds = Array.isArray(auth.storeIds) ? auth.storeIds : (auth.storeId ? [auth.storeId] : []);
+      if (!storeIds.length) return next(new Error('agent-missing-storeId'));
+
+      // Resolve company from first storeId
+      const store = await prisma.store.findUnique({ where: { id: storeIds[0] }, select: { companyId: true } });
+      if (!store) return next(new Error('invalid-storeId'));
+
+      const setting = await prisma.printerSetting.findUnique({ where: { companyId: store.companyId }, select: { agentTokenHash: true } });
+      if (!setting || !setting.agentTokenHash) return next(new Error('agent-no-token-configured'));
+
+      const incomingHash = sha256(token);
+      if (incomingHash !== setting.agentTokenHash) return next(new Error('invalid-agent-token'));
+
+      // attach agent metadata to socket for later use
+      socket.agent = { companyId: store.companyId, storeIds };
+      return next();
+    } catch (e) {
+      console.error('Socket auth error', e);
+      return next(new Error('internal'));
+    }
+  });
+
   io.on("connection", (socket) => {
     const origin = socket.handshake && socket.handshake.headers && socket.handshake.headers.origin;
     console.log(`📡 Painel conectado: ${socket.id} (origin: ${origin})`);
+
+    // Allow frontend clients to identify themselves by sending a JWT via 'identify'.
+    // This attaches `socket.user` so server-side code can target sockets by companyId.
+    socket.on('identify', (token) => {
+      try {
+        const JWT_SECRET = process.env.JWT_SECRET;
+        if (!token || !JWT_SECRET) return;
+        const user = jwt.verify(token, JWT_SECRET);
+        if (user && user.companyId) {
+          socket.user = user;
+          console.log('Socket identified as user', socket.id, 'companyId', user.companyId);
+        }
+      } catch (e) {
+        // ignore invalid tokens from identify
+      }
+    });
+
+    // If this socket authenticated as an agent, record connection timestamp
+    try {
+      if (socket.agent) {
+        socket.agent.connectedAt = Date.now();
+        console.log('Agent metadata on connect:', socket.id, socket.agent);
+        // attempt to process queued print jobs for this agent's stores (fire-and-forget)
+        try {
+          printQueue.processForStores(io, socket.agent.storeIds).then(r => {
+            if (r && r.ok) console.log('Processed print queue for stores', socket.agent.storeIds, 'results:', r.results)
+          }).catch(e => console.warn('printQueue.processForStores failed:', e && e.message))
+        } catch (e) { /* ignore */ }
+      }
+    } catch (e) {
+      // ignore
+    }
 
     socket.on("disconnect", (reason) => {
       console.warn(`⚠️ Painel desconectado (${reason}): ${socket.id}`);

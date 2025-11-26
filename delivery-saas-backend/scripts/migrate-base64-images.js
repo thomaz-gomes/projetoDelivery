@@ -3,9 +3,9 @@ import { prisma } from '../src/prisma.js'
 import fs from 'fs'
 import path from 'path'
 
-// Usage: node scripts/migrate-base64-images.js [--baseUrl=https://localhost:3000]
+// Usage: node scripts/migrate-base64-images.js [--baseUrl=http://localhost:3000]
 const arg = process.argv.slice(2).find(a => a.startsWith('--baseUrl='))
-const baseUrl = arg ? arg.split('=')[1] : (process.env.BACKEND_URL || 'https://localhost:3000')
+const baseUrl = arg ? arg.split('=')[1] : (process.env.BACKEND_URL || 'http://localhost:3000')
 
 async function run(){
   console.log('Migration start, baseUrl=', baseUrl)

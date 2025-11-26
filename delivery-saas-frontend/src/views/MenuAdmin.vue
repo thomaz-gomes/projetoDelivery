@@ -68,7 +68,13 @@
                 </div>
 
                 <div class="product-thumb me-3">
-                  <img v-if="p.image" :src="assetUrl(p.image)" class="admin-product-image" loading="lazy" />
+                  <div v-if="p.image" class="admin-product-image-wrapper" role="button" tabindex="0" @click.stop.prevent="fileInputClick(p)" @keydown.enter.stop.prevent="fileInputClick(p)" aria-label="Substituir imagem do produto">
+                    <img :src="assetUrl(p.image)" class="admin-product-image" loading="lazy" />
+                    <div class="admin-image-overlay">
+                      <i class="bi bi-camera" style="font-size:18px"></i>
+                      <div style="font-size:11px;margin-top:2px">TROCAR</div>
+                    </div>
+                  </div>
                   <div v-else class="bg-light admin-product-image-placeholder d-flex align-items-center justify-content-center" role="button" tabindex="0" @click.stop.prevent="fileInputClick(p)" @keydown.enter.stop.prevent="fileInputClick(p)" aria-label="Adicionar imagem para produto">
                     <i class="bi bi-camera" style="font-size:20px;color:#6c6c6c"></i>
                   </div>
@@ -84,8 +90,8 @@
                     <div class="price-pill">{{ formatCurrency(p.price) }}</div>
                   </div>
                   <div class="product-actions d-flex align-items-center" style="gap:8px">
-                    <button class="btn btn-sm btn-outline-primary" @click="edit(p)" :aria-label="`Editar ${p.name || 'produto'}`"><i class="bi bi-pencil me-1"></i>Editar</button>
-                    <button class="btn btn-sm btn-danger" @click="remove(p)" :aria-label="`Remover ${p.name || 'produto'}`"><i class="bi bi-trash me-1"></i>Remover</button>
+                    <button class="btn btn-sm btn-outline-primary" @click="edit(p)" :aria-label="`Editar ${p.name || 'produto'}`"><i class="bi bi-pencil me-1"></i></button>
+                    <button class="btn btn-sm btn-danger" @click="remove(p)" :aria-label="`Remover ${p.name || 'produto'}`"><i class="bi bi-trash me-1"></i></button>
                   </div>
                 </div>
               </div>
@@ -476,4 +482,10 @@ async function deleteCategory(cat){
 .upload-preview-img { width:100%; height:100%; object-fit:cover; display:block }
 .image-preview-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0.45); color:#fff; font-weight:700; letter-spacing:0.6px; opacity:0; transition: opacity .14s ease, transform .14s ease; transform: translateY(6px) }
 .upload-preview:hover .image-preview-overlay, .upload-preview:focus .image-preview-overlay { opacity:1; transform: translateY(0) }
+
+.admin-product-image { width:72px; height:72px; object-fit:cover; border-radius:6px; display:block }
+.admin-product-image-wrapper { position:relative; width:72px; height:72px; border-radius:6px; overflow:hidden; cursor:pointer; display:inline-block }
+.admin-image-overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); color:#fff; font-weight:700; letter-spacing:0.5px; opacity:0; transition:opacity .14s ease, transform .14s ease; transform:translateY(4px) }
+.admin-product-image-wrapper:hover .admin-image-overlay, .admin-product-image-wrapper:focus .admin-image-overlay { opacity:1; transform:translateY(0) }
+.admin-product-image-placeholder { width:72px; height:72px; border-radius:6px; cursor:pointer }
 </style>

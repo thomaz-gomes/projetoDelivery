@@ -4,7 +4,7 @@ import https from 'https';
 async function main(){
   const agent = new https.Agent({ rejectUnauthorized: false });
   try{
-    const res = await axios.post('https://localhost:3000/auth/login', { login: '73991429676', password: 'rider123' }, { httpsAgent: agent, headers: { 'Content-Type': 'application/json' } });
+    const res = await axios.post('http://localhost:3000/auth/login', { login: '73991429676', password: 'rider123' }, { httpsAgent: agent, headers: { 'Content-Type': 'application/json' } });
     console.log('status', res.status);
     console.log(res.data);
   } catch (e) {

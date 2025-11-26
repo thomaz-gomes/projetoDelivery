@@ -1,0 +1,17 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | Kuat | 6
+2 | Frango grelhado | 22.9
+
+
+[alignLeft]
+Cliente: John doe
+Endereço: -
+Total: R$ 51.80
+
+
+[alignCenter]
+Obrigado!
+[CUT]

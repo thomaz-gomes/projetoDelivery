@@ -2,7 +2,7 @@ import axios from 'axios';
 import https from 'https';
 
 const agent = new https.Agent({ rejectUnauthorized: false });
-const API = 'https://localhost:3000';
+const API = 'http://localhost:3000';
 
 async function run() {
   try {

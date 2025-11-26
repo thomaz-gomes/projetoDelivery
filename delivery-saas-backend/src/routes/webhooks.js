@@ -5,6 +5,7 @@ import path from "path";
 import { prisma } from "../prisma.js";
 import { upsertCustomerFromIfood } from "../services/customers.js";
 import { emitirNovoPedido } from "../index.js"; // envia o pedido ao front via Socket.IO
+import printQueue from '../printQueue.js'
 
 export const webhooksRouter = express.Router();
 
@@ -309,6 +310,72 @@ webhooksRouter.post("/ifood", async (req, res) => {
     // 🔊 Envia o pedido para o painel via Socket.IO
     emitirNovoPedido(saved);
     console.log(`📦 Pedido salvo e emitido ao painel: ${displayId} (simple:${saved.displaySimple || 'N/A'})`);
+
+    // --- Auto-print: try to deliver the order to a connected print agent for this storeId
+    try {
+      const io = req.app && req.app.locals && req.app.locals.io;
+      const storeIdForPrint = saved.storeId || null;
+      if (storeIdForPrint && io) {
+        const candidates = Array.from(io.sockets.sockets.values()).filter(s => s.agent && Array.isArray(s.agent.storeIds) && s.agent.storeIds.includes(storeIdForPrint));
+        if (!candidates || candidates.length === 0) {
+          const queued = printQueue.enqueue({ order: saved, storeId: storeIdForPrint });
+          console.log('Auto-print: no agent connected; job queued', queued.id);
+        } else {
+          // try recently connected agents first
+          const sorted = candidates.slice().sort((a, b) => {
+            const ta = (a.agent && a.agent.connectedAt) ? a.agent.connectedAt : 0;
+            const tb = (b.agent && b.agent.connectedAt) ? b.agent.connectedAt : 0;
+            return tb - ta;
+          });
+
+          const ACK_TIMEOUT_MS = process.env.PRINT_ACK_TIMEOUT_MS ? Number(process.env.PRINT_ACK_TIMEOUT_MS) : 10000;
+          let delivered = false;
+          let deliveredInfo = null;
+          for (const s of sorted) {
+            try {
+              const attempt = await new Promise(resolve => {
+                let resolved = false;
+                const timer = setTimeout(() => { if (!resolved) { resolved = true; resolve({ ok: false, error: 'ack_timeout', socketId: s.id }); } }, ACK_TIMEOUT_MS + 1000);
+                try {
+                  s.timeout(ACK_TIMEOUT_MS).emit('novo-pedido', saved, (...args) => {
+                    if (resolved) return;
+                    resolved = true; clearTimeout(timer);
+                    resolve({ ok: true, ack: args, socketId: s.id });
+                  });
+                } catch (e) {
+                  if (!resolved) { resolved = true; clearTimeout(timer); resolve({ ok: false, error: String(e && e.message), socketId: s.id }); }
+                }
+              });
+              if (attempt && attempt.ok) {
+                console.log('Auto-print: delivered to agent socket', attempt.socketId);
+                delivered = true;
+                deliveredInfo = { socketId: attempt.socketId, ack: attempt.ack }
+                break;
+              } else {
+                console.log('Auto-print: attempt failed for socket', attempt.socketId, attempt.error || '<no error>');
+              }
+            } catch (e) {
+              console.warn('Auto-print: delivery attempt error', e && e.message);
+            }
+          }
+          if (!delivered) {
+            const queued = printQueue.enqueue({ order: saved, storeId: storeIdForPrint });
+            console.log('Auto-print: no agent acknowledged; job queued', queued.id);
+            try { io.emit('print-result', { orderId: saved.id, status: 'queued', queuedId: queued.id }) } catch(_){}
+          } else {
+            try { io.emit('print-result', { orderId: saved.id, status: 'printed', socketId: deliveredInfo && deliveredInfo.socketId, ack: deliveredInfo && deliveredInfo.ack }) } catch(_){}
+          }
+        }
+      } else if (!io) {
+        // no Socket.IO instance available yet — enqueue for later
+        if (saved.storeId) {
+          const queued = printQueue.enqueue({ order: saved, storeId: saved.storeId });
+          console.log('Auto-print: Socket.IO not initialized; job queued', queued.id);
+        }
+      }
+    } catch (e) {
+      console.warn('Auto-print: unexpected error while attempting to deliver print job:', e && e.message);
+    }
 
     return res.json({
       ok: true,

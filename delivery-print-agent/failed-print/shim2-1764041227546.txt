@@ -1,0 +1,17 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | Kuat | 6
+1 | Coca cola original 1 litro | 10.9
+
+
+[alignLeft]
+Cliente: John doe
+Endereço: -
+Total: R$ 16.90
+
+
+[alignCenter]
+Obrigado!
+[CUT]

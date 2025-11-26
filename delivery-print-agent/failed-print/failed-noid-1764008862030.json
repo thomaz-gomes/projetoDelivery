@@ -1,0 +1,15 @@
+{
+  "order": {
+    "displayId": "TEST",
+    "customerName": "TEST PRINT",
+    "items": [
+      {
+        "quantity": 1,
+        "name": "Teste final ap�s prefer newest",
+        "price": 0
+      }
+    ],
+    "total": 0
+  },
+  "err": "Cannot read properties of undefined (reading 'characterSet')"
+}

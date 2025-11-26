@@ -4,6 +4,8 @@ import tls from 'tls';
 import fs from "fs";
 import path from "path";
 import { app, attachSocket } from "./index.js"; // attachSocket will bind Socket.IO to the server
+import { prisma } from './prisma.js';
+import { sha256 } from './utils.js';
 import { startWatching } from './fileWatcher.js';
 
 // Load SSL key/cert from several possible filenames so frontend files can be used directly
@@ -104,6 +106,66 @@ if (envKey || envCert || envCa) {
 
 const DEFAULT_PORT = Number(process.env.PORT) || 3000;
 
+// If a developer/operator created a `.print-agent-token` file in the project root
+// we will use it to automatically create/update a PrinterSetting for the first
+// company found in the database. This makes the dev UX "configure once" so the
+// agent and backend share the same token without manual DB operations.
+async function ensureAgentTokenFromFile() {
+  try {
+    const tokenPath = path.join(process.cwd(), '.print-agent-token');
+    if (!fs.existsSync(tokenPath)) return;
+    const raw = fs.readFileSync(tokenPath, { encoding: 'utf8' }).trim();
+    if (!raw) return;
+    const token = raw;
+    console.log('Found .print-agent-token file; registering token to database (if missing)');
+
+    // Determine companyId to use: prefer explicit .print-agent-company file (dev convenience)
+    const companyFile = path.join(process.cwd(), '.print-agent-company');
+    let companyId = null;
+    if (fs.existsSync(companyFile)) {
+      try {
+        const rawc = fs.readFileSync(companyFile, { encoding: 'utf8' }).trim();
+        if (rawc) companyId = rawc;
+      } catch (e) {
+        console.warn('Failed to read .print-agent-company file, falling back to first company', e && e.message ? e.message : e);
+      }
+    }
+
+    let company = null;
+    if (companyId) {
+      company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true } });
+      if (!company) {
+        console.warn(`.print-agent-company specified id ${companyId} but no such company found; falling back to first company in DB`);
+      }
+    }
+    if (!company) {
+      // find first company (single-tenant dev instances usually have one)
+      company = await prisma.company.findFirst({ select: { id: true } });
+    }
+    if (!company) {
+      console.warn('No company record present in DB; skipping PrinterSetting upsert');
+      return;
+    }
+
+    const tokenHash = sha256(token);
+    const existing = await prisma.printerSetting.findUnique({ where: { companyId: company.id } });
+    if (existing) {
+      if (existing.agentTokenHash !== tokenHash) {
+        await prisma.printerSetting.update({ where: { companyId: company.id }, data: { agentTokenHash: tokenHash, agentTokenCreatedAt: new Date() } });
+        console.log('Updated PrinterSetting.agentTokenHash for company', company.id);
+      } else {
+        console.log('PrinterSetting.agentTokenHash already matches file token');
+      }
+    } else {
+      await prisma.printerSetting.create({ data: { companyId: company.id, agentTokenHash: tokenHash, agentTokenCreatedAt: new Date() } });
+      console.log('Created PrinterSetting with agent token for company', company.id);
+    }
+  } catch (e) {
+    console.error('Failed to ensure agent token from file:', e && e.message ? e.message : e);
+  }
+}
+
+
 /**
  * Tenta iniciar o servidor HTTPS em `port`. Se o porto estiver em uso,
  * tenta o próximo porto (port+1) até `retries` tentativas.
@@ -145,8 +207,10 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
     const hostLabel = process.env.HOST || 'localhost';
     console.log(`✅ HTTPS rodando em https://${hostLabel}:${port}`);
     try {
-      attachSocket(server);
-      console.log('🔌 Socket.IO anexado ao servidor HTTPS');
+      const io = attachSocket(server);
+        console.log('🔌 Socket.IO anexado ao servidor HTTPS');
+        // expose io instance to routes via app.locals so routes can emit to agents
+        try { app.locals.io = io } catch (e) { console.warn('Could not set app.locals.io', e) }
       // start file watcher (if any paths configured)
       startWatching().catch(e => console.error('Failed to start file watcher:', e));
     } catch (e) {
@@ -155,4 +219,9 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
   });
 }
 
-startServer();
+// Ensure token file (if present) is registered, then start the server
+ensureAgentTokenFromFile().then(() => startServer()).catch(e => {
+  console.error('Error processing .print-agent-token:', e && e.message ? e.message : e);
+  // still attempt to start server even if token processing failed
+  startServer();
+});

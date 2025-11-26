@@ -1,0 +1,19 @@
+pedido: XPTO-987 | 2025-10-30
+JOÃAAAAO DA SILVA
+--------------------
+Rua dos Testes, 123 - Centro - São Paulo/SP
+---------------------
+Telefones: 11987654321
+
+QT  Descrição                Valor
+1   X-Salada                    18.50
+1   Batata Média                 9.90
+
+Quantidade de itens  2
+---------------------------
+Total de itens   28.40
+
+FORMAS DE PAGAMENTO
+[QR IMAGE]
+
+[QR_PRESENCE] data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAYAAAAbWs+BAAASuElEQVR4Xu2d0XIbOw5E4///6LtSclO1a5Guc9zESFp3njEg2OgGQM7I+fjn9u9X/xWBInAJAh8V3CU4d5Ei8BuBCq5EKAIXIlDBXQh2lyoCFVw5UAQuRKCCuxDsLlUEKr...[truncated]

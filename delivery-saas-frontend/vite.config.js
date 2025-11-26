@@ -18,17 +18,22 @@ export default defineConfig({
     // - ca_bundle.crt (optional CA bundle / chain)
     https: (function() {
       try {
-  const sslDir = path.resolve(__dirname, './ssl');
-  const backendSslDir = path.resolve(__dirname, '../delivery-saas-backend/ssl');
-  const keyPath = fs.existsSync(path.join(sslDir, 'private.key')) ? path.join(sslDir, 'private.key') : path.join(backendSslDir, 'localhost-key.pem');
-  const certPath = fs.existsSync(path.join(sslDir, 'certificate.crt')) ? path.join(sslDir, 'certificate.crt') : path.join(backendSslDir, 'localhost-crt.pem');
-  const caPath = fs.existsSync(path.join(sslDir, 'ca_bundle.crt')) ? path.join(sslDir, 'ca_bundle.crt') : path.join(backendSslDir, 'localhost-chain.pem');
+        // Enable HTTPS only when explicitly requested via VITE_DEV_HTTPS=1.
+        // Default is to start the dev server without TLS to avoid mixed-content
+        // issues during development.
+        if (String(process.env.VITE_DEV_HTTPS || '').toLowerCase() !== '1') return false;
 
-  const opts = {};
-  if (fs.existsSync(keyPath)) opts.key = fs.readFileSync(keyPath);
-  if (fs.existsSync(certPath)) opts.cert = fs.readFileSync(certPath);
-  // prefer explicit ca bundle if provided
-  if (fs.existsSync(caPath)) opts.ca = fs.readFileSync(caPath);
+        const sslDir = path.resolve(__dirname, './ssl');
+        const backendSslDir = path.resolve(__dirname, '../delivery-saas-backend/ssl');
+        const keyPath = fs.existsSync(path.join(sslDir, 'private.key')) ? path.join(sslDir, 'private.key') : path.join(backendSslDir, 'localhost-key.pem');
+        const certPath = fs.existsSync(path.join(sslDir, 'certificate.crt')) ? path.join(sslDir, 'certificate.crt') : path.join(backendSslDir, 'localhost-crt.pem');
+        const caPath = fs.existsSync(path.join(sslDir, 'ca_bundle.crt')) ? path.join(sslDir, 'ca_bundle.crt') : path.join(backendSslDir, 'localhost-chain.pem');
+
+        const opts = {};
+        if (fs.existsSync(keyPath)) opts.key = fs.readFileSync(keyPath);
+        if (fs.existsSync(certPath)) opts.cert = fs.readFileSync(certPath);
+        // prefer explicit ca bundle if provided
+        if (fs.existsSync(caPath)) opts.ca = fs.readFileSync(caPath);
 
         // if none found, return false to let Vite start without HTTPS
         if (!opts.key || !opts.cert) return false;
@@ -38,7 +43,23 @@ export default defineConfig({
         return false;
       }
     })(),
-  host: 'dev.redemultilink.com.br',
-    port: 5173,
+  // Allow overriding the dev host via env (VITE_DEV_HOST) so you can run on localhost or a custom dev domain
+  host: process.env.VITE_DEV_HOST || process.env.HOST || 'localhost',
+    port: process.env.VITE_PORT ? Number(process.env.VITE_PORT) : 5173,
+    // Proxy API requests to the backend during local development to avoid CORS
+    // The proxy target protocol follows the backend SSL setting (DISABLE_SSL).
+    proxy: (function() {
+      const backendProto = (String(process.env.DISABLE_SSL || '').toLowerCase() === '1') ? 'http' : 'https';
+      const target = `${backendProto}://localhost:3000`;
+      return {
+        '/api': { target, changeOrigin: true, secure: false },
+        '/auth': { target, changeOrigin: true, secure: false },
+        '/socket.io': { target, ws: true, changeOrigin: true, secure: false },
+        // Agent setup endpoints used by the PrinterSetup UI
+        '/agent-setup': { target, changeOrigin: true, secure: false },
+        // allow forwarding /agent-print to backend so frontend can call it directly in dev
+        '/agent-print': { target, changeOrigin: true, secure: false }
+      };
+    })(),
   },
 });

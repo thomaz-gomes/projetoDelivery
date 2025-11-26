@@ -14,8 +14,18 @@ export const useOrdersStore = defineStore('orders', {
       this.loading = true;
       try {
         const { data } = await api.get('/orders');
-        this.orders = data;
-        return data;
+        // Defensive: ensure backend returned an array. If not, try to
+        // accept common wrapper shapes ({ orders: [...] }) or fallback
+        // to an empty array and log for easier debugging.
+        if (Array.isArray(data)) {
+          this.orders = data;
+        } else if (data && Array.isArray(data.orders)) {
+          this.orders = data.orders;
+        } else {
+          console.warn('Unexpected /orders response shape, expected array. Setting empty list.', data);
+          this.orders = [];
+        }
+        return this.orders;
       } finally {
         this.loading = false;
       }

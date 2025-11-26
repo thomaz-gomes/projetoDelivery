@@ -18,7 +18,7 @@ const fetch = global.fetch || require('node-fetch');
       neighborhood: 'Centro'
     };
 
-    const res = await fetch('https://localhost:3000/public/1/orders', {
+    const res = await fetch('http://localhost:3000/public/1/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

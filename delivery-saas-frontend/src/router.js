@@ -19,6 +19,8 @@ import CustomerProfile from './views/CustomerProfile.vue';
 import IFoodIntegration from './views/IFoodIntegration.vue';
 import Stores from './views/Stores.vue';
 import TestTools from './views/TestTools.vue';
+import PrinterSetup from './components/PrinterSetup.vue';
+import AgentTokenAdmin from './views/AgentTokenAdmin.vue';
 import StoreForm from './views/StoreForm.vue';
 import FileSourceSettings from './views/FileSourceSettings.vue';
 import CompanySettings from './views/CompanySettings.vue';
@@ -75,6 +77,8 @@ const router = createRouter({
   { path: '/settings/stores/new', component: StoreForm, meta: { requiresAuth: true } },
   { path: '/settings/stores/:id', component: StoreForm, meta: { requiresAuth: true } },
   { path: '/settings/devtools', component: TestTools, meta: { requiresAuth: true } },
+  { path: '/settings/printer-setup', component: PrinterSetup, meta: { requiresAuth: true } },
+  { path: '/settings/agent-token', component: AgentTokenAdmin, meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/file-source', component: FileSourceSettings, meta: { requiresAuth: true } },
   { path: '/settings/file-source/preview', component: FileSourcePreview, meta: { requiresAuth: true } },
   { path: '/affiliates', component: AffiliateListing, meta: { requiresAuth: true } },
@@ -92,6 +96,7 @@ const router = createRouter({
    ,{ path: '/public/:companyId/menu', component: PublicMenu }
   ,{ path: '/public/:companyId/order/:orderId', component: OrderStatus }
   ,{ path: '/public/:companyId/history', component: OrderHistory }
+  ,{ path: '/public/:companyId/orders', redirect: to => ({ path: `/public/${to.params.companyId}/history`, query: to.query }) }
   ,{ path: '/menu/admin', component: MenuAdmin, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus', component: Menus, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus/new', component: MenuEdit, meta: { requiresAuth: true } }

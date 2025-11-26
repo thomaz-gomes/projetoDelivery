@@ -1,0 +1,16 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | Teste de impressão — Delivery | 0
+
+
+[alignLeft]
+Cliente: TEST PRINT
+Endereço: -
+Total: R$ 0.00
+
+
+[alignCenter]
+Obrigado!
+[CUT]

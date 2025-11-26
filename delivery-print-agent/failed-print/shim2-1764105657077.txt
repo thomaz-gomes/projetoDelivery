@@ -1,0 +1,18 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | Coca cola sem açúcar | 0
+1 | Frango grelhado | 22.9
+1 | Coca Cola Original | 6
+
+
+[alignLeft]
+Cliente: John doe
+Endereço: -
+Total: R$ 28.90
+
+
+[alignCenter]
+Obrigado!
+[CUT]

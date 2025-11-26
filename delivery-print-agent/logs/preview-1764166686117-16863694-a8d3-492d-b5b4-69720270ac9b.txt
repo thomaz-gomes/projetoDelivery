@@ -1,0 +1,24 @@
+[OBJECT OBJECT]
+Pedido: 13 | ID:16863694-a8d3-492d-b5b4-69720270ac9b | 2025-11-26 21:43:17
+JOHN DOEE
+--------------------
+Rua Tordesilhas, Eunápolis, 45820-131, Brazil
+---------------------
+Telefones: (73) 9 8128-7040
+
+Itens e opcionais
+QT  Descrição                Valor
+1   Bife Acebolado              36.99
+-- 1 Fanta     12.00
+
+Quantidade de itens  1
+---------------------------
+Total de itens   36.99
+Taxa entrega     10.00
+
+FORMAS DE PAGAMENTO
+CARTÃO DE CRÉDITO   46.99
+[QR IMAGE]
+Loja: 2e25e850-768f-4c5e-ae2c-95e16388b4b8
+
+[QR_PRESENCE] data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAYAAAAbWs+BAAASk0lEQVR4Xu2d0XZrtw1E4///6NZKk9XVa9LZu0NQku/4GYcABzMAyCPJH//6/Pujf0WgCFxB4KOCu4JznRSBPxGo4EqEInARgQruIth1VQQquHKgCFxEoIK7CHZdFYEKrh...[truncated]

@@ -10,6 +10,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
 import { io } from "socket.io-client";
+import { SOCKET_URL } from '@/config';
 import printService, { isConnecting } from "../services/printService.js";
 import { computed } from 'vue';
 
@@ -19,24 +20,20 @@ let socket;
 let reconnectTimer;
 
 onMounted(async () => {
-  // 🚀 tentativa inicial de conectar ao QZ Tray
-  async function ensureQZConnected() {
+  // tentativa inicial de conectar ao serviço de impressão (backend/agent)
+  async function ensurePrintServiceConnected() {
     if (!printService.isConnected()) {
       const ok = await printService.connectQZ();
-      if (ok) console.log("✅ QZ Tray conectado e pronto.");
+      if (ok) console.log("✅ Serviço de impressão conectado e pronto.");
     }
   }
 
-  await ensureQZConnected();
-  reconnectTimer = setInterval(ensureQZConnected, 15000); // tenta reconectar a cada 15s
+  await ensurePrintServiceConnected();
+  reconnectTimer = setInterval(ensurePrintServiceConnected, 15000); // tenta reconectar a cada 15s
 
   // ⚡ conectar ao backend via Socket.IO (use VITE_API_URL or derive from page)
-  const API_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== 'https://localhost:3000')
-    ? import.meta.env.VITE_API_URL
-    : `${location.protocol}//${location.hostname}:3000`;
-
   // prefer polling first for better resilience on some networks
-  socket = io(API_URL, {
+  socket = io(SOCKET_URL, {
     transports: ['polling', 'websocket'],
     reconnectionAttempts: Infinity,
     reconnectionDelay: 2000,

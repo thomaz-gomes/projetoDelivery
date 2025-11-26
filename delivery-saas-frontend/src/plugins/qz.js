@@ -1,59 +1,39 @@
-// src/plugins/qz.js
-// Use the QZ Tray instance provided by the script tags in index.html (window.qz)
-// This avoids bundling a second copy of qz-tray and ensures the global
-// dependencies loaded via CDN (RSVP, js-sha256) are available.
-import { connectQZ } from "../services/printService.js";
+// Replacement plugin: QZ Tray is no longer used.
+// This module provides a small compatibility layer with the same exports
+// (`initQZ` and `printComanda`) so the frontend can call printing without
+// referencing `window.qz`. Printing is delegated to a backend HTTP endpoint
+// (`/api/print`) or to any proxy the app provides.
 
-const qz = window.qz;
 export async function initQZ() {
-  if (!qz) return console.warn("⚠️ QZ Tray não encontrado em window.qz (verifique index.html)");
+  // No-op replacement for legacy init. Keep for compatibility.
+  console.log('print plugin: QZ Tray removed — init no-op');
+  return false;
+}
 
-  // Define uso de Promises nativas
+export async function printComanda(order) {
+  if (!order) return console.warn('print plugin: pedido indefinido');
+
   try {
-    qz.api.setPromiseType((resolver) => new Promise(resolver));
+    // Send order to backend print endpoint. Adjust URL if your backend exposes
+    // a different route for printing (e.g. `/print` or external print agent).
+    const res = await fetch('/api/print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order })
+    });
 
-    // Em ambiente de desenvolvimento podemos usar certificado vazio (já definido em index.html)
-    if (qz.security) {
-      qz.security.setCertificatePromise(() => Promise.resolve(""));
-      qz.security.setSignaturePromise(() => Promise.resolve(""));
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      console.error('print plugin: falha ao enviar impressão', res.status, txt);
+      return false;
     }
 
-    // Use the centralized connectQZ from printService which implements
-    // a concurrency guard and backoff to avoid overlapping connect attempts.
-    const ok = await connectQZ();
-    if (ok) console.log("✅ QZ Tray conectado!");
+    console.log('print plugin: pedido enviado para impressão (backend)');
+    return true;
   } catch (e) {
-    console.error("❌ Erro ao conectar ao QZ Tray:", e);
+    console.error('print plugin: erro ao enviar impressão', e);
+    return false;
   }
 }
 
-/**
- * Imprime uma comanda simples
- */
-export async function printComanda(order) {
-  if (!order) return console.warn("⚠️ Pedido indefinido");
-
-  if (!window.qz) return console.warn("⚠️ QZ Tray não disponível");
-  const config = qz.configs.create(order.printer || "EPSON");
-
-  const display = order.displaySimple != null ? String(order.displaySimple).padStart(2,'0') : (order.displayId != null ? String(order.displayId).padStart(2,'0') : order.id.slice(0,6));
-  const data = [
-    { type: "raw", format: "plain", data: "\x1B@\n" }, // reset
-  { type: "raw", format: "plain", data: `PEDIDO: ${display}\n` },
-    { type: "raw", format: "plain", data: `Cliente: ${order.customerName || "Cliente"}\n` },
-    { type: "raw", format: "plain", data: `Endereço: ${order.address || "N/A"}\n\n` },
-    ...(order.items || []).map((it) => ({
-      type: "raw",
-      format: "plain",
-      data: `${it.quantity}x ${it.name} - R$${it.price?.toFixed(2) ?? 0}\n`,
-    })),
-    { type: "raw", format: "plain", data: `\nTOTAL: R$${order.total?.toFixed(2) ?? 0}\n\n\x1DV0` },
-  ];
-
-    try {
-      await qz.print(config, data);
-  console.log(`🖨️ Comanda impressa (${display})`);
-    } catch (err) {
-      console.error("❌ Erro ao imprimir:", err.message);
-    }
-}
+export default { initQZ, printComanda };
