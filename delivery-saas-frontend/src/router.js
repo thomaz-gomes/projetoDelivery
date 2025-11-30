@@ -17,6 +17,8 @@ import CustomersList from './views/CustomersList.vue';
 import CustomerForm from './views/CustomerForm.vue';
 import CustomerProfile from './views/CustomerProfile.vue';
 import IFoodIntegration from './views/IFoodIntegration.vue';
+import Integrations from './views/Integrations.vue';
+import IntegrationForm from './views/IntegrationForm.vue';
 import Stores from './views/Stores.vue';
 import TestTools from './views/TestTools.vue';
 import PrinterSetup from './components/PrinterSetup.vue';
@@ -73,6 +75,9 @@ const router = createRouter({
   { path: '/settings/company', component: CompanySettings, meta: { requiresAuth: true } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true } },
   { path: '/settings/ifood', component: IFoodIntegration }, // 👈 AQUI
+  { path: '/integrations', component: Integrations, meta: { requiresAuth: true } },
+  { path: '/integrations/new', component: IntegrationForm, meta: { requiresAuth: true } },
+  { path: '/integrations/:id', component: IntegrationForm, meta: { requiresAuth: true } },
   { path: '/settings/stores', component: Stores, meta: { requiresAuth: true } },
   { path: '/settings/stores/new', component: StoreForm, meta: { requiresAuth: true } },
   { path: '/settings/stores/:id', component: StoreForm, meta: { requiresAuth: true } },

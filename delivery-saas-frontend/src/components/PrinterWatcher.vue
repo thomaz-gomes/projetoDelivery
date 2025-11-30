@@ -20,16 +20,15 @@ let socket;
 let reconnectTimer;
 
 onMounted(async () => {
-  // tentativa inicial de conectar ao serviço de impressão (backend/agent)
-  async function ensurePrintServiceConnected() {
-    if (!printService.isConnected()) {
-      const ok = await printService.connectQZ();
-      if (ok) console.log("✅ Serviço de impressão conectado e pronto.");
-    }
+  // keep connectivity checked in background (no QZ Tray)
+  async function ensureConnectivity() {
+    try {
+      await printService.checkConnectivity();
+    } catch (e) {}
   }
 
-  await ensurePrintServiceConnected();
-  reconnectTimer = setInterval(ensurePrintServiceConnected, 15000); // tenta reconectar a cada 15s
+  await ensureConnectivity();
+  reconnectTimer = setInterval(ensureConnectivity, 15000);
 
   // ⚡ conectar ao backend via Socket.IO (use VITE_API_URL or derive from page)
   // prefer polling first for better resilience on some networks

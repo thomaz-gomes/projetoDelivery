@@ -73,7 +73,7 @@ const status = ref('')
 const agentDetecting = ref(false)
 
 // Default printerCodepage set to the most common Windows printing codepage
-const form = reactive({ backend: '', storeIds: '', token: '', printer: '', printerInterface: '', printerType: 'EPSON', printerCodepage: 'windows-1252', dryRun: true })
+const form = reactive({ backend: '', storeIds: '', token: '', printer: '', printerInterface: '', printerType: 'EPSON', printerCodepage: 'utf8', dryRun: true })
 const autoDetected = ref(false)
 
 onMounted(async () => {

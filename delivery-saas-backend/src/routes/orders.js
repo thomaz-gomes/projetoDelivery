@@ -1,6 +1,6 @@
 import express from 'express';
 import { prisma } from '../prisma.js';
-import { emitirPedidoAtualizado } from '../index.js';
+import { emitirPedidoAtualizado, emitirNovoPedido } from '../index.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { upsertCustomerFromIfood, findOrCreateCustomer } from '../services/customers.js';
 import { trackAffiliateSale } from '../services/affiliates.js';
@@ -68,14 +68,8 @@ ordersRouter.get('/', async (req, res) => {
     console.warn('Failed to compute displaySimple for orders list', e?.message || e);
   }
 
-  res.json(orders);
-});
+  return res.json(orders);
 
-ordersRouter.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body || {};
-  const allowed = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONCLUIDO', 'CANCELADO'];
-  if (!allowed.includes(status)) return res.status(400).json({ message: 'Status inválido' });
 
   // registra histórico com o status anterior
   const existing = await prisma.order.findUnique({ where: { id } });
@@ -397,6 +391,7 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
   try {
     const { customerName, customerPhone, orderType = 'BALCAO', address = {}, items = [], payment = null, coupon } = req.body || {};
+    const requestedStoreId = req.body && req.body.storeId ? String(req.body.storeId) : null;
     if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Itens são obrigatórios' });
 
     const type = String(orderType || 'BALCAO').toUpperCase();
@@ -483,12 +478,24 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       }
     } catch (e) { console.warn('PDV: falha ao criar/achar cliente', e?.message || e); }
 
-    // resolve store fallback (single store) similar a public route
+    // resolve store: prefer explicit `storeId` from request (validate belongs to company),
+    // otherwise fallback to single-store companies like the public route
     let resolvedStore = null;
     try {
-      const count = await prisma.store.count({ where: { companyId } });
-      if (count === 1) {
-        resolvedStore = await prisma.store.findFirst({ where: { companyId } });
+      if (requestedStoreId) {
+        const s = await prisma.store.findFirst({ where: { id: requestedStoreId, companyId }, select: { id: true } });
+        if (s) {
+          resolvedStore = s;
+          console.log('PDV: using requested storeId for order creation:', requestedStoreId);
+        } else {
+          console.warn('PDV: requested storeId does not belong to company, ignoring:', requestedStoreId);
+        }
+      }
+      if (!resolvedStore) {
+        const count = await prisma.store.count({ where: { companyId } });
+        if (count === 1) {
+          resolvedStore = await prisma.store.findFirst({ where: { companyId } });
+        }
       }
     } catch (e) { /* ignore */ }
 
@@ -520,6 +527,62 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       include: { items: true, histories: true }
     });
 
+    try {
+      // generate QR for delivery orders so agents can print the QR on comanda
+      try {
+        if (String(type || '').toUpperCase() === 'DELIVERY') {
+          try {
+            const QRLib = await import('qrcode');
+            const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+            const qrTarget = `${frontend}/orders/${created.id}`;
+            const dataUrl = await QRLib.toDataURL(qrTarget, { width: 240 });
+            try {
+              // check prisma model fields to avoid Unknown argument errors
+              const hasField = (() => {
+                try {
+                  const model = prisma && prisma._dmmf && prisma._dmmf.modelMap && prisma._dmmf.modelMap.Order;
+                  if (!model || !Array.isArray(model.fields)) return false;
+                  return model.fields.some(f => ['qrDataUrl', 'qrText', 'rasterDataUrl'].includes(f.name));
+                } catch (e) { return false; }
+              })();
+              if (hasField) {
+                await prisma.order.update({ where: { id: created.id }, data: { qrDataUrl: dataUrl, qrText: qrTarget, rasterDataUrl: dataUrl } });
+                created.qrDataUrl = dataUrl;
+                created.qrText = qrTarget;
+                created.rasterDataUrl = dataUrl;
+              } else {
+                const current = await prisma.order.findUnique({ where: { id: created.id }, select: { payload: true } });
+                const currentPayload = (current && current.payload) ? current.payload : {};
+                currentPayload.qrDataUrl = dataUrl;
+                currentPayload.qrText = qrTarget;
+                currentPayload.rasterDataUrl = dataUrl;
+                await prisma.order.update({ where: { id: created.id }, data: { payload: currentPayload } });
+                created.payload = currentPayload;
+                created.qrText = qrTarget;
+                created.rasterDataUrl = dataUrl;
+              }
+            } catch (eUp) { console.warn('PDV: failed to persist qrDataUrl for order', created.id, eUp && eUp.message); }
+          } catch (eQr) { console.warn('PDV: failed to generate QR for order', created.id, eQr && eQr.message); }
+        }
+      } catch (eInner) { /* ignore */ }
+      // emit novo-pedido so connected agents can receive and print immediately
+      try {
+        const emitObj = {
+          id: created.id,
+          companyId: created.companyId || null,
+          storeId: created.storeId || (created.payload && created.payload.storeId) || null,
+          qrDataUrl: created.qrDataUrl || (created.payload && created.payload.qrDataUrl) || null,
+          rasterDataUrl: created.rasterDataUrl || (created.payload && created.payload.rasterDataUrl) || null,
+          qrText: created.qrText || (created.payload && created.payload.qrText) || null,
+          payload: created.payload || null,
+          items: created.items || null
+        };
+        emitirNovoPedido(emitObj);
+      } catch (eEmit) {
+        console.warn('emitirNovoPedido failed for created order', created && created.id, eEmit && eEmit.message);
+        emitirNovoPedido(created);
+      }
+    } catch (e) { console.warn('Emitir novo pedido falhou:', e && e.message); }
     try { emitirPedidoAtualizado(created); } catch (e) { /* ignore */ }
     return res.status(201).json(created);
   } catch (e) {

@@ -25,7 +25,7 @@ couponsRouter.get('/', async (req, res) => {
     }
 
     if (code) {
-      where.code = { contains: code, mode: 'insensitive' }
+      where.code = { contains: code }
     }
 
     if (isPercentage !== undefined) {

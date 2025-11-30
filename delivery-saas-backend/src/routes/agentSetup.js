@@ -58,7 +58,32 @@ agentSetupRouter.post('/token', requireRole('ADMIN'), async (req, res) => {
       return res.json({ token });
     } catch (e) {
       console.error('POST /agent-setup/token rotateAgentToken failed', e && e.message ? e.message : e);
-      return res.status(500).json({ message: 'Falha ao gerar token do agente', error: e && e.message ? e.message : String(e) });
+      // Fallback: try to generate a token locally and write dev convenience files
+      try {
+        const token = randomToken(24);
+        try {
+          if (process.env.NODE_ENV !== 'production') {
+            const root = process.cwd();
+            try { fs.writeFileSync(path.join(root, '.print-agent-token'), token, { encoding: 'utf8' }) } catch (err) { /* ignore */ }
+            try { fs.writeFileSync(path.join(root, '.print-agent-company'), companyId, { encoding: 'utf8' }) } catch (err) { /* ignore */ }
+            console.log('agent-setup/token fallback: wrote .print-agent-token and .print-agent-company for company', companyId);
+          }
+        } catch (wf) { console.warn('agent-setup/token fallback: failed to write token files', wf && wf.message); }
+
+        // try to notify connected agents via socket if available
+        try {
+          const io = req.app && req.app.locals && req.app.locals.io;
+          if (io && typeof io.emit === 'function') {
+            io.emit('agent-token-rotated', { companyId, token });
+            console.log('agent-setup/token fallback: emitted agent-token-rotated via Socket.IO');
+          }
+        } catch (emitErr) { console.warn('agent-setup/token fallback: emit failed', emitErr && emitErr.message); }
+
+        return res.json({ token, fallback: true });
+      } catch (fallbackErr) {
+        console.error('agent-setup/token fallback also failed', fallbackErr && fallbackErr.message ? fallbackErr.message : fallbackErr);
+        return res.status(500).json({ message: 'Falha ao gerar token do agente', error: e && e.message ? e.message : String(e) });
+      }
     }
   } catch (e) {
     console.error('POST /agent-setup/token failed', e)
@@ -72,33 +97,43 @@ agentSetupRouter.post('/settings', requireRole('ADMIN'), async (req, res) => {
     const companyId = req.user && req.user.companyId
     if (!companyId) return res.status(400).json({ message: 'companyId ausente no token' })
 
+    // defensive parsing and logging to help diagnose 500s reported by frontend
     const { interface: iface, type, width, headerName, headerCity } = req.body || {}
     const data = {}
-    if (iface !== undefined) data.interface = iface
-    if (type !== undefined) data.type = type
-    if (width !== undefined) data.width = Number(width) || undefined
-    if (headerName !== undefined) data.headerName = headerName
-    if (headerCity !== undefined) data.headerCity = headerCity
-
-    const existing = await prisma.printerSetting.findUnique({ where: { companyId } })
-    let updated
-    if (existing) {
-      updated = await prisma.printerSetting.update({ where: { companyId }, data })
-    } else {
-      updated = await prisma.printerSetting.create({ data: Object.assign({ companyId }, data) })
+    if (iface !== undefined) data.interface = String(iface)
+    if (type !== undefined) data.type = String(type)
+    if (width !== undefined) {
+      const w = Number(width)
+      if (Number.isFinite(w) && w > 0) data.width = Math.floor(w)
+      else data.width = undefined
     }
+    if (headerName !== undefined) data.headerName = headerName === null ? null : String(headerName)
+    if (headerCity !== undefined) data.headerCity = headerCity === null ? null : String(headerCity)
 
-    res.json({ ok: true, setting: {
-      interface: updated.interface,
-      type: updated.type,
-      width: updated.width,
-      headerName: updated.headerName,
-      headerCity: updated.headerCity,
-      agentTokenCreatedAt: updated.agentTokenCreatedAt
-    }})
+    try {
+      const existing = await prisma.printerSetting.findUnique({ where: { companyId } })
+      let updated
+      if (existing) {
+        updated = await prisma.printerSetting.update({ where: { companyId }, data })
+      } else {
+        updated = await prisma.printerSetting.create({ data: Object.assign({ companyId }, data) })
+      }
+
+      return res.json({ ok: true, setting: {
+        interface: updated.interface,
+        type: updated.type,
+        width: updated.width,
+        headerName: updated.headerName,
+        headerCity: updated.headerCity,
+        agentTokenCreatedAt: updated.agentTokenCreatedAt
+      }})
+    } catch (dbErr) {
+      console.error('Printer settings DB error for company', companyId, 'body:', req.body, 'user:', req.user, dbErr && dbErr.stack ? dbErr.stack : dbErr)
+      return res.status(500).json({ message: 'Erro ao persistir configuração de impressão (DB)', error: dbErr && dbErr.message ? dbErr.message : String(dbErr) })
+    }
   } catch (e) {
-    console.error('POST /agent-setup/settings failed', e)
-    res.status(500).json({ message: 'Falha ao salvar configuração de impressão', error: e?.message || String(e) })
+    console.error('POST /agent-setup/settings failed (unexpected)', e && e.stack ? e.stack : e)
+    res.status(500).json({ message: 'Falha inesperada ao salvar configuração de impressão', error: e?.message || String(e) })
   }
 })
 

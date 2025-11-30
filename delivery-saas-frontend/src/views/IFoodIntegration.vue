@@ -131,12 +131,16 @@ async function load() {
 }
 
 async function save() {
+  if (!form.value.storeId) {
+    statusMsg.value = 'Selecione a loja para vincular a integração.';
+    return;
+  }
   await api.post('/integrations/IFOOD', {
     clientId: form.value.clientId,
     clientSecret: form.value.clientSecret,
     merchantId: form.value.merchantId,
     enabled: true,
-    storeId: form.value.storeId || null,
+    storeId: form.value.storeId,
   });
   await load();
   statusMsg.value = 'Credenciais salvas.';
@@ -233,9 +237,9 @@ onMounted(loadStores);
           <input class="form-control" v-model="form.merchantId" :readonly="integrationActive" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Vincular a Loja (opcional)</label>
-          <select class="form-select" v-model="form.storeId" :disabled="integrationActive">
-            <option :value="null">-- Nenhuma --</option>
+          <label class="form-label">Vincular a Loja (obrigatório)</label>
+          <select class="form-select" v-model="form.storeId" :disabled="integrationActive" required>
+            <option :value="null">-- Selecione uma loja --</option>
             <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }} {{ s.cnpj ? ' - ' + s.cnpj : '' }}</option>
           </select>
         </div>

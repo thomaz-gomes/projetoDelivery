@@ -12,6 +12,21 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './assets/main.css';
 import './assets/admin-shared.css';
 
+// inicializar tooltips Bootstrap dinamicamente
+import * as bootstrap from 'bootstrap';
+function initTooltips() {
+  try {
+    const nodes = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    nodes.forEach((el) => {
+      if (!el._tooltip) {
+        el._tooltip = new bootstrap.Tooltip(el);
+      }
+    });
+  } catch (e) {
+    console.warn('initTooltips failed', e);
+  }
+}
+
 // componentes globais
 import BaseButton from './components/BaseButton.vue';
 import BaseIconButton from './components/BaseIconButton.vue';
@@ -44,3 +59,10 @@ app.component("PrinterWatcher", PrinterWatcher);
 
 // monta
 app.mount('#app');
+
+// init tooltips initially and after route changes
+initTooltips();
+router.afterEach(() => {
+  // small timeout to ensure DOM updated
+  setTimeout(initTooltips, 50);
+});

@@ -122,7 +122,7 @@ function normalizeSaiposPayload(parsed, externalId) {
   const id = parsed.id || externalId;
   const displayId = parsed.displayId || parsed.displaySimple || (typeof id === 'string' ? id.slice(0, 6) : undefined);
 
-  const customerName = pick('customerName', 'customer.fullName', 'customer.name', 'customerName');
+  const customerName = pick('customerName', 'customer.fullName', 'customer.name', 'customerName') || null;
   const customerPhone = pick('customerPhone', 'customer.phone', 'customer.phones.0.number', 'phone');
 
   const address = pick('address', 'delivery.deliveryAddress.formattedAddress', 'delivery.address', 'deliveryAddress');
@@ -148,7 +148,7 @@ function normalizeSaiposPayload(parsed, externalId) {
   return {
     id,
     displayId,
-    customer: { name: customerName || 'Importado', phones: customerPhone ? [{ number: customerPhone }] : [] },
+    customer: { name: customerName || null, phones: customerPhone ? [{ number: customerPhone }] : [] },
     delivery: { deliveryAddress: { formattedAddress: address || null, coordinates: { latitude: lat ?? 0, longitude: lng ?? 0 } } },
     total: { orderAmount: Number(totalAmount) },
     items,
@@ -206,7 +206,7 @@ function parseSaiposRaw(parsed, externalId) {
     if (!customerName) {
       for (let i=0;i<rows.length;i++){ const t=stripTags(rows[i]); if (/Telefone/i.test(t)) { if (i>0) customerName = stripTags(rows[i-1]); break; } }
     }
-    if (!customerName) customerName = 'Importado';
+    if (!customerName) customerName = null;
 
     // phone
     let phone = null;

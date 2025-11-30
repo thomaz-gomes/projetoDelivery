@@ -7,6 +7,32 @@ import { upsertCustomerFromIfood } from "../services/customers.js";
 import { emitirNovoPedido } from "../index.js"; // envia o pedido ao front via Socket.IO
 import printQueue from '../printQueue.js'
 
+// Helper: try to process the print queue for the provided storeIds with a
+// small retry/backoff strategy. Returns the final result from processForStores.
+async function tryProcessQueueWithRetries(io, storeIds, maxRetries = 2, baseDelayMs = 1000) {
+  if (!io || !storeIds || !storeIds.length) return { ok: false, results: [] };
+  let attempt = null;
+  try {
+    attempt = await printQueue.processForStores(io, storeIds);
+    // if any job was delivered, return immediately
+    if (attempt && attempt.ok && Array.isArray(attempt.results) && attempt.results.some(r => r && r.ok)) return attempt;
+  } catch (e) {
+    // continue to retries
+  }
+
+  for (let i = 0; i < maxRetries; i++) {
+    const delay = baseDelayMs * Math.pow(2, i); // exponential backoff: 1s, 2s, ...
+    try {
+      await new Promise(res => setTimeout(res, delay));
+      attempt = await printQueue.processForStores(io, storeIds);
+      if (attempt && attempt.ok && Array.isArray(attempt.results) && attempt.results.some(r => r && r.ok)) return attempt;
+    } catch (e) {
+      // swallow and continue
+    }
+  }
+  return attempt || { ok: false, results: [] };
+}
+
 export const webhooksRouter = express.Router();
 
 // 📂 Pasta de logs (para debugging)
@@ -19,11 +45,11 @@ if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 function verifySignature(req, secret) {
   try {
     const sig = req.headers["x-ifood-signature"] || "";
-    if (!sig || !secret) return true; // Se não houver segredo, ignora
+    if (!sig || !secret) return true; // If there's no signature configured, treat as valid
     const raw = JSON.stringify(req.body);
     const h = crypto.createHmac("sha256", secret).update(raw).digest("hex");
     return h === sig;
-  } catch {
+  } catch (e) {
     return false;
   }
 }
@@ -121,29 +147,7 @@ webhooksRouter.post("/ifood", async (req, res) => {
         body = JSON.parse(body);
       } catch {
         console.warn("⚠️ Corpo recebido como string inválida");
-        body = {};
       }
-    }
-
-    // Salva log do corpo original (útil para debug)
-    const logFile = path.join(LOG_DIR, `ifood-${Date.now()}.json`);
-    fs.writeFileSync(logFile, JSON.stringify(body, null, 2), "utf8");
-
-    const okSig = verifySignature(req, process.env.IFOOD_WEBHOOK_SECRET);
-    if (!okSig) {
-      return res.status(401).json({ ok: false, message: "Assinatura inválida" });
-    }
-
-    // Detecta o pedido dentro do corpo
-    const order =
-      body.order ??
-      body.data?.order ??
-      body.payload?.order ??
-      body.resource?.order ??
-      body;
-
-    if (!order || typeof order !== "object") {
-      throw new Error("Payload inválido — corpo sem dados de pedido.");
     }
 
     // 🔎 Resolve empresa
@@ -307,19 +311,205 @@ webhooksRouter.post("/ifood", async (req, res) => {
       console.warn('Failed to compute displaySimple for emitted order', e?.message || e);
     }
 
+    // 🔊 Generate QR (data URL) for delivery orders so agents can print QR on comanda
+    try {
+      const resolvedOrderType = String(saved.orderType || saved.order_type || (saved.payload && (saved.payload.orderType || saved.payload.order_type)) || '').toUpperCase();
+      const hasDeliveryPayload = !!(saved.payload && (saved.payload.delivery || saved.payload.deliveryAddress || saved.payload.orderType === 'DELIVERY'));
+      if (resolvedOrderType === 'DELIVERY' || hasDeliveryPayload) {
+        try {
+          const QRLib = await import('qrcode');
+          const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+          const qrTarget = `${frontend}/orders/${saved.id}`;
+          const dataUrl = await QRLib.toDataURL(qrTarget, { width: 240 });
+          // persist to order so agents can access raster directly
+          try {
+            await prisma.order.update({ where: { id: saved.id }, data: { qrDataUrl: dataUrl, qrText: qrTarget, rasterDataUrl: dataUrl } });
+            saved.qrDataUrl = dataUrl;
+            saved.qrText = qrTarget;
+            saved.rasterDataUrl = dataUrl;
+          } catch (eUp) {
+            // If the schema doesn't have qrDataUrl (Unknown argument), fallback to saving inside JSON payload
+            try {
+              console.warn('Persisting qrDataUrl directly failed, falling back to payload. Reason:', eUp && eUp.message);
+              const current = await prisma.order.findUnique({ where: { id: saved.id }, select: { payload: true } });
+              const currentPayload = (current && current.payload) ? current.payload : {};
+              currentPayload.qrDataUrl = dataUrl;
+              currentPayload.qrText = qrTarget;
+              currentPayload.rasterDataUrl = dataUrl;
+              await prisma.order.update({ where: { id: saved.id }, data: { payload: currentPayload } });
+              // reflect in-memory so emitted object contains the QR
+              saved.payload = currentPayload;
+              saved.qrText = qrTarget;
+              saved.rasterDataUrl = dataUrl;
+              saved.qrText = qrTarget;
+            } catch (e2) {
+              console.warn('Failed to persist qrDataUrl to payload for order', saved.id, e2 && e2.message);
+            }
+          }
+        } catch (eQr) {
+          console.warn('Failed to generate QR for order', saved.id, eQr && eQr.message);
+        }
+      }
+    } catch (e) { /* ignore QR generation errors */ }
+
     // 🔊 Envia o pedido para o painel via Socket.IO
-    emitirNovoPedido(saved);
+    // Ensure emitted object has required fields so agents always receive id + QR info
+    try {
+      const emitObj = {
+        id: saved.id,
+        companyId: saved.companyId || saved.company || null,
+        storeId: saved.storeId || (saved.payload && saved.payload.storeId) || null,
+        qrDataUrl: saved.qrDataUrl || (saved.payload && saved.payload.qrDataUrl) || null,
+        rasterDataUrl: saved.rasterDataUrl || (saved.payload && saved.payload.rasterDataUrl) || null,
+        qrText: saved.qrText || (saved.payload && saved.payload.qrText) || null,
+        payload: saved.payload || null
+      };
+      emitirNovoPedido(emitObj);
+    } catch (eEmit) {
+      console.warn('emitirNovoPedido failed for saved order', saved && saved.id, eEmit && eEmit.message);
+      emitirNovoPedido(saved);
+    }
     console.log(`📦 Pedido salvo e emitido ao painel: ${displayId} (simple:${saved.displaySimple || 'N/A'})`);
+
+    // If saved.storeId is missing, persist the job to the print queue so it
+    // can be processed later when an agent connects. This helps cases where
+    // webhooks do not include storeId information but an agent is available.
+    try {
+      if (!saved.storeId) {
+        const QUEUE_FILE = path.join(process.cwd(), 'tmp', 'print-queue.json');
+        let existing = [];
+        try {
+          if (fs.existsSync(QUEUE_FILE)) {
+            existing = JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8') || '[]') || [];
+          }
+        } catch (e) { existing = [] }
+        const already = existing.find(it => it && it.order && (it.order.id === saved.id || it.order.externalId === saved.externalId));
+        if (!already) {
+          try {
+            const queued = printQueue.enqueue({ order: saved, storeId: saved.storeId || null });
+            console.log('Auto-print: saved.storeId missing — job enqueued for later processing', queued.id);
+            // try processing immediately using handshake-advertised storeIds
+            try {
+              const io = req.app && req.app.locals && req.app.locals.io;
+              if (io) {
+                const hsStoreIds = new Set();
+                Array.from(io.sockets.sockets.values()).forEach(s => {
+                  try {
+                    const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+                    const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+                    if (Array.isArray(handshakeStoreIds)) handshakeStoreIds.forEach(id => hsStoreIds.add(id));
+                  } catch (e) {}
+                });
+                const toTry = Array.from(hsStoreIds).length ? Array.from(hsStoreIds) : null;
+                if (toTry && toTry.length) {
+                  printQueue.processForStores(io, toTry).then(r => {
+                    if (r && r.ok) console.log('Auto-print: processed queue after enqueue (missing storeId), results:', r.results);
+                  }).catch(e => console.warn('Auto-print: processForStores after enqueue failed', e && e.message));
+                }
+              }
+            } catch (e) { }
+          } catch (e) { console.warn('Auto-print: enqueue failed for missing storeId', e && e.message); }
+        }
+      }
+    } catch (e) { /* ignore */ }
 
     // --- Auto-print: try to deliver the order to a connected print agent for this storeId
     try {
       const io = req.app && req.app.locals && req.app.locals.io;
       const storeIdForPrint = saved.storeId || null;
-      if (storeIdForPrint && io) {
-        const candidates = Array.from(io.sockets.sockets.values()).filter(s => s.agent && Array.isArray(s.agent.storeIds) && s.agent.storeIds.includes(storeIdForPrint));
+      // If we don't have a storeId but we do have a companyId, try to target
+      // agents by company as a best-effort (useful when webhooks don't include storeId).
+      const companyIdForPrint = saved.companyId || null;
+      if (io && (storeIdForPrint || companyIdForPrint)) {
+        let candidates = [];
+        if (storeIdForPrint) {
+          candidates = Array.from(io.sockets.sockets.values()).filter(s => {
+            const agentStoreIds = (s.agent && Array.isArray(s.agent.storeIds)) ? s.agent.storeIds : null;
+            const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+            const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+            const storeIds = agentStoreIds || handshakeStoreIds;
+            return storeIds && storeIds.includes(storeIdForPrint);
+          });
+        } else if (companyIdForPrint) {
+          // include sockets that authenticated as agents for this company
+          candidates = Array.from(io.sockets.sockets.values()).filter(s => {
+            try {
+              if (s.agent && s.agent.companyId === companyIdForPrint) return true;
+              const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+              const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+              if (!handshakeStoreIds || !handshakeStoreIds.length) return false;
+              // best-effort: check if any handshake store belongs to this company
+              return false; // placeholder, we'll filter below with DB check
+            } catch (e) { return false; }
+          });
+        }
+        // If we need to consider handshake storeIds for company matching, perform
+        // a single bulk DB query to find which handshake-advertised storeIds
+        // actually belong to the target company, then select matching sockets.
+        if (!storeIdForPrint && companyIdForPrint && io) {
+          try {
+            // map socket -> handshake storeIds and collect all handshake storeIds
+            const socketMap = new Map();
+            const allHsIds = new Set();
+            for (const s of Array.from(io.sockets.sockets.values())) {
+              try {
+                const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+                const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+                if (Array.isArray(handshakeStoreIds) && handshakeStoreIds.length) {
+                  socketMap.set(s, handshakeStoreIds);
+                  handshakeStoreIds.forEach(id => allHsIds.add(id));
+                }
+              } catch (e) { /* ignore per-socket */ }
+            }
+            const allIds = Array.from(allHsIds);
+            let validStoreIds = [];
+            if (allIds.length) {
+              try {
+                const found = await prisma.store.findMany({ where: { id: { in: allIds }, companyId: companyIdForPrint }, select: { id: true } });
+                validStoreIds = (found || []).map(f => String(f.id));
+              } catch (e) { /* ignore DB error, fall back to no matches */ }
+            }
+            // collect sockets whose handshake storeIds intersect validStoreIds
+            const matchedByHandshake = [];
+            if (validStoreIds.length) {
+              for (const [s, hsIds] of socketMap.entries()) {
+                try {
+                  if (hsIds.some(id => validStoreIds.includes(String(id)))) matchedByHandshake.push(s);
+                } catch (e) { /* ignore */ }
+              }
+            }
+            // also include sockets that authenticated as agents for the company
+            const authMatched = Array.from(io.sockets.sockets.values()).filter(s => s.agent && s.agent.companyId === companyIdForPrint);
+            const merged = [...new Set([...(authMatched || []), ...(matchedByHandshake || [])])];
+            candidates = merged;
+          } catch (e) {
+            // on unexpected errors, fall back to no candidates
+            candidates = [];
+          }
+        }
         if (!candidates || candidates.length === 0) {
           const queued = printQueue.enqueue({ order: saved, storeId: storeIdForPrint });
           console.log('Auto-print: no agent connected; job queued', queued.id);
+          // Attempt to process the queue immediately for any connected agents
+          try {
+            if (io) {
+              // collect handshake-advertised storeIds from connected sockets
+              const hsStoreIds = new Set();
+              Array.from(io.sockets.sockets.values()).forEach(s => {
+                try {
+                  const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+                  const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+                  if (Array.isArray(handshakeStoreIds)) handshakeStoreIds.forEach(id => hsStoreIds.add(id));
+                } catch (e) {}
+              });
+              const toTry = storeIdForPrint ? [storeIdForPrint] : (Array.from(hsStoreIds).length ? Array.from(hsStoreIds) : null);
+              if (toTry && toTry.length) {
+                printQueue.processForStores(io, toTry).then(r => {
+                  if (r && r.ok) console.log('Auto-print: processed queue after enqueue, results:', r.results);
+                }).catch(e => console.warn('Auto-print: immediate post-enqueue processForStores failed', e && e.message));
+              }
+            }
+          } catch (e) { /* ignore */ }
         } else {
           // try recently connected agents first
           const sorted = candidates.slice().sort((a, b) => {

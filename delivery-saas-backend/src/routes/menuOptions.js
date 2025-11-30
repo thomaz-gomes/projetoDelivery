@@ -19,6 +19,20 @@ router.get('/', async (req, res) => {
   }
 })
 
+// GET /menu/options/:id - fetch single option group (with options)
+router.get('/:id', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params
+  const companyId = req.user.companyId
+  try {
+    const group = await prisma.optionGroup.findFirst({ where: { id, companyId }, include: { options: { orderBy: { position: 'asc' } } } })
+    if (!group) return res.status(404).json({ message: 'Grupo não encontrado' })
+    return res.json(group)
+  } catch (e) {
+    console.error('Error loading option group', e)
+    return res.status(500).json({ message: 'Erro ao carregar grupo de opções' })
+  }
+})
+
 // POST /menu/options - create group
 router.post('/', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId

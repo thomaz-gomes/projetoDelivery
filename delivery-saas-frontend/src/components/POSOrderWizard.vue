@@ -109,6 +109,16 @@
 
       <div v-else-if="step===3" class="products-step">
         <h6 class="fw-semibold mb-3">Produtos</h6>
+        <div class="mb-3">
+          <label class="form-label small">Loja atribuída</label>
+          <div v-if="storesLoading" class="small text-muted">Carregando lojas...</div>
+          <div v-else>
+            <select v-model="selectedStoreId" class="form-select">
+              <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+            </select>
+            <div v-if="stores.length===0" class="small text-muted mt-1">Nenhuma loja disponível para atribuir.</div>
+          </div>
+        </div>
         <div v-if="menuLoading" class="small">Carregando menu...</div>
         <div v-else class="menu-scroll">
           <div v-for="cat in allProducts" :key="cat.id" class="mb-3">
@@ -140,6 +150,7 @@
             <div class="small d-flex gap-2 mt-1">
               <button class="btn btn-sm btn-outline-secondary" @click="it.quantity++; recalc()">+1</button>
               <button class="btn btn-sm btn-outline-secondary" @click="decQty(it)">-1</button>
+              <button class="btn btn-sm btn-outline-secondary" @click="editItem(idx)">Editar</button>
               <button class="btn btn-sm btn-outline-danger" @click="removeItem(idx)">Remover</button>
             </div>
           </div>
@@ -148,29 +159,94 @@
             <button class="btn btn-success" :disabled="cart.length===0" @click="next">Escolher pagamento</button>
           </div>
         </div>
-        <!-- Inline modal para opcionais -->
+        <!-- Inline modal para opcionais (layout adapted from PublicMenu modal) -->
         <div v-if="showOptions" class="pos-options-overlay">
-          <div class="pos-options-panel">
-            <h6 class="fw-semibold mb-2">{{ activeProduct?.name }} <span class="text-muted small">R$ {{ Number(activeProduct?.price||0).toFixed(2) }}</span></h6>
-            <div class="small mb-2">Quantidade</div>
-            <input type="number" min="1" v-model.number="optionQty" class="form-control mb-2" />
-            <div v-if="activeProduct?.optionGroups?.length" class="mb-2">
-              <div class="small fw-semibold mb-1">Opcionais</div>
-              <div v-for="g in activeProduct.optionGroups" :key="g.id">
-                <div class="small text-muted mb-1">{{ g.name }}</div>
-                <div class="d-flex flex-column gap-1 mb-2">
-                  <button type="button" class="btn btn-sm btn-outline-primary text-start" v-for="opt in g.options" :key="opt.id" @click="toggleOption(opt)">
-                    <span :class="{'fw-semibold': chosenOptions.includes(opt)}">{{ opt.name }}</span>
-                    <span class="ms-2 small text-muted">R$ {{ Number(opt.price||0).toFixed(2) }}</span>
-                  </button>
+          <div class="pos-options-panel d-flex flex-column">
+              <div class="pos-options-body" ref="optionsBodyRef">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                  <h6 class="fw-semibold m-0">{{ activeProduct?.name }} <span class="text-muted small">R$ {{ Number(activeProduct?.price||0).toFixed(2) }}</span></h6>
+                  <div class="small text-muted">{{ activeProduct?.description }}</div>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary d-sm-none" @click="closeOptions" aria-label="Fechar">✕</button>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label small">Quantidade</label>
+                <input type="number" min="1" v-model.number="optionQty" class="form-control" />
+              </div>
+
+                <div class="options-scroll" style="max-height:320px; overflow:auto;">
+                <div v-if="activeProduct?.optionGroups?.length">
+                  <div class="small fw-semibold mb-2">Opcionais</div>
+                  <div v-for="g in activeProduct.optionGroups" :key="g.id" :id="'grp-'+g.id" class="mb-3">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                      <div class="small text-muted">{{ g.name }}</div>
+                      <div v-if="requiredWarnings[g.id]" class="badge bg-danger ms-2">OBRIGATÓRIO</div>
+                    </div>
+                      <div>
+                        <template v-if="g.max === 1">
+                          <div v-for="opt in g.options" :key="opt.id" class="mb-2">
+                            <div class="d-flex justify-content-between align-items-center option-row">
+                              <div class="d-flex align-items-center gap-2 option-left">
+                                <div class="option-meta">
+                                  <div class="option-name">{{ opt.name }}</div>
+                                  <div class="small text-muted option-price">{{ Number(opt.price) > 0 ? formatCurrency(opt.price) : 'Grátis' }}</div>
+                                </div>
+                              </div>
+                              <div style="min-width:96px;display:flex;justify-content:flex-end;align-items:center">
+                                <input type="radio" :name="'grp-'+g.id" :id="'opt_'+g.id+'_'+opt.id" class="form-check-input" :checked="isOptionSelected(opt)" @change="selectRadio(g,opt)" />
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                        <template v-else>
+                          <div v-for="opt in g.options" :key="opt.id" class="mb-2">
+                            <div class="d-flex justify-content-between align-items-center option-row">
+                              <div class="d-flex align-items-center gap-2 option-left">
+                                <div class="option-meta">
+                                  <div class="option-name">{{ opt.name }}</div>
+                                  <div class="small text-muted option-price">{{ Number(opt.price) > 0 ? formatCurrency(opt.price) : 'Grátis' }}</div>
+                                </div>
+                              </div>
+                              <div style="min-width:120px;display:flex;justify-content:flex-end;align-items:center" >
+                                <div v-if="qtyFor(g.id,opt.id) === 0">
+                                  <button class="btn btn-sm btn-primary" @click.prevent="changeOptionQty(g,opt,1)">+</button>
+                                </div>
+                                <div v-else class="d-flex align-items-center gap-2">
+                                  <button class="btn btn-sm btn-outline-secondary" @click.prevent="changeOptionQty(g,opt,-1)">-</button>
+                                  <div class="fw-bold">{{ qtyFor(g.id,opt.id) }}</div>
+                                  <button class="btn btn-sm btn-primary" @click.prevent="changeOptionQty(g,opt,1)">+</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                  </div>
+                </div>
+
+                <div v-if="!activeProduct?.optionGroups?.length && chosenOptions && chosenOptions.length">
+                  <div class="small fw-semibold mb-2">Opcionais selecionados</div>
+                  <ul class="list-unstyled small text-muted mb-2">
+                    <li v-for="(opt, oi) in chosenOptions" :key="oi" class="d-flex justify-content-between align-items-center">
+                      <div>{{ opt.name }} <span class="text-muted">(R$ {{ Number(opt.price||0).toFixed(2) }})</span></div>
+                      <div>
+                        <button class="btn btn-sm btn-outline-danger" @click.prevent="removeChosenOption(oi)">Remover</button>
+                      </div>
+                    </li>
+                  </ul>
                 </div>
               </div>
+
+              
             </div>
-            <div class="mt-3 d-flex justify-content-between align-items-center">
+
+            <div class="pos-options-footer mt-3 d-flex justify-content-between align-items-center">
               <div class="fw-semibold">Total: R$ {{ optionModalTotal.toFixed(2) }}</div>
               <div>
                 <button class="btn btn-outline-secondary btn-sm me-2" @click="closeOptions">Cancelar</button>
-                <button class="btn btn-success btn-sm" @click="confirmOptionsAdd">Adicionar</button>
+                <button class="btn btn-success btn-sm" @click="confirmOptionsAdd">{{ editingIndex !== null ? 'Atualizar' : 'Adicionar' }}</button>
               </div>
             </div>
           </div>
@@ -208,7 +284,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
 
@@ -226,9 +302,13 @@ async function resolveCompanyId(){
   } catch(e){ console.warn('PDV: falha ao hidratar /auth/me', e); }
   return null;
 }
+function formatCurrency(v){
+  try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)); }catch(e){ return 'R$ ' + (Number(v||0).toFixed(2)); }
+}
 const props = defineProps({ 
   visible: { type: Boolean, default: false },
-  initialPhone: { type: String, default: '' }
+  initialPhone: { type: String, default: '' },
+  preset: { type: Object, default: null }
 });
 const emit = defineEmits(['update:visible','created']);
 
@@ -243,6 +323,9 @@ const addr = ref({ street:'', number:'', neighborhood:'', city:'', complement:''
 
 const menuLoading = ref(false);
 const allProducts = ref([]);
+const stores = ref([]);
+const storesLoading = ref(false);
+const selectedStoreId = ref(null);
 const paymentMethods = ref([]);
 const cart = ref([]);
 const paymentMethodCode = ref('');
@@ -254,6 +337,9 @@ const showOptions = ref(false);
 const activeProduct = ref(null);
 const optionQty = ref(1);
 const chosenOptions = ref([]);
+const editingIndex = ref(null);
+const requiredWarnings = ref({});
+const optionsBodyRef = ref(null);
 const neighborhoods = ref([]);
 const neighborhoodsLoading = ref(false);
 const savedAddresses = ref([]);
@@ -354,23 +440,207 @@ function next(){ step.value++; if(step.value===3) loadMenu(); }
 function prev(){ step.value--; }
 
 function selectProduct(p){ activeProduct.value = p; showOptions.value = true; optionQty.value=1; chosenOptions.value=[]; }
-function addToCart(payload){ cart.value.push(payload); showOptions.value=false; recalc(); }
+function addToCart(payload){
+  // persist product id when available so future edits can locate full product
+  if(activeProduct.value && activeProduct.value.id) payload.productId = activeProduct.value.id;
+  cart.value.push(payload);
+  showOptions.value=false;
+  recalc();
+}
+function editItem(idx){
+  const it = cart.value[idx];
+  if(!it) return;
+  // prepare modal in edit mode with current item data
+  editingIndex.value = idx;
+  optionQty.value = Number(it.quantity || 1);
+
+  // try to find the original product by id or name in loaded menu so we can show optionGroups
+  let found = null;
+  if(it.productId){
+    for(const c of allProducts.value){
+      found = (c.products || []).find(p => String(p.id) === String(it.productId));
+      if(found) break;
+    }
+  }
+  if(!found){
+    // fallback: match by name
+    for(const c of allProducts.value){
+      found = (c.products || []).find(p => String(p.name) === String(it.name));
+      if(found) break;
+    }
+  }
+
+  if(found){
+    activeProduct.value = found;
+    // map existing chosen options to the product's option objects when possible (match by id or name)
+    const mapped = [];
+    const flatOpts = (found.optionGroups || []).reduce((acc,g)=> acc.concat(g.options || []), []);
+    (it.options || []).forEach(o => {
+      const qty = Number(o.quantity ?? o.qty ?? 1) || 1;
+      const m = flatOpts.find(po => (po.id && String(po.id) === String(o.id)) || String(po.name) === String(o.name));
+      if(m) mapped.push(Object.assign({}, m, { quantity: qty }));
+      else mapped.push({ name: o.name, price: o.price, id: o.id, quantity: qty });
+    });
+    chosenOptions.value = mapped;
+  } else {
+    // product not found in menu (perhaps menu not loaded) — open modal with minimal info
+    activeProduct.value = { name: it.name, price: it.price };
+    chosenOptions.value = (it.options || []).map(o => ({ ...o }));
+  }
+
+  showOptions.value = true;
+}
 function decQty(it){ if(it.quantity>1){ it.quantity--; recalc(); } }
 function removeItem(idx){ cart.value.splice(idx,1); recalc(); }
 function recalc(){ /* triggers computed */ }
-function toggleOption(opt){ const idx = chosenOptions.value.indexOf(opt); if(idx===-1) chosenOptions.value.push(opt); else chosenOptions.value.splice(idx,1); }
-const optionModalTotal = computed(()=> {
-  const base = Number(activeProduct.value?.price||0) * optionQty.value;
-  const opts = chosenOptions.value.reduce((s,o)=> s + Number(o.price||0),0);
-  return base + opts;
-});
-function closeOptions(){ showOptions.value=false; }
-function confirmOptionsAdd(){
-  if(!activeProduct.value) return;
-  addToCart({ name: activeProduct.value.name, quantity: optionQty.value, price: Number(activeProduct.value.price||0), options: chosenOptions.value.map(o=>({ name:o.name, price:Number(o.price||0) })) });
+// Toggle option by id or name so items edited from cart (which may not have full option objects)
+function toggleOption(opt){
+  try{
+    if(!opt) return;
+    const keyId = opt.id != null ? String(opt.id) : null;
+    const idx = chosenOptions.value.findIndex(co => {
+      if(keyId && co.id != null) return String(co.id) === keyId;
+      return String(co.name) === String(opt.name);
+    });
+    if(idx === -1){
+      // push a shallow copy and default quantity=1
+      chosenOptions.value.push(Object.assign({}, opt, { quantity: 1 }));
+    } else {
+      chosenOptions.value.splice(idx, 1);
+    }
+  }catch(e){ console.warn('toggleOption failed', e); }
+  // clear validation warnings when user interacts
+  try{ requiredWarnings.value = {}; }catch(e){}
 }
 
-const subtotal = computed(()=> cart.value.reduce((s,it)=> s + (Number(it.price||0)*Number(it.quantity||1) + (it.options||[]).reduce((so,o)=> so+Number(o.price||0),0)),0));
+function isOptionSelected(opt){
+  if(!opt) return false;
+  const keyId = opt.id != null ? String(opt.id) : null;
+  return chosenOptions.value.some(co => (keyId && co.id != null) ? String(co.id) === keyId : String(co.name) === String(opt.name));
+}
+const optionModalTotal = computed(()=> {
+  const unitPrice = Number(activeProduct.value?.price||0) || 0;
+  const optsPerUnit = chosenOptions.value.reduce((s,o)=> s + (Number(o.price||0) * (Number(o.quantity||1) || 1)),0);
+  return (unitPrice + optsPerUnit) * (Number(optionQty.value) || 1);
+});
+// ensure editingIndex cleared when closing options without saving
+function closeOptions(){ showOptions.value=false; editingIndex.value = null; requiredWarnings.value = {}; }
+function confirmOptionsAdd(){
+  if(!activeProduct.value) return;
+  // validate required groups before adding
+  if(!validateOptionGroups()) return;
+  const payload = { name: activeProduct.value.name, quantity: optionQty.value, price: Number(activeProduct.value.price||0), productId: activeProduct.value?.id || null, options: chosenOptions.value.map(o=>({ id: o.id, name: o.name, price: Number(o.price||0), quantity: Number(o.quantity||1) })) };
+  if(editingIndex.value !== null && typeof editingIndex.value !== 'undefined'){
+    // update existing item
+    cart.value.splice(editingIndex.value, 1, payload);
+    editingIndex.value = null;
+    showOptions.value = false;
+    recalc();
+    return;
+  }
+  addToCart(payload);
+}
+
+function removeChosenOption(optIdx){
+  if(optIdx==null) return;
+  chosenOptions.value.splice(optIdx,1);
+}
+
+// return quantity selected for option (per product unit)
+function qtyFor(groupId, optId){
+  try{
+    if(!chosenOptions.value || !chosenOptions.value.length) return 0;
+    const key = optId != null ? String(optId) : null;
+    const found = chosenOptions.value.find(co => (key && co.id != null) ? String(co.id) === key : String(co.name) === String(optId));
+    return found ? (Number(found.quantity) || 0) : 0;
+  }catch(e){ return 0; }
+}
+
+// change option quantity by delta. If resulting qty <=0 remove option.
+function changeOptionQty(group, opt, delta){
+  try{
+    if(!opt) return;
+    const keyId = opt.id != null ? String(opt.id) : null;
+    const idx = chosenOptions.value.findIndex(co => (keyId && co.id != null) ? String(co.id) === keyId : String(co.name) === String(opt.name));
+    if(idx === -1){
+      if(delta > 0){
+        chosenOptions.value.push({ id: opt.id, name: opt.name, price: Number(opt.price||0), quantity: Math.max(1, delta) });
+      }
+      return;
+    }
+    const current = Number(chosenOptions.value[idx].quantity || 0);
+    const next = current + delta;
+    if(next <= 0){ chosenOptions.value.splice(idx,1); }
+    else { chosenOptions.value.splice(idx,1, Object.assign({}, chosenOptions.value[idx], { quantity: next })); }
+  // clear validation warnings when user interacts
+  try{ requiredWarnings.value = {}; }catch(e){}
+  }catch(e){ console.warn('changeOptionQty failed', e); }
+}
+
+// select a single option for a group (radio behaviour)
+function selectRadio(group, opt){
+  try{
+    if(!group || !opt) return;
+    // remove any chosen options that are part of this group
+    const ids = (group.options || []).map(o => o.id != null ? String(o.id) : null);
+    chosenOptions.value = chosenOptions.value.filter(co => {
+      if(co.id != null && ids.includes(String(co.id))) return false;
+      // fallback by name
+      if(typeof co.name === 'string' && (group.options || []).some(o => String(o.name) === String(co.name))) return false;
+      return true;
+    });
+    // push selected with qty=1
+    chosenOptions.value.push({ id: opt.id, name: opt.name, price: Number(opt.price||0), quantity: 1 });
+  }catch(e){ console.warn('selectRadio failed', e); }
+  try{ requiredWarnings.value = {}; }catch(e){}
+}
+
+function selectedCountForGroup(g){
+  try{
+    if(!g) return 0;
+    const ids = (g.options || []).map(o => o.id != null ? String(o.id) : null);
+    let cnt = 0;
+    for(const co of chosenOptions.value){
+      if(co == null) continue;
+      if(co.id != null && ids.includes(String(co.id))) cnt += Number(co.quantity || 1) || 1;
+      else if(typeof co.name === 'string' && (g.options||[]).some(o => String(o.name) === String(co.name))) cnt += Number(co.quantity || 1) || 1;
+    }
+    return cnt;
+  }catch(e){ return 0; }
+}
+
+function validateOptionGroups(){
+  try{
+    requiredWarnings.value = {};
+    const groups = activeProduct.value?.optionGroups || [];
+    let ok = true;
+    let firstFailId = null;
+    for(const g of groups){
+      const min = Number(g.min || 0) || 0;
+      if(min > 0){
+        const cnt = selectedCountForGroup(g);
+        if(cnt < min){
+          requiredWarnings.value[g.id] = true;
+          ok = false;
+          if(!firstFailId) firstFailId = g.id;
+        }
+      }
+    }
+    if(!ok && firstFailId){
+      // scroll first failing group into view inside the options body
+      nextTick(() => {
+        try{
+          const root = optionsBodyRef.value || document;
+          const el = root.querySelector ? root.querySelector('#grp-' + firstFailId) : null;
+          if(el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }catch(e){}
+      });
+    }
+    return ok;
+  }catch(e){ console.warn('validateOptionGroups failed', e); return true; }
+}
+
+const subtotal = computed(()=> cart.value.reduce((s,it)=> s + (Number(it.price||0)*Number(it.quantity||1) + (it.options||[]).reduce((so,o)=> so + (Number(o.price||0) * (Number(o.quantity||1) || 1)),0)),0));
 const deliveryFee = computed(()=> orderType.value==='DELIVERY' ? estimateDeliveryFee() : 0);
 const matchedNeighborhood = computed(()=>{
   if(orderType.value!=='DELIVERY') return null;
@@ -408,8 +678,22 @@ async function loadMenu(){
     cats.forEach(c=> c.products.forEach(p=> { if(p.price==null) p.price = Number(p.basePrice||0); }));
     allProducts.value = cats;
     paymentMethods.value = data.company?.paymentMethods || [];
+    // ensure stores are loaded so the user can assign a store before finalizing
+    if(!stores.value || stores.value.length===0) await loadStores();
   } catch(e){ console.error('Falha ao carregar menu público para PDV', e); }
   finally{ menuLoading.value=false; }
+}
+
+async function loadStores(){
+  if(storesLoading.value) return;
+  storesLoading.value = true;
+  try{
+    // admin endpoint returns company stores for the authenticated user
+    const { data } = await api.get('/stores');
+    stores.value = Array.isArray(data) ? data : [];
+    if(!selectedStoreId.value && stores.value.length>0) selectedStoreId.value = stores.value[0].id;
+  }catch(e){ console.error('PDV: falha ao carregar lojas', e); }
+  finally{ storesLoading.value = false; }
 }
 
 async function loadNeighborhoods(){
@@ -430,7 +714,7 @@ async function finalize(){
     const itemsPayload = cart.value.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes||null, options: it.options||null }));
     // Para pedido balcão sem identificação, usa nome genérico
     const customerNameFinal = newCustomerName.value.trim() || (orderType.value === 'BALCAO' ? 'Cliente Balcão' : '');
-    const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value } };
+    const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value };
     const { data } = await api.post('/orders', body);
     createdOrderDisplay.value = data.displaySimple || data.displayId || data.id?.slice(0,6) || '—';
     step.value = 5;
@@ -457,6 +741,24 @@ watch(()=>props.visible, async (v)=>{
       console.log('Carregando bairros ao abrir wizard...');
       await loadNeighborhoods();
     }
+    // If a preset was provided (e.g. Pedido balcão), apply it and skip steps as appropriate
+    if(props.preset){
+      try{
+        if(props.preset.customerName) newCustomerName.value = props.preset.customerName;
+        // support preset.orderType values like 'RETIRADA' or 'BALCAO' or 'DELIVERY'
+        if(props.preset.orderType){
+          const ot = String(props.preset.orderType).toUpperCase();
+          if(ot === 'RETIRADA' || ot === 'BALCAO' || ot === 'BALCÃO') orderType.value = 'BALCAO';
+          else orderType.value = ot;
+        }
+        // if preset indicates skipAddress or it's a balcão/retirada, jump to products
+        if(props.preset.skipAddress || orderType.value === 'BALCAO'){
+          await loadMenu();
+          step.value = 3;
+          return;
+        }
+      }catch(e){ console.warn('Failed to apply PDV preset', e); }
+    }
     // Se há telefone inicial, preenche e busca automaticamente
     if(props.initialPhone) {
       phoneInput.value = props.initialPhone;
@@ -478,6 +780,32 @@ watch(()=>orderType.value,(v)=>{ if(v==='DELIVERY' && neighborhoods.value.length
 .cart-item{ border-bottom:1px solid #eceff3; padding:6px 0; }
 .cart-item:last-child{ border-bottom:none; }
 .pos-options-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; justify-content:center; align-items:center; z-index:1100; }
-.pos-options-panel{ background:#fff; width:100%; max-width:520px; padding:18px 20px; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,.2); }
+.pos-options-panel{ background:#fff; width:100%; max-width:520px; padding:18px 20px; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,.2); display:flex; flex-direction:column; }
+.pos-options-panel .pos-options-body{  max-height: calc(80vh - 140px); }
+.pos-options-panel .options-scroll{ padding-right:6px; padding-bottom:18px; overscroll-behavior:contain; }
+.pos-options-panel .pos-options-body{ position:relative; }
+.pos-options-panel .pos-options-footer{ flex:0 0 auto; }
+.option-meta .small {
+  font-weight: 300;
+  font-size: 0.775rem;
+  font-style: italic;
+}
+/* Custom scrollbars */
+.pos-options-panel .options-scroll{
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,0.12) transparent;
+}
+.pos-options-panel .options-scroll::-webkit-scrollbar{ width:10px; height:10px; }
+.pos-options-panel .options-scroll::-webkit-scrollbar-track{ background: transparent; border-radius:8px; }
+.pos-options-panel .options-scroll::-webkit-scrollbar-thumb{ background: rgba(0,0,0,0.12); border-radius:8px; border: 2px solid transparent; background-clip: padding-box; }
+.pos-options-panel .options-scroll::-webkit-scrollbar-thumb:hover{ background: rgba(0,0,0,0.18); }
+
+/* Highlight for required groups when validation fails (removed) */
+.option-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: bold;
+}
 /* .products-step estilos específicos podem ser adicionados futuramente */
 </style>

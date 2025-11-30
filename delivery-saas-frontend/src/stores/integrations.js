@@ -39,11 +39,12 @@ export const useIntegrationsStore = defineStore('integrations', {
       this.clearMessages();
       this.saving = true;
       try {
+        if (!payload || !payload.storeId) throw new Error('Selecione a loja para vincular a integração.');
         const { data } = await api.post('/integrations/IFOOD', payload);
         this.ifood = data;
         this.message = 'Integração salva com sucesso.';
       } catch (e) {
-        this.error = e?.response?.data?.message || 'Falha ao salvar integração';
+        this.error = e?.response?.data?.message || e?.message || 'Falha ao salvar integração';
       } finally {
         this.saving = false;
       }

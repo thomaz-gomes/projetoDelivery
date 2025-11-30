@@ -1,8 +1,21 @@
 // src/seed-large.js
 // Large dataset seeder: creates multiple companies, stores, menus, categories, products and option groups
 import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+
+// If you want the seed to attach a real image to products/options,
+// place an image named `seed-image.jpg` at the project root. The seeder
+// will copy that file into `public/uploads/products` and
+// `public/uploads/options` using the created record id as filename.
+const seedImagePath = path.join(process.cwd(), 'seed-image.jpg');
+const hasSeedImage = fs.existsSync(seedImagePath);
+const publicUploadsDir = path.join(process.cwd(), 'public', 'uploads');
+try { fs.mkdirSync(path.join(publicUploadsDir, 'products'), { recursive: true }); } catch (e) {}
+try { fs.mkdirSync(path.join(publicUploadsDir, 'options'), { recursive: true }); } catch (e) {}
 
 function randPrice(min = 5, max = 80) {
   const v = (Math.random() * (max - min) + min);
@@ -43,7 +56,19 @@ async function ensureCategory(companyId, menuId, name, position = 0) {
 async function ensureProduct(companyId, menuId, categoryId, name, price, position = 0) {
   const exists = await prisma.product.findFirst({ where: { companyId, name } });
   if (exists) return exists;
-  return prisma.product.create({ data: { companyId, menuId, categoryId, name, price: String(price), position } });
+  const created = await prisma.product.create({ data: { companyId, menuId, categoryId, name, price: String(price), position } });
+  // attach seed image if available
+  if (hasSeedImage && created && created.id) {
+    try {
+      const destRel = path.posix.join('uploads', 'products', `${created.id}.jpg`);
+      const destFs = path.join(process.cwd(), 'public', destRel);
+      fs.copyFileSync(seedImagePath, destFs);
+      await prisma.product.update({ where: { id: created.id }, data: { image: `/${destRel}` } });
+    } catch (e) {
+      console.warn('Failed to copy seed image for product', created.id, e && e.message);
+    }
+  }
+  return created;
 }
 
 async function ensureOptionGroup(companyId, name, min = 0, max = null) {
@@ -55,7 +80,18 @@ async function ensureOptionGroup(companyId, name, min = 0, max = null) {
 async function ensureOption(groupId, name, price = '0.00', position = 0) {
   const exists = await prisma.option.findFirst({ where: { groupId, name } });
   if (exists) return exists;
-  return prisma.option.create({ data: { groupId, name, price: String(price), position } });
+  const created = await prisma.option.create({ data: { groupId, name, price: String(price), position } });
+  if (hasSeedImage && created && created.id) {
+    try {
+      const destRel = path.posix.join('uploads', 'options', `${created.id}.jpg`);
+      const destFs = path.join(process.cwd(), 'public', destRel);
+      fs.copyFileSync(seedImagePath, destFs);
+      await prisma.option.update({ where: { id: created.id }, data: { image: `/${destRel}` } });
+    } catch (e) {
+      console.warn('Failed to copy seed image for option', created.id, e && e.message);
+    }
+  }
+  return created;
 }
 
 async function linkProductToGroup(productId, groupId) {
@@ -84,9 +120,10 @@ async function main() {
 
     // create an admin user per company (idempotent by email)
     const adminEmail = `${cmp.slug}.admin@example.com`;
-    const adminExists = await prisma.user.findUnique({ where: { email: adminEmail } });
-    if (!adminExists) {
-      await prisma.user.create({ data: { companyId: company.id, role: 'ADMIN', name: 'Admin', email: adminEmail, password: 'changeme' } });
+      const adminExists = await prisma.user.findUnique({ where: { email: adminEmail } });
+      if (!adminExists) {
+        const adminHash = await bcrypt.hash('changeme', 10);
+        await prisma.user.create({ data: { companyId: company.id, role: 'ADMIN', name: 'Admin', email: adminEmail, password: adminHash } });
     }
 
     // create 2 stores per company
@@ -134,7 +171,7 @@ async function main() {
         await ensureOption(sizesGroup.id, 'Grande', '10.00', 3);
 
         // link the first 8 products of this menu to these groups
-        const prods = await prisma.product.findMany({ where: { menuId: menu.id }, take: 8, orderBy: { createdAt: 'asc' } });
+        const prods = await prisma.product.findMany({ where: { menuId: menu.id }, take: 8, orderBy: { id: 'asc' } });
         for (const pd of prods) {
           await linkProductToGroup(pd.id, addonsGroup.id);
           await linkProductToGroup(pd.id, sizesGroup.id);

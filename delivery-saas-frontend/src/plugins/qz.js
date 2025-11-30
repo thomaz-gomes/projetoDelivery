@@ -10,13 +10,16 @@ export async function initQZ() {
   return false;
 }
 
+import { API_URL } from '../config';
+
 export async function printComanda(order) {
   if (!order) return console.warn('print plugin: pedido indefinido');
 
   try {
     // Send order to backend print endpoint. Adjust URL if your backend exposes
     // a different route for printing (e.g. `/print` or external print agent).
-    const res = await fetch('/api/print', {
+    const base = String(API_URL || '').replace(/\/$/, '') || '';
+    const res = await fetch(`${base}/agent-print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ order })

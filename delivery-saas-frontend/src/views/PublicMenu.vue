@@ -2425,7 +2425,6 @@ try{
 .option-row { padding: 0 16px; font-size: 14px }
 .group-header .badge.bg-primary { background-color:#0d6efd; color:#fff }
 /* highlight failing required group briefly */
-.required-fail { box-shadow: 0 0 0 3px rgba(220,53,69,0.06); border-radius: 12px }
 .badge.bg-danger { background-color: #d9534f !important }
 /* pulse animation used when scrolling to a required group */
 .required-pulse { animation: pulse 0.9s ease-out forwards }

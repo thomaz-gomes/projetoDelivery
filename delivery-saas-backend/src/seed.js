@@ -1,208 +1,108 @@
-// src/seed.js
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs'
 import ensureDatabaseUrl from './configureDatabaseEnv.js'
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client'
+import fs from 'fs'
+import path from 'path'
 
 ensureDatabaseUrl()
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
-async function main() {
-  console.log('🌱 Iniciando seed...');
+async function createDemoData() {
+  console.log('🌱 Running comprehensive seed...')
 
-  // 1) Empresa
+  // Create or update demo company
+  const companyId = 'bd6a5381-6b90-4cc9-bc8f-24890c491693'
   const company = await prisma.company.upsert({
-    where: { id: 'bd6a5381-6b90-4cc9-bc8f-24890c491693' },
-    update: {},
-    create: {
-      id: 'bd6a5381-6b90-4cc9-bc8f-24890c491693',
-      name: 'Minha Loja de Testes',
-    },
-  });
+    where: { id: companyId },
+    update: { name: 'Minha Loja de Testes' },
+    create: { id: companyId, name: 'Minha Loja de Testes', slug: 'minha-loja-de-testes' }
+  })
 
-  // 2) Usuário ADMIN
-  const adminEmail = 'admin@example.com';
-  const adminPass = 'admin123';
-  const adminHash = await bcrypt.hash(adminPass, 10);
+  // Store
+  const store = await prisma.store.upsert({
+    where: { slug: 'minha-loja-de-testes-store' },
+    update: { name: 'Minha Loja de Testes - Loja 1', companyId: company.id },
+    create: { slug: 'minha-loja-de-testes-store', name: 'Minha Loja de Testes - Loja 1', companyId: company.id, address: 'Rua dos Testes, 123' }
+  })
 
-  const admin = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {},
-    create: {
-      role: 'ADMIN',
-      name: 'Administrador',
-      email: adminEmail,
-      password: adminHash,
-      companyId: company.id,
-    },
-  });
+  // Admin user (hashed)
+  const adminEmail = 'admin@example.com'
+  const adminPass = 'admin123'
+  const adminHash = await bcrypt.hash(adminPass, 10)
+  await prisma.user.upsert({ where: { email: adminEmail }, update: { name: 'Administrador', role: 'ADMIN', companyId: company.id, password: adminHash }, create: { email: adminEmail, name: 'Administrador', role: 'ADMIN', password: adminHash, companyId: company.id } })
 
-  // 3) Rider (opcional)
-  const rider = await prisma.rider.upsert({
-    where: { id: 'rider-demo-1' },
-    update: {},
-    create: {
-      id: 'rider-demo-1',
-      companyId: company.id,
-      name: 'Entregador Demo',
-      whatsapp: '55999999999',
-      dailyRate: '50.00',
-      active: true,
-    },
-  });
+  // Printer setting
+  await prisma.printerSetting.upsert({ where: { companyId: company.id }, update: { interface: 'printer:EPSON', type: 'EPSON', width: 48, headerName: 'Minha Loja de Testes', headerCity: 'São Paulo' }, create: { companyId: company.id, interface: 'printer:EPSON', type: 'EPSON', width: 48, headerName: 'Minha Loja de Testes', headerCity: 'São Paulo' } })
 
-  // 4) Configuração de Impressora (PrinterSetting)
-  const printer = await prisma.printerSetting.upsert({
-    where: { companyId: company.id },
-    update: {
-      interface: 'printer:EPSON',
-      type: 'EPSON',
-      width: 48,
-      headerName: 'Minha Loja de Testes',
-      headerCity: 'São Paulo',
-    },
-    create: {
-      companyId: company.id,
-      interface: 'printer:EPSON',
-      type: 'EPSON',
-      width: 48,
-      headerName: 'Minha Loja de Testes',
-      headerCity: 'São Paulo',
-    },
-  });
+  // Payment methods
+  await prisma.paymentMethod.upsert({ where: { code: 'PIX' }, update: { name: 'PIX', isActive: true, companyId: company.id }, create: { companyId: company.id, name: 'PIX', code: 'PIX', isActive: true } }).catch(()=>{})
+  await prisma.paymentMethod.upsert({ where: { code: 'CASH' }, update: { name: 'Dinheiro', isActive: true, companyId: company.id }, create: { companyId: company.id, name: 'Dinheiro', code: 'CASH', isActive: true } }).catch(()=>{})
 
-  // 5) Integração iFood (ApiIntegration)
-  // clientId/clientSecret podem ser sobrescritos depois via /integrations/IFOOD
-  // Create a default iFood integration if none exists for this company
-  let ifood = await prisma.apiIntegration.findFirst({ where: { companyId: company.id, provider: 'IFOOD' } });
-  if (!ifood) {
-    ifood = await prisma.apiIntegration.create({ data: {
-      companyId: company.id,
-      provider: 'IFOOD',
-      clientId: process.env.IFOOD_CLIENT_ID || 'sandbox_client_id',
-      clientSecret: process.env.IFOOD_CLIENT_SECRET || 'sandbox_secret',
-      merchantId: process.env.IFOOD_MERCHANT_ID || 'sandbox_merchant',
-      enabled: true,
-      authMode: 'AUTH_CODE',
-      linkCode: null,
-      codeVerifier: null,
-      authCode: null,
-      accessToken: null,
-      refreshToken: null,
-      tokenType: null,
-      tokenExpiresAt: null,
-    } });
+  // Menu
+  const menu = await prisma.menu.upsert({ where: { slug: 'main-menu' }, update: { name: 'Cardápio Principal', storeId: store.id }, create: { slug: 'main-menu', name: 'Cardápio Principal', storeId: store.id } })
+
+  // Categories
+  const categories = []
+  for (let i = 1; i <= 5; i++) {
+    const name = `Categoria ${i}`
+    let cat = await prisma.menuCategory.findFirst({ where: { companyId: company.id, menuId: menu.id, name } })
+    if (cat) {
+      cat = await prisma.menuCategory.update({ where: { id: cat.id }, data: { position: i } })
+    } else {
+      cat = await prisma.menuCategory.create({ data: { companyId: company.id, menuId: menu.id, name, position: i } })
+    }
+    categories.push(cat)
   }
 
-  // 6) Customer + Address (para pedidos de exemplo)
-  const customer = await prisma.customer.upsert({
-    where: { id: 'cust-demo-1' },
-    update: {},
-    create: {
-      id: 'cust-demo-1',
-      companyId: company.id,
-      fullName: 'João da Silva',
-      cpf: null,
-      whatsapp: '11987654321',
-      phone: '11987654321',
-      addresses: {
-        create: [
-          {
-            label: 'Casa',
-            street: 'Rua dos Testes',
-            number: '123',
-            neighborhood: 'Centro',
-            city: 'São Paulo',
-            state: 'SP',
-            postalCode: '01000000',
-            formatted: 'Rua dos Testes, 123 - Centro - São Paulo/SP',
-            isDefault: true,
-            latitude: -23.55052,
-            longitude: -46.633308,
-          },
-        ],
-      },
-    },
-  });
+  // Products
+  for (const cat of categories) {
+    const prods = []
+    for (let p = 1; p <= 6; p++) {
+      prods.push({ companyId: company.id, menuId: menu.id, categoryId: cat.id, name: `${cat.name} Item ${p}`, price: String((Math.random() * 40 + 10).toFixed(2)), position: p })
+    }
+    await prisma.product.createMany({ data: prods, skipDuplicates: true }).catch(()=>{})
+  }
 
-  // 7) Pedidos de exemplo
-  // Observação: campos Decimal devem ser strings; Prisma converte corretamente para DECIMAL
-  const order1 = await prisma.order.upsert({
-    where: { externalId: 'ORD-TEST-123456' },
-    update: {},
-    create: {
+  // Option groups and options
+  let addons = await prisma.optionGroup.findFirst({ where: { companyId: company.id, name: 'Adicionais' } })
+  if (!addons) addons = await prisma.optionGroup.create({ data: { companyId: company.id, name: 'Adicionais', min: 0, max: 5 } })
+  await prisma.option.createMany({ data: [ { groupId: addons.id, name: 'Queijo extra', price: '3.50', position: 1 }, { groupId: addons.id, name: 'Bacon', price: '4.50', position: 2 } ] }).catch(()=>{})
+
+  let sizes = await prisma.optionGroup.findFirst({ where: { companyId: company.id, name: 'Tamanhos' } })
+  if (!sizes) sizes = await prisma.optionGroup.create({ data: { companyId: company.id, name: 'Tamanhos', min: 1, max: 1 } })
+  await prisma.option.createMany({ data: [ { groupId: sizes.id, name: 'Pequeno', price: '0.00', position: 1 }, { groupId: sizes.id, name: 'Médio', price: '6.00', position: 2 }, { groupId: sizes.id, name: 'Grande', price: '10.00', position: 3 } ] }).catch(()=>{})
+
+  // Customer
+  const customer = await prisma.customer.upsert({ where: { id: 'cust-demo-1' }, update: { fullName: 'João da Silva' }, create: { id: 'cust-demo-1', companyId: company.id, fullName: 'João da Silva', whatsapp: '11987654321', phone: '11987654321' } }).catch(()=>null)
+  try { if (customer) await prisma.address.create({ data: { companyId: company.id, customerId: customer.id, label: 'Casa', street: 'Rua dos Testes', number: '123', neighborhood: 'Centro', city: 'São Paulo', state: 'SP', postalCode: '01000000', formatted: 'Rua dos Testes, 123 - Centro - São Paulo/SP', isDefault: true, latitude: -23.55052, longitude: -46.633308 } }) } catch(e){}
+
+  // Rider
+  await prisma.rider.upsert({ where: { id: 'rider-demo-1' }, update: { name: 'Entregador Demo' }, create: { id: 'rider-demo-1', companyId: company.id, name: 'Entregador Demo', whatsapp: '55999999999', dailyRate: '50.00', active: true } }).catch(()=>{})
+
+  // Sample orders (create with nested items)
+  try {
+    await prisma.order.create({ data: {
       companyId: company.id,
       externalId: 'ORD-TEST-123456',
       displayId: 'XPTO-987',
       status: 'EM_PREPARO',
-      customerName: customer.fullName,
-      customerPhone: customer.whatsapp,
-      customerId: customer.id,
+      customerName: customer?.fullName || 'Cliente Demo',
+      customerPhone: customer?.whatsapp || '11987654321',
+      customerId: customer?.id || null,
       address: 'Rua dos Testes, 123 - Centro - São Paulo/SP',
       latitude: -23.55052,
       longitude: -46.633308,
       total: '34.90',
       deliveryFee: '5.99',
-      payload: {
-        source: 'SEED',
-        type: 'SAMPLE',
-      },
-      items: {
-        create: [
-          { name: 'X-Salada', quantity: 1, price: '18.50' },
-          { name: 'Batata Média', quantity: 1, price: '9.90' },
-        ],
-      },
-      histories: {
-        create: [{ from: null, to: 'EM_PREPARO', reason: 'Seed inicial' }],
-      },
-    },
-  });
-
-  const order2 = await prisma.order.upsert({
-    where: { externalId: 'ORD-TEST-654321' },
-    update: {},
-    create: {
-      companyId: company.id,
-      externalId: 'ORD-TEST-654321',
-      displayId: 'XPTO-123',
-      status: 'SAIU_PARA_ENTREGA',
-      customerName: customer.fullName,
-      customerPhone: customer.whatsapp,
-      customerId: customer.id,
-      address: 'Rua dos Testes, 123 - Centro - São Paulo/SP',
-      total: '59.00',
-      deliveryFee: '0',
       payload: { source: 'SEED', type: 'SAMPLE' },
-      riderId: rider.id,
-      items: {
-        create: [
-          { name: 'Pizza Calabresa Média', quantity: 1, price: '42.00' },
-          { name: 'Refrigerante Lata', quantity: 1, price: '7.00' },
-          { name: 'Taxa de Serviço', quantity: 1, price: '10.00' },
-        ],
-      },
-      histories: {
-        create: [
-          { from: null, to: 'EM_PREPARO', reason: 'Seed inicial' },
-          { from: 'EM_PREPARO', to: 'SAIU_PARA_ENTREGA', reason: 'Seed inicial' },
-        ],
-      },
-    },
-  });
+      items: { create: [ { name: 'X-Salada', quantity: 1, price: '18.50' }, { name: 'Batata Média', quantity: 1, price: '9.90' } ] },
+      histories: { create: [ { from: null, to: 'EM_PREPARO', reason: 'Seed inicial' } ] }
+    } }).catch(()=>{})
+  } catch (e) { console.warn('order create failed', e && e.message) }
 
-  console.log('✅ Seed concluído com sucesso!');
-  console.log('🔑 Admin:', admin.email, '/', adminPass);
-  console.log('🏢 Empresa:', company.name, company.id);
-  console.log('🧾 Impressora:', printer.interface, '-', printer.type);
-  console.log('🤝 iFood provider:', ifood.provider, 'enabled:', ifood.enabled);
-  console.log('🧺 Pedidos criados:', order1.externalId, ',', order2.externalId);
+  console.log('✅ Seed completed: company, store, user, menu, categories, products, options, sample orders created')
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ Erro no seed:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+createDemoData()
+  .catch((e) => { console.error('Seed failed:', e); process.exit(1) })
+  .finally(async () => { await prisma.$disconnect() })

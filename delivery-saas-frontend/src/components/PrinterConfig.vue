@@ -21,19 +21,31 @@
               <option value="">Selecione uma impressora</option>
               <option v-for="p in printers" :key="p" :value="p">{{ p }}</option>
             </select>
-            <div class="mt-2 small text-muted">Se a lista estiver vazia, verifique se o agente de impressão/back-end está rodando.</div>
+            <div class="mt-2 small text-muted">Se a lista estiver vazia, verifique se o agente de impressão está executando na loja.</div>
             <div class="mt-2">
               <div v-if="discovering" class="small text-muted">Procurando impressoras... ⏳</div>
               <div v-else-if="discoverError" class="small text-danger">{{ discoverError }}</div>
-              
+              <div class="mt-2 small text-muted">Agente de impressão detectado: <strong>{{ printers.length ? 'sim' : 'não' }}</strong></div>
+              <div class="mt-2 small logs" v-if="logs.length">
+                <div class="small text-muted mb-1">Logs:</div>
+                <div class="log-line" v-for="(l, idx) in logs" :key="idx">{{ l }}</div>
+              </div>
               <div class="mt-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar token de agente</button>
               </div>
             </div>
           </div>
 
           <div class="row">
-            <div class="col-md-12 mb-3">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tipo de impressão</label>
+              <select v-model="printType" class="form-select">
+                <option value="thermal">impressão térmica</option>
+                <option value="generic">impressão genérica (navegador)</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
               <label class="form-label">Largura de papel</label>
               <select v-model="paperWidth" class="form-select">
                 <option value="80">80 mm</option>
@@ -47,34 +59,12 @@
             <label class="form-check-label" for="includeDesc">incluir descrição de itens na impressão</label>
           </div>
 
-          <hr />
-          <div class="mb-3">
-            <label class="form-label">Configuração do Agente Local (dev)</label>
-            <input v-model="agentUrl" class="form-control mb-2" placeholder="Ex: http://localhost:4000/api/print" />
-            <input v-model="agentToken" class="form-control" placeholder="Token do agente (x-print-agent-token) - opcional" />
-            <div class="mt-2 small text-muted">Essas configurações são usadas quando a rota de impressão está definida para 'Local agent' (dev). Em produção a impressão deve ir via backend (/agent-print).</div>
-          </div>
-
-          <hr />
-          <div class="mb-3">
-            <h6>Agent / Token (Admin)</h6>
-            <div class="small text-muted">Socket URL: <strong>{{ socketUrl || '-' }}</strong></div>
-            <div class="small text-muted">Store IDs: <strong>{{ (storeIds || []).join(', ') || '-' }}</strong></div>
-            <div class="small text-muted">Token emitido: <strong>{{ tokenHint || 'nenhum' }}</strong></div>
-            <div class="mt-2 d-flex gap-2">
-              <button class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar / Rotacionar token</button>
-              <button class="btn btn-sm btn-outline-secondary" @click="copyGeneratedToken" :disabled="!generatedToken">Copiar token gerado</button>
-            </div>
-            <div v-if="generatedToken" class="mt-2 small"><label>Token (copie e guarde em segurança — será exibido apenas agora)</label>
-              <div style="display:flex; gap:8px; align-items:center"><input readonly style="flex:1" :value="generatedToken" /><button class="btn btn-sm btn-outline-secondary" @click="copyGeneratedToken">Copiar</button></div>
-            </div>
-          </div>
-
-        </div>
-        <div v-if="saveStatus" class="p-2">
-          <div :class="['alert', saveSuccess ? 'alert-success' : 'alert-danger']" role="alert">{{ saveStatus }}</div>
         </div>
         <div class="modal-footer">
+          <div class="me-auto text-start">
+            <div v-if="generatedToken" class="small text-success">Token gerado e copiado: <code>{{ generatedToken }}</code></div>
+            <div v-else class="small text-muted">Clique em "Gerar token de agente" para criar um token para o agente.</div>
+          </div>
           <button class="btn btn-secondary" @click="close">Cancelar</button>
           <button class="btn btn-primary" @click="save" :disabled="!printerName">Salvar e usar</button>
         </div>
@@ -87,7 +77,8 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import printService from '../services/printService.js';
-import api from '../api'
+import api from '../api';
+import { API_URL } from '../config';
 
 const props = defineProps({ visible: Boolean });
 const emit = defineEmits(['update:visible','saved']);
@@ -96,51 +87,35 @@ const visible = ref(false);
 const printers = ref([]);
 const printerName = ref('');
 const alias = ref('');
-const agentUrl = ref('');
-const agentToken = ref('');
-// printType removed — we always print via agent/backend and let the agent decide
-const printType = ref(null);
+const printType = ref('thermal');
 const paperWidth = ref('80');
 const includeItemDescription = ref(false);
 const discovering = ref(false);
 const discoverError = ref('');
-// qzAvailable/logs removed (no longer showing QZ Tray detection or logs in modal)
-const generatedToken = ref('')
-const tokenHint = ref('')
-const printerSetting = ref(null)
-const saving = ref(false)
-const saveStatus = ref('')
-const saveSuccess = ref(false)
-const socketUrl = ref('')
-const storeIds = ref([])
+const qzAvailable = ref(false);
+const generatedToken = ref('');
+const logs = ref([]);
+
+function pushLog(msg){
+  try{
+    logs.value.unshift(`${new Date().toLocaleTimeString()} - ${String(msg)}`);
+    if (logs.value.length > 30) logs.value.length = 30;
+  }catch(e){}
+}
 
 onMounted(() => {
   visible.value = props.visible;
+  // this modal uses backend/agent endpoints for discovery and token generation
+  // printers list will be fetched from backend/agents
   loadSaved();
-  // load printers and agent info on frontend start
-  discoverPrinters();
-  fetchAgentSetup();
+  if (visible.value) discoverPrinters();
 });
 
-watch(() => props.visible, (v) => { visible.value = v; if (v) { discoverPrinters(); fetchAgentSetup(); } });
+// watch prop changes
+watch(() => props.visible, (v) => { visible.value = v; if (v) { discoverPrinters(); } });
 
-function close(){ emit('update:visible', false); }
-
-async function fetchAgentSetup(){
-  try{
-    const { data } = await api.get('/agent-setup')
-    tokenHint.value = data.tokenHint || ''
-    printerSetting.value = data.printerSetting || null
-    socketUrl.value = data.socketUrl || ''
-    storeIds.value = data.storeIds || []
-    // populate fields from server-side stored printerSetting if present
-      if (printerSetting.value) {
-      printerName.value = printerSetting.value.interface || printerName.value
-      paperWidth.value = printerSetting.value.width ? String(printerSetting.value.width) : paperWidth.value
-      alias.value = printerSetting.value.headerName || alias.value
-      includeItemDescription.value = !!printerSetting.value.includeItemDescription
-    }
-  } catch(e){ console.warn('Failed to fetch /agent-setup', e); }
+function close(){
+  emit('update:visible', false);
 }
 
 function loadSaved(){
@@ -148,12 +123,10 @@ function loadSaved(){
     const s = localStorage.getItem('printerConfig');
     if (s){
       const cfg = JSON.parse(s);
-      printerName.value = cfg.printerName || printerName.value;
-      alias.value = cfg.alias || alias.value;
-      agentUrl.value = cfg.agentUrl || agentUrl.value;
-      agentToken.value = cfg.agentToken || agentToken.value;
-      printType.value = cfg.printType || printType.value;
-      paperWidth.value = cfg.paperWidth || paperWidth.value;
+      printerName.value = cfg.printerName || '';
+      alias.value = cfg.alias || '';
+      printType.value = cfg.printType || 'thermal';
+      paperWidth.value = cfg.paperWidth || '80';
       includeItemDescription.value = !!cfg.includeItemDescription;
     }
   }catch(e){ console.warn('Failed to load saved printer config', e); }
@@ -163,101 +136,90 @@ async function discoverPrinters(){
   printers.value = [];
   discoverError.value = '';
   discovering.value = true;
-  // attempt to discover printers via backend or local agent
-  try{
-    const ok = await printService.connectQZ();
-    if (!ok) {
-      discoverError.value = 'Não foi possível contatar o serviço de impressão (verifique backend/agent).';
+  pushLog('discoverPrinters called; querying backend agent-print/printers');
+  try {
+    // call backend to ask a connected agent for printers
+    const storeId = (window && window.currentStoreId) || '';
+    const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : '';
+    const base = String((API_URL || '')).replace(/\/$/, '') || '';
+    const res = await fetch(`${base}/agent-print/printers${qs}`);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      discoverError.value = `Falha ao consultar agentes: ${res.status} ${txt}`;
+      pushLog('agent-print/printers failed: ' + String(txt || res.status));
       discovering.value = false;
       return;
     }
-
-    // Prefer querying the local agent first (dev-friendly). If unavailable,
-    // fall back to backend proxy. Use configured agentToken when available.
-    try {
-      const cfg = printService.getPrinterConfig && printService.getPrinterConfig() || {};
-      const headers = {};
-      if (cfg.agentToken) headers['x-print-agent-token'] = cfg.agentToken;
-      const resLocal = await fetch((cfg.agentUrl && cfg.agentUrl.indexOf('http') === 0 ? cfg.agentUrl.replace(/\/api\/print\/?$/, '') : 'http://localhost:4000') + '/api/print/printers', { headers });
-      if (resLocal && resLocal.ok) {
-        const list = await resLocal.json();
-        if (Array.isArray(list)) printers.value = list.map(p => (typeof p === 'string' ? p : (p.name || p)));
-        discovering.value = false;
-        return;
-      }
-    } catch (e) {
-      // local agent not reachable or returned error; continue to backend fallback
+    const body = await res.json();
+    if (body && Array.isArray(body.printers)) {
+      printers.value = body.printers;
+      if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
+      pushLog('agent-print/printers found ' + printers.value.length + ' printers');
+    } else {
+      discoverError.value = 'Nenhum agente respondeu com lista de impressoras.';
+      pushLog('agent-print/printers returned no printers');
     }
-
-    // fallback: try backend (proxied via Vite) — handle errors gracefully
-    try {
-      const res = await fetch('/api/print/printers');
-      if (res && res.ok) {
-        const list = await res.json();
-        if (Array.isArray(list)) printers.value = list.map(p => (typeof p === 'string' ? p : (p.name || p)));
-      }
-    } catch (e) {
-      // ignore errors from backend proxy — we'll show a friendly message
-    }
-  } catch(e){
-    console.warn('Failed to discover printers (backend)', e);
-    discoverError.value = String(e?.message || e || 'Erro desconhecido ao descobrir impressoras');
-  } finally { discovering.value = false; }
+  } catch (e) {
+    console.warn('discoverPrinters error', e);
+    discoverError.value = String(e?.message || e || 'Erro desconhecido');
+    pushLog('discover error: ' + String(e?.message || e));
+  } finally {
+    discovering.value = false;
+  }
 }
 
 async function generateToken(){
-  generatedToken.value = ''
   try{
-    const { data } = await api.post('/agent-setup/token')
-    generatedToken.value = data.token
-    // also set agentToken in local UI so user can copy/paste to agent
-    agentToken.value = data.token
-    // update tokenHint by refetching setup info
-    await fetchAgentSetup()
-  } catch(e){ console.error('Failed to generate token', e); alert('Falha ao gerar token: ' + (e?.response?.data?.message || e?.message || e)) }
+  const res = await api.post('/agent-setup/token');
+    if (!res.ok) {
+      const txt = await res.text().catch(()=>'');
+      pushLog('generateToken failed: ' + txt);
+      discoverError.value = 'Falha ao gerar token: ' + (txt || res.status);
+      return;
+    }
+    const body = await res.json();
+    if (body && body.token) {
+      generatedToken.value = body.token;
+      try { await navigator.clipboard.writeText(body.token); pushLog('Token copiado para clipboard'); } catch(e){}
+      // store in localStorage for frontend convenience
+      try { localStorage.setItem('agentToken', body.token); } catch(e){}
+    }
+  }catch(e){
+    pushLog('generateToken error: ' + String(e?.message || e));
+    discoverError.value = String(e?.message || e);
+  }
 }
 
-function copyGeneratedToken(){
-  if (!generatedToken.value) return;
-  try { navigator.clipboard.writeText(generatedToken.value); alert('Token copiado para área de transferência'); } catch(e) { alert('Falha ao copiar token: ' + e) }
-}
-
-async function save(){
+function save(){
   const cfg = {
     alias: alias.value,
     printerName: printerName.value,
+    printType: printType.value,
     paperWidth: paperWidth.value,
     includeItemDescription: includeItemDescription.value,
-    agentUrl: agentUrl.value,
-    agentToken: agentToken.value,
   };
-
-  // Persist to backend PrinterSetting (admin-only). If backend call fails, still save locally.
-  try{
-    await api.post('/agent-setup/settings', {
-      interface: cfg.printerName || undefined,
-      width: cfg.paperWidth ? Number(cfg.paperWidth) : undefined,
-      headerName: cfg.alias || undefined,
-      headerCity: undefined,
-      includeItemDescription: !!cfg.includeItemDescription
-    })
-  } catch(e){ console.warn('Failed to persist printer settings to backend', e); }
-
-  saving.value = true
-  saveStatus.value = ''
-  saveSuccess.value = false
-
   try{ localStorage.setItem('printerConfig', JSON.stringify(cfg)); } catch(e){ console.warn('Failed to save printer config', e); }
-  // update in-memory printService config
-  try { await printService.setPrinterConfig(cfg); } catch(e){}
 
-  // show success in modal and close shortly after; if backend persistence failed earlier we still saved locally
-  saveStatus.value = 'Configuração salva com sucesso.'
-  saveSuccess.value = true
-  saving.value = false
-  try { emit('saved', cfg); } catch(e){}
-  // keep modal open briefly to show confirmation
-  setTimeout(() => { emit('update:visible', false); }, 1200)
+  // Try to persist to backend PrinterSetting (requires admin auth). If it
+  // fails (no auth / network), fall back to localStorage only.
+  (async () => {
+    try {
+      const iface = printerName.value ? `printer:${printerName.value}` : undefined;
+      const body = { interface: iface, type: printType.value === 'thermal' ? 'EPSON' : 'GENERIC', width: Number(paperWidth.value) || 80, headerName: alias.value || undefined };
+      try {
+        const { data } = await api.post('/agent-setup/settings', body);
+        if (data && data.ok) pushLog('Saved printer settings to backend');
+        else pushLog('Failed to save settings to backend: ' + JSON.stringify(data));
+      } catch (e) {
+        pushLog('Failed to save settings to backend: ' + (e?.response?.data?.message || e?.message || e));
+      }
+    } catch (e) {
+      pushLog('Could not persist settings to backend (no auth/network)');
+    } finally {
+      emit('saved', cfg);
+      emit('update:visible', false);
+    }
+  })();
 }
 </script>
 
@@ -266,5 +228,6 @@ async function save(){
 .modal-dialog{ max-width:780px; width:100%; }
 .modal-centered{ display:flex; align-items:center; justify-content:center; }
 .modal-content{ border-radius:8px; max-height:80vh; overflow:auto; background:#fff; box-shadow:0 8px 30px rgba(0,0,0,0.18); }
-/* logs UI removed */
+.logs{ background:#f8f9fa; border:1px solid #e9ecef; padding:8px; border-radius:6px; max-height:120px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace; }
+.log-line{ font-size:12px; color:#333; white-space:pre-wrap; }
 </style>

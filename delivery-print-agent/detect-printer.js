@@ -1,11 +1,23 @@
 require('dotenv').config();
-const { printer: ThermalPrinter, types: PrinterTypes } = require('node-thermal-printer');
+let ThermalPrinter = null;
+let PrinterTypes = { EPSON: 'EPSON', STAR: 'STAR' };
+try {
+  const ntp = require('node-thermal-printer');
+  ThermalPrinter = ntp.printer || ntp.ThermalPrinter || ntp.Printer || ntp;
+  PrinterTypes = ntp.types || ntp.PrinterTypes || ntp.Types || PrinterTypes;
+} catch (e) {
+  console.warn('node-thermal-printer not available; detect-printer will be limited:', e && e.message);
+}
 
 const PRINTER_INTERFACE = process.env.PRINTER_INTERFACE || 'printer:default';
 const PRINTER_TYPE = (process.env.PRINTER_TYPE || 'EPSON').toUpperCase();
 const type = PRINTER_TYPE === 'STAR' ? PrinterTypes.STAR : PrinterTypes.EPSON;
 
 (async () => {
+  if (!ThermalPrinter) {
+    console.log('ThermalPrinter module not present — skipping detect-printer checks.');
+    process.exit(0);
+  }
   try {
     const printer = new ThermalPrinter({ type, interface: PRINTER_INTERFACE, options: { timeout: 3000 } });
     if (typeof printer.isPrinterConnected === 'function') {

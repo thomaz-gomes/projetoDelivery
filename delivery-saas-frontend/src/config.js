@@ -10,21 +10,24 @@ const rawApiEnv = import.meta.env.VITE_API_URL;
 let API_URL;
 
 // Developer convenience: when running Vite in DEV mode and no explicit
-// VITE_API_URL is provided, default to the "'/api'" prefix so that
-// the dev server proxy (configured in vite.config.js) forwards requests
-// to the backend. This keeps code using absolute paths like '/orders'
-// intact if they call '/api/orders' or allows easy migration.
-// If VITE_API_URL explicitly points to localhost, prefer using '/api' as well
-// so the dev proxy is used instead of making direct cross-origin calls.
+// `VITE_API_URL` is provided, the default behavior used to rely on the
+// dev server proxy (empty `API_URL`) so requests were issued to the dev
+// server origin and forwarded to the backend. However, when the backend
+// is running in plain HTTP (DISABLE_SSL=1) the dev server proxy can cause
+// the frontend to route calls to the dev origin (port 5173) which is not
+// the backend. To avoid the frontend accidentally calling port 5173 for
+// backend agent endpoints in local dev, if SSL is disabled prefer a direct
+// `http://localhost:3000` backend URL unless the developer explicitly sets
+// `VITE_API_URL`.
 if (import.meta.env.DEV) {
-  // In local dev prefer using the dev server origin so Vite's proxy forwards
-  // requests to the backend. If the developer explicitly sets VITE_API_URL,
-  // use it; otherwise leave API_URL empty so calls like `api.get('/agent-setup')`
-  // are issued to the dev server origin and proxied by Vite to the backend.
-  if (!rawApiEnv || String(rawApiEnv).trim() === '') {
-    API_URL = '';
-  } else {
+  const disableSsl = import.meta.env.DISABLE_SSL === '1' || import.meta.env.VITE_DISABLE_SSL === '1';
+  if (rawApiEnv && String(rawApiEnv).trim() !== '') {
     API_URL = String(rawApiEnv).trim();
+  } else if (disableSsl) {
+    API_URL = 'http://localhost:3000';
+  } else {
+    // Fall back to empty so Vite proxy can be used when backend runs with HTTPS
+    API_URL = '';
   }
 } else {
   API_URL = String(rawApiEnv).trim();

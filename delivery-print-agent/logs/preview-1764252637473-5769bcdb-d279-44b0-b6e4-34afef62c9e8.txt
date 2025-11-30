@@ -1,0 +1,27 @@
+pedido: 01 | 2025-11-27
+THOMAZ
+--------------------
+av rui barbosa 118
+---------------------
+Telefones: 73991429676
+
+QT  Descrição                Valor
+1   Tropeiro com frango         22.90
+1   Parmegianna de Frango       26.90
+-- 1 Coca      3.00
+-- 1 Fanta     12.00
+-- 1 Kuat      6.00
+1   Frango grelhado             22.90
+
+Quantidade de itens  3
+---------------------------
+Total de itens   72.70
+
+FORMAS DE PAGAMENTO
+DINHEIRO   98.70
+[QR IMAGE]
+
+[QR_PRESENCE] data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAYAAAAbWs+BAAASxUlEQVR4Xu2d0XYcOQ5DN///0bPdSeZhbMkHdyCqO56bZ5ZEgQBJscqdH389/v3PfyIgAlcQ+KHgruDsJiLwEwEFJxFE4CICCu4i2G4lAgpODojARQQU3EWw3UoEFJwcEI...[truncated]
+
+
+[RASTER_PRESENCE] data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAkAAAAEECAIAAABP2RyGAAAACXBIWXMAAAsTAAALEwEAmpwYAAAD60lEQVR4nO3VMQ0AMAzAsPIn3XHoM0WyEeTLLAAEze8AALgwMACSDAyAJAMDIMnAAEgyMACSDAyAJAMDIMnAAEgyMACSDAyAJAMDIM...[truncated]

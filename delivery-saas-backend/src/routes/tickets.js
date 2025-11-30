@@ -27,30 +27,54 @@ ticketsRouter.post('/:token/claim', authMiddleware, requireRole('RIDER'), async 
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const now = new Date();
+      console.log('[tickets.claim] incoming token:', token, 'tokenHash:', tokenHash, 'now:', now.toISOString(), 'riderId:', riderId);
+      // Allow tickets that either have no expiresAt (non-expiring) or whose expiresAt is in the future
       const ticket = await tx.ticket.findFirst({
         where: {
           tokenHash,
           usedAt: null,
-          // se utilizar expiração opcional, considere also: OR de expiresAt null
-          expiresAt: { gt: new Date() },
+          OR: [
+            { expiresAt: null },
+            { expiresAt: { gt: now } }
+          ]
         },
         include: { order: true },
       });
+      // If not found by tokenHash, allow a fallback where the provided value
+      // is actually an orderId (some printed QR codes may embed the order id).
+      let ticketFinal = ticket;
+      if (!ticketFinal) {
+        const alt = await tx.ticket.findFirst({
+          where: {
+            orderId: token,
+            usedAt: null,
+            OR: [ { expiresAt: null }, { expiresAt: { gt: now } } ]
+          },
+          include: { order: true }
+        });
+        if (alt) {
+          console.log('[tickets.claim] fallback: found ticket by orderId', alt.id, 'orderId:', alt.orderId);
+          ticketFinal = alt;
+        }
+      }
+      if (!ticketFinal) throw new Error('Token inválido ou expirado');
+      console.log('[tickets.claim] ticket lookup result:', !!ticket, ticket && { id: ticket.id, orderId: ticket.orderId, expiresAt: ticket.expiresAt, usedAt: ticket.usedAt });
 
       if (!ticket) throw new Error('Token inválido ou expirado');
 
-      if (ticket.order.companyId !== rider.companyId) {
+      if (ticketFinal.order.companyId !== rider.companyId) {
         throw new Error('Empresa não corresponde');
       }
 
       const updatedOrder = await tx.order.update({
-        where: { id: ticket.orderId },
+        where: { id: ticketFinal.orderId },
         data: {
           riderId: rider.id,
           status: 'SAIU_PARA_ENTREGA',
           histories: {
             create: {
-              from: ticket.order.status,
+              from: ticketFinal.order.status,
               to: 'SAIU_PARA_ENTREGA',
               byRiderId: rider.id,
               reason: 'QR claim',
@@ -61,7 +85,7 @@ ticketsRouter.post('/:token/claim', authMiddleware, requireRole('RIDER'), async 
       });
 
       await tx.ticket.update({
-        where: { id: ticket.id },
+        where: { id: ticketFinal.id },
         data: { usedAt: new Date() },
       });
 

@@ -1,117 +1,113 @@
 import fs from 'fs'
 import path from 'path'
 
-const QUEUE_FILE = process.env.PRINT_QUEUE_FILE || path.join(process.cwd(), 'tmp', 'print-queue.json')
+const QUEUE_FILE = path.join(process.cwd(), 'tmp', 'print-queue.json')
 
-function ensureTmpDir() {
-  const dir = path.dirname(QUEUE_FILE)
-  try { fs.mkdirSync(dir, { recursive: true }) } catch (e) { /* ignore */ }
+let queue = []
+
+function persist() {
+  try {
+    fs.mkdirSync(path.dirname(QUEUE_FILE), { recursive: true })
+    fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2), 'utf8')
+  } catch (e) {
+    console.warn('printQueue: failed to persist queue', e && e.message)
+  }
 }
 
-let queue = null
-
-function load() {
-  if (queue !== null) return queue
-  ensureTmpDir()
-  try {
-    if (fs.existsSync(QUEUE_FILE)) {
-      const raw = fs.readFileSync(QUEUE_FILE, 'utf8')
-      queue = JSON.parse(raw || '[]') || []
-    } else {
-      queue = []
-    }
-  } catch (e) {
-    console.error('Failed to load print queue file', e && e.message)
-    queue = []
+// load persisted queue if present (best-effort)
+try {
+  if (fs.existsSync(QUEUE_FILE)) {
+    const raw = fs.readFileSync(QUEUE_FILE, 'utf8')
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) queue = parsed
   }
-  return queue
+} catch (e) {
+  queue = []
 }
 
-function save() {
-  try {
-    ensureTmpDir()
-    const tmp = QUEUE_FILE + '.tmp'
-    fs.writeFileSync(tmp, JSON.stringify(queue, null, 2), 'utf8')
-    try { fs.renameSync(tmp, QUEUE_FILE) } catch (e) { fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2), 'utf8') }
-  } catch (e) {
-    console.error('Failed to save print queue', e && e.message)
-  }
+function makeId() {
+  return `${Date.now()}-${Math.floor(Math.random()*1000000)}`
 }
 
 function enqueue(job) {
-  load()
-  const entry = Object.assign({}, job, { id: `pq-${Date.now()}-${Math.floor(Math.random()*10000)}`, createdAt: Date.now() })
-  queue.push(entry)
-  save()
-  return entry
+  const id = makeId()
+  const item = Object.assign({ id, createdAt: Date.now() }, job)
+  queue.push(item)
+  persist()
+  try {
+    const sid = item.storeId || (item.order && item.order.storeId) || null;
+    console.log(`printQueue.enqueue: id=${item.id} storeId=${sid} createdAt=${new Date(item.createdAt).toISOString()}`);
+  } catch (e) {}
+  return item
 }
-
-function removeById(id) {
-  load()
-  const before = queue.length
-  queue = queue.filter(q => q.id !== id)
-  if (queue.length !== before) save()
-}
-
-function list() { load(); return queue.slice() }
 
 async function processForStores(io, storeIds = []) {
-  load()
-  if (!io) return { ok: false, error: 'no_io' }
+  // Attempt to deliver queued jobs for the given storeIds to connected agents (io).
+  // Returns { ok: true, results: [...] }
   const results = []
-  const ACK_TIMEOUT_MS = process.env.PRINT_ACK_TIMEOUT_MS ? Number(process.env.PRINT_ACK_TIMEOUT_MS) : 10000
-
-  for (const job of queue.slice()) {
-    if (!job || !job.storeId) continue
-    if (!storeIds.includes(job.storeId)) continue
-
-    // find connected agent sockets for this storeId
-    const candidates = Array.from(io.sockets.sockets.values()).filter(s => s.agent && Array.isArray(s.agent.storeIds) && s.agent.storeIds.includes(job.storeId))
-    if (!candidates || candidates.length === 0) {
-      results.push({ jobId: job.id, attempted: 0, ok: false, error: 'no_agent' })
-      continue
-    }
-
-    // try candidates sequentially (most recent first)
-    const sorted = candidates.slice().sort((a,b) => {
-      const ta = (a.agent && a.agent.connectedAt) ? a.agent.connectedAt : 0
-      const tb = (b.agent && b.agent.connectedAt) ? b.agent.connectedAt : 0
-      return tb - ta
-    })
-
-    let success = null
-    for (const s of sorted) {
-      const attempt = await new Promise(resolve => {
-        let resolved = false
-        const timer = setTimeout(() => {
-          if (!resolved) { resolved = true; resolve({ socketId: s.id, ok: false, error: 'ack_timeout' }) }
-        }, ACK_TIMEOUT_MS + 1000)
-        try {
-          s.timeout(ACK_TIMEOUT_MS).emit('novo-pedido', job.order, (...args) => {
-            if (resolved) return
-            resolved = true
-            clearTimeout(timer)
-            resolve({ socketId: s.id, ok: true, ack: args })
+  try {
+    if (!Array.isArray(storeIds)) storeIds = [storeIds]
+    // find candidate jobs
+    const candidates = queue.filter(j => !j.delivered && (!j.storeId || storeIds.includes(j.storeId)))
+    try { console.log(`printQueue.processForStores: storeIds=${JSON.stringify(storeIds)} candidates=${candidates.length}`); } catch(e){}
+    for (const job of candidates) {
+      let delivered = false
+      if (io) {
+          // find agent sockets that match job.storeId. Accept either authenticated
+          // agents (s.agent) or sockets that provided storeIds in handshake.auth
+          const sockets = Array.from(io.sockets.sockets.values()).filter(s => {
+            const agentStoreIds = (s.agent && Array.isArray(s.agent.storeIds)) ? s.agent.storeIds : null;
+            const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+            const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+            const storeIds = agentStoreIds || handshakeStoreIds;
+            if (!storeIds) return false;
+            return job.storeId ? storeIds.includes(job.storeId) : true;
           })
-        } catch (e) {
-          if (!resolved) { resolved = true; clearTimeout(timer); resolve({ socketId: s.id, ok: false, error: String(e && e.message) }) }
+          try {
+            console.log(`printQueue.processForStores: job=${job.id} foundCandidates=${sockets.length}`);
+            sockets.forEach(s => {
+              try {
+                const hs = (s.handshake && s.handshake.auth) ? Object.assign({}, s.handshake.auth) : null;
+                if (hs && hs.token) delete hs.token;
+                const agentMeta = s.agent ? { companyId: s.agent.companyId, storeIds: s.agent.storeIds } : null;
+                console.log(`  candidate socket ${s.id} connected=${s.connected} agent=${agentMeta ? JSON.stringify(agentMeta) : 'null'} handshake=${hs ? JSON.stringify(hs) : 'null'}`);
+              } catch (e) {}
+            })
+          } catch (e) {}
+        for (const s of sockets) {
+          try {
+            // emit 'novo-pedido' and wait for ack if possible
+            await new Promise((resolve) => {
+              try {
+                s.timeout(10000).emit('novo-pedido', job.order || job, (...args) => { resolve(true) })
+              } catch (e) {
+                // best-effort emit
+                try { s.emit('novo-pedido', job.order || job); } catch(_){}
+                resolve(false)
+              }
+            })
+            delivered = true
+            break
+          } catch (e) {
+            continue
+          }
         }
-      })
-      results.push({ jobId: job.id, attempt: attempt })
-      if (attempt && attempt.ok) { success = attempt; break }
+      }
+      if (delivered) {
+        job.delivered = true
+        job.deliveredAt = Date.now()
+        results.push({ id: job.id, ok: true })
+      } else {
+        results.push({ id: job.id, ok: false })
+      }
     }
-
-    if (success) {
-      removeById(job.id)
-      results.push({ jobId: job.id, removed: true, socketId: success.socketId })
-      try {
-        // notify frontend about successful print
-        io.emit('print-result', { orderId: job.order && job.order.id, status: 'printed', socketId: success.socketId, ack: success.ack })
-      } catch (e) { /* ignore */ }
-    }
+    // remove delivered jobs
+    queue = queue.filter(j => !j.delivered)
+    persist()
+    return { ok: true, results }
+  } catch (e) {
+    return { ok: false, error: String(e && e.message) }
   }
-
-  return { ok: true, results }
 }
 
-export default { enqueue, list, processForStores }
+export default { enqueue, processForStores }

@@ -143,8 +143,24 @@ async function ensureAgentTokenFromFile() {
       company = await prisma.company.findFirst({ select: { id: true } });
     }
     if (!company) {
-      console.warn('No company record present in DB; skipping PrinterSetting upsert');
-      return;
+      // In development, create a default company so dev UX can proceed without manual DB seeding.
+      if (process.env.NODE_ENV !== 'production') {
+        try {
+          const devCompanyName = process.env.COMPANY_NAME || 'Dev Company';
+          // If a specific companyId file was provided, try to use that id when creating the company
+          const createData = {};
+          if (companyId) createData.id = companyId;
+          createData.name = devCompanyName;
+          company = await prisma.company.create({ data: createData });
+          console.log('Created development Company record for PRINTER token registration:', company.id);
+        } catch (e) {
+          console.error('Failed to create development Company record:', e && e.message);
+          return;
+        }
+      } else {
+        console.warn('No company record present in DB; skipping PrinterSetting upsert');
+        return;
+      }
     }
 
     const tokenHash = sha256(token);

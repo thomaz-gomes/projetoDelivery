@@ -57,6 +57,7 @@ const connectionState = ref({ status: 'idle', since: Date.now(), url: null });
 const showPrinterConfig = ref(false);
 const showPdv = ref(false);
 const newOrderPhone = ref('');
+const pdvPreset = ref(null);
 
 // atualiza 'now' a cada 30s para que durações sejam atualizadas na interface
 let nowTimer = null;
@@ -432,12 +433,7 @@ function onPrinterSaved(cfg){
   try {
     // persist config to the print service and attempt to apply immediately
     printService.setPrinterConfig(cfg).then(() => {
-      console.log('Printer config persisted. Reconnecting to QZ Tray to apply settings...');
-      // Force reconnection to make sure the QZ library picks up any changes
-      try { printService.disconnectQZ(); } catch (e) { /* ignore */ }
-      setTimeout(() => { printService.connectQZ().then((ok) => {
-        console.log('Reconnected to QZ Tray after config change:', ok);
-      }).catch(e => console.warn('Reconnect after config failed', e)); }, 600);
+      console.log('Printer config persisted.');
     }).catch(e => console.warn('Failed to persist printer config via printService', e));
   } catch (e) {
     console.warn('Error applying printer config', e);
@@ -480,6 +476,84 @@ function formatTimeOnly(d) {
 
 function formatCurrency(v){
   try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)); }catch(e){ return 'R$ ' + (Number(v||0).toFixed(2)); }
+}
+
+// Compute displayed total as sum(items + options) + delivery fee, robust to different payload shapes
+function computeDisplayedTotal(o){
+  try{
+    const items = normalizeOrderItems(o) || [];
+    let subtotal = 0;
+    for(const it of items){
+      const qty = Number(it.quantity || 1) || 1;
+      const unit = Number(it.unitPrice || 0) || 0;
+      // use extractItemOptions to support multiple option shapes (publicMenu checkout etc.)
+      const opts = extractItemOptions(it) || [];
+      let optsSum = 0;
+      for (const opt of opts) {
+        const p = Number(opt.price || 0) || 0;
+        const oq = Number(opt.quantity || 1) || 1;
+        // assume option price applies per product unit; quantity is option qty per product
+        optsSum += p * oq;
+      }
+      subtotal += (unit * qty) + (optsSum * qty);
+    }
+
+    // detect delivery fee in common fields
+    const d = Number(o.deliveryFee ?? o.delivery_fee ?? o.delivery?.fee ?? o.payload?.delivery?.deliveryFee ?? o.payload?.delivery?.fee ?? o.totalDeliveryFee ?? o.total_delivery_fee ?? 0) || 0;
+    return subtotal + d;
+  }catch(e){
+    try { return Number(o.total || o.amount || 0) || 0; } catch(e2) { return 0; }
+  }
+}
+
+// Normalize various option shapes to a common array of {name, price, quantity}
+function extractItemOptions(it) {
+  try {
+    if (!it) return [];
+    // Common locations: it.options, it.selectedOptions, it.selected
+    let opts = it.options || it.selectedOptions || it.selected || [];
+
+    // Some payloads use a single object under `option`
+    if ((!Array.isArray(opts) || opts.length === 0) && it.option) {
+      opts = Array.isArray(it.option) ? it.option : [it.option];
+    }
+
+    // Also support optionGroups with chosen options: { optionGroups: [ { selected: [...] } ] }
+    if ((!Array.isArray(opts) || opts.length === 0) && Array.isArray(it.optionGroups)) {
+      // flatten any selected arrays found in groups
+      const byGroup = [];
+      for (const g of it.optionGroups) {
+        if (Array.isArray(g.selected)) byGroup.push(...g.selected);
+        else if (Array.isArray(g.selectedOptions)) byGroup.push(...g.selectedOptions);
+      }
+      if (byGroup.length) opts = byGroup;
+    }
+
+    if (!Array.isArray(opts)) return [];
+
+    const out = [];
+    for (const o of opts) {
+      if (!o) continue;
+      // shape: { option: { name, price }, qty }
+      if (o.option && (o.option.name || o.option.title || o.option.price !== undefined)) {
+        out.push({
+          name: o.option.name || o.option.title || '',
+          price: Number(o.option.price ?? o.option.unitPrice ?? o.option.amount ?? 0) || 0,
+          quantity: Number(o.qty ?? o.quantity ?? o.option.quantity ?? 1) || 1
+        });
+        continue;
+      }
+      // shape: { name, price, quantity }
+      out.push({
+        name: o.name || o.title || '' ,
+        price: Number(o.price ?? o.unitPrice ?? o.amount ?? 0) || 0,
+        quantity: Number(o.quantity ?? o.qty ?? 1) || 1
+      });
+    }
+    return out;
+  } catch (e) {
+    return [];
+  }
 }
 
 function humanDuration(ms) {
@@ -1138,6 +1212,27 @@ function toggleSound() {
   playSound.value = !playSound.value;
 }
 
+function openPdv(){
+  try{
+    pdvPreset.value = null;
+  }catch(e){}
+  showPdv.value = true;
+}
+
+function openBalcao(){
+  // preset: client name 'Balcão', order type RETIRADA and skip address collection
+  pdvPreset.value = { customerName: 'Balcão', orderType: 'RETIRADA', skipAddress: true };
+  newOrderPhone.value = '';
+  showPdv.value = true;
+}
+
+function handlePdvVisibleChange(v){
+  if(!v){
+    try{ newOrderPhone.value = ''; }catch(e){}
+    try{ pdvPreset.value = null; }catch(e){}
+  }
+}
+
 function onPdvCreated(o){
   try {
     if(o){ o._isNew = true; store.orders.unshift(o); setTimeout(()=>{ o._isNew=false; },900); }
@@ -1189,7 +1284,7 @@ function pulseButton() {
       </div>
     </header>
     <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
-    <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" @created="onPdvCreated" @update:visible="(v) => { if(!v) newOrderPhone = ''; }" />
+    <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
 
     <!-- 📞 Card de Novo Pedido -->
     <div class="card mb-4 shadow-sm" style="border-left: 4px solid #198754;">
@@ -1212,12 +1307,16 @@ function pulseButton() {
               type="tel"
               class="form-control"
               placeholder="(00) 0 0000-0000"
-              @keyup.enter="showPdv = true"
+              @keyup.enter="openPdv"
             />
           </div>
-          <button type="button" class="btn btn-success" @click="showPdv = true">
+          <button type="button" class="btn btn-success" @click="openPdv">
             <i class="bi bi-arrow-right-circle"></i>
             Criar Pedido
+          </button>
+          <button type="button" class="btn btn-outline-secondary ms-2" @click="openBalcao" title="Pedido balcão">
+            <i class="bi bi-shop"></i>
+            &nbsp;Pedido balcão
           </button>
         </div>
       </div>
@@ -1314,7 +1413,7 @@ function pulseButton() {
                   <div class="small text-muted mt-1">{{ o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || '-' }}</div>
                   <div class="d-flex justify-content-between align-items-center mt-2">
                     <div class="small text-muted">{{ getCreatedDurationDisplay(o) }}</div>
-                    <div class="fw-semibold text-success">R$ {{ Number(o.total || 0).toFixed(2) }}</div>
+                    <div class="fw-semibold text-success">{{ formatCurrency(computeDisplayedTotal(o)) }}</div>
                   </div>
                 </div>
               </div>
@@ -1336,8 +1435,8 @@ function pulseButton() {
                 <ul class="mb-1">
                   <li v-for="it in normalizeOrderItems(o)" :key="it.id + it.name">
                     <div class="fw-semibold">{{ it.quantity || 1 }}x {{ it.name }} <span class="text-success ms-2">{{ formatCurrency(it.unitPrice || 0) }}</span></div>
-                    <div v-if="it.options && it.options.length" class="small text-muted ms-3 mt-1">
-                      <div v-for="(opt, idx) in it.options" :key="(opt.name || idx) + idx">
+                    <div v-if="extractItemOptions(it).length" class="small text-muted ms-3 mt-1">
+                      <div v-for="(opt, idx) in extractItemOptions(it)" :key="(opt.name || idx) + idx">
                         <span v-if="opt.quantity">{{ opt.quantity }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
                       </div>
                     </div>
