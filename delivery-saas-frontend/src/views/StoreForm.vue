@@ -20,8 +20,8 @@
                 <div class="form-text small">Se preenchido, a URL pública ficará em <code>/public/SEU_SLUG</code>. Caso vazio, o sistema gerará/resolve um slug automaticamente.</div>
               </div>
             <div class="mb-3"><label class="form-label">Endereço</label><input class="form-control" v-model="form.address" /></div>
-            <div class="mb-3"><label class="form-label">Telefone</label><input class="form-control" v-model="form.phone" /></div>
-            <div class="mb-3"><label class="form-label">WhatsApp</label><input class="form-control" v-model="form.whatsapp" /></div>
+            <div class="mb-3"><label class="form-label">Telefone</label><input class="form-control" v-model="form.phone" @input="handlePhoneInput" type="tel" maxlength="15" placeholder="(00) 0000-0000" /></div>
+            <div class="mb-3"><label class="form-label">WhatsApp</label><input class="form-control" v-model="form.whatsapp" @input="handleWhatsAppInput" type="tel" maxlength="16" placeholder="(00) 0 0000-0000" /></div>
             <div class="row">
               <div class="col-md-6 mb-3">
                 <ImageUploader label="Banner" :initialUrl="form.bannerUrl" :aspect="1200/400" :targetWidth="1200" :targetHeight="400" :uploadUrl="!isNew ? `/stores/${id}/settings/upload` : null" uploadKey="bannerBase64" @cropped="onBannerCropped" @uploaded="onBannerUploaded" />
@@ -146,6 +146,7 @@ import api from '../api'
 import { assetUrl } from '../utils/assetUrl.js'
 import ImageUploader from '../components/ImageUploader.vue'
 import { useRoute, useRouter } from 'vue-router'
+import { applyPhoneMask } from '../utils/phoneMask'
 
 const route = useRoute()
 const router = useRouter()
@@ -223,6 +224,14 @@ function triggerCertInput(){ try{ if (certInput.value && certInput.value.click) 
 function confirmDeleteCert(){ showDeleteModal.value = true }
 
 function cancelDeleteCert(){ showDeleteModal.value = false }
+
+function handlePhoneInput(e) {
+  form.value.phone = applyPhoneMask(e.target.value)
+}
+
+function handleWhatsAppInput(e) {
+  form.value.whatsapp = applyPhoneMask(e.target.value)
+}
 
 async function deleteCert(){
   try{

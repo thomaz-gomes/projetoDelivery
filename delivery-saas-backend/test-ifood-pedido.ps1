@@ -8,7 +8,7 @@ Write-Host " Teste: Simulação de Pedido iFood (Webhook)"
 Write-Host "========================================"
 
 # Configuração
-$baseUrl = "https://localhost:3000"
+$baseUrl = "http://localhost:3000"
 $webhookUrl = "$baseUrl/webhooks/ifood"
 $sampleFile = "sample/ifood-webhook.json"
 

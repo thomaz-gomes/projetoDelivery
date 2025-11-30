@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -343,6 +343,9 @@ model PrinterSetting {
   width      Int      @default(48)
   headerName String?  @default("Minha Loja")
   headerCity String?  @default("Cidade")
+  // Agent token (hashed) used by delivery-print-agent for authentication
+  agentTokenHash String?
+  agentTokenCreatedAt DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }

@@ -1,0 +1,18 @@
+pedido: 11 | 2025-11-25
+CLIENTE BALCÃO
+--------------------
+-
+---------------------
+
+QT  Descrição                Valor
+1   Tropeiro com carne          26.00
+
+Quantidade de itens  1
+---------------------------
+Total de itens   26.00
+
+FORMAS DE PAGAMENTO
+CARTÃO DE CRÉDITO   26.00
+[QR IMAGE]
+
+[QR_PRESENCE] data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAYAAAAbWs+BAAATeElEQVR4Xu2d0XZbtw5Em///6HvlNHmoRXrt3SEoxZ08ZuGA4GAGAKkj+cf/Hv/+6r8iUASuIPCjgruCcxcpAj8RqOBKhCJwEYEK7iLYXaoIVHDlQBG4iEAFdxHsLlUEKr...[truncated]

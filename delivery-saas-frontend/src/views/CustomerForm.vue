@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useCustomersStore } from '../stores/customers';
 import { useRouter, useRoute } from 'vue-router';
+import { applyPhoneMask } from '../utils/phoneMask';
 
 const store = useCustomersStore();
 const router = useRouter();
@@ -77,6 +78,14 @@ function addAddress() {
 function removeAddress(index) {
   customer.value.addresses.splice(index, 1);
 }
+
+function handleWhatsAppInput(e) {
+  customer.value.whatsapp = applyPhoneMask(e.target.value);
+}
+
+function handlePhoneInput(e) {
+  customer.value.phone = applyPhoneMask(e.target.value);
+}
 </script>
 
 <template>
@@ -99,11 +108,11 @@ function removeAddress(index) {
           </div>
           <div class="col-md-3">
             <label class="form-label">WhatsApp</label>
-            <input v-model="customer.whatsapp" type="text" class="form-control" placeholder="(00) 00000-0000" />
+            <input v-model="customer.whatsapp" @input="handleWhatsAppInput" type="tel" class="form-control" placeholder="(00) 0 0000-0000" maxlength="16" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Telefone</label>
-            <input v-model="customer.phone" type="text" class="form-control" placeholder="(00) 0000-0000" />
+            <input v-model="customer.phone" @input="handlePhoneInput" type="tel" class="form-control" placeholder="(00) 0000-0000" maxlength="15" />
           </div>
 
           <div class="col-12 mt-3">

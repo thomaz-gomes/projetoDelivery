@@ -1,0 +1,2 @@
+C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\publish\raw-spooler.pdb
+C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\publish\raw-spooler.exe

@@ -27,6 +27,12 @@ integrationsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
     const { provider, clientId, clientSecret, merchantId, enabled, storeId, authMode } = req.body || {};
     if (!provider) return res.status(400).json({ message: 'provider é obrigatório' });
 
+    // storeId is required: each integration must be bound to a specific store
+    if (!storeId) return res.status(400).json({ message: 'storeId é obrigatório e deve pertencer à empresa' });
+    // validate store belongs to company
+    const store = await prisma.store.findFirst({ where: { id: storeId, companyId } });
+    if (!store) return res.status(400).json({ message: 'storeId inválido ou não pertence à empresa' });
+
     const created = await prisma.apiIntegration.create({ data: {
       companyId,
       provider: String(provider).toUpperCase(),
@@ -34,7 +40,7 @@ integrationsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       clientSecret: clientSecret || null,
       merchantId: merchantId || null,
       enabled: enabled ?? true,
-      storeId: storeId || null,
+      storeId: storeId,
       authMode: authMode || 'AUTH_CODE',
     } });
     res.status(201).json(created);
@@ -52,6 +58,11 @@ integrationsRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
     const body = req.body || {};
     const existing = await prisma.apiIntegration.findFirst({ where: { id, companyId } });
     if (!existing) return res.status(404).json({ message: 'Integração não encontrada' });
+    // if storeId is provided, validate it belongs to the company
+    if (body.storeId) {
+      const st = await prisma.store.findFirst({ where: { id: body.storeId, companyId } });
+      if (!st) return res.status(400).json({ message: 'storeId inválido ou não pertence à empresa' });
+    }
     const updated = await prisma.apiIntegration.update({ where: { id }, data: {
       clientId: body.clientId ?? existing.clientId,
       clientSecret: body.clientSecret ?? existing.clientSecret,
@@ -132,6 +143,23 @@ integrationsRouter.get('/', requireRole('ADMIN'), async (req, res) => {
   }
 });
 
+// Buscar integração por id - evita conflito com rota /:provider
+// Use a clear path `/by-id/:id` to avoid older path-to-regexp regex limitations.
+integrationsRouter.get('/by-id/:id', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const companyId = req.user.companyId;
+    // basic UUID v4-ish validation
+    if (!id || !/^[0-9a-fA-F-]{36}$/.test(id)) return res.status(400).json({ message: 'id inválido' });
+    const integration = await prisma.apiIntegration.findFirst({ where: { id, companyId } });
+    if (!integration) return res.status(404).json({ message: 'Integração não encontrada' });
+    res.json(integration);
+  } catch (e) {
+    console.error('GET /integrations/:id failed', e);
+    res.status(500).json({ message: 'Erro ao buscar integração', error: e.message });
+  }
+});
+
 // Lista integrações por provider (ex: /integrations/IFOOD)
 integrationsRouter.get('/:provider', requireRole('ADMIN'), async (req, res) => {
   try {
@@ -205,5 +233,34 @@ integrationsRouter.post('/ifood/ack', requireRole('ADMIN'), async (req, res) => 
     res.json(r);
   } catch (e) {
     res.status(500).json({ message: 'Falha ao confirmar eventos', error: e.message });
+  }
+});
+
+// Provider-specific create, e.g. POST /integrations/IFOOD
+integrationsRouter.post('/:provider', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { provider } = req.params;
+    const { clientId, clientSecret, merchantId, enabled, storeId, authMode } = req.body || {};
+    if (!provider) return res.status(400).json({ message: 'provider é obrigatório' });
+
+    if (!storeId) return res.status(400).json({ message: 'storeId é obrigatório e deve pertencer à empresa' });
+    const store = await prisma.store.findFirst({ where: { id: storeId, companyId } });
+    if (!store) return res.status(400).json({ message: 'storeId inválido ou não pertence à empresa' });
+
+    const created = await prisma.apiIntegration.create({ data: {
+      companyId,
+      provider: String(provider).toUpperCase(),
+      clientId: clientId || null,
+      clientSecret: clientSecret || null,
+      merchantId: merchantId || null,
+      enabled: enabled ?? true,
+      storeId: storeId,
+      authMode: authMode || 'AUTH_CODE',
+    } });
+    res.status(201).json(created);
+  } catch (e) {
+    console.error('POST /integrations/:provider failed', e);
+    res.status(500).json({ message: 'Erro ao criar integração', error: e.message });
   }
 });

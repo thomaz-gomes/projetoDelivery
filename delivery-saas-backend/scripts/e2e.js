@@ -1,7 +1,7 @@
 (async () => {
   try {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    const base = 'https://localhost:3000';
+    const base = 'http://localhost:3000';
     const fetch = global.fetch || (await import('node-fetch')).default;
 
     const loginRes = await fetch(base + '/auth/login', {

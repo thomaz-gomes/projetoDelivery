@@ -24,6 +24,7 @@ const nav = [
     { name: 'Configurações', to: '/settings/company', icon: 'bi bi-gear', children: [
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt' },
     { name: 'iFood', to: '/settings/ifood', icon: 'bi bi-shop' },
+    { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug' },
     { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
     { name: 'Pasta (import)', to: '/settings/file-source', icon: 'bi bi-folder' },
     { name: 'Preview (pasta)', to: '/settings/file-source/preview', icon: 'bi bi-eye' },

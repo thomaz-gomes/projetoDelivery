@@ -10,8 +10,10 @@ import 'sweetalert2/dist/sweetalert2.min.css';
 import printService from "../services/printService.js";
 import PrinterStatus from '../components/PrinterStatus.vue';
 import PrinterConfig from '../components/PrinterConfig.vue';
+import POSOrderWizard from '../components/POSOrderWizard.vue';
 
 import api from '../api';
+import { API_URL, SOCKET_URL } from '@/config';
 import QRCode from 'qrcode';
 import { bindLoading } from '../state/globalLoading.js';
 import Sortable from 'sortablejs';
@@ -53,6 +55,9 @@ const now = ref(Date.now());
 // connection state for a dev-friendly badge (moved to module scope so computed can access it)
 const connectionState = ref({ status: 'idle', since: Date.now(), url: null });
 const showPrinterConfig = ref(false);
+const showPdv = ref(false);
+const newOrderPhone = ref('');
+const pdvPreset = ref(null);
 
 // atualiza 'now' a cada 30s para que durações sejam atualizadas na interface
 let nowTimer = null;
@@ -127,13 +132,9 @@ onMounted(async () => {
   }
 
   // 🔌 Conectar ao servidor (tempo real)
-  // Build API URL: prefer VITE_API_URL, else build from current page origin with port 3000.
-  const API_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== 'https://localhost:3000')
-    ? import.meta.env.VITE_API_URL
-    : `${location.protocol}//${location.hostname}:3000`;
-  console.log('Socket connecting to API_URL:', API_URL);
+  console.log('Socket connecting to SOCKET_URL:', SOCKET_URL);
   // Prefer websocket transport to avoid polling/upgrade flapping; increase reconnection patience
-  socket.value = io(API_URL, {
+  socket.value = io(SOCKET_URL, {
     transports: ['websocket'],
     timeout: 30000,
     reconnectionAttempts: Infinity,
@@ -143,11 +144,17 @@ onMounted(async () => {
   });
 
   // update connection state for a dev-friendly badge
-  connectionState.value = { status: 'connecting', since: Date.now(), url: API_URL };
+  connectionState.value = { status: 'connecting', since: Date.now(), url: SOCKET_URL };
 
   socket.value.on('connect', () => {
-    connectionState.value = { status: 'connected', since: Date.now(), url: API_URL };
+    connectionState.value = { status: 'connected', since: Date.now(), url: SOCKET_URL };
     console.log('📡 Conectado ao servidor de pedidos.');
+    // If user is logged in, identify this socket so backend can target it by companyId
+    try {
+      if (auth && auth.token) {
+        try { socket.value.emit('identify', auth.token); } catch (e) { console.warn('Failed to emit identify', e); }
+      }
+    } catch (e) {}
   });
   // Debug: log any socket event to help identify what backend is emitting
   try {
@@ -156,17 +163,28 @@ onMounted(async () => {
     });
   } catch (e) { /* some older socket builds may not support onAny; ignore */ }
   socket.value.on('disconnect', (reason) => {
-    connectionState.value = { status: 'disconnected', reason: reason || 'unknown', since: Date.now(), url: API_URL };
+    connectionState.value = { status: 'disconnected', reason: reason || 'unknown', since: Date.now(), url: SOCKET_URL };
     console.warn('⚠️ Desconectado do servidor de pedidos.', reason);
   });
   socket.value.on('connect_error', (err) => {
-    connectionState.value = { status: 'error', reason: String(err || ''), since: Date.now(), url: API_URL };
+    connectionState.value = { status: 'error', reason: String(err || ''), since: Date.now(), url: SOCKET_URL };
     console.error('❌ Socket connect error', err);
   });
   socket.value.on('reconnect_attempt', (n) => {
-    connectionState.value = { status: 'reconnecting', attempt: n, since: Date.now(), url: API_URL };
+    connectionState.value = { status: 'reconnecting', attempt: n, since: Date.now(), url: SOCKET_URL };
     console.log('🔁 Socket reconnect attempt', n);
   });
+
+  // If other parts of the app notify that a user just logged in, send 'identify'
+  const onAppUserLoggedIn = (ev) => {
+    try {
+      const t = ev && ev.detail && ev.detail.token;
+      if (t && socket.value) {
+        try { socket.value.emit('identify', t); } catch (e) {}
+      }
+    } catch (e) {}
+  };
+  try { window.addEventListener('app:user-logged-in', onAppUserLoggedIn); } catch (e) {}
 
   socket.value.on("novo-pedido", async (pedido) => {
     console.log("🆕 Novo pedido recebido via socket:", pedido);
@@ -193,8 +211,20 @@ onMounted(async () => {
     showNotification(full);
 
     try {
-      await printService.enqueuePrint(full);
-      console.log(`🖨️ Impressão automática enviada: ${formatDisplay(full)}`);
+      // Only perform frontend automatic printing when the print route is set to 'agent'.
+      // When using backend auto-printing (recommended), the backend will forward to agents
+      // and emit `print-result` events back to the UI — avoid double-printing.
+      try {
+        const route = (printService && printService.getPrintRoute) ? printService.getPrintRoute() : null;
+        if (route === 'agent') {
+          await printService.enqueuePrint(full);
+          console.log(`🖨️ Impressão automática (frontend->agent) enviada: ${formatDisplay(full)}`);
+        } else {
+          console.log(`🖨️ Frontend print skipped (route=${route}) — backend will handle auto-print.`);
+        }
+      } catch (e) {
+        console.warn('printService check/print failed', e);
+      }
     } catch (err) {
       console.error("⚠️ Falha ao imprimir automaticamente:", err);
     }
@@ -299,6 +329,47 @@ onMounted(async () => {
   const orderUpdateEvents = ['pedido-atualizado', 'order-updated', 'order:updated', 'order-status-changed', 'pedido-status', 'update-order'];
   orderUpdateEvents.forEach(ev => socket.value.on(ev, (p) => handleOrderUpdateEvent(p, ev)));
 
+  // Listen for print results emitted by backend so UI shows toast notifications
+  socket.value.on('print-result', (payload) => {
+    try {
+      const oid = payload && (payload.orderId || payload.order && payload.order.id);
+      const order = oid ? store.orders.find(o => o && o.id === oid) : null;
+      const display = order ? formatDisplay(order) : (payload && payload.order && formatDisplay(payload.order)) || (oid ? String(oid).slice(0,6) : '');
+
+      if (!payload || !payload.status) {
+        // unknown payload
+        return;
+      }
+
+      if (payload.status === 'printed') {
+        Swal.fire({ icon: 'success', title: 'Impressão realizada', text: `Comanda ${display} impressa com sucesso.`, timer: 2500, toast: true, position: 'top-end', showConfirmButton: false });
+      } else if (payload.status === 'queued') {
+        Swal.fire({ icon: 'info', title: 'Pedido enfileirado', text: `Comanda ${display} foi enfileirada para impressão. Será processada em breve.`, timer: 3000, toast: true, position: 'top-end', showConfirmButton: false });
+      } else if (payload.status === 'error' || payload.status === 'failed') {
+        Swal.fire({ icon: 'error', title: 'Erro na impressão', text: `Falha ao imprimir comanda ${display}.`, timer: 4000, toast: true, position: 'top-end', showConfirmButton: false });
+      } else {
+        // fallback informational toast
+        Swal.fire({ icon: 'info', title: 'Status de impressão', text: payload.message || `Status: ${payload.status}`, timer: 3000, toast: true, position: 'top-end', showConfirmButton: false });
+      }
+    } catch (e) {
+      console.warn('Failed to handle print-result socket event', e);
+    }
+  });
+
+  // Listen for agent token rotations (dev/admin action). When received, update
+  // local storage and printService so frontend HTTP->agent calls keep working.
+  socket.value.on('agent-token-rotated', async (payload) => {
+    try {
+      if (!payload || !payload.token) return;
+      const token = payload.token;
+      console.log('Received agent-token-rotated via socket; updating local token store.');
+      try { localStorage.setItem('agentToken', token); } catch (e) {}
+      try { await printService.setPrinterConfig({ agentToken: token }); } catch (e) { console.warn('Failed to apply rotated agent token to printService', e); }
+    } catch (e) {
+      console.warn('Failed to handle agent-token-rotated', e);
+    }
+  });
+
   socket.value.on('disconnect', () => {
     // keep connectionState in sync when disconnected via other paths
     connectionState.value = { status: 'disconnected', since: Date.now(), url: API_URL };
@@ -348,6 +419,7 @@ onUnmounted(() => {
     try { socket.value.offAny && socket.value.offAny(); } catch (e) {}
     socket.value.disconnect();
   }
+  try { window.removeEventListener('app:user-logged-in', onAppUserLoggedIn); } catch (e) {}
   try { if (resizeHandler) window.removeEventListener('resize', resizeHandler); } catch (e) {}
   clearInterval(nowTimer);
   // destroy Sortable instances
@@ -358,6 +430,14 @@ onUnmounted(() => {
 
 function onPrinterSaved(cfg){
   console.log('Printer configuration saved:', cfg);
+  try {
+    // persist config to the print service and attempt to apply immediately
+    printService.setPrinterConfig(cfg).then(() => {
+      console.log('Printer config persisted.');
+    }).catch(e => console.warn('Failed to persist printer config via printService', e));
+  } catch (e) {
+    console.warn('Error applying printer config', e);
+  }
 }
 
 // =============================
@@ -396,6 +476,84 @@ function formatTimeOnly(d) {
 
 function formatCurrency(v){
   try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)); }catch(e){ return 'R$ ' + (Number(v||0).toFixed(2)); }
+}
+
+// Compute displayed total as sum(items + options) + delivery fee, robust to different payload shapes
+function computeDisplayedTotal(o){
+  try{
+    const items = normalizeOrderItems(o) || [];
+    let subtotal = 0;
+    for(const it of items){
+      const qty = Number(it.quantity || 1) || 1;
+      const unit = Number(it.unitPrice || 0) || 0;
+      // use extractItemOptions to support multiple option shapes (publicMenu checkout etc.)
+      const opts = extractItemOptions(it) || [];
+      let optsSum = 0;
+      for (const opt of opts) {
+        const p = Number(opt.price || 0) || 0;
+        const oq = Number(opt.quantity || 1) || 1;
+        // assume option price applies per product unit; quantity is option qty per product
+        optsSum += p * oq;
+      }
+      subtotal += (unit * qty) + (optsSum * qty);
+    }
+
+    // detect delivery fee in common fields
+    const d = Number(o.deliveryFee ?? o.delivery_fee ?? o.delivery?.fee ?? o.payload?.delivery?.deliveryFee ?? o.payload?.delivery?.fee ?? o.totalDeliveryFee ?? o.total_delivery_fee ?? 0) || 0;
+    return subtotal + d;
+  }catch(e){
+    try { return Number(o.total || o.amount || 0) || 0; } catch(e2) { return 0; }
+  }
+}
+
+// Normalize various option shapes to a common array of {name, price, quantity}
+function extractItemOptions(it) {
+  try {
+    if (!it) return [];
+    // Common locations: it.options, it.selectedOptions, it.selected
+    let opts = it.options || it.selectedOptions || it.selected || [];
+
+    // Some payloads use a single object under `option`
+    if ((!Array.isArray(opts) || opts.length === 0) && it.option) {
+      opts = Array.isArray(it.option) ? it.option : [it.option];
+    }
+
+    // Also support optionGroups with chosen options: { optionGroups: [ { selected: [...] } ] }
+    if ((!Array.isArray(opts) || opts.length === 0) && Array.isArray(it.optionGroups)) {
+      // flatten any selected arrays found in groups
+      const byGroup = [];
+      for (const g of it.optionGroups) {
+        if (Array.isArray(g.selected)) byGroup.push(...g.selected);
+        else if (Array.isArray(g.selectedOptions)) byGroup.push(...g.selectedOptions);
+      }
+      if (byGroup.length) opts = byGroup;
+    }
+
+    if (!Array.isArray(opts)) return [];
+
+    const out = [];
+    for (const o of opts) {
+      if (!o) continue;
+      // shape: { option: { name, price }, qty }
+      if (o.option && (o.option.name || o.option.title || o.option.price !== undefined)) {
+        out.push({
+          name: o.option.name || o.option.title || '',
+          price: Number(o.option.price ?? o.option.unitPrice ?? o.option.amount ?? 0) || 0,
+          quantity: Number(o.qty ?? o.quantity ?? o.option.quantity ?? 1) || 1
+        });
+        continue;
+      }
+      // shape: { name, price, quantity }
+      out.push({
+        name: o.name || o.title || '' ,
+        price: Number(o.price ?? o.unitPrice ?? o.amount ?? 0) || 0,
+        quantity: Number(o.quantity ?? o.qty ?? 1) || 1
+      });
+    }
+    return out;
+  } catch (e) {
+    return [];
+  }
 }
 
 function humanDuration(ms) {
@@ -783,30 +941,18 @@ function logout() {
 
 async function printReceipt(order) {
     try {
-      await printService.enqueuePrint(order);
-      console.log(`🧾 Impressão solicitada manualmente: ${formatDisplay(order)}`);
-
-      Swal.fire({
-        icon: "success",
-        title: "Impressão enviada!",
-        text: `Comanda do pedido ${formatDisplay(order)} enviada à impressora.`,
-        timer: 2500,
-        toast: true,
-        position: "top-end",
-        showConfirmButton: false,
-      });
+      const res = await printService.enqueuePrint(order);
+      console.log(`🧾 Impressão solicitada manualmente: ${formatDisplay(order)}`, res);
+      if (res && res.status === 'printed') {
+        Swal.fire({ icon: 'success', title: 'Impressão realizada', text: `Comanda ${formatDisplay(order)} impressa com sucesso.`, timer: 2500, toast: true, position: 'top-end', showConfirmButton: false });
+      } else if (res && res.status === 'queued') {
+        Swal.fire({ icon: 'info', title: 'Pedido enfileirado', text: `Comanda ${formatDisplay(order)} foi enfileirada para impressão. Será processada em breve.`, timer: 3000, toast: true, position: 'top-end', showConfirmButton: false });
+      } else {
+        Swal.fire({ icon: 'warning', title: 'Solicitação enviada', text: `Comanda ${formatDisplay(order)} enviada para processamento.`, timer: 2500, toast: true, position: 'top-end', showConfirmButton: false });
+      }
     } catch (err) {
     console.error("❌ Erro ao imprimir manualmente:", err);
-    Swal.fire({
-      icon: "error",
-      title: "Erro ao imprimir",
-      text:
-        "Falha ao imprimir comanda. Verifique se o QZ Tray está aberto e autorizado.",
-      timer: 4000,
-      toast: true,
-      position: "top-end",
-      showConfirmButton: false,
-    });
+    Swal.fire({ icon: 'error', title: 'Erro ao imprimir', text: 'Falha ao imprimir comanda. Verifique a conexão com o agente de impressão ou consulte o log.', timer: 4000, toast: true, position: 'top-end', showConfirmButton: false });
   }
 }
 
@@ -1066,6 +1212,35 @@ function toggleSound() {
   playSound.value = !playSound.value;
 }
 
+function openPdv(){
+  try{
+    pdvPreset.value = null;
+  }catch(e){}
+  showPdv.value = true;
+}
+
+function openBalcao(){
+  // preset: client name 'Balcão', order type RETIRADA and skip address collection
+  pdvPreset.value = { customerName: 'Balcão', orderType: 'RETIRADA', skipAddress: true };
+  newOrderPhone.value = '';
+  showPdv.value = true;
+}
+
+function handlePdvVisibleChange(v){
+  if(!v){
+    try{ newOrderPhone.value = ''; }catch(e){}
+    try{ pdvPreset.value = null; }catch(e){}
+  }
+}
+
+function onPdvCreated(o){
+  try {
+    if(o){ o._isNew = true; store.orders.unshift(o); setTimeout(()=>{ o._isNew=false; },900); }
+  } catch(e){ console.warn('Falha ao inserir pedido PDV localmente', e); }
+  // close wizard after creation
+  showPdv.value = false;
+}
+
 function pulseButton() {
   if (!soundButton.value) return;
   soundButton.value.classList.add('btn-pulse');
@@ -1103,9 +1278,49 @@ function pulseButton() {
         <button type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
           <i class="bi bi-printer"></i>&nbsp;Teste Impressão
         </button>
+        <button type="button" class="btn btn-sm btn-success" @click="showPdv = true" title="Novo pedido PDV">
+          <i class="bi bi-plus-circle"></i>&nbsp;Novo Pedido
+        </button>
       </div>
     </header>
     <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
+    <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
+
+    <!-- 📞 Card de Novo Pedido -->
+    <div class="card mb-4 shadow-sm" style="border-left: 4px solid #198754;">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <h5 class="card-title mb-1">
+              <i class="bi bi-plus-circle-fill text-success"></i>
+              Iniciar Novo Pedido
+            </h5>
+            <p class="card-text text-muted small mb-0">
+              Digite o telefone do cliente para começar um novo pedido pelo PDV
+            </p>
+          </div>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+          <div class="flex-grow-1" style="max-width: 300px;">
+            <input
+              v-model="newOrderPhone"
+              type="tel"
+              class="form-control"
+              placeholder="(00) 0 0000-0000"
+              @keyup.enter="openPdv"
+            />
+          </div>
+          <button type="button" class="btn btn-success" @click="openPdv">
+            <i class="bi bi-arrow-right-circle"></i>
+            Criar Pedido
+          </button>
+          <button type="button" class="btn btn-outline-secondary ms-2" @click="openBalcao" title="Pedido balcão">
+            <i class="bi bi-shop"></i>
+            &nbsp;Pedido balcão
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- 🔍 Filtros + Som -->
     <div
@@ -1198,7 +1413,7 @@ function pulseButton() {
                   <div class="small text-muted mt-1">{{ o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || '-' }}</div>
                   <div class="d-flex justify-content-between align-items-center mt-2">
                     <div class="small text-muted">{{ getCreatedDurationDisplay(o) }}</div>
-                    <div class="fw-semibold text-success">R$ {{ Number(o.total || 0).toFixed(2) }}</div>
+                    <div class="fw-semibold text-success">{{ formatCurrency(computeDisplayedTotal(o)) }}</div>
                   </div>
                 </div>
               </div>
@@ -1220,8 +1435,8 @@ function pulseButton() {
                 <ul class="mb-1">
                   <li v-for="it in normalizeOrderItems(o)" :key="it.id + it.name">
                     <div class="fw-semibold">{{ it.quantity || 1 }}x {{ it.name }} <span class="text-success ms-2">{{ formatCurrency(it.unitPrice || 0) }}</span></div>
-                    <div v-if="it.options && it.options.length" class="small text-muted ms-3 mt-1">
-                      <div v-for="(opt, idx) in it.options" :key="(opt.name || idx) + idx">
+                    <div v-if="extractItemOptions(it).length" class="small text-muted ms-3 mt-1">
+                      <div v-for="(opt, idx) in extractItemOptions(it)" :key="(opt.name || idx) + idx">
                         <span v-if="opt.quantity">{{ opt.quantity }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
                       </div>
                     </div>

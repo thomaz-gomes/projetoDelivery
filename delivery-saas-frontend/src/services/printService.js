@@ -1,141 +1,19 @@
 // src/services/printService.js
 
-let connected = false;
+// Minimal HTTP-based print service that replaces QZ Tray integration.
+// - Sends print requests to `/agent-print`.
+// - Keeps a small retry queue when network/backend is unavailable.
+// - Provides connectivity checks used by UI components.
+// Determine backend base URL: prefer VITE_API_URL, otherwise default to localhost:3000
+const BACKEND_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
+  ? String(import.meta.env.VITE_API_URL).replace(/\/$/, '')
+  : 'http://localhost:3000';
+
+let connected = true; // optimistic default
 let defaultPrinter = null;
 const queue = [];
 let isPrinting = false;
-// Promise that represents an ongoing connect attempt. Used to coalesce concurrent calls.
 let connectingPromise = null;
-// ================================
-// 🔌 Conectar ao QZ Tray
-// ================================
-export async function connectQZ() {
-  try {
-    const qz = window.qz;
-    if (!qz) {
-      console.warn("⚠️ QZ Tray não detectado no navegador (window.qz ausente).");
-      return false;
-    }
-
-    // já conectado?
-    if (qz.websocket && qz.websocket.isActive && qz.websocket.isActive()) {
-      connected = true;
-      // prefer a configured printer from localStorage when present
-      try {
-        const cfg = JSON.parse(localStorage.getItem('printerConfig') || '{}');
-        if (cfg && cfg.printerName) {
-          defaultPrinter = cfg.printerName;
-        } else {
-          defaultPrinter = await qz.printers.getDefault();
-        }
-      } catch (e) {
-        defaultPrinter = await qz.printers.getDefault();
-      }
-      console.log("✅ QZ Tray já conectado. Impressora padrão:", defaultPrinter);
-      return true;
-    }
-
-    // If there's already an ongoing connect attempt, return the same promise so
-    // concurrent callers wait for the same result instead of starting new attempts.
-    if (connectingPromise) {
-      return await connectingPromise;
-    }
-
-    // Create a single promise for the connect flow and keep it in module scope
-    // so other callers can await it. We implement an exponential backoff retry
-    // strategy to avoid flooding QZ Tray while trying to connect.
-    connectingPromise = (async () => {
-      console.log("🔌 Tentando conectar ao QZ Tray...");
-      const maxAttempts = 5;
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          // Let the qz library perform its own small retry loop too.
-          await qz.websocket.connect({ retries: 10, delay: 500 });
-
-          // aguarda de fato ficar ativo
-          let waitAttempts = 0;
-          while (!qz.websocket.isActive() && waitAttempts < 20) {
-            await new Promise(r => setTimeout(r, 200));
-            waitAttempts++;
-          }
-
-          if (!qz.websocket.isActive()) throw new Error("QZ Tray não respondeu a tempo");
-
-          connected = true;
-          // prefer a configured printer from localStorage when present
-          try {
-            const cfg = JSON.parse(localStorage.getItem('printerConfig') || '{}');
-            if (cfg && cfg.printerName) {
-              defaultPrinter = cfg.printerName;
-            } else {
-              defaultPrinter = await qz.printers.getDefault();
-            }
-          } catch (e) {
-            defaultPrinter = await qz.printers.getDefault();
-          }
-          console.log("🖨️ Conectado ao QZ Tray. Impressora padrão:", defaultPrinter);
-          return true;
-        } catch (err) {
-          console.error(`❌ Falha ao conectar QZ Tray (tentativa ${attempt}):`, err && err.message ? err.message : err);
-          if (attempt >= maxAttempts) {
-            // Re-throw so outer catch can handle it and we clear connectingPromise.
-            throw err;
-          }
-          // Exponential backoff with jitter (cap at 30s)
-          const base = Math.min(2000 * Math.pow(2, attempt - 1), 30000);
-          const jitter = Math.floor(Math.random() * 500);
-          const delay = base + jitter;
-          console.log(`Aguardando ${delay}ms antes da próxima tentativa de conexão...`);
-          await new Promise(r => setTimeout(r, delay));
-        }
-      }
-      // If we exit the loop without returning, consider it a failure.
-      throw new Error('Falha desconhecida ao conectar QZ Tray');
-    })();
-
-    try {
-      const res = await connectingPromise;
-      return res;
-    } finally {
-      // Clear the connecting promise so future attempts can start fresh.
-      connectingPromise = null;
-    }
-  } catch (err) {
-    console.error("❌ Falha ao conectar QZ Tray:", err.message);
-    connected = false;
-    return false;
-  }
-}
-
-
-// ================================
-// 🖨️ Função para imprimir um pedido
-// ================================
-export async function enqueuePrint(order) {
-  queue.push(order);
-  processQueue();
-}
-
-// ================================
-// ⏳ Processa a fila de impressão
-// ================================
-async function processQueue() {
-  if (isPrinting || queue.length === 0) return;
-
-  isPrinting = true;
-  const order = queue.shift();
-
-  try {
-    await printOrder(order);
-  } catch (err) {
-    console.error("❌ Erro ao imprimir pedido:", err.message || err);
-  } finally {
-    isPrinting = false;
-    if (queue.length > 0) {
-      processQueue();
-    }
-  }
-}
 
 // ================================
 // 🧾 Gera o conteúdo de texto da comanda
@@ -177,68 +55,107 @@ TOTAL: R$ ${totalNum.toFixed(2)}
 export { formatOrderText };
 
 // ================================
-// 🖨️ Execução real da impressão
+// 🖨️ Envia pedido para o backend/agent
 // ================================
-async function printOrder(order) {
-  const qz = window.qz;
-  if (!qz) throw new Error("QZ Tray não disponível (window.qz ausente)");
-
-  if (!connected) {
-    const ok = await connectQZ();
-    if (!ok) throw new Error("QZ Tray não conectado");
+export async function enqueuePrint(order) {
+  if (!order) return;
+  try {
+    const res = await fetch(`${BACKEND_BASE}/agent-print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order })
+    });
+    if (!res.ok) throw new Error('failed to post to /agent-print: ' + res.status);
+    return true;
+  } catch (e) {
+    console.warn('printService: failed to send order, queuing for retry', e && e.message ? e.message : e);
+    queue.push(order);
+    // schedule a retry
+    setTimeout(processQueue, 5000);
+    return false;
   }
-
-  if (!defaultPrinter) {
-    defaultPrinter = await qz.printers.getDefault();
-    if (!defaultPrinter) throw new Error("Nenhuma impressora padrão definida");
-  }
-
-  const text = formatOrderText(order);
-
-  const config = qz.configs.create(defaultPrinter, {
-    encoding: "UTF-8",
-    copies: 1,
-    colorType: "grayscale",
-  });
-
-  const data = [{ type: "raw", format: "plain", data: text }];
-
-  const dbg = order.displaySimple != null ? String(order.displaySimple).padStart(2,'0') : (order.displayId != null ? String(order.displayId).padStart(2,'0') : (order.id || '').slice(0,6));
-  console.log(`🧾 Enviando pedido ${dbg} para impressão...`);
-
-  await qz.print(config, data);
-  console.log(`✅ Pedido ${dbg} impresso com sucesso.`);
 }
 
-// ================================
-// ♻️ Desconectar do QZ Tray
-// ================================
-export async function disconnectQZ() {
-  const qz = window.qz;
-  if (qz && qz.websocket && qz.websocket.isActive && qz.websocket.isActive()) {
-    await qz.websocket.disconnect();
-    connected = false;
-    console.log("🔌 Desconectado do QZ Tray.");
+async function processQueue() {
+  if (isPrinting || queue.length === 0) return;
+  isPrinting = true;
+  const order = queue.shift();
+  try {
+    await enqueuePrint(order);
+  } catch (e) {
+    console.error('printService: error while processing queued print', e);
+    queue.unshift(order); // push back to front
+    setTimeout(processQueue, 5000);
+  } finally {
+    isPrinting = false;
+    if (queue.length > 0) setTimeout(processQueue, 5000);
   }
 }
 
 // ================================
-// 🚦 Estado do serviço
+// 🚦 Estado do serviço / conectividade
 // ================================
 export function isConnected() {
-  return connected;
+  return !!connected;
 }
 
-// retorna se existe uma tentativa de conexão em andamento
 export function isConnecting() {
   return !!connectingPromise;
 }
 
+// perform an async connectivity check against the agent-print endpoint
+export async function checkConnectivity() {
+  if (connectingPromise) return connectingPromise;
+  connectingPromise = (async () => {
+    try {
+      const res = await fetch(`${BACKEND_BASE}/agent-print/printers`, { method: 'GET' });
+      connected = res.ok;
+    } catch (e) {
+      connected = false;
+    } finally {
+      connectingPromise = null;
+      return connected;
+    }
+  })();
+  return connectingPromise;
+}
+
+// kick off a background connectivity check
+try { checkConnectivity(); setInterval(() => { checkConnectivity().catch(()=>{}); }, 15000); } catch(e){}
+
+// ================================
+// 🔧 Printer configuration helpers
+// ================================
+export function getPrinterConfig() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('printerConfig') || '{}');
+    return cfg;
+  } catch (e) {
+    return {};
+  }
+}
+
+export async function setPrinterConfig(cfg = {}) {
+  try {
+    const merged = Object.assign({}, getPrinterConfig(), cfg);
+    localStorage.setItem('printerConfig', JSON.stringify(merged));
+    // update in-memory defaultPrinter if provided
+    if (merged.printerName) {
+      defaultPrinter = merged.printerName;
+    }
+    return merged;
+  } catch (e) {
+    console.warn('Failed to set printer config', e);
+    throw e;
+  }
+}
+
 export default {
-  connectQZ,
   enqueuePrint,
-  disconnectQZ,
   isConnected,
   isConnecting,
+  checkConnectivity,
   formatOrderText,
+  getPrinterConfig,
+  setPrinterConfig,
 };

@@ -1,51 +1,49 @@
 # Print mock tools
 
-This folder contains two lightweight servers you can run locally to test printing flows without a real QZ Tray instance.
+Este diretório contém utilitários leves para testar fluxos de impressão durante o
+desenvolvimento. A dependência de QZ Tray foi removida — em vez de usar um
+mock WebSocket, o fluxo recomendado agora é enviar a impressão para um endpoint
+HTTP local (por exemplo `/api/print`) que sua API/backend ou um agente local
+pode processar.
 
-Files
+Arquivos
 
-- `qz-mock-server.js` — a minimal WebSocket server that mimics the QZ Tray websocket API for a few calls (version, printers.getDefault, printers.find, print). It writes incoming print payloads to `prints/`.
-- `http-print-receiver.js` — a tiny Express server with `POST /print` that saves JSON payloads to `prints-http/`.
+- `http-print-receiver.js` — um servidor Express simples com `POST /print` que
+	salva payloads JSON em `prints-http/` para inspeção.
 
 Quick start (PowerShell)
 
-1. Open a terminal in this folder:
+1. Abra um terminal neste diretório:
 
 ```powershell
 cd .\delivery-saas-frontend\dev-tools\print-mock
 ```
 
-2. Install dependencies for the mock WS server and HTTP receiver:
+2. Instale dependências para o receiver HTTP (se ainda não instalou):
 
 ```powershell
-npm install ws express body-parser
+npm install express body-parser
 ```
 
-3. Run the WebSocket QZ mock (use this if you want the frontend to talk to a fake QZ Tray):
-
-```powershell
-node qz-mock-server.js
-# listens on ws://localhost:8182
-```
-
-4. Run the HTTP receiver (alternative test path):
+3. Execute o receiver HTTP:
 
 ```powershell
 node http-print-receiver.js
-# listens on http://localhost:4000
+# escuta em http://localhost:4000 por padrão
 ```
 
-Pointing your frontend to the mock server
+4. Aponte seu frontend para `http://localhost:4000/print` (ou para o endpoint
+da sua API) para testar o payload de impressão sem depender do QZ Tray.
 
-- QZ-mock: The qz-tray client in the frontend will try multiple ports (8181/8182/...) — this mock listens on 8182 by default. Start it and reload your frontend. The mock logs calls and will save print payloads to `prints/`.
-- HTTP receiver: If you want to test `printService` without QZ at all, temporarily change `printService.enqueuePrint` to POST to `http://localhost:4000/print` with the same payload you would send to QZ. This is a safe way to validate formatting and payload structure.
+Notas
 
-Notes
+- O receiver é uma ferramenta de desenvolvimento e não implementa autenticação
+	ou segurança. Use apenas em ambiente local.
+- Os arquivos JSON salvos em `prints-http/` permitem inspecionar o conteúdo que
+	teria sido enviado para impressão.
 
-- The mock is intentionally minimal and meant for development/testing only. It does not implement the full QZ Tray protocol or security.
-- Use the saved JSON files in `prints/` or `prints-http/` to inspect what your frontend would have printed.
+Se desejar, posso:
 
-If you want, I can:
+- Adicionar um script npm para iniciar o receiver mais facilmente.
+- Ajudar a adaptar o frontend para enviar impressões diretamente ao backend/agent.
 
-- Add a small helper script to automatically open the prints folder after a job is saved.
-- Add an npm script to the frontend `package.json` to start the mock servers more easily.

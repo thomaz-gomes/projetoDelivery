@@ -1,0 +1,11 @@
+{
+  "ts": "2025-11-26T20:14:14.419Z",
+  "id": "16863694-a8d3-492d-b5b4-69720270ac9b",
+  "qrPresent": true,
+  "payments": [],
+  "opts": {
+    "dryRun": false,
+    "paperWidth": 80,
+    "includeItemDescription": false
+  }
+}

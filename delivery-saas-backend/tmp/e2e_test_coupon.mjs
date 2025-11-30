@@ -9,7 +9,7 @@ async function run(){
     const rows = await prisma.$queryRawUnsafe(`SELECT * FROM "Coupon" WHERE lower("code") = lower($1) LIMIT 1`, 'CUPOM11')
     if(!rows || !rows[0]) return console.error('CUPOM11 coupon not found in DB')
     const companyId = rows[0].companyId
-    const base = 'https://localhost:3000'
+    const base = 'http://localhost:3000'
     // wait for menu
     await new Promise(r => setTimeout(r, 500))
 

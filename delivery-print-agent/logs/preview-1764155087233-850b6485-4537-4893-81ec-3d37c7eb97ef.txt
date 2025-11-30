@@ -1,0 +1,19 @@
+[OBJECT OBJECT]
+Pedido: 08 | ID:850b6485-4537-4893-81ec-3d37c7eb97ef | 2025-11-25 07:07:29
+CLIENTE BALCÃO
+--------------------
+-
+---------------------
+
+QT  Descrição                Valor
+1   Parmegianna de Frango       26.90
+-- 1 Sprite     12.00
+
+Quantidade de itens  1
+---------------------------
+Total de itens   26.90
+
+FORMAS DE PAGAMENTO
+DINHEIRO   38.90
+[QR CODE]
+Loja: bd6a5381-6b90-4cc9-bc8f-24890c491693

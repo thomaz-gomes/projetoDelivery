@@ -1015,7 +1015,18 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
 // Public: GET single order (by id) with phone verification
 publicMenuRouter.get('/:companyId/orders/:orderId', async (req, res) => {
   const { companyId, orderId } = req.params
-  const phone = String(req.query.phone || '').trim()
+  // allow phone via query or existing session cookie (public_phone)
+  let phone = String(req.query.phone || '').trim()
+  if (!phone) {
+    try {
+      const rawCookie = req.headers.cookie || ''
+      const parts = rawCookie.split(/;\s*/)
+      for (const p of parts) {
+        const [k,v] = p.split('=')
+        if (k === 'public_phone') { phone = decodeURIComponent(v || '').trim(); break }
+      }
+    } catch (e) { /* ignore */ }
+  }
   if (!phone) return res.status(400).json({ message: 'Informe o número de WhatsApp (phone) para acessar o pedido' })
   try {
     const order = await prisma.order.findFirst({ where: { id: orderId, companyId }, include: { items: true, histories: true } })
@@ -1024,8 +1035,22 @@ publicMenuRouter.get('/:companyId/orders/:orderId', async (req, res) => {
     // also check payload rawPayload customer contact
     let payloadPhone = ''
     try { payloadPhone = String((order.payload && order.payload.rawPayload && order.payload.rawPayload.customer && order.payload.rawPayload.customer.contact) || '') } catch (e) { payloadPhone = '' }
-    if (orderPhone && orderPhone.replace(/\D/g,'') === phone.replace(/\D/g,'')) return res.json(order)
-    if (payloadPhone && payloadPhone.replace(/\D/g,'') === phone.replace(/\D/g,'')) return res.json(order)
+    const digitsReq = phone.replace(/\D/g,'')
+    const matchOrderPhone = orderPhone && orderPhone.replace(/\D/g,'') === digitsReq
+    const matchPayloadPhone = payloadPhone && payloadPhone.replace(/\D/g,'') === digitsReq
+    if (matchOrderPhone || matchPayloadPhone) {
+      // persist session cookie (30d) if absent or different value
+      const cookieStr = String(req.headers.cookie || '')
+      const alreadySet = cookieStr.includes('public_phone=') && cookieStr.includes(digitsReq)
+      if (!alreadySet) {
+        if (res.cookie) {
+          res.cookie('public_phone', digitsReq, { httpOnly: true, sameSite: 'lax', maxAge: 30*24*60*60*1000, path: '/' })
+        } else {
+          res.setHeader('Set-Cookie', `public_phone=${encodeURIComponent(digitsReq)}; Path=/; Max-Age=${30*24*60*60}; SameSite=Lax; HttpOnly`)
+        }
+      }
+      return res.json(order)
+    }
     return res.status(403).json({ message: 'Número não autorizado para visualizar este pedido' })
   } catch (e) {
     console.error('Error fetching public order', e)
@@ -1036,7 +1061,17 @@ publicMenuRouter.get('/:companyId/orders/:orderId', async (req, res) => {
 // Public: GET order history for a phone number
 publicMenuRouter.get('/:companyId/orders', async (req, res) => {
   const { companyId } = req.params
-  const phone = String(req.query.phone || '').trim()
+  let phone = String(req.query.phone || '').trim()
+  if (!phone) {
+    try {
+      const rawCookie = req.headers.cookie || ''
+      const parts = rawCookie.split(/;\s*/)
+      for (const p of parts) {
+        const [k,v] = p.split('=')
+        if (k === 'public_phone') { phone = decodeURIComponent(v || '').trim(); break }
+      }
+    } catch (e) { /* ignore */ }
+  }
   if (!phone) return res.status(400).json({ message: 'Informe o número de WhatsApp (phone) para consultar histórico' })
   try {
     const orders = await prisma.order.findMany({ where: { companyId, customerPhone: phone }, orderBy: { createdAt: 'desc' }, include: { items: true } })
@@ -1053,6 +1088,12 @@ publicMenuRouter.get('/:companyId/orders', async (req, res) => {
     // dedupe by id
     const map = new Map()
     for (const o of combined) map.set(o.id, o)
+    // set session cookie if query param provided and valid
+    const digitsReq = phone.replace(/\D/g,'')
+    if (digitsReq.length >= 10) {
+      res.cookie ? res.cookie('public_phone', digitsReq, { httpOnly: true, sameSite: 'lax', maxAge: 30*24*60*60*1000, path: '/' })
+      : res.setHeader('Set-Cookie', `public_phone=${encodeURIComponent(digitsReq)}; Path=/; Max-Age=${30*24*60*60}; SameSite=Lax; HttpOnly`)
+    }
     return res.json(Array.from(map.values()))
   } catch (e) {
     console.error('Error fetching public order history', e)
@@ -1060,4 +1101,15 @@ publicMenuRouter.get('/:companyId/orders', async (req, res) => {
   }
 })
 
+// Public: POST logout (limpa cookie public_phone)
+publicMenuRouter.post('/:companyId/logout', async (req, res) => {
+  try {
+    const clearOpts = { httpOnly: true, sameSite: 'lax', maxAge: 0, path: '/' }
+    if (res.cookie) res.cookie('public_phone', '', clearOpts)
+    else res.setHeader('Set-Cookie', 'public_phone=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly')
+  } catch (e) { /* ignore */ }
+  return res.json({ ok: true })
+})
+
 export default publicMenuRouter
+// (mantido export default acima; colocar novas rotas antes dele)

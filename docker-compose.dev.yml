@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: projetodelivery
+    volumes:
+      - prisma_dev_db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    image: node:20
+    working_dir: /app
+    volumes:
+      - ./delivery-saas-backend:/app:delegated
+      - /app/node_modules
+    command: sh -c "npm ci --silent && npx prisma generate && npx prisma db push && npm run dev"
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/projetodelivery
+      - JWT_SECRET=dev-jwt-secret
+      - DISABLE_SSL=1
+      - FRONTEND_ORIGIN=http://localhost:5173
+      - NODE_ENV=development
+    depends_on:
+      - db
+
+  frontend:
+    image: node:20
+    working_dir: /app
+    volumes:
+      - ./delivery-saas-frontend:/app:delegated
+      - /app/node_modules
+    command: sh -c "npm ci --silent && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3000
+
+volumes:
+  prisma_dev_db:
+    name: projeto_prisma_dev_db

@@ -21,17 +21,18 @@
               <option value="">Selecione uma impressora</option>
               <option v-for="p in printers" :key="p" :value="p">{{ p }}</option>
             </select>
-            <div class="mt-2 small text-muted">Se a lista estiver vazia, verifique se o QZ Tray está rodando e autorizado.</div>
+            <div class="mt-2 small text-muted">Se a lista estiver vazia, verifique se o agente de impressão está executando na loja.</div>
             <div class="mt-2">
               <div v-if="discovering" class="small text-muted">Procurando impressoras... ⏳</div>
               <div v-else-if="discoverError" class="small text-danger">{{ discoverError }}</div>
-              <div class="mt-2 small text-muted">QZ Tray detectado: <strong>{{ qzAvailable ? 'sim' : 'não' }}</strong></div>
+              <div class="mt-2 small text-muted">Agente de impressão detectado: <strong>{{ printers.length ? 'sim' : 'não' }}</strong></div>
               <div class="mt-2 small logs" v-if="logs.length">
                 <div class="small text-muted mb-1">Logs:</div>
                 <div class="log-line" v-for="(l, idx) in logs" :key="idx">{{ l }}</div>
               </div>
               <div class="mt-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar token de agente</button>
               </div>
             </div>
           </div>
@@ -60,6 +61,10 @@
 
         </div>
         <div class="modal-footer">
+          <div class="me-auto text-start">
+            <div v-if="generatedToken" class="small text-success">Token gerado e copiado: <code>{{ generatedToken }}</code></div>
+            <div v-else class="small text-muted">Clique em "Gerar token de agente" para criar um token para o agente.</div>
+          </div>
           <button class="btn btn-secondary" @click="close">Cancelar</button>
           <button class="btn btn-primary" @click="save" :disabled="!printerName">Salvar e usar</button>
         </div>
@@ -71,7 +76,9 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import { connectQZ } from '../services/printService.js';
+import printService from '../services/printService.js';
+import api from '../api';
+import { API_URL } from '../config';
 
 const props = defineProps({ visible: Boolean });
 const emit = defineEmits(['update:visible','saved']);
@@ -86,6 +93,7 @@ const includeItemDescription = ref(false);
 const discovering = ref(false);
 const discoverError = ref('');
 const qzAvailable = ref(false);
+const generatedToken = ref('');
 const logs = ref([]);
 
 function pushLog(msg){
@@ -97,8 +105,8 @@ function pushLog(msg){
 
 onMounted(() => {
   visible.value = props.visible;
-  qzAvailable.value = !!window.qz;
-  if (qzAvailable.value) pushLog('window.qz detected on mount');
+  // this modal uses backend/agent endpoints for discovery and token generation
+  // printers list will be fetched from backend/agents
   loadSaved();
   if (visible.value) discoverPrinters();
 });
@@ -128,36 +136,57 @@ async function discoverPrinters(){
   printers.value = [];
   discoverError.value = '';
   discovering.value = true;
-  qzAvailable.value = !!window.qz;
-  pushLog('discoverPrinters called; qzAvailable=' + qzAvailable.value);
-  try{
-    // Ensure QZ is connected (will coalesce concurrent attempts)
-    const ok = await connectQZ();
-    pushLog('connectQZ result: ' + ok);
-    if (!ok) {
-      discoverError.value = 'Não foi possível conectar ao QZ Tray (verifique se o app está rodando e autorizado).';
+  pushLog('discoverPrinters called; querying backend agent-print/printers');
+  try {
+    // call backend to ask a connected agent for printers
+    const storeId = (window && window.currentStoreId) || '';
+    const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : '';
+    const base = String((API_URL || '')).replace(/\/$/, '') || '';
+    const res = await fetch(`${base}/agent-print/printers${qs}`);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      discoverError.value = `Falha ao consultar agentes: ${res.status} ${txt}`;
+      pushLog('agent-print/printers failed: ' + String(txt || res.status));
       discovering.value = false;
-      pushLog('connectQZ failed');
       return;
     }
-    if (!window.qz || !window.qz.printers) {
-      discoverError.value = 'QZ Tray não expõe printers API.';
-      discovering.value = false;
-      pushLog('window.qz.printers missing');
-      return;
+    const body = await res.json();
+    if (body && Array.isArray(body.printers)) {
+      printers.value = body.printers;
+      if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
+      pushLog('agent-print/printers found ' + printers.value.length + ' printers');
+    } else {
+      discoverError.value = 'Nenhum agente respondeu com lista de impressoras.';
+      pushLog('agent-print/printers returned no printers');
     }
-    const list = await window.qz.printers.find();
-    pushLog('printers.find() returned ' + (Array.isArray(list) ? list.length + ' printers' : String(list)));
-    if (Array.isArray(list)) printers.value = list;
-    const def = await window.qz.printers.getDefault();
-    pushLog('printers.getDefault() => ' + String(def));
-    if (def && !printerName.value) printerName.value = def;
-  }catch(e){
-    console.warn('Failed to discover printers (is QZ Tray running/authorized?)', e);
+  } catch (e) {
+    console.warn('discoverPrinters error', e);
+    discoverError.value = String(e?.message || e || 'Erro desconhecido');
     pushLog('discover error: ' + String(e?.message || e));
-    discoverError.value = String(e?.message || e || 'Erro desconhecido ao descobrir impressoras');
   } finally {
     discovering.value = false;
+  }
+}
+
+async function generateToken(){
+  try{
+  const res = await api.post('/agent-setup/token');
+    if (!res.ok) {
+      const txt = await res.text().catch(()=>'');
+      pushLog('generateToken failed: ' + txt);
+      discoverError.value = 'Falha ao gerar token: ' + (txt || res.status);
+      return;
+    }
+    const body = await res.json();
+    if (body && body.token) {
+      generatedToken.value = body.token;
+      try { await navigator.clipboard.writeText(body.token); pushLog('Token copiado para clipboard'); } catch(e){}
+      // store in localStorage for frontend convenience
+      try { localStorage.setItem('agentToken', body.token); } catch(e){}
+    }
+  }catch(e){
+    pushLog('generateToken error: ' + String(e?.message || e));
+    discoverError.value = String(e?.message || e);
   }
 }
 
@@ -170,8 +199,27 @@ function save(){
     includeItemDescription: includeItemDescription.value,
   };
   try{ localStorage.setItem('printerConfig', JSON.stringify(cfg)); } catch(e){ console.warn('Failed to save printer config', e); }
-  emit('saved', cfg);
-  emit('update:visible', false);
+
+  // Try to persist to backend PrinterSetting (requires admin auth). If it
+  // fails (no auth / network), fall back to localStorage only.
+  (async () => {
+    try {
+      const iface = printerName.value ? `printer:${printerName.value}` : undefined;
+      const body = { interface: iface, type: printType.value === 'thermal' ? 'EPSON' : 'GENERIC', width: Number(paperWidth.value) || 80, headerName: alias.value || undefined };
+      try {
+        const { data } = await api.post('/agent-setup/settings', body);
+        if (data && data.ok) pushLog('Saved printer settings to backend');
+        else pushLog('Failed to save settings to backend: ' + JSON.stringify(data));
+      } catch (e) {
+        pushLog('Failed to save settings to backend: ' + (e?.response?.data?.message || e?.message || e));
+      }
+    } catch (e) {
+      pushLog('Could not persist settings to backend (no auth/network)');
+    } finally {
+      emit('saved', cfg);
+      emit('update:visible', false);
+    }
+  })();
 }
 </script>
 

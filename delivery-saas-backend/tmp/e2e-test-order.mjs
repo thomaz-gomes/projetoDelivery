@@ -59,7 +59,7 @@ import { PrismaClient } from '@prisma/client';
     };
 
   const port = process.env.TEST_PORT || 3000;
-  const url = `https://localhost:${port}/public/${company.id}/orders`;
+  const url = `http://localhost:${port}/public/${company.id}/orders`;
     console.log('Posting order to', url);
 
     // use global fetch (Node 18+); allow self-signed cert by env var above

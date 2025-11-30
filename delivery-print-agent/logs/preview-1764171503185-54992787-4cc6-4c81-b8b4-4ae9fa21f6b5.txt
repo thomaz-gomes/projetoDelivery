@@ -1,0 +1,21 @@
+pedido: 12 | 2025-11-25
+JOHN DOE
+--------------------
+-
+---------------------
+Telefones: (73) 9 9142-9676
+
+QT  Descrição                Valor
+1   Coca cola sem açúcar         0.00
+1   Frango grelhado             22.90
+1   Coca Cola Original           6.00
+
+Quantidade de itens  3
+---------------------------
+Total de itens   28.90
+
+FORMAS DE PAGAMENTO
+DINHEIRO   28.90
+[QR IMAGE]
+
+[QR_PRESENCE] data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCAYAAAAbWs+BAAASoElEQVR4Xu2d0WJbOQ5Dt///0bt2Z+ZhEil7TiHKboo880okCJCUfO38+O/j7z/9KwJF4AoCPyq4Kzh3kyLwE4EKrkQoAhcRqOAugt2tikAFVw4UgYsIVHAXwe5WRaCCKw...[truncated]

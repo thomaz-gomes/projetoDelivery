@@ -4,7 +4,7 @@ import https from 'https'
 async function run(){
   try{
     const companyId = 'bd6a5381-6b90-4cc9-bc8f-24890c491693'
-    const base = 'https://localhost:3000'
+    const base = 'http://localhost:3000'
     const subtotal = 22.9
     const val = await axios.post(`${base}/public/${companyId}/coupons/validate`, { code: 'CUPOM11', subtotal }, { httpsAgent: new https.Agent({ rejectUnauthorized: false }) })
     console.log('validate resp:', JSON.stringify(val.data, null, 2))

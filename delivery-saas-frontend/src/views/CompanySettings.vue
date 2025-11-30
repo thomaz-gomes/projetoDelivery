@@ -29,8 +29,8 @@
             <h5>Informações da loja</h5>
             <div class="mb-2"><label class="form-label">Nome do restaurante</label><input class="form-control" v-model="form.name" /></div>
             <div class="mb-2"><label class="form-label">Endereço</label><input class="form-control" v-model="form.address" /></div>
-            <div class="mb-2"><label class="form-label">Telefone</label><input class="form-control" v-model="form.phone" /></div>
-            <div class="mb-2"><label class="form-label">WhatsApp</label><input class="form-control" v-model="form.whatsapp" /></div>
+            <div class="mb-2"><label class="form-label">Telefone</label><input class="form-control" v-model="form.phone" @input="handlePhoneInput" type="tel" maxlength="15" placeholder="(00) 0000-0000" /></div>
+            <div class="mb-2"><label class="form-label">WhatsApp</label><input class="form-control" v-model="form.whatsapp" @input="handleWhatsAppInput" type="tel" maxlength="16" placeholder="(00) 0 0000-0000" /></div>
 
             <div class="row">
               <div class="col-md-6 mb-3">
@@ -144,6 +144,7 @@ import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import api from '../api'
 import { bindLoading } from '../state/globalLoading.js'
 import { assetUrl } from '../utils/assetUrl.js'
+import { applyPhoneMask } from '../utils/phoneMask'
 
 export default {
   name: 'CompanySettings',
@@ -177,6 +178,14 @@ export default {
   const invalidDays = ref([])
   const invalidMessages = ref({})
   const certRemoveRequested = ref(false)
+
+    function handlePhoneInput(e) {
+      form.value.phone = applyPhoneMask(e.target.value)
+    }
+
+    function handleWhatsAppInput(e) {
+      form.value.whatsapp = applyPhoneMask(e.target.value)
+    }
 
     async function load() {
       loading.value = true
@@ -576,7 +585,7 @@ export default {
 
     return { loading, saving, form, message, messageClass, save, reload, weekDays, invalidDays, invalidMessages,
       showCropper, cropperImage, cropContainer, cropBox, cropBoxStyle, onImageLoaded, startDrag, cropSizePct, onSizeChange, cancelCrop, confirmCrop, currentObjectUrl, removeCert,
-      setActiveTab, activeTab
+      setActiveTab, activeTab, handlePhoneInput, handleWhatsAppInput
     }
   }
 }

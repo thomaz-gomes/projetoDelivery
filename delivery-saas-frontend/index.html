@@ -6,72 +6,7 @@
 
     <title>Delivery SaaS — Painel</title>
 
-    <!-- ============================ -->
-    <!-- 🧩 Dependências do QZ Tray -->
-    <!-- ============================ -->
-
-    <!-- RSVP (Promise polyfill necessário) -->
-    <script src="https://cdn.jsdelivr.net/npm/rsvp@4.8.5/dist/rsvp.min.js"></script>
-
-    <!-- SHA-256 (criptografia usada pelo QZ Tray) -->
-    <script src="https://cdn.jsdelivr.net/npm/js-sha256@0.9.0/src/sha256.min.js"></script>
-
-    <!-- Adapter: expõe `Sha256.hash()` esperado por algumas versões do QZ Tray -->
-    <script>
-      // Se uma função global `sha256` estiver disponível (do js-sha256), cria um wrapper
-      // compatível com o nome que o qz-tray espera: `Sha256.hash(string) -> hex`.
-      (function() {
-        try {
-          if (typeof Sha256 === 'undefined') {
-            if (typeof sha256 === 'function') {
-              window.Sha256 = {
-                hash: function(data) {
-                  return sha256(data);
-                }
-              };
-              console.debug('Adapter: exposto global Sha256.hash usando js-sha256');
-            }
-          }
-        } catch (e) {
-          // proteção extra para navegadores estranhos — não falhar o carregamento
-          console.warn('Adapter Sha256 falhou:', e && e.message);
-        }
-      })();
-    </script>
-
-    <!-- Biblioteca principal do QZ Tray -->
-    <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.1.0/qz-tray.js"></script>
-
-    <!-- Fallback seguro (em caso de falha de conexão) -->
-    <script>
-      window.addEventListener("DOMContentLoaded", () => {
-        if (!window.qz) {
-          console.error("❌ QZ Tray não carregado. Verifique scripts ou permissões.");
-        } else {
-          console.log("✅ QZ Tray carregado com sucesso.");
-        }
-
-        // Permitir auto-reconexão para localhost HTTP (ambiente dev)
-        if (window.qz?.security) {
-          qz.security.setCertificatePromise((resolve, reject) => {
-            // Em dev, usamos o modo sem certificado
-            console.warn("⚠️ Usando certificado inseguro (modo DEV).");
-            resolve();
-          });
-
-          qz.security.setSignaturePromise((toSign) => {
-            // Em dev, retorno vazio (sem assinatura)
-            return (resolve, reject) => {
-              resolve(); // sem assinatura
-            };
-          });
-        }
-
-        // Nota: a inicialização/ conexão com QZ Tray é feita pelo aplicativo Vue
-        // (src/plugins/qz.js -> initQZ) para centralizar lógica e evitar
-        // tentativas concorrentes vindas de múltiplos pontos.
-      });
-    </script>
+    <!-- QZ Tray removed: printing handled by backend/agents -->
 
     <!-- ============================ -->
     <!-- ⚙️ Estilos do Vue + App -->

@@ -28,7 +28,8 @@
           id="whatsapp"
           v-model="form.whatsapp" 
           type="tel" 
-          placeholder="(11) 99999-9999"
+          placeholder="(00) 0 0000-0000"
+          maxlength="16"
           @input="formatPhone"
         />
       </div>
@@ -98,6 +99,7 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import api from '@/api.js'
+import { applyPhoneMask } from '../utils/phoneMask'
 
 export default {
   name: 'AffiliateForm',
@@ -124,22 +126,7 @@ export default {
     const isEditing = computed(() => !!props.affiliate)
 
     const formatPhone = (event) => {
-      const value = event.target.value.replace(/\D/g, '')
-      let formatted = value
-
-      if (value.length > 0) {
-        if (value.length <= 2) {
-          formatted = `(${value}`
-        } else if (value.length <= 6) {
-          formatted = `(${value.substring(0, 2)}) ${value.substring(2)}`
-        } else if (value.length <= 10) {
-          formatted = `(${value.substring(0, 2)}) ${value.substring(2, 6)}-${value.substring(6)}`
-        } else {
-          formatted = `(${value.substring(0, 2)}) ${value.substring(2, 7)}-${value.substring(7, 11)}`
-        }
-      }
-
-      form.value.whatsapp = formatted
+      form.value.whatsapp = applyPhoneMask(event.target.value)
     }
 
     const formatCouponCode = (event) => {

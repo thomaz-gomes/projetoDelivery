@@ -1,0 +1,9 @@
+{
+  "ts": "2025-11-26T14:13:28.081Z",
+  "id": "b-test-automated-1",
+  "qrPresent": true,
+  "payments": [],
+  "opts": {
+    "printerInterface": "printer:Print iD"
+  }
+}

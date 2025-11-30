@@ -92,7 +92,7 @@ export async function loadCompanyCertBuffer(companyId: string) {
 
 /**
  * Send signed XML to SEFAZ and optionally persist the returned protocol to a backend
- * persistenceUrl: optional base URL of the delivery-saas-backend (ex: https://localhost:3000)
+ * persistenceUrl: optional base URL of the delivery-saas-backend (ex: http://localhost:3000)
  * persistPayload: { companyId, orderId? }
  */
 export async function sendAndPersist(signedXml: string, sendOpts?: { certBuffer?: Buffer; certPath?: string; certPassword?: string; environment?: 'homologation'|'production'; uf?: string }, persistenceOpts?: { persistenceUrl?: string; companyId?: string; orderId?: string }) {

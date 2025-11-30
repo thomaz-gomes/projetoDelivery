@@ -4,16 +4,16 @@
   "description": "Backend do sistema delivery SAAS com iFood integration",
   "main": "src/server.js",
   "type": "module",
-  "engines": {
-    "node": ">=20.0.0"
-  },
   "scripts": {
-    "dev": "nodemon --ignore prisma/dev.db src/server.js",
+    "dev": "nodemon --ignore prisma/dev.db --ignore tmp --ignore logs --ignore dev-print-endpoint --ignore .print-agent-token --ignore .print-agent-company src/server.js",
+    "dev:local": "npx prisma generate && npx prisma db push && npm run dev",
     "start": "node src/server.js",
     "prisma:generate": "prisma generate",
     "migrate": "prisma migrate dev --name init",
     "db:seed": "node src/seed.js",
     "seed:manual": "node src/seed.js",
+    "db:seed:large": "node src/seed-large.js",
+    "db:seed:full": "npx prisma generate && npx prisma db push && node src/seed.js && node src/seed-large.js",
     "worker:ifood": "node src/workers/ifoodPoller.js"
   },
   "keywords": [
@@ -39,11 +39,13 @@
     "node-thermal-printer": "^4.5.0",
     "pdfkit": "^0.13.0",
     "qrcode": "^1.5.4",
+    "sharp": "^0.34.5",
     "socket.io": "^4.8.1",
     "xlsx": "^0.18.5",
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "ngrok": "^5.0.0-beta.2",
     "nodemon": "^3.1.10",
     "prisma": "^6.19.0"
   }

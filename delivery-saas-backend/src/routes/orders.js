@@ -1,8 +1,8 @@
 import express from 'express';
 import { prisma } from '../prisma.js';
-import { emitirPedidoAtualizado } from '../index.js';
+import { emitirPedidoAtualizado, emitirNovoPedido } from '../index.js';
 import { authMiddleware, requireRole } from '../auth.js';
-import { upsertCustomerFromIfood } from '../services/customers.js';
+import { upsertCustomerFromIfood, findOrCreateCustomer } from '../services/customers.js';
 import { trackAffiliateSale } from '../services/affiliates.js';
 import { canTransition } from '../stateMachine.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
@@ -68,14 +68,8 @@ ordersRouter.get('/', async (req, res) => {
     console.warn('Failed to compute displaySimple for orders list', e?.message || e);
   }
 
-  res.json(orders);
-});
+  return res.json(orders);
 
-ordersRouter.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body || {};
-  const allowed = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONCLUIDO', 'CANCELADO'];
-  if (!allowed.includes(status)) return res.status(400).json({ message: 'Status inválido' });
 
   // registra histórico com o status anterior
   const existing = await prisma.order.findUnique({ where: { id } });
@@ -387,5 +381,212 @@ ordersRouter.post('/:id/associate-customer', requireRole('ADMIN'), async (req, r
   } catch (e) {
     console.error('Failed to associate customer for order', id, e?.message || e);
     return res.status(500).json({ message: 'Falha ao associar cliente', error: String(e?.message || e) });
+  }
+});
+
+// POS/PDV: criar pedido manual interno
+// POST /orders  body: { customerName, customerPhone, orderType, address?, items: [{ name, quantity, price, notes?, options?:[{ name, price }] }], payment: { methodCode, amount, changeFor? } }
+ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+  try {
+    const { customerName, customerPhone, orderType = 'BALCAO', address = {}, items = [], payment = null, coupon } = req.body || {};
+    const requestedStoreId = req.body && req.body.storeId ? String(req.body.storeId) : null;
+    if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Itens são obrigatórios' });
+
+    const type = String(orderType || 'BALCAO').toUpperCase();
+    if (type === 'DELIVERY') {
+      const neigh = String(address.neighborhood || address.neigh || '').trim();
+      const street = String(address.street || '').trim();
+      if (!neigh || !street) return res.status(400).json({ message: 'Endereço (rua e bairro) obrigatório para entrega' });
+    }
+
+    // sanitize items
+    const cleanItems = items.map(it => ({
+      name: String(it.name || it.productName || 'Item'),
+      quantity: Number(it.quantity || 1),
+      price: Number(it.price || 0),
+      notes: it.notes ? String(it.notes) : null,
+      options: Array.isArray(it.options) ? it.options.map(o => ({ name: String(o.name || ''), price: Number(o.price || 0) })) : null
+    }));
+    const subtotal = cleanItems.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+
+    // neighborhood delivery fee
+    let deliveryFee = 0;
+    try {
+      const neighName = String(address.neighborhood || address.neigh || '').trim().toLowerCase();
+      if (neighName) {
+        const neighRows = await prisma.neighborhood.findMany({ where: { companyId } });
+        const matched = neighRows.find(n => {
+          if (!n) return false;
+          const nm = String(n.name || '').toLowerCase();
+          if (nm === neighName) return true;
+          if (n.aliases && Array.isArray(n.aliases) && n.aliases.map(a => String(a).toLowerCase()).includes(neighName)) return true;
+          return false;
+        });
+        if (matched) deliveryFee = Number(matched.deliveryFee || 0);
+      }
+    } catch (e) { deliveryFee = 0; }
+
+    // coupon handling (optional) — mimic public logic simplified
+    let couponDiscount = 0;
+    let couponCode = null;
+    if (coupon && coupon.code) {
+      couponCode = String(coupon.code).trim();
+      try {
+        const row = await prisma.coupon.findFirst({ where: { companyId, code: couponCode, isActive: true } });
+        if (row) {
+          const rawVal = Number(row.value || 0);
+            if (row.isPercentage) {
+              couponDiscount = rawVal > 0 && rawVal <= 1 ? subtotal * rawVal : (subtotal * rawVal) / 100;
+            } else {
+              couponDiscount = rawVal;
+            }
+            if (couponDiscount > subtotal) couponDiscount = subtotal;
+            couponDiscount = Math.round(couponDiscount * 100) / 100;
+        }
+      } catch (e) { couponDiscount = 0; }
+    }
+
+    const total = Math.max(0, subtotal - couponDiscount) + Number(deliveryFee || 0);
+
+    // validate payment method if provided
+    let paymentPayload = null;
+    if (payment && (payment.methodCode || payment.method)) {
+      const code = String(payment.methodCode || payment.method).trim();
+      const pm = await prisma.paymentMethod.findFirst({ where: { companyId, isActive: true, OR: [{ code }, { name: code }] } });
+      if (!pm) return res.status(400).json({ message: 'Método de pagamento inválido' });
+      paymentPayload = {
+        method: pm.name,
+        methodCode: pm.name,
+        amount: Number(payment.amount || total),
+        changeFor: payment.changeFor != null ? Number(payment.changeFor) : null,
+        raw: payment.raw || null
+      };
+    }
+
+    // find or create customer (best-effort)
+    let persistedCustomer = null;
+    try {
+      const contact = String(customerPhone || '').trim();
+      const name = String(customerName || '').trim();
+      if (contact || name) {
+        const addressPayload = address && type === 'DELIVERY' ? {
+          delivery: { deliveryAddress: { formattedAddress: address.formatted || [address.street, address.number].filter(Boolean).join(', '), streetName: address.street || null, streetNumber: address.number || null, neighborhood: address.neighborhood || null } }
+        } : null;
+        persistedCustomer = await findOrCreateCustomer({ companyId, fullName: name || null, whatsapp: contact || null, phone: contact || null, addressPayload });
+      }
+    } catch (e) { console.warn('PDV: falha ao criar/achar cliente', e?.message || e); }
+
+    // resolve store: prefer explicit `storeId` from request (validate belongs to company),
+    // otherwise fallback to single-store companies like the public route
+    let resolvedStore = null;
+    try {
+      if (requestedStoreId) {
+        const s = await prisma.store.findFirst({ where: { id: requestedStoreId, companyId }, select: { id: true } });
+        if (s) {
+          resolvedStore = s;
+          console.log('PDV: using requested storeId for order creation:', requestedStoreId);
+        } else {
+          console.warn('PDV: requested storeId does not belong to company, ignoring:', requestedStoreId);
+        }
+      }
+      if (!resolvedStore) {
+        const count = await prisma.store.count({ where: { companyId } });
+        if (count === 1) {
+          resolvedStore = await prisma.store.findFirst({ where: { companyId } });
+        }
+      }
+    } catch (e) { /* ignore */ }
+
+    const created = await prisma.order.create({
+      data: {
+        companyId,
+        customerSource: 'MANUAL',
+        customerId: persistedCustomer ? persistedCustomer.id : undefined,
+        customerName: customerName || (persistedCustomer ? persistedCustomer.fullName : null),
+        customerPhone: customerPhone || (persistedCustomer ? (persistedCustomer.whatsapp || persistedCustomer.phone) : null),
+        address: type === 'DELIVERY' ? (address.formatted || [address.street, address.number].filter(Boolean).join(', ')) : null,
+        total,
+        couponCode,
+        couponDiscount: Number(couponDiscount || 0),
+        orderType: type,
+        deliveryFee,
+        status: 'EM_PREPARO',
+        ...(resolvedStore ? { storeId: resolvedStore.id } : {}),
+        payload: {
+          payment: paymentPayload,
+          orderType: type,
+          rawPayload: { source: 'PDV', items: cleanItems, customer: { name: customerName || null, contact: customerPhone || null }, address }
+        },
+        items: {
+          create: cleanItems.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes, options: it.options || null }))
+        },
+        histories: { create: { from: null, to: 'EM_PREPARO', byUserId: req.user.id, reason: 'Criação PDV' } }
+      },
+      include: { items: true, histories: true }
+    });
+
+    try {
+      // generate QR for delivery orders so agents can print the QR on comanda
+      try {
+        if (String(type || '').toUpperCase() === 'DELIVERY') {
+          try {
+            const QRLib = await import('qrcode');
+            const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+            const qrTarget = `${frontend}/orders/${created.id}`;
+            const dataUrl = await QRLib.toDataURL(qrTarget, { width: 240 });
+            try {
+              // check prisma model fields to avoid Unknown argument errors
+              const hasField = (() => {
+                try {
+                  const model = prisma && prisma._dmmf && prisma._dmmf.modelMap && prisma._dmmf.modelMap.Order;
+                  if (!model || !Array.isArray(model.fields)) return false;
+                  return model.fields.some(f => ['qrDataUrl', 'qrText', 'rasterDataUrl'].includes(f.name));
+                } catch (e) { return false; }
+              })();
+              if (hasField) {
+                await prisma.order.update({ where: { id: created.id }, data: { qrDataUrl: dataUrl, qrText: qrTarget, rasterDataUrl: dataUrl } });
+                created.qrDataUrl = dataUrl;
+                created.qrText = qrTarget;
+                created.rasterDataUrl = dataUrl;
+              } else {
+                const current = await prisma.order.findUnique({ where: { id: created.id }, select: { payload: true } });
+                const currentPayload = (current && current.payload) ? current.payload : {};
+                currentPayload.qrDataUrl = dataUrl;
+                currentPayload.qrText = qrTarget;
+                currentPayload.rasterDataUrl = dataUrl;
+                await prisma.order.update({ where: { id: created.id }, data: { payload: currentPayload } });
+                created.payload = currentPayload;
+                created.qrText = qrTarget;
+                created.rasterDataUrl = dataUrl;
+              }
+            } catch (eUp) { console.warn('PDV: failed to persist qrDataUrl for order', created.id, eUp && eUp.message); }
+          } catch (eQr) { console.warn('PDV: failed to generate QR for order', created.id, eQr && eQr.message); }
+        }
+      } catch (eInner) { /* ignore */ }
+      // emit novo-pedido so connected agents can receive and print immediately
+      try {
+        const emitObj = {
+          id: created.id,
+          companyId: created.companyId || null,
+          storeId: created.storeId || (created.payload && created.payload.storeId) || null,
+          qrDataUrl: created.qrDataUrl || (created.payload && created.payload.qrDataUrl) || null,
+          rasterDataUrl: created.rasterDataUrl || (created.payload && created.payload.rasterDataUrl) || null,
+          qrText: created.qrText || (created.payload && created.payload.qrText) || null,
+          payload: created.payload || null,
+          items: created.items || null
+        };
+        emitirNovoPedido(emitObj);
+      } catch (eEmit) {
+        console.warn('emitirNovoPedido failed for created order', created && created.id, eEmit && eEmit.message);
+        emitirNovoPedido(created);
+      }
+    } catch (e) { console.warn('Emitir novo pedido falhou:', e && e.message); }
+    try { emitirPedidoAtualizado(created); } catch (e) { /* ignore */ }
+    return res.status(201).json(created);
+  } catch (e) {
+    console.error('Erro ao criar pedido PDV', e);
+    return res.status(500).json({ message: 'Erro interno ao criar pedido PDV' });
   }
 });

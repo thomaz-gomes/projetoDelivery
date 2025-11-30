@@ -2,8 +2,8 @@
   <div class="container-fluid px-0">
     <!-- Hero banner -->
   <div class="public-hero position-relative text-white" style="height:220px;overflow:hidden" ref="heroRef">
-  <div class="hero-image" :style="{ backgroundImage: 'url(' + assetUrl(menu?.banner || company?.banner || 'default-banner.jpg') + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
-     
+    <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
+    
     </div>
     <!-- migration toast: shown when persisted cart was reconciled and items/options were removed -->
     <div v-if="showCartMigration" class="migration-toast" role="status" aria-live="polite">
@@ -21,7 +21,7 @@
           <div>
             <h3 class="mb-1 company-name">{{ company?.store?.name || company?.name || 'Cardápio' }}</h3>
             <div class="small company-address text-muted">{{ company?.pickupInfo || company?.address || '' }}</div>
-            <div class="small mt-1"><a href="#" class="text-muted">Mais informações</a></div>
+            <div class="small mt-1"><a href="#" class="text-muted" @click.prevent="openInfoModal">Mais informações</a></div>
             <div class="store-closed-panel mt-2">
               <strong v-if="isOpen" class="text-success">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</strong>
               <strong v-else>Fechado no momento{{ nextOpenText ? (', ' + nextOpenText) : '' }}</strong>
@@ -42,7 +42,7 @@
       </div>
       <div>
         <template v-if="isOpen">
-          <button class="btn btn-primary" @click="openCartModal">Ver carrinho</button>
+          <button class="btn btn-primary btn-sm" @click="openCartModal">Ver carrinho</button>
         </template>
         <template v-else>
           <div class="text-muted small">Fora do horário de atendimento</div>
@@ -261,108 +261,11 @@
             
           </div>
         </div>
-        </div>
+       
 
         <!-- Cart view: unified drawer is used for all screen sizes (replaces the old centered mobile modal) -->
 
-  <!-- Unified slide-in drawer (used on desktop and mobile) -->
-  <div class="drawer-backdrop" v-if="cartModalOpen && cart.length > 0" @click="closeCartModal"></div>
-  <aside class="cart-drawer" :class="{ open: cartModalOpen && cart.length > 0 }" aria-hidden="!cartModalOpen" role="dialog" aria-label="Carrinho">
-          <div class="drawer-header d-flex justify-content-between align-items-center p-3 border-bottom">
-            <h5 class="m-0">Sua sacola</h5>
-            <div class="d-flex align-items-center gap-2">
-              <button class="btn btn-sm btn-outline-secondary close-x" @click="closeCartModal" aria-label="Fechar">&times;</button>
-            </div>
-          </div>
-          <div class="drawer-body p-3" style="overflow:auto;">
-            <div v-if="cart.length===0" class="text-muted">Sua sacola está vazia.</div>
-            <ul v-else class="list-group mb-3">
-              <li class="list-group-item cart-line" v-for="(it, i) in cart" :key="it.lineId">
-                <div class="d-flex align-items-start">
-                  <div class="cart-item-qty text-muted me-3">{{ it.quantity }}x</div>
-                  <div class="d-flex flex-column w-100">
-                  <div class="d-flex w-100">
-                  <div class="cart-item-name flex-fill me-3" style="min-width:0">
-                    <div class="product-name">{{ it.name }}</div>
-                  </div>
-                  <div class="cart-item-price text-end me-3">{{ formatCurrency(it.price * it.quantity) }}</div>
-                  </div>
-                  <div class="d-flex w-100 justify-content-between">
-                    <div class="small text-muted option-summary drawer-wrap">{{ optionsSummaryNoPrice(it) }}</div>
-                  <div class="cart-item-actions d-flex flex-row align-items-end">
-                    <button class="action-btn edit btn btn-link p-0 small" @click="editCartItem(i)" aria-label="Editar item" title="Editar item">
-                      <i class="bi bi-pencil action-icon" aria-hidden="true"></i>
-                      <span class="action-text">Editar</span>
-                    </button>
-                    <button class="action-btn remove btn btn-link p-0 small" @click="removeItem(i)">
-                      <i class="bi bi-trash action-icon" aria-hidden="true"></i>
-                      <span class="action-text">Remover</span>
-                    </button>
-                  </div>
-                  </div>
-                  </div>
-                </div>
-              </li>
-            </ul>
-
-            <!-- summary and coupon area -->
-            <div class="cart-summary p-3 border-top">
-                        <div class="d-flex justify-content-between mb-2"><div>Subtotal</div><div>{{ formatCurrency(subtotal) }}</div></div>
-                        <div class="d-flex justify-content-between mb-2"><div>Taxa de entrega</div><div>
-                          <template v-if="orderType==='DELIVERY'">
-                            <template v-if="neighborhood && String(neighborhood).trim() !== ''">
-                              {{ Number(deliveryFee) === 0 ? 'Grátis' : formatCurrency(deliveryFee) }}
-                            </template>
-                            <template v-else>
-                              Será calculada após escolher o endereço
-                            </template>
-                          </template>
-                          <template v-else>
-                            —
-                          </template>
-                        </div></div>
-                        <hr />
-                        <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
-                        <div class="d-flex justify-content-between fw-bold mb-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0)) + deliveryFee) }}</div></div>
-
-              <div class="coupon-block mt-3">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div class="small">Tem um cupom? Clique e insira o código</div>
-                  <button class="btn btn-sm btn-outline-secondary" @click="openCoupon = !openCoupon">›</button>
-                </div>
-                <div v-show="openCoupon" class="mt-2">
-                  <div class="input-group">
-                    <input v-model="couponCode" class="form-control" placeholder="Código do cupom" />
-                    <button class="btn btn-primary" @click="applyCoupon" :disabled="couponLoading">
-                      <span v-if="couponLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      Aplicar
-                    </button>
-                  </div>
-                  <div class="mt-2">
-                    <div v-if="tipMessages['coupon']" class="small text-danger">{{ tipMessages['coupon'] }}</div>
-                    <div v-if="tipMessages['coupon-success']" class="small text-success">{{ tipMessages['coupon-success'] }}</div>
-                    <div v-if="couponApplied" class="mt-2 d-flex align-items-center gap-2">
-                      <small class="text-success">Cupom aplicado: <strong>{{ couponInfo?.code }} — {{ formatCurrency(couponDiscount) }}</strong></small>
-                      <button class="btn btn-sm btn-outline-secondary" @click="removeCoupon">Remover</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="drawer-footer p-3 border-top d-flex justify-content-end align-items-center">
-            <div class="d-flex gap-2 w-100">
-              <button class="btn btn-outline-secondary flex-fill" @click="closeCartModal">Continuar comprando</button>
-              <button class="btn btn-primary flex-fill d-flex align-items-center justify-content-center" :disabled="cart.length===0 || submitting || !isOpen" @click="proceedFromCart">
-                <div class="d-flex flex-column align-items-end me-3" style="line-height:1">
-                  <strong style="display:block">{{ formatCurrency(finalTotal) }}</strong>
-                  <small class="text-white" style="display:block">{{ cart.length }} item{{ cart.length>1 ? 's' : '' }}</small>
-                </div>
-                <span>Avançar</span>
-              </button>
-            </div>
-          </div>
-        </aside>
+  
         
   <!-- Multi-step checkout modal -->
   <div v-if="checkoutModalOpen" class="product-modal checkout-modal full-mobile" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:11000">
@@ -386,7 +289,7 @@
                 </div>
 
                 <div class="mb-2"><label class="form-label">Nome</label><input v-model="customer.name" class="form-control" /></div>
-                <div class="mb-2"><label class="form-label">WhatsApp / Telefone</label><input v-model="customer.contact" class="form-control" /></div>
+                <div class="mb-2"><label class="form-label">WhatsApp / Telefone</label><input v-model="customer.contact" @input="handleContactInput" type="tel" class="form-control" maxlength="16" placeholder="(00) 0 0000-0000" /></div>
               </div>
 
               <div class="d-flex justify-content-between mt-3">
@@ -450,7 +353,17 @@
 
                   <div v-if="showNewAddressForm" class="mb-3 border p-2" style="border-radius: 16px;">
                     <h6 class="mb-2">Adicionar novo endereço</h6>
-                    <div class="mb-2"><input v-model="_newAddrFormatted" placeholder="Endereço completo" class="form-control" /></div>
+                    <div class="row mb-2">
+                      <div class="col-8">
+                        <input v-model="_newAddrFormatted" placeholder="Endereço (rua, avenida)" class="form-control" />
+                      </div>
+                      <div class="col-4">
+                        <input v-model="_newAddrNumber" placeholder="Número" class="form-control" />
+                      </div>
+                    </div>
+                    <div class="mb-2">
+                      <input v-model="_newAddrComplement" placeholder="Complemento (apto, bloco, etc)" class="form-control" />
+                    </div>
                     <div class="mb-2">
                       <label class="form-label small">Bairro</label>
                       <select v-model="_newAddrNeighborhood" class="form-select">
@@ -458,7 +371,7 @@
                         <option v-for="n in neighborhoodsList" :key="n.id" :value="n.name">{{ n.name }} — {{ formatCurrency(n.deliveryFee) }}</option>
                       </select>
                     </div>
-                    <div class="mb-2"><input v-model="_newAddrReference" placeholder="Referência (ex: Apt 4, próximo ao mercado)" class="form-control" /></div>
+                    <div class="mb-2"><input v-model="_newAddrReference" placeholder="Referência (ex: próximo ao mercado)" class="form-control" /></div>
                     <div class="d-flex gap-2">
                       <button v-if="!editingAddressId" class="btn btn-sm btn-primary" @click="addNewAddress">Adicionar</button>
                       <button v-else class="btn btn-sm btn-success" @click="saveEditedAddress">Salvar</button>
@@ -578,14 +491,167 @@
       </div>
     </div>
   </div>
+   <!-- Unified slide-in drawer (used on desktop and mobile) -->
+  <div class="drawer-backdrop" v-if="cartModalOpen && cart.length > 0" @click="closeCartModal"></div>
+  <aside class="cart-drawer" :class="{ open: cartModalOpen && cart.length > 0 }" aria-hidden="!cartModalOpen" role="dialog" aria-label="Carrinho">
+          <div class="drawer-header d-flex justify-content-between align-items-center p-3 border-bottom">
+            <h5 class="m-0">Sua sacola</h5>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary close-x" @click="closeCartModal" aria-label="Fechar">&times;</button>
+            </div>
+          </div>
+          <div class="drawer-body p-3" style="overflow:auto;">
+            <div v-if="cart.length===0" class="text-muted">Sua sacola está vazia.</div>
+            <ul v-else class="list-group mb-3">
+              <li class="list-group-item cart-line" v-for="(it, i) in cart" :key="it.lineId">
+                <div class="d-flex align-items-start">
+                  <div class="cart-item-qty text-muted me-3">{{ it.quantity }}x</div>
+                  <div class="d-flex flex-column w-100">
+                  <div class="d-flex w-100">
+                  <div class="cart-item-name flex-fill me-3" style="min-width:0">
+                    <div class="product-name">{{ it.name }}</div>
+                  </div>
+                  <div class="cart-item-price text-end me-3">{{ formatCurrency(it.price * it.quantity) }}</div>
+                  </div>
+                  <div class="d-flex w-100 justify-content-between">
+                    <div class="small text-muted option-summary drawer-wrap">{{ optionsSummaryNoPrice(it) }}</div>
+                  <div class="cart-item-actions d-flex flex-row align-items-end">
+                    <button class="action-btn edit btn btn-link p-0 small" @click="editCartItem(i)" aria-label="Editar item" title="Editar item">
+                      <i class="bi bi-pencil action-icon" aria-hidden="true"></i>
+                    </button>
+                    <button class="action-btn remove btn btn-link p-0 small" @click="removeItem(i)">
+                      <i class="bi bi-trash action-icon" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  </div>
+                  </div>
+                </div>
+              </li>
+            </ul>
+
+            <!-- summary and coupon area -->
+            <div class="cart-summary p-3 border-top">
+                        <div class="d-flex justify-content-between mb-2"><div>Subtotal</div><div>{{ formatCurrency(subtotal) }}</div></div>
+                        <div class="d-flex justify-content-between mb-2"><div>Taxa de entrega</div><div>
+                          <template v-if="orderType==='DELIVERY'">
+                            <template v-if="neighborhood && String(neighborhood).trim() !== ''">
+                              {{ Number(deliveryFee) === 0 ? 'Grátis' : formatCurrency(deliveryFee) }}
+                            </template>
+                            <template v-else>
+                              Será calculada após escolher o endereço
+                            </template>
+                          </template>
+                          <template v-else>
+                            —
+                          </template>
+                        </div></div>
+                        <hr />
+                        <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
+                        <div class="d-flex justify-content-between fw-bold mb-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0)) + deliveryFee) }}</div></div>
+
+              <div class="coupon-block mt-3">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div class="small">Tem um cupom? Clique e insira o código</div>
+                  <button class="btn btn-sm btn-outline-secondary" @click="openCoupon = !openCoupon">›</button>
+                </div>
+                <div v-show="openCoupon" class="mt-2">
+                  <div class="input-group">
+                    <input v-model="couponCode" class="form-control" placeholder="Código do cupom" />
+                    <button class="btn btn-primary" @click="applyCoupon" :disabled="couponLoading">
+                      <span v-if="couponLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Aplicar
+                    </button>
+                  </div>
+                  <div class="mt-2">
+                    <div v-if="tipMessages['coupon']" class="small text-danger">{{ tipMessages['coupon'] }}</div>
+                    <div v-if="tipMessages['coupon-success']" class="small text-success">{{ tipMessages['coupon-success'] }}</div>
+                    <div v-if="couponApplied" class="mt-2 d-flex align-items-center gap-2">
+                      <small class="text-success">Cupom aplicado: <strong>{{ couponInfo?.code }} — {{ formatCurrency(couponDiscount) }}</strong></small>
+                      <button class="btn btn-sm btn-outline-secondary" @click="removeCoupon">Remover</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="drawer-footer p-3 border-top d-flex justify-content-end align-items-center">
+            <div class="d-flex gap-2 w-100">
+              <button class="btn btn-outline-secondary flex-fill" @click="closeCartModal">Continuar comprando</button>
+              <button class="btn btn-primary flex-fill d-flex align-items-center justify-content-center" :disabled="cart.length===0 || submitting || !isOpen" @click="proceedFromCart">
+                <div class="d-flex flex-column align-items-end me-3" style="line-height:1">
+                  <strong style="display:block">{{ formatCurrency(finalTotal) }}</strong>
+                  <small class="text-white" style="display:block">{{ cart.length }} item{{ cart.length>1 ? 's' : '' }}</small>
+                </div>
+                <span>Avançar</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+        <!-- Simple info modal (opened from 'Mais informações') with tabs -->
+        <div v-if="infoModalOpen" class="product-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:11100">
+          <div class="modal-content bg-white rounded shadow p-3" style="width:520px;max-width:94%;">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <h5 class="m-0">Informações da loja</h5>
+              <div><button class="btn btn-sm btn-outline-secondary close-x" @click="closeInfoModal" aria-label="Fechar">&times;</button></div>
+            </div>
+            <div class="modal-body p-2" style="max-height:60vh;overflow:auto">
+              <ul class="nav nav-tabs mb-3" role="tablist">
+                <li class="nav-item" role="presentation"><button type="button" :class="['nav-link', infoTab === 'hours' ? 'active' : '']" @click="infoTab = 'hours'">Horário</button></li>
+                <li class="nav-item" role="presentation"><button type="button" :class="['nav-link', infoTab === 'contacts' ? 'active' : '']" @click="infoTab = 'contacts'">Contatos</button></li>
+                <li class="nav-item" role="presentation"><button type="button" :class="['nav-link', infoTab === 'payments' ? 'active' : '']" @click="infoTab = 'payments'">Formas de pagamento</button></li>
+              </ul>
+
+              <div v-show="infoTab === 'hours'">
+                <div class="mb-2">
+                  <strong>Horário</strong>
+                  <div class="small text-muted">{{ companyHoursText }}</div>
+                  <div v-if="isOpen" class="small text-success">{{ openUntilText }}</div>
+                  <div v-else class="small text-muted">{{ nextOpenText }}</div>
+                </div>
+              </div>
+
+              <div v-show="infoTab === 'contacts'">
+                <div class="mb-2">
+                  <strong>Contatos</strong>
+                  <div class="small text-muted" v-if="company?.phone">Telefone: {{ company.phone }}</div>
+                  <div class="small text-muted" v-if="company?.email">E-mail: {{ company.email }}</div>
+                  <div v-if="company?.contacts && company.contacts.length">
+                    <div v-for="c in company.contacts" :key="c.type" class="small text-muted">{{ c.type }}: {{ c.value }}</div>
+                  </div>
+                  <div v-if="!company?.phone && !company?.email && !(company?.contacts && company.contacts.length)" class="small text-muted">Nenhum contato disponível</div>
+                </div>
+              </div>
+
+              <div v-show="infoTab === 'payments'">
+                <div class="mb-2">
+                  <strong>Formas de pagamento</strong>
+                  <div v-if="paymentMethods && paymentMethods.length">
+                    <ul class="list-unstyled mb-0 mt-2">
+                      <li v-for="m in paymentMethods" :key="m.code" class="small text-muted">{{ m.name }} <span v-if="m.description">— <em class="text-muted">{{ m.description }}</em></span></li>
+                    </ul>
+                  </div>
+                  <div v-else class="small text-muted">Dinheiro</div>
+                </div>
+              </div>
+
+            </div>
+            <div class="modal-footer p-2" style="border-top: none;">
+              <button class="btn btn-secondary" @click="closeInfoModal">Fechar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Info modal removed -->
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, reactive, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, reactive, watch, nextTick } from 'vue';
 import { bindLoading } from '../state/globalLoading.js';
 import api from '../api';
 import { useRoute, useRouter } from 'vue-router';
 import { assetUrl } from '../utils/assetUrl.js';
+import { applyPhoneMask } from '../utils/phoneMask';
 
 const route = useRoute();
 const router = useRouter();
@@ -597,6 +663,17 @@ const storeId = ref(route.query.storeId || localStorage.getItem(storeStorageKey)
 // persist menuId similarly so the selected menu survives navigation
 const menuStorageKey = `public_menu_${companyId}`
 const menuId = ref(route.query.menuId || localStorage.getItem(menuStorageKey) || null);
+
+// Hero banner URL: if backend provides a banner use it; otherwise
+// fallback to non-/public path /:companyId/default-banner.jpg as requested.
+const heroBannerUrl = computed(() => {
+  try {
+    const b = menu.value?.banner || company.value?.banner;
+    if(b) return assetUrl(b);
+    // fallback path without /public prefix
+    return assetUrl('/' + companyId + '/default-banner.jpg');
+  } catch(e){ return assetUrl('/' + companyId + '/default-banner.jpg'); }
+});
 
 const loading = ref(true);
 bindLoading(loading);
@@ -708,6 +785,13 @@ function toggleOrderType(){
 // checkout modal state (multi-step)
 const checkoutModalOpen = ref(false)
 const checkoutStep = ref('customer') // 'customer' | 'delivery' | 'payment' | 'review'
+// simple info modal state (opened by 'Mais informações')
+const infoModalOpen = ref(false)
+// which tab inside the info modal is active: 'hours' | 'contacts' | 'payments'
+const infoTab = ref('hours')
+
+function openInfoModal(){ infoModalOpen.value = true; infoTab.value = 'hours' }
+function closeInfoModal(){ infoModalOpen.value = false }
 // persist customer and addresses in localStorage for convenience
 // namespace localStorage by company + optional store + optional menu so carts don't collide
 const PUBLIC_NS = [companyId, storeId.value || '', menuId.value || ''].filter(Boolean).join('_') || companyId
@@ -822,6 +906,7 @@ const deliveryFee = computed(() => {
 const paymentMethod = ref('CASH');
 // when paying with cash, customer may provide a 'troco' amount
 const changeFor = ref('');
+// (info modal removed) handlers and visibility state deleted
 const submitting = ref(false);
 const serverError = ref('');
 const clientError = ref('');
@@ -960,6 +1045,8 @@ const companyHoursText = computed(() => {
   // fallback to simple openFrom/openTo fields
   return `${c.openFrom || '--:--'} — ${c.openTo || '--:--'}`
 })
+
+ 
 
 const nextOpenText = computed(() => {
   const c = company.value
@@ -1756,6 +1843,8 @@ const modalTotal = computed(() => {
 // transient inputs for adding/editing a new address in modal
 const _newAddrLabel = ref('')
 const _newAddrFormatted = ref('')
+const _newAddrNumber = ref('')
+const _newAddrComplement = ref('')
 const _newAddrNeighborhood = ref('')
 const _newAddrReference = ref('')
 const _newAddrLat = ref(null)
@@ -1773,6 +1862,8 @@ const showNewAddressForm = ref(addresses.value.length === 0)
 function clearNewAddress(){
   _newAddrLabel.value = ''
   _newAddrFormatted.value = ''
+  _newAddrNumber.value = ''
+  _newAddrComplement.value = ''
   _newAddrNeighborhood.value = ''
   _newAddrReference.value = ''
   _newAddrLat.value = null
@@ -1817,6 +1908,10 @@ async function performOrderFromModal(){
   if(orderResponse.value){ closeCheckout() }
 }
 
+function handleContactInput(e) {
+  customer.value.contact = applyPhoneMask(e.target.value)
+}
+
 function nextFromCustomer(){
   clientError.value = ''
   if(!customer.value || !customer.value.name || !customer.value.contact){
@@ -1845,7 +1940,7 @@ function addNewAddress(){
   if(editingAddressId.value){
     const idx = addresses.value.findIndex(a=>a.id===editingAddressId.value)
     if(idx >= 0){
-      const upd = { ...addresses.value[idx], label: (_newAddrLabel.value || _newAddrFormatted.value), formattedAddress: _newAddrFormatted.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, reference: _newAddrReference.value }
+      const upd = { ...addresses.value[idx], label: (_newAddrLabel.value || _newAddrFormatted.value), formattedAddress: _newAddrFormatted.value, number: _newAddrNumber.value, complement: _newAddrComplement.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, reference: _newAddrReference.value }
       if(_newAddrFull.value) upd.fullDisplay = _newAddrFull.value
       addresses.value.splice(idx, 1, upd)
       localStorage.setItem(LOCAL_ADDR_KEY, JSON.stringify(addresses.value))
@@ -1855,7 +1950,7 @@ function addNewAddress(){
     return
   }
 
-  addAddress({ label: _newAddrLabel.value, formattedAddress: _newAddrFormatted.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, fullDisplay: _newAddrFull.value, reference: _newAddrReference.value })
+  addAddress({ label: _newAddrLabel.value, formattedAddress: _newAddrFormatted.value, number: _newAddrNumber.value, complement: _newAddrComplement.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, fullDisplay: _newAddrFull.value, reference: _newAddrReference.value })
   clearNewAddress()
 }
 
@@ -1952,10 +2047,13 @@ function editAddress(id){
   editingAddressId.value = id
   _newAddrLabel.value = a.label || ''
   _newAddrFormatted.value = a.formattedAddress || ''
+  _newAddrNumber.value = a.number || ''
+  _newAddrComplement.value = a.complement || ''
   _newAddrNeighborhood.value = a.neighborhood || ''
   _newAddrLat.value = a.latitude || null
   _newAddrLon.value = a.longitude || null
   _newAddrFull.value = a.fullDisplay || ''
+  _newAddrReference.value = a.reference || ''
   selectedAddressId.value = id
 }
 
@@ -2327,7 +2425,6 @@ try{
 .option-row { padding: 0 16px; font-size: 14px }
 .group-header .badge.bg-primary { background-color:#0d6efd; color:#fff }
 /* highlight failing required group briefly */
-.required-fail { box-shadow: 0 0 0 3px rgba(220,53,69,0.06); border-radius: 12px }
 .badge.bg-danger { background-color: #d9534f !important }
 /* pulse animation used when scrolling to a required group */
 .required-pulse { animation: pulse 0.9s ease-out forwards }
@@ -2644,7 +2741,7 @@ try{
   .cart-drawer.open { transform: translateY(0) }
   .drawer-body { overflow:auto; max-height: calc(100vh - 140px) }
   /* reduce cart bar conflicts: hide mobile-cart-bar when drawer is open */
-  .mobile-cart-bar { bottom: calc(68vh + 8px) }
+  .mobile-cart-bar { bottom: calc(68vh + 8px); font-size:12px; bottom:60px; height:60px;}
 }
 
 /* Mobile bottom nav */
@@ -2655,7 +2752,7 @@ try{
 .mobile-bottom-nav .cart-badge { background:#0d6efd; color:#fff; border-radius:10px; padding:2px 6px; font-size:11px; position:absolute; top:6px; right:12px; margin-left:0 }
 
 /* make mobile cart bar fixed above the bottom nav so it's always visible while scrolling */
-.mobile-cart-bar { position:fixed; left:0; right:0; bottom:64px; height:64px; z-index:1048; display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:#fff; border-top:1px solid rgba(0,0,0,0.06) }
+.mobile-cart-bar { position:fixed; left:0; right:0;  z-index:1048; display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:#fff; border-top:1px solid rgba(0,0,0,0.06) }
 .mobile-cart-bar .btn { margin:0 }
 
 @media (max-width: 767px){
@@ -2755,6 +2852,27 @@ body { padding-bottom: 110px; }
   .product-modal .product-name { font-size:0.95rem }
   .product-modal .option-summary { font-size:0.8rem }
   .product-modal .cart-item-qty { width:36px; height:36px }
+}
+/* Tabs inside the info modal: visual tweaks to match the app style */
+.modal-content .nav-tabs { border-bottom: none; padding-bottom: 6px; display:flex; gap:6px; }
+.modal-content .nav-tabs .nav-item { margin-bottom: 0 }
+.modal-content .nav-tabs .nav-link {
+  border: none;
+  padding: 8px 12px;
+  color: #444;
+  background: transparent;
+  border-radius: 10px;
+  transition: background .12s ease, box-shadow .12s ease, color .12s ease;
+}
+.modal-content .nav-tabs .nav-link.active {
+  background: rgba(13,110,253,0.06);
+  color: #0d6efd;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(13,110,253,0.06);
+  border: 1px solid rgba(13,110,253,0.08);
+}
+@media (max-width:480px){
+  .modal-content .nav-tabs .nav-link { padding: 8px 10px; font-size: 0.95rem }
 }
 </style>
 
