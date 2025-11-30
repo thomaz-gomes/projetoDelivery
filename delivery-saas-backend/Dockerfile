@@ -5,9 +5,12 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 
-# Copy source and generate Prisma client (if Prisma schema exists)
+# Copy source and generate Prisma client (for both sqlite and postgres schemas if present)
 COPY . .
-RUN if [ -f prisma/schema.prisma ]; then npx prisma generate; fi
+# Generate client for default schema (sqlite) if present
+RUN if [ -f prisma/schema.prisma ]; then npx prisma generate --schema=prisma/schema.prisma; fi
+# Also generate client for Postgres schema (used in production) if present
+RUN if [ -f prisma/schema.postgres.prisma ]; then npx prisma generate --schema=prisma/schema.postgres.prisma; fi
 
 FROM node:20-bullseye-slim AS runtime
 WORKDIR /app
@@ -22,4 +25,4 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Keep container stateless: run migrations outside the image or via a one-shot job.
-CMD ["node", "src/server.js"]
+CMD ["sh", "-lc", "npx prisma migrate deploy --schema=prisma/schema.postgres.prisma 2>/dev/null || true; node src/server.js"]
