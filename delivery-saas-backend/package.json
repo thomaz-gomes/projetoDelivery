@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "nodemon --ignore prisma/dev.db --ignore tmp --ignore logs --ignore dev-print-endpoint --ignore .print-agent-token --ignore .print-agent-company src/server.js",
     "dev:local": "npx prisma generate && npx prisma db push && npm run dev",
+    "prisma:generate:postgres": "prisma generate --schema=prisma/schema.postgres.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.postgres.prisma",
     "start": "node src/server.js",
     "prisma:generate": "prisma generate",
     "migrate": "prisma migrate dev --name init",
