@@ -6,7 +6,7 @@ import { useRoute, useRouter } from 'vue-router';
 const email = ref('admin@example.com');
 const password = ref('admin123');
 const whatsapp = ref('');
-const loginType = ref('operator'); // 'operator' = email, 'rider' = whatsapp/affiliate
+const loginType = ref('operator'); // 'operator' = email, 'rider' = whatsapp (motoboy), 'affiliate' = whatsapp (afiliado)
 const loading = ref(false);
 const error = ref('');
 
@@ -18,19 +18,24 @@ async function onSubmit() {
   loading.value = true;
   error.value = '';
   try {
-    if (loginType.value === 'rider') {
+    if (loginType.value === 'rider' || loginType.value === 'affiliate') {
       const digits = (whatsapp.value || '').replace(/\D/g, '');
       // client-side validation: require 10 or 11 digits
       if (!(digits.length === 10 || digits.length === 11)) {
         throw { message: 'Informe um WhatsApp válido com 10 ou 11 dígitos' };
       }
-      await auth.loginWhatsapp(digits.slice(-11), password.value);
+      if (loginType.value === 'rider') {
+        await auth.loginWhatsapp(digits.slice(-11), password.value);
+      } else {
+        await auth.loginWhatsappAffiliate(digits.slice(-11), password.value);
+      }
     } else {
       await auth.login(email.value, password.value);
     }
-  // redirect based on role
-  // Riders should land on their orders page directly
-  const destination = auth.user?.role === 'RIDER' ? '/rider/orders' : (route.query.redirect || '/orders');
+  // redirect: affiliates -> /affiliate, riders -> /rider, otherwise redirect param or /orders
+  let destination = route.query.redirect || '/orders';
+  if (auth.user?.affiliateId) destination = '/affiliate';
+  else if (auth.user?.role === 'RIDER') destination = '/rider';
   router.push(destination);
   } catch (e) {
     error.value = e?.response?.data?.message || 'Falha ao entrar';
@@ -67,14 +72,36 @@ function onWhatsappInput(e) {
 
         <form @submit.prevent="onSubmit" class="needs-validation">
           <div class="mb-3">
-            <label class="form-label d-block">Tipo de login</label>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="radio" id="loginTypeOp" value="operator" v-model="loginType">
-              <label class="form-check-label" for="loginTypeOp">Operador (login com email)</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="radio" id="loginTypeRider" value="rider" v-model="loginType">
-              <label class="form-check-label" for="loginTypeRider">Motoboy/Afiliado (login com whatsapp)</label>
+            <div class="radio-list">
+              <label class="radio-card">
+                <input type="radio" name="loginType" value="operator" v-model="loginType" />
+                <div class="card-content">
+                  <div class="left">
+                    <span class="indicator" aria-hidden="true"></span>
+                    <span class="label-text">Operador <small class="muted">(login com email)</small></span>
+                  </div>
+                </div>
+              </label>
+
+              <label class="radio-card">
+                <input type="radio" name="loginType" value="rider" v-model="loginType" />
+                <div class="card-content">
+                  <div class="left">
+                    <span class="indicator" aria-hidden="true"></span>
+                    <span class="label-text">Motoboy <small class="muted">(login com whatsapp)</small></span>
+                  </div>
+                </div>
+              </label>
+
+              <label class="radio-card">
+                <input type="radio" name="loginType" value="affiliate" v-model="loginType" />
+                <div class="card-content">
+                  <div class="left">
+                    <span class="indicator" aria-hidden="true"></span>
+                    <span class="label-text">Afiliado <small class="muted">(login com whatsapp)</small></span>
+                  </div>
+                </div>
+              </label>
             </div>
           </div>
           <div class="mb-3" v-if="loginType === 'operator'">
@@ -89,7 +116,7 @@ function onWhatsappInput(e) {
             />
           </div>
 
-          <div class="mb-3" v-if="loginType === 'rider'">
+          <div class="mb-3" v-if="loginType === 'rider' || loginType === 'affiliate'">
             <label for="whatsapp" class="form-label">WhatsApp (10 ou 11 dígitos, sem DDI)</label>
             <input
               id="whatsapp"
@@ -100,8 +127,7 @@ function onWhatsappInput(e) {
               placeholder="(73) 99141-29676"
               required
             />
-            <div class="form-text small">Digite apenas números; máscara aplicada automaticamente.</div>
-          </div>
+                </div>
 
           <div class="mb-3">
             <label for="password" class="form-label">Senha</label>
@@ -150,4 +176,42 @@ input { display:block; width:100%; padding:8px; margin:8px 0; }
 button { padding:8px 12px; }
 .err { color:crimson; }
 .hint { color:#555; font-size:12px; margin-top:8px; }
+
+/* Custom radio card selector */
+.radio-list { display: grid; gap: 10px; }
+.radio-card { display: block; cursor: pointer; }
+.radio-card input { position: absolute; opacity: 0; pointer-events: none; }
+.radio-card .card-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid #e6eef6;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(18, 38, 63, 0.04);
+  transition: all 160ms ease;
+}
+.radio-card .card-content .left { display:flex; align-items:center; gap:10px; }
+.radio-card .indicator {
+  width:18px; height:18px; border-radius:50%;
+  background: #f1f5f9; border: 2px solid #e6eef6; display:inline-block; box-sizing:border-box;
+}
+.radio-card .label-text { font-weight:500; color:#0f1724; }
+.radio-card .label-text .muted { font-weight:400; color:#6b7280; font-size:12px; margin-left:6px; }
+.radio-card .right { color:#374151; font-size:13px; }
+
+/* Selected state */
+.radio-card input:checked + .card-content {
+  border-color: #3b82f6; /* blue */
+  box-shadow: 0 6px 16px rgba(59,130,246,0.14);
+}
+.radio-card input:checked + .card-content .indicator {
+  background: linear-gradient(180deg,#fff,#3b82f6);
+  border-color: #3b82f6;
+}
+
+/* Hover */
+.radio-card:hover .card-content { transform: translateY(-1px); }
+
 </style>

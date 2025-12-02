@@ -92,6 +92,7 @@
 import { ref, onMounted } from 'vue'
 import { bindLoading } from '../state/globalLoading.js'
 import api from '@/api.js'
+import { formatCurrency } from '../utils/formatters.js'
 import { useRouter } from 'vue-router'
 import ListCard from '@/components/ListCard.vue'
 import Swal from 'sweetalert2'
@@ -138,7 +139,7 @@ export default {
     const formatValue = (c) => {
       if (!c) return ''
       if (c.isPercentage) return (Number(c.value) * 100).toFixed(1) + '%'
-      return 'R$ ' + Number(c.value).toFixed(2)
+      return formatCurrency(Number(c.value))
     }
 
     const goNew = () => router.push('/coupons/new')

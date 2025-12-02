@@ -110,6 +110,27 @@ onMounted(async () => {
   }
 });
 
+function extractAddress(order) {
+  if (!order) return '';
+  return order.address ||
+    order.payload?.delivery?.deliveryAddress?.formattedAddress ||
+    order.payload?.deliveryAddress?.formattedAddress ||
+    order.payload?.delivery?.address?.formattedAddress ||
+    order.payload?.delivery?.address ||
+    order.payload?.order?.delivery?.address?.formattedAddress ||
+    order.payload?.order?.delivery?.address ||
+    order.payload?.shippingAddress?.formattedAddress ||
+    order.payload?.shipping?.address?.formattedAddress ||
+    order.payload?.delivery_address?.formatted_address ||
+    order.payload?.rawPayload?.deliveryAddress?.formattedAddress ||
+    order.payload?.rawPayload?.address?.formatted ||
+    order.payload?.rawPayload?.address?.formattedAddress ||
+    order.payload?.rawPayload?.address?.formatted_address ||
+    order.rawPayload?.neighborhood ||
+    (typeof order.rawPayload?.address === 'string' ? order.rawPayload.address : null) ||
+    '';
+}
+
 async function associateCustomer() {
   if (!order.value) return;
   assocLoading.value = true;
@@ -144,7 +165,7 @@ async function associateCustomer() {
             <button @click="associateCustomer" :disabled="assocLoading">{{ assocLoading ? 'Associando...' : 'Associar cliente' }}</button>
           </div>
         </div>
-        <div class="small"><b>Endereço:</b> {{ order.address || '-' }}</div>
+        <div class="small"><b>Endereço:</b> {{ extractAddress(order) || '-' }}</div>
       </section>
 
       <section class="sec">

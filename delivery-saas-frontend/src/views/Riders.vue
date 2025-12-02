@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 import api from '../api';
 import ListCard from '../components/ListCard.vue';
 import Swal from 'sweetalert2'
+import { formatAmount } from '../utils/formatters.js';
 
 const store = useRidersStore();
 const router = useRouter();
@@ -106,7 +107,7 @@ onMounted(()=> load())
 
 const formatBalance = (id) => {
   const v = balances.value[id] || 0
-  return Number(v).toFixed(2)
+  return formatAmount(v)
 }
 
 </script>

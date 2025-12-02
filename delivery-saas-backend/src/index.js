@@ -37,6 +37,7 @@ import agentPrintRouter from './routes/agentPrint.js'
 import qrActionRouter from './routes/qrAction.js'
 import rasterizeRouter from './routes/rasterize.js'
 import printerSettingRouter from './routes/printerSetting.js'
+import cashRouter from './routes/cash.js'
 import events from './utils/events.js'
 import printQueue from './printQueue.js'
 import { prisma } from './prisma.js'
@@ -136,6 +137,7 @@ app.use('/agent-setup', agentSetupRouter);
 app.use('/agent-print', agentPrintRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
+app.use('/cash', cashRouter);
 app.use('/qr-action', qrActionRouter);
 // Server-side rasterization endpoint (returns PNG data URL)
 app.use('/rasterize', rasterizeRouter);

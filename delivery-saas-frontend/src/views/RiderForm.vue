@@ -77,7 +77,7 @@ async function save() {
           </div>
           <div class="col-md-3">
             <label class="form-label">Diária</label>
-            <input v-model="rider.dailyRate" type="number" class="form-control" step="0.01" />
+            <CurrencyInput v-model="rider.dailyRate" inputClass="form-control" placeholder="0,00" />
           </div>
           <div class="col-md-6">
             <label class="form-label">Senha (para o app do motoboy)</label>

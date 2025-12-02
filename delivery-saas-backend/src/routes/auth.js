@@ -180,4 +180,34 @@ authRouter.post('/login-whatsapp', async (req, res) => {
     return;
   }
 });
+
+// fallback: allow affiliate login by whatsapp+password
+authRouter.post('/login-whatsapp-affiliate', async (req, res) => {
+  const { whatsapp, login, password } = req.body || {};
+  const raw = whatsapp || login || '';
+  if (!raw || !password) return res.status(400).json({ message: 'Informe whatsapp e senha' });
+  const digits = String(raw).replace(/\D/g, '');
+  if (!digits) return res.status(400).json({ message: 'WhatsApp inválido' });
+
+  try {
+    const affiliate = await prisma.affiliate.findFirst({ where: { whatsapp: { contains: digits } } });
+    if (!affiliate || !affiliate.password) return res.status(401).json({ message: 'Credenciais inválidas' });
+    const ok = await bcrypt.compare(String(password), affiliate.password);
+    if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' });
+
+    // Sign token for affiliate. Use role 'ATTENDANT' so permission checks can be scoped.
+    const token = signToken({ id: affiliate.id, role: 'ATTENDANT', companyId: affiliate.companyId, affiliateId: affiliate.id, name: affiliate.name });
+    // ensure agent token exists for company
+    try {
+      const { token: agentTokenPlain } = await rotateAgentToken(affiliate.companyId, req.app);
+      return res.json({ token, user: { id: affiliate.id, role: 'ATTENDANT', name: affiliate.name, companyId: affiliate.companyId, affiliateId: affiliate.id }, agentToken: agentTokenPlain });
+    } catch (e) {
+      const agentTokenPlain = await ensureAgentTokenForCompany(affiliate.companyId);
+      return res.json({ token, user: { id: affiliate.id, role: 'ATTENDANT', name: affiliate.name, companyId: affiliate.companyId, affiliateId: affiliate.id }, agentToken: agentTokenPlain || undefined });
+    }
+  } catch (e) {
+    console.error('affiliate login error', e);
+    return res.status(500).json({ message: 'Erro ao autenticar' });
+  }
+});
  

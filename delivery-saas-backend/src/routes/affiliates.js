@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
+import { getAffiliateIfOwned } from './affiliates.helpers.js';
 
 export const affiliatesRouter = express.Router();
 
@@ -32,40 +33,12 @@ affiliatesRouter.get('/', async (req, res) => {
   }
 });
 
-// GET /affiliates/:id - Detalhe do afiliado com vendas e pagamentos
-affiliatesRouter.get('/:id', async (req, res) => {
-  const { id } = req.params;
-  const companyId = req.user.companyId;
-
-  try {
-    const affiliate = await prisma.affiliate.findFirst({
-      where: { id, companyId },
-      include: {
-        sales: {
-          include: { order: true },
-          orderBy: { createdAt: 'desc' }
-        },
-        payments: {
-          orderBy: { createdAt: 'desc' }
-        }
-      }
-    });
-
-    if (!affiliate) {
-      return res.status(404).json({ message: 'Afiliado não encontrado' });
-    }
-
-    res.json(affiliate);
-  } catch (e) {
-    console.error('Error fetching affiliate:', e);
-    res.status(500).json({ message: 'Erro ao buscar afiliado' });
-  }
-});
+// Note: sales/payments/statement routes are defined below with the proper models.
 
 // POST /affiliates - Criar novo afiliado
 affiliatesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
-  const { name, email, whatsapp, commissionRate, couponCode } = req.body;
+  const { name, email, whatsapp, commissionRate, couponCode, password } = req.body;
 
   if (!name || !couponCode) {
     return res.status(400).json({ message: 'Nome e código do cupom são obrigatórios' });
@@ -78,11 +51,19 @@ affiliatesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   try {
     // Create affiliate and its default coupon in a single transaction to ensure consistency.
     const result = await prisma.$transaction(async (tx) => {
+      // hash password if provided
+      let passHash = null;
+      if (password) {
+        const bcrypt = await import('bcryptjs');
+        passHash = await bcrypt.hash(String(password), 10);
+      }
+
       const affiliate = await tx.affiliate.create({
         data: {
           companyId,
           name,
           email: email || null,
+          password: passHash,
           whatsapp: whatsapp || null,
           commissionRate: commissionRate || 0,
           couponCode,
@@ -124,13 +105,16 @@ affiliatesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
 affiliatesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params;
   const companyId = req.user.companyId;
-  const { name, email, whatsapp, commissionRate, couponCode, isActive } = req.body;
+  const { name, email, whatsapp, commissionRate, couponCode, isActive, password } = req.body;
 
   if (commissionRate && (commissionRate < 0 || commissionRate > 1)) {
     return res.status(400).json({ message: 'Taxa de comissão deve estar entre 0 e 1' });
   }
 
   try {
+    const exists = await getAffiliateIfOwned(prisma, id, companyId);
+    if (!exists) return res.status(404).json({ message: 'Afiliado não encontrado' });
+
     const affiliate = await prisma.affiliate.update({
       where: { id },
       data: {
@@ -142,6 +126,15 @@ affiliatesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
         isActive: isActive !== undefined ? isActive : undefined
       }
     });
+
+    // update password separately (hashed)
+    if (password) {
+      try {
+        const bcrypt = await import('bcryptjs');
+        const passHash = await bcrypt.hash(String(password), 10);
+        await prisma.affiliate.update({ where: { id }, data: { password: passHash } });
+      } catch (e) { console.warn('Failed to update affiliate password', e); }
+    }
 
     res.json(affiliate);
   } catch (e) {
@@ -274,15 +267,10 @@ affiliatesRouter.get('/:id/sales', async (req, res) => {
   const companyId = req.user.companyId;
 
   try {
-    const sales = await prisma.affiliateSale.findMany({
-      where: {
-        affiliateId: id,
-        affiliate: { companyId }
-      },
-      include: { order: true },
-      orderBy: { createdAt: 'desc' }
-    });
+    const aff = await getAffiliateIfOwned(prisma, id, companyId);
+    if (!aff) return res.status(404).json({ message: 'Afiliado não encontrado' });
 
+    const sales = await prisma.affiliateSale.findMany({ where: { affiliateId: id }, include: { order: true }, orderBy: { createdAt: 'desc' } });
     res.json(sales);
   } catch (e) {
     console.error('Error fetching affiliate sales:', e);
@@ -296,14 +284,10 @@ affiliatesRouter.get('/:id/payments', async (req, res) => {
   const companyId = req.user.companyId;
 
   try {
-    const payments = await prisma.affiliatePayment.findMany({
-      where: {
-        affiliateId: id,
-        affiliate: { companyId }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    const aff = await getAffiliateIfOwned(prisma, id, companyId);
+    if (!aff) return res.status(404).json({ message: 'Afiliado não encontrado' });
 
+    const payments = await prisma.affiliatePayment.findMany({ where: { affiliateId: id }, orderBy: { createdAt: 'desc' } });
     res.json(payments);
   } catch (e) {
     console.error('Error fetching affiliate payments:', e);

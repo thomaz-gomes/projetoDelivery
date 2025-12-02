@@ -157,6 +157,7 @@ export async function notifyCustomerStatus(orderId, newStatus) {
     const statusPt = {
       EM_PREPARO: 'em preparo',
       SAIU_PARA_ENTREGA: 'saiu para entrega',
+      CONFIRMACAO_PAGAMENTO: 'confirmação de pagamento',
       CONCLUIDO: 'concluído',
       CANCELADO: 'cancelado',
     }[newStatus] || newStatus;

@@ -2,11 +2,12 @@
 import { ref, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
+import { formatCurrency } from '../utils/formatters.js';
 
 const list = ref([]);
 const loading = ref(false);
 
-const form = ref({ id: null, name: '', aliases: '', deliveryFee: '0.00', riderFee: '0.00' });
+const form = ref({ id: null, name: '', aliases: '', deliveryFee: '0,00', riderFee: '0,00' });
 const saving = ref(false);
 const error = ref('');
 const testText = ref('');
@@ -32,7 +33,7 @@ function edit(n) {
 }
 
 function resetForm() {
-  form.value = { id: null, name: '', aliases: '', deliveryFee: '0.00', riderFee: '0.00' };
+  form.value = { id: null, name: '', aliases: '', deliveryFee: '0,00', riderFee: '0,00' };
 }
 
 async function save() {
@@ -96,10 +97,10 @@ async function testMatch() {
             <input v-model="form.aliases" class="form-control" placeholder="Apelidos (vírgula separado)" />
           </div>
           <div class="col-md-2">
-            <input v-model="form.deliveryFee" class="form-control" placeholder="Taxa entrega" />
+            <CurrencyInput v-model="form.deliveryFee" inputClass="form-control" placeholder="Taxa entrega" />
           </div>
           <div class="col-md-2">
-            <input v-model="form.riderFee" class="form-control" placeholder="Taxa motoboy" />
+            <CurrencyInput v-model="form.riderFee" inputClass="form-control" placeholder="Taxa motoboy" />
           </div>
           <div class="col-12 mt-2">
             <div class="d-flex gap-2">
@@ -146,8 +147,8 @@ async function testMatch() {
             <tr v-for="n in list" :key="n.id">
               <td>{{ n.name }}</td>
               <td>{{ Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '') }}</td>
-              <td>R$ {{ Number(n.deliveryFee || 0).toFixed(2) }}</td>
-              <td>R$ {{ Number(n.riderFee || 0).toFixed(2) }}</td>
+              <td>{{ formatCurrency(n.deliveryFee) }}</td>
+              <td>{{ formatCurrency(n.riderFee) }}</td>
               <td><button class="btn btn-sm btn-outline-secondary" @click="edit(n)">Editar</button></td>
             </tr>
             <tr v-if="list.length === 0">

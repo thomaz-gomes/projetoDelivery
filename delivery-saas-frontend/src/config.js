@@ -26,8 +26,11 @@ if (import.meta.env.DEV) {
   } else if (disableSsl) {
     API_URL = 'http://localhost:3000';
   } else {
-    // Fall back to empty so Vite proxy can be used when backend runs with HTTPS
-    API_URL = '';
+    // Fall back to localhost backend for developer convenience when no
+    // explicit VITE_API_URL is provided. Using an absolute backend URL
+    // avoids relying on Vite proxy rules and prevents the dev server from
+    // answering unknown API routes with a 404 (see reported "Cannot PATCH /orders/...").
+    API_URL = 'http://localhost:3000';
   }
 } else {
   API_URL = String(rawApiEnv).trim();

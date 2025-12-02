@@ -35,6 +35,20 @@
       </div>
 
       <div class="form-group">
+        <label for="password">Senha</label>
+        <input
+          id="password"
+          v-model="form.password"
+          type="password"
+          placeholder="Senha para login"
+          minlength="6"
+          autocomplete="new-password"
+          :required="!isEditing"
+        />
+        <small class="form-hint">{{ isEditing ? 'Preencha apenas para alterar a senha (opcional ao editar)' : 'Afiliado fará login com WhatsApp + senha (mínimo 6 caracteres)'}} </small>
+      </div>
+
+      <div class="form-group">
         <label for="couponCode">Código do Cupom *</label>
         <input 
           id="couponCode"
@@ -117,6 +131,7 @@ export default {
     const form = ref({
       name: '',
       email: '',
+      password: '',
       whatsapp: '',
       couponCode: '',
       commissionRate: 0,
@@ -156,6 +171,14 @@ export default {
         return false
       }
 
+      // Password requirement on create: affiliates must have a password to allow login
+      if (!isEditing.value) {
+        if (!form.value.password || form.value.password.length < 6) {
+          error.value = 'Senha é obrigatória (mínimo 6 caracteres)'
+          return false
+        }
+      }
+
       return true
     }
 
@@ -174,12 +197,16 @@ export default {
       loading.value = true
 
       try {
+        // Normalize whatsapp: send only digits (backend expects plain digits)
+        const normalizedWhats = (form.value.whatsapp || '').toString().replace(/\D/g, '')
         const payload = {
           ...form.value,
           commissionRate: form.value.commissionRate / 100, // Convert percentage to decimal
           email: form.value.email || null,
-          whatsapp: form.value.whatsapp || null
+          whatsapp: normalizedWhats || null
         }
+        // Only send password when provided (avoid sending empty strings when editing)
+        if (form.value.password) payload.password = form.value.password
 
         let response
         if (isEditing.value) {
@@ -203,7 +230,8 @@ export default {
         form.value = {
           name: props.affiliate.name || '',
           email: props.affiliate.email || '',
-          whatsapp: props.affiliate.whatsapp || '',
+          // show masked whatsapp in input when editing
+          whatsapp: props.affiliate.whatsapp ? applyPhoneMask(props.affiliate.whatsapp) : '',
           couponCode: props.affiliate.couponCode || '',
           commissionRate: (props.affiliate.commissionRate * 100) || 0, // Convert to percentage
           isActive: props.affiliate.isActive !== false
@@ -243,7 +271,8 @@ export default {
 .form-group input[type="text"],
 .form-group input[type="email"],
 .form-group input[type="tel"],
-.form-group input[type="number"] {
+.form-group input[type="number"],
+.form-group input[type="password"] {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #ddd;

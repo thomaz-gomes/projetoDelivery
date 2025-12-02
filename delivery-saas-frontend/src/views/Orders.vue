@@ -11,10 +11,14 @@ import printService from "../services/printService.js";
 import PrinterStatus from '../components/PrinterStatus.vue';
 import PrinterConfig from '../components/PrinterConfig.vue';
 import POSOrderWizard from '../components/POSOrderWizard.vue';
+import CashControl from '../components/CashControl.vue';
 
 import api from '../api';
 import { API_URL, SOCKET_URL } from '@/config';
 import QRCode from 'qrcode';
+import { formatCurrency, formatAmount } from '../utils/formatters.js';
+import { createApp, h } from 'vue';
+import CurrencyInput from '../components/CurrencyInput.vue';
 import { bindLoading } from '../state/globalLoading.js';
 import Sortable from 'sortablejs';
 const store = useOrdersStore();
@@ -46,6 +50,7 @@ const playSound = ref(true);
 const selectedStatus = ref('TODOS');
 const selectedRider = ref('TODOS');
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+const companyPaymentMethods = ref([]);
 const statusFiltersMobile = computed(() => statusFilters.filter(s => s.value !== 'TODOS'));
 // extra filters
 const searchOrderNumber = ref('');
@@ -101,7 +106,7 @@ function showNotification(pedido) {
 
   const title = "Novo pedido recebido!";
   const options = {
-    body: `${pedido.customerName || "Cliente"} — R$${Number(pedido.total || 0).toFixed(2)}`,
+    body: `${pedido.customerName || "Cliente"} — ${formatCurrency(pedido.total)}`,
     icon: "/icons/order.png", // você pode adicionar um ícone na pasta public/icons
     badge: "/icons/badge.png",
   };
@@ -126,6 +131,16 @@ onMounted(async () => {
     // ensure store names are hydrated when backend omitted the relation
     await hydrateMissingStores();
     await store.fetchRiders();
+    // load company payment methods (admin endpoint)
+    try {
+      const cid = auth?.user?.companyId || null;
+      if (cid) {
+        const pmRes = await api.get(`/menu/payment-methods?companyId=${cid}`);
+        companyPaymentMethods.value = Array.isArray(pmRes.data) ? pmRes.data : [];
+      }
+    } catch (e) {
+      companyPaymentMethods.value = [{ code: 'CASH', name: 'Dinheiro' }];
+    }
   } catch (e) {
     console.error(e);
     Swal.fire('Erro', 'Falha ao carregar pedidos/entregadores.', 'error');
@@ -474,9 +489,7 @@ function formatTimeOnly(d) {
   return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
-function formatCurrency(v){
-  try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)); }catch(e){ return 'R$ ' + (Number(v||0).toFixed(2)); }
-}
+// use `formatCurrency` / `formatAmount` from `src/utils/formatters.js`
 
 // Compute displayed total as sum(items + options) + delivery fee, robust to different payload shapes
 function computeDisplayedTotal(o){
@@ -654,12 +667,36 @@ function normalizeOrder(o){
 
   const total = Number(o.total ?? o.amount ?? (o.payment ? o.payment.amount : undefined) ?? 0) || 0;
 
+  // build a robust address extraction checking many common payload shapes
+  function extractAddress(o) {
+    if (!o) return '';
+    const a = o.address ||
+      o.payload?.delivery?.deliveryAddress?.formattedAddress ||
+      o.payload?.deliveryAddress?.formattedAddress ||
+      o.payload?.delivery?.address?.formattedAddress ||
+      o.payload?.delivery?.address ||
+      o.payload?.order?.delivery?.address?.formattedAddress ||
+      o.payload?.order?.delivery?.address ||
+      o.payload?.shippingAddress?.formattedAddress ||
+      o.payload?.shipping?.address?.formattedAddress ||
+      o.payload?.delivery_address?.formatted_address ||
+      o.payload?.rawPayload?.deliveryAddress?.formattedAddress ||
+      o.payload?.rawPayload?.address?.formatted ||
+      o.payload?.rawPayload?.address?.formattedAddress ||
+      o.payload?.rawPayload?.address?.formatted_address ||
+      o.rawPayload?.neighborhood ||
+      (typeof o.rawPayload?.address === 'string' ? o.rawPayload.address : null) ||
+      o.customer?.address?.formattedAddress ||
+      '';
+    return a;
+  }
+
   const normalized = {
     id: o.id,
     display: formatDisplay(o),
     customerName: o.customerName || o.name || (o.customer && (o.customer.name || o.customer.fullName)) || '',
     customerPhone: o.customerPhone || o.contact || (o.customer && o.customer.contact) || '',
-    address: o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || o.rawPayload?.neighborhood || '',
+    address: extractAddress(o) || '',
     total,
     paymentMethod,
     // storeName and channelLabel: prefer explicit store name and a human-friendly channel label
@@ -713,8 +750,9 @@ function normalizeOrder(o){
     items
   };
 
-  // cache on object to avoid recomputing while the object is unchanged
-  try { o._normalized = normalized; } catch (e) {}
+  // Do not cache normalization on the order object here because orders may be
+  // updated in-place later (via socket or fetch) and we want the UI to reflect
+  // the freshest address/payload. Keep this function idempotent and cheap.
   return normalized;
 }
 
@@ -766,7 +804,7 @@ function cancelOrderAction(o) {
 
 // compute next status in the happy path pipeline
 function getNextStatus(current) {
-  const pipeline = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONCLUIDO'];
+  const pipeline = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO'];
   const idx = pipeline.indexOf((current || '').toUpperCase());
   if (idx === -1) return null;
   if (idx === pipeline.length - 1) return null;
@@ -831,6 +869,7 @@ const STATUS_LABEL = {
   EM_PREPARO: 'Em preparo',
   SAIU_PARA_ENTREGA: 'Saiu para entrega',
   CONCLUIDO: 'Concluído',
+  CONFIRMACAO_PAGAMENTO: 'Confirmação de pagamento',
   CANCELADO: 'Cancelado',
   INVOICE_AUTHORIZED: 'NFC-e Autorizada',
 };
@@ -839,6 +878,7 @@ const STATUS_LABEL = {
 const COLUMNS = [
   { key: 'EM_PREPARO', label: 'Novos / Em preparo' },
   { key: 'SAIU_PARA_ENTREGA', label: 'Saiu para entrega' },
+  { key: 'CONFIRMACAO_PAGAMENTO', label: 'Confirmação de pagamento' },
   { key: 'CONCLUIDO', label: 'Concluído' }
 ];
 
@@ -887,7 +927,15 @@ function initDragAndDrop(){
         // confirmation for moving to concluded or canceled
         // call changeStatus which already handles assign modal for SAIU_PARA_ENTREGA
         (async () => {
-          if (toCol === 'CONCLUIDO'){
+          // Prevent skipping CONFIRMACAO_PAGAMENTO: if moving directly from delivery -> concluded,
+          // redirect to CONFIRMACAO_PAGAMENTO instead.
+          const fromCol = evt.from.closest('.orders-column')?.getAttribute('data-status');
+          let targetCol = toCol;
+          if (fromCol === 'SAIU_PARA_ENTREGA' && toCol === 'CONCLUIDO') {
+            targetCol = 'CONFIRMACAO_PAGAMENTO';
+          }
+
+          if (targetCol === 'CONCLUIDO'){
             const conf = await Swal.fire({ title: 'Marcar como concluído?', text: 'Deseja marcar este pedido como CONCLUÍDO?', icon: 'question', showCancelButton: true, confirmButtonText: 'Sim', cancelButtonText: 'Cancelar' })
             if(!conf.isConfirmed){ evt.from.insertBefore(li, evt.from.children[evt.oldIndex] || null); return }
           }
@@ -895,7 +943,7 @@ function initDragAndDrop(){
             const conf = await Swal.fire({ title: 'Cancelar pedido?', text: 'Tem certeza que deseja cancelar este pedido?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sim, cancelar', cancelButtonText: 'Manter' })
             if(!conf.isConfirmed){ evt.from.insertBefore(li, evt.from.children[evt.oldIndex] || null); return }
           }
-          await changeStatus(order, toCol);
+          await changeStatus(order, targetCol);
         })();
       }
     });
@@ -1098,6 +1146,103 @@ async function changeStatus(order, to) {
       await openAssignModal(order);
       return;
     }
+    // If moving from payment confirmation to concluded, show payment confirmation modal
+    if (to === 'CONCLUIDO' && order && order.status === 'CONFIRMACAO_PAGAMENTO') {
+      // Allow multiple payment methods with editable amounts.
+      const orderTotal = Number(order.total || 0);
+      const methods = (companyPaymentMethods.value && companyPaymentMethods.value.length) ? companyPaymentMethods.value : [{ code: 'CASH', name: 'Dinheiro' }];
+      const pmOptionsHtml = methods.map(m => `<option value="${(m.code||m.name)}">${(m.name||m.code)}</option>`).join('');
+
+      const html = `<div id="swal-pay-vue"></div>`;
+
+      let vuePayApp = null;
+      let mountedPayApp = null;
+
+      const result = await Swal.fire({
+        title: 'Confirmar pagamento',
+        html,
+        showCancelButton: true,
+        focusConfirm: false,
+        confirmButtonText: 'Confirmar',
+        didOpen: () => {
+          // mount a small Vue app to manage dynamic payment rows with CurrencyInput
+          const App = {
+            components: { CurrencyInput },
+            data() {
+              return {
+                methods: methods,
+                rows: [ { method: (methods[0] && (methods[0].code||methods[0].name)) || '', amount: orderTotal } ]
+              };
+            },
+            methods: {
+              add() { this.rows.push({ method: (this.methods[0] && (this.methods[0].code||this.methods[0].name)) || '', amount: 0 }); },
+              remove(i) { this.rows.splice(i,1); },
+              sum() { return this.rows.reduce((s,r) => s + (Number(r.amount)||0), 0); },
+              remaining() { return Math.max(0, orderTotal - this.sum()); },
+              formatCurrency
+            },
+            render() {
+              const vm = this;
+              return h('div', { style: 'text-align:left' }, [
+                h('div', { style: 'margin-bottom:8px' }, [ h('strong', 'Pendente:'), ' ', h('span', vm.formatCurrency(vm.remaining())) ]),
+                h('div', vm.rows.map((r, idx) => h('div', { key: idx, class: 'pay-row', style: 'display:flex;gap:8px;margin-bottom:8px;align-items:center' }, [
+                  h('select', { class: 'form-select', style: 'flex:1', value: r.method, onInput: (e) => { vm.rows[idx].method = e.target.value } }, vm.methods.map(m => h('option', { value: (m.code||m.name) }, m.name || m.code))),
+                  h(CurrencyInput, { modelValue: r.amount, 'onUpdate:modelValue': v => { vm.rows[idx].amount = v }, inputClass: 'form-control', style: 'width:120px' }),
+                  h('button', { type: 'button', class: 'btn btn-sm btn-outline-danger', title: 'Remover', style: 'height:32px;padding:4px 8px', onClick: (e) => { e.preventDefault(); vm.remove(idx); } }, '×')
+                ]))),
+                h('div', { style: 'margin-top:8px' }, [ h('button', { type: 'button', class: 'btn btn-sm btn-secondary', onClick: (e) => { e.preventDefault(); vm.add(); } }, 'Adicionar forma') ])
+              ]);
+            }
+          };
+
+          try {
+            const appRef = createApp(App);
+            vuePayApp = appRef.mount('#swal-pay-vue');
+            mountedPayApp = appRef;
+          } catch (e) {
+            console.error('Failed to mount payment Vue app inside Swal modal', e);
+          }
+        },
+        preConfirm: () => {
+          // collect values from mounted app
+          const payments = [];
+          let sum = 0;
+          if (vuePayApp && vuePayApp.rows) {
+            for (const r of vuePayApp.rows) {
+              const method = r.method || null;
+              const amount = Number(r.amount || 0);
+              if (!method || !amount) continue;
+              payments.push({ method, amount });
+              sum += amount;
+            }
+          }
+          if (payments.length === 0) {
+            Swal.showValidationMessage('Informe ao menos uma forma de pagamento com valor.');
+            return false;
+          }
+          if (sum > orderTotal + 0.001) {
+            Swal.showValidationMessage('O total informado nas formas não pode ser maior que o total da comanda.');
+            return false;
+          }
+          if (sum + 0.001 < orderTotal) {
+            const remaining = Math.max(0, orderTotal - sum);
+            Swal.showValidationMessage(`Ainda há ${formatCurrency(remaining)} pendente.`);
+            return false;
+          }
+          return { payments };
+        }
+      });
+
+      // unmount temporary Vue app if mounted
+      try { if (mountedPayApp) mountedPayApp.unmount(); } catch (e) {}
+
+      if (!result || result.isDismissed) return;
+      const payments = (result.value && result.value.payments) || [];
+      loading.value = true;
+      await store.updateStatus(order.id, to, { payments });
+      await store.fetch();
+      return;
+    }
     loading.value = true;
     await store.updateStatus(order.id, to);
     await store.fetch();
@@ -1112,6 +1257,7 @@ async function changeStatus(order, to) {
 const statusActions = [
   { to: 'EM_PREPARO', label: 'Em preparo' },
   { to: 'SAIU_PARA_ENTREGA', label: 'Saiu p/ entrega' },
+  { to: 'CONFIRMACAO_PAGAMENTO', label: 'Confirmação de pagamento' },
   { to: 'CONCLUIDO', label: 'Concluído' },
   { to: 'CANCELADO', label: 'Cancelar' },
 ];
@@ -1120,6 +1266,7 @@ const statusFilters = [
   { value: 'TODOS', label: 'Todos', color: 'secondary' },
   { value: 'EM_PREPARO', label: 'Em preparo', color: 'warning' },
   { value: 'SAIU_PARA_ENTREGA', label: 'Saiu p/ entrega', color: 'primary' },
+  { value: 'CONFIRMACAO_PAGAMENTO', label: 'Confirmação de pagamento', color: 'info' },
   { value: 'CONCLUIDO', label: 'Concluído', color: 'success' },
   { value: 'CANCELADO', label: 'Cancelado', color: 'danger' },
   { value: 'INVOICE_AUTHORIZED', label: 'NFC-e aut.', color: 'info' },
@@ -1233,9 +1380,23 @@ function handlePdvVisibleChange(v){
   }
 }
 
-function onPdvCreated(o){
+function onPdvCreated(created){
   try {
-    if(o){ o._isNew = true; store.orders.unshift(o); setTimeout(()=>{ o._isNew=false; },900); }
+    if(!created) return;
+    // Avoid duplicate insertion: the server also emits `novo-pedido` via socket.
+    const exists = store.orders.find(o => o && o.id === created.id);
+    if (exists) {
+      // If already present, replace/update it to ensure latest data
+      const idx = store.orders.findIndex(o => o && o.id === created.id);
+      if (idx !== -1) {
+        try { delete created._normalized; } catch(e){}
+        store.orders.splice(idx, 1, created);
+      }
+    } else {
+      try { created._isNew = true; } catch(e){}
+      store.orders.unshift(created);
+      setTimeout(()=>{ try{ created._isNew=false }catch(e){} },900);
+    }
   } catch(e){ console.warn('Falha ao inserir pedido PDV localmente', e); }
   // close wizard after creation
   showPdv.value = false;
@@ -1278,9 +1439,7 @@ function pulseButton() {
         <button type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
           <i class="bi bi-printer"></i>&nbsp;Teste Impressão
         </button>
-        <button type="button" class="btn btn-sm btn-success" @click="showPdv = true" title="Novo pedido PDV">
-          <i class="bi bi-plus-circle"></i>&nbsp;Novo Pedido
-        </button>
+        <CashControl />
       </div>
     </header>
     <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
@@ -1389,8 +1548,15 @@ function pulseButton() {
               <div class="card-body p-2 d-flex align-items-start gap-2">
                 <div class="flex-grow-1">
                   <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                          <div class="fw-semibold">#{{ formatDisplay(o) }} — {{ o.customerName || 'Cliente' }}</div>
+                    <div class="w-100">
+                          <div class="topOrder w-100 d-flex   align-items-center justify-content-between">
+                            <div class="fw-semibold">#{{ formatDisplay(o) }} — {{ o.customerName || 'Cliente' }}</div>
+                            <div class="storeName">
+                               <div class="small text-muted">
+                  {{ normalizeOrder(o).storeName ? (normalizeOrder(o).storeName + (normalizeOrder(o).channelLabel ? ' | ' + normalizeOrder(o).channelLabel : '')) : (normalizeOrder(o).channelLabel ? normalizeOrder(o).channelLabel : '—') }}
+                </div>
+                            </div>
+                          </div>
                           <div class="text-muted small">{{ o.customerPhone || '' }}</div>
                           <div class="small text-muted mt-1 d-flex align-items-center">
                             <i class="bi bi-credit-card me-1"></i>
@@ -1410,24 +1576,25 @@ function pulseButton() {
                     </div>
                     <!-- status badge removed from card; column header indicates status -->
                   </div>
-                  <div class="small text-muted mt-1">{{ o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || '-' }}</div>
+                  <div class="small text-muted mt-1">{{ normalizeOrder(o).address || '-' }}</div>
                   <div class="d-flex justify-content-between align-items-center mt-2">
                     <div class="small text-muted">{{ getCreatedDurationDisplay(o) }}</div>
                     <div class="fw-semibold text-success">{{ formatCurrency(computeDisplayedTotal(o)) }}</div>
                   </div>
                 </div>
               </div>
-              <div class="card-footer bg-transparent py-1 d-flex justify-content-between align-items-center">
-                <div class="small text-muted">
-                  {{ normalizeOrder(o).storeName ? (normalizeOrder(o).storeName + (normalizeOrder(o).channelLabel ? ' | ' + normalizeOrder(o).channelLabel : '')) : (normalizeOrder(o).channelLabel ? normalizeOrder(o).channelLabel : '—') }}
+              <div class="card-footer bg-transparent p-1 d-flex justify-content-between align-items-center">
+                <div>
+                        <button class="btn btn-sm btn-outline-secondary" @click="toggleTimeline(o.id)">Detalhes</button>
                 </div>
+               
                 <div>
                   <button class="btn btn-sm btn-outline-secondary me-1" @click="viewReceipt(o)" title="Visualizar comanda"><i class="bi bi-eye"></i></button>
                   <button class="btn btn-sm btn-light me-1" @click="printReceipt(o)" title="Imprimir comanda"><i class="bi bi-printer"></i></button>
                   <button class="btn btn-sm btn-primary me-1" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status) || !store.canTransition(o.status, getNextStatus(o.status)) || loading" title="Avançar status">
                     <i class="bi bi-arrow-right"></i>
                   </button>
-                  <button class="btn btn-sm btn-outline-secondary" @click="toggleTimeline(o.id)">Detalhes</button>
+                  
                 </div>
               </div>
               <div v-if="openTimeline[o.id]" class="p-2 bg-light small border-top">
@@ -1497,7 +1664,7 @@ function pulseButton() {
 
 /* Boards layout */
 .orders-board .boards { padding: 8px 0; }
-.orders-column {background-color: #E6E6E6; flex: 0 0 32%; }
+.orders-column {background-color: #E6E6E6; flex: 0 0 23.5%; }
 .orders-column .list { max-height: 70vh; overflow:auto; }
 .orders-column .card-header {
   background: #FFF;
@@ -1526,4 +1693,7 @@ function pulseButton() {
   color: #fff !important;
 }
 .wa-choose { text-align: left; }
+.order-card .card-body .small {
+  font-size: 0.65rem;
+}
 </style>

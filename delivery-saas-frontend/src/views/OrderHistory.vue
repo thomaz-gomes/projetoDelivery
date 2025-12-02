@@ -27,9 +27,9 @@
             </div>
             <span class="badge rounded-pill px-3 py-2" :class="statusClass(o.status)">{{ statusLabel(o.status) }}</span>
           </div>
-          <div class="mt-2 d-flex justify-content-between align-items-center">
+            <div class="mt-2 d-flex justify-content-between align-items-center">
             <div class="small text-muted">Itens: {{ (o.items||[]).reduce((s,i)=> s+Number(i.quantity||1),0) }}</div>
-            <div class="fw-semibold">R$ {{ Number(o.total||0).toFixed(2) }}</div>
+            <div class="fw-semibold">{{ formatCurrency(Number(o.total||0)) }}</div>
           </div>
         </div>
       </div>
@@ -61,6 +61,7 @@ import { bindLoading } from '../state/globalLoading.js'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import { applyPhoneMask, removePhoneMask } from '../utils/phoneMask.js'
+import { formatCurrency } from '../utils/formatters.js'
 const route = useRoute()
 const router = useRouter()
 const companyId = route.params.companyId

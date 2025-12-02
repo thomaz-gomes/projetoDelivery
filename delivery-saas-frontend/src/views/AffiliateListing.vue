@@ -35,7 +35,7 @@
                 </td>
                 <td><span class="badge bg-light text-primary">{{ affiliate.couponCode }}</span></td>
                 <td>{{ (affiliate.commissionRate * 100).toFixed(1) }}%</td>
-                <td><strong class="" :class="Number(affiliate.currentBalance) > 0 ? 'text-success' : ''">R$ {{ Number(affiliate.currentBalance || 0).toFixed(2) }}</strong></td>
+                <td><strong class="" :class="Number(affiliate.currentBalance) > 0 ? 'text-success' : ''">{{ formatCurrency(affiliate.currentBalance) }}</strong></td>
                 <td>{{ affiliate._Count?.sales || affiliate._count?.sales || 0 }} vendas</td>
                 <td><span :class="affiliate.isActive ? 'text-success' : 'text-danger'">{{ affiliate.isActive ? 'Ativo' : 'Inativo' }}</span></td>
                 <td>
@@ -70,6 +70,7 @@ import AffiliateSaleForm from '@/components/AffiliateSaleForm.vue'
 import { useRouter } from 'vue-router'
 import api from '@/api.js'
 import ListCard from '@/components/ListCard.vue'
+import { formatCurrency } from '../utils/formatters.js'
 
 export default {
   name: 'AffiliateListing',

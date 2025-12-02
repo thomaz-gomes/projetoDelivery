@@ -1,21 +1,23 @@
 <template>
   <div class="affiliate-payment-form">
-    <div class="affiliate-info" v-if="affiliate">
-      <strong>{{ affiliate.name }}</strong>
-      <div class="contact-info">{{ affiliate.email || '' }} {{ affiliate.whatsapp || '' }}</div>
-      <div class="balance">Saldo disponível: R$ {{ Number(affiliate.currentBalance || 0).toFixed(2) }}</div>
+      <div class="affiliate-info mb-3" v-if="affiliate">
+      <strong class="d-block mb-1">{{ affiliate.name }}</strong>
+      <div class="contact-info text-muted mb-1">{{ affiliate.email || '' }} {{ affiliate.whatsapp || '' }}</div>
+      <div class="balance">Saldo disponível: <span class="fw-bold">{{ formatCurrency(affiliate.currentBalance) }}</span></div>
     </div>
 
     <form @submit.prevent="submit">
       <div class="form-group">
         <label for="amount">Valor do Pagamento (R$)</label>
-        <input id="amount" type="number" v-model.number="form.amount" min="0.01" step="0.01" :max="affiliate?.currentBalance || null" required />
-        <button type="button" class="btn-max" @click.prevent="setMax">MAX</button>
+        <div class="d-flex align-items-center">
+          <CurrencyInput id="amount" v-model="form.amount" :min="0.01" :max="affiliate?.currentBalance || null" placeholder="0,00" required />
+          <button type="button" class="btn btn-sm btn-outline-secondary btn-max ms-2" @click.prevent="setMax">MAX</button>
+        </div>
       </div>
 
       <div class="form-group">
         <label for="method">Método</label>
-        <select id="method" v-model="form.method">
+        <select id="method" class="form-select" v-model="form.method">
           <option value="">Selecione...</option>
           <option value="PIX">PIX</option>
           <option value="TED">TED</option>
@@ -26,12 +28,12 @@
 
       <div class="form-group">
         <label for="note">Observação (opcional)</label>
-        <textarea id="note" v-model="form.note" rows="3"></textarea>
+        <textarea id="note" class="form-control" v-model="form.note" rows="3"></textarea>
       </div>
 
       <div class="form-actions">
-        <button type="button" class="btn-secondary" @click.prevent="$emit('cancel')">Cancelar</button>
-        <button type="submit" class="btn-primary" :disabled="processing || !canSubmit">
+        <button type="button" class="btn btn-outline-secondary" @click.prevent="$emit('cancel')">Cancelar</button>
+        <button type="submit" class="btn btn-primary" :disabled="processing || !canSubmit">
           {{ processing ? 'Processando...' : 'Confirmar Pagamento' }}
         </button>
       </div>
@@ -41,6 +43,7 @@
 
 <script>
 import { ref, computed, watch } from 'vue'
+import { formatCurrency } from '../utils/formatters.js'
 
 export default {
   name: 'AffiliatePaymentForm',
@@ -71,17 +74,18 @@ export default {
       emit('submit', { ...form.value })
     }
 
-    return { form, setMax, canSubmit, submit }
+    return { form, setMax, canSubmit, submit, formatCurrency }
   }
 }
 </script>
 
 <style scoped>
-.affiliate-payment-form { padding: 8px }
-.form-group { margin-bottom: 12px }
+.affiliate-payment-form { padding: 0 }
+.form-group { margin-bottom: 16px }
 .form-actions { display:flex; gap:12px; justify-content:flex-end }
 .btn-primary { background:#3498db; color:white; padding:8px 16px; border-radius:6px }
 .btn-secondary { background:#f8f9fa; padding:8px 16px; border-radius:6px }
 .btn-max { margin-left:8px }
 .balance { margin-top:6px; font-weight:600 }
+.contact-info { font-size:0.9rem }
 </style>

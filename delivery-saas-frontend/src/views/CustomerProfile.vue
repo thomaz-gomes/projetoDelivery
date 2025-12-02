@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted } from 'vue';
+import { formatCurrency } from '../utils/formatters.js';
 import { useRoute } from 'vue-router';
 import { useCustomersStore } from '../stores/customers';
 import BaseButton from '../components/BaseButton.vue';
@@ -87,7 +88,7 @@ onMounted(() => store.get(route.params.id));
                   #{{ o.displaySimple != null ? String(o.displaySimple).padStart(2,'0') : (o.displayId != null ? String(o.displayId).padStart(2,'0') : o.id.slice(0, 6)) }} — {{ o.status }}
                 </span>
                 <span class="fw-medium">
-                  R$ {{ Number(o.total || o.total?.orderAmount || 0).toFixed(2) }}
+                  {{ formatCurrency(Number(o.total || o.total?.orderAmount || 0)) }}
                 </span>
               </li>
 

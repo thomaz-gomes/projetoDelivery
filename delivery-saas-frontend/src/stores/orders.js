@@ -45,15 +45,16 @@ export const useOrdersStore = defineStore('orders', {
     canTransition(current, to) {
       const flow = {
         EM_PREPARO: ['SAIU_PARA_ENTREGA', 'CANCELADO'],
-        SAIU_PARA_ENTREGA: ['CONCLUIDO', 'CANCELADO'],
+        SAIU_PARA_ENTREGA: ['CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO'],
+        CONFIRMACAO_PAGAMENTO: ['CONCLUIDO', 'CANCELADO'],
         CONCLUIDO: [],
         CANCELADO: [],
       };
       return (flow[current] || []).includes(to);
     },
 
-    async updateStatus(id, status) {
-      const { data } = await api.patch(`/orders/${id}/status`, { status });
+    async updateStatus(id, status, extra = {}) {
+      const { data } = await api.patch(`/orders/${id}/status`, { status, ...extra });
       const idx = this.orders.findIndex(o => o.id === id);
       if (idx >= 0) this.orders[idx] = data;
       return data;

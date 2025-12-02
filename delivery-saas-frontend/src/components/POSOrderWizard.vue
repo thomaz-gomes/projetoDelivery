@@ -79,7 +79,7 @@
               <select v-model="addr.neighborhood" class="form-select">
                 <option value="">Selecione o bairro</option>
                 <option v-for="n in neighborhoods" :key="n.id" :value="n.name">
-                  {{ n.name }} - R$ {{ Number(n.deliveryFee||0).toFixed(2) }}
+                  {{ n.name }} - {{ formatCurrency(n.deliveryFee) }}
                 </option>
               </select>
             </div>
@@ -92,11 +92,11 @@
               <input v-model="addr.complement" class="form-control" />
             </div>
           </div>
-          <div class="mt-2 small">
+              <div class="mt-2 small">
             <div v-if="neighborhoodsLoading">Calculando taxa...</div>
             <div v-else-if="addr.neighborhood">
-              <span v-if="matchedNeighborhood">Taxa: <strong>R$ {{ Number(matchedNeighborhood.deliveryFee||0).toFixed(2) }}</strong></span>
-              <span v-else class="text-muted">Bairro sem taxa (R$ 0,00)</span>
+              <span v-if="matchedNeighborhood">Taxa: <strong>{{ formatCurrency(matchedNeighborhood.deliveryFee) }}</strong></span>
+              <span v-else class="text-muted">Bairro sem taxa ({{ formatCurrency(0) }})</span>
             </div>
           </div>
         </div>
@@ -125,27 +125,36 @@
             <div class="fw-semibold mb-1">{{ cat.name }}</div>
             <div class="d-flex flex-column gap-1">
               <button v-for="p in cat.products" :key="p.id" class="btn btn-light text-start position-relative" @click="selectProduct(p)">
-                <div class="d-flex justify-content-between">
+                  <div class="d-flex justify-content-between">
                   <span>{{ p.name }}</span>
-                  <span class="small text-muted">R$ {{ Number(p.price||0).toFixed(2) }}</span>
+                  <span class="small text-muted">{{ formatCurrency(p.price) }}</span>
                 </div>
               </button>
             </div>
           </div>
         </div>
         <div class="cart-box mt-3">
-          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="fw-semibold">Carrinho</div>
-            <div class="small text-muted">Subtotal: R$ {{ subtotal.toFixed(2) }}</div>
+            <div class="small text-muted">Subtotal: {{ formatCurrency(subtotal) }}</div>
+          </div>
+          <!-- coupon summary / input -->
+          <div class="mt-2">
+              <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
+            <div v-else class="d-flex gap-2 align-items-center">
+              <input v-model="couponCode" class="form-control form-control-sm" placeholder="Código do cupom (opcional)" />
+              <button class="btn btn-sm btn-primary" @click="applyCoupon" :disabled="couponLoading">Aplicar</button>
+            </div>
+            <div v-if="couponError" class="small text-danger mt-1">{{ couponError }}</div>
           </div>
           <div v-if="cart.length===0" class="small text-muted">Nenhum item.</div>
           <div v-for="(it,idx) in cart" :key="idx" class="cart-item">
-            <div class="d-flex justify-content-between">
+              <div class="d-flex justify-content-between">
               <div><strong>{{ it.quantity }}x</strong> {{ it.name }}</div>
-              <div>R$ {{ (it.price*it.quantity).toFixed(2) }}</div>
+              <div>{{ formatCurrency(it.price*it.quantity) }}</div>
             </div>
-            <div v-if="it.options && it.options.length" class="small text-muted ms-2">
-              <div v-for="(o,i2) in it.options" :key="i2">- {{ o.name }} (R$ {{ Number(o.price||0).toFixed(2) }})</div>
+              <div v-if="it.options && it.options.length" class="small text-muted ms-2">
+              <div v-for="(o,i2) in it.options" :key="i2">- {{ o.name }} ({{ formatCurrency(o.price) }})</div>
             </div>
             <div class="small d-flex gap-2 mt-1">
               <button class="btn btn-sm btn-outline-secondary" @click="it.quantity++; recalc()">+1</button>
@@ -165,7 +174,7 @@
               <div class="pos-options-body" ref="optionsBodyRef">
               <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
-                  <h6 class="fw-semibold m-0">{{ activeProduct?.name }} <span class="text-muted small">R$ {{ Number(activeProduct?.price||0).toFixed(2) }}</span></h6>
+                  <h6 class="fw-semibold m-0">{{ activeProduct?.name }} <span class="text-muted small">{{ formatCurrency(activeProduct?.price) }}</span></h6>
                   <div class="small text-muted">{{ activeProduct?.description }}</div>
                 </div>
                 <button class="btn btn-sm btn-outline-secondary d-sm-none" @click="closeOptions" aria-label="Fechar">✕</button>
@@ -230,7 +239,7 @@
                   <div class="small fw-semibold mb-2">Opcionais selecionados</div>
                   <ul class="list-unstyled small text-muted mb-2">
                     <li v-for="(opt, oi) in chosenOptions" :key="oi" class="d-flex justify-content-between align-items-center">
-                      <div>{{ opt.name }} <span class="text-muted">(R$ {{ Number(opt.price||0).toFixed(2) }})</span></div>
+                      <div>{{ opt.name }} <span class="text-muted">({{ formatCurrency(opt.price) }})</span></div>
                       <div>
                         <button class="btn btn-sm btn-outline-danger" @click.prevent="removeChosenOption(oi)">Remover</button>
                       </div>
@@ -243,7 +252,7 @@
             </div>
 
             <div class="pos-options-footer mt-3 d-flex justify-content-between align-items-center">
-              <div class="fw-semibold">Total: R$ {{ optionModalTotal.toFixed(2) }}</div>
+              <div class="fw-semibold">Total: {{ formatCurrency(optionModalTotal) }}</div>
               <div>
                 <button class="btn btn-outline-secondary btn-sm me-2" @click="closeOptions">Cancelar</button>
                 <button class="btn btn-success btn-sm" @click="confirmOptionsAdd">{{ editingIndex !== null ? 'Atualizar' : 'Adicionar' }}</button>
@@ -263,9 +272,9 @@
         </div>
         <div v-if="isCashPayment" class="mb-2">
           <label class="form-label small">Troco para (opcional)</label>
-          <input v-model.number="changeFor" type="number" class="form-control" placeholder="Ex: 100" />
+          <CurrencyInput v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />
         </div>
-        <div class="alert alert-light small">Total: <strong>R$ {{ totalWithDelivery.toFixed(2) }}</strong> (Entrega: R$ {{ deliveryFee.toFixed(2) }})</div>
+        <div class="alert alert-light small">Total: <strong>{{ formatCurrency(totalWithDelivery) }}</strong> (Entrega: {{ formatCurrency(deliveryFee) }})</div>
         <div class="d-flex justify-content-between mt-3">
           <button class="btn btn-outline-secondary" @click="prev">Voltar</button>
           <button class="btn btn-success" :disabled="!paymentMethodCode" @click="finalize">Concluir pedido</button>
@@ -287,6 +296,7 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
+import { formatCurrency } from '../utils/formatters.js';
 
 const auth = useAuthStore();
 async function resolveCompanyId(){
@@ -302,9 +312,7 @@ async function resolveCompanyId(){
   } catch(e){ console.warn('PDV: falha ao hidratar /auth/me', e); }
   return null;
 }
-function formatCurrency(v){
-  try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)); }catch(e){ return 'R$ ' + (Number(v||0).toFixed(2)); }
-}
+// use shared `formatCurrency` helper from `src/utils/formatters.js`
 const props = defineProps({ 
   visible: { type: Boolean, default: false },
   initialPhone: { type: String, default: '' },
@@ -649,7 +657,20 @@ const matchedNeighborhood = computed(()=>{
   return neighborhoods.value.find(n => n.name.trim().toLowerCase() === name) || null;
 });
 function estimateDeliveryFee(){ return matchedNeighborhood.value ? Number(matchedNeighborhood.value.deliveryFee||0) : 0; }
-const totalWithDelivery = computed(()=> subtotal.value + deliveryFee.value);
+// account for coupon discount when computing final total
+const couponCode = ref('');
+const couponApplied = ref(false);
+const couponDiscount = ref(0);
+const couponInfo = ref(null);
+const couponLoading = ref(false);
+const couponError = ref('');
+
+const totalWithDelivery = computed(()=> {
+  try{
+    const base = Math.max(0, subtotal.value - (Number(couponDiscount.value || 0)));
+    return base + Number(deliveryFee.value || 0);
+  }catch(e){ return subtotal.value + deliveryFee.value }
+});
 
 const isCashPayment = computed(()=> {
   if(!paymentMethodCode.value) return false;
@@ -708,6 +729,34 @@ async function loadNeighborhoods(){
   finally{ neighborhoodsLoading.value=false; }
 }
 
+async function applyCoupon(){
+  try{
+    couponError.value = '';
+    if(!couponCode.value || !couponCode.value.trim()){
+      couponError.value = 'Insira um código válido';
+      return;
+    }
+    couponLoading.value = true;
+    const companyId = await resolveCompanyId();
+    if(!companyId){ couponError.value = 'Empresa não encontrada'; return; }
+    const res = await api.post(`/public/${companyId}/coupons/validate`, { code: couponCode.value.trim(), subtotal: subtotal.value, customerPhone: phoneDigits.value || undefined });
+    const data = res.data || {};
+    if(data && data.valid){
+      couponApplied.value = true;
+      couponDiscount.value = Number(data.discountAmount || 0);
+      couponInfo.value = data.coupon || null;
+      couponError.value = '';
+      return;
+    }
+    couponError.value = 'Cupom inválido';
+  }catch(e){
+    couponError.value = e?.response?.data?.message || 'Erro ao validar cupom';
+    console.warn('applyCoupon error', e);
+  } finally { couponLoading.value = false; }
+}
+
+function removeCoupon(){ couponApplied.value = false; couponDiscount.value = 0; couponInfo.value = null; couponCode.value = ''; couponError.value = ''; }
+
 async function finalize(){
   finalizing.value = true;
   try {
@@ -715,6 +764,12 @@ async function finalize(){
     // Para pedido balcão sem identificação, usa nome genérico
     const customerNameFinal = newCustomerName.value.trim() || (orderType.value === 'BALCAO' ? 'Cliente Balcão' : '');
     const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value };
+    // include coupon information when applied so backend can persist and track usage
+    try{
+      if(couponApplied.value && couponInfo.value){
+        body.coupon = { code: couponInfo.value.code || couponCode.value.trim(), discountAmount: Number(couponDiscount.value || 0) };
+      }
+    }catch(e){ /* ignore */ }
     const { data } = await api.post('/orders', body);
     createdOrderDisplay.value = data.displaySimple || data.displayId || data.id?.slice(0,6) || '—';
     step.value = 5;

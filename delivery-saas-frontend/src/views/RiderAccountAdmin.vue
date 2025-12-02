@@ -3,6 +3,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../api';
+import { formatCurrency } from '../utils/formatters.js';
 import { useAuthStore } from '../stores/auth';
 import Sidebar from '../components/Sidebar.vue';
 import Swal from 'sweetalert2';
@@ -203,7 +204,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
         <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-2">
           <div>
             <div class="small text-muted">Saldo no período</div>
-            <div class="h3">R$ {{ periodBalance.toFixed(2) }}</div>
+            <div class="h3">{{ formatCurrency(periodBalance) }}</div>
           </div>
           <div>
             <div class="d-none d-md-flex align-items-center gap-2">
@@ -232,7 +233,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
               <tr v-for="t in transactions" :key="t.id">
                 <td>{{ t.date }}</td>
                 <td>{{ t.type }}</td>
-                <td>R$ {{ Number(t.amount || 0).toFixed(2) }}</td>
+                <td>{{ formatCurrency(Number(t.amount || 0)) }}</td>
                 <td>{{ t.order?.displayId || t.displayId || '—' }}</td>
                 <td>{{ t.note || '—' }}</td>
               </tr>

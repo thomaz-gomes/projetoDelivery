@@ -1,7 +1,8 @@
 <script setup>
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref, onMounted, onUpdated, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import * as bootstrap from 'bootstrap';
 
 const route = useRoute();
 const router = useRouter();
@@ -37,12 +38,38 @@ const nav = [
 ];
 
 // collapsed state for parent items with children (true = collapsed)
-const collapsed = reactive({})
+const parentsCollapsed = reactive({})
 
 function toggleParent(to){
   if(!to) return
-  collapsed[to] = !collapsed[to]
+  parentsCollapsed[to] = !parentsCollapsed[to]
 }
+
+// mini sidebar (icons-only) state — persisted in localStorage
+const mini = ref(localStorage.getItem('sidebar-mini') === '1');
+const asideEl = ref(null);
+
+function initLocalTooltips(){
+  try{
+    const root = asideEl.value || document;
+    const nodes = root.querySelectorAll('[data-bs-toggle="tooltip"]');
+    nodes.forEach((el) => {
+      if (!el._tooltip) {
+        el._tooltip = new bootstrap.Tooltip(el);
+      }
+    });
+  } catch(e){}
+}
+
+function toggleMini(){
+  mini.value = !mini.value;
+  try { localStorage.setItem('sidebar-mini', mini.value ? '1' : '0'); } catch(e){}
+  nextTick(() => { try{ initLocalTooltips(); } catch(e){} });
+}
+
+onMounted(() => { nextTick(initLocalTooltips); });
+onUpdated(() => { nextTick(initLocalTooltips); });
+ 
 
 const isActive = (to) => computed(() => route.path.startsWith(to));
 
@@ -62,16 +89,28 @@ function logout() {
 }
 </script>
 <template>
-  <aside v-if="showSidebar" class="d-none d-md-flex flex-column border-end" style="width: 240px; min-height: 100vh;">
+  <aside ref="asideEl" v-if="showSidebar" :class="['d-none d-md-flex flex-column border-end', { 'sidebar-mini': mini }]" :style="mini ? { width: '72px', minHeight: '100vh' } : { width: '240px', minHeight: '100vh' }">
     <!-- Header -->
-    <div class="border-bottom p-3">
-      <h5 class="mb-0">Delivery SaaS</h5>
-      <small class="text-muted">Painel Administrativo</small>
+    <div class="border-bottom p-3 header-wrap">
+      <div class="d-flex align-items-center">
+        <div class="me-auto d-flex align-items-center header-content">
+          <i v-if="mini" class="bi bi-shop logo-compact-icon" aria-hidden="true" :title="'Delivery SaaS'" aria-label="Delivery SaaS"></i>
+          <div v-else>
+            <h5 class="mb-0">Delivery SaaS</h5>
+            <small class="text-muted">Painel Administrativo</small>
+          </div>
+        </div>
+        <div class="d-none d-md-block">
+          <button type="button" class="btn btn-sm  btn-toggle-mini" @click="toggleMini" :aria-pressed="mini">
+            <i :class="mini ? 'bi bi-chevron-right' : 'bi bi-chevron-left'"></i>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Navegação -->
     <nav class="flex-grow-1 p-2">
-      <ul class="nav flex-column">
+        <ul class="nav flex-column">
         <li v-for="item in nav" :key="item.to" class="nav-item mb-1">
           <div class="d-flex flex-column">
             <template v-if="!item.children">
@@ -80,28 +119,42 @@ function logout() {
                 class="nav-link d-flex align-items-center px-3 py-2 rounded text-white"
                 :class="{ active: isActive(item.to).value }"
               >
-                <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
-                <span>{{ item.name }}</span>
+                <i
+                  :class="item.icon + ' me-2'"
+                  aria-hidden="true"
+                  :title="mini ? item.name : null"
+                  :aria-label="item.name"
+                  v-bind:data-bs-toggle="mini ? 'tooltip' : null"
+                  v-bind:data-bs-placement="mini ? 'right' : null"
+                ></i>
+                <span v-show="!mini">{{ item.name }}</span>
               </router-link>
             </template>
 
             <template v-else>
-              <div class="nav-link d-flex align-items-center px-3 py-2 rounded parent-link" role="button" tabindex="0" @click="toggleParent(item.to)" @keydown.enter.prevent="toggleParent(item.to)" :aria-expanded="!collapsed[item.to]">
+              <div class="nav-link d-flex align-items-center px-3 py-2 rounded parent-link" role="button" tabindex="0" @click="toggleParent(item.to)" @keydown.enter.prevent="toggleParent(item.to)" :aria-expanded="!parentsCollapsed[item.to]">
                 <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
-                <span class="flex-grow-1">{{ item.name }}</span>
-                <i :class="['bi bi-chevron-down ms-2 chevron', { rotated: collapsed[item.to] }]" aria-hidden="true"></i>
+                <span class="flex-grow-1" v-show="!mini">{{ item.name }}</span>
+                <i v-show="!mini" :class="['bi bi-chevron-down ms-2 chevron', { rotated: parentsCollapsed[item.to] }]" aria-hidden="true"></i>
               </div>
 
               <transition name="slide">
-                <ul class="nav flex-column ms-3 mt-1" v-show="!collapsed[item.to]">
+                <ul class="nav flex-column ms-3 mt-1" v-show="!mini && !parentsCollapsed[item.to]">
                 <li v-for="child in item.children" :key="child.to" class="nav-item mb-1">
                   <router-link
                     :to="child.to"
                     class="nav-link px-3 py-1 rounded text-white child-link"
                     :class="{ active: isActive(child.to).value }"
                   >
-                    <i :class="child.icon + ' me-2'" aria-hidden="true"></i>
-                    <span>{{ child.name }}</span>
+                      <i
+                        :class="child.icon + ' me-2'"
+                        aria-hidden="true"
+                        :title="mini ? child.name : null"
+                        :aria-label="child.name"
+                        v-bind:data-bs-toggle="mini ? 'tooltip' : null"
+                        v-bind:data-bs-placement="mini ? 'right' : null"
+                      ></i>
+                      <span v-show="!mini">{{ child.name }}</span>
                   </router-link>
                 </li>
                 </ul>
@@ -158,4 +211,24 @@ aside { background-color: #0d6efd; background-image: linear-gradient(135deg, #0d
   max-height: 400px; /* large enough for lists */
   opacity: 1;
 }
+
+/* Mini (icons-only) sidebar styles */
+.sidebar-mini { transition: width 220ms ease; }
+.sidebar-mini .nav-link { justify-content: center; padding-left: 0.4rem; padding-right: 0.4rem; }
+.sidebar-mini .nav-link i { margin-right: 0; font-size: 1.15rem }
+.sidebar-mini .nav-link span { display: none !important; opacity: 0 }
+.sidebar-mini .child-link { padding-left: 0.5rem }
+.sidebar-mini .parent-link { justify-content: center }
+.sidebar-mini h5, .sidebar-mini small { display: none }
+.sidebar-mini .logo-compact { width: 28px; height: 28px; object-fit: contain }
+.logo-compact-icon { font-size: 20px; color: #fff; }
+aside { transition: width 220ms ease; }
+.btn-toggle-mini { border-color: rgba(255,255,255,0.2); color: #fff;  margin-right: -35px;
+  background-color: #0d4cab;}
+.btn-toggle-mini:hover { background-color: #2f7ff8; border-color: #2f7ff8; color: #fff; }
+.btn-toggle-mini i { font-size: 0.92rem }
+
+/* Smooth labels opacity transition when expanding/collapsing */
+.nav-link span { transition: opacity 180ms ease; }
+.header-wrap { transition: padding 220ms ease; }
 </style>

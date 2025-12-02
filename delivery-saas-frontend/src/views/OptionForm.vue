@@ -16,7 +16,7 @@
         <div class="row mb-3">
           <div class="col-md-3">
             <label class="form-label">Preço</label>
-            <input v-model.number="form.price" type="number" step="0.01" class="form-control" min="0" />
+            <CurrencyInput v-model="form.price" inputClass="form-control" :min="0" placeholder="0,00" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Posição</label>
