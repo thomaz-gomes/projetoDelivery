@@ -7,12 +7,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// The rest of the schema is intentionally copied from schema.prisma
-// to keep definitions identical between sqlite (dev) and postgres (prod).
-// If you edit the model definitions, keep both files in sync or
-// prefer maintaining a single canonical schema and deriving others
-// in your build pipeline.
-
 enum Role {
   SUPER_ADMIN
   ADMIN
@@ -23,211 +17,189 @@ enum Role {
 enum OrderStatus {
   EM_PREPARO
   SAIU_PARA_ENTREGA
+  CONFIRMACAO_PAGAMENTO
   CONCLUIDO
   CANCELADO
-  datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
-  }
+  INVOICE_AUTHORIZED
+}
 
-  generator client {
-    provider = "prisma-client-js"
-  }
+enum CustomerSource {
+  PUBLIC
+  IFOOD
+  MANUAL
+}
 
-  enum Role {
-    SUPER_ADMIN
-    ADMIN
-    RIDER
-    ATTENDANT
-  }
+model Company {
+  id                String             @id @default(uuid())
+  name              String
+  // optional URL-friendly slug (ex: "nomedaloja")
+  slug              String?            @unique
+  createdAt         DateTime           @default(now())
+  users             User[]
+  riders            Rider[]
+  neighborhoods     Neighborhood[]
+  orders            Order[]
+  nfeProtocols      NfeProtocol[]
+  whatsAppInstances WhatsAppInstance[]
+  Customer          Customer[]
+  apiIntegrations   ApiIntegration[]
+  // stores associated to this company (multi-store support)
+  stores            Store[]
+  affiliates        Affiliate[]
+  coupons           Coupon[]
+  // relations for menu / payments (inverse relation fields required by Prisma)
+  menuCategories    MenuCategory[]
+  products          Product[]
+  paymentMethods    PaymentMethod[]
+  optionGroups      OptionGroup[]
+  // operating hours: if alwaysOpen is true the store accepts orders anytime
+  alwaysOpen        Boolean            @default(true)
+  // IANA timezone string (ex: "America/Sao_Paulo"). If null, server timezone is used.
+  timezone          String?
+  // optional per-week schedule: array of { day: 0..6, enabled: boolean, from: "HH:MM"?, to: "HH:MM"? }
+  weeklySchedule    Json?
+  // one-to-one optional file source configured for this company
+  fileSource        FileSource?
+}
 
-  enum OrderStatus {
-    EM_PREPARO
-    SAIU_PARA_ENTREGA
-    CONFIRMACAO_PAGAMENTO
-    CONCLUIDO
-    CANCELADO
-    INVOICE_AUTHORIZED
-  }
+model User {
+  id        String   @id @default(uuid())
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
+  role      Role
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  rider     Rider?
+}
 
-  enum CustomerSource {
-    PUBLIC
-    IFOOD
-    MANUAL
-  }
+model Rider {
+  id           String             @id @default(uuid())
+  companyId    String
+  company      Company            @relation(fields: [companyId], references: [id])
+  name         String
+  whatsapp     String
+  dailyRate    Decimal?
+  active       Boolean            @default(true)
+  userId       String?            @unique
+  user         User?              @relation(fields: [userId], references: [id])
+  orders       Order[]
+  account      RiderAccount?
+  transactions RiderTransaction[]
+}
 
-  model Company {
-    id                String             @id @default(uuid())
-    name              String
-    // optional URL-friendly slug (ex: "nomedaloja")
-    slug              String?            @unique
-    createdAt         DateTime           @default(now())
-    users             User[]
-    riders            Rider[]
-    neighborhoods     Neighborhood[]
-    orders            Order[]
-    nfeProtocols      NfeProtocol[]
-    whatsAppInstances WhatsAppInstance[]
-    Customer          Customer[]
-    apiIntegrations   ApiIntegration[]
-    // stores associated to this company (multi-store support)
-    stores            Store[]
-    affiliates        Affiliate[]
-    coupons           Coupon[]
-    // relations for menu / payments (inverse relation fields required by Prisma)
-    menuCategories    MenuCategory[]
-    products          Product[]
-    paymentMethods    PaymentMethod[]
-    optionGroups      OptionGroup[]
-    // operating hours: if alwaysOpen is true the store accepts orders anytime
-    alwaysOpen        Boolean            @default(true)
-    // IANA timezone string (ex: "America/Sao_Paulo"). If null, server timezone is used.
-    timezone          String?
-    // optional per-week schedule: array of { day: 0..6, enabled: boolean, from: "HH:MM"?, to: "HH:MM"? }
-    weeklySchedule    Json?
-    // one-to-one optional file source configured for this company
-    fileSource        FileSource?
-  }
+model Order {
+  id                String               @id @default(uuid())
+  companyId         String
+  company           Company              @relation(fields: [companyId], references: [id])
+  // optional: associate this order to a specific store (useful for multistore / multi-CNPJ setups)
+  storeId           String?
+  store             Store?               @relation(fields: [storeId], references: [id])
+  externalId        String?              @unique
+  displayId         String?
+  // Per-day sequential visual number (1,2,3...). Persisted as integer.
+  // Use nullable to allow existing rows to remain unchanged until migrated.
+  displaySimple     Int?
+  // delivery or pickup request from public ordering
+  orderType         String?
+  status            OrderStatus          @default(EM_PREPARO)
+  customerName      String?
+  customerPhone     String?
+  customerSource    CustomerSource?      @default(MANUAL)
+  customerId        String?
+  customer          Customer?            @relation(fields: [customerId], references: [id])
+  address           String?
+  latitude          Float?
+  longitude         Float?
+  total             Decimal              @default(0)
+  // persisted coupon information (nullable - may be null for older orders)
+  couponCode        String?
+  couponDiscount    Decimal?
+  deliveryFee       Decimal?
+  payload           Json?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  items             OrderItem[]
+  riderId           String?
+  rider             Rider?               @relation(fields: [riderId], references: [id])
+  tickets           Ticket[]
+  histories         OrderStatusHistory[]
+  riderTransactions RiderTransaction[]
+  affiliateSales    AffiliateSale[]
+  nfeProtocols      NfeProtocol[]
 
-  model User {
-    id        String   @id @default(uuid())
-    companyId String?
-    company   Company? @relation(fields: [companyId], references: [id])
-    role      Role
-    name      String
-    email     String   @unique
-    password  String
-    createdAt DateTime @default(now())
-    rider     Rider?
-  }
+// Index to speed up queries by company + couponCode
+    @@index([companyId, couponCode], name: "idx_order_company_coupon")
+}
 
-  model Rider {
-    id           String             @id @default(uuid())
-    companyId    String
-    company      Company            @relation(fields: [companyId], references: [id])
-    name         String
-    whatsapp     String
-    dailyRate    Decimal?
-    active       Boolean            @default(true)
-    userId       String?            @unique
-    user         User?              @relation(fields: [userId], references: [id])
-    orders       Order[]
-    account      RiderAccount?
-    transactions RiderTransaction[]
-  }
+// NFC-e / NFe protocol records (stores SEFAZ responses such as protNFe)
+model NfeProtocol {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id])
+  orderId   String?  
+  order     Order?   @relation(fields: [orderId], references: [id])
+  nProt     String?  @unique
+  cStat     String?
+  xMotivo   String?
+  rawXml    String?
+  createdAt DateTime @default(now())
 
-  model Order {
-    id                String               @id @default(uuid())
-    companyId         String
-    company           Company              @relation(fields: [companyId], references: [id])
-    // optional: associate this order to a specific store (useful for multistore / multi-CNPJ setups)
-    storeId           String?
-    store             Store?               @relation(fields: [storeId], references: [id])
-    externalId        String?              @unique
-    displayId         String?
-    // Per-day sequential visual number (1,2,3...). Persisted as integer.
-    // Use nullable to allow existing rows to remain unchanged until migrated.
-    displaySimple     Int?
-    // delivery or pickup request from public ordering
-    orderType         String?
-    status            OrderStatus          @default(EM_PREPARO)
-    customerName      String?
-    customerPhone     String?
-    customerSource    CustomerSource?      @default(MANUAL)
-    customerId        String?
-    customer          Customer?            @relation(fields: [customerId], references: [id])
-    address           String?
-    latitude          Float?
-    longitude         Float?
-    total             Decimal              @default(0)
-    // persisted coupon information (nullable - may be null for older orders)
-    couponCode        String?
-    couponDiscount    Decimal?
-    deliveryFee       Decimal?
-    payload           Json?
-    createdAt         DateTime             @default(now())
-    updatedAt         DateTime             @updatedAt
-    items             OrderItem[]
-    riderId           String?
-    rider             Rider?               @relation(fields: [riderId], references: [id])
-    tickets           Ticket[]
-    histories         OrderStatusHistory[]
-    riderTransactions RiderTransaction[]
-    affiliateSales    AffiliateSale[]
-    nfeProtocols      NfeProtocol[]
+  @@index([companyId], name: "idx_nfeprotocol_company")
+  @@index([orderId], name: "idx_nfeprotocol_order")
+}
 
-  // Index to speed up queries by company + couponCode
-      @@index([companyId, couponCode], name: "idx_order_company_coupon")
-  }
+model OrderItem {
+  id       String  @id @default(uuid())
+  orderId  String
+  order    Order   @relation(fields: [orderId], references: [id])
+  name     String
+  quantity Int
+  price    Decimal
+  notes    String?
+  // options: store selected complements/options for this item (array of {id,name,price})
+  options  Json?
+}
 
-  // NFC-e / NFe protocol records (stores SEFAZ responses such as protNFe)
-  model NfeProtocol {
-    id        String   @id @default(uuid())
-    companyId String
-    company   Company  @relation(fields: [companyId], references: [id])
-    storeId   String?
-    store     Store?   @relation(fields: [storeId], references: [id])
-    orderId   String?  
-    order     Order?   @relation(fields: [orderId], references: [id])
-    nProt     String?  @unique
-    cStat     String?
-    xMotivo   String?
-    rawXml    String?
-    createdAt DateTime @default(now())
+model Ticket {
+  id        String    @id @default(uuid())
+  orderId   String
+  order     Order     @relation(fields: [orderId], references: [id])
+  tokenHash String
+  expiresAt DateTime?
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
 
-    @@index([companyId], name: "idx_nfeprotocol_company")
-    @@index([orderId], name: "idx_nfeprotocol_order")
-  }
-
-  model OrderItem {
-    id       String  @id @default(uuid())
-    orderId  String
-    order    Order   @relation(fields: [orderId], references: [id])
-    name     String
-    quantity Int
-    price    Decimal
-    notes    String?
-    // options: store selected complements/options for this item (array of {id,name,price})
-    options  Json?
-  }
-
-  model Ticket {
-    id        String    @id @default(uuid())
-    orderId   String
-    order     Order     @relation(fields: [orderId], references: [id])
-    tokenHash String
-    expiresAt DateTime?
-    usedAt    DateTime?
-    createdAt DateTime  @default(now())
-  }
-
-  model OrderStatusHistory {
-    id        String       @id @default(uuid())
-    orderId   String
-    order     Order        @relation(fields: [orderId], references: [id])
-    from      OrderStatus?
-    to        OrderStatus
-    byUserId  String?
-    byRiderId String?
-    reason    String?
-    createdAt DateTime     @default(now())
-  }
-
-  model WebhookEvent {
-    id            String    @id @default(uuid())
-    provider      String
-    eventId       String?   @unique
-    payload       Json
-    receivedAt    DateTime  @default(now())
-    processedAt   DateTime?
-    // availability: days of week (0=Sunday..6=Saturday), start and end times (HH:MM), and enabled flag
-    availableDays Json?
-    availableFrom String?
-    availableTo   String?
-    isAvailable   Boolean   @default(true)
-    status        String    @default("PENDING")
-    error         String?
-  }
+model OrderStatusHistory {
+  id        String       @id @default(uuid())
+  orderId   String
+  order     Order        @relation(fields: [orderId], references: [id])
+  from      OrderStatus?
+  to        OrderStatus
+  byUserId  String?
+  byRiderId String?
+  reason    String?
+  createdAt DateTime     @default(now())
+}
+model WebhookEvent {
+  id            String    @id @default(uuid())
+  provider      String
+  eventId       String?   @unique
+  payload       Json
+  receivedAt    DateTime  @default(now())
+  processedAt   DateTime?
+  // availability: days of week (0=Sunday..6=Saturday), start and end times (HH:MM), and enabled flag
+  availableDays Json?
+  availableFrom String?
+  availableTo   String?
+  isAvailable   Boolean   @default(true)
+  status        String    @default("PENDING")
+  error         String?
+}
 
   model WhatsAppInstance {
     id           String   @id @default(uuid())
