@@ -9,7 +9,6 @@ import RiderForm from './views/RiderForm.vue';
 import Neighborhoods from './views/Neighborhoods.vue';
 import RiderAccount from './views/RiderAccount.vue';
 import RiderAccountAdmin from './views/RiderAccountAdmin.vue';
-import RiderAccountRider from './views/RiderAccountRider.vue';
 import api from './api';
 import { useAuthStore } from './stores/auth';
 import RiderAdjustments from './views/RiderAdjustments.vue';
@@ -33,6 +32,8 @@ import AffiliateEdit from './views/AffiliateEdit.vue';
 import AffiliateSaleNew from './views/AffiliateSaleNew.vue';
 import AffiliatePaymentNew from './views/AffiliatePaymentNew.vue';
 import AffiliateStatement from './views/AffiliateStatement.vue';
+import AffiliateHome from './views/AffiliateHome.vue';
+import AffiliateStatementSelf from './views/affiliate/Statement.vue';
 import CouponsList from './views/CouponsList.vue';
 import CouponForm from './views/CouponForm.vue';
 import PublicMenu from './views/PublicMenu.vue';
@@ -51,9 +52,10 @@ import ProductForm from './views/ProductForm.vue';
 import CategoryForm from './views/CategoryForm.vue';
 import Users from './views/Users.vue';
 import AccessControl from './views/AccessControl.vue';
-import RiderOrders from './views/RiderOrders.vue';
-import RiderQrCode from './views/RiderQrCode.vue';
-import RiderAccountSelf from './views/RiderAccountSelf.vue';
+import RiderOrders from './views/rider/Orders.vue';
+import RiderQrCode from './views/rider/QrReader.vue';
+import RiderAccountSelf from './views/rider/Account.vue';
+import RiderDashboard from './views/rider/Dashboard.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -119,7 +121,10 @@ const router = createRouter({
   ,{ path: '/settings/access-control', component: AccessControl, meta: { requiresAuth: true } }
   ,{ path: '/rider/orders', component: RiderOrders, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/rider/home', component: RiderQrCode, meta: { requiresAuth: true, noSidebar: true } }
-  ,{ path: '/rider/account', component: RiderAccountRider, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
+  ,{ path: '/rider/account', component: RiderAccountSelf, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
+  ,{ path: '/rider', component: RiderDashboard, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
+  ,{ path: '/affiliate', component: AffiliateHome, meta: { requiresAuth: true, noSidebar: true } }
+  ,{ path: '/affiliate/statement', component: AffiliateStatementSelf, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/menu/products/new', component: ProductForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/products/:id', component: ProductForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/categories/new', component: CategoryForm, meta: { requiresAuth: true } }

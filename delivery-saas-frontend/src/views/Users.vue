@@ -70,6 +70,7 @@
                   <option value="ADMIN">Admin</option>
                   <option value="ATTENDANT">Atendimento</option>
                   <option value="RIDER">Rider</option>
+                  <option value="AFFILIATE">Afiliado</option>
                 </select>
               </div>
               <div class="mb-2" v-if="!editing"><label class="form-label">Senha (opcional)</label><input type="password" class="form-control" v-model="form.password" /></div>
@@ -208,7 +209,7 @@ const paginatedUsers = computed(() => {
 const showPermissions = ref(false)
 const permLoading = ref(false)
 const mapping = ref({})
-const rolesList = ['SUPER_ADMIN','ADMIN','ATTENDANT','RIDER']
+const rolesList = ['SUPER_ADMIN','ADMIN','ATTENDANT','RIDER','AFFILIATE']
 const permMeta = ref({})
 const allPerms = computed(() => Object.keys(permMeta.value).length ? Object.keys(permMeta.value) : ['users:read','users:create','users:update','users:delete','orders:view','orders:update','menu:edit','settings:update','customers:view'])
 const selectedRole = ref(rolesList[0])

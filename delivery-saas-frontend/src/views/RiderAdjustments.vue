@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
+import { formatCurrency } from '../utils/formatters.js';
 import { bindLoading } from '../state/globalLoading.js';
 import api from '../api';
 
@@ -88,11 +89,11 @@ onMounted(async () => {
           </div>
           <div class="col-md-2">
             <label class="form-label small">Saldo atual</label>
-            <div class="form-control-plaintext">{{ selectedBalance !== null ? ('R$ ' + Number(selectedBalance).toFixed(2)) : '—' }}</div>
+            <div class="form-control-plaintext">{{ selectedBalance !== null ? formatCurrency(selectedBalance) : '—' }}</div>
           </div>
           <div class="col-md-2">
             <label class="form-label small">Valor</label>
-            <input class="form-control" type="number" step="0.01" v-model="form.amount" />
+            <CurrencyInput v-model="form.amount" inputClass="form-control" placeholder="0,00" />
           </div>
           <div class="col-md-2">
             <label class="form-label small">Tipo</label>

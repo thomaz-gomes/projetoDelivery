@@ -34,14 +34,14 @@
                     <div class="item-name fw-semibold">{{ it.name }}</div>
                     <div v-if="it.notes" class="item-notes text-muted small">OBS: {{ it.notes }}</div>
                   </div>
-                  <div class="item-price fw-semibold">R$ {{ (Number(it.price||0)*Number(it.quantity||1)).toFixed(2) }}</div>
+                  <div class="item-price fw-semibold">{{ formatCurrency(Number(it.price||0)*Number(it.quantity||1)) }}</div>
                 </div>
-                <div class="item-meta small text-muted mt-1">Qtd: {{ it.quantity }} · Unitário: R$ {{ Number(it.price||0).toFixed(2) }}</div>
+                <div class="item-meta small text-muted mt-1">Qtd: {{ it.quantity }} · Unitário: {{ formatCurrency(Number(it.price||0)) }}</div>
               </div>
               <div class="totals-box mt-3">
-                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Subtotal</span><span>R$ {{ subtotal.toFixed(2) }}</span></div>
-                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Taxa de entrega</span><span>R$ {{ deliveryFee.toFixed(2) }}</span></div>
-                <div class="d-flex justify-content-between total-line pt-2 mt-1"><span class="fw-semibold">Total</span><span class="fw-semibold">R$ {{ Number(order?.total||0).toFixed(2) }}</span></div>
+                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Subtotal</span><span>{{ formatCurrency(subtotal) }}</span></div>
+                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Taxa de entrega</span><span>{{ formatCurrency(deliveryFee) }}</span></div>
+                <div class="d-flex justify-content-between total-line pt-2 mt-1"><span class="fw-semibold">Total</span><span class="fw-semibold">{{ formatCurrency(Number(order?.total||0)) }}</span></div>
               </div>
             </div>
 
@@ -104,6 +104,7 @@ import { io } from 'socket.io-client'
 import { SOCKET_URL } from '@/config'
 // phone mask helpers (remove formatting before sending to backend)
 import { removePhoneMask } from '../utils/phoneMask'
+import { formatCurrency, formatAmount } from '../utils/formatters.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -237,7 +238,7 @@ function goHistory(){
 function shareOnWhatsApp(){
   if(!order.value) return
   const display = order.value.displayId || (order.value.displaySimple ? order.value.displaySimple : order.value.id)
-  const total = Number(order.value.total || 0).toFixed(2)
+  const total = formatAmount(Number(order.value.total || 0))
   const phoneForQuery = phoneQuery || (JSON.parse(localStorage.getItem(`public_customer_${companyId}`) || 'null') || {}).contact || ''
   let orderUrl = `${window.location.origin}/public/${companyId}/order/${orderId}`
   const params = new URLSearchParams()

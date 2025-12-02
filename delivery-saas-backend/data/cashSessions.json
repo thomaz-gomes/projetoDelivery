@@ -1,0 +1,73 @@
+{
+  "sessions": [
+    {
+      "id": "ca8dcced-879b-42dd-8006-73212f1890df",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2025-12-01T03:21:59.441Z",
+      "openedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "openingAmount": 100,
+      "balance": 79.6,
+      "note": null,
+      "movements": [
+        {
+          "id": "e88fcd73-e7eb-4d34-8ebe-9ac7998dd402",
+          "type": "reforco",
+          "amount": 79.6,
+          "account": null,
+          "note": "Reconciliação automática (esperado 79.60 vs registrado)",
+          "at": "2025-12-01T18:19:45.695Z",
+          "by": "119b4731-0f4a-4c98-8259-d9e9dd3f99af"
+        },
+        {
+          "id": "be675674-0e99-48d9-93f3-68132b4af0c6",
+          "type": "retirada",
+          "amount": 100,
+          "account": null,
+          "note": "Fechamento: ",
+          "at": "2025-12-01T18:58:00.492Z",
+          "by": "119b4731-0f4a-4c98-8259-d9e9dd3f99af"
+        }
+      ],
+      "closedAt": "2025-12-01T18:58:00.516Z",
+      "closedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "closingSummary": {
+        "note": "",
+        "counted": {
+          "PIX": 60,
+          "Dinheiro": 79.6
+        }
+      }
+    },
+    {
+      "id": "8349df14-93f9-4396-9120-87c4f4886daf",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2025-12-01T23:00:25.298Z",
+      "openedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "openingAmount": 10,
+      "balance": 10,
+      "note": null,
+      "movements": [],
+      "closedAt": "2025-12-01T23:08:43.997Z",
+      "closedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "closingSummary": {
+        "note": "",
+        "counted": {
+          "Dinheiro": 10
+        }
+      }
+    },
+    {
+      "id": "c85ff3a5-3464-40d0-8fe3-69153d22d7e4",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2025-12-02T02:26:38.182Z",
+      "openedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "openingAmount": 10,
+      "balance": 10,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
+    }
+  ]
+}

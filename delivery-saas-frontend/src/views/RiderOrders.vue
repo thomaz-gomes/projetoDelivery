@@ -24,7 +24,7 @@
             </div>
           </div>
           <div class="card-body">
-            <div class="mb-2"><strong>Endereço:</strong> {{ o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || '-' }}</div>
+            <div class="mb-2"><strong>Endereço:</strong> {{ o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || o.rawPayload?.neighborhood || '-' }}</div>
             <div class="mb-2"><strong>Pagamento:</strong> {{ o.payload?.payments ? (o.payload.payments[0]?.method || o.payload.payments[0]?.type) : (o.payment?.method || o.payment?.type) || '-' }}</div>
             <div class="mb-2"><strong>Itens:</strong>
               <ul class="mb-0">

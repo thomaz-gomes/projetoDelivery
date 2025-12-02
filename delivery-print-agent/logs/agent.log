@@ -4864,3 +4864,112 @@ No linha:1 caractere:59
 [2025-11-29T18:28:51.459Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
 [2025-11-29T18:28:51.461Z] Printing order 7276f30c-b43f-4f13-92f9-ec04a93b2113 - length 300
 [2025-11-29T18:28:51.462Z] Skipping print for order 7276f30c-b43f-4f13-92f9-ec04a93b2113 because it was printed recently
+[2025-12-01T01:49:54.109Z] Printing order null - length 223
+[2025-12-01T01:49:54.115Z] printerApiType: null - interface:printer:EPSON type:EPSON
+[2025-12-01T01:49:54.116Z] Attempting local printer discovery at http://localhost:4000/printers (interface looked like type: EPSON)
+[2025-12-01T01:49:54.118Z] Printing order null - length 223
+[2025-12-01T01:49:54.122Z] printerApiType: null - interface:printer:EPSON type:EPSON
+[2025-12-01T01:49:54.123Z] Attempting local printer discovery at http://localhost:4000/printers (interface looked like type: EPSON)
+[2025-12-01T01:49:54.127Z] Resolved printer name from local discovery: printer:Print iD (was type: EPSON)
+[2025-12-01T01:49:55.467Z] raw-spooler stderr: OpenPrinter failed for: printer:Print iD
+
+[2025-12-01T01:49:55.468Z] raw-spooler returned status 5
+[2025-12-01T01:49:55.473Z] Resolved printer name from local discovery: printer:Print iD (was type: EPSON)
+[2025-12-01T01:49:55.632Z] raw-spooler stderr: OpenPrinter failed for: printer:Print iD
+
+[2025-12-01T01:49:55.633Z] raw-spooler returned status 5
+[2025-12-01T01:49:55.645Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-12-01T01:49:55.810Z] raw-spooler stderr: OpenPrinter failed for: EPSON
+
+[2025-12-01T01:49:55.811Z] raw-spooler failed with status 5: OpenPrinter failed for: EPSON
+
+[2025-12-01T01:49:55.811Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: EPSON
+
+[2025-12-01T01:49:58.864Z] powershell stderr: out-lineoutput : As configurações para acessar a impressora 'EPSON' não são válidas.
+No linha:1 caractere:59
++ ... ing]::UTF8; Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-12-01T01:49:58.864Z] Out-Printer failed with status 1: out-lineoutput : As configurações para acessar a impressora 'EPSON' não são válidas.
+No linha:1 caractere:59
++ ... ing]::UTF8; Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-12-01T01:49:58.865Z] Shim2 Windows Out-Printer attempt failed: Out-Printer failed: out-lineoutput : As configurações para acessar a impressora 'EPSON' não são válidas.
+No linha:1 caractere:59
++ ... ing]::UTF8; Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-12-01T01:49:58.865Z] Shim2 execute result: false
+[2025-12-01T01:49:58.870Z] Native printer build failed, fallback: Cannot read properties of undefined (reading 'characterSet')
+[2025-12-01T01:49:59.025Z] raw-spooler stderr: OpenPrinter failed for: EPSON
+
+[2025-12-01T01:49:59.025Z] raw-spooler failed with status 5: OpenPrinter failed for: EPSON
+
+[2025-12-01T01:49:59.026Z] raw-spooler attempt failed: raw-spooler failed: OpenPrinter failed for: EPSON
+
+[2025-12-01T01:49:59.623Z] powershell stderr: out-lineoutput : As configurações para acessar a impressora 'EPSON' não são válidas.
+No linha:1 caractere:59
++ ... ing]::UTF8; Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-12-01T01:49:59.624Z] Out-Printer failed with status 1: out-lineoutput : As configurações para acessar a impressora 'EPSON' não são válidas.
+No linha:1 caractere:59
++ ... ing]::UTF8; Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-12-01T01:49:59.624Z] Shim2 Windows Out-Printer attempt failed: Out-Printer failed: out-lineoutput : As configurações para acessar a impressora 'EPSON' não são válidas.
+No linha:1 caractere:59
++ ... ing]::UTF8; Get-Content -Raw -Encoding UTF8 'C:\Users\gomes\projetoDe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [out-lineoutput], InvalidPrinterException
+    + FullyQualifiedErrorId : System.Drawing.Printing.InvalidPrinterException,Microsoft.PowerShell.Commands.OutLineOut 
+   putCommand
+ 
+
+[2025-12-01T01:49:59.625Z] Shim2 execute result: false
+[2025-12-01T03:25:56.070Z] Printing order null - length 223
+[2025-12-01T03:25:56.073Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-12-01T03:25:58.258Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-12-01T03:25:58.258Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-12-01T14:05:23.882Z] Printing order null - length 223
+[2025-12-01T14:05:23.903Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-12-01T14:05:28.606Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-12-01T14:05:28.606Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-12-01T15:23:42.531Z] Printing order null - length 223
+[2025-12-01T15:23:42.534Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-12-01T15:23:57.040Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-12-01T15:23:57.040Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-12-01T15:28:43.271Z] Printing order null - length 223
+[2025-12-01T15:28:43.304Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-12-01T15:28:44.309Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-12-01T15:28:44.310Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'
+[2025-12-01T16:08:24.044Z] Printing order null - length 223
+[2025-12-01T16:08:24.051Z] printerApiType: null - interface:printer:Print iD type:EPSON
+[2025-12-01T16:08:25.397Z] raw-spooler stdout: RAW print sent successfully to printer: Print iD
+
+[2025-12-01T16:08:25.397Z] Printed via raw-spooler helper (C:\Users\gomes\projetoDelivery\delivery-print-agent\raw-spooler\raw-spooler.exe) to printer 'Print iD'

@@ -404,7 +404,7 @@
                   <div v-if="paymentMethod === 'CASH'" class="mt-2">
                     <div class="input-group">
                       <span class="input-group-text">R$</span>
-                      <input v-model="changeFor" type="number" step="0.01" min="0" class="form-control" placeholder="Troco para (ex: 50.00)" />
+                      <CurrencyInput v-model="changeFor" :min="0" inputClass="form-control" placeholder="Troco para (ex: 50,00)" />
                     </div>
                   </div>
                 </div>

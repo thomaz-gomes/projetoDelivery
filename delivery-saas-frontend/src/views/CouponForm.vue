@@ -33,7 +33,7 @@
 
             <div class="col-md-8">
               <label class="form-label">Valor (se percentual coloque 0.1 = 10%)</label>
-              <input class="form-control" v-model.number="form.value" type="number" step="0.01" />
+              <CurrencyInput v-model="form.value" inputClass="form-control" placeholder="0,00" />
             </div>
           </div>
 
@@ -76,7 +76,7 @@
             </div>
             <div class="col-md-6">
               <label class="form-label">Subtotal mínimo (opcional)</label>
-              <input class="form-control" v-model.number="form.minSubtotal" type="number" step="0.01" min="0" />
+              <CurrencyInput v-model="form.minSubtotal" inputClass="form-control" :min="0" placeholder="0,00" />
             </div>
           </div>
 

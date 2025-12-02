@@ -1,6 +1,8 @@
 import express from 'express';
 import { prisma } from '../prisma.js';
-import { emitirPedidoAtualizado, emitirNovoPedido } from '../index.js';
+// Note: avoid static import of index.js to prevent circular dependency with index.js
+// When we need to emit socket events, use dynamic import inside async handlers:
+// const { emitirPedidoAtualizado } = await import('../index.js');
 import { authMiddleware, requireRole } from '../auth.js';
 import { upsertCustomerFromIfood, findOrCreateCustomer } from '../services/customers.js';
 import { trackAffiliateSale } from '../services/affiliates.js';
@@ -69,118 +71,6 @@ ordersRouter.get('/', async (req, res) => {
   }
 
   return res.json(orders);
-
-
-  // registra histórico com o status anterior
-  const existing = await prisma.order.findUnique({ where: { id } });
-  if (!existing) return res.status(404).json({ message: 'Pedido não encontrado' });
-
-  const updated = await prisma.order.update({
-    where: { id },
-    data: {
-      status,
-      histories: {
-        create: { from: existing.status, to: status, byUserId: req.user.id, reason: 'Manual' }
-      }
-    },
-    include: { histories: true }
-  });
-
-  // notificar cliente (stub pronto)
-  notifyCustomerStatus(updated.id, status).catch(() => {});
-
-  // emit order-updated socket so public clients can receive status changes
-  try { emitirPedidoAtualizado(updated) } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e) }
-
-  // If order was completed and has a rider, credit rider's account with riderFee and daily rate if needed
-  try {
-    if (status === 'CONCLUIDO' && updated.riderId) {
-      // Detect neighborhoodName only by matching known Neighborhoods (name + aliases)
-      // against the order address or any formatted address available in the payload.
-      // NOTE: we intentionally DO NOT use customer.addresses here — neighborhoods are global per company.
-      let neighborhoodName = null;
-
-      // helper: try to extract human-readable address text from payload
-      function extractAddressTextFromPayload(payload) {
-        if (!payload) return null;
-        try {
-          // payload might be an object or JSON string
-          const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
-          // common locations used by integrators
-          const candidates = [];
-          if (p.delivery && p.delivery.deliveryAddress) {
-            const d = p.delivery.deliveryAddress;
-            if (d.formattedAddress) candidates.push(d.formattedAddress);
-            if (d.formatted_address) candidates.push(d.formatted_address);
-            if (d.address) candidates.push(typeof d.address === 'string' ? d.address : (d.address.formatted || ''));
-          }
-          // generic fallback: some payloads contain a top-level formattedAddress or address
-          if (p.formattedAddress) candidates.push(p.formattedAddress);
-          if (p.formatted_address) candidates.push(p.formatted_address);
-          if (p.address) candidates.push(typeof p.address === 'string' ? p.address : (p.address.formatted || ''));
-
-          const txt = candidates.filter(Boolean).join(' ');
-          return txt || null;
-        } catch (e) {
-          return null;
-        }
-      }
-
-      const addrCandidates = [];
-      if (updated.address) addrCandidates.push(String(updated.address));
-      const payloadText = extractAddressTextFromPayload(updated.payload);
-      if (payloadText) addrCandidates.push(payloadText);
-
-      if (addrCandidates.length) {
-        const addrText = addrCandidates.join(' ').toLowerCase();
-        const neighs = await prisma.neighborhood.findMany({ where: { companyId: updated.companyId } });
-        const matched = neighs.find(n => {
-          if (!n || !n.name) return false;
-          const name = String(n.name).toLowerCase();
-          if (addrText.includes(name)) return true;
-          if (n.aliases) {
-            try {
-              const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
-              if (arr.some(a => addrText.includes(String(a || '').toLowerCase()))) return true;
-            } catch (e) {
-              // ignore parse errors
-            }
-          }
-          return false;
-        });
-        if (matched) neighborhoodName = matched.name;
-      }
-
-      await riderAccountService.addDeliveryAndDailyIfNeeded({
-        companyId: updated.companyId,
-        riderId: updated.riderId,
-        orderId: updated.id,
-        neighborhoodName,
-        orderDate: updated.updatedAt || new Date(),
-      });
-    }
-  } catch (e) {
-    console.error('Failed to add rider transaction:', e?.message || e);
-  }
-
-  // If order was completed, attempt to track affiliate commission for coupon owner
-  try {
-    if (status === 'CONCLUIDO') {
-      // avoid duplicate affiliate sales: only track if no affiliateSale exists for this order
-      const existingCount = await prisma.affiliateSale.count({ where: { orderId: updated.id } });
-      if (existingCount === 0) {
-        try {
-          await trackAffiliateSale(updated, updated.companyId);
-        } catch (afErr) {
-          console.warn('Failed to track affiliate sale on order completion', updated.id, afErr?.message || afErr);
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Error while attempting affiliate tracking on order status change:', e?.message || e);
-  }
-
-  return res.json(updated);
 });
 
 // POST atribuir entregador manualmente
@@ -223,7 +113,8 @@ ordersRouter.post('/:id/assign', requireRole('ADMIN'), async (req, res) => {
   return res.json({ ok: true, order });
 });
 
-// Rider: mark order as delivered (complete) - rider must be assigned to the order
+// Rider: mark order as delivered (delivered by rider). Move to payment confirmation
+// Rider must be assigned to the order
 ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
   const { id } = req.params;
   const riderId = req.user.riderId;
@@ -237,15 +128,15 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
     const updated = await prisma.order.update({
       where: { id },
       data: {
-        status: 'CONCLUIDO',
-        histories: { create: { from: existing.status, to: 'CONCLUIDO', byRiderId: riderId, reason: 'Entregue pelo motoboy' } }
+        status: 'CONFIRMACAO_PAGAMENTO',
+        histories: { create: { from: existing.status, to: 'CONFIRMACAO_PAGAMENTO', byRiderId: riderId, reason: 'Entregue pelo motoboy (aguardando confirmação de pagamento)' } }
       },
       include: { rider: true }
     });
 
-    // notify customer and emit socket
-    notifyCustomerStatus(updated.id, 'CONCLUIDO').catch(() => {});
-    try { emitirPedidoAtualizado(updated) } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e) }
+    // notify customer and emit socket (use new status)
+    notifyCustomerStatus(updated.id, 'CONFIRMACAO_PAGAMENTO').catch(() => {});
+    try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e) }
 
     // credit rider account (reuse same logic as status patch)
     try {
@@ -299,6 +190,125 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
   }
 });
 
+// Admin: patch order status (manual change)
+ordersRouter.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body || {};
+  const companyId = req.user.companyId;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+
+  try {
+    const existing = await prisma.order.findFirst({ where: { id, companyId } });
+    if (!existing) return res.status(404).json({ message: 'Pedido não encontrado' });
+
+    // If moving from CONFIRMACAO_PAGAMENTO -> CONCLUIDO, record a payment confirmation history
+    const historyCreate = { from: existing.status, to: status, byUserId: req.user.id, reason: 'Manual' };
+    // support multiple payments payload { payments: [{ method, amount }, ...] } or legacy paymentMethod
+    let payments = null;
+    if (req.body && Array.isArray(req.body.payments) && req.body.payments.length) payments = req.body.payments;
+    else if (req.body && req.body.paymentMethod) payments = [{ method: String(req.body.paymentMethod), amount: req.body.amount != null ? Number(req.body.amount) : null }];
+
+    if (existing.status === 'CONFIRMACAO_PAGAMENTO' && status === 'CONCLUIDO') {
+      historyCreate.reason = 'Confirmação de pagamento manual';
+      if (payments) {
+        try {
+          const summary = payments.map(p => `${String(p.method)}:${Number(p.amount||0).toFixed(2)}`).join(', ');
+          historyCreate.reason += ` (métodos: ${summary})`;
+        } catch (e) {}
+      } else if (req.body && req.body.paymentMethod) {
+        historyCreate.reason += ` (método: ${String(req.body.paymentMethod)})`;
+      }
+    }
+
+    // If payments provided, persist them into payload.paymentConfirmed (merge with existing payload)
+    let updateData = { status, histories: { create: historyCreate } };
+    if (payments) {
+      try {
+        const current = await prisma.order.findUnique({ where: { id }, select: { payload: true } });
+        const currentPayload = (current && current.payload) ? current.payload : {};
+        const newPayload = Object.assign({}, currentPayload, { paymentConfirmed: payments });
+        updateData.payload = newPayload;
+      } catch (e) { console.warn('Failed to merge paymentConfirmed into payload', e && e.message); }
+    }
+
+    const updated = await prisma.order.update({
+      where: { id },
+      data: updateData,
+      include: { histories: true, rider: true }
+    });
+
+    // notify customer and emit websocket update
+    notifyCustomerStatus(updated.id, status).catch(() => {});
+    try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e); }
+
+    // If order was completed and has a rider, credit rider's account
+    try {
+      if (status === 'CONCLUIDO' && updated.riderId) {
+        // attempt to detect neighborhood name from address/payload (best-effort)
+        let neighborhoodName = null;
+        function extractAddressTextFromPayload(payload) {
+          if (!payload) return null;
+          try {
+            const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            const candidates = [];
+            if (p.delivery && p.delivery.deliveryAddress) {
+              const d = p.delivery.deliveryAddress;
+              if (d.formattedAddress) candidates.push(d.formattedAddress);
+              if (d.formatted_address) candidates.push(d.formatted_address);
+              if (d.address) candidates.push(typeof d.address === 'string' ? d.address : (d.address.formatted || ''));
+            }
+            if (p.formattedAddress) candidates.push(p.formattedAddress);
+            if (p.formatted_address) candidates.push(p.formatted_address);
+            if (p.address) candidates.push(typeof p.address === 'string' ? p.address : (p.address.formatted || ''));
+            const txt = candidates.filter(Boolean).join(' ');
+            return txt || null;
+          } catch (e) { return null; }
+        }
+
+        const addrCandidates = [];
+        if (updated.address) addrCandidates.push(String(updated.address));
+        const payloadText = extractAddressTextFromPayload(updated.payload);
+        if (payloadText) addrCandidates.push(payloadText);
+
+        if (addrCandidates.length) {
+          const addrText = addrCandidates.join(' ').toLowerCase();
+          const neighs = await prisma.neighborhood.findMany({ where: { companyId: updated.companyId } });
+          const matched = neighs.find(n => {
+            if (!n || !n.name) return false;
+            const name = String(n.name).toLowerCase();
+            if (addrText.includes(name)) return true;
+            if (n.aliases) {
+              try {
+                const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
+                if (arr.some(a => addrText.includes(String(a || '').toLowerCase()))) return true;
+              } catch (e) {}
+            }
+            return false;
+          });
+          if (matched) neighborhoodName = matched.name;
+        }
+
+        await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId: updated.companyId, riderId: updated.riderId, orderId: updated.id, neighborhoodName, orderDate: updated.updatedAt || new Date() });
+      }
+    } catch (e) { console.error('Failed to add rider transaction:', e?.message || e); }
+
+    // If order was completed, attempt to track affiliate commission for coupon owner
+    try {
+      if (status === 'CONCLUIDO') {
+        const existingCount = await prisma.affiliateSale.count({ where: { orderId: updated.id } });
+        if (existingCount === 0) {
+          try { await trackAffiliateSale(updated, updated.companyId); } catch (afErr) { console.warn('Failed to track affiliate sale on order completion', updated.id, afErr?.message || afErr); }
+        }
+      }
+    } catch (e) { console.error('Error while attempting affiliate tracking on order status change:', e?.message || e); }
+
+    return res.json(updated);
+  } catch (e) {
+    console.error('Failed to update order status', e);
+    return res.status(500).json({ message: 'Falha ao atualizar status do pedido' });
+  }
+});
+
 ordersRouter.post('/:id/tickets', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params;
   const companyId = req.user.companyId;
@@ -349,57 +359,22 @@ ordersRouter.get('/:id', async (req, res) => {
   } catch (e) {
     console.warn('Failed to compute displaySimple for order detail', e?.message || e);
   }
-
-  res.json(order);
+  return res.json(order);
 });
 
-// POST /orders/:id/associate-customer - associate or create a customer from the order payload
-ordersRouter.post('/:id/associate-customer', requireRole('ADMIN'), async (req, res) => {
-  const { id } = req.params;
-  const companyId = req.user.companyId;
-
-  const order = await prisma.order.findFirst({ where: { id, companyId } });
-  if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
-
-  // allow caller to pass an override payload, otherwise use stored payload
-  const payload = req.body?.payload ?? order.payload;
-  if (!payload) return res.status(400).json({ message: 'Nenhum payload disponível para extrair cliente' });
-
-  try {
-    const { customer, addressId } = await upsertCustomerFromIfood({ companyId: order.companyId, payload });
-
-    const updated = await prisma.order.update({
-      where: { id },
-      data: {
-        customerId: customer.id,
-        customerName: customer.fullName || order.customerName,
-        customerPhone: customer.whatsapp || customer.phone || order.customerPhone,
-      }
-    });
-
-    return res.json({ ok: true, customer, addressId, order: updated });
-  } catch (e) {
-    console.error('Failed to associate customer for order', id, e?.message || e);
-    return res.status(500).json({ message: 'Falha ao associar cliente', error: String(e?.message || e) });
-  }
-});
-
-// POS/PDV: criar pedido manual interno
-// POST /orders  body: { customerName, customerPhone, orderType, address?, items: [{ name, quantity, price, notes?, options?:[{ name, price }] }], payment: { methodCode, amount, changeFor? } }
+// PDV create route (previously the opening wrapper was missing)
 ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
-  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
   try {
-    const { customerName, customerPhone, orderType = 'BALCAO', address = {}, items = [], payment = null, coupon } = req.body || {};
-    const requestedStoreId = req.body && req.body.storeId ? String(req.body.storeId) : null;
-    if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Itens são obrigatórios' });
+    const { items = [], address = {}, coupon, payment, type, customerPhone, customerName, requestedStoreId } = req.body || {};
 
-    const type = String(orderType || 'BALCAO').toUpperCase();
-    if (type === 'DELIVERY') {
-      const neigh = String(address.neighborhood || address.neigh || '').trim();
-      const street = String(address.street || '').trim();
-      if (!neigh || !street) return res.status(400).json({ message: 'Endereço (rua e bairro) obrigatório para entrega' });
-    }
+    // Dev: log a compact summary to help debug PDV create 500s (safe, non-sensitive fields)
+    try { console.log('PDV create payload summary:', { type, customerPhone, customerName, itemsCount: Array.isArray(items) ? items.length : 0, addressProvided: address && Object.keys(address).length > 0 }); } catch (e) {}
+
+    const orderType = String(type || '').toUpperCase();
+    const neigh = String(address?.neighborhood || address?.neigh || '').trim();
+    const street = String(address?.street || '').trim();
+    if (orderType === 'DELIVERY' && (!neigh || !street)) return res.status(400).json({ message: 'Endereço (rua e bairro) obrigatório para entrega' });
 
     // sanitize items
     const cleanItems = items.map(it => ({
@@ -577,16 +552,20 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
           payload: created.payload || null,
           items: created.items || null
         };
-        emitirNovoPedido(emitObj);
+        try { const idx = await import('../index.js'); idx.emitirNovoPedido(emitObj); } catch (e) { console.warn('emitirNovoPedido failed for created order', emitObj && emitObj.id, e && e.message); }
       } catch (eEmit) {
         console.warn('emitirNovoPedido failed for created order', created && created.id, eEmit && eEmit.message);
-        emitirNovoPedido(created);
+        try { const idx = await import('../index.js'); idx.emitirNovoPedido(created); } catch (e) { console.warn('emitirNovoPedido failed for created order', created && created.id, e && e.message); }
       }
     } catch (e) { console.warn('Emitir novo pedido falhou:', e && e.message); }
-    try { emitirPedidoAtualizado(created); } catch (e) { /* ignore */ }
+    try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(created); } catch (e) { /* ignore */ }
     return res.status(201).json(created);
   } catch (e) {
-    console.error('Erro ao criar pedido PDV', e);
+    console.error('Erro ao criar pedido PDV', e && (e.stack || e.message || e));
+    // In development, return the actual error for easier debugging.
+    if (process.env.NODE_ENV !== 'production') {
+      return res.status(500).json({ message: e && e.message ? e.message : 'Erro interno ao criar pedido PDV', stack: e && e.stack ? e.stack : null });
+    }
     return res.status(500).json({ message: 'Erro interno ao criar pedido PDV' });
   }
 });

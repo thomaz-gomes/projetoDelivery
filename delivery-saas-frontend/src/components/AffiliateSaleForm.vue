@@ -9,7 +9,7 @@
     <form @submit.prevent="submit">
       <div class="form-group">
         <label for="saleAmount">Valor da Venda (R$)</label>
-        <input id="saleAmount" type="number" v-model.number="form.saleAmount" min="0.01" step="0.01" required />
+        <CurrencyInput id="saleAmount" v-model="form.saleAmount" :min="0.01" placeholder="0,00" required />
       </div>
 
       <div class="form-group">
@@ -18,7 +18,7 @@
       </div>
 
       <div class="commission-preview" v-if="form.saleAmount && affiliate">
-        Comissão: R$ {{ (Number(form.saleAmount) * Number(affiliate.commissionRate || 0)).toFixed(2) }} ({{ (Number(affiliate.commissionRate || 0) * 100).toFixed(1) }}%)
+        Comissão: {{ formatCurrency(Number(form.saleAmount) * Number(affiliate.commissionRate || 0)) }} ({{ (Number(affiliate.commissionRate || 0) * 100).toFixed(1) }}%)
       </div>
 
       <div class="form-actions">
@@ -31,6 +31,7 @@
 
 <script>
 import { ref, watch, computed } from 'vue'
+import { formatCurrency } from '../utils/formatters.js'
 
 export default {
   name: 'AffiliateSaleForm',
@@ -53,7 +54,7 @@ export default {
       emit('submit', { saleAmount: Number(form.value.saleAmount), note: form.value.note })
     }
 
-    return { form, submit }
+    return { form, submit, formatCurrency }
   }
 }
 </script>

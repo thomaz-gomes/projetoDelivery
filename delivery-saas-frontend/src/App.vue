@@ -21,9 +21,9 @@ const showLayout = computed(() => {
 <template>
   <div class="bg-light text-dark">
     <template v-if="showLayout">
-      <!-- Mobile bottom nav: replaces the top .navbar on small screens -->
+      <!-- Mobile bottom nav: replaces the top .navbar on small screens 
       <MobileBottomNav />
-
+-->
       <!-- Layout principal -->
       <div class="container-fluid d-flex p-0">
         <!-- Sidebar desktop -->

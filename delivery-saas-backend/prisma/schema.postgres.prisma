@@ -44,6 +44,7 @@ enum OrderStatus {
   enum OrderStatus {
     EM_PREPARO
     SAIU_PARA_ENTREGA
+    CONFIRMACAO_PAGAMENTO
     CONCLUIDO
     CANCELADO
     INVOICE_AUTHORIZED
@@ -426,6 +427,8 @@ enum OrderStatus {
     company        Company  @relation(fields: [companyId], references: [id])
     name           String
     email          String?
+    // password for affiliate self-login (hashed)
+    password       String?
     whatsapp       String?
     commissionRate Decimal  @default(0) // porcentual de comissão (ex: 0.10 = 10%)
     couponCode     String   @unique // código do cupom único

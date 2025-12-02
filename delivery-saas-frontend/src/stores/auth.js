@@ -41,6 +41,21 @@ export const useAuthStore = defineStore('auth', {
       try { localStorage.setItem('user', JSON.stringify(this.user)); } catch(e){}
       try { window.dispatchEvent(new CustomEvent('app:user-logged-in', { detail: { token: this.token } })); } catch(e) {}
     },
+    async loginWhatsappAffiliate(whatsapp, password) {
+      // Separate endpoint for affiliate login
+      const { data } = await api.post('/auth/login-whatsapp-affiliate', { whatsapp, password });
+      this.token = data.token;
+      this.user = data.user;
+      if (data.agentToken) {
+        try {
+          localStorage.setItem('agentToken', data.agentToken);
+          await printService.setPrinterConfig({ agentToken: data.agentToken });
+        } catch (e) { console.warn('Failed to apply agent token to printService', e); }
+      }
+      localStorage.setItem('token', this.token);
+      try { localStorage.setItem('user', JSON.stringify(this.user)); } catch(e){}
+      try { window.dispatchEvent(new CustomEvent('app:user-logged-in', { detail: { token: this.token } })); } catch(e) {}
+    },
     logout() {
       this.user = null;
       this.token = null;

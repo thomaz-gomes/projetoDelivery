@@ -1,1 +1,78 @@
-[]
+[
+  {
+    "id": "1764643749869-601761",
+    "createdAt": 1764643749869,
+    "order": {
+      "id": "4a1964b5-16bc-46fa-9d32-70c0aec9b07b",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz Gomes",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "fd8ed083-808f-47bd-932b-6a7860dc77f2",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "30",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "10",
+      "payload": {
+        "payment": {
+          "method": "PIX",
+          "methodCode": "PIX",
+          "amount": 30,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Produto 1",
+              "quantity": 1,
+              "price": 20,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Thomaz Gomes",
+            "contact": "73991429676"
+          },
+          "address": {
+            "street": "Rua Tordesilhas",
+            "number": "Eunápolis",
+            "neighborhood": "Dinah borges",
+            "city": "Aracaju",
+            "complement": "",
+            "formatted": "Rua Tordesilhas, Eunápolis, 45820-131, Brazil"
+          }
+        }
+      },
+      "createdAt": "2025-12-02T02:49:09.144Z",
+      "updatedAt": "2025-12-02T02:49:09.144Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "5bab87c8-6ece-4ad6-84bd-02969f1a1aa8",
+          "orderId": "4a1964b5-16bc-46fa-9d32-70c0aec9b07b",
+          "name": "Produto 1",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "includeFullOrder": true
+  }
+]

@@ -1,0 +1,18 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+
+
+[alignLeft]
+Cliente: Cliente
+Endereço: -
+Total: R$ 0.00
+
+
+FORMAS DE PAGAMENTO
+
+
+[alignCenter]
+Obrigado!
+[CUT]
