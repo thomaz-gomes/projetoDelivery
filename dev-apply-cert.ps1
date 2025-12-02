@@ -54,4 +54,4 @@ Write-Host "2) Restart the backend so it picks up the new cert files (or nodemon
 Write-Host "   cd $RepoRoot\delivery-saas-backend; npm run dev"
 Write-Host "3) Restart the frontend dev server (so it honors VITE_API_URL if needed):"
 Write-Host "   cd $RepoRoot\delivery-saas-frontend; npm run dev -- --host dev.redemultilink.com.br"
-Write-Host "4) Open https://dev.redemultilink.com.br:5173 and try login again."
+Write-Host "4) Open http://dev.redemultilink.com.br:5173 and try login again."
