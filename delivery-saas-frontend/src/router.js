@@ -52,6 +52,8 @@ import ProductForm from './views/ProductForm.vue';
 import CategoryForm from './views/CategoryForm.vue';
 import Users from './views/Users.vue';
 import AccessControl from './views/AccessControl.vue';
+import SalesHistory from './views/SalesHistory.vue';
+import SaleDetails from './views/SaleDetails.vue';
 import RiderOrders from './views/rider/Orders.vue';
 import RiderQrCode from './views/rider/QrReader.vue';
 import RiderAccountSelf from './views/rider/Account.vue';
@@ -129,6 +131,8 @@ const router = createRouter({
   ,{ path: '/menu/products/:id', component: ProductForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/categories/new', component: CategoryForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/categories/:id', component: CategoryForm, meta: { requiresAuth: true } }
+  ,{ path: '/sales', component: SalesHistory, meta: { requiresAuth: true } }
+  ,{ path: '/sales/:id', component: SaleDetails, meta: { requiresAuth: true } }
   ]
 });
 

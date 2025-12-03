@@ -7,27 +7,27 @@
     <template #filters>
       <div class="filters row g-2">
         <div class="col-md-4">
-          <input class="form-control" v-model="q" placeholder="Pesquisar código..." @keyup.enter="load" />
+          <TextInput v-model="q" placeholder="Pesquisar código..." inputClass="form-control" />
         </div>
         <div class="col-md-2">
-          <select class="form-select" v-model="filterActive" @change="load">
+          <SelectInput  class="form-select"  v-model="filterActive"  @change="load">
             <option value="">Todos</option>
             <option value="true">Ativos</option>
             <option value="false">Inativos</option>
-          </select>
+          </SelectInput>
         </div>
         <div class="col-md-2">
-          <select class="form-select" v-model="filterType" @change="load">
+          <SelectInput  class="form-select"  v-model="filterType"  @change="load">
             <option value="">Todos</option>
             <option value="true">Percentual</option>
             <option value="false">Valor</option>
-          </select>
+          </SelectInput>
         </div>
         <div class="col-md-3">
-          <select class="form-select" v-model="filterAffiliate" @change="load">
+          <SelectInput  class="form-select"  v-model="filterAffiliate"  @change="load">
             <option value="">Todos afiliados</option>
             <option v-for="a in affiliates" :key="a.id" :value="a.id">{{ a.name }}</option>
-          </select>
+          </SelectInput>
         </div>
         <div class="col-md-1 d-flex align-items-center">
           <button class="btn btn-outline-secondary w-100" @click="resetFilters">Limpar</button>

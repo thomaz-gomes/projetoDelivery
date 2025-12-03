@@ -8,7 +8,7 @@
           <div v-if="needsPhone" class="alert alert-warning">
             Informe seu WhatsApp para visualizar este pedido.
             <div class="input-group mt-2">
-              <input v-model="phoneInput" @keyup.enter="submitPhone" type="tel" class="form-control" placeholder="(00) 0 0000-0000" maxlength="16" />
+              <TextInput v-model="phoneInput" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" />
               <button class="btn btn-primary" @click="submitPhone">Ver pedido</button>
             </div>
           </div>

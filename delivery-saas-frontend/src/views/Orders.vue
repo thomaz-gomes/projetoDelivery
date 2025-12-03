@@ -1461,13 +1461,7 @@ function pulseButton() {
         </div>
         <div class="d-flex gap-2 align-items-center">
           <div class="flex-grow-1" style="max-width: 300px;">
-            <input
-              v-model="newOrderPhone"
-              type="tel"
-              class="form-control"
-              placeholder="(00) 0 0000-0000"
-              @keyup.enter="openPdv"
-            />
+            <TextInput v-model="newOrderPhone" placeholder="(00) 0 0000-0000" inputClass="form-control" />
           </div>
           <button type="button" class="btn btn-success" @click="openPdv">
             <i class="bi bi-arrow-right-circle"></i>
@@ -1503,8 +1497,8 @@ function pulseButton() {
 
       <!-- Filtros adicionais -->
       <div class="d-flex align-items-center gap-2 flex-wrap">
-        <select
-          v-model="selectedRider"
+        <SelectInput 
+           v-model="selectedRider" 
           class="form-select form-select-sm"
           style="min-width: 200px;"
         >
@@ -1513,10 +1507,10 @@ function pulseButton() {
           <option v-for="r in store.riders" :key="r.id" :value="String(r.id)">
             {{ r.name }}
           </option>
-        </select>
+        </SelectInput>
 
-        <input v-model="searchOrderNumber" class="form-control form-control-sm" placeholder="Nº pedido" style="max-width:140px;" />
-        <input v-model="searchCustomerName" class="form-control form-control-sm" placeholder="Nome do cliente" style="min-width:200px; max-width:280px;" />
+        <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control form-control-sm" />
+        <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control form-control-sm" />
 
         <!-- 🔊 Botão de som -->
         <button

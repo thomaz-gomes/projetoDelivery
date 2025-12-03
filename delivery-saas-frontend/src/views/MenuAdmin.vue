@@ -6,7 +6,7 @@
       <div class="col-12">
         <div class="mb-3 d-flex justify-content-between align-items-center">
           <div class="w-50 d-flex">
-            <input class="form-control me-2" placeholder="Buscar um item" v-model="search" />
+            <TextInput v-model="search" placeholder="Buscar um item" inputClass="form-control me-2" />
             <button class="btn btn-sm btn-outline-secondary me-2" :class="{ active: compactMode }" @click="toggleCompact"><i class="bi bi-list"></i> {{ compactMode ? 'Denso' : 'Normal' }}</button>
           </div>
           <div>

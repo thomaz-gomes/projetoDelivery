@@ -12,15 +12,15 @@
 
           <div class="mb-3">
             <label class="form-label">Apelido</label>
-            <input v-model="alias" class="form-control" placeholder="Apelido para esta impressora" />
+            <TextInput v-model="alias" placeholder="Apelido para esta impressora" inputClass="form-control" />
           </div>
 
           <div class="mb-3">
             <label class="form-label">Impressora</label>
-            <select v-model="printerName" class="form-select">
+            <SelectInput   v-model="printerName"  class="form-select">
               <option value="">Selecione uma impressora</option>
               <option v-for="p in printers" :key="p" :value="p">{{ p }}</option>
-            </select>
+            </SelectInput>
             <div class="mt-2 small text-muted">Se a lista estiver vazia, verifique se o agente de impressão está executando na loja.</div>
             <div class="mt-2">
               <div v-if="discovering" class="small text-muted">Procurando impressoras... ⏳</div>
@@ -40,17 +40,17 @@
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Tipo de impressão</label>
-              <select v-model="printType" class="form-select">
+              <SelectInput   v-model="printType"  class="form-select">
                 <option value="thermal">impressão térmica</option>
                 <option value="generic">impressão genérica (navegador)</option>
-              </select>
+              </SelectInput>
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Largura de papel</label>
-              <select v-model="paperWidth" class="form-select">
+              <SelectInput   v-model="paperWidth"  class="form-select">
                 <option value="80">80 mm</option>
                 <option value="58">58 mm</option>
-              </select>
+              </SelectInput>
             </div>
           </div>
 

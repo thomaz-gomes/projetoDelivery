@@ -4,7 +4,7 @@
       <h5 class="fw-semibold mb-3">Meus pedidos</h5>
       <div v-if="needsPhone" class="phone-box mb-4">
         <label class="form-label small fw-semibold">Informe seu WhatsApp</label>
-        <input v-model="phone" @keyup.enter="submitPhone" type="tel" class="form-control" placeholder="(00) 0 0000-0000" maxlength="16" />
+        <TextInput v-model="phone" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" />
         <button class="btn btn-primary btn-sm mt-2" @click="submitPhone">Ver histórico</button>
         <button v-if="hasStoredPhone" class="btn btn-outline-secondary btn-sm mt-2 ms-2" @click="useSaved">Usar salvo</button>
       </div>

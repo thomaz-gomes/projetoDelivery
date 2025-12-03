@@ -10,14 +10,14 @@
 
       <div class="row mb-3">
         <div class="col-md-6 mb-2">
-          <input class="form-control" placeholder="Pesquisar por nome ou email" v-model="query" />
+          <TextInput v-model="query" placeholder="Pesquisar por nome ou email" inputClass="form-control" />
         </div>
         <div class="col-md-2 mb-2">
-          <select class="form-select" v-model.number="pageSize">
+          <SelectInput  class="form-select"  v-model.number="pageSize" >
             <option :value="5">5 / página</option>
             <option :value="10">10 / página</option>
             <option :value="20">20 / página</option>
-          </select>
+          </SelectInput>
         </div>
       </div>
 
@@ -57,23 +57,23 @@
               <button type="button" class="btn-close" @click="closeForm"></button>
             </div>
             <div class="modal-body">
-              <div class="mb-2"><label class="form-label">Nome</label><input class="form-control" v-model="form.name" /></div>
+              <div class="mb-2"><label class="form-label">Nome</label><TextInput v-model="form.name" inputClass="form-control" /></div>
               <div class="mb-2">
                 <label class="form-label">Email</label>
-                <input class="form-control" v-model="form.email" />
+                <TextInput v-model="form.email" inputClass="form-control" />
                 <div v-if="emailError" class="form-text text-danger">{{ emailError }}</div>
               </div>
-              <div class="mb-2"><label class="form-label">Whatsapp</label><input class="form-control" v-model="form.whatsapp" /></div>
+              <div class="mb-2"><label class="form-label">Whatsapp</label><TextInput v-model="form.whatsapp" inputClass="form-control" /></div>
               <div class="mb-2"><label class="form-label">Role</label>
-                <select class="form-select" v-model="form.role">
+                <SelectInput  class="form-select"  v-model="form.role" >
                   <option value="SUPER_ADMIN">Super Admin</option>
                   <option value="ADMIN">Admin</option>
                   <option value="ATTENDANT">Atendimento</option>
                   <option value="RIDER">Rider</option>
                   <option value="AFFILIATE">Afiliado</option>
-                </select>
+                </SelectInput>
               </div>
-              <div class="mb-2" v-if="!editing"><label class="form-label">Senha (opcional)</label><input type="password" class="form-control" v-model="form.password" /></div>
+              <div class="mb-2" v-if="!editing"><label class="form-label">Senha (opcional)</label><TextInput v-model="form.password" inputClass="form-control" /></div>
             </div>
             <div class="modal-footer">
               <button class="btn btn-outline-secondary" @click="closeForm">Cancelar</button>

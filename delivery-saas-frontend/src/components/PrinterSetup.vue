@@ -4,14 +4,14 @@
 
     <div v-if="!autoDetected">
       <label>Backend Socket URL</label>
-      <input v-model="form.backend" placeholder="http://localhost:3000" />
+      <TextInput v-model="form.backend" placeholder="http://localhost:3000" />
 
       <label>Store IDs (comma-separated)</label>
-      <input v-model="form.storeIds" placeholder="store-1,store-2" />
+      <TextInput v-model="form.storeIds" placeholder="store-1,store-2" />
       <small style="color:#666">Se a máquina atende várias lojas, informe os store ids separados por vírgula.</small>
 
       <label>Agent Token</label>
-      <input v-model="form.token" placeholder="PRINT_AGENT_TOKEN" />
+      <TextInput v-model="form.token" placeholder="PRINT_AGENT_TOKEN" />
     </div>
 
     <div v-else>
@@ -21,28 +21,28 @@
 
     <div>
       <label>Printer (detectado via agente local)</label>
-      <select v-model="form.printer">
+      <SelectInput   v-model="form.printer" >
         <option disabled value="">-- selecione --</option>
         <option v-for="p in printers" :key="p.name" :value="p.name">{{ p.name }} <span v-if="p.default">(default)</span></option>
-      </select>
+      </SelectInput>
       <label style="margin-top:8px">Ou informe o nome exato da impressora (interface)</label>
-      <input v-model="form.printerInterface" placeholder="printer:Print iD" />
+      <TextInput v-model="form.printerInterface" placeholder="printer:Print iD" />
 
       <label style="margin-top:8px">Printer Type (emulação)</label>
-      <select v-model="form.printerType">
+      <SelectInput   v-model="form.printerType" >
         <option value="EPSON">EPSON (ESC/POS)</option>
         <option value="STAR">STAR</option>
-      </select>
+      </SelectInput>
       
       <label style="margin-top:8px">Codepage</label>
-      <select v-model="form.printerCodepage">
+      <SelectInput   v-model="form.printerCodepage" >
         <option value="windows-1252">Windows-1252 (CP1252)</option>
         <option value="cp437">CP437</option>
         <option value="cp850">CP850</option>
         <option value="cp852">CP852</option>
         <option value="iso-8859-1">ISO-8859-1</option>
         <option value="utf8">UTF-8</option>
-      </select>
+      </SelectInput>
       <label style="display:flex;align-items:center;margin-top:8px"><input type="checkbox" v-model="form.dryRun" style="margin-right:8px"/> DRY_RUN (não envia ao dispositivo)</label>
     </div>
 

@@ -61,9 +61,12 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
   try {
     let categories
     if (menuId) {
-      // load categories/products scoped to a specific menu
+      // load categories/products scoped only to the specific menu.
+      // Previously company-wide categories (menuId == null) were included
+      // which caused the same categories to appear across multiple menus.
+      // For independent menus, fetch only categories assigned to this menu.
       categories = await prisma.menuCategory.findMany({
-        where: { companyId, isActive: true, OR: [{ menuId }, { menuId: null }] },
+        where: { companyId, isActive: true, menuId },
         orderBy: { position: 'asc' },
         include: {
           products: {
@@ -172,9 +175,11 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
           if (!menuId) {
             const menuForStore = await prisma.menu.findFirst({ where: { storeId: store.id, isActive: true }, orderBy: { position: 'asc' } })
               if (menuForStore) {
-                // load categories scoped to that menu
+                // load categories scoped only to that specific store menu
+                // do not include company-shared categories (menuId == null) to avoid
+                // repeating the same categories across different menus.
                 categories = await prisma.menuCategory.findMany({
-                  where: { companyId, isActive: true, OR: [{ menuId: menuForStore.id }, { menuId: null }] },
+                  where: { companyId, isActive: true, menuId: menuForStore.id },
                   orderBy: { position: 'asc' },
                   include: {
                     products: {

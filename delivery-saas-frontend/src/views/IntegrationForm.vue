@@ -95,10 +95,10 @@ onMounted(async () => { await loadStores(); await loadIntegration(); });
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label">Provider</label>
-            <select class="form-select" v-model="form.provider" :disabled="!!id">
+            <SelectInput  class="form-select"  v-model="form.provider"  :disabled="!!id">
               <option :value="null">-- Selecione um provider --</option>
               <option v-for="p in providers" :key="p.value" :value="p.value">{{ p.label }}</option>
-            </select>
+            </SelectInput>
           </div>
             <!-- show rest of form only when editing or after a provider is selected -->
             <template v-if="id || form.provider">
@@ -106,33 +106,33 @@ onMounted(async () => { await loadStores(); await loadIntegration(); });
               <template v-if="form.provider !== 'IFOOD'">
                 <div class="col-md-4">
                   <label class="form-label">Client ID</label>
-                  <input class="form-control" v-model="form.clientId" />
+                  <TextInput v-model="form.clientId" inputClass="form-control" />
                 </div>
                 <div class="col-md-4">
                   <label class="form-label">Client Secret</label>
-                  <input class="form-control" v-model="form.clientSecret" />
+                  <TextInput v-model="form.clientSecret" inputClass="form-control" />
                 </div>
                 <div class="col-md-4">
                   <label class="form-label">Merchant ID (opcional)</label>
-                  <input class="form-control" v-model="form.merchantId" />
+                  <TextInput v-model="form.merchantId" inputClass="form-control" />
                 </div>
               </template>
               <template v-if="form.provider !== 'IFOOD'">
                 <div class="col-md-4">
                   <label class="form-label">Vincular a Loja (obrigatório)</label>
-                  <select class="form-select" v-model="form.storeId">
+                  <SelectInput  class="form-select"  v-model="form.storeId" >
                     <option :value="null">-- Selecione uma loja --</option>
                     <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
-                  </select>
+                  </SelectInput>
                 </div>
               </template>
             
               <div class="col-md-2">
                 <label class="form-label">Ativo</label>
-                <select class="form-select" v-model="form.enabled">
+                <SelectInput  class="form-select"  v-model="form.enabled" >
                   <option :value="true">Sim</option>
                   <option :value="false">Não</option>
-                </select>
+                </SelectInput>
               </div>
             
               

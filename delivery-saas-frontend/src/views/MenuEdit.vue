@@ -5,26 +5,26 @@
       <form @submit.prevent="save">
         <div class="mb-3">
           <label class="form-label">Nome</label>
-          <input v-model="form.name" class="form-control" placeholder="Nome do cardápio" required maxlength="120" />
+          <TextInput v-model="form.name" placeholder="Nome do cardápio" maxlength="120" inputClass="form-control" required />
         </div>
 
         <div class="mb-3">
           <label class="form-label">Loja</label>
-          <select v-model="form.storeId" class="form-select" required>
+          <SelectInput   v-model="form.storeId"  class="form-select" required>
             <option :value="null">-- Selecione uma loja --</option>
             <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
-          </select>
+          </SelectInput>
         </div>
 
         <div class="mb-3">
           <label class="form-label">Slug público (opcional)</label>
-          <input v-model="form.slug" class="form-control" placeholder="ex: festival-de-verao" maxlength="80" />
+          <TextInput v-model="form.slug" placeholder="ex: festival-de-verao" maxlength="80" inputClass="form-control" />
           <div class="form-text">Se preenchido, o cardápio ficará acessível em /public/&lt;slug&gt;</div>
         </div>
 
         <div class="mb-3">
           <label class="form-label">Descrição (opcional)</label>
-          <input v-model="form.description" class="form-control" />
+          <TextInput v-model="form.description" inputClass="form-control" />
         </div>
 
         <div class="d-flex justify-content-between">

@@ -91,10 +91,10 @@ async function testMatch() {
       <div class="card-body">
         <form @submit.prevent="save" class="row g-2">
           <div class="col-md-4">
-            <input v-model="form.name" class="form-control" placeholder="Nome do bairro" required />
+            <TextInput v-model="form.name" placeholder="Nome do bairro" inputClass="form-control" required />
           </div>
           <div class="col-md-4">
-            <input v-model="form.aliases" class="form-control" placeholder="Apelidos (vírgula separado)" />
+            <TextInput v-model="form.aliases" placeholder="Apelidos (vírgula separado)" inputClass="form-control" />
           </div>
           <div class="col-md-2">
             <CurrencyInput v-model="form.deliveryFee" inputClass="form-control" placeholder="Taxa entrega" />

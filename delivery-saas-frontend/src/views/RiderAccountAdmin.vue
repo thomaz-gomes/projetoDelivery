@@ -184,12 +184,12 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
           </div>
           <div class="col-md-3">
             <label class="form-label small">Tipo</label>
-            <select v-model="filters.type" class="form-select">
+            <SelectInput   v-model="filters.type"  class="form-select">
               <option value="">Todos</option>
               <option value="DELIVERY_FEE">Delivery fee</option>
               <option value="DAILY_RATE">Daily rate</option>
               <option value="MANUAL_ADJUSTMENT">Manual adjustment</option>
-            </select>
+            </SelectInput>
           </div>
           <div class="col-md-3 d-flex gap-2">
             <button class="btn btn-primary" @click="fetchTransactions" :disabled="loadingTx || !datesAreValid">Buscar</button>
@@ -210,7 +210,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             <div class="d-none d-md-flex align-items-center gap-2">
               <button class="btn btn-sm btn-primary" @click="fetchBalance" :disabled="loading">Atualizar</button>
               <button class="btn btn-sm btn-outline-secondary" @click="exportCsv" :disabled="exporting || !datesAreValid">{{ exporting ? 'Exportando...' : 'Exportar CSV' }}</button>
-              <input v-model="phoneTo" type="text" placeholder="+5511999999999" class="form-control form-control-sm phone-input" style="max-width:160px;" />
+              <TextInput v-model="phoneTo" placeholder="+5511999999999" inputClass="form-control form-control-sm phone-input" />
               <button class="btn btn-sm btn-success" @click="sendPdf" :disabled="sendingPdf || !datesAreValid">{{ sendingPdf ? 'Enviando...' : 'Enviar PDF (WhatsApp)' }}</button>
             </div>
           </div>

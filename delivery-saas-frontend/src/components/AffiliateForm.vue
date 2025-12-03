@@ -3,61 +3,28 @@
     <form @submit.prevent="handleSubmit">
       <div class="form-group">
         <label for="name">Nome do Afiliado *</label>
-        <input 
-          id="name"
-          v-model="form.name" 
-          type="text" 
-          required
-          placeholder="Nome completo do afiliado"
-        />
+        <TextInput v-model="form.name" id="name" placeholder="Nome completo do afiliado" required />
       </div>
 
       <div class="form-group">
         <label for="email">E-mail</label>
-        <input 
-          id="email"
-          v-model="form.email" 
-          type="email" 
-          placeholder="email@exemplo.com"
-        />
+        <TextInput v-model="form.email" id="email" placeholder="email@exemplo.com" />
       </div>
 
       <div class="form-group">
         <label for="whatsapp">WhatsApp</label>
-        <input 
-          id="whatsapp"
-          v-model="form.whatsapp" 
-          type="tel" 
-          placeholder="(00) 0 0000-0000"
-          maxlength="16"
-          @input="formatPhone"
-        />
+        <TextInput v-model="form.whatsapp" id="whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" @input="formatPhone" />
       </div>
 
       <div class="form-group">
         <label for="password">Senha</label>
-        <input
-          id="password"
-          v-model="form.password"
-          type="password"
-          placeholder="Senha para login"
-          minlength="6"
-          autocomplete="new-password"
-          :required="!isEditing"
-        />
+        <TextInput v-model="form.password" id="password" placeholder="Senha para login" autocomplete="new-password" required />
         <small class="form-hint">{{ isEditing ? 'Preencha apenas para alterar a senha (opcional ao editar)' : 'Afiliado fará login com WhatsApp + senha (mínimo 6 caracteres)'}} </small>
       </div>
 
       <div class="form-group">
         <label for="couponCode">Código do Cupom *</label>
-        <input 
-          id="couponCode"
-          v-model="form.couponCode" 
-          type="text" 
-          required
-          placeholder="CUPOM10, AFILIADO123, etc."
-          @input="formatCouponCode"
-        />
+        <TextInput v-model="form.couponCode" id="couponCode" placeholder="CUPOM10, AFILIADO123, etc." required @input="formatCouponCode" />
         <small class="form-hint">
           Código único que os clientes usarão para identificar este afiliado
         </small>

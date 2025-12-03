@@ -81,7 +81,7 @@ function editCustomer(id){ router.push(`/customers/${id}/edit`) }
     <template #filters>
       <div class="filters row g-2">
         <div class="col-md-6">
-          <input class="form-control" v-model="q" placeholder="Buscar por nome, CPF, WhatsApp" @keyup.enter="search" />
+          <TextInput v-model="q" placeholder="Buscar por nome, CPF, WhatsApp" inputClass="form-control" />
         </div>
         <div class="col-md-2 d-flex align-items-center">
           <button class="btn btn-outline-secondary w-100" @click="resetFilters">Limpar</button>

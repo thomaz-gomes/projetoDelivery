@@ -106,14 +106,7 @@ function onWhatsappInput(e) {
           </div>
           <div class="mb-3" v-if="loginType === 'operator'">
             <label for="email" class="form-label">E-mail</label>
-            <input
-              id="email"
-              v-model="email"
-              type="email"
-              class="form-control"
-              placeholder="admin@example.com"
-              required
-            />
+            <TextInput v-model="email" id="email" placeholder="admin@example.com" inputClass="form-control" required />
           </div>
 
           <div class="mb-3" v-if="loginType === 'rider' || loginType === 'affiliate'">
@@ -131,14 +124,7 @@ function onWhatsappInput(e) {
 
           <div class="mb-3">
             <label for="password" class="form-label">Senha</label>
-            <input
-              id="password"
-              v-model="password"
-              type="password"
-              class="form-control"
-              placeholder="Digite sua senha"
-              required
-            />
+            <TextInput v-model="password" id="password" placeholder="Digite sua senha" inputClass="form-control" required />
           </div>
 
           <div v-if="error" class="alert alert-danger py-2 small">

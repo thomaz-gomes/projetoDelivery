@@ -14,21 +14,21 @@
 
           <div class="mb-3">
             <label class="form-label">Código</label>
-            <input class="form-control" v-model="form.code" required />
+            <TextInput v-model="form.code" required />
           </div>
 
           <div class="mb-3">
             <label class="form-label">Descrição</label>
-            <input class="form-control" v-model="form.description" />
+            <TextInput v-model="form.description" />
           </div>
 
           <div class="row g-3">
             <div class="col-md-4">
               <label class="form-label">Tipo</label>
-              <select class="form-select" v-model="form.isPercentage">
+              <SelectInput  class="form-select"  v-model="form.isPercentage" >
                 <option :value="true">Percentual</option>
                 <option :value="false">Valor absoluto</option>
-              </select>
+              </SelectInput>
             </div>
 
             <div class="col-md-8">
@@ -40,18 +40,18 @@
           <div class="row g-3 mt-3">
             <div class="col-md-8">
               <label class="form-label">Afiliado (opcional)</label>
-              <select class="form-select" v-model="form.affiliateId">
+              <SelectInput  class="form-select"  v-model="form.affiliateId" >
                 <option :value="null">— Nenhum —</option>
                 <option v-for="a in affiliates" :key="a.id" :value="a.id">{{ a.name }}</option>
-              </select>
+              </SelectInput>
             </div>
 
             <div class="col-md-4">
               <label class="form-label">Status</label>
-              <select class="form-select" v-model="form.isActive">
+              <SelectInput  class="form-select"  v-model="form.isActive" >
                 <option :value="true">Ativo</option>
                 <option :value="false">Inativo</option>
-              </select>
+              </SelectInput>
             </div>
           </div>
 
@@ -104,10 +104,12 @@
 <script>
 import { ref, onMounted, watch } from 'vue'
 import api from '@/api.js'
+import TextInput from '../components/form/input/TextInput.vue'
 import { useRoute, useRouter } from 'vue-router'
 
 export default {
   name: 'CouponForm',
+  components: { TextInput },
   setup() {
     const route = useRoute()
     const router = useRouter()

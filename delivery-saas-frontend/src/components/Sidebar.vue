@@ -11,6 +11,7 @@ const auth = useAuthStore();
 // Menu lateral (use Bootstrap Icons classes in `icon`)
 const nav = [
   { name: 'Pedidos', to: '/orders', icon: 'bi bi-box-seam' },
+  { name: 'Histórico de Vendas', to: '/sales', icon: 'bi bi-clock-history' },
   { name: 'Clientes', to: '/customers', icon: 'bi bi-person' },
   { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', children: [
     { name: 'Lista', to: '/riders', icon: 'bi bi-people' },

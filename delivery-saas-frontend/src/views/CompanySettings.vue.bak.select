@@ -1,0 +1,604 @@
+<template>
+  <div class="container mt-3">
+    <h2>Configurações da Loja</h2>
+
+    <div class="card mt-3">
+      <div class="card-body">
+        <div v-if="loading" class="text-center">Carregando...</div>
+
+        <div v-else>
+          <ul class="nav nav-tabs mb-3">
+            <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='geral'}" href="#" @click.prevent="setActiveTab('geral')">Geral</a></li>
+            <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='horario'}" href="#" @click.prevent="setActiveTab('horario')">Horário de funcionamento</a></li>
+            <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='fiscal'}" href="#" @click.prevent="setActiveTab('fiscal')">Fiscal</a></li>
+          </ul>
+
+          <div v-show="activeTab==='geral'">
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="alwaysOpen" v-model="form.alwaysOpen">
+              <label class="form-check-label" for="alwaysOpen">Sempre disponível (24h)</label>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Timezone (IANA)</label>
+              <TextInput v-model="form.timezone" placeholder="Ex: America/Sao_Paulo" inputClass="form-control" />
+              <div class="form-text">Timezone padrão: <strong>America/Sao_Paulo</strong> (Horário de Brasília). Use uma string IANA válida, ex: <code>America/Sao_Paulo</code>. Deixe em branco para usar o timezone do servidor.</div>
+            </div>
+
+            <hr />
+            <h5>Informações da loja</h5>
+            <div class="mb-2"><label class="form-label">Nome do restaurante</label><TextInput v-model="form.name" inputClass="form-control" /></div>
+            <div class="mb-2"><label class="form-label">Endereço</label><TextInput v-model="form.address" inputClass="form-control" /></div>
+            <div class="mb-2"><label class="form-label">Telefone</label><TextInput v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
+            <div class="mb-2"><label class="form-label">WhatsApp</label><TextInput v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Banner do topo</label>
+                <div v-if="form.bannerUrl" class="mb-2"><img :src="assetUrl(form.bannerUrl)" style="width:100%;height:120px;object-fit:cover;border:1px solid #eee;border-radius:6px" /></div>
+                <input type="file" @change="onCompanyFileChange('banner', $event)" accept="image/*" />
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Logotipo (450x450)</label>
+                <div v-if="form.logoUrl" class="mb-2"><img :src="assetUrl(form.logoUrl)" style="width:120px;height:120px;object-fit:cover;border:1px solid #eee;border-radius:8px" /></div>
+                <input type="file" @change="onCompanyFileChange('logo', $event)" accept="image/*" />
+              </div>
+            </div>
+          </div>
+
+          <div v-show="activeTab==='horario'">
+            <!-- Weekly schedule editor (hidden when alwaysOpen) -->
+            <div class="card mt-3" v-if="!form.alwaysOpen">
+              <div class="card-body">
+                <h5>Horário por dia da semana</h5>
+                <div class="form-text mb-2">Ative o dia e defina um intervalo (um intervalo por dia). Horário padrão do sistema: <strong>America/Sao_Paulo</strong>.</div>
+                <div class="table-responsive">
+                  <table class="table table-sm">
+                    <thead>
+                      <tr>
+                        <th>Dia</th>
+                        <th style="width:80px">Ativo</th>
+                        <th>Horário de</th>
+                        <th>até</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="day in weekDays" :key="day.value">
+                        <td>{{ day.label }}</td>
+                        <td>
+                          <input type="checkbox" v-model="form.weeklySchedule[day.value].enabled" />
+                        </td>
+                        <td>
+                          <input type="time" class="form-control form-control-sm" v-model="form.weeklySchedule[day.value].from" :disabled="!form.weeklySchedule[day.value].enabled" :class="{'is-invalid': invalidDays.includes(day.value)}" />
+                        </td>
+                        <td>
+                          <input type="time" class="form-control form-control-sm" v-model="form.weeklySchedule[day.value].to" :disabled="!form.weeklySchedule[day.value].enabled" :class="{'is-invalid': invalidDays.includes(day.value)}" />
+                          <div v-if="invalidMessages[day.value]" class="invalid-feedback d-block">{{ invalidMessages[day.value] }}</div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-show="activeTab==='fiscal'">
+            <h5>Configurações fiscais (ambiente de homologação)</h5>
+            <div class="mb-2"><label class="form-label">CNPJ</label><TextInput v-model="form.cnpj" placeholder="Apenas dígitos" inputClass="form-control" /></div>
+            <div class="mb-2"><label class="form-label">Inscrição Estadual (IE)</label><TextInput v-model="form.ie" inputClass="form-control" /></div>
+            <div class="mb-2"><label class="form-label">Série NFC-e</label><TextInput v-model="form.nfeSerie" inputClass="form-control" /></div>
+            <div class="mb-2"><label class="form-label">Ambiente</label>
+              <select class="form-select" v-model="form.nfeEnvironment"><option value="2">Homologação (2)</option><option value="1">Produção (1)</option></select>
+            </div>
+            <div class="mb-2"><label class="form-label">CSC (Código de Segurança do Contribuinte)</label><TextInput v-model="form.csc" inputClass="form-control" /></div>
+            <div class="mb-2"><label class="form-label">CSC ID</label><TextInput v-model="form.cscId" inputClass="form-control" /></div>
+            <div class="mb-2">
+              <label class="form-label">Certificado PFX (.pfx / .p12)</label>
+              <div v-if="form.certExists || form.certFilename" class="mb-2">
+                <small class="text-muted">Arquivo selecionado: <strong>{{ form.certFilename || 'arquivo carregado anteriormente' }}</strong></small>
+                <div><small class="text-success" v-if="form.certExists">Certificado presente no servidor</small></div>
+              </div>
+              <input type="file" @change="onCertFileChange" accept=".pfx,.p12" />
+              <div class="mt-2">
+                <button v-if="(form.certExists || form.certFilename)" class="btn btn-sm btn-outline-danger me-2" type="button" @click.prevent="removeCert">Remover certificado</button>
+                <small class="text-muted">Envie o arquivo .pfx e informe a senha para que o backend grave o certificado de forma segura.</small>
+              </div>
+            </div>
+            <div class="mb-2"><label class="form-label">Senha do certificado</label><TextInput v-model="form.certPassword" inputClass="form-control" /></div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" @click="save" :disabled="saving">Salvar</button>
+            <button class="btn btn-outline-secondary" @click="reload" :disabled="saving">Recarregar</button>
+          </div>
+
+          <div v-if="message" class="mt-3 alert" :class="messageClass">{{ message }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Cropper modal (shared with product form) -->
+  <div v-if="showCropper" class="cropper-modal" role="dialog" aria-modal="true">
+  <div class="cropper-modal-content modal-content-padding">
+      <div class="cropper-canvas-wrapper">
+        <div ref="cropContainer" class="crop-image-container">
+          <img ref="cropperImage" :src="currentObjectUrl" alt="Preview" class="crop-image" @load="onImageLoaded" />
+          <div ref="cropBox" class="crop-box" :style="cropBoxStyle" @pointerdown.stop.prevent="startDrag"></div>
+        </div>
+      </div>
+      <div class="mt-2 d-flex align-items-center" style="gap:8px;">
+        <label class="small text-muted mb-0">Tamanho</label>
+        <input type="range" min="50" max="100" v-model.number="cropSizePct" @input="onSizeChange" />
+      </div>
+      <div class="cropper-actions mt-3 d-flex justify-content-end" style="gap:8px;">
+        <button type="button" class="btn btn-secondary" @click="cancelCrop">Cancelar</button>
+        <button type="button" class="btn btn-primary" @click="confirmCrop">Usar imagem</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
+import api from '../api'
+import { bindLoading } from '../state/globalLoading.js'
+import { assetUrl } from '../utils/assetUrl.js'
+import { applyPhoneMask } from '../utils/phoneMask'
+
+export default {
+  name: 'CompanySettings',
+  setup() {
+  const loading = ref(true)
+  bindLoading(loading)
+    const saving = ref(false)
+    const message = ref('')
+  const messageClass = ref('')
+
+  // default timezone should be Brasilia time if not set
+  const DEFAULT_TZ = 'America/Sao_Paulo'
+  // initialize weeklySchedule with 7 days (0=Sunday..6=Saturday)
+  const defaultWeek = Array.from({ length: 7 }).map((_, i) => ({ day: i, enabled: false, from: '', to: '' }))
+  const form = ref({ alwaysOpen: true, timezone: DEFAULT_TZ, weeklySchedule: defaultWeek, name: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null,
+    // fiscal
+    cnpj: '', ie: '', nfeSerie: '1', nfeEnvironment: '2', csc: '', cscId: '', certBase64: null, certFilename: null, certPassword: '', certExists: false
+  })
+
+  const activeTab = ref('geral')
+
+  const weekDays = [
+    { value: 0, label: 'Domingo' },
+    { value: 1, label: 'Segunda-feira' },
+    { value: 2, label: 'Terça-feira' },
+    { value: 3, label: 'Quarta-feira' },
+    { value: 4, label: 'Quinta-feira' },
+    { value: 5, label: 'Sexta-feira' },
+    { value: 6, label: 'Sábado' }
+  ]
+  const invalidDays = ref([])
+  const invalidMessages = ref({})
+  const certRemoveRequested = ref(false)
+
+    function handlePhoneInput(e) {
+      form.value.phone = applyPhoneMask(e.target.value)
+    }
+
+    function handleWhatsAppInput(e) {
+      form.value.whatsapp = applyPhoneMask(e.target.value)
+    }
+
+    async function load() {
+      loading.value = true
+      try {
+        const res = await api.get('/settings/company')
+        const data = res.data || {}
+          form.value.alwaysOpen = !!data.alwaysOpen
+          // use returned timezone or default to Brasilia
+          form.value.timezone = data.timezone || DEFAULT_TZ
+          form.value.name = data.name || ''
+          form.value.address = data.address || ''
+          form.value.phone = data.phone || ''
+          form.value.whatsapp = data.whatsapp || ''
+          form.value.bannerUrl = data.banner || ''
+          form.value.logoUrl = data.logo || ''
+          // fiscal fields from settings file
+          form.value.cnpj = data.cnpj || data.CNPJ || ''
+          form.value.ie = data.ie || data.IE || ''
+          form.value.nfeSerie = data.nfeSerie || ''
+          // accept stored numeric (1/2) or textual values; default to homologation (2)
+          form.value.nfeEnvironment = data.nfeEnvironment || '2'
+          form.value.csc = data.csc || ''
+          form.value.cscId = data.cscId || ''
+          // we do not load certBase64 into UI for security; only show if file exists marker
+          form.value.certFilename = data.certFilename || null
+          form.value.certExists = !!data.certExists
+        // load weekly schedule or initialize empty week
+        if (data.weeklySchedule && Array.isArray(data.weeklySchedule)) {
+          // ensure indexed by day 0..6
+          const wk = Array.from({ length: 7 }).map((_, i) => ({ day: i, enabled: false, from: '', to: '' }))
+          for (const d of data.weeklySchedule) {
+            const idx = Number(d?.day)
+            if (!Number.isNaN(idx) && idx >= 0 && idx <= 6) {
+              wk[idx] = { day: idx, enabled: !!d.enabled, from: d.from || '', to: d.to || '' }
+            }
+          }
+          form.value.weeklySchedule = wk
+        } else {
+          form.value.weeklySchedule = Array.from({ length: 7 }).map((_, i) => ({ day: i, enabled: false, from: '', to: '' }))
+        }
+      } catch (err) {
+        // More forgiving: show a helpful message but keep the form available so user can still edit/save
+        const status = err?.response?.status
+        const srvMsg = err?.response?.data?.message || err?.response?.data || err.message || String(err)
+        if (status === 401) {
+          message.value = 'Não autorizado: faça login como ADMIN para editar as configurações.'
+          messageClass.value = 'alert-warning'
+        } else if (status === 404) {
+          message.value = 'Configurações não encontradas (404). Você pode preencher os campos e salvar.'
+          messageClass.value = 'alert-warning'
+        } else {
+          message.value = 'Erro ao carregar dados: ' + srvMsg
+          messageClass.value = 'alert-danger'
+        }
+        console.warn('CompanySettings.load() failed', { status, body: err?.response?.data })
+      } finally {
+        loading.value = false
+      }
+    }
+
+    async function save() {
+      // client-side validation before submitting
+      invalidDays.value = []
+      if (!form.value.alwaysOpen) {
+        const errors = []
+        const invalid = []
+        const isValidTime = (s) => /^\d{2}:\d{2}$/.test(s) && (() => {
+          const [hh, mm] = s.split(':').map(Number)
+          return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59
+        })()
+        for (const d of form.value.weeklySchedule) {
+          if (d.enabled) {
+            if (!d.from || !d.to) {
+              errors.push(`${weekDays[d.day].label}: horário incompleto`)
+              invalid.push(d.day)
+              continue
+            }
+            if (!isValidTime(d.from) || !isValidTime(d.to)) {
+              errors.push(`${weekDays[d.day].label}: formato de horário inválido`)
+              invalid.push(d.day)
+              continue
+            }
+            if (d.from === d.to) {
+              errors.push(`${weekDays[d.day].label}: horário de início igual ao de fim`)
+              invalid.push(d.day)
+              continue
+            }
+          }
+        }
+        if (errors.length) {
+          invalidDays.value = invalid
+          invalidMessages.value = invalid.reduce((acc, d) => ({ ...acc, [d]: '' }), {})
+          message.value = 'Erros no agendamento: ' + errors.join('; ')
+          messageClass.value = 'alert-danger'
+          saving.value = false
+          return
+        }
+      }
+      saving.value = true
+      message.value = ''
+      try {
+        const payload = {
+          alwaysOpen: !!form.value.alwaysOpen,
+          openFrom: null,
+          openTo: null,
+          timezone: form.value.timezone || null,
+          weeklySchedule: form.value.alwaysOpen ? null : form.value.weeklySchedule,
+          name: form.value.name || undefined,
+          address: form.value.address || undefined,
+          phone: form.value.phone || undefined,
+          whatsapp: form.value.whatsapp || undefined
+        }
+        // include base64 images if user selected new files
+        if (form.value.bannerBase64) payload.bannerBase64 = form.value.bannerBase64
+        if (form.value.logoBase64) payload.logoBase64 = form.value.logoBase64
+        // fiscal fields
+        if (form.value.cnpj) payload.cnpj = form.value.cnpj
+        if (form.value.ie) payload.ie = form.value.ie
+        if (form.value.nfeSerie) payload.nfeSerie = form.value.nfeSerie
+        if (form.value.nfeEnvironment) payload.nfeEnvironment = form.value.nfeEnvironment
+        if (form.value.csc) payload.csc = form.value.csc
+        if (form.value.cscId) payload.cscId = form.value.cscId
+        if (form.value.certPassword) payload.certPassword = form.value.certPassword
+        // include cert base64 if user uploaded a new certificate
+  if (form.value.certBase64) payload.certBase64 = form.value.certBase64
+  if (certRemoveRequested.value) payload.certRemove = true
+        const resp = await api.patch('/settings/company', payload)
+        // reflect any returned merged settings
+        const r = resp.data || {}
+        form.value.bannerUrl = r.banner || form.value.bannerUrl
+        form.value.logoUrl = r.logo || form.value.logoUrl
+        form.value.name = r.name || form.value.name
+  // refresh form from server to reflect persisted values
+  await load()
+  certRemoveRequested.value = false
+  // clear server-side validation markers
+  invalidDays.value = []
+  invalidMessages.value = {}
+  message.value = 'Configurações salvas com sucesso.'
+  messageClass.value = 'alert-success'
+      } catch (err) {
+        // Map server-side validation errors (if any) into UI
+        const srv = err?.response?.data
+        if (srv && Array.isArray(srv.errors)) {
+          const msgs = srv.errors
+          const invalid = []
+          const map = {}
+          for (const line of msgs) {
+            // expected format: 'day N: message' or 'day N: ...'
+            const m = String(line).match(/day\s*(\d+)\s*:\s*(.*)/i)
+            if (m) {
+              const d = Number(m[1])
+              invalid.push(d)
+              map[d] = m[2]
+            }
+          }
+          if (invalid.length) {
+            invalidDays.value = invalid
+            invalidMessages.value = map
+            message.value = srv.message || 'Erro ao salvar: validação inválida'
+            messageClass.value = 'alert-danger'
+            saving.value = false
+            return
+          }
+        }
+
+        message.value = 'Erro ao salvar: ' + (err?.response?.data?.message || err.message || err)
+        messageClass.value = 'alert-danger'
+      } finally {
+        saving.value = false
+      }
+    }
+
+    function reload() { load() }
+
+    onMounted(() => {
+      try {
+        const saved = localStorage.getItem('companySettingsActiveTab')
+        if (saved) activeTab.value = saved
+      } catch (e) {
+        // ignore localStorage errors
+      }
+      load()
+    })
+
+    // --- Image cropper / upload helpers (reused from ProductForm) ---
+  const fileInput = ref(null)
+  const showCropper = ref(false)
+  const cropperImage = ref(null)
+  const cropContainer = ref(null)
+  const cropBox = ref(null)
+  const currentObjectUrl = ref(null)
+    const cropSizePct = ref(80)
+    const cropPos = ref({ x: 0, y: 0 })
+    let dragging = false
+    let dragStart = null
+    const isUploading = ref(false)
+  const pendingField = ref(null) // 'banner' | 'logo'
+
+    function processFile(file) {
+      if (!file) return
+      const objectUrl = URL.createObjectURL(file)
+  currentObjectUrl.value = objectUrl
+      showCropper.value = true
+      nextTick(() => {
+        cropSizePct.value = 80
+        cropPos.value = { x: 0, y: 0 }
+      })
+    }
+
+    function onCompanyFileChange(field, e) {
+      const f = e.target.files && e.target.files[0]
+      if (!f) return
+      pendingField.value = field
+      processFile(f)
+      // reset input so same file may be selected again
+      try { e.target.value = '' } catch (e) {}
+    }
+
+    function onCertFileChange(e) {
+      const f = e.target.files && e.target.files[0]
+      if (!f) return
+      // read as base64
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result
+        if (!result) return
+        // result is ArrayBuffer or data URL depending on readAs
+        // read as data URL to keep mime and base64
+        // but here we used readAsDataURL
+      }
+      reader.readAsDataURL(f)
+      reader.onloadend = () => {
+        const r = reader.result
+        if (!r) return
+        // store base64 (data:*;base64,...) and filename
+        form.value.certBase64 = String(r)
+        form.value.certFilename = f.name
+        // mark as new upload (not yet persisted)
+        form.value.certExists = false
+      }
+      try { e.target.value = '' } catch (e) {}
+    }
+
+    function removeCert() {
+      // clear client-side selection and mark for removal on save
+      form.value.certBase64 = null
+      form.value.certFilename = null
+      form.value.certPassword = ''
+      form.value.certExists = false
+      certRemoveRequested.value = true
+      // notify user to save to persist change
+      message.value = 'Certificado removido localmente. Clique em Salvar para persistir a remoção.'
+      messageClass.value = 'alert-warning'
+    }
+
+    function onImageLoaded(e) {
+      const img = cropperImage.value
+      if (!img) return
+      const imgRect = img.getBoundingClientRect()
+      const containerRect = cropContainer.value ? cropContainer.value.getBoundingClientRect() : imgRect
+      imgDisplay.w = imgRect.width
+      imgDisplay.h = imgRect.height
+      imgDisplay.leftInContainer = imgRect.left - containerRect.left
+      imgDisplay.topInContainer = imgRect.top - containerRect.top
+      imgDisplay.naturalW = img.naturalWidth || img.width
+      imgDisplay.naturalH = img.naturalHeight || img.height
+      cropPos.value = { x: 0, y: 0 }
+    }
+
+    const imgDisplay = { w: 0, h: 0, leftInContainer: 0, topInContainer: 0, naturalW: 0, naturalH: 0 }
+
+    const cropBoxStyle = computed(() => {
+      const dw = imgDisplay.w || 0
+      const dh = imgDisplay.h || 0
+      const aspect = pendingField.value === 'banner' ? (1200 / 400) : 1
+      // compute displayed crop height respecting aspect ratio
+      const base = Math.min(dh, dw / aspect)
+      const hDisplay = base * (cropSizePct.value / 100)
+      const wDisplay = hDisplay * aspect
+      const offsetX = imgDisplay.leftInContainer || 0
+      const offsetY = imgDisplay.topInContainer || 0
+      const left = offsetX + (dw - wDisplay) / 2 + (cropPos.value.x || 0)
+      const top = offsetY + (dh - hDisplay) / 2 + (cropPos.value.y || 0)
+      return { left: `${left}px`, top: `${top}px`, width: `${wDisplay}px`, height: `${hDisplay}px` }
+    })
+
+    function startDrag(e) {
+      dragging = true
+      dragStart = { x: e.clientX, y: e.clientY, startPos: { ...cropPos.value } }
+      window.addEventListener('pointermove', onPointerMove)
+      window.addEventListener('pointerup', endDrag)
+    }
+
+    function onPointerMove(e) {
+      if (!dragging || !dragStart) return
+      const dx = e.clientX - dragStart.x
+      const dy = e.clientY - dragStart.y
+      const dw = imgDisplay.w || 0
+      const dh = imgDisplay.h || 0
+      const aspect = pendingField.value === 'banner' ? (1200 / 400) : 1
+      const base = Math.min(dh, dw / aspect)
+      const hDisplay = base * (cropSizePct.value / 100)
+      const wDisplay = hDisplay * aspect
+      const limitX = Math.max(0, (dw - wDisplay) / 2)
+      const limitY = Math.max(0, (dh - hDisplay) / 2)
+      let nx = dragStart.startPos.x + dx
+      let ny = dragStart.startPos.y + dy
+      nx = Math.max(-limitX, Math.min(limitX, nx))
+      ny = Math.max(-limitY, Math.min(limitY, ny))
+      cropPos.value = { x: nx, y: ny }
+    }
+
+    function endDrag() {
+      dragging = false
+      dragStart = null
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', endDrag)
+    }
+
+    function onSizeChange() {
+      const dw = imgDisplay.w || 0
+      const dh = imgDisplay.h || 0
+      const aspect = pendingField.value === 'banner' ? (1200 / 400) : 1
+      const base = Math.min(dh, dw / aspect)
+      const hDisplay = base * (cropSizePct.value / 100)
+      const wDisplay = hDisplay * aspect
+      const limitX = Math.max(0, (dw - wDisplay) / 2)
+      const limitY = Math.max(0, (dh - hDisplay) / 2)
+      cropPos.value.x = Math.max(-limitX, Math.min(limitX, cropPos.value.x || 0))
+      cropPos.value.y = Math.max(-limitY, Math.min(limitY, cropPos.value.y || 0))
+    }
+
+    async function applyCrop() {
+      try {
+        const img = cropperImage.value
+        if (!img) return null
+  const { w: dw, h: dh, leftInContainer: dl, topInContainer: dt, naturalW, naturalH } = imgDisplay
+  const aspect = pendingField.value === 'banner' ? (1200 / 400) : 1
+  // compute displayed crop size
+  const base = Math.min(dh, dw / aspect)
+  const hDisplay = base * (cropSizePct.value / 100)
+  const wDisplay = hDisplay * aspect
+  const cx = (dl || 0) + (dw - wDisplay) / 2 + (cropPos.value.x || 0)
+  const cy = (dt || 0) + (dh - hDisplay) / 2 + (cropPos.value.y || 0)
+  const sx = Math.max(0, Math.round((cx - (dl || 0)) * (naturalW / dw)))
+  const sy = Math.max(0, Math.round((cy - (dt || 0)) * (naturalH / dh)))
+  const sWidth = Math.max(1, Math.round(wDisplay * (naturalW / dw)))
+  const sHeight = Math.max(1, Math.round(hDisplay * (naturalH / dh)))
+  const canvas = document.createElement('canvas')
+  // target size depends on field
+  const targetW = pendingField.value === 'logo' ? 450 : 1200
+  const targetH = pendingField.value === 'logo' ? 450 : 400
+  canvas.width = targetW; canvas.height = targetH
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,targetW,targetH)
+  ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, targetW, targetH)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+  return dataUrl
+      } catch (e) { console.error('Failed to crop', e); return null }
+    }
+
+    async function confirmCrop() {
+      try {
+        isUploading.value = true
+        const dataUrl = await applyCrop()
+        if (dataUrl) {
+          if (pendingField.value === 'banner') {
+            form.value.bannerBase64 = dataUrl
+            form.value.bannerUrl = dataUrl
+          } else if (pendingField.value === 'logo') {
+            form.value.logoBase64 = dataUrl
+            form.value.logoUrl = dataUrl
+          }
+        }
+      } catch (e) { console.error(e); message.value = 'Falha ao processar imagem' }
+      finally {
+        isUploading.value = false
+        closeCropper()
+      }
+    }
+
+    function cancelCrop() { closeCropper() }
+
+    function closeCropper() {
+      showCropper.value = false
+      pendingField.value = null
+      if (currentObjectUrl.value) { try { URL.revokeObjectURL(currentObjectUrl.value) } catch (e) {} currentObjectUrl.value = null }
+    }
+
+    function setActiveTab(tabKey) {
+      activeTab.value = tabKey
+      try { localStorage.setItem('companySettingsActiveTab', tabKey) } catch (e) {}
+    }
+
+  onBeforeUnmount(()=>{ if (currentObjectUrl.value){ try{ URL.revokeObjectURL(currentObjectUrl.value) }catch(e){} currentObjectUrl.value = null } })
+
+    return { loading, saving, form, message, messageClass, save, reload, weekDays, invalidDays, invalidMessages,
+      showCropper, cropperImage, cropContainer, cropBox, cropBoxStyle, onImageLoaded, startDrag, cropSizePct, onSizeChange, cancelCrop, confirmCrop, currentObjectUrl, removeCert,
+      setActiveTab, activeTab, handlePhoneInput, handleWhatsAppInput
+    }
+  }
+}
+</script>
+
+<style scoped>
+.form-text code{background:#f1f1f1;padding:2px 6px;border-radius:4px}
+.cropper-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:2000 }
+.cropper-modal-content { background: #fff; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
+.cropper-canvas-wrapper { width:100%; height: auto; display:flex; align-items:center; justify-content:center }
+.crop-image-container { position: relative; width:100%; max-height:64vh; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f5f5f5 }
+.crop-image { max-width:100%; max-height:64vh; user-select:none; -webkit-user-drag:none }
+.crop-box { position:absolute; border:2px dashed #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.2); background: rgba(255,255,255,0.02); touch-action: none }
+.crop-actions { display:flex; gap:8px }
+.cropper-actions .btn { min-width:100px }
+</style>

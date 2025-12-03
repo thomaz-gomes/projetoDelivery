@@ -21,14 +21,14 @@
           <div v-else-if="customerNotFound" class="alert alert-warning py-2 mb-3">Cliente não encontrado.</div>
           
           <label class="form-label small fw-semibold">Tipo do pedido</label>
-          <select v-model="orderType" class="form-select mb-3">
+          <SelectInput   v-model="orderType"  class="form-select mb-3">
             <option value="BALCAO">Balcão (retirada)</option>
             <option value="DELIVERY">Entrega</option>
-          </select>
+          </SelectInput>
 
           <div v-if="orderType === 'DELIVERY' || !foundCustomer">
             <label class="form-label small">Nome do cliente {{ orderType === 'DELIVERY' ? '(obrigatório)' : '(opcional)' }}</label>
-            <input v-model="newCustomerName" class="form-control mb-3" placeholder="Nome completo" />
+            <TextInput v-model="newCustomerName" placeholder="Nome completo" inputClass="form-control mb-3" />
           </div>
 
           <button class="btn btn-success" @click="confirmCustomer" :disabled="!canConfirmCustomer">Continuar</button>
@@ -68,28 +68,28 @@
           <div class="row g-2">
             <div class="col-8">
               <label class="form-label small">Rua</label>
-              <input v-model="addr.street" class="form-control" />
+              <TextInput v-model="addr.street" inputClass="form-control" />
             </div>
             <div class="col-4">
               <label class="form-label small">Número</label>
-              <input v-model="addr.number" class="form-control" />
+              <TextInput v-model="addr.number" inputClass="form-control" />
             </div>
             <div class="col-6">
               <label class="form-label small">Bairro</label>
-              <select v-model="addr.neighborhood" class="form-select">
+              <SelectInput   v-model="addr.neighborhood"  class="form-select">
                 <option value="">Selecione o bairro</option>
                 <option v-for="n in neighborhoods" :key="n.id" :value="n.name">
                   {{ n.name }} - {{ formatCurrency(n.deliveryFee) }}
                 </option>
-              </select>
+              </SelectInput>
             </div>
             <div class="col-6">
               <label class="form-label small">Cidade</label>
-              <input v-model="addr.city" class="form-control" />
+              <TextInput v-model="addr.city" inputClass="form-control" />
             </div>
             <div class="col-12">
               <label class="form-label small">Complemento</label>
-              <input v-model="addr.complement" class="form-control" />
+              <TextInput v-model="addr.complement" inputClass="form-control" />
             </div>
           </div>
               <div class="mt-2 small">
@@ -113,9 +113,9 @@
           <label class="form-label small">Loja atribuída</label>
           <div v-if="storesLoading" class="small text-muted">Carregando lojas...</div>
           <div v-else>
-            <select v-model="selectedStoreId" class="form-select">
+            <SelectInput   v-model="selectedStoreId"  class="form-select">
               <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
-            </select>
+            </SelectInput>
             <div v-if="stores.length===0" class="small text-muted mt-1">Nenhuma loja disponível para atribuir.</div>
           </div>
         </div>
@@ -142,7 +142,7 @@
           <div class="mt-2">
               <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
             <div v-else class="d-flex gap-2 align-items-center">
-              <input v-model="couponCode" class="form-control form-control-sm" placeholder="Código do cupom (opcional)" />
+              <TextInput v-model="couponCode" placeholder="Código do cupom (opcional)" inputClass="form-control form-control-sm" />
               <button class="btn btn-sm btn-primary" @click="applyCoupon" :disabled="couponLoading">Aplicar</button>
             </div>
             <div v-if="couponError" class="small text-danger mt-1">{{ couponError }}</div>
@@ -266,9 +266,9 @@
         <h6 class="fw-semibold mb-3">Pagamento</h6>
         <div class="mb-2">
           <label class="form-label small">Forma</label>
-          <select v-model="paymentMethodCode" class="form-select">
+          <SelectInput   v-model="paymentMethodCode"  class="form-select">
             <option v-for="pm in paymentMethods" :key="pm.id" :value="pm.code || pm.name">{{ pm.name }}</option>
-          </select>
+          </SelectInput>
         </div>
         <div v-if="isCashPayment" class="mb-2">
           <label class="form-label small">Troco para (opcional)</label>

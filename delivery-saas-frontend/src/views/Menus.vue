@@ -11,7 +11,7 @@
       <template #filters>
         <div class="row g-2">
           <div class="col-md-6">
-            <input class="form-control" v-model="search" placeholder="Buscar menu por nome" @keyup.enter="load" />
+            <TextInput v-model="search" placeholder="Buscar menu por nome" inputClass="form-control" />
           </div>
           <div class="col-md-6 d-flex justify-content-end align-items-start">
             <button class="btn btn-outline-secondary" @click="resetFilters">Limpar</button>
