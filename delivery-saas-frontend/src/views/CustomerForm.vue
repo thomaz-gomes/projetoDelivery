@@ -100,19 +100,19 @@ function handlePhoneInput(e) {
         <form @submit.prevent="save" class="row g-3">
           <div class="col-md-6">
             <label class="form-label">Nome completo</label>
-            <input v-model="customer.fullName" type="text" class="form-control" required />
+            <TextInput v-model="customer.fullName" inputClass="form-control" required />
           </div>
           <div class="col-md-3">
             <label class="form-label">CPF</label>
-            <input v-model="customer.cpf" type="text" class="form-control" placeholder="000.000.000-00" />
+            <TextInput v-model="customer.cpf" placeholder="000.000.000-00" inputClass="form-control" />
           </div>
           <div class="col-md-3">
             <label class="form-label">WhatsApp</label>
-            <input v-model="customer.whatsapp" @input="handleWhatsAppInput" type="tel" class="form-control" placeholder="(00) 0 0000-0000" maxlength="16" />
+            <TextInput v-model="customer.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Telefone</label>
-            <input v-model="customer.phone" @input="handlePhoneInput" type="tel" class="form-control" placeholder="(00) 0000-0000" maxlength="15" />
+            <TextInput v-model="customer.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" />
           </div>
 
           <div class="col-12 mt-3">
@@ -127,24 +127,24 @@ function handlePhoneInput(e) {
             <div class="row g-2">
               <div class="col-md-5">
                 <label class="form-label">Rua</label>
-                <input v-model="addr.street" type="text" class="form-control" />
+                <TextInput v-model="addr.street" inputClass="form-control" />
               </div>
               <div class="col-md-2">
                 <label class="form-label">Número</label>
-                <input v-model="addr.number" type="text" class="form-control" />
+                <TextInput v-model="addr.number" inputClass="form-control" />
               </div>
               <div class="col-md-3">
                 <label class="form-label">Cidade</label>
-                <input v-model="addr.city" type="text" class="form-control" />
+                <TextInput v-model="addr.city" inputClass="form-control" />
               </div>
               <div class="col-md-2">
                 <label class="form-label">UF</label>
-                <input v-model="addr.state" type="text" maxlength="2" class="form-control text-uppercase" />
+                <TextInput v-model="addr.state" maxlength="2" inputClass="form-control text-uppercase" />
               </div>
             </div>
 
             <div class="mt-2 d-flex justify-content-between align-items-center">
-              <div class="text-muted small">CEP: <input v-model="addr.zip" type="text" class="form-control form-control-sm d-inline w-auto" /></div>
+              <div class="text-muted small">CEP: <TextInput v-model="addr.zip" inputClass="form-control form-control-sm d-inline w-auto" /></div>
               <button type="button" class="btn btn-sm btn-outline-danger" @click="removeAddress(i)">Remover</button>
             </div>
           </div>

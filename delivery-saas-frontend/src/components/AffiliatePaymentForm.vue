@@ -17,13 +17,13 @@
 
       <div class="form-group">
         <label for="method">Método</label>
-        <select id="method" class="form-select" v-model="form.method">
+        <SelectInput  id="method" class="form-select"  v-model="form.method" >
           <option value="">Selecione...</option>
           <option value="PIX">PIX</option>
           <option value="TED">TED</option>
           <option value="Dinheiro">Dinheiro</option>
           <option value="Crédito em conta">Crédito em conta</option>
-        </select>
+        </SelectInput>
       </div>
 
       <div class="form-group">

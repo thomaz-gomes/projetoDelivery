@@ -1,0 +1,149 @@
+<script setup>
+import { ref, onMounted } from 'vue';
+import IFoodIntegration from './IFoodIntegration.vue';
+import { useRoute, useRouter } from 'vue-router';
+import api from '../api';
+
+const route = useRoute();
+const router = useRouter();
+const id = route.params.id || null;
+
+const loading = ref(false);
+const saving = ref(false);
+const error = ref('');
+const stores = ref([]);
+
+const providers = [
+  { value: 'IFOOD', label: 'iFood' },
+  // future providers can be added here
+];
+
+const form = ref({
+  provider: '',
+  clientId: '',
+  clientSecret: '',
+  merchantId: '',
+  storeId: null,
+  enabled: true,
+  authMode: 'AUTH_CODE'
+});
+
+async function loadStores(){
+  try{ const { data } = await api.get('/stores'); stores.value = data || [] }catch(e){ console.warn('failed load stores', e); }
+}
+
+async function loadIntegration(){
+  if(!id) return;
+  loading.value = true;
+  try{
+    const { data } = await api.get(`/integrations/by-id/${id}`);
+    const found = data;
+    if(!found) {
+      error.value = 'Integração não encontrada';
+      return;
+    }
+    form.value.provider = found.provider || '';
+    form.value.clientId = found.clientId || '';
+    form.value.clientSecret = found.clientSecret || '';
+    form.value.merchantId = found.merchantId || '';
+    form.value.storeId = found.storeId || null;
+    form.value.enabled = !!found.enabled;
+    form.value.authMode = found.authMode || 'AUTH_CODE';
+  }catch(e){ console.error(e); error.value = 'Falha ao carregar integração' }
+  finally{ loading.value = false }
+}
+
+async function save(){
+  error.value = '';
+  if(!form.value.storeId) { error.value = 'Selecione a loja'; return }
+  saving.value = true;
+  try{
+    if(id){
+      const payload = { clientId: form.value.clientId, clientSecret: form.value.clientSecret, merchantId: form.value.merchantId, enabled: form.value.enabled, storeId: form.value.storeId, authMode: form.value.authMode };
+      await api.put(`/integrations/${id}`, payload);
+    } else {
+      // require provider for new
+      if(!form.value.provider) { error.value = 'Informe o provider (ex: IFOOD)'; saving.value = false; return }
+      const payload = { clientId: form.value.clientId, clientSecret: form.value.clientSecret, merchantId: form.value.merchantId, enabled: form.value.enabled, storeId: form.value.storeId, authMode: form.value.authMode };
+      await api.post(`/integrations/${form.value.provider}`, payload);
+    }
+    router.push('/integrations');
+  }catch(e){ console.error(e); error.value = e?.response?.data?.message || e?.message || 'Falha ao salvar' }
+  finally{ saving.value = false }
+}
+
+onMounted(async () => { await loadStores(); await loadIntegration(); });
+</script>
+
+<template>
+  <div class="container py-3">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">{{ id ? 'Editar integração' : 'Nova integração' }}</h5>
+        <div>
+          <template v-if="form.provider !== 'IFOOD' || id">
+            <span v-if="!id && !form.provider" class="d-inline-block me-2" title="Selecione um provider para habilitar" data-bs-toggle="tooltip" data-bs-placement="bottom">
+              <button class="btn btn-primary" disabled style="pointer-events: none;">Criar</button>
+            </span>
+            <button v-else class="btn btn-primary me-2" @click="save" :disabled="saving">{{ saving ? 'Salvando...' : (id ? 'Salvar' : 'Criar') }}</button>
+          </template>
+          <button class="btn btn-secondary" @click="() => $router.back()">Cancelar</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div v-if="error" class="alert alert-danger">{{ error }}</div>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Provider</label>
+            <select class="form-select" v-model="form.provider" :disabled="!!id">
+              <option :value="null">-- Selecione um provider --</option>
+              <option v-for="p in providers" :key="p.value" :value="p.value">{{ p.label }}</option>
+            </select>
+          </div>
+            <!-- show rest of form only when editing or after a provider is selected -->
+            <template v-if="id || form.provider">
+              <!-- Provider-specific credential fields. For IFOOD we render the full settings component below. -->
+              <template v-if="form.provider !== 'IFOOD'">
+                <div class="col-md-4">
+                  <label class="form-label">Client ID</label>
+                  <TextInput v-model="form.clientId" inputClass="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Client Secret</label>
+                  <TextInput v-model="form.clientSecret" inputClass="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Merchant ID (opcional)</label>
+                  <TextInput v-model="form.merchantId" inputClass="form-control" />
+                </div>
+              </template>
+              <template v-if="form.provider !== 'IFOOD'">
+                <div class="col-md-4">
+                  <label class="form-label">Vincular a Loja (obrigatório)</label>
+                  <select class="form-select" v-model="form.storeId">
+                    <option :value="null">-- Selecione uma loja --</option>
+                    <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+                  </select>
+                </div>
+              </template>
+            
+              <div class="col-md-2">
+                <label class="form-label">Ativo</label>
+                <select class="form-select" v-model="form.enabled">
+                  <option :value="true">Sim</option>
+                  <option :value="false">Não</option>
+                </select>
+              </div>
+            
+              
+            </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Provider-specific subforms -->
+    <div v-if="form.provider === 'IFOOD'" class="mt-3">
+      <IFoodIntegration />
+    </div>
+  </div>
+</template>

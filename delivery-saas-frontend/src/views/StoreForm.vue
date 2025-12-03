@@ -14,14 +14,14 @@
           </ul>
 
           <div v-show="activeTab==='geral'">
-            <div class="mb-3"><label class="form-label">Nome</label><input class="form-control" v-model="form.name" /></div>
+            <div class="mb-3"><label class="form-label">Nome</label><TextInput v-model="form.name" inputClass="form-control" /></div>
               <div class="mb-3"><label class="form-label">Slug público (opcional)</label>
-                <input class="form-control" v-model="form.slug" placeholder="ex: nomedaloja" />
+                <TextInput v-model="form.slug" placeholder="ex: nomedaloja" inputClass="form-control" />
                 <div class="form-text small">Se preenchido, a URL pública ficará em <code>/public/SEU_SLUG</code>. Caso vazio, o sistema gerará/resolve um slug automaticamente.</div>
               </div>
-            <div class="mb-3"><label class="form-label">Endereço</label><input class="form-control" v-model="form.address" /></div>
-            <div class="mb-3"><label class="form-label">Telefone</label><input class="form-control" v-model="form.phone" @input="handlePhoneInput" type="tel" maxlength="15" placeholder="(00) 0000-0000" /></div>
-            <div class="mb-3"><label class="form-label">WhatsApp</label><input class="form-control" v-model="form.whatsapp" @input="handleWhatsAppInput" type="tel" maxlength="16" placeholder="(00) 0 0000-0000" /></div>
+            <div class="mb-3"><label class="form-label">Endereço</label><TextInput v-model="form.address" inputClass="form-control" /></div>
+            <div class="mb-3"><label class="form-label">Telefone</label><TextInput v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
+            <div class="mb-3"><label class="form-label">WhatsApp</label><TextInput v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
             <div class="row">
               <div class="col-md-6 mb-3">
                 <ImageUploader label="Banner" :initialUrl="form.bannerUrl" :aspect="1200/400" :targetWidth="1200" :targetHeight="400" :uploadUrl="!isNew ? `/stores/${id}/settings/upload` : null" uploadKey="bannerBase64" @cropped="onBannerCropped" @uploaded="onBannerUploaded" />
@@ -69,9 +69,9 @@
           </div>
 
                   <div v-show="activeTab==='fiscal'">
-                    <div class="mb-2"><label class="form-label">CNPJ</label><input class="form-control" v-model="form.cnpj" placeholder="Apenas dígitos" /></div>
-                    <div class="mb-2"><label class="form-label">Inscrição Estadual</label><input class="form-control" v-model="form.ie" /></div>
-                    <div class="mb-2"><label class="form-label">Timezone (IANA)</label><input class="form-control" v-model="form.timezone" /></div>
+                    <div class="mb-2"><label class="form-label">CNPJ</label><TextInput v-model="form.cnpj" placeholder="Apenas dígitos" inputClass="form-control" /></div>
+                    <div class="mb-2"><label class="form-label">Inscrição Estadual</label><TextInput v-model="form.ie" inputClass="form-control" /></div>
+                    <div class="mb-2"><label class="form-label">Timezone (IANA)</label><TextInput v-model="form.timezone" inputClass="form-control" /></div>
 
                     <div class="card mt-3 p-3">
                       <h6 class="mb-2">Certificado NF-e (PFX)</h6>
@@ -99,7 +99,7 @@
 
                       <div class="mb-2">
                         <label class="form-label">Senha do PFX (opcional)</label>
-                        <input class="form-control" type="password" v-model="form.certPassword" placeholder="Senha do certificado (deixe vazio para manter/limpar)" />
+                        <TextInput v-model="form.certPassword" placeholder="Senha do certificado (deixe vazio para manter/limpar)" inputClass="form-control" />
                       </div>
 
                       <div class="form-check">

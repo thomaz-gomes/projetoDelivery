@@ -159,14 +159,14 @@ onMounted(loadStores);
               <tr v-for="s in stores" :key="s.id">
                 <td>
                   <div v-if="editingId === s.id">
-                    <input class="form-control form-control-sm mb-1" v-model="editForm.name" />
-                    <input class="form-control form-control-sm" v-model="editForm.timezone" placeholder="timezone" />
+                    <TextInput v-model="editForm.name" inputClass="form-control form-control-sm mb-1" />
+                    <TextInput v-model="editForm.timezone" placeholder="timezone" inputClass="form-control form-control-sm" />
                   </div>
                   <div v-else>{{ s.name }}</div>
                 </td>
                 <td>
                   <div v-if="editingId === s.id">
-                    <input class="form-control form-control-sm" v-model="editForm.cnpj" />
+                    <TextInput v-model="editForm.cnpj" inputClass="form-control form-control-sm" />
                   </div>
                   <div v-else>{{ s.cnpj || '-' }}</div>
                 </td>

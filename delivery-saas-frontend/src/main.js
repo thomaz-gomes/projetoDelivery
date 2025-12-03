@@ -15,9 +15,12 @@ import './assets/admin-shared.css';
 // tooltips are initialized by individual components when needed (e.g. Sidebar).
 
 // componentes globais
+import TextInput from './components/form/input/TextInput.vue';
+import TextareaInput from './components/form/input/TextareaInput.vue';
 import BaseButton from './components/BaseButton.vue';
 import BaseIconButton from './components/BaseIconButton.vue';
 import CurrencyInput from './components/CurrencyInput.vue';
+import SelectInput from './components/form/select/SelectInput.vue';
 
 const app = createApp(App);
 
@@ -40,6 +43,9 @@ async function handleNovoPedido(pedido) {
 app.component('BaseButton', BaseButton);
 app.component('BaseIconButton', BaseIconButton);
 app.component('CurrencyInput', CurrencyInput);
+app.component('TextInput', TextInput);
+app.component('TextareaInput', TextareaInput);
+app.component('SelectInput', SelectInput);
 
 // plugins
 app.use(createPinia());

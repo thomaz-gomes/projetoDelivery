@@ -1,8 +1,9 @@
 <script setup>
 import { ref, onMounted, computed, onUnmounted } from 'vue';
+import Swal from 'sweetalert2';
 import api from '../api';
 
-const form = ref({ clientId: '', clientSecret: '', merchantId: '', storeId: null });
+const form = ref({ storeId: null });
 const integ = ref(null);
 const statusMsg = ref('');
 // computed status for visual feedback
@@ -121,9 +122,7 @@ async function load() {
   const { data } = await api.get('/integrations/ifood');
   integ.value = data || null;
   if (integ.value) {
-    form.value.clientId = integ.value.clientId || '';
-    form.value.clientSecret = integ.value.clientSecret || '';
-    form.value.merchantId = integ.value.merchantId || '';
+    // server-side creds are not editable here; only bind storeId
     form.value.storeId = integ.value.storeId || null;
     // schedule token refresh when integration info loaded
     scheduleRefreshFromInteg();
@@ -135,10 +134,9 @@ async function save() {
     statusMsg.value = 'Selecione a loja para vincular a integração.';
     return;
   }
+  // Credentials (clientId/clientSecret/merchantId) are provided via server environment
+  // and must not be edited from the UI. We only persist binding to a store and enable the integration.
   await api.post('/integrations/IFOOD', {
-    clientId: form.value.clientId,
-    clientSecret: form.value.clientSecret,
-    merchantId: form.value.merchantId,
     enabled: true,
     storeId: form.value.storeId,
   });
@@ -154,6 +152,11 @@ async function loadStores() {
     stores.value = data || [];
   } catch (e) { console.warn('Failed to load stores', e); }
 }
+
+// when the integration already has a storeId set on the server, lock the selector
+const storeLocked = computed(() => {
+  try { return Boolean(integ.value && integ.value.storeId); } catch(e){ return false }
+});
 
 const linking = ref(false);
 const confirming = ref(false);
@@ -211,6 +214,26 @@ async function testPoll() {
 
 onMounted(load);
 onMounted(loadStores);
+
+async function unlinkStore(){
+  const res = await Swal.fire({
+    title: 'Desvincular loja',
+    text: 'Tem certeza que deseja desvincular a loja desta integração? Isso removerá a associação e permitirá escolher outra loja.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Sim, desvincular',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!res || !res.isConfirmed) return;
+  try{
+    await api.post('/integrations/ifood/unlink');
+    statusMsg.value = 'Loja desvinculada com sucesso.';
+    await load();
+  }catch(e){
+    console.error('unlinkStore failed', e);
+    statusMsg.value = e?.response?.data?.message || 'Falha ao desvincular loja';
+  }
+}
 </script>
 
 <template>
@@ -222,30 +245,35 @@ onMounted(loadStores);
     <div v-if="statusMsg" class="alert alert-info my-2">{{ statusMsg }}</div>
 
     <div class="card mb-3">
-      <div class="card-header">Credenciais (por empresa)</div>
-      <div class="card-body row g-3">
-        <div class="col-md-4">
-          <label class="form-label">Client ID</label>
-          <input class="form-control" v-model="form.clientId" :readonly="integrationActive" />
+      <div class="card-header">Configuração iFood</div>
+      <div class="card-body">
+        <p class="small text-muted">As credenciais (Client ID, Client Secret e Merchant ID) são gerenciadas pela configuração do servidor (arquivo <code>.env</code>) e não podem ser editadas por aqui. Esta tela apenas vincula a integração a uma loja e inicia o fluxo de autorização.</p>
+
+        <div class="row g-3 align-items-end">
+          <div class="col-md-6">
+            <label class="form-label">Vincular a Loja (obrigatório)</label>
+            <SelectInput class="form-select" v-model="form.storeId" :disabled="storeLocked" required>
+              <option :value="null">-- Selecione uma loja --</option>
+              <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }} {{ s.cnpj ? ' - ' + s.cnpj : '' }}</option>
+            </SelectInput>
+          </div>
+          <div class="col-md-6">
+            <div class="d-flex gap-2">
+              <button class="btn btn-primary" @click="save" :disabled="storeLocked">Salvar</button>
+              <button class="btn btn-outline-secondary" @click="load">Recarregar</button>
+              <button v-if="storeLocked" class="btn btn-outline-danger" @click="unlinkStore">Desvincular</button>
+            </div>
+            <div v-if="storeLocked" class="small text-muted mt-2">Loja vinculada e bloqueada para edição. Para alterar, remova a vinculação no backend.</div>
+          </div>
         </div>
-        <div class="col-md-4">
-          <label class="form-label">Client Secret</label>
-          <input class="form-control" v-model="form.clientSecret" :readonly="integrationActive" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Merchant ID (opcional)</label>
-          <input class="form-control" v-model="form.merchantId" :readonly="integrationActive" />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Vincular a Loja (obrigatório)</label>
-          <select class="form-select" v-model="form.storeId" :disabled="integrationActive" required>
-            <option :value="null">-- Selecione uma loja --</option>
-            <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }} {{ s.cnpj ? ' - ' + s.cnpj : '' }}</option>
-          </select>
-        </div>
-        <div class="col-12">
-          <button class="btn btn-primary" @click="save" :disabled="integrationActive">Salvar</button>
-        </div>
+
+        <hr />
+        <div class="small text-muted">Status das credenciais no servidor:</div>
+        <ul class="small">
+          <li>Client ID: <strong>{{ integ?.clientId ? 'presente' : 'não configurado' }}</strong></li>
+          <li>Client Secret: <strong>{{ integ?.clientSecret ? 'presente' : 'não configurado' }}</strong></li>
+          <li>Merchant ID: <strong>{{ integ?.merchantId ? integ.merchantId : 'não configurado' }}</strong></li>
+        </ul>
       </div>
     </div>
 
@@ -304,7 +332,7 @@ onMounted(loadStores);
   <div class="row g-2 align-items-end">
           <div class="col-md-6">
             <label class="form-label">Código de autorização (do lojista)</label>
-            <input class="form-control" v-model="authCode" placeholder="Cole o código aqui" />
+            <TextInput v-model="authCode" placeholder="Cole o código aqui" inputClass="form-control" />
           </div>
           <div class="col-md-3">
             <button class="btn btn-success" @click="confirmLink" :disabled="confirming || !authCode">

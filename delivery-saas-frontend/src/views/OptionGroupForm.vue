@@ -6,7 +6,7 @@
       <div class="row">
         <div class="col-md-6 mb-3">
           <label class="form-label">Nome</label>
-          <input v-model="form.name" class="form-control" required />
+          <TextInput v-model="form.name" inputClass="form-control" required />
         </div>
         <div class="col-md-3 mb-3">
           <label class="form-label">Min</label>

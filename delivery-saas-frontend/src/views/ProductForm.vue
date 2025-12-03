@@ -5,11 +5,11 @@
       <form @submit.prevent="save">
         <div class="mb-3">
           <label class="form-label">Nome do Produto</label>
-          <input v-model="form.name" class="form-control" placeholder="Ex: Coxinha" required maxlength="80" />
+          <TextInput v-model="form.name" placeholder="Ex: Coxinha" required maxlength="80" />
         </div>
         <div class="mb-3">
           <label class="form-label">Descrição</label>
-          <textarea v-model="form.description" class="form-control" placeholder="Descrição" rows="4" maxlength="1000"></textarea>
+          <TextareaInput v-model="form.description" placeholder="Descrição" rows="4" maxlength="1000" />
         </div>
         <div class="row mb-3">
           <div class="col-md-4">
@@ -18,17 +18,17 @@
           </div>
           <div class="col-md-4">
             <label class="form-label">Categoria</label>
-            <select v-model="form.categoryId" class="form-control">
+            <SelectInput   v-model="form.categoryId"  class="form-control">
               <option :value="null">Sem categoria</option>
               <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+            </SelectInput>
           </div>
           <div class="col-md-4">
             <label class="form-label">Menu (opcional)</label>
-            <select v-model="form.menuId" class="form-control">
+            <SelectInput   v-model="form.menuId"  class="form-control">
               <option :value="null">-- Nenhum --</option>
               <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
-            </select>
+            </SelectInput>
           </div>
           <div class="col-md-4">
             <label class="form-label">Posição</label>
@@ -84,6 +84,8 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
 import ImageUploader from '../components/ImageUploader.vue'
+import TextInput from '../components/form/input/TextInput.vue'
+import TextareaInput from '../components/form/input/TextareaInput.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -111,8 +113,12 @@ async function load(){
       // load attached groups
       try{ const att = await api.get(`/menu/products/${id}/option-groups`); form.value.optionGroupIds = att.data.attachedIds || [] }catch(e){}
     }
-    // load categories for select
-    try{ const cr = await api.get('/menu/categories'); categories.value = cr.data || [] }catch(e){ categories.value = [] }
+    // load categories for select — if a menuId was provided in the query, request categories scoped to that menu
+    try{
+      const menuQuery = route.query.menuId ? `?menuId=${encodeURIComponent(route.query.menuId)}` : ''
+      const cr = await api.get(`/menu/categories${menuQuery}`)
+      categories.value = cr.data || []
+    }catch(e){ categories.value = [] }
     // load menus for select
     try{ const mr = await api.get('/menu/menus'); menus.value = mr.data || [] }catch(e){ menus.value = [] }
     // prefill category and menu if passed in query
@@ -196,7 +202,7 @@ onBeforeUnmount(()=>{
 })
 
 // register components
-const __components = { ImageUploader }
+const __components = { ImageUploader, TextInput, TextareaInput }
 </script>
 
 <style scoped>

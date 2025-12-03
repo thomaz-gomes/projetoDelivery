@@ -5,12 +5,12 @@
       <form @submit.prevent="save">
         <div class="mb-3">
           <label class="form-label">Nome</label>
-          <input v-model="form.name" class="form-control" placeholder="Ex: Extra queijo" required maxlength="80" />
+          <TextInput v-model="form.name" placeholder="Ex: Extra queijo" required maxlength="80" />
         </div>
 
         <div class="mb-3">
           <label class="form-label">Descrição (opcional)</label>
-          <textarea v-model="form.description" class="form-control" rows="3" maxlength="400" placeholder="Detalhes da opção"></textarea>
+          <TextareaInput v-model="form.description" rows="3" maxlength="400" placeholder="Detalhes da opção" />
         </div>
 
         <div class="row mb-3">
@@ -59,10 +59,10 @@
 
         <div class="mb-3">
           <label class="form-label">Vincular a produto (opcional)</label>
-          <select v-model="form.linkedProductId" class="form-select">
+          <SelectInput   v-model="form.linkedProductId"  class="form-select">
             <option :value="null">Nenhum</option>
             <option v-for="p in productsList" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
+          </SelectInput>
         </div>
 
         <div class="mb-3">
@@ -133,6 +133,8 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
 import { assetUrl } from '../utils/assetUrl.js'
+import TextInput from '../components/form/input/TextInput.vue'
+import TextareaInput from '../components/form/input/TextareaInput.vue'
 
 const route = useRoute()
 const router = useRouter()

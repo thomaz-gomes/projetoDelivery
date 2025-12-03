@@ -12,20 +12,20 @@
         <form @submit.prevent="save">
           <div class="mb-3">
             <label class="form-label">Nome</label>
-            <input v-model="form.name" class="form-control" placeholder="Nome (ex: Dinheiro, PIX)" required autofocus />
+            <TextInput v-model="form.name" placeholder="Nome (ex: Dinheiro, PIX)" inputClass="form-control" required />
           </div>
 
           <div class="mb-3 row">
             <div class="col-md-6">
               <label class="form-label">Código</label>
-              <input v-model="form.code" class="form-control" placeholder="Código (ex: CASH, PIX)" :disabled="isCash" required />
+              <TextInput v-model="form.code" placeholder="Código (ex: CASH, PIX)" inputClass="form-control" required />
             </div>
             <div class="col-md-6">
               <label class="form-label">Estado</label>
-              <select v-model="form.isActive" class="form-select">
+              <SelectInput   v-model="form.isActive"  class="form-select">
                 <option :value="true">Ativo</option>
                 <option :value="false">Inativo</option>
-              </select>
+              </SelectInput>
             </div>
           </div>
 

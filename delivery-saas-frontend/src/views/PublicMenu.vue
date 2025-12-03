@@ -162,7 +162,7 @@
                     <!-- close control overlapping hero -->
               <button class="modal-share-mobile modal-close-mobile d-flex d-sm-none" @click="closeModal" aria-label="Fechar">✕</button>
                 <div class="d-flex justify-content-between gap-4 w-100">
-                   <input v-model="searchTerm" class="form-control" placeholder="Pesquise pelo nome" />
+                   <TextInput v-model="searchTerm" placeholder="Pesquise pelo nome" inputClass="form-control" />
                   <button class="btn btn-sm btn-outline-secondary close-x d-none d-sm-flex" aria-label="Fechar" @click="closeModal">×</button>
                 </div>
               </div>
@@ -288,8 +288,8 @@
                   </div>
                 </div>
 
-                <div class="mb-2"><label class="form-label">Nome</label><input v-model="customer.name" class="form-control" /></div>
-                <div class="mb-2"><label class="form-label">WhatsApp / Telefone</label><input v-model="customer.contact" @input="handleContactInput" type="tel" class="form-control" maxlength="16" placeholder="(00) 0 0000-0000" /></div>
+                <div class="mb-2"><label class="form-label">Nome</label><TextInput v-model="customer.name" inputClass="form-control" /></div>
+                <div class="mb-2"><label class="form-label">WhatsApp / Telefone</label><TextInput v-model="customer.contact" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleContactInput" /></div>
               </div>
 
               <div class="d-flex justify-content-between mt-3">
@@ -317,15 +317,15 @@
                 <div v-if="addresses.length === 0">
                   <div class="mb-3 border p-2">
                     <h6 class="mb-2">Endereço</h6>
-                    <div class="mb-2"><input v-model="_newAddrFormatted" placeholder="Endereço completo" class="form-control" /></div>
+                    <div class="mb-2"><TextInput v-model="_newAddrFormatted" placeholder="Endereço completo" inputClass="form-control" /></div>
                       <div class="mb-2">
                         <label class="form-label small">Bairro</label>
-                        <select v-model="_newAddrNeighborhood" class="form-select">
+                        <SelectInput   v-model="_newAddrNeighborhood"  class="form-select">
                           <option value="" disabled>Escolha um bairro...</option>
                           <option v-for="n in neighborhoodsList" :key="n.id" :value="n.name">{{ n.name }} — {{ formatCurrency(n.deliveryFee) }}</option>
-                        </select>
+                        </SelectInput>
                       </div>
-                      <div class="mb-2"><input v-model="_newAddrReference" placeholder="Referência (ex: Apt 4, próximo ao mercado)" class="form-control" /></div>
+                      <div class="mb-2"><TextInput v-model="_newAddrReference" placeholder="Referência (ex: Apt 4, próximo ao mercado)" inputClass="form-control" /></div>
                     <!-- Buttons removed: advancing will save and proceed; clear removed per UX request -->
                   </div>
                   <div class="mt-2">
@@ -355,23 +355,23 @@
                     <h6 class="mb-2">Adicionar novo endereço</h6>
                     <div class="row mb-2">
                       <div class="col-8">
-                        <input v-model="_newAddrFormatted" placeholder="Endereço (rua, avenida)" class="form-control" />
+                        <TextInput v-model="_newAddrFormatted" placeholder="Endereço (rua, avenida)" inputClass="form-control" />
                       </div>
                       <div class="col-4">
-                        <input v-model="_newAddrNumber" placeholder="Número" class="form-control" />
+                        <TextInput v-model="_newAddrNumber" placeholder="Número" inputClass="form-control" />
                       </div>
                     </div>
                     <div class="mb-2">
-                      <input v-model="_newAddrComplement" placeholder="Complemento (apto, bloco, etc)" class="form-control" />
+                      <TextInput v-model="_newAddrComplement" placeholder="Complemento (apto, bloco, etc)" inputClass="form-control" />
                     </div>
                     <div class="mb-2">
                       <label class="form-label small">Bairro</label>
-                      <select v-model="_newAddrNeighborhood" class="form-select">
+                      <SelectInput   v-model="_newAddrNeighborhood"  class="form-select">
                         <option value="" disabled>Escolha um bairro...</option>
                         <option v-for="n in neighborhoodsList" :key="n.id" :value="n.name">{{ n.name }} — {{ formatCurrency(n.deliveryFee) }}</option>
-                      </select>
+                      </SelectInput>
                     </div>
-                    <div class="mb-2"><input v-model="_newAddrReference" placeholder="Referência (ex: próximo ao mercado)" class="form-control" /></div>
+                    <div class="mb-2"><TextInput v-model="_newAddrReference" placeholder="Referência (ex: próximo ao mercado)" inputClass="form-control" /></div>
                     <div class="d-flex gap-2">
                       <button v-if="!editingAddressId" class="btn btn-sm btn-primary" @click="addNewAddress">Adicionar</button>
                       <button v-else class="btn btn-sm btn-success" @click="saveEditedAddress">Salvar</button>
@@ -556,7 +556,7 @@
                 </div>
                 <div v-show="openCoupon" class="mt-2">
                   <div class="input-group">
-                    <input v-model="couponCode" class="form-control" placeholder="Código do cupom" />
+                    <TextInput v-model="couponCode" placeholder="Código do cupom" inputClass="form-control" />
                     <button class="btn btn-primary" @click="applyCoupon" :disabled="couponLoading">
                       <span v-if="couponLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                       Aplicar

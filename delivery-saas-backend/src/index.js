@@ -84,6 +84,36 @@ if (ALLOW_ALL_CORS) {
     })
   );
 }
+// Ensure CORS headers are present on all responses (including 404s) and
+// explicitly handle OPTIONS preflight requests. Some reverse-proxies or
+// error handlers may return responses without CORS headers; this middleware
+// guarantees the browser sees the expected headers.
+app.use((req, res, next) => {
+  try {
+    const origin = req.headers.origin;
+    // If ALLOW_ALL_CORS is enabled, reflect the incoming origin (or use '*').
+    if (ALLOW_ALL_CORS) {
+      res.header('Access-Control-Allow-Origin', origin || '*');
+      res.header('Access-Control-Allow-Credentials', 'true');
+    } else {
+      // In production, only allow configured origins. If request has no
+      // Origin (curl, server-to-server), do not set Access-Control-Allow-Origin.
+      if (origin && allowedOrigins.indexOf(origin) !== -1) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+      }
+    }
+
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+
+    // Respond to preflight immediately
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+  } catch (e) {
+    // if anything goes wrong here, don't block the request
+  }
+  return next();
+});
 // capture raw body for debugging parsing errors (verify is called before parsing)
 app.use(bodyParser.json({ limit: "10mb", verify: (req, _res, buf) => { try { req.rawBody = buf && buf.toString ? buf.toString() : null } catch(_) { req.rawBody = null } } }));
 

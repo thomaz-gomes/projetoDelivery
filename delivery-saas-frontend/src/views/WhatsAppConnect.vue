@@ -154,11 +154,11 @@ onMounted(async () => {
         <!-- Linha de seleção e status -->
         <div v-if="instances.length > 0" class="d-flex flex-wrap align-items-center gap-3 mb-3">
           <label class="form-label mb-0">Instância:</label>
-          <select v-model="selected" class="form-select w-auto">
+          <SelectInput   v-model="selected"  class="form-select w-auto">
             <option v-for="i in instances" :key="i.id" :value="i.instanceName">
               {{ i.displayName || i.instanceName }} — {{ i.status }}
             </option>
-          </select>
+          </SelectInput>
           <button class="btn btn-outline-secondary" @click="fetchStatus">Atualizar status</button>
         </div>
         <div v-else class="mb-3 text-secondary">

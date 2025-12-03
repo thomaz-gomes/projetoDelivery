@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
+import TextInput from '../components/form/input/TextInput.vue';
 import { useRidersStore } from '../stores/riders';
 import { useRoute, useRouter } from 'vue-router';
 import { applyPhoneMask } from '../utils/phoneMask';
@@ -69,11 +70,11 @@ async function save() {
         <form @submit.prevent="save" class="row g-3">
           <div class="col-md-6">
             <label class="form-label">Nome</label>
-            <input v-model="rider.name" type="text" class="form-control" required />
+            <TextInput v-model="rider.name" type="text" required />
           </div>
           <div class="col-md-3">
             <label class="form-label">WhatsApp</label>
-            <input v-model="rider.whatsapp" @input="handleWhatsAppInput" type="tel" class="form-control" maxlength="16" placeholder="(00) 0 0000-0000" />
+            <TextInput v-model="rider.whatsapp" @input="handleWhatsAppInput" type="tel" maxlength="16" placeholder="(00) 0 0000-0000" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Diária</label>
@@ -81,7 +82,7 @@ async function save() {
           </div>
           <div class="col-md-6">
             <label class="form-label">Senha (para o app do motoboy)</label>
-            <input v-model="rider.password" type="password" class="form-control" placeholder="Deixe em branco para não criar/alterar senha" />
+            <TextInput v-model="rider.password" type="password" placeholder="Deixe em branco para não criar/alterar senha" />
           </div>
 
           <div class="col-12">

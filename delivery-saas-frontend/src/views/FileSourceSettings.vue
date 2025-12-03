@@ -35,7 +35,7 @@ onMounted(load);
     <div class="card">
       <div class="card-body">
         <label class="form-label">Caminho completo da pasta</label>
-        <input class="form-control" v-model="path" placeholder="Ex: C:\\Users\\meuuser\\ifood_incoming" />
+        <TextInput v-model="path" placeholder="Ex: C:\\\\Users\\\\meuuser\\\\ifood_incoming" inputClass="form-control" />
         <div class="mt-3">
           <button class="btn btn-primary" @click="save">Salvar e iniciar monitoramento</button>
         </div>

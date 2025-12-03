@@ -5,7 +5,7 @@
       <form @submit.prevent="save">
         <div class="mb-3">
           <label class="form-label">Nome da categoria</label>
-          <input v-model="name" class="form-control" placeholder="Ex: Bebidas" required />
+          <TextInput v-model="name" placeholder="Ex: Bebidas" inputClass="form-control" required />
         </div>
             <div class="mb-3">
               <label class="form-label">Descrição (opcional)</label>
@@ -19,10 +19,10 @@
               </div>
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Menu (opcional)</label>
-                          <select class="form-select" v-model="menuId">
+                          <SelectInput  class="form-select"  v-model="menuId" >
                             <option :value="null">-- Nenhum --</option>
                             <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }} (loja: {{ storesMap[m.storeId]?.name || m.storeId }})</option>
-                          </select>
+                          </SelectInput>
                         </div>
               <div class="col-md-6 mb-3 d-flex align-items-center">
                 <div class="form-check form-switch ms-2">

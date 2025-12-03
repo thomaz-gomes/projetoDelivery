@@ -100,7 +100,10 @@ router.delete('/menus/:id', requireRole('ADMIN'), async (req, res) => {
 // ------- Categories -------
 router.get('/categories', async (req, res) => {
   const companyId = req.user.companyId
-  const rows = await prisma.menuCategory.findMany({ where: { companyId }, orderBy: { position: 'asc' } })
+  const { menuId } = req.query || {}
+  const where = { companyId }
+  if (menuId) where.menuId = menuId
+  const rows = await prisma.menuCategory.findMany({ where, orderBy: { position: 'asc' } })
   res.json(rows)
 })
 

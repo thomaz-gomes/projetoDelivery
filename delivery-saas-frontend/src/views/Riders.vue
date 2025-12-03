@@ -121,14 +121,14 @@ const formatBalance = (id) => {
     <template #filters>
       <div class="filters row g-2">
         <div class="col-md-4">
-          <input class="form-control" v-model="q" placeholder="Buscar nome ou WhatsApp..." @keyup.enter="load" />
+          <TextInput v-model="q" placeholder="Buscar nome ou WhatsApp..." inputClass="form-control" />
         </div>
         <div class="col-md-3">
-          <select class="form-select" v-model="filterActive" @change="load">
+          <SelectInput  class="form-select"  v-model="filterActive"  @change="load">
             <option value="">Todos</option>
             <option value="true">Ativos</option>
             <option value="false">Inativos</option>
-          </select>
+          </SelectInput>
         </div>
         <div class="col-md-2 d-flex align-items-center">
           <button class="btn btn-outline-secondary w-100" @click="resetFilters">Limpar</button>

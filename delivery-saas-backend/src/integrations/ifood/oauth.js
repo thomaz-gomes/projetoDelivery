@@ -27,14 +27,31 @@ function http() {
 export async function startDistributedAuth({ companyId }) {
   // pick the most recently updated iFood integration for the company (if multiple exist)
   const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
-  if (!integ?.clientId) {
-    throw new Error('Defina clientId antes de iniciar o vínculo');
+  // Prefer clientId stored in DB, fallback to environment variable if available
+  const clientIdFromDb = integ?.clientId;
+  const clientId = clientIdFromDb || process.env.IFOOD_CLIENT_ID || null;
+  if (!clientId) {
+    throw new Error('Defina clientId na integração ou via variável de ambiente IFOOD_CLIENT_ID antes de iniciar o vínculo');
+  }
+
+  // If no integration record exists, create a lightweight one using environment credentials
+  let integrationRecord = integ;
+  if (!integrationRecord) {
+    const created = await prisma.apiIntegration.create({ data: {
+      companyId,
+      provider: 'IFOOD',
+      clientId: process.env.IFOOD_CLIENT_ID || null,
+      clientSecret: process.env.IFOOD_CLIENT_SECRET || null,
+      merchantId: process.env.IFOOD_MERCHANT_ID || null,
+      enabled: true,
+    } });
+    integrationRecord = created;
   }
 
   const api = http();
 
   try {
-    const form = new URLSearchParams({ clientId: integ.clientId });
+    const form = new URLSearchParams({ clientId });
     const { data } = await api.post(USER_CODE_PATH, form.toString(), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
@@ -52,7 +69,7 @@ export async function startDistributedAuth({ companyId }) {
       );
 
     const saved = await prisma.apiIntegration.update({
-      where: { id: integ.id },
+      where: { id: integrationRecord.id },
       data: {
         authMode: 'AUTH_CODE',
         linkCode: userCode,

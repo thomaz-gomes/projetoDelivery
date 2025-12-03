@@ -82,10 +82,10 @@ onMounted(async () => {
         <div class="row g-2 align-items-end">
           <div class="col-md-4">
             <label class="form-label small">Entregador</label>
-            <select class="form-select" v-model="form.riderId" @change="fetchBalance(form.riderId)">
+            <SelectInput  class="form-select"  v-model="form.riderId"  @change="fetchBalance(form.riderId)">
               <option value="">Selecione</option>
               <option v-for="r in riders" :key="r.id" :value="r.id">{{ r.name }} {{ r.whatsapp ? (' - ' + r.whatsapp) : '' }}</option>
-            </select>
+            </SelectInput>
           </div>
           <div class="col-md-2">
             <label class="form-label small">Saldo atual</label>
@@ -97,10 +97,10 @@ onMounted(async () => {
           </div>
           <div class="col-md-2">
             <label class="form-label small">Tipo</label>
-            <select class="form-select" v-model="form.type">
+            <SelectInput  class="form-select"  v-model="form.type" >
               <option value="CREDIT">Crédito</option>
               <option value="DEBIT">Débito</option>
-            </select>
+            </SelectInput>
           </div>
           <div class="col-md-2 d-grid">
             <button class="btn btn-success" :disabled="submitting" @click="submitAdjustment">{{ submitting ? 'Enviando...' : 'Aplicar' }}</button>
@@ -110,7 +110,7 @@ onMounted(async () => {
         <div class="row mt-3">
           <div class="col-12">
             <label class="form-label small">Observação</label>
-            <input class="form-control" v-model="form.note" placeholder="Motivo do ajuste (opcional)" />
+            <TextInput v-model="form.note" placeholder="Motivo do ajuste (opcional)" inputClass="form-control" />
           </div>
         </div>
       </div>
