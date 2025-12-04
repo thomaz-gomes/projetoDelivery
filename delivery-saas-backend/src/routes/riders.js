@@ -601,3 +601,47 @@ ridersRouter.post('/:id/reset-password', requireRole('ADMIN'), async (req, res) 
     res.status(500).json({ ok: false, message: 'Falha ao resetar senha' });
   }
 });
+
+// Pay period (create a payment transaction that deducts the period total) - ADMIN only
+ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const rider = await prisma.rider.findFirst({ where: { id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+  const { from, to } = req.body || {};
+
+  // parse YYYY-MM-DD as local date
+  function parseDateLocal(s) {
+    if (!s) return null;
+    const str = String(s).trim();
+    const m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+      const y = Number(m[1]); const mo = Number(m[2]); const d = Number(m[3]);
+      return new Date(y, mo - 1, d);
+    }
+    const dt = new Date(str);
+    return isNaN(dt) ? null : dt;
+  }
+
+  const where = { riderId: id };
+  const fromDate = parseDateLocal(from);
+  let toDate = parseDateLocal(to);
+  if (fromDate || toDate) {
+    where.date = {};
+    if (fromDate && !isNaN(fromDate)) where.date.gte = fromDate;
+    if (toDate && !isNaN(toDate)) { toDate.setHours(23,59,59,999); where.date.lte = toDate; }
+  }
+
+  // fetch matching transactions and sum amounts
+  const items = await prisma.riderTransaction.findMany({ where });
+  const sum = items.reduce((acc, t) => acc + Number(t.amount || 0), 0);
+
+  if (!sum || Number(sum) === 0) return res.json({ ok: true, message: 'Nenhuma transação para pagar neste período', total: 0 });
+
+  // Create a payment transaction with negative amount to deduct balance
+  const note = `Pagamento do período ${from || '-'} → ${to || '-'}`;
+  const paymentTx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: -Math.abs(sum), type: 'MANUAL_ADJUSTMENT', date: new Date(), note });
+
+  return res.json({ ok: true, message: 'Pagamento registrado', total: sum, tx: paymentTx });
+});

@@ -3,6 +3,7 @@ import { onMounted, ref, computed } from 'vue';
 import Swal from 'sweetalert2'
 import { useRoute } from 'vue-router';
 import api from '../api';
+import { formatDateTime } from '../utils/dates'
 import { bindLoading } from '../state/globalLoading.js';
 import QRCode from 'qrcode';
 
@@ -155,7 +156,7 @@ async function associateCustomer() {
     {{ (getOrderStoreName(order) ? (getOrderStoreName(order) + (getOrderChannelLabel(order) ? ' | ' + getOrderChannelLabel(order) : '')) : (order.company?.name || 'Minha Empresa')) }}
   </h1>
   <div class="muted">Comanda / Pedido {{ order.displaySimple != null ? String(order.displaySimple).padStart(2,'0') : (order.displayId != null ? String(order.displayId).padStart(2,'0') : order.id.slice(0,6)) }}</div>
-        <div class="muted">{{ new Date(order.createdAt).toLocaleString() }}</div>
+  <div class="muted">{{ formatDateTime(order?.createdAt) }}</div>
         <div v-if="order.payload && order.payload.nfe && order.payload.nfe.nProt" class="protocol small">Protocolo NFe: {{ order.payload.nfe.nProt }}</div>
       </header>
 

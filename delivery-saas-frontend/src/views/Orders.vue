@@ -17,6 +17,7 @@ import api from '../api';
 import { API_URL, SOCKET_URL } from '@/config';
 import QRCode from 'qrcode';
 import { formatCurrency, formatAmount } from '../utils/formatters.js';
+import { formatDate, formatTime } from '../utils/dates'
 import { createApp, h } from 'vue';
 import CurrencyInput from '../components/CurrencyInput.vue';
 import { bindLoading } from '../state/globalLoading.js';
@@ -216,11 +217,27 @@ onMounted(async () => {
 
     // marca pedido como novo para aplicar animação de entrada
     full._isNew = true;
-    store.orders.unshift(full);
-  // hydrate store name for the newly arrived order if missing
-  try { await hydrateMissingStore(full); } catch (e) {}
+    // Evita duplicação: se o pedido já existir no store, substitui/atualiza em vez de inserir novamente.
+    try {
+      const existsIdx = store.orders.findIndex(o => o && o.id === full.id);
+      if (existsIdx !== -1) {
+        try { if (store.orders[existsIdx] && store.orders[existsIdx]._normalized) delete store.orders[existsIdx]._normalized; } catch(e) {}
+        store.orders.splice(existsIdx, 1, full);
+      } else {
+        store.orders.unshift(full);
+      }
+    } catch (e) {
+      try { store.orders.unshift(full); } catch (err) { console.warn('Failed to insert novo-pedido into store.orders', err); }
+    }
+    // hydrate store name for the newly arrived order if missing
+    try { await hydrateMissingStore(full); } catch (e) {}
     // remove a marcação após a animação
-    nextTick(() => setTimeout(() => { full._isNew = false; }, 900));
+    nextTick(() => setTimeout(() => {
+      try {
+        const idx = store.orders.findIndex(o => o && o.id === full.id);
+        if (idx !== -1) store.orders[idx]._isNew = false;
+      } catch (e) {}
+    }, 900));
     beep();
     pulseButton();
     showNotification(full);
@@ -466,28 +483,9 @@ function getCreatedAt(o) {
   return new Date(val);
 }
 
-function parseDate(val) {
-  if (!val) return null;
-  if (val instanceof Date) return val;
-  if (typeof val === 'number') return new Date(val);
-  return new Date(val);
-}
-
-function formatDateShort(d) {
-  if (!d) return '-';
-  const dt = parseDate(d);
-  const day = dt.getDate();
-  let month = dt.toLocaleString('pt-BR', { month: 'short' });
-  month = month.replace('.', '');
-  const time = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-  return `${day}/${month}, ${time}`;
-}
-
-function formatTimeOnly(d) {
-  if (!d) return '-';
-  const dt = parseDate(d);
-  return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-}
+// Use shared date helpers from `src/utils/dates`:
+// - formatDate(d) -> returns `dd/mm/YYYY`
+// - formatTime(d) -> returns `HH:MM`
 
 // use `formatCurrency` / `formatAmount` from `src/utils/formatters.js`
 
@@ -600,13 +598,13 @@ function getOrderTotalDuration(o) {
 function getCreatedDurationDisplay(o) {
   const created = getCreatedAt(o);
   if (!created) return `${formatDateShort(null)} (-)`;
-  return `${formatDateShort(created)} (${humanDuration(now.value - created.getTime())})`;
+  return `${formatDate(created)} (${humanDuration(now.value - created.getTime())})`;
 }
 
 function getStatusStartDurationDisplay(o) {
   const start = getStatusStart(o);
   if (!start) return '';
-  return `Desde ${formatTimeOnly(start)} (${humanDuration(now.value - start.getTime())})`;
+  return `Desde ${formatTime(start)} (${humanDuration(now.value - start.getTime())})`;
 }
 
 function getPaymentMethod(o) {
@@ -1433,6 +1431,22 @@ function pulseButton() {
       <PrinterStatus />
       <!-- Dev: quick test print button -->
       <div class="ms-2 d-flex gap-2 align-items-center">
+        
+        <!-- 🔊 Botão de som -->
+        <button
+          ref="soundButton"
+          type="button"
+          class="btn btn-sm"
+          :class="playSound ? 'btn-primary' : 'btn-outline-secondary'"
+          @click="toggleSound"
+          title="Som de novos pedidos"
+        >
+          <i
+            :class="playSound ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute-fill'"
+            class=""
+          ></i>
+        </button>
+
         <button type="button" class="btn btn-sm btn-outline-primary" @click="showPrinterConfig = true" title="Configurar impressora">
           <i class="bi bi-gear"></i>&nbsp;Configurar Impressora
         </button>
@@ -1446,39 +1460,39 @@ function pulseButton() {
     <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
 
     <!-- 📞 Card de Novo Pedido -->
-    <div class="card mb-4 shadow-sm" style="border-left: 4px solid #198754;">
+    <div class="card mb-4" style="border:none;">
       <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="d-flex align-items-center justify-content-between">
           <div>
             <h5 class="card-title mb-1">
-              <i class="bi bi-plus-circle-fill text-success"></i>
-              Iniciar Novo Pedido
+             Novo Pedido
             </h5>
-            <p class="card-text text-muted small mb-0">
-              Digite o telefone do cliente para começar um novo pedido pelo PDV
-            </p>
+            
           </div>
-        </div>
+        
         <div class="d-flex gap-2 align-items-center">
-          <div class="flex-grow-1" style="max-width: 300px;">
-            <TextInput v-model="newOrderPhone" placeholder="(00) 0 0000-0000" inputClass="form-control" />
+          <button type="button" class="btn btn-outline-secondary ms-2" @click="openBalcao" title="Pedido balcão">
+            <i class="bi bi-shop"></i>
+            &nbsp;Pedido balcão
+          </button>
+          <div class="flex-grow-1" style="max-width: 500px;">
+            <TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control" />
           </div>
           <button type="button" class="btn btn-success" @click="openPdv">
             <i class="bi bi-arrow-right-circle"></i>
             Criar Pedido
           </button>
-          <button type="button" class="btn btn-outline-secondary ms-2" @click="openBalcao" title="Pedido balcão">
-            <i class="bi bi-shop"></i>
-            &nbsp;Pedido balcão
-          </button>
+          
+        </div>
         </div>
       </div>
     </div>
 
     <!-- 🔍 Filtros + Som -->
     <div
-      class="filters-bar d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4"
+      class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;"
     >
+    <div class="card-body">
   <!-- Filtros de status (visível apenas em dispositivos pequenos) -->
   <div class="btn-group flex-wrap d-flex d-md-none">
         <button
@@ -1496,10 +1510,10 @@ function pulseButton() {
       </div>
 
       <!-- Filtros adicionais -->
-      <div class="d-flex align-items-center gap-2 flex-wrap">
+      <div class="d-flex align-items-center gap-2">
         <SelectInput 
            v-model="selectedRider" 
-          class="form-select form-select-sm"
+          class="form-select form-select"
           style="min-width: 200px;"
         >
           <option value="TODOS">Todos os entregadores</option>
@@ -1509,26 +1523,12 @@ function pulseButton() {
           </option>
         </SelectInput>
 
-        <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control form-control-sm" />
-        <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control form-control-sm" />
+        <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control form-control" />
+        <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control form-control" />
 
-        <!-- 🔊 Botão de som -->
-        <button
-          ref="soundButton"
-          type="button"
-          class="btn position-relative"
-          :class="playSound ? 'btn-primary' : 'btn-outline-secondary'"
-          @click="toggleSound"
-          title="Som de novos pedidos"
-        >
-          <i
-            :class="playSound ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute-fill'"
-            class="fs-5"
-          ></i>
-        </button>
       </div>
     </div>
-
+</div>
     <!-- Orders board: columns with drag & drop -->
     <div v-if="store.orders && store.orders.length > 0" class="orders-board">
       <div class="boards d-flex gap-3 overflow-auto py-2">

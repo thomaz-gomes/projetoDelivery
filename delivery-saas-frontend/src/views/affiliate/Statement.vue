@@ -56,6 +56,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import api from '@/api.js'
+import { formatDateTime } from '../../utils/dates'
 import AffiliateFooter from '../../components/AffiliateFooter.vue'
 
 const route = useRoute()
@@ -109,7 +110,7 @@ const load = async () => {
   }
 }
 
-const formatDate = (d) => new Date(d).toLocaleString()
+const formatDate = (d) => { if(!d) return ''; try { return formatDateTime(d) } catch(e) { return d } }
 const fmt = (v) => currency.format(Number(v || 0))
 const goToOrder = (orderId) => { if (!orderId) return; router.push({ path: `/orders/${orderId}/receipt` }) }
 

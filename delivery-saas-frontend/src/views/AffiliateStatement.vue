@@ -53,6 +53,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/api.js'
+import { formatDateTime } from '../utils/dates'
 
 export default {
   name: 'AffiliateStatement',
@@ -102,7 +103,7 @@ export default {
       }
     }
 
-    const formatDate = (d) => new Date(d).toLocaleString()
+    const formatDate = (d) => { if(!d) return ''; try { return formatDateTime(d) } catch(e) { return d } }
 
     const fmt = (v) => currency.format(Number(v || 0))
 

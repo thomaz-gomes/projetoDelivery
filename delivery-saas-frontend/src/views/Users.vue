@@ -132,6 +132,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import api from '../api'
+import { formatDateTime } from '../utils/dates'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -150,7 +151,7 @@ const emailError = ref('')
 
 const canDelete = computed(() => auth.user && auth.user.role === 'SUPER_ADMIN')
 
-function formatDate(d){ if(!d) return ''; try{ return new Date(d).toLocaleString() }catch(e){ return d } }
+const formatDate = (d) => { if(!d) return ''; try{ return formatDateTime(d) }catch(e){ return d } }
 
 async function load(){
   loading.value = true

@@ -100,7 +100,9 @@ function statusLabel(s){
   if (s === 'INVOICE_AUTHORIZED') return 'NFC-e Autorizada'
   return s
 }
-function formatDate(d){ if(!d) return '-'; return new Date(d).toLocaleString() }
+import { formatDateTime } from '../utils/dates.js';
+
+function formatDate(d){ if(!d) return '-'; return formatDateTime(d) }
 
 const hasStoredPhone = computed(()=> {
   try { return !!(JSON.parse(localStorage.getItem(`public_customer_${companyId}`)||'null')||{}).contact } catch { return false }

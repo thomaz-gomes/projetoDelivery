@@ -5,8 +5,8 @@ import { useRoute } from 'vue-router';
 import api from '../api';
 import { formatCurrency } from '../utils/formatters.js';
 import { useAuthStore } from '../stores/auth';
-import Sidebar from '../components/Sidebar.vue';
 import Swal from 'sweetalert2';
+import DateInput from '../components/form/date/DateInput.vue';
 
 const route = useRoute();
 const riderId = route.params.id;
@@ -17,6 +17,13 @@ const editingId = ref(null);
 const editAmount = ref('');
 const editNote = ref('');
 const savingEdit = ref(false);
+
+// auth + role helpers
+const auth = useAuthStore();
+const isAdmin = computed(() => {
+  const role = String(auth.user?.role || '').toUpperCase();
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
+});
 
 // send PDF via WhatsApp
 const phoneTo = ref('');
@@ -37,7 +44,6 @@ const adj = ref({ amount: '', type: 'CREDIT', note: '' });
 const adjusting = ref(false);
 
 // page state and common refs
-const auth = useAuthStore();
 const error = ref('');
 const success = ref('');
 const loading = ref(false);
@@ -97,6 +103,38 @@ async function fetchTransactions() {
   finally { loadingTx.value = false; }
 }
 
+function startEdit(tx) {
+  if (!isAdmin.value) return;
+  editingId.value = tx.id;
+  editAmount.value = String(tx.amount || '');
+  editNote.value = tx.note || '';
+}
+
+function cancelEdit() {
+  editingId.value = null;
+  editAmount.value = '';
+  editNote.value = '';
+}
+
+async function saveEdit() {
+  if (!isAdmin.value || !editingId.value) return;
+  savingEdit.value = true;
+  try {
+    const payload = { amount: Number(editAmount.value), note: editNote.value };
+    const { data } = await api.patch(`/riders/${riderId}/transactions/${editingId.value}`, payload);
+    Swal.fire({ icon: 'success', text: 'Transação atualizada.' });
+    // refresh list and balances
+    await fetchBalance();
+    await fetchTransactions();
+    cancelEdit();
+  } catch (e) {
+    console.error('saveEdit failed', e);
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao salvar alteração' });
+  } finally {
+    savingEdit.value = false;
+  }
+}
+
 async function fetchPeriodFees() {
   try {
     const params = buildParams(true);
@@ -140,7 +178,11 @@ async function pagarPeriodo() {
   try {
     const payload = { from, to };
     const { data } = await api.post(`/riders/${riderId}/account/pay`, payload);
-    Swal.fire({ icon: 'success', text: data?.message || 'Pagamento registrado.' });
+    const totalPaid = Number(data?.total || 0);
+    const txId = data?.tx?.id;
+    const msg = data?.message || 'Pagamento registrado.';
+    const details = `Total pago: <b>${formatCurrency(totalPaid)}</b>` + (txId ? `<br>ID transação: <code>${txId}</code>` : '');
+    await Swal.fire({ icon: 'success', title: msg, html: details });
     // refresh
     await fetchBalance();
     await fetchTransactions();
@@ -156,12 +198,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
 </script>
 
 <template>
-  <div class="d-flex">
-    <!-- Sidebar column -->
-    <aside style="width:260px;min-width:220px;padding:0;border-right:1px solid rgba(0,0,0,0.05);background:#fff;">
-      <Sidebar />
-    </aside>
-    <main class="flex-grow-1 p-4 rider-account">
+  <main class="p-4 rider-account">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="h4 m-0">Extrato do entregador (Admin)</h2>
         <div>
@@ -176,11 +213,11 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
         <div class="row g-2 align-items-end">
           <div class="col-md-3">
             <label class="form-label small">De</label>
-            <input v-model="filters.from" type="date" class="form-control" />
+            <DateInput v-model="filters.from" inputClass="form-control" />
           </div>
           <div class="col-md-3">
             <label class="form-label small">Até</label>
-            <input v-model="filters.to" type="date" class="form-control" />
+            <DateInput v-model="filters.to" inputClass="form-control" />
           </div>
           <div class="col-md-3">
             <label class="form-label small">Tipo</label>
@@ -233,7 +270,19 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
               <tr v-for="t in transactions" :key="t.id">
                 <td>{{ t.date }}</td>
                 <td>{{ t.type }}</td>
-                <td>{{ formatCurrency(Number(t.amount || 0)) }}</td>
+                <td>
+                  <div v-if="isAdmin && editingId === t.id" class="d-flex gap-2 align-items-center">
+                    <input class="form-control form-control-sm" v-model="editAmount" style="width:110px" />
+                    <input class="form-control form-control-sm" v-model="editNote" placeholder="Observação" />
+                    <div class="btn-group">
+                      <button class="btn btn-sm btn-success" @click="saveEdit" :disabled="savingEdit">{{ savingEdit ? 'Salvando...' : 'Salvar' }}</button>
+                      <button class="btn btn-sm btn-outline-secondary" @click="cancelEdit">Cancelar</button>
+                    </div>
+                  </div>
+                  <div v-else>
+                    <span :class="{ 'text-primary': isAdmin }" @click="isAdmin ? startEdit(t) : null" style="cursor: pointer">{{ formatCurrency(Number(t.amount || 0)) }}</span>
+                  </div>
+                </td>
                 <td>{{ t.order?.displayId || t.displayId || '—' }}</td>
                 <td>{{ t.note || '—' }}</td>
               </tr>
@@ -242,7 +291,6 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
         </div>
       </div>
     </main>
-  </div>
 </template>
 
 <style scoped>

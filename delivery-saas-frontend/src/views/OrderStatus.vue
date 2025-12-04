@@ -96,6 +96,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { formatDateTime } from '../utils/dates.js'
 import Swal from 'sweetalert2'
 import { bindLoading } from '../state/globalLoading.js'
 import { useRoute, useRouter } from 'vue-router'
@@ -158,8 +159,7 @@ function statusLabel() {
 
 function formatDate(d) {
   if (!d) return '-'
-  const dt = new Date(d)
-  return dt.toLocaleString()
+  return formatDateTime(d)
 }
 
 const canViewHistory = computed(() => {

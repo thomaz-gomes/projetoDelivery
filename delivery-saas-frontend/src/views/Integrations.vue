@@ -3,6 +3,7 @@ import { onMounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api';
 import ListCard from '../components/ListCard.vue';
+import { formatDateTime } from '../utils/dates.js';
 import Swal from 'sweetalert2'
 
 const router = useRouter();
@@ -117,7 +118,7 @@ onMounted(()=> load())
                 </td>
                 <td>{{ storeName(it.storeId) }}</td>
                 <td>{{ it.enabled ? 'Sim' : 'Não' }}</td>
-                <td>{{ it.createdAt ? new Date(it.createdAt).toLocaleString() : '-' }}</td>
+                <td>{{ it.createdAt ? formatDateTime(it.createdAt) : '-' }}</td>
                 <td>
                   <div class="d-flex">
                     <button class="btn btn-sm btn-outline-secondary me-2" @click="goEdit(it.id)"><i class="bi bi-pencil-square"></i></button>
