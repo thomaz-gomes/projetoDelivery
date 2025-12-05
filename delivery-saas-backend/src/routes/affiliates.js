@@ -33,6 +33,21 @@ affiliatesRouter.get('/', async (req, res) => {
   }
 });
 
+// GET /affiliates/:id - Obter afiliado por id
+affiliatesRouter.get('/:id', async (req, res) => {
+  const { id } = req.params
+  const companyId = req.user.companyId
+
+  try {
+    const aff = await prisma.affiliate.findFirst({ where: { id, companyId } })
+    if (!aff) return res.status(404).json({ message: 'Afiliado não encontrado' })
+    res.json(aff)
+  } catch (e) {
+    console.error('Error fetching affiliate:', e)
+    res.status(500).json({ message: 'Erro ao buscar afiliado' })
+  }
+})
+
 // Note: sales/payments/statement routes are defined below with the proper models.
 
 // POST /affiliates - Criar novo afiliado

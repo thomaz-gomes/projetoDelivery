@@ -360,5 +360,149 @@
     "printerType": "EPSON",
     "paperWidth": 48,
     "includeFullOrder": true
+  },
+  {
+    "id": "1764899863048-251070",
+    "createdAt": 1764899863048,
+    "order": {
+      "id": "c3087f0f-312e-438b-acda-f76bb15dedfb",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "33e61747-b455-4742-807a-913fd1540149",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "046ff6d2-db81-40bb-8036-d3e244365808",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "19",
+      "couponCode": "cupomteste",
+      "couponDiscount": "1",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "raw": null,
+          "amount": 19,
+          "method": "Dinheiro",
+          "changeFor": null,
+          "methodCode": "Dinheiro"
+        },
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Parmegianna de frango",
+              "notes": null,
+              "price": 20,
+              "options": [],
+              "quantity": 1
+            }
+          ],
+          "source": "PDV",
+          "address": null,
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          }
+        }
+      },
+      "createdAt": "2025-12-05T01:57:41.888Z",
+      "updatedAt": "2025-12-05T01:57:41.888Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "ec7be6a8-d691-4ade-a318-0ea2f63145df",
+          "orderId": "c3087f0f-312e-438b-acda-f76bb15dedfb",
+          "name": "Parmegianna de frango",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1764902128107-105525",
+    "createdAt": 1764902128107,
+    "order": {
+      "id": "80588af5-56f7-42e5-b195-3c5c06142874",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "33e61747-b455-4742-807a-913fd1540149",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Cliente teste",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "d5242167-27cf-425c-a7cc-1cd20d7d816b",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "19",
+      "couponCode": "cupomteste",
+      "couponDiscount": "1",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "raw": null,
+          "amount": 19,
+          "method": "Pix",
+          "changeFor": null,
+          "methodCode": "Pix"
+        },
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Parmegianna de frango",
+              "notes": null,
+              "price": 20,
+              "options": [],
+              "quantity": 1
+            }
+          ],
+          "source": "PDV",
+          "address": null,
+          "customer": {
+            "name": "Cliente teste",
+            "contact": "73991429676"
+          }
+        }
+      },
+      "createdAt": "2025-12-05T02:35:26.952Z",
+      "updatedAt": "2025-12-05T02:35:26.952Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "64aacfe8-3e37-4375-9c8c-66ac43f78e95",
+          "orderId": "80588af5-56f7-42e5-b195-3c5c06142874",
+          "name": "Parmegianna de frango",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
   }
 ]

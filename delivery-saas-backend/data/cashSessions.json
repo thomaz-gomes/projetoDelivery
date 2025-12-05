@@ -65,6 +65,34 @@
       "balance": 10,
       "note": null,
       "movements": [],
+      "closedAt": "2025-12-04T22:54:38.836Z",
+      "closedBy": "27521843-af5b-44c8-a2c8-d1415184ba53",
+      "closingSummary": {
+        "note": "",
+        "counted": {
+          "Dinheiro": 10
+        }
+      }
+    },
+    {
+      "id": "f6b9aa7c-6e29-4a85-95f7-b799303d3013",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2025-12-04T22:54:47.958Z",
+      "openedBy": "27521843-af5b-44c8-a2c8-d1415184ba53",
+      "openingAmount": 10,
+      "balance": -40,
+      "note": null,
+      "movements": [
+        {
+          "id": "2cb8e789-ab50-4eac-82af-95246cc76bbc",
+          "type": "retirada",
+          "amount": 50,
+          "account": null,
+          "note": "teste",
+          "at": "2025-12-04T23:24:14.864Z",
+          "by": "27521843-af5b-44c8-a2c8-d1415184ba53"
+        }
+      ],
       "closedAt": null,
       "closedBy": null,
       "closingSummary": null

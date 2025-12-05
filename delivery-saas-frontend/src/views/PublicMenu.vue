@@ -19,8 +19,8 @@
             <img :src="assetUrl(menu?.logo || company?.logo || 'default-logo.svg')" alt="logo" class="company-logo" />
           </div>
           <div>
-            <h3 class="mb-1 company-name">{{ company?.store?.name || company?.name || 'Cardápio' }}</h3>
-            <div class="small company-address text-muted">{{ company?.pickupInfo || company?.address || '' }}</div>
+            <h3 class="mb-1 company-name">{{ displayName }}</h3>
+            <div v-if="displayPickup" class="small company-address text-muted">{{ displayPickup }}</div>
             <div class="small mt-1"><a href="#" class="text-muted" @click.prevent="openInfoModal">Mais informações</a></div>
             <div class="store-closed-panel mt-2">
               <strong v-if="isOpen" class="text-success">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</strong>
@@ -268,7 +268,9 @@
   
         
   <!-- Multi-step checkout modal -->
-  <div v-if="checkoutModalOpen" class="product-modal checkout-modal full-mobile" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:11000">
+  
+      </div>
+      <div v-if="checkoutModalOpen" class="product-modal checkout-modal full-mobile" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:11000">
   <div :class="['modal-content','bg-white','rounded','shadow','modal-content-padding']">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h5 class="m-0">Checkout — {{ checkoutStep }}</h5>
@@ -488,7 +490,6 @@
             </div>
           </div>
         </div>
-      </div>
     </div>
   </div>
    <!-- Unified slide-in drawer (used on desktop and mobile) -->
@@ -683,6 +684,22 @@ const paymentMethods = ref([]);
 const company = ref(null)
 const menu = ref(null)
 const orderType = ref('DELIVERY') // 'DELIVERY' or 'PICKUP'
+
+// Derived display values: prefer store name, and avoid showing pickupInfo when it's just a duplicate/mocked value
+const displayName = computed(() => {
+  try {
+    const storeName = company.value?.store?.name?.trim();
+    const companyName = company.value?.name?.trim();
+    return storeName || companyName || 'Cardápio';
+  } catch (e) { return 'Cardápio' }
+});
+
+const displayPickup = computed(() => {
+  // Prefer the store-level address from settings/stores. Fallback to company.address if missing.
+  const storeAddr = (company.value?.store?.address || '').toString().trim();
+  const companyAddr = (company.value?.address || '').toString().trim();
+  return storeAddr || companyAddr || '';
+});
 
 // Sticky categories bar state
 const heroRef = ref(null)

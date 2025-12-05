@@ -1,5 +1,5 @@
 <template>
-  <ListCard title="Cupons" icon="bi bi-ticket-detailed" :subtitle="total ? `${total} itens` : ''">
+  <ListCard title="Cupons" icon="bi bi-ticket-detailed" :subtitle="total ? `${total} itens` : ''" variant="compact">
     <template #actions>
       <button @click="goNew" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Novo Cupom</button>
     </template>

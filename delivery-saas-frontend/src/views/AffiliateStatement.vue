@@ -54,6 +54,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/api.js'
 import { formatDateTime } from '../utils/dates'
+import { bindLoading } from '../state/globalLoading.js'
 
 export default {
   name: 'AffiliateStatement',

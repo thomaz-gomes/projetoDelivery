@@ -1,8 +1,7 @@
 <template>
   <div class="public-container py-4">
-    <div class="history-wrapper">
-      <h5 class="fw-semibold mb-3">Meus pedidos</h5>
-      <div v-if="needsPhone" class="phone-box mb-4">
+    <ListCard title="Meus pedidos" icon="bi bi-journal-text" :subtitle="orders.length ? `${orders.length} pedidos` : ''" variant="card-style">
+        <div v-if="needsPhone" class="phone-box mb-4">
         <label class="form-label small fw-semibold">Informe seu WhatsApp</label>
         <TextInput v-model="phone" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" />
         <button class="btn btn-primary btn-sm mt-2" @click="submitPhone">Ver histórico</button>
@@ -33,7 +32,7 @@
           </div>
         </div>
       </div>
-    </div>
+  </ListCard>
   </div>
 
   <!-- Mobile bottom navigation (visible on small screens) -->
@@ -56,6 +55,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import ListCard from '@/components/ListCard.vue'
 import Swal from 'sweetalert2'
 import { bindLoading } from '../state/globalLoading.js'
 import { useRoute, useRouter } from 'vue-router'
@@ -166,15 +166,14 @@ function goMenu(){ _publicNavigate('/menu') }
 </script>
 
 <style scoped>
-.public-container { max-width: 680px; margin: 0 auto; }
-.history-wrapper { background:#fff; border:1px solid #eceff3; border-radius:14px; padding:18px 20px; }
-.phone-box { background:#f9fafb; border:1px solid #eceff3; border-radius:12px; padding:14px 16px; }
+  .public-container { max-width: 680px; margin: 0 auto; }
+  .phone-box { background:#f9fafb; border:1px solid #eceff3; border-radius:12px; padding:14px 16px; }
 .order-card { background:#ffffff; border:1px solid #eceff3; border-radius:12px; padding:14px 16px; margin-bottom:14px; cursor:pointer; transition:box-shadow .15s ease; }
 .order-card:hover { box-shadow:0 4px 10px rgba(0,0,0,.06); }
 .badge { font-size:.75rem; }
 .empty { padding:24px 8px; text-align:center; }
 @media (max-width:576px){
-  .history-wrapper { padding:16px 16px; }
+  .public-container > .list-card .card-body { padding:16px; }
   .order-card { padding:14px 16px; }
   .badge { font-size:.68rem; }
 }

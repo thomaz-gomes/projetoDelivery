@@ -1412,7 +1412,7 @@ function pulseButton() {
 
 <template>
   <div>
-  <div class="container py-4">
+  <div class="container-fluid p-4">
     <header class="d-flex flex-wrap align-items-center justify-content-between mb-4 gap-3">
       <div class="d-flex align-items-center">
         <h2 class="fs-4 fw-semibold m-0">Pedidos</h2>
@@ -1459,8 +1459,9 @@ function pulseButton() {
     <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
     <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
 
-    <!-- 📞 Card de Novo Pedido -->
-    <div class="card mb-4" style="border:none;">
+        <div class="row">
+          <div class="col-sm-6">
+              <div class="card mb-4" style="border:none;">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between">
           <div>
@@ -1469,12 +1470,9 @@ function pulseButton() {
             </h5>
             
           </div>
-        
+        </div>
         <div class="d-flex gap-2 align-items-center">
-          <button type="button" class="btn btn-outline-secondary ms-2" @click="openBalcao" title="Pedido balcão">
-            <i class="bi bi-shop"></i>
-            &nbsp;Pedido balcão
-          </button>
+         
           <div class="flex-grow-1" style="max-width: 500px;">
             <TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control" />
           </div>
@@ -1482,17 +1480,31 @@ function pulseButton() {
             <i class="bi bi-arrow-right-circle"></i>
             Criar Pedido
           </button>
+
+           <button type="button" class="btn btn-outline-secondary ms-2" @click="openBalcao" title="Pedido balcão">
+            <i class="bi bi-shop"></i>
+            &nbsp;Pedido balcão
+          </button>
           
         </div>
         </div>
       </div>
     </div>
 
-    <!-- 🔍 Filtros + Som -->
-    <div
+          <div class="col-sm-6">
+
+              <div
       class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;"
     >
     <div class="card-body">
+      <div class="d-flex align-items-center justify-content-between">
+          <div>
+            <h5 class="card-title mb-1">
+             Procurar pedido
+            </h5>
+            
+          </div>
+        </div>
   <!-- Filtros de status (visível apenas em dispositivos pequenos) -->
   <div class="btn-group flex-wrap d-flex d-md-none">
         <button
@@ -1528,7 +1540,13 @@ function pulseButton() {
 
       </div>
     </div>
-</div>
+    
+          </div>
+          </div>
+      
+    </div>
+    <!-- 🔍 Filtros + Som -->
+    
     <!-- Orders board: columns with drag & drop -->
     <div v-if="store.orders && store.orders.length > 0" class="orders-board">
       <div class="boards d-flex gap-3 overflow-auto py-2">
