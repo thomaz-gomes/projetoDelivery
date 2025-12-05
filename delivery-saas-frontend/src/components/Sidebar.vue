@@ -120,6 +120,16 @@ function onDocumentKeydown(ev){
 
 function toggleMenusDropdown(ev){
   try{
+    const opening = !dropdownOpen.value
+    // compute popup position near the toggle button when opening in mini/mobile
+    if(opening && menuToggleBtn && (mini.value)){
+      try{
+        const el = menuToggleBtn.value && (menuToggleBtn.value.$el ? menuToggleBtn.value.$el : menuToggleBtn.value)
+        const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : { top: 80, right: 80 }
+        subMenuPos.top = rect.top + window.scrollY
+        subMenuPos.left = rect.right + 6 + window.scrollX
+      }catch(e){}
+    }
     dropdownOpen.value = !dropdownOpen.value
   }catch(e){ dropdownOpen.value = false }
 }
@@ -151,10 +161,10 @@ function toggleMini(){
   nextTick(() => { try{ initLocalTooltips(); } catch(e){} });
 }
 
-onMounted(() => { nextTick(initLocalTooltips); document.addEventListener('click', onDocumentClick); document.addEventListener('keydown', onDocumentKeydown); });
+onMounted(() => { nextTick(initLocalTooltips); document.addEventListener('click', onDocumentClick); document.addEventListener('keydown', onDocumentKeydown); window.addEventListener('resize', updateIsMobile); updateIsMobile(); });
 onMounted(()=>{ loadMenusWidget().catch(()=>{}) })
 onUpdated(() => { nextTick(initLocalTooltips); });
-onUnmounted(() => { try{ document.removeEventListener('click', onDocumentClick); document.removeEventListener('keydown', onDocumentKeydown); }catch(e){} });
+onUnmounted(() => { try{ document.removeEventListener('click', onDocumentClick); document.removeEventListener('keydown', onDocumentKeydown); window.removeEventListener('resize', updateIsMobile); }catch(e){} });
  
 
 const isActive = (to) => computed(() => route.path.startsWith(to));
@@ -166,7 +176,13 @@ const dropdownOpen = ref(false)
 const menuToggleBtn = ref(null)
 const menusDropdownEl = ref(null)
 
+// detect small screens (mobile) to change dropdown behavior/style
+const isMobile = ref(typeof window !== 'undefined' ? (window.innerWidth <= 576) : false)
+function updateIsMobile(){ try{ isMobile.value = window.innerWidth <= 576 }catch(e){} }
+
 const closedCount = computed(() => (menusList.value || []).filter(m => m._status && !m._status.isOpen).length)
+const totalCount = computed(() => (menusList.value || []).length)
+const openCount = computed(() => Math.max(0, (totalCount.value || 0) - (closedCount.value || 0)))
 
 async function loadMenusWidget(){
   try{
@@ -323,43 +339,79 @@ function logout() {
     </div>
 
     <!-- Menus dropdown: shows closed count and expands to list cardápios -->
-    <div class="border-bottom p-2 stores-widget" v-if="menusList.length">
-      <div class="d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center">
+    <div class="border-bottom p-2 stores-widget w-100" v-if="menusList.length" style="position:relative">
+      <div class="d-flex align-items-center justify-content-between w-100">
+        <div class="d-flex align-items-center position-relative w-100">
+          <div class=" w-100" v-if="!mini">
+            <button ref="menuToggleBtn" type="button" class="btn btn-sm btn-light d-flex align-items-center text-dark w-100" @click="toggleMenusDropdown" :aria-expanded="dropdownOpen">
           <div class="me-2 small text-muted" v-show="!mini">Cardápios</div>
-          <div v-if="!mini">
-            <button ref="menuToggleBtn" type="button" class="btn btn-sm btn-light d-flex align-items-center text-dark" @click="toggleMenusDropdown" :aria-expanded="dropdownOpen">
-              <div :class="['status-dot', closedCount > 0 ? 'closed' : 'open']" style="width:10px;height:10px;margin-right:8px"></div>
-              <span class="small">{{ closedCount }} fechadas</span>
+          
+              <span class="small">(
+                <template v-if="openCount > 0">{{ openCount }} {{ openCount === 1 ? 'aberta' : 'abertas' }}</template>
+                <template v-else>{{ closedCount }} {{ closedCount === 1 ? 'fechada' : 'fechadas' }}</template>)
+              </span>
               <i class="bi bi-caret-down-fill ms-2"></i>
             </button>
           </div>
-          <div v-else class="d-flex align-items-center" role="button" ref="menuToggleBtn" @click="toggleMenusDropdown">
-            <img v-if="menusList[0] && menusList[0]._thumb" :src="menusList[0]._thumb" class="store-thumb" />
-            <div :class="['status-dot', closedCount > 0 ? 'closed' : 'open']" style="margin-left:8px; width:10px; height:10px"></div>
+          <div v-else class="d-flex align-items-center  w-100" role="button" ref="menuToggleBtn" @click="toggleMenusDropdown">
+            <div class="thumb-wrap">
+              <img v-if="menusList[0] && menusList[0]._thumb" :src="menusList[0]._thumb" class="store-thumb" />
+              <div :class="['status-dot', closedCount > 0 ? 'closed' : 'open', 'thumb-badge']"></div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div v-show="dropdownOpen" ref="menusDropdownEl" class="menus-dropdown mt-2 p-2">
-        <div class="small text-muted mb-2">status</div>
-        <ul class="list-unstyled m-0">
-          <li v-for="m in menusList" :key="m.id" class="d-flex align-items-center justify-content-between py-1">
-            <div class="d-flex align-items-center gap-2">
-              <img v-if="m._thumb" :src="m._thumb" class="store-thumb" />
-              <div>
-                <div class="store-name">{{ m.name }}</div>
-                <div class="small text-muted store-sub">{{ m._meta && (m._meta.name || m._meta.city) ? (m._meta.name || m._meta.city) : '' }}</div>
+      <!-- Inline dropdown for expanded sidebar (pushes content down) -->
+      <transition name="slide">
+        <div v-if="!mini && dropdownOpen" class="menus-dropdown-inline mt-2 p-2">
+          <div class="small text-muted mb-2">status</div>
+          <ul class="list-unstyled m-0">
+            <li v-for="m in menusList" :key="m.id" class="d-flex align-items-center justify-content-between py-1">
+              <div class="d-flex align-items-center gap-2">
+                <div class="thumb-wrap">
+                  <img v-if="m._thumb" :src="m._thumb" class="store-thumb" />
+                  <div :class="['status-dot', m._status && m._status.isOpen ? 'open' : 'closed', 'thumb-badge']"></div>
+                </div>
+                <div>
+                  <div class="store-name">{{ m.name }}</div>
+                  <div class="small text-muted store-sub">{{ m._meta && (m._meta.name || m._meta.city) ? (m._meta.name || m._meta.city) : '' }}</div>
+                </div>
               </div>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-              <div :class="['status-dot', m._status && m._status.isOpen ? 'open' : 'closed']"></div>
-              <div class="form-check form-switch m-0">
-                <input class="form-check-input" type="checkbox" role="switch" :checked="m._status && m._status.forced !== undefined ? m._status.forced : false" @change="onToggleForce(m, $event)" />
+              <div class="d-flex align-items-center gap-2">
+                <div class="form-check form-switch m-0">
+                  <input class="form-check-input" type="checkbox" role="switch" :checked="m._status && m._status.forced !== undefined ? m._status.forced : false" @change="onToggleForce(m, $event)" />
+                </div>
               </div>
-            </div>
-          </li>
-        </ul>
+            </li>
+          </ul>
+        </div>
+      </transition>
+
+      <!-- Floating dropdown for mini sidebar (to the side) -->
+      <div v-if="mini">
+        <div v-show="dropdownOpen" ref="menusDropdownEl" :class="['menus-dropdown', { 'menus-dropdown-mobile': isMobile }, 'mt-2', 'p-2']" :style="isMobile ? { position: 'absolute', top: subMenuPos.top + 'px', left: subMenuPos.left + 'px', zIndex: 1050 } : {}">
+          <div class="small text-muted mb-2">status</div>
+          <ul class="list-unstyled m-0">
+            <li v-for="m in menusList" :key="m.id" class="d-flex align-items-center justify-content-between py-1">
+              <div class="d-flex align-items-center gap-2">
+                <div class="thumb-wrap">
+                  <img v-if="m._thumb" :src="m._thumb" class="store-thumb" />
+                  <div :class="['status-dot', m._status && m._status.isOpen ? 'open' : 'closed', 'thumb-badge']"></div>
+                </div>
+                <div>
+                  <div class="store-name">{{ m.name }}</div>
+                  <div class="small text-muted store-sub">{{ m._meta && (m._meta.name || m._meta.city) ? (m._meta.name || m._meta.city) : '' }}</div>
+                </div>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <div class="form-check form-switch m-0">
+                  <input class="form-check-input" type="checkbox" role="switch" :checked="m._status && m._status.forced !== undefined ? m._status.forced : false" @change="onToggleForce(m, $event)" />
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
 
@@ -472,13 +524,41 @@ aside { background-color: #0d6efd; background-image: linear-gradient(135deg, #0d
   color: #222;
   border-radius: 8px;
   box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-  width: 280px;
-  max-height: 320px;
+  width: 320px;
+  max-height: 360px;
+  overflow: auto;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 8px;
+  left: auto;
+  z-index: 1400;
+}
+.menus-dropdown-mobile {
+  background: linear-gradient(180deg, #2f7ff8 0%, #0d6efd 100%);
+  color: #fff;
+  border-radius: 10px;
+  min-width: 170px;
+  max-width: 260px;
+  box-shadow: 0 10px 30px rgba(13,110,253,0.18);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.menus-dropdown-mobile .nav-link { color: #fff; padding: 10px 12px; border-radius:6px }
+.menus-dropdown-mobile .nav-link:hover, .menus-dropdown-mobile .nav-link:focus { background: rgba(255,255,255,0.06); color: #fff }
+.menus-dropdown-mobile .thumb-wrap { margin-right:6px }
+.menus-dropdown-inline {
+  background: #fff;
+  color: #222;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+  width: 100%;
+  max-height: 360px;
   overflow: auto;
   position: relative;
 }
 .stores-widget .store-thumb { width:36px; height:36px; object-fit:cover; border-radius:6px }
-.status-dot { width:10px; height:10px; border-radius:50%; background:#bbb }
+.thumb-wrap { position: relative; display: inline-block }
+.thumb-badge { position: absolute; right: -3px; bottom: -3px; width:10px; height:10px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,0.15) }
+.status-dot { width:10px; height:10px; border-radius:50%; }
 .status-dot.open { background: #0ac36b }
 .status-dot.closed { background: #ff4d4f }
 .menus-dropdown .store-name { font-weight:600 }
@@ -520,9 +600,6 @@ aside { transition: width 220ms ease; }
 .store-item { border-radius:6px; padding-left:6px; padding-right:6px }
 .store-name { font-weight:600; font-size:0.92rem }
 .store-sub { margin-top:-2px }
-.status-dot { width:10px; height:10px; border-radius:50%; }
-.status-dot.open { background: #2ad07a }
-.status-dot.closed { background: #ff6b6b }
 .toggle-open { width:36px; height:22px }
 
 /* Smooth labels opacity transition when expanding/collapsing */

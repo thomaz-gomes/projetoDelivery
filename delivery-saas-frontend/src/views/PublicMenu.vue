@@ -1,7 +1,7 @@
 <template>
   <div class="container-fluid px-0">
     <!-- Hero banner -->
-  <div class="public-hero position-relative text-white" style="height:220px;overflow:hidden" ref="heroRef">
+  <div class="public-hero position-relative text-white" ref="heroRef">
     <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
     
     </div>
@@ -2379,7 +2379,7 @@ try{
 </script>
 
 <style scoped>
-.public-hero { background: #222; color: #fff; }
+ .public-hero { background: #222; color: #fff; height: 220px; overflow: hidden; }
 .public-hero h3 { font-weight:700; color:#fff }
 .nav-pills { position: sticky; top: 0; z-index: 5; padding-bottom: 8px; background: transparent; }
 .nav-pills.stuck { background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.06); padding-top: 8px; padding-bottom: 8px; z-index: 1040; }
@@ -2806,6 +2806,11 @@ body { padding-bottom: 110px; }
   .nav-pills .nav-link::after { content: ''; position: absolute; left: 12%; right: 12%; height: 3px; bottom: 4px; background: #111; transform: scaleX(0); transform-origin: left center; transition: transform .18s ease; border-radius: 3px }
   .nav-pills .nav-link.active { background: transparent; color: #111; font-weight:700; border-radius:0 }
   .nav-pills .nav-link.active::after { transform: scaleX(1) }
+}
+
+/* Reduce hero height on small screens for better vertical space */
+@media (max-width: 767px){
+  .public-hero { height: 125px }
 }
 
 /* Desktop/mobile animated underline and active styles handled by pseudo-element */
