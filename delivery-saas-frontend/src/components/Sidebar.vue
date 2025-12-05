@@ -1,5 +1,7 @@
 <script setup>
 import { computed, reactive, ref, onMounted, onUpdated, nextTick, onUnmounted } from 'vue';
+import api from '../api'
+import { assetUrl } from '../utils/assetUrl.js'
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import * as bootstrap from 'bootstrap';
@@ -80,23 +82,46 @@ function closeMiniSub(){ openSub.value = null }
 function onDocumentClick(ev){
   try{
     const aside = asideEl.value;
-    if (!openSub.value) return;
+    // handle mini submenu
     const popup = document.getElementById('sidebar-mini-popup');
-    if (popup && (popup.contains(ev.target) || (aside && aside.contains(ev.target)))) return;
-    openSub.value = null;
-    // return focus to previous element
-    try{ if (lastFocusedEl.value && lastFocusedEl.value.focus) lastFocusedEl.value.focus(); }catch(e){}
+    if (openSub.value) {
+      if (popup && (popup.contains(ev.target) || (aside && aside.contains(ev.target)))) return;
+      openSub.value = null;
+      try{ if (lastFocusedEl.value && lastFocusedEl.value.focus) lastFocusedEl.value.focus(); }catch(e){}
+    }
+    // handle menus dropdown: close when clicking outside dropdown & toggle button
+    try{
+      if (dropdownOpen.value) {
+        const btn = menuToggleBtn.value
+        const dd = menusDropdownEl.value
+        if (dd && (dd === ev.target || dd.contains && dd.contains(ev.target))) {
+          // clicked inside dropdown — keep open
+        } else if (btn && (btn === ev.target || btn.contains && btn.contains(ev.target))) {
+          // clicked the toggle — let its handler manage
+        } else {
+          dropdownOpen.value = false
+        }
+      }
+    }catch(e){}
   }catch(e){}
 }
 
 function onDocumentKeydown(ev){
   try{
-    if (!openSub.value) return;
     if (ev.key === 'Escape' || ev.key === 'Esc') {
-      openSub.value = null;
-      try{ if (lastFocusedEl.value && lastFocusedEl.value.focus) lastFocusedEl.value.focus(); }catch(e){}
+      if (openSub.value) {
+        openSub.value = null;
+        try{ if (lastFocusedEl.value && lastFocusedEl.value.focus) lastFocusedEl.value.focus(); }catch(e){}
+      }
+      if (dropdownOpen.value) dropdownOpen.value = false
     }
   }catch(e){}
+}
+
+function toggleMenusDropdown(ev){
+  try{
+    dropdownOpen.value = !dropdownOpen.value
+  }catch(e){ dropdownOpen.value = false }
 }
 
 function toggleParent(to){
@@ -127,11 +152,140 @@ function toggleMini(){
 }
 
 onMounted(() => { nextTick(initLocalTooltips); document.addEventListener('click', onDocumentClick); document.addEventListener('keydown', onDocumentKeydown); });
+onMounted(()=>{ loadMenusWidget().catch(()=>{}) })
 onUpdated(() => { nextTick(initLocalTooltips); });
 onUnmounted(() => { try{ document.removeEventListener('click', onDocumentClick); document.removeEventListener('keydown', onDocumentKeydown); }catch(e){} });
  
 
 const isActive = (to) => computed(() => route.path.startsWith(to));
+
+// menus widget state (cardápios are the storefronts)
+const menusList = ref([])
+// dropdown state for menus control
+const dropdownOpen = ref(false)
+const menuToggleBtn = ref(null)
+const menusDropdownEl = ref(null)
+
+const closedCount = computed(() => (menusList.value || []).filter(m => m._status && !m._status.isOpen).length)
+
+async function loadMenusWidget(){
+  try{
+    const res = await api.get('/menu/menus')
+    const rows = res.data || []
+    // For each menu, fetch its parent store merged settings to compute status and read menu-specific metadata
+    for(const m of rows){
+      try{
+        const storeId = m.storeId || m.store?.id || null
+        let merged = {}
+        if(storeId){
+          const mr = await api.get(`/stores/${storeId}`)
+          merged = mr.data || {}
+          if(merged.logoUrl && !merged.logoUrl.startsWith('http')) merged.logoUrl = assetUrl(merged.logoUrl)
+        }
+        const menuMeta = (merged && merged.menus && merged.menus[String(m.id)]) ? merged.menus[String(m.id)] : {}
+        const combined = { ...(merged || {}), ...(menuMeta || {}) }
+        let thumb = m.logoUrl || combined.logo || combined.logoUrl || null
+        if(thumb && !String(thumb).startsWith('http')) thumb = assetUrl(thumb)
+        m._thumb = thumb
+        m._meta = combined
+        m._status = computeOpenStatus(combined)
+      }catch(e){
+        m._meta = m
+        m._status = computeOpenStatus(m)
+      }
+    }
+    menusList.value = rows
+  }catch(e){ console.warn('Failed to load menus for sidebar widget', e) }
+}
+
+function computeOpenStatus(s){
+  try{
+    // If settings file includes a forced flag, respect it
+    const forced = s.forceOpen
+    if(forced !== undefined && forced !== null){
+      return { isOpen: !!forced, forced: !!forced, source: 'forced' }
+    }
+    // follow schedule: reuse PublicMenu logic (simplified)
+    if(s.open24Hours || s.alwaysOpen) return { isOpen: true, forced: undefined, source: 'schedule' }
+
+    const parseHM = (str) => {
+      if(!str) return null
+      const parts = String(str).split(':').map(x=>Number(x))
+      if(parts.length<2) return null
+      const [hh, mm] = parts
+      if(Number.isNaN(hh) || Number.isNaN(mm)) return null
+      return { hh, mm }
+    }
+
+    if(Array.isArray(s.weeklySchedule) && s.weeklySchedule.length){
+      const tz = s.timezone || 'America/Sao_Paulo'
+      try{
+        const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+        const parts = fmt.format(new Date()).split('/')
+        const [dd, mm, yyyy] = parts
+        const tzDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
+        const weekDay = tzDate.getUTCDay()
+        const today = s.weeklySchedule.find(d => Number(d?.day) === Number(weekDay))
+        if(!today || !today.enabled) return { isOpen: false, forced: undefined, source: 'schedule' }
+        const from = parseHM(today.from)
+        const to = parseHM(today.to)
+        if(!from || !to) return { isOpen: false, forced: undefined, source: 'schedule' }
+        // compute now in tz
+        let nowParts
+        try{
+          const fmt2 = new Intl.DateTimeFormat(undefined, { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' })
+          if(fmt2.formatToParts){
+            const p = fmt2.formatToParts(new Date())
+            nowParts = { hh: Number(p.find(x=>x.type==='hour')?.value), mm: Number(p.find(x=>x.type==='minute')?.value) }
+          } else {
+            const s2 = fmt2.format(new Date())
+            const [hh, mm] = s2.split(':').map(x=>Number(x))
+            nowParts = { hh, mm }
+          }
+        }catch(e){ const d = new Date(); nowParts = { hh: d.getHours(), mm: d.getMinutes() } }
+        const toM = p => p.hh*60 + p.mm
+        const nowM = toM(nowParts)
+        const fromM = toM(from)
+        const toMval = toM(to)
+        if(fromM <= toMval) return { isOpen: nowM >= fromM && nowM <= toMval, forced: undefined, source: 'schedule' }
+        return { isOpen: (nowM >= fromM) || (nowM <= toMval), forced: undefined, source: 'schedule' }
+      }catch(e){ console.warn('computeOpenStatus weeklySchedule error', e) }
+    }
+
+    // fallback to openFrom/openTo
+    const from = parseHM(s.openFrom)
+    const to = parseHM(s.openTo)
+    if(!from || !to) return { isOpen: false, forced: undefined, source: 'schedule' }
+    let nowParts
+    try{
+      if(s.timezone){
+        const fmt = new Intl.DateTimeFormat(undefined, { timeZone: s.timezone, hour12: false, hour: '2-digit', minute: '2-digit' })
+        if(fmt.formatToParts){
+          const parts = fmt.formatToParts(new Date())
+          nowParts = { hh: Number(parts.find(p=>p.type==='hour')?.value), mm: Number(parts.find(p=>p.type==='minute')?.value) }
+        } else { const str = fmt.format(new Date()); const [hh, mm] = str.split(':').map(x=>Number(x)); nowParts = { hh, mm } }
+      } else { const d = new Date(); nowParts = { hh: d.getHours(), mm: d.getMinutes() } }
+    }catch(e){ const d = new Date(); nowParts = { hh: d.getHours(), mm: d.getMinutes() } }
+    const toMinutes = p => p.hh*60 + p.mm
+    const nowM = toMinutes(nowParts)
+    const fromM = toMinutes(from)
+    const toM2 = toMinutes(to)
+    if(fromM <= toM2) return { isOpen: nowM >= fromM && nowM <= toM2, forced: undefined, source: 'schedule' }
+    return { isOpen: (nowM >= fromM) || (nowM <= toM2), forced: undefined, source: 'schedule' }
+  }catch(e){ console.warn('computeOpenStatus failed', e); return { isOpen: false, forced: undefined, source: 'schedule' } }
+}
+
+async function onToggleForce(item, ev){
+  try{
+    const newVal = !!ev.target.checked
+    const storeId = item.storeId || item._meta?.id || item._meta?.storeId || null
+    if(!storeId) throw new Error('Store id not found for this menu')
+    await api.post(`/stores/${storeId}/settings/upload`, { menuId: item.id, forceOpen: newVal })
+    item._meta = item._meta || {}
+    item._meta.forceOpen = newVal
+    item._status = computeOpenStatus(item._meta)
+  }catch(e){ console.error('Failed to persist forceOpen', e); alert('Falha ao mudar status') }
+}
 
 const showSidebar = computed(() => {
   try {
@@ -165,6 +319,47 @@ function logout() {
             <i :class="mini ? 'bi bi-chevron-right' : 'bi bi-chevron-left'"></i>
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Menus dropdown: shows closed count and expands to list cardápios -->
+    <div class="border-bottom p-2 stores-widget" v-if="menusList.length">
+      <div class="d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center">
+          <div class="me-2 small text-muted" v-show="!mini">Cardápios</div>
+          <div v-if="!mini">
+            <button ref="menuToggleBtn" type="button" class="btn btn-sm btn-light d-flex align-items-center text-dark" @click="toggleMenusDropdown" :aria-expanded="dropdownOpen">
+              <div :class="['status-dot', closedCount > 0 ? 'closed' : 'open']" style="width:10px;height:10px;margin-right:8px"></div>
+              <span class="small">{{ closedCount }} fechadas</span>
+              <i class="bi bi-caret-down-fill ms-2"></i>
+            </button>
+          </div>
+          <div v-else class="d-flex align-items-center" role="button" ref="menuToggleBtn" @click="toggleMenusDropdown">
+            <img v-if="menusList[0] && menusList[0]._thumb" :src="menusList[0]._thumb" class="store-thumb" />
+            <div :class="['status-dot', closedCount > 0 ? 'closed' : 'open']" style="margin-left:8px; width:10px; height:10px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div v-show="dropdownOpen" ref="menusDropdownEl" class="menus-dropdown mt-2 p-2">
+        <div class="small text-muted mb-2">status</div>
+        <ul class="list-unstyled m-0">
+          <li v-for="m in menusList" :key="m.id" class="d-flex align-items-center justify-content-between py-1">
+            <div class="d-flex align-items-center gap-2">
+              <img v-if="m._thumb" :src="m._thumb" class="store-thumb" />
+              <div>
+                <div class="store-name">{{ m.name }}</div>
+                <div class="small text-muted store-sub">{{ m._meta && (m._meta.name || m._meta.city) ? (m._meta.name || m._meta.city) : '' }}</div>
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <div :class="['status-dot', m._status && m._status.isOpen ? 'open' : 'closed']"></div>
+              <div class="form-check form-switch m-0">
+                <input class="form-check-input" type="checkbox" role="switch" :checked="m._status && m._status.forced !== undefined ? m._status.forced : false" @change="onToggleForce(m, $event)" />
+              </div>
+            </div>
+          </li>
+        </ul>
       </div>
     </div>
 
@@ -271,6 +466,24 @@ aside { background-color: #0d6efd; background-image: linear-gradient(135deg, #0d
 .chevron { transition: transform 180ms ease; transform-origin: 50% 50%; }
 .chevron.rotated { transform: rotate(-90deg); }
 
+/* menus dropdown styling */
+.menus-dropdown {
+  background: #fff;
+  color: #222;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+  width: 280px;
+  max-height: 320px;
+  overflow: auto;
+  position: relative;
+}
+.stores-widget .store-thumb { width:36px; height:36px; object-fit:cover; border-radius:6px }
+.status-dot { width:10px; height:10px; border-radius:50%; background:#bbb }
+.status-dot.open { background: #0ac36b }
+.status-dot.closed { background: #ff4d4f }
+.menus-dropdown .store-name { font-weight:600 }
+.menus-dropdown .store-sub { opacity:0.8 }
+
 /* slide transition for child lists */
 .slide-enter-active, .slide-leave-active {
   transition: max-height 220ms ease, opacity 160ms ease;
@@ -300,6 +513,17 @@ aside { transition: width 220ms ease; }
   background-color: #0d4cab;}
 .btn-toggle-mini:hover { background-color: #2f7ff8; border-color: #2f7ff8; color: #fff; }
 .btn-toggle-mini i { font-size: 0.92rem }
+
+/* Stores widget styles */
+.stores-widget { background: rgba(255,255,255,0.03); }
+.store-thumb { width:28px; height:28px; object-fit:cover; border-radius:6px }
+.store-item { border-radius:6px; padding-left:6px; padding-right:6px }
+.store-name { font-weight:600; font-size:0.92rem }
+.store-sub { margin-top:-2px }
+.status-dot { width:10px; height:10px; border-radius:50%; }
+.status-dot.open { background: #2ad07a }
+.status-dot.closed { background: #ff6b6b }
+.toggle-open { width:36px; height:22px }
 
 /* Smooth labels opacity transition when expanding/collapsing */
 .nav-link span { transition: opacity 180ms ease; }
