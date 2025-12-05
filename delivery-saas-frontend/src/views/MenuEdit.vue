@@ -42,6 +42,33 @@
           <TextInput v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" />
         </div>
 
+        <div class="mb-3 border rounded p-3">
+          <label class="form-label">Horário de Funcionamento (opcional)</label>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="open24" v-model="form.open24Hours" />
+            <label class="form-check-label" for="open24">Aberto 24 horas</label>
+          </div>
+          <div class="row gx-2">
+            <div class="col-auto mb-2">
+              <label class="form-label small">De (HH:MM)</label>
+              <TextInput v-model="form.openFrom" placeholder="09:00" maxlength="5" inputClass="form-control" />
+            </div>
+            <div class="col-auto mb-2">
+              <label class="form-label small">Até (HH:MM)</label>
+              <TextInput v-model="form.openTo" placeholder="18:00" maxlength="5" inputClass="form-control" />
+            </div>
+            <div class="col mb-2">
+              <label class="form-label small">Fuso horário</label>
+              <TextInput v-model="form.timezone" placeholder="America/Sao_Paulo" inputClass="form-control" />
+            </div>
+          </div>
+          <div class="mt-2">
+            <label class="form-label small">Weekly schedule (opcional, JSON de 7 itens)</label>
+            <textarea v-model="form.weeklySchedule" class="form-control" rows="4" placeholder='[ { "day":0, "enabled":true, "from":"09:00", "to":"18:00" }, ... ]'></textarea>
+            <div class="form-text">Informe um array com 7 objetos (domingo=0 .. sábado=6). Se preenchido, terá precedência sobre openFrom/openTo.</div>
+          </div>
+        </div>
+
         <div class="row">
           <div class="col-md-6 mb-3">
             <ImageUploader label="Banner" :initialUrl="form.bannerUrl" :aspect="1200/400" :targetWidth="1200" :targetHeight="400" uploadKey="bannerBase64" @cropped="onBannerCropped" />
@@ -81,7 +108,7 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null })
+const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, open24Hours: false, openFrom: '', openTo: '', timezone: '', weeklySchedule: '' })
 const stores = ref([])
 const saving = ref(false)
 const error = ref('')
@@ -101,9 +128,17 @@ async function load(){
           const sdata = stResp.data || {}
           if (sdata.menus && sdata.menus[String(d.id)]) {
             const mmeta = sdata.menus[String(d.id)] || {}
-            form.value.address = mmeta.address || mmeta.address || form.value.address
-            form.value.phone = mmeta.phone || mmeta.phone || form.value.phone
-            form.value.whatsapp = mmeta.whatsapp || mmeta.whatsapp || form.value.whatsapp
+            form.value.address = mmeta.address || form.value.address
+            form.value.phone = mmeta.phone || form.value.phone
+            form.value.whatsapp = mmeta.whatsapp || form.value.whatsapp
+            // schedule/meta
+            if (typeof mmeta.open24Hours !== 'undefined') form.value.open24Hours = !!mmeta.open24Hours
+            if (mmeta.openFrom) form.value.openFrom = mmeta.openFrom
+            if (mmeta.openTo) form.value.openTo = mmeta.openTo
+            if (mmeta.timezone) form.value.timezone = mmeta.timezone
+            if (mmeta.weeklySchedule) {
+              try { form.value.weeklySchedule = JSON.stringify(mmeta.weeklySchedule, null, 2) } catch(e) { form.value.weeklySchedule = '' }
+            }
             // prefer menu-level saved banner/logo when present
             if (mmeta.banner) form.value.bannerUrl = assetUrl(mmeta.banner)
             if (mmeta.logo) form.value.logoUrl = assetUrl(mmeta.logo)
@@ -154,7 +189,7 @@ async function save(){
       // continues working on that menu instead of returning to the list view.
     try{
       const targetId = isEdit ? id : (res && res.data && res.data.id ? res.data.id : null)
-      // If user provided menu-specific images or contact metadata, persist them into the store settings
+      // If user provided menu-specific images, contact metadata or schedule, persist them into the store settings
       try {
         const toUpload = {}
         if (form.value.logoBase64) toUpload.logoBase64 = form.value.logoBase64
@@ -164,6 +199,14 @@ async function save(){
         if (form.value.address) meta.address = form.value.address
         if (form.value.phone) meta.phone = form.value.phone
         if (form.value.whatsapp) meta.whatsapp = form.value.whatsapp
+        // schedule fields
+        if (typeof form.value.open24Hours !== 'undefined') meta.open24Hours = !!form.value.open24Hours
+        if (form.value.openFrom) meta.openFrom = form.value.openFrom
+        if (form.value.openTo) meta.openTo = form.value.openTo
+        if (form.value.timezone) meta.timezone = form.value.timezone
+        if (form.value.weeklySchedule) {
+          try { meta.weeklySchedule = JSON.parse(form.value.weeklySchedule) } catch (e) { /* ignore parse error, don't include */ }
+        }
         if (Object.keys(meta).length) toUpload.menuMeta = meta
         if (Object.keys(toUpload).length && form.value.storeId && targetId) {
           toUpload.menuId = targetId

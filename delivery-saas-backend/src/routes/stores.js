@@ -233,7 +233,7 @@ storesRouter.post('/:id/settings/upload', requireRole('ADMIN'), async (req, res)
     if (!existing) return res.status(404).json({ message: 'Loja não encontrada' })
 
     const body = req.body || {}
-  const { logoBase64, bannerBase64, logoFilename, bannerFilename, menuId, menuMeta } = body
+  const { logoBase64, bannerBase64, logoFilename, bannerFilename, menuId, menuMeta, forceOpen } = body
     try{ console.log('[stores] settings/upload incoming for store', id, 'keys:', Object.keys(body || {})) }catch(e){}
     try{ if (req.rawBody) console.log('[stores] rawBody snippet:', String(req.rawBody).slice(0,200)) }catch(e){}
     const path = await import('path')
@@ -354,6 +354,11 @@ storesRouter.post('/:id/settings/upload', requireRole('ADMIN'), async (req, res)
           Object.assign(saved, menuMeta)
         }
       } catch (e) { /* ignore */ }
+    }
+
+    // support top-level forceOpen flag to manually override open/closed state for the store
+    if (typeof forceOpen !== 'undefined') {
+      try { saved.forceOpen = forceOpen } catch (e) { /* ignore */ }
     }
 
     // Persist settings: merge into existing settings so menus mapping is preserved
