@@ -233,7 +233,7 @@ storesRouter.post('/:id/settings/upload', requireRole('ADMIN'), async (req, res)
     if (!existing) return res.status(404).json({ message: 'Loja não encontrada' })
 
     const body = req.body || {}
-  const { logoBase64, bannerBase64, logoFilename, bannerFilename, menuId } = body
+  const { logoBase64, bannerBase64, logoFilename, bannerFilename, menuId, menuMeta } = body
     try{ console.log('[stores] settings/upload incoming for store', id, 'keys:', Object.keys(body || {})) }catch(e){}
     try{ if (req.rawBody) console.log('[stores] rawBody snippet:', String(req.rawBody).slice(0,200)) }catch(e){}
     const path = await import('path')
@@ -345,6 +345,15 @@ storesRouter.post('/:id/settings/upload', requireRole('ADMIN'), async (req, res)
           console.warn('Failed to write banner to both settings and public paths', ee)
         }
       }
+    }
+
+    // If menuMeta provided, merge it into saved so metadata fields are persisted
+    if (menuMeta && menuId) {
+      try {
+        if (typeof menuMeta === 'object') {
+          Object.assign(saved, menuMeta)
+        }
+      } catch (e) { /* ignore */ }
     }
 
     // Persist settings: merge into existing settings so menus mapping is preserved
