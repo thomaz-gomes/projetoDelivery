@@ -74,5 +74,435 @@
       "qrText": null
     },
     "includeFullOrder": true
+  },
+  {
+    "id": "1764815140596-971176",
+    "createdAt": 1764815140596,
+    "order": {
+      "id": "df59ea7e-4f81-4663-994c-48d1444485a8",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": "ORD-TEST-123456",
+      "displayId": "XPTO-987",
+      "displaySimple": null,
+      "orderType": null,
+      "status": "CONCLUIDO",
+      "customerName": "Joãaaaao da Silva",
+      "customerPhone": "11987654321",
+      "customerSource": "IFOOD",
+      "customerId": "3fd02fe7-36e2-415e-9360-41eebb8688fd",
+      "address": "Rua dos Testes, 123 - Centro - São Paulo/SP",
+      "latitude": -23.55052,
+      "longitude": -46.633308,
+      "total": "34.39",
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "5.99",
+      "payload": {
+        "id": "ORD-TEST-123456",
+        "items": [
+          {
+            "id": "item-001",
+            "name": "X-Salada",
+            "index": 0,
+            "quantity": 1,
+            "unitPrice": 18.5,
+            "totalPrice": 18.5,
+            "externalCode": "LANCHE001",
+            "observations": "Sem cebola, por favor"
+          },
+          {
+            "id": "item-002",
+            "name": "Batata Frita Média",
+            "index": 1,
+            "quantity": 1,
+            "unitPrice": 9.9,
+            "totalPrice": 9.9,
+            "externalCode": "BATATA001"
+          }
+        ],
+        "total": {
+          "subTotal": 28.4,
+          "deliveryFee": 5.99,
+          "orderAmount": 34.39
+        },
+        "category": "FOOD",
+        "customer": {
+          "id": "cli-001",
+          "name": "Joãaaaao da Silva",
+          "phone": {
+            "number": "11987654321"
+          },
+          "documentNumber": "12345678900"
+        },
+        "delivery": {
+          "mode": "DEFAULT",
+          "pickupCode": "ABCD1234",
+          "deliveredBy": "IFOOD",
+          "description": "Entrega padrão",
+          "deliveryAddress": {
+            "city": "São Paulo",
+            "state": "SP",
+            "country": "BR",
+            "postalCode": "01000000",
+            "streetName": "Rua dos Testes",
+            "coordinates": {
+              "latitude": -23.55052,
+              "longitude": -46.633308
+            },
+            "neighborhood": "Centro",
+            "streetNumber": "123",
+            "formattedAddress": "Rua dos Testes, 123 - Centro - São Paulo/SP"
+          },
+          "deliveryDateTime": "2025-10-27T15:30:00Z"
+        },
+        "merchant": {
+          "id": "3366226",
+          "name": "Lanchonete do Teste"
+        },
+        "payments": {
+          "methods": [
+            {
+              "card": {
+                "brand": "VISA"
+              },
+              "type": "ONLINE",
+              "value": 34.39,
+              "method": "CREDIT",
+              "prepaid": true,
+              "currency": "BRL",
+              "transaction": {
+                "acquirerDocument": "000123456789",
+                "authorizationCode": "999888"
+              }
+            }
+          ],
+          "prepaid": 34.39
+        },
+        "createdAt": "2025-10-27T15:00:00Z",
+        "displayId": "XPTO-987",
+        "orderType": "DELIVERY",
+        "orderTiming": "IMMEDIATE",
+        "salesChannel": "IFOOD",
+        "additionalInfo": {
+          "metadata": {
+            "nomeVendedor": "Marcos",
+            "codigoInternoPdv": "PDV1234"
+          }
+        }
+      },
+      "createdAt": "2025-11-22T02:46:00.543Z",
+      "updatedAt": "2025-12-04T02:25:39.828Z",
+      "riderId": "rider-demo-1",
+      "items": [
+        {
+          "id": "cfa3c45e-1e36-445b-87eb-107ab39bf7e6",
+          "orderId": "df59ea7e-4f81-4663-994c-48d1444485a8",
+          "name": "X-Salada",
+          "quantity": 1,
+          "price": "18.5",
+          "notes": null,
+          "options": null
+        },
+        {
+          "id": "dde62bad-ea99-47d6-8c08-fb6cb9ccd34f",
+          "orderId": "df59ea7e-4f81-4663-994c-48d1444485a8",
+          "name": "Batata Média",
+          "quantity": 1,
+          "price": "9.9",
+          "notes": null,
+          "options": null
+        }
+      ]
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1764817541625-799530",
+    "createdAt": 1764817541625,
+    "order": {
+      "id": "ff7bf0a9-1c4e-4d03-b01a-65a4b669a3e1",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "33e61747-b455-4742-807a-913fd1540149",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "046ff6d2-db81-40bb-8036-d3e244365808",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "20",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "raw": null,
+          "amount": 20,
+          "method": "Dinheiro",
+          "changeFor": 50,
+          "methodCode": "Dinheiro"
+        },
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Parmegianna de frango",
+              "notes": null,
+              "price": 20,
+              "options": [],
+              "quantity": 1
+            }
+          ],
+          "source": "PDV",
+          "address": null,
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          }
+        }
+      },
+      "createdAt": "2025-12-04T03:05:39.932Z",
+      "updatedAt": "2025-12-04T03:05:39.932Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "84077a1a-b817-4967-bd0e-203f5faf5e2e",
+          "orderId": "ff7bf0a9-1c4e-4d03-b01a-65a4b669a3e1",
+          "name": "Parmegianna de frango",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1764817971340-183790",
+    "createdAt": 1764817971340,
+    "order": {
+      "id": "736cc6aa-7758-44c6-b636-c3ca6f0dbb82",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "33e61747-b455-4742-807a-913fd1540149",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "046ff6d2-db81-40bb-8036-d3e244365808",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "20",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "raw": null,
+          "amount": 20,
+          "method": "Dinheiro",
+          "changeFor": 100,
+          "methodCode": "Dinheiro"
+        },
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Parmegianna de frango",
+              "notes": null,
+              "price": 20,
+              "options": [],
+              "quantity": 1
+            }
+          ],
+          "source": "PDV",
+          "address": null,
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          }
+        }
+      },
+      "createdAt": "2025-12-04T03:12:49.619Z",
+      "updatedAt": "2025-12-04T03:12:49.619Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "06e00de2-0c29-4e70-871e-a957127f5a6d",
+          "orderId": "736cc6aa-7758-44c6-b636-c3ca6f0dbb82",
+          "name": "Parmegianna de frango",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1764899863048-251070",
+    "createdAt": 1764899863048,
+    "order": {
+      "id": "c3087f0f-312e-438b-acda-f76bb15dedfb",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "33e61747-b455-4742-807a-913fd1540149",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "046ff6d2-db81-40bb-8036-d3e244365808",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "19",
+      "couponCode": "cupomteste",
+      "couponDiscount": "1",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "raw": null,
+          "amount": 19,
+          "method": "Dinheiro",
+          "changeFor": null,
+          "methodCode": "Dinheiro"
+        },
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Parmegianna de frango",
+              "notes": null,
+              "price": 20,
+              "options": [],
+              "quantity": 1
+            }
+          ],
+          "source": "PDV",
+          "address": null,
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          }
+        }
+      },
+      "createdAt": "2025-12-05T01:57:41.888Z",
+      "updatedAt": "2025-12-05T01:57:41.888Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "ec7be6a8-d691-4ade-a318-0ea2f63145df",
+          "orderId": "c3087f0f-312e-438b-acda-f76bb15dedfb",
+          "name": "Parmegianna de frango",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1764902128107-105525",
+    "createdAt": 1764902128107,
+    "order": {
+      "id": "80588af5-56f7-42e5-b195-3c5c06142874",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "33e61747-b455-4742-807a-913fd1540149",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Cliente teste",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "d5242167-27cf-425c-a7cc-1cd20d7d816b",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "19",
+      "couponCode": "cupomteste",
+      "couponDiscount": "1",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "raw": null,
+          "amount": 19,
+          "method": "Pix",
+          "changeFor": null,
+          "methodCode": "Pix"
+        },
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Parmegianna de frango",
+              "notes": null,
+              "price": 20,
+              "options": [],
+              "quantity": 1
+            }
+          ],
+          "source": "PDV",
+          "address": null,
+          "customer": {
+            "name": "Cliente teste",
+            "contact": "73991429676"
+          }
+        }
+      },
+      "createdAt": "2025-12-05T02:35:26.952Z",
+      "updatedAt": "2025-12-05T02:35:26.952Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "64aacfe8-3e37-4375-9c8c-66ac43f78e95",
+          "orderId": "80588af5-56f7-42e5-b195-3c5c06142874",
+          "name": "Parmegianna de frango",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
   }
 ]

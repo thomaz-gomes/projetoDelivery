@@ -23,6 +23,7 @@ export default {
     const router = useRouter()
     const affiliate = ref(null)
   const loading = ref(true)
+  const notFound = ref(false)
   bindLoading(loading)
 
     const load = async () => {
@@ -30,8 +31,12 @@ export default {
       try {
         const res = await api.get(`/affiliates/${route.params.id}`)
         affiliate.value = res.data
+        notFound.value = false
       } catch (err) {
         console.error('Failed to load affiliate', err)
+        if (err?.response?.status === 404) {
+          notFound.value = true
+        }
       } finally {
         loading.value = false
       }
@@ -45,7 +50,7 @@ export default {
 
     onMounted(load)
 
-    return { affiliate, loading, onSaved, onCancel }
+    return { affiliate, loading, notFound, onSaved, onCancel }
   }
 }
 </script>

@@ -7,11 +7,11 @@
         <div class="row g-2 align-items-end">
           <div class="col-md-3">
             <label class="form-label">Data início <small class="text-muted">(padrão: hoje)</small></label>
-            <input type="date" class="form-control" v-model="filters.from" />
+            <DateInput v-model="filters.from" inputClass="form-control" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Data fim <small class="text-muted">(padrão: hoje)</small></label>
-            <input type="date" class="form-control" v-model="filters.to" />
+            <DateInput v-model="filters.to" inputClass="form-control" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Entregador</label>
@@ -33,7 +33,7 @@
               <th>Nº Pedido</th>
               <th>Endereço</th>
               <th>Cliente</th>
-              <th>Data / Hora</th>
+              <th>Data</th>
               <th>Entregador</th>
               <th>Pagamento</th>
               <th></th>
@@ -44,7 +44,7 @@
               <td>{{ formatOrderNumber(o) }}</td>
               <td>{{ formatAddress(o) }}</td>
               <td>{{ o.customer?.fullName || o.customer?.name || o.customer?.contact || '-' }}</td>
-              <td>{{ formatDateTime(o.createdAt) }}</td>
+              <td>{{ formatDate(o.createdAt) }}</td>
               <td>{{ o.rider?.name || '-' }}</td>
               <td>{{ o.paymentMethod || o.payment?.method || '-' }}</td>
               <td class="text-end">
@@ -66,6 +66,8 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api';
 import SelectInput from '../components/form/select/SelectInput.vue';
+import { formatDate } from '../utils/dates.js';
+import DateInput from '../components/form/date/DateInput.vue';
 
 const router = useRouter();
 const orders = ref([]);
@@ -84,10 +86,7 @@ const filters = ref({ from: today, to: today, riderId: '' });
 
 const riderOptions = ref([]);
 
-function formatDateTime(s){
-  if(!s) return '-';
-  try{ return new Date(s).toLocaleString(); }catch(e){ return s }
-}
+// use shared formatDateTime from utils/dates.js
 
 function padNumber(n){
   if (n == null || n === '') return null;

@@ -54,6 +54,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import api from '../api'
+import { formatDateTime } from '../utils/dates'
 import { io } from 'socket.io-client'
 import { SOCKET_URL } from '@/config'
 import { normalizeOrderItems } from '../utils/orderUtils.js'
@@ -63,7 +64,7 @@ const loading = ref(false)
 let socket = null
 
 function formatMoney(v){ try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0)) }catch(e){ return v } }
-function formatDate(d){ if(!d) return ''; try{ return new Date(d).toLocaleString() }catch(e){ return d } }
+function formatDate(d){ if(!d) return ''; try{ return formatDateTime(d) }catch(e){ return d } }
 
 async function load(){
   loading.value = true

@@ -25,6 +25,14 @@ async function createDemoData() {
     create: { slug: 'minha-loja-de-testes-store', name: 'Minha Loja de Testes - Loja 1', companyId: company.id, address: 'Rua dos Testes, 123' }
   })
 
+  // Ensure company's pickupInfo reflects the store address (avoid mocked pickup text)
+  try{
+    const storeAddress = store.address || '';
+    if(storeAddress){
+      await prisma.company.update({ where: { id: company.id }, data: { pickupInfo: storeAddress } }).catch(()=>{})
+    }
+  }catch(e){ /* ignore seed update errors */ }
+
   // Admin user (hashed)
   const adminEmail = 'admin@example.com'
   const adminPass = 'admin123'

@@ -35,12 +35,13 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../api';
+import { formatDateTime } from '../utils/dates.js';
 
 const route = useRoute();
 const id = route.params.id;
 const order = ref(null);
 
-function formatDateTime(s){ if(!s) return '-'; try{ return new Date(s).toLocaleString(); }catch(e){ return s }}
+// use shared formatDateTime from utils/dates.js
 function padNumber(n){ if (n == null || n === '') return null; return String(n).toString().padStart(2, '0'); }
 function formatOrderNumber(o){
   if(!o) return '';

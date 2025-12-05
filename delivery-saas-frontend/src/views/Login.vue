@@ -66,7 +66,7 @@ function onWhatsappInput(e) {
 
 <template>
   <div class="d-flex align-items-center justify-content-center vh-100 bg-light">
-    <div class="card shadow-sm" style="width: 360px;">
+    <div class="card" style="width: 360px;border: none;border-radius: 36px;padding: 8px;">
       <div class="card-body">
         <h4 class="card-title mb-4 text-center">Login</h4>
 
@@ -148,15 +148,17 @@ function onWhatsappInput(e) {
           </div>
         </form>
 
-        <p class="text-muted small mt-3 text-center">
-          Rider para teste: <b>rider@example.com</b> / <b>rider123</b>
-        </p>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.form-label {
+  font-weight: bold;
+  font-size: 0.85rem;
+  margin-bottom: 0px;
+}
 .page { max-width:360px; margin:60px auto; }
 input { display:block; width:100%; padding:8px; margin:8px 0; }
 button { padding:8px 12px; }
@@ -193,7 +195,7 @@ button { padding:8px 12px; }
   box-shadow: 0 6px 16px rgba(59,130,246,0.14);
 }
 .radio-card input:checked + .card-content .indicator {
-  background: linear-gradient(180deg,#fff,#3b82f6);
+  background-color: #3b82f6;
   border-color: #3b82f6;
 }
 

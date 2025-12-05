@@ -54,6 +54,7 @@ import Users from './views/Users.vue';
 import AccessControl from './views/AccessControl.vue';
 import SalesHistory from './views/SalesHistory.vue';
 import SaleDetails from './views/SaleDetails.vue';
+import CashFronts from './views/CashFronts.vue';
 import RiderOrders from './views/rider/Orders.vue';
 import RiderQrCode from './views/rider/QrReader.vue';
 import RiderAccountSelf from './views/rider/Account.vue';
@@ -133,6 +134,7 @@ const router = createRouter({
   ,{ path: '/menu/categories/:id', component: CategoryForm, meta: { requiresAuth: true } }
   ,{ path: '/sales', component: SalesHistory, meta: { requiresAuth: true } }
   ,{ path: '/sales/:id', component: SaleDetails, meta: { requiresAuth: true } }
+  ,{ path: '/reports/cash-fronts', component: CashFronts, meta: { requiresAuth: true } }
   ]
 });
 

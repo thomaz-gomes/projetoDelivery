@@ -10,32 +10,52 @@ export async function trackAffiliateSale(order, companyId) {
   try {
     // Check if order has discount/coupon information
     const couponCode = extractCouponCode(order);
+    console.log('[affiliates] trackAffiliateSale called — orderId=', order && order.id, 'companyId=', companyId, 'couponCode=', couponCode)
     if (!couponCode) {
+      console.log('[affiliates] no coupon code found on order', order && order.id)
       return null;
     }
 
-    // Find active affiliate with this coupon code
-    const affiliate = await prisma.affiliate.findFirst({
-      where: {
-        companyId,
-        couponCode: couponCode.toUpperCase(),
-        isActive: true
-      }
-    });
+    // Try to find a coupon record first (coupons now hold affiliate linkage).
+    // If a coupon exists and references an affiliate, use that affiliate.
+    // Fallback: legacy behavior - find affiliate by couponCode stored on affiliate.
+    const codeUpper = couponCode.toUpperCase()
+    let affiliate = null
+
+    // Find coupon using case-insensitive match so tracking works regardless of stored case
+    const coupon = await prisma.coupon.findFirst({ where: { companyId, isActive: true, code: { equals: couponCode, mode: 'insensitive' } }, include: { affiliate: true } })
+    if (coupon) console.log('[affiliates] found coupon row', { id: coupon.id, code: coupon.code, affiliateId: coupon.affiliateId })
+    if (coupon && coupon.affiliateId && coupon.affiliate) {
+      affiliate = coupon.affiliate
+      console.log('[affiliates] coupon links to affiliate', { id: affiliate.id, name: affiliate.name, isActive: affiliate.isActive })
+    } else {
+      // legacy fallback: affiliate table having couponCode field
+      console.log('[affiliates] coupon did not link to an affiliate, trying legacy affiliate.couponCode lookup (case-insensitive) for code', couponCode)
+      affiliate = await prisma.affiliate.findFirst({
+        where: {
+          companyId,
+          couponCode: { equals: couponCode, mode: 'insensitive' },
+          isActive: true
+        }
+      })
+      if (affiliate) console.log('[affiliates] found legacy affiliate by couponCode', { id: affiliate.id, name: affiliate.name })
+    }
 
     if (!affiliate) {
-      console.log(`No active affiliate found for coupon: ${couponCode}`);
+      console.log('[affiliates] No active affiliate found for coupon:', couponCode);
       return null;
     }
 
     // Calculate sale amount and commission
     const saleAmount = Number(order.total || order.totalAmount || 0);
+    console.log('[affiliates] saleAmount computed=', saleAmount)
     if (saleAmount <= 0) {
-      console.log(`Invalid sale amount for affiliate tracking: ${saleAmount}`);
+      console.log('[affiliates] Invalid sale amount for affiliate tracking:', saleAmount)
       return null;
     }
 
     const commissionAmount = saleAmount * Number(affiliate.commissionRate);
+    console.log('[affiliates] affiliate.commissionRate=', affiliate.commissionRate, 'commissionAmount=', commissionAmount)
 
     // Create affiliate sale record and update balance in transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -47,7 +67,7 @@ export async function trackAffiliateSale(order, companyId) {
           saleAmount,
           commissionRate: affiliate.commissionRate,
           commissionAmount,
-          couponCode: affiliate.couponCode,
+          couponCode: (coupon && coupon.code) ? coupon.code : couponCode,
           note: `Venda automática - Pedido ${order.displayId || order.id}`
         }
       });

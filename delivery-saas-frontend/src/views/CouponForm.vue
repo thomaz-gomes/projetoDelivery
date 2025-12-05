@@ -59,19 +59,7 @@
             <div class="col-md-6">
               <label class="form-label">Data de expiração (opcional)</label>
               <div class="date-picker-wrapper" style="position:relative">
-                <!-- visible formatted display (dd/mm/YYYY) - not interactive, overlay receives clicks -->
-                <input class="form-control" type="text" placeholder="dd/mm/YYYY" :value="form.expiresAtLocal" readonly style="pointer-events:none;position:relative;z-index:1;padding-right:40px" />
-                <!-- small calendar icon (visual hint) -->
-                <span class="calendar-icon" aria-hidden="true">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M7 11H9V13H7V11Z" fill="currentColor"/>
-                    <path d="M11 11H13V13H11V11Z" fill="currentColor"/>
-                    <path d="M15 11H17V13H15V11Z" fill="currentColor"/>
-                    <path fill-rule="evenodd" clip-rule="evenodd" d="M7 3C6.44772 3 6 3.44772 6 4V5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V7C21 5.89543 20.1046 5 19 5H18V4C18 3.44772 17.5523 3 17 3C16.4477 3 16 3.44772 16 4V5H8V4C8 3.44772 7.55228 3 7 3ZM5 9H19V19H5V9Z" fill="currentColor"/>
-                  </svg>
-                </span>
-                <!-- native date input overlay (transparent) - opens native picker on mobile -->
-                <input class="native-date-input" type="date" v-model="internalDate" aria-label="Escolher data de expiração" style="position:absolute;inset:0;opacity:0;border:none;background:transparent;z-index:2;cursor:pointer" />
+                <DateInput v-model="internalDate" inputClass="form-control" aria-label="Escolher data de expiração" />
               </div>
             </div>
             <div class="col-md-6">
@@ -105,11 +93,12 @@
 import { ref, onMounted, watch } from 'vue'
 import api from '@/api.js'
 import TextInput from '../components/form/input/TextInput.vue'
+import DateInput from '../components/form/date/DateInput.vue'
 import { useRoute, useRouter } from 'vue-router'
 
 export default {
   name: 'CouponForm',
-  components: { TextInput },
+  components: { TextInput, DateInput },
   setup() {
     const route = useRoute()
     const router = useRouter()

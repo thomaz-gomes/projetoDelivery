@@ -1,20 +1,35 @@
 <template>
-  <div class="cash-control d-inline-block ms-2">
-    <button class="btn btn-outline-secondary btn-sm" @click="openCash">Abrir Caixa</button>
-    <button class="btn btn-outline-secondary btn-sm ms-1" @click="movement">Retirada/Reforço</button>
-    <button class="btn btn-outline-secondary btn-sm ms-1" @click="partialSummary">Resumo Parcial</button>
-    <button class="btn btn-outline-danger btn-sm ms-1" @click="closeCash">Fechar Caixa</button>
+  <div class="cash-control d-inline-block ms-2" ref="container">
+    <template v-if="currentSession">
+      <div class="btn-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm" @click="toggleDropdown" :aria-expanded="showDropdown">
+          Caixa aberto
+        </button>
+        <ul v-show="showDropdown" class="dropdown-menu show" style="position:absolute;">
+          <li><button class="dropdown-item" type="button" @click="onPartialSummary">Resumo Parcial</button></li>
+          <li><button class="dropdown-item" type="button" @click="onMovement">Retirada/Reforço</button></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><button class="dropdown-item text-danger" type="button" @click="onCloseCash">Fechar Caixa</button></li>
+        </ul>
+      </div>
+    </template>
+    <template v-else>
+      <button type="button" class="btn btn-outline-secondary btn-sm" @click="openCash">Abrir Caixa</button>
+    </template>
   </div>
 </template>
 
 <script setup>
 import Swal from 'sweetalert2';
 import api from '../api';
-import { ref, createApp, h } from 'vue';
+import { ref, createApp, h, onMounted, onUnmounted } from 'vue';
 import CurrencyInput from './CurrencyInput.vue';
 import { formatCurrency, formatAmount } from '../utils/formatters.js';
 
 const loading = ref(false);
+const currentSession = ref(null);
+const container = ref(null);
+const showDropdown = ref(false);
 
 // Simple in-memory cache for /cash/summary/current to avoid repeated backend calls
 let cashSummaryCache = { value: null, ts: 0 };
@@ -50,6 +65,17 @@ async function fetchCashSummary(force = false) {
   return cashSummaryCache.value;
 }
 
+async function loadCurrentSession(force = false) {
+  try {
+    const { data } = await api.get('/cash/current');
+    currentSession.value = data || null;
+    return currentSession.value;
+  } catch (e) {
+    currentSession.value = null;
+    return null;
+  }
+}
+
 function normalizeMethod(name) {
   if (!name) return 'Outros';
   const s = String(name).toLowerCase();
@@ -62,6 +88,7 @@ function normalizeMethod(name) {
 }
 
 async function openCash() {
+  console.debug('CashControl: openCash clicked');
   // try to prefill opening amount from last closed session counted cash
   let suggested = '0,00';
   try {
@@ -110,6 +137,9 @@ async function openCash() {
   loading.value = true;
   try {
     const { data } = await api.post('/cash/open', formValues);
+    // refresh current session state
+    await loadCurrentSession(true);
+    invalidateCashSummary();
     Swal.fire('OK', 'Caixa aberto', 'success');
   } catch (e) {
     console.error(e);
@@ -117,29 +147,112 @@ async function openCash() {
   } finally { loading.value = false }
 }
 
+function toggleDropdown() {
+  console.debug('CashControl: toggleDropdown ->', showDropdown.value);
+  showDropdown.value = !showDropdown.value;
+}
+
+function closeDropdown() {
+  showDropdown.value = false;
+}
+
+function onPartialSummary() {
+  closeDropdown();
+  partialSummary();
+}
+
+function onMovement() {
+  closeDropdown();
+  movement();
+}
+
+function onCloseCash() {
+  closeDropdown();
+  closeCash();
+}
+
 async function movement() {
-  const { value: form } = await Swal.fire({
+  // mount a small Vue app inside Swal to provide a proper select + CurrencyInput
+  let vueInstance = null;
+  let mountedAppRef = null;
+
+  const html = `<div id="swal-mv-vue"></div>`;
+
+  const result = await Swal.fire({
     title: 'Movimento de caixa',
-    html: `<label>Tipo (retirada/retirada|reforco)</label><input id="swal-mv-type" class="swal2-input" placeholder="retirada|reinforce">\n<label>Valor</label><input id="swal-mv-amount" inputmode="decimal" class="swal2-input" value="0,00">\n<label>Descrição</label><textarea id="swal-mv-note" class="swal2-textarea"></textarea>`,
+    html,
+    showCancelButton: true,
+    confirmButtonText: 'Salvar',
+    focusConfirm: false,
     didOpen: () => {
-      const el = document.getElementById('swal-mv-amount');
-      if (el) {
-        el.addEventListener('focus', () => { el.value = el.value.replace(',', '.'); el.select(); });
-        el.addEventListener('blur', () => { const n = parseFloat(el.value.replace(',', '.')) || 0; el.value = formatAmount(n); });
+      const App = {
+        components: { CurrencyInput },
+        data() {
+          return { type: 'retirada', amount: 0, note: '' };
+        },
+        methods: { formatAmount },
+        mounted() {},
+        render() {
+          const vm = this;
+          return h('div', { class: 'd-flex flex-column', style: 'text-align:left' }, [
+            h('div', { style: 'margin-bottom:8px' }, [
+              h('label', { style: 'display:block;margin-bottom:6px' }, 'Tipo'),
+                // use onChange (native select event) and keep value in sync
+                h('select', { class: 'form-select', value: vm.type, onChange: (e) => { vm.type = e.target.value }, onInput: (e) => { vm.type = e.target.value }, style: 'width:100%' }, [
+                h('option', { value: 'retirada' }, 'Retirada'),
+                h('option', { value: 'reforco' }, 'Reforço')
+              ])
+            ]),
+            h('div', { style: 'margin-bottom:8px' }, [
+              h('label', { style: 'display:block;margin-bottom:6px' }, 'Valor'),
+              // ensure CurrencyInput receives class used by Swal2 and a stable initial value
+              h(CurrencyInput, { modelValue: vm.amount ?? 0, 'onUpdate:modelValue': v => vm.amount = v, inputClass: 'w-100' })
+            ]),
+            h('div', { style: 'margin-bottom:6px' }, [
+              h('label', { style: 'display:block;margin-bottom:6px' }, 'Descrição'),
+              h('textarea', { class: 'form-control', value: vm.note, onInput: (e) => vm.note = e.target.value, style: 'min-height:80px' })
+            ])
+          ]);
+        }
+      };
+
+      try {
+        const appRef = createApp(App);
+        vueInstance = appRef.mount('#swal-mv-vue');
+        mountedAppRef = appRef;
+      } catch (e) {
+        console.error('Failed to mount movement Vue app inside Swal modal', e);
       }
     },
     preConfirm: () => {
-      const type = document.getElementById('swal-mv-type').value || 'retirada';
-      const amount = parseFloat(document.getElementById('swal-mv-amount').value.replace(',', '.')) || 0;
-      const note = document.getElementById('swal-mv-note').value || '';
+      // collect values from mounted Vue instance
+      if (vueInstance) {
+        const t = vueInstance.type || 'retirada';
+        const a = Number(vueInstance.amount || 0) || 0;
+        const n = vueInstance.note || '';
+        return { type: t, amount: a, note: n };
+      }
+      // fallback (shouldn't happen)
+      const typeEl = document.querySelector('#swal-mv-vue select');
+      const noteEl = document.querySelector('#swal-mv-vue textarea');
+      const amountEl = document.querySelector('#swal-mv-vue input');
+      const type = typeEl ? typeEl.value : 'retirada';
+      const amount = amountEl ? Number(amountEl.value.replace(',', '.')) || 0 : 0;
+      const note = noteEl ? noteEl.value : '';
       return { type, amount, note };
-    },
-    showCancelButton: true,
-    confirmButtonText: 'Salvar'
+    }
   });
-  if (!form) return;
+
+  // unmount app if mounted
+  try { if (mountedAppRef) mountedAppRef.unmount(); } catch (e) {}
+
+  if (!result || result.isDismissed) return;
+  const form = result.value;
   try {
     const { data } = await api.post('/cash/movement', form);
+    // refresh session info
+    await loadCurrentSession();
+    invalidateCashSummary();
     Swal.fire('OK', 'Movimento registrado', 'success');
   } catch (e) {
     console.error(e);
@@ -152,7 +265,7 @@ async function partialSummary() {
     // show loading spinner while fetching session and summary
     Swal.fire({ title: 'Carregando resumo...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     const { data: session } = await api.get('/cash/current');
-    if (!session) { Swal.close(); return Swal.fire('Nenhum caixa aberto', '', 'info'); }
+    if (!session) { Swal.close(); currentSession.value = null; return Swal.fire('Nenhum caixa aberto', '', 'info'); }
 
     // fetch precomputed summary from backend for the open session (cached)
     const summary = await fetchCashSummary();
@@ -191,6 +304,7 @@ async function partialSummary() {
       // user chose to reconcile: create a movement to adjust the stored balance
       await reconcileBalance(Math.round(diff * 100));
       // refresh the modal to show updated values
+      await loadCurrentSession();
       await partialSummary();
     }
   } catch (e) { console.error(e); Swal.fire('Erro', 'Falha ao buscar resumo parcial', 'error') }
@@ -203,6 +317,8 @@ async function reconcileBalance(diffCents) {
     const note = `Reconciliação automática (esperado ${ formatAmount(diffCents/100) } vs registrado)`;
     await api.post('/cash/movement', { type, amount, note });
     Swal.fire('OK', 'Movimento de reconciliação registrado', 'success');
+    await loadCurrentSession();
+    invalidateCashSummary();
   } catch (e) {
     console.error('Failed to reconcile balance', e);
     Swal.fire('Erro', e?.response?.data?.message || 'Falha ao registrar movimento de reconciliação', 'error');
@@ -231,15 +347,70 @@ async function closeCash() {
       rows.push(`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee"><div style="flex:1">${m}</div><div style="flex:1;text-align:center">${formatCurrency(expectedNum)}</div><div style="flex:1;text-align:center"><input id="${inputId}" inputmode="decimal" class="swal2-input" value="${formatAmount(expectedNum)}" style="width:100px;margin:0 auto"></div></div>`);
     }
 
+    // helper to escape HTML in notes
+    function escapeHtml(str) {
+      if (!str && str !== 0) return '';
+      return String(str).replace(/[&<>"'`]/g, (s) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;', '`':'&#96;'})[s]);
+    }
+
+    // helper to show movements of a specific kind ('retirada' or 'reforco') inside a collapsible div next to the link
+    function showMovementDetails(kind, containerId) {
+      try {
+        const container = document.getElementById(containerId) || document.getElementById('swal-mov-details');
+        if (!container) return;
+        const movements = Array.isArray(data.movements) ? data.movements : [];
+        const filtered = movements.filter((mv) => {
+          const t = String(mv.type || '').toLowerCase();
+          if (kind === 'retirada') return t.includes('retir') || t.includes('withdraw');
+          if (kind === 'reforco') return t.includes('refor') || t.includes('reinfor') || t.includes('refo');
+          return false;
+        });
+
+        // toggle: if already visible and showing same kind, hide it
+        const currently = container.getAttribute('data-kind');
+        if (container.style.display && container.style.display !== 'none' && currently === kind) {
+          container.style.display = 'none';
+          container.setAttribute('data-kind', '');
+          return;
+        }
+
+        // build list
+        if (!filtered.length) {
+          container.innerHTML = `<div style="padding:8px">Nenhuma movimentação encontrada</div>`;
+          container.style.display = 'block';
+          container.setAttribute('data-kind', kind);
+          return;
+        }
+
+        // sort descending by date so newest appear first
+        filtered.sort((a,b) => new Date(b.at || 0) - new Date(a.at || 0));
+
+        const lines = filtered.map((mv) => {
+          const at = mv.at ? new Date(mv.at).toLocaleString() : '';
+          const val = formatCurrency(Number(mv.amount || 0));
+          const note = mv.note ? (' - ' + escapeHtml(mv.note)) : '';
+          return `<li style="padding:6px 0;border-bottom:1px dashed #eee">${at} - ${val}${note}</li>`;
+        });
+        container.innerHTML = `<div style="text-align:left;margin-top:8px"><ul style="list-style:none;padding:0;margin:0">${lines.join('')}</ul></div>`;
+        container.style.display = 'block';
+        container.setAttribute('data-kind', kind);
+      } catch (e) { console.error('Failed to show movement details', e); Swal.fire('Erro', 'Falha ao exibir detalhes', 'error'); }
+    }
+
     // build html with a container where we'll mount a small Vue app that uses CurrencyInput
     const html = `
       <div style="text-align:center"><strong>Fechamento de Frente de Caixa</strong></div>
       <div style="margin-top:8px">Abertura: ${data.openedAt} &nbsp;&nbsp; Saldo registrado: ${formatCurrency(Number(data.balance||0))}</div>
       <div style="margin-top:12px"><div id="swal-vue-container">${rows.join('')}</div></div>
       <hr/>
-      <div style="font-size:0.9rem">Abertura de caixa(+): ${formatCurrency(Number(data.openingAmount||0))}<br/>Totais em caixa: ${formatCurrency(Object.values(inRegisterByMethod).reduce((s,v)=>s+Number(v||0),0))}<br/>Retiradas(-): ${formatCurrency(Number(totalWithdrawals))}<br/>Reforços(+): ${formatCurrency(Number(totalReinforcements))}</div>
+      <div style="font-size:0.9rem">Abertura de caixa(+): ${formatCurrency(Number(data.openingAmount||0))}<br/>Totais em caixa: ${formatCurrency(Object.values(inRegisterByMethod).reduce((s,v)=>s+Number(v||0),0))}<br/>Retiradas(-): ${formatCurrency(Number(totalWithdrawals))} <a href="#" id="swal-details-withdrawals" style="margin-left:8px;font-size:0.9rem">Detalhes</a>
+      <div id="swal-mov-details-withdrawals" style="display:none;margin-top:6px;text-align:left;max-height:180px;overflow:auto;padding:6px;border:1px solid #f0f0f0;border-radius:4px;background:#fff"></div>
+      <br/>Reforços(+): ${formatCurrency(Number(totalReinforcements))} <a href="#" id="swal-details-reinforcements" style="margin-left:8px;font-size:0.9rem">Detalhes</a>
+      <div id="swal-mov-details-reinforcements" style="display:none;margin-top:6px;text-align:left;max-height:180px;overflow:auto;padding:6px;border:1px solid #f0f0f0;border-radius:4px;background:#fff"></div>
+      </div>
       <hr/>
-      <label>Obs. Fechamento</label><textarea id="swal-close-note" class="swal2-textarea"></textarea>
+      <label>Obs. Fechamento</label><textarea id="swal-close-note" class="form-control"></textarea>
+      <div id="swal-mov-details" style="display:none;margin-top:12px;text-align:left;max-height:220px;overflow:auto;padding:6px;border:1px solid #f0f0f0;border-radius:4px;background:#fff"></div>
     `;
 
     // prepare methods and expected values for the Vue app
@@ -291,6 +462,13 @@ async function closeCash() {
           // fallback: if mounting fails, keep the plain inputs (should not happen)
           console.error('Failed to mount Vue app inside Swal modal', e);
         }
+        // attach detail handlers for movements (withdrawals / reinforcements)
+        try {
+          const w = document.getElementById('swal-details-withdrawals');
+          const r = document.getElementById('swal-details-reinforcements');
+          if (w) w.addEventListener('click', (ev) => { ev.preventDefault(); showMovementDetails('retirada', 'swal-mov-details-withdrawals'); });
+          if (r) r.addEventListener('click', (ev) => { ev.preventDefault(); showMovementDetails('reforco', 'swal-mov-details-reinforcements'); });
+        } catch (e) { /* ignore */ }
       },
       preConfirm: () => {
         // collect entered values from the mounted Vue instance when present
@@ -343,10 +521,29 @@ async function closeCash() {
     const closingSummary = { note: note || '', counted: entered };
     try {
       await api.post('/cash/close', { closingSummary });
+      // refresh session state to reflect closed
+      await loadCurrentSession();
+      invalidateCashSummary();
       Swal.fire('OK', 'Caixa fechado', 'success');
     } catch (e) { console.error(e); Swal.fire('Erro', e?.response?.data?.message || 'Falha ao fechar caixa', 'error') }
   } catch (e) { console.error(e); Swal.fire('Erro', 'Falha ao abrir modal de fechamento', 'error') }
 }
+
+onMounted(() => {
+  // initialize current session on mount
+  loadCurrentSession().catch(() => {});
+  // close dropdown on outside click
+  const outside = (ev) => {
+    try {
+      if (!container.value) return;
+      if (!container.value.contains(ev.target)) closeDropdown();
+    } catch (e) {}
+  };
+  document.addEventListener('click', outside);
+  onUnmounted(() => {
+    try { document.removeEventListener('click', outside); } catch (e) {}
+  });
+});
 </script>
 
 <style scoped>

@@ -1,5 +1,5 @@
 <template>
-  <ListCard title="Afiliados" icon="bi bi-handshake" :subtitle="affiliates?.length ? `${affiliates.length} itens` : ''">
+  <ListCard title="Afiliados" icon="bi bi-handshake" :subtitle="affiliates?.length ? `${affiliates.length} itens` : ''" variant="compact">
     <template #actions>
       <button @click="goNewAffiliate" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i> Novo Afiliado</button>
     </template>
@@ -222,6 +222,7 @@ export default {
   processSaleFromModal,
       closeSaleModal,
       toggleStatus
+    , formatCurrency
     }
   }
 }

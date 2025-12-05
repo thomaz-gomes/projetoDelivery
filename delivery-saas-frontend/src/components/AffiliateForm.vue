@@ -23,11 +23,7 @@
       </div>
 
       <div class="form-group">
-        <label for="couponCode">Código do Cupom *</label>
-        <TextInput v-model="form.couponCode" id="couponCode" placeholder="CUPOM10, AFILIADO123, etc." required @input="formatCouponCode" />
-        <small class="form-hint">
-          Código único que os clientes usarão para identificar este afiliado
-        </small>
+        <!-- Coupon code removed from affiliate form. Coupons should be linked when creating a coupon. -->
       </div>
 
       <div class="form-group">
@@ -100,7 +96,6 @@ export default {
       email: '',
       password: '',
       whatsapp: '',
-      couponCode: '',
       commissionRate: 0,
       isActive: true
     })
@@ -111,20 +106,9 @@ export default {
       form.value.whatsapp = applyPhoneMask(event.target.value)
     }
 
-    const formatCouponCode = (event) => {
-      // Convert to uppercase and remove special characters
-      const value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
-      form.value.couponCode = value
-    }
-
     const validateForm = () => {
       if (!form.value.name.trim()) {
         error.value = 'Nome é obrigatório'
-        return false
-      }
-
-      if (!form.value.couponCode.trim()) {
-        error.value = 'Código do cupom é obrigatório'
         return false
       }
 
@@ -199,7 +183,6 @@ export default {
           email: props.affiliate.email || '',
           // show masked whatsapp in input when editing
           whatsapp: props.affiliate.whatsapp ? applyPhoneMask(props.affiliate.whatsapp) : '',
-          couponCode: props.affiliate.couponCode || '',
           commissionRate: (props.affiliate.commissionRate * 100) || 0, // Convert to percentage
           isActive: props.affiliate.isActive !== false
         }
@@ -212,7 +195,6 @@ export default {
       error,
       isEditing,
       formatPhone,
-      formatCouponCode,
       handleSubmit
     }
   }

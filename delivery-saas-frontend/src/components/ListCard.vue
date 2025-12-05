@@ -1,5 +1,5 @@
 <template>
-  <div class="list-card container py-4">
+  <div :class="['list-card container py-4', variant ? 'list-card--' + variant : '']">
     <div class="card">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between mb-3">
@@ -33,10 +33,24 @@
 defineProps({
   title: { type: String, default: '' },
   subtitle: { type: String, default: '' },
-  icon: { type: String, default: '' }
+  icon: { type: String, default: '' },
+  variant: { type: String, default: '' }
 })
 </script>
 
 <style scoped>
 .list-card { padding-top: 16px }
+.list-card--card-style .card { background: #fff; border: 1px solid #eceff3; border-radius: 14px; }
+.list-card--card-style .card-body { padding: 18px 20px; border-radius: 14px; }
+@media (max-width:576px){
+  .list-card--card-style .card-body { padding: 16px; }
+}
+
+/* Compact variant: smaller header and reduced spacing for dense lists */
+.list-card--compact .card-body { padding: 10px 12px; }
+.list-card--compact h4 { font-size: 1rem; margin-bottom: 4px; }
+.list-card--compact .small { font-size: 0.75rem; }
+
+/* No-padding variant: card body has no inner padding (useful for embedded lists) */
+.list-card--no-padding .card-body { padding: 0; }
 </style>
