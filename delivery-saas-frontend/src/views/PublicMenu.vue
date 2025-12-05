@@ -685,12 +685,15 @@ const company = ref(null)
 const menu = ref(null)
 const orderType = ref('DELIVERY') // 'DELIVERY' or 'PICKUP'
 
-// Derived display values: prefer store name, and avoid showing pickupInfo when it's just a duplicate/mocked value
+// Derived display values: prefer the menu name (cardápio title), then fall back
+// to store name or company name. This ensures the page heading shows the
+// currently selected menu instead of the store name.
 const displayName = computed(() => {
   try {
-    const storeName = company.value?.store?.name?.trim();
-    const companyName = company.value?.name?.trim();
-    return storeName || companyName || 'Cardápio';
+    const menuName = menu.value?.name?.toString().trim();
+    const storeName = company.value?.store?.name?.toString().trim();
+    const companyName = company.value?.name?.toString().trim();
+    return menuName || storeName || companyName || 'Cardápio';
   } catch (e) { return 'Cardápio' }
 });
 
@@ -2128,7 +2131,8 @@ onMounted(async ()=>{
   menu.value = data.menu || null
     // set page title and social meta tags, prefer store name when available
     try{
-      const title = (company.value && company.value.store && company.value.store.name) || (menu.value && menu.value.name) || (company.value && company.value.name) || 'Cardápio'
+      // Prefer the selected menu's name as the document title, then store name, then company name
+      const title = (menu.value && menu.value.name) || (company.value && company.value.store && company.value.store.name) || (company.value && company.value.name) || 'Cardápio'
       try{ document.title = title }catch(e){}
       const setMeta = (prop, val, isProperty=false) => {
         try{
