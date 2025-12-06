@@ -99,11 +99,18 @@ async function save(){
       await api.patch(`/menu/categories/${id}`, payload)
       Swal.fire({ icon: 'success', text: 'Categoria atualizada' })
     } else {
-      await api.post('/menu/categories', payload)
+      const res = await api.post('/menu/categories', payload)
+      const created = res && res.data ? res.data : null
       Swal.fire({ icon: 'success', text: 'Categoria criada' })
+      // If category was created for a specific menu, redirect back to the Menu Admin
+      // for that same menu so the user can continue editing its categories/products.
+      if(menuId.value){
+        router.push({ path: '/menu/admin', query: { menuId: menuId.value } })
+        return
+      }
+      // fallback: if no menu selected, go to generic admin
+      router.push({ path: '/menu/admin' })
     }
-    // navigate back to admin and consider refreshing the list there
-    router.push({ path: '/menu/admin' })
   }catch(e){ console.error(e); error.value = e?.response?.data?.message || e.message || 'Erro' }
   finally{ saving.value = false }
 }

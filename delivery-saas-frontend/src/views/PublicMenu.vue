@@ -2402,7 +2402,7 @@ try{
 .public-hero:hover .hero-image { transform: scale(1.02) }
 
 /* Product card styles to match mockups */
-.product-card { background: #fff; border: 1px solid #eee; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+.product-card { background: #fff; border-radius: 18px;}
 .product-card-body { flex: 1 1 auto; padding-right: 1rem; }
 .product-title { font-size: 1.05rem; font-weight: 600; }
 .product-desc { color: #666; font-size:12px; line-height:135%; max-height: 3em; overflow: hidden; text-overflow: ellipsis; }
@@ -2801,13 +2801,16 @@ body { padding-bottom: 110px; }
   .hero-panel { margin-top: -56px; padding: 14px }
   .hero-panel .company-logo-wrapper { display:flex; width:72px; height:72px; flex: 0 0 72px }
   .hero-panel .company-name { font-size: 1.4rem }
-  .nav-pills .nav-link { padding-bottom: 14px; position: relative }
+  .nav-pills .nav-link { color:#000; font-size:14px; padding-bottom: 14px; position: relative }
   /* animated underline using pseudo-element */
   .nav-pills .nav-link::after { content: ''; position: absolute; left: 12%; right: 12%; height: 3px; bottom: 4px; background: #111; transform: scaleX(0); transform-origin: left center; transition: transform .18s ease; border-radius: 3px }
   .nav-pills .nav-link.active { background: transparent; color: #111; font-weight:700; border-radius:0 }
   .nav-pills .nav-link.active::after { transform: scaleX(1) }
 }
-
+.nav-item:first-child a {
+  padding-left: 10px;
+  margin-left: 0px;
+}
 /* Reduce hero height on small screens for better vertical space */
 @media (max-width: 767px){
   .public-hero { height: 125px }
