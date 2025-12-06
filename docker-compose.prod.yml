@@ -24,6 +24,9 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       NODE_ENV: production
       PORT: 3000
+    # Persist uploads outside the ephemeral container filesystem
+    volumes:
+      - backend_uploads:/app/public/uploads
     depends_on:
       - db
     ports:
@@ -43,3 +46,5 @@ services:
 
 volumes:
   db_data:
+  backend_uploads:
+    driver: local
