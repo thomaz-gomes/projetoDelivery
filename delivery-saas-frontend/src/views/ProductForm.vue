@@ -130,6 +130,8 @@ async function load(){
 }
 
 function cancel(){
+  const prevHistory = (typeof window !== 'undefined' && window.history && window.history.length > 1)
+  if(prevHistory){ router.back(); return }
   // preserve menuId query when returning to the admin structure view
   const q = {}
   const mid = form.value.menuId || route.query.menuId
@@ -154,7 +156,11 @@ async function save(){
         const mid = form.value.menuId || route.query.menuId
         if(mid) q.menuId = mid
         router.push({ path: '/menu/admin', query: q })
-      }catch(e){ router.push({ path: '/menu/admin' }) }
+      }catch(e){
+        const prevHistory = (typeof window !== 'undefined' && window.history && window.history.length > 1)
+        if(prevHistory){ router.back(); }
+        else { router.push({ path: '/menu/admin' }) }
+      }
     } else {
   const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId }
       const res = await api.post('/menu/products', payload)
@@ -175,7 +181,11 @@ async function save(){
         const mid = form.value.menuId || route.query.menuId
         if(mid) q.menuId = mid
         router.push({ path: '/menu/admin', query: q })
-      }catch(e){ router.push({ path: '/menu/admin' }) }
+      }catch(e){
+        const prevHistory = (typeof window !== 'undefined' && window.history && window.history.length > 1)
+        if(prevHistory){ router.back(); }
+        else { router.push({ path: '/menu/admin' }) }
+      }
     }
   }catch(e){ console.error(e); error.value = e?.response?.data?.message || e.message || 'Erro' }
   finally{ saving.value = false }

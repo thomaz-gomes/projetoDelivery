@@ -87,7 +87,13 @@ async function loadMenus(){
 onMounted(()=> load())
 onMounted(()=> loadMenus())
 
-function cancel(){ router.push({ path: '/menu/admin' }) }
+function cancel(){
+  const prevHistory = (typeof window !== 'undefined' && window.history && window.history.length > 1)
+  if(prevHistory){ router.back(); return }
+  const qMenu = route.query.menuId || menuId.value
+  if(qMenu) router.push({ path: '/menu/admin', query: { menuId: qMenu } })
+  else router.push({ path: '/menu/admin' })
+}
 
 async function save(){
   error.value = ''
@@ -108,7 +114,9 @@ async function save(){
         router.push({ path: '/menu/admin', query: { menuId: menuId.value } })
         return
       }
-      // fallback: if no menu selected, go to generic admin
+      // fallback: if no menu selected, try to go back, else generic admin
+      const prevHistory = (typeof window !== 'undefined' && window.history && window.history.length > 1)
+      if(prevHistory){ router.back(); return }
       router.push({ path: '/menu/admin' })
     }
   }catch(e){ console.error(e); error.value = e?.response?.data?.message || e.message || 'Erro' }
