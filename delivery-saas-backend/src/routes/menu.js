@@ -107,6 +107,20 @@ router.get('/categories', async (req, res) => {
   res.json(rows)
 })
 
+// GET /menu/categories/:id -> get single category (company-scoped)
+router.get('/categories/:id', async (req, res) => {
+  const { id } = req.params
+  const companyId = req.user.companyId
+  try {
+    const row = await prisma.menuCategory.findFirst({ where: { id, companyId } })
+    if (!row) return res.status(404).json({ message: 'Categoria não encontrada' })
+    return res.json(row)
+  } catch (e) {
+    console.error('GET /categories/:id error', e)
+    return res.status(500).json({ message: 'Erro ao carregar categoria', error: String(e && e.message) })
+  }
+})
+
 router.post('/categories', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const { name, position = 0, isActive = true, menuId = null } = req.body || {}

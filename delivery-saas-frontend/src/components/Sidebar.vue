@@ -343,14 +343,15 @@ function logout() {
       <div class="d-flex align-items-center justify-content-between w-100">
         <div class="d-flex align-items-center position-relative w-100">
           <div class=" w-100" v-if="!mini">
-            <button ref="menuToggleBtn" type="button" class="btn btn-sm btn-light d-flex align-items-center text-dark w-100" @click="toggleMenusDropdown" :aria-expanded="dropdownOpen">
+            <button ref="menuToggleBtn" type="button" class="btn btn-sm btn-light d-flex  justify-content-between align-items-center text-dark w-100 p-2" @click="toggleMenusDropdown" :aria-expanded="dropdownOpen">
+              <span class="small d-flex">
           <div class="me-2 small text-muted" v-show="!mini">Cardápios</div>
           
-              <span class="small">(
+              (
                 <template v-if="openCount > 0">{{ openCount }} {{ openCount === 1 ? 'aberta' : 'abertas' }}</template>
                 <template v-else>{{ closedCount }} {{ closedCount === 1 ? 'fechada' : 'fechadas' }}</template>)
               </span>
-              <i class="bi bi-caret-down-fill ms-2"></i>
+              <i  class="bi bi-chevron-down ms-2 chevron" aria-hidden="true" style=""></i>
             </button>
           </div>
           <div v-else class="d-flex align-items-center  w-100" role="button" ref="menuToggleBtn" @click="toggleMenusDropdown">
