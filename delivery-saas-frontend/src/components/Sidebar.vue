@@ -214,13 +214,102 @@ async function loadMenusWidget(){
   }catch(e){ console.warn('Failed to load menus for sidebar widget', e) }
 }
 
+function parseHM(str){
+  if(!str) return null
+  const m = String(str).match(/^(\d{1,2}):(\d{2})$/)
+  if(!m) return null
+  return { hh: Number(m[1]), mm: Number(m[2]) }
+}
+
+function getTZOffsetMinutes(utcMillis, tz){
+  // returns offset in minutes: local = UTC + offsetMinutes
+  try{
+    const dt = new Date(utcMillis)
+    const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    const parts = fmt.formatToParts(dt).reduce((acc, p) => { acc[p.type] = p.value; return acc }, {})
+    const localYear = Number(parts.year), localMonth = Number(parts.month), localDay = Number(parts.day)
+    const localHour = Number(parts.hour), localMinute = Number(parts.minute)
+    // UTC components
+    const utcYear = dt.getUTCFullYear(), utcMonth = dt.getUTCMonth()+1, utcDay = dt.getUTCDate()
+    const utcHour = dt.getUTCHours(), utcMinute = dt.getUTCMinutes()
+    const localTotal = localYear*400000 + localMonth*4000 + localDay // coarse date compare
+    const utcTotal = utcYear*400000 + utcMonth*4000 + utcDay
+    const dayDiff = (localYear - utcYear)*365 + (localMonth - utcMonth)*31 + (localDay - utcDay)
+    // compute minutes difference
+    const minutesDiff = dayDiff*24*60 + (localHour - utcHour)*60 + (localMinute - utcMinute)
+    return minutesDiff
+  }catch(e){ return 0 }
+}
+
+function zonedTimeToUtc(year, month, day, hour, minute, tz){
+  // iterative solver: find UTC ms corresponding to the given local date/time in tz
+  try{
+    const localMillisBase = Date.UTC(year, month-1, day, hour, minute, 0)
+    let candidate = localMillisBase
+    for(let i=0;i<4;i++){
+      const offset = getTZOffsetMinutes(candidate, tz)
+      const newCandidate = Date.UTC(year, month-1, day, hour, minute, 0) - offset*60000
+      if(Math.abs(newCandidate - candidate) < 1000) { candidate = newCandidate; break }
+      candidate = newCandidate
+    }
+    return new Date(candidate)
+  }catch(e){ return null }
+}
+
+function findNextSchedulePoint(weekly, mode='nextOpen', tz='America/Sao_Paulo'){
+  // mode: 'nextOpen' or 'nextClose' - returns a Date in UTC for the instant of that boundary
+  try{
+    const nowUtc = Date.now()
+    // iterate up to 14 days
+    for(let add=0; add<14; add++){
+      // compute candidate day in timezone by taking 'now' + add days and formatting in tz to extract YMD
+      const candUtc = new Date(Date.now() + add*24*60*60*1000)
+      const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+      const parts = fmt.formatToParts(candUtc).reduce((acc,p)=>{ acc[p.type]=p.value; return acc },{})
+      const y = Number(parts.year), mo = Number(parts.month), d = Number(parts.day)
+      const entry = (Array.isArray(weekly) && weekly.length) ? weekly[(new Date(y, mo-1, d)).getDay()] : null
+      // above lookup by weekday may be off because (new Date(y,mo-1,d)).getDay() uses local timezone, but weekly entries are by weekday numeric 0-6
+      // safer: compute weekday from UTC representation in tz: use format with weekday
+      const fmtW = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit' })
+      const partsW = fmtW.formatToParts(candUtc).reduce((acc,p)=>{ acc[p.type]=p.value; return acc },{})
+      const weekday = new Date(partsW.year + '-' + partsW.month + '-' + partsW.day).getDay()
+      const dayEntry = (Array.isArray(weekly) && weekly[weekday]) ? weekly[weekday] : null
+      if(!dayEntry || !dayEntry.enabled) continue
+      const from = parseHM(dayEntry.from)
+      const to = parseHM(dayEntry.to)
+      if(!from || !to) continue
+      const startUtc = zonedTimeToUtc(y, mo, d, from.hh, from.mm, tz)
+      const endUtc = zonedTimeToUtc(y, mo, d, to.hh, to.mm, tz)
+      if(!startUtc || !endUtc) continue
+      if(add === 0){
+        if(nowUtc < startUtc.getTime()){
+          return mode === 'nextOpen' ? startUtc : endUtc
+        }
+        if(nowUtc >= startUtc.getTime() && nowUtc <= endUtc.getTime()){
+          return mode === 'nextOpen' ? startUtc : endUtc
+        }
+        // otherwise continue
+      } else {
+        return mode === 'nextOpen' ? startUtc : endUtc
+      }
+    }
+  }catch(e){ console.warn('findNextSchedulePoint error', e) }
+  return null
+}
+
 function computeOpenStatus(s){
   try{
-    // If settings file includes a forced flag, respect it
+    // If settings file includes a forced flag, respect it but only while it hasn't expired
     const forced = s.forceOpen
-    if(forced !== undefined && forced !== null){
-      return { isOpen: !!forced, forced: !!forced, source: 'forced' }
-    }
+    try{
+      if(forced !== undefined && forced !== null){
+        const expires = s.forceOpenExpiresAt ? Date.parse(String(s.forceOpenExpiresAt)) : null
+        if(!expires || Date.now() < expires){
+          return { isOpen: !!forced, forced: !!forced, source: 'forced', forceOpenExpiresAt: s.forceOpenExpiresAt }
+        }
+        // expired: ignore forced flag and allow schedule to take precedence
+      }
+    }catch(e){ /* ignore parsing errors and fallthrough to schedule */ }
     // follow schedule: reuse PublicMenu logic (simplified)
     if(s.open24Hours || s.alwaysOpen) return { isOpen: true, forced: undefined, source: 'schedule' }
 
@@ -296,9 +385,29 @@ async function onToggleForce(item, ev){
     const newVal = !!ev.target.checked
     const storeId = item.storeId || item._meta?.id || item._meta?.storeId || null
     if(!storeId) throw new Error('Store id not found for this menu')
-    await api.post(`/stores/${storeId}/settings/upload`, { menuId: item.id, forceOpen: newVal })
+    // compute an expiration for the forced override so it only lasts until the next scheduled period change
+    const meta = item._meta || {}
+    let forceOpenExpiresAt = null
+    try{
+      if(Array.isArray(meta.weeklySchedule) && meta.weeklySchedule.length){
+        const tz = meta.timezone || meta.tz || 'America/Sao_Paulo'
+        if(newVal){
+          // forced open: persist until next scheduled close
+          const nextClose = findNextSchedulePoint(meta.weeklySchedule, 'nextClose', tz)
+          if(nextClose) forceOpenExpiresAt = nextClose.toISOString()
+        } else {
+          // forced close: persist until next scheduled open
+          const nextOpen = findNextSchedulePoint(meta.weeklySchedule, 'nextOpen', tz)
+          if(nextOpen) forceOpenExpiresAt = nextOpen.toISOString()
+        }
+      }
+    }catch(e){ /* ignore calculation errors */ }
+    const payload = { menuId: item.id, forceOpen: newVal }
+    if(forceOpenExpiresAt) payload.forceOpenExpiresAt = forceOpenExpiresAt
+    await api.post(`/stores/${storeId}/settings/upload`, payload)
     item._meta = item._meta || {}
     item._meta.forceOpen = newVal
+    if(forceOpenExpiresAt) item._meta.forceOpenExpiresAt = forceOpenExpiresAt
     item._status = computeOpenStatus(item._meta)
   }catch(e){ console.error('Failed to persist forceOpen', e); alert('Falha ao mudar status') }
 }
@@ -603,7 +712,21 @@ aside { transition: width 220ms ease; }
 .store-sub { margin-top:-2px }
 .toggle-open { width:36px; height:22px }
 
+.nav-link{font-size:0.8rem}
 /* Smooth labels opacity transition when expanding/collapsing */
 .nav-link span { transition: opacity 180ms ease; }
 .header-wrap { transition: padding 220ms ease; }
+/* Ensure sidebar never exceeds viewport height and make nav scrollable with themed scrollbar */
+aside { max-height: 100vh; height: 100vh; display: flex; flex-direction: column; }
+/* make the main nav area scrollable */
+aside nav { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* Themed custom scrollbar for WebKit browsers */
+aside nav::-webkit-scrollbar { width: 10px; }
+aside nav::-webkit-scrollbar-track { background: transparent; }
+aside nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+aside nav::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
+
+/* Firefox scrollbar styling */
+aside nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
 </style>

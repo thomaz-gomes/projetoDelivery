@@ -45,6 +45,7 @@ import { sha256 } from './utils.js'
 import { rotateAgentToken } from './agentTokenManager.js'
 import path from 'path';
 import startReportsCleanup from './cleanupReports.js';
+import startForceOpenCleanup from './cleanupForceOpen.js';
 
 const app = express();
 
@@ -207,6 +208,16 @@ try {
   console.log('Reports cleanup scheduled (REPORTS_MAX_AGE_HOURS, REPORTS_CLEANUP_INTERVAL_MIN)');
 } catch (e) {
   console.error('Failed to start reports cleanup:', e?.message || e);
+}
+
+// start periodic cleanup for expired forceOpen flags
+try {
+  const intervalMin = process.env.FORCEOPEN_CLEANUP_INTERVAL_MIN ? Number(process.env.FORCEOPEN_CLEANUP_INTERVAL_MIN) : undefined
+  const forceCleanupHandle = startForceOpenCleanup({ intervalMinutes: intervalMin })
+  app.locals.forceOpenCleanup = forceCleanupHandle
+  console.log('ForceOpen cleanup scheduled (FORCEOPEN_CLEANUP_INTERVAL_MIN)')
+} catch (e) {
+  console.error('Failed to start ForceOpen cleanup:', e?.message || e)
 }
 
 // ✅ Rota de teste
