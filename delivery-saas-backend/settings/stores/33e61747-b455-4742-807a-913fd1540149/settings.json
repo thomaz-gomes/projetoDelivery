@@ -5,7 +5,51 @@
       "forceOpen": true
     },
     "8248d884-670e-42a4-9f52-9e538dfa06f6": {
-      "forceOpen": true
+      "forceOpen": true,
+      "weeklySchedule": [
+        {
+          "day": 0,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 1,
+          "enabled": false,
+          "from": "10:00",
+          "to": "22:30"
+        },
+        {
+          "day": 2,
+          "enabled": true,
+          "from": "10:00",
+          "to": "22:30"
+        },
+        {
+          "day": 3,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 4,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 5,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 6,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        }
+      ]
     }
   }
 }

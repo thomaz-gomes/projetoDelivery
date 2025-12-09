@@ -52,7 +52,7 @@ const showLayout = computed(() => {
         </div>
 
         <!-- Conteúdo -->
-        <main class="flex-grow-1 min-vh-100 p-4">
+        <main class="flex-grow-1 min-vh-100 p-4" style="max-height: 100vh; overflow-y: auto;">
           <router-view />
         </main>
       </div>

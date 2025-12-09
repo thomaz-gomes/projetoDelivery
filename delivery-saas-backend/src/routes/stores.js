@@ -3,6 +3,7 @@ import express from 'express'
 import { prisma } from '../prisma.js'
 import { normalizeSlug, isValidSlug, isReservedSlug } from '../utils/slug.js'
 import { authMiddleware, requireRole } from '../auth.js'
+import { runForceOpenCleanupOnce } from '../cleanupForceOpen.js'
 import { encryptText } from '../utils/secretStore.js'
 
 // helper: persist store settings file under public/uploads/store/<storeId>/settings.json
@@ -73,6 +74,53 @@ storesRouter.get('/:id', async (req, res) => {
           try {
             const raw = await fs.promises.readFile(settingsPath, 'utf8')
             const settings = JSON.parse(raw || '{}')
+
+            // Cleanup expired forceOpen flags on read so stale overrides don't persist
+            try {
+              const cleanupExpiredForceFlags = (obj) => {
+                if (!obj || typeof obj !== 'object') return false
+                let mutated = false
+                const now = Date.now()
+                if (obj.forceOpenExpiresAt) {
+                  const t = Date.parse(String(obj.forceOpenExpiresAt))
+                  if (!isNaN(t) && t < now) {
+                    delete obj.forceOpen
+                    delete obj.forceOpenExpiresAt
+                    mutated = true
+                  }
+                }
+                if (obj.menus && typeof obj.menus === 'object') {
+                  for (const k of Object.keys(obj.menus)) {
+                    const m = obj.menus[k]
+                    if (m && m.forceOpenExpiresAt) {
+                      const tt = Date.parse(String(m.forceOpenExpiresAt))
+                      if (!isNaN(tt) && tt < now) {
+                        delete m.forceOpen
+                        delete m.forceOpenExpiresAt
+                        mutated = true
+                      }
+                    }
+                  }
+                }
+                return mutated
+              }
+
+              const mutated = cleanupExpiredForceFlags(settings)
+              if (mutated) {
+                // write back cleaned settings to both centralized and legacy paths (best-effort)
+                try {
+                  const settingsPathNew = path.join(process.cwd(), 'settings', 'stores', id, 'settings.json')
+                  await fs.promises.mkdir(path.dirname(settingsPathNew), { recursive: true })
+                  await fs.promises.writeFile(settingsPathNew, JSON.stringify(settings, null, 2), 'utf8')
+                } catch (e) { /* non-fatal */ }
+                try {
+                  const settingsPathLegacy = path.join(process.cwd(), 'public', 'uploads', 'store', id, 'settings.json')
+                  await fs.promises.mkdir(path.dirname(settingsPathLegacy), { recursive: true })
+                  await fs.promises.writeFile(settingsPathLegacy, JSON.stringify(settings, null, 2), 'utf8')
+                } catch (e) { /* non-fatal */ }
+              }
+            } catch (e) { /* non-fatal cleanup error */ }
+
             // sanitize: never expose encrypted password blob
             const safe = { ...settings }
             if (safe.certPasswordEnc !== undefined) delete safe.certPasswordEnc
@@ -95,6 +143,17 @@ storesRouter.get('/:id', async (req, res) => {
   } catch (e) {
     console.error('GET /stores/:id failed', e)
     res.status(500).json({ message: 'Erro ao buscar loja', error: e?.message || String(e) })
+  }
+})
+
+// Admin endpoint: trigger manual cleanup of expired forceOpen flags
+storesRouter.post('/admin/cleanup-forceopen', requireRole('ADMIN'), async (req, res) => {
+  try {
+    await runForceOpenCleanupOnce()
+    return res.json({ ok: true, message: 'ForceOpen cleanup triggered' })
+  } catch (e) {
+    console.error('POST /stores/admin/cleanup-forceopen failed', e)
+    return res.status(500).json({ ok: false, error: e?.message || String(e) })
   }
 })
 
@@ -374,6 +433,35 @@ storesRouter.post('/:id/settings/upload', requireRole('ADMIN'), async (req, res)
         } else {
           Object.assign(existingNew, saved)
         }
+
+        // Cleanup expired forceOpen flags before persisting
+        try {
+          const cleanupExpiredForceFlags = (obj) => {
+            if (!obj || typeof obj !== 'object') return
+            const now = Date.now()
+            if (obj.forceOpenExpiresAt) {
+              const t = Date.parse(String(obj.forceOpenExpiresAt))
+              if (!isNaN(t) && t < now) {
+                delete obj.forceOpen
+                delete obj.forceOpenExpiresAt
+              }
+            }
+            if (obj.menus && typeof obj.menus === 'object') {
+              for (const k of Object.keys(obj.menus)) {
+                const m = obj.menus[k]
+                if (m && m.forceOpenExpiresAt) {
+                  const tt = Date.parse(String(m.forceOpenExpiresAt))
+                  if (!isNaN(tt) && tt < now) {
+                    delete m.forceOpen
+                    delete m.forceOpenExpiresAt
+                  }
+                }
+              }
+            }
+          }
+          cleanupExpiredForceFlags(existingNew)
+        } catch (e) { /* non-fatal */ }
+
         // write primary settings file
         await fs.promises.writeFile(settingsPathNew, JSON.stringify(existingNew, null, 2), 'utf8')
         try{ console.log('[stores] wrote settings.json at', settingsPathNew) }catch(e){}
@@ -390,6 +478,31 @@ storesRouter.post('/:id/settings/upload', requireRole('ADMIN'), async (req, res)
           } else {
             Object.assign(existingLegacy, saved)
           }
+
+          // cleanup expired flags on legacy copy as well
+          try {
+            const now = Date.now()
+            if (existingLegacy.forceOpenExpiresAt) {
+              const t = Date.parse(String(existingLegacy.forceOpenExpiresAt))
+              if (!isNaN(t) && t < now) {
+                delete existingLegacy.forceOpen
+                delete existingLegacy.forceOpenExpiresAt
+              }
+            }
+            if (existingLegacy.menus && typeof existingLegacy.menus === 'object') {
+              for (const k of Object.keys(existingLegacy.menus)) {
+                const m = existingLegacy.menus[k]
+                if (m && m.forceOpenExpiresAt) {
+                  const tt = Date.parse(String(m.forceOpenExpiresAt))
+                  if (!isNaN(tt) && tt < now) {
+                    delete m.forceOpen
+                    delete m.forceOpenExpiresAt
+                  }
+                }
+              }
+            }
+          } catch (e) { /* non-fatal */ }
+
           await fs.promises.writeFile(settingsPathLegacy, JSON.stringify(existingLegacy, null, 2), 'utf8')
           try{ console.log('[stores] wrote legacy settings.json at', settingsPathLegacy) }catch(e){}
         } catch (e) { /* non-fatal */ }
