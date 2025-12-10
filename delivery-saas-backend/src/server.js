@@ -117,13 +117,19 @@ To restore original behaviour, remove this comment block and the small
 
 // Minimal replacement: ensure variables exist and prevent startup failure.
 // The service will run in HTTP mode when Easypanel handles TLS externally.
-process.env.EASYPANEL_SKIP_SSL_LOOKUP = '1';
+// Note: the original discovery/validation logic is left commented above
+// so this can be reverted easily. We define safe defaults here so runtime
+// doesn't throw ReferenceError when the discovery code is disabled.
 const keyPath = null;
 const certPath = null;
 const caPath = null;
 const pfxPath = null;
 let options = {};
 let usedPfx = false;
+// When running behind Easypanel we prefer the panel to terminate TLS. If you
+// explicitly want the app to load local cert files again, set the
+// environment variable `ENABLE_LOCAL_SSL_LOOKUP=1` and restore the original
+// code above.
 */
 if (envKey || envCert || envCa) {
   console.log('Note: one or more SSL paths were provided via environment variables and were preferred when present.');
