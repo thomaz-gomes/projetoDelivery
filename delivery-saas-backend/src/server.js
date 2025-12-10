@@ -48,58 +48,83 @@ const envCa = process.env.SSL_CA_PATH;
 // If set to '1' or 'true' (case-insensitive) the server will run in HTTP mode
 const DISABLE_SSL = String(process.env.DISABLE_SSL || '').toLowerCase() === '1' || String(process.env.DISABLE_SSL || '').toLowerCase() === 'true';
 
-const keyPath = (envKey && fs.existsSync(envKey)) ? envKey : pickFirstExisting(SSL_DIR, keyCandidates);
-const certPath = (envCert && fs.existsSync(envCert)) ? envCert : pickFirstExisting(SSL_DIR, certCandidates);
-const caPath = (envCa && fs.existsSync(envCa)) ? envCa : pickFirstExisting(SSL_DIR, caCandidates);
-const pfxPath = pickFirstExisting(SSL_DIR, pfxCandidates);
+/*
+TEMPORARY CHANGE: Disable automatic SSL file discovery and validation.
+The original code below searched for SSL key/cert/pfx files under the
+`ssl/` directory or via env vars and attempted to validate/load them for
+creating an HTTPS server. This behaviour interferes with Easypanel's built-in
+proxy/certificate management in some deployments. To avoid blocking startup
+when no cert files are present, the lookup and exit-on-missing logic is
+commented out here so the service can run behind Easypanel which terminates
+TLS.
 
+To restore original behaviour, remove this comment block and the small
+`EASYPANEL_SKIP_SSL_LOOKUP` override below.
+
+// Original code commented out:
+// const keyPath = (envKey && fs.existsSync(envKey)) ? envKey : pickFirstExisting(SSL_DIR, keyCandidates);
+// const certPath = (envCert && fs.existsSync(envCert)) ? envCert : pickFirstExisting(SSL_DIR, certCandidates);
+// const caPath = (envCa && fs.existsSync(envCa)) ? envCa : pickFirstExisting(SSL_DIR, caCandidates);
+// const pfxPath = pickFirstExisting(SSL_DIR, pfxCandidates);
+//
+// let options = {};
+// let usedPfx = false;
+// // If SSL is disabled we skip PFX/key/cert validation and run in plain HTTP instead
+// if (DISABLE_SSL) {
+//   console.log('DISABLE_SSL is set — starting server in plain HTTP mode (no SSL files required).');
+// } else {
+//   // Prefer explicit PFX when present -- but validate it before handing to https
+//   if (pfxPath && !envCert && !envKey) {
+//   try {
+//     const pfxBuf = fs.readFileSync(pfxPath);
+//     try {
+//       // try to create a secure context to validate the PFX contents
+//       tls.createSecureContext({ pfx: pfxBuf });
+//       options.pfx = pfxBuf;
+//       usedPfx = true;
+//       console.log('Using PFX file for SSL:', pfxPath);
+//     } catch (err) {
+//       console.error('Found PFX but it appears to be invalid/unreadable as PKCS#12:', pfxPath, err.message || err);
+//       console.error('Falling back to PEM key/cert files (if present).');
+//     }
+//   } catch (e) {
+//     console.error('Failed to read PFX file:', pfxPath, e.message || e);
+//   }
+// }
+//   if (!usedPfx) {
+//     if (keyPath && certPath) {
+//     try {
+//       options.key = fs.readFileSync(keyPath);
+//       options.cert = fs.readFileSync(certPath);
+//       if (caPath) options.ca = fs.readFileSync(caPath);
+//       console.log('Using SSL key:', keyPath);
+//       console.log('Using SSL cert:', certPath);
+//       if (caPath) console.log('Using SSL ca bundle:', caPath);
+//     } catch (e) {
+//       console.error('Failed to read key/cert/ca files:', e.message || e);
+//     }
+//   } else {
+//       console.error('❌ SSL key or certificate not found. Looked for:');
+//       console.error('   key candidates:', keyCandidates.join(', '));
+//       console.error('   cert candidates:', certCandidates.join(', '));
+//       console.error('   pfx candidates:', pfxCandidates.join(', '));
+//       console.error('Place your key/cert/pfx files in', SSL_DIR);
+//       console.error('If you want to let the reverse proxy (EasyPanel) terminate TLS and run the app over HTTP, set DISABLE_SSL=1 in the container environment.');
+//       process.exit(1);
+//   }
+//   }
+// }
+
+// Minimal replacement: ensure variables exist and prevent startup failure.
+// The service will run in HTTP mode when Easypanel handles TLS externally.
+process.env.EASYPANEL_SKIP_SSL_LOOKUP = '1';
+const keyPath = null;
+const certPath = null;
+const caPath = null;
+const pfxPath = null;
 let options = {};
 let usedPfx = false;
-// If SSL is disabled we skip PFX/key/cert validation and run in plain HTTP instead
-if (DISABLE_SSL) {
-  console.log('DISABLE_SSL is set — starting server in plain HTTP mode (no SSL files required).');
-} else {
-  // Prefer explicit PFX when present -- but validate it before handing to https
-  if (pfxPath && !envCert && !envKey) {
-  try {
-    const pfxBuf = fs.readFileSync(pfxPath);
-    try {
-      // try to create a secure context to validate the PFX contents
-      tls.createSecureContext({ pfx: pfxBuf });
-      options.pfx = pfxBuf;
-      usedPfx = true;
-      console.log('Using PFX file for SSL:', pfxPath);
-    } catch (err) {
-      console.error('Found PFX but it appears to be invalid/unreadable as PKCS#12:', pfxPath, err.message || err);
-      console.error('Falling back to PEM key/cert files (if present).');
-    }
-  } catch (e) {
-    console.error('Failed to read PFX file:', pfxPath, e.message || e);
-  }
-}
-  if (!usedPfx) {
-    if (keyPath && certPath) {
-    try {
-      options.key = fs.readFileSync(keyPath);
-      options.cert = fs.readFileSync(certPath);
-      if (caPath) options.ca = fs.readFileSync(caPath);
-      console.log('Using SSL key:', keyPath);
-      console.log('Using SSL cert:', certPath);
-      if (caPath) console.log('Using SSL ca bundle:', caPath);
-    } catch (e) {
-      console.error('Failed to read key/cert/ca files:', e.message || e);
-    }
-  } else {
-      console.error('❌ SSL key or certificate not found. Looked for:');
-      console.error('   key candidates:', keyCandidates.join(', '));
-      console.error('   cert candidates:', certCandidates.join(', '));
-      console.error('   pfx candidates:', pfxCandidates.join(', '));
-      console.error('Place your key/cert/pfx files in', SSL_DIR);
-      console.error('If you want to let the reverse proxy (EasyPanel) terminate TLS and run the app over HTTP, set DISABLE_SSL=1 in the container environment.');
-      process.exit(1);
-  }
-  }
-}
+*/
 if (envKey || envCert || envCa) {
   console.log('Note: one or more SSL paths were provided via environment variables and were preferred when present.');
 }
@@ -188,7 +213,8 @@ async function ensureAgentTokenFromFile() {
  */
 function startServer(port = DEFAULT_PORT, retries = 3) {
   let server;
-  const useHttp = DISABLE_SSL;
+  // Honor DISABLE_SSL or the temporary Easypanel skip flag set above
+  const useHttp = DISABLE_SSL || process.env.EASYPANEL_SKIP_SSL_LOOKUP === '1';
   try {
     if (useHttp) {
       server = http.createServer(app);
