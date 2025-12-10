@@ -1,4 +1,13 @@
 import https from "https";
+import http from "http";
+import tls from 'tls';
+import fs from "fs";
+import path from "path";
+import { app, attachSocket } from "./index.js";
+import { prisma } from './prisma.js';
+import { sha256 } from './utils.js';
+import { startWatching } from './fileWatcher.js';
+
 function pickFirstExisting(dir, candidates) {
   for (const c of candidates) {
     const p = path.join(dir, c);
@@ -8,6 +17,34 @@ function pickFirstExisting(dir, candidates) {
 }
 
 const SSL_DIR = path.resolve(process.cwd(), 'ssl');
+
+// include common PEM names produced by various tools (win-acme, mkcert, etc.)
+const keyCandidates = [
+  'localhost-key.pem',
+  'private.key',
+  'key.pem',
+  'server.key',
+  'localhost-key.pem',
+  'localhost-key.pem.pem'
+];
+const certCandidates = [
+  'localhost.pem',
+  'certificate.crt',
+  'cert.pem',
+  'server.crt',
+  'localhost-crt.pem',
+  'localhost-crt.pem'
+];
+const caCandidates = ['ca_bundle.crt', 'ca.pem', 'chain.pem', 'localhost-chain.pem', 'localhost-chain-only.pem'];
+const pfxCandidates = ['localhost.pfx', 'certificate.pfx', 'fullchain.pfx'];
+
+// Allow explicit SSL paths via environment (preferred when present)
+const envKey = process.env.SSL_KEY_PATH;
+const envCert = process.env.SSL_CERT_PATH;
+const envCa = process.env.SSL_CA_PATH;
+
+// If set to '1' or 'true' (case-insensitive) the server will run in HTTP mode
+const DISABLE_SSL = String(process.env.DISABLE_SSL || '').toLowerCase() === '1' || String(process.env.DISABLE_SSL || '').toLowerCase() === 'true';
 
 // SSL discovery & loading
 // Controlled by environment variable `ENABLE_LOCAL_SSL_LOOKUP`.
