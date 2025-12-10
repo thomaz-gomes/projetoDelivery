@@ -120,6 +120,7 @@ To restore original behaviour, remove this comment block and the small
 // Note: the original discovery/validation logic is left commented above
 // so this can be reverted easily. We define safe defaults here so runtime
 // doesn't throw ReferenceError when the discovery code is disabled.
+*/
 const keyPath = null;
 const certPath = null;
 const caPath = null;
@@ -130,7 +131,6 @@ let usedPfx = false;
 // explicitly want the app to load local cert files again, set the
 // environment variable `ENABLE_LOCAL_SSL_LOOKUP=1` and restore the original
 // code above.
-*/
 if (envKey || envCert || envCa) {
   console.log('Note: one or more SSL paths were provided via environment variables and were preferred when present.');
 }
