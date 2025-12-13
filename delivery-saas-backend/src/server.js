@@ -1,6 +1,4 @@
-import https from "https";
 import http from "http";
-import tls from 'tls';
 import fs from "fs";
 import path from "path";
 import { app, attachSocket } from "./index.js";
@@ -18,110 +16,12 @@ function pickFirstExisting(dir, candidates) {
 
 const SSL_DIR = path.resolve(process.cwd(), 'ssl');
 
-// include common PEM names produced by various tools (win-acme, mkcert, etc.)
-const keyCandidates = [
-  'localhost-key.pem',
-  'private.key',
-  'key.pem',
-  'server.key',
-  'localhost-key.pem',
-  'localhost-key.pem.pem'
-];
-const certCandidates = [
-  'localhost.pem',
-  'certificate.crt',
-  'cert.pem',
-  'server.crt',
-  'localhost-crt.pem',
-  'localhost-crt.pem'
-];
-const caCandidates = ['ca_bundle.crt', 'ca.pem', 'chain.pem', 'localhost-chain.pem', 'localhost-chain-only.pem'];
-const pfxCandidates = ['localhost.pfx', 'certificate.pfx', 'fullchain.pfx'];
-
-// Allow explicit SSL paths via environment (preferred when present)
-const envKey = process.env.SSL_KEY_PATH;
-const envCert = process.env.SSL_CERT_PATH;
-const envCa = process.env.SSL_CA_PATH;
-
-// If set to '1' or 'true' (case-insensitive) the server will run in HTTP mode
-const DISABLE_SSL = String(process.env.DISABLE_SSL || '').toLowerCase() === '1' || String(process.env.DISABLE_SSL || '').toLowerCase() === 'true';
-
-// SSL discovery & loading
-// Controlled by environment variable `ENABLE_LOCAL_SSL_LOOKUP`.
-// If ENABLE_LOCAL_SSL_LOOKUP=1 OR explicit SSL env paths are provided
-// (SSL_KEY_PATH, SSL_CERT_PATH, SSL_CA_PATH), the server will attempt to
-// load PFX or PEM files from the `ssl/` directory (or the provided paths)
-// and start an HTTPS server. Otherwise the app expects TLS termination to
-// be handled by the reverse proxy (EasyPanel) and will not fail when no
-// local cert files are present.
-const ENABLE_LOCAL_SSL = String(process.env.ENABLE_LOCAL_SSL_LOOKUP || '').toLowerCase() === '1';
-
-// default placeholders
-let keyPath = null;
-let certPath = null;
-let caPath = null;
-let pfxPath = null;
+// SSL support removed: this backend will run over plain HTTP only.
+// All TLS termination must be handled by the reverse proxy (EasyPanel)
+// or at network edge. The code no longer searches for local cert files.
+const DISABLE_SSL = true;
 let options = {};
 let usedPfx = false;
-
-if (ENABLE_LOCAL_SSL || envKey || envCert || envCa) {
-  // discover paths (env vars take precedence)
-  keyPath = (envKey && fs.existsSync(envKey)) ? envKey : pickFirstExisting(SSL_DIR, keyCandidates);
-  certPath = (envCert && fs.existsSync(envCert)) ? envCert : pickFirstExisting(SSL_DIR, certCandidates);
-  caPath = (envCa && fs.existsSync(envCa)) ? envCa : pickFirstExisting(SSL_DIR, caCandidates);
-  pfxPath = pickFirstExisting(SSL_DIR, pfxCandidates);
-
-  if (DISABLE_SSL) {
-    console.log('DISABLE_SSL is set — starting server in plain HTTP mode (no SSL files required).');
-  } else {
-    // Prefer explicit PFX when present -- but validate it before handing to https
-    if (pfxPath && !envCert && !envKey) {
-      try {
-        const pfxBuf = fs.readFileSync(pfxPath);
-        try {
-          // try to create a secure context to validate the PFX contents
-          tls.createSecureContext({ pfx: pfxBuf });
-          options.pfx = pfxBuf;
-          usedPfx = true;
-          console.log('Using PFX file for SSL:', pfxPath);
-        } catch (err) {
-          console.error('Found PFX but it appears to be invalid/unreadable as PKCS#12:', pfxPath, err.message || err);
-          console.error('Falling back to PEM key/cert files (if present).');
-        }
-      } catch (e) {
-        console.error('Failed to read PFX file:', pfxPath, e.message || e);
-      }
-    }
-
-    if (!usedPfx) {
-      if (keyPath && certPath) {
-        try {
-          options.key = fs.readFileSync(keyPath);
-          options.cert = fs.readFileSync(certPath);
-          if (caPath) options.ca = fs.readFileSync(caPath);
-          console.log('Using SSL key:', keyPath);
-          console.log('Using SSL cert:', certPath);
-          if (caPath) console.log('Using SSL ca bundle:', caPath);
-        } catch (e) {
-          console.error('Failed to read key/cert/ca files:', e.message || e);
-        }
-      } else {
-        console.error('❌ SSL key or certificate not found. Looked for:');
-        console.error('   key candidates:', keyCandidates.join(', '));
-        console.error('   cert candidates:', certCandidates.join(', '));
-        console.error('   pfx candidates:', pfxCandidates.join(', '));
-        console.error('Place your key/cert/pfx files in', SSL_DIR);
-        console.error('If you want to let the reverse proxy (EasyPanel) terminate TLS and run the app over HTTP, set DISABLE_SSL=1 in the container environment.');
-        process.exit(1);
-      }
-    }
-  }
-} else {
-  console.log('Local SSL lookup disabled. Set ENABLE_LOCAL_SSL_LOOKUP=1 or provide SSL_* env vars to enable HTTPS in the app.');
-}
-if (envKey || envCert || envCa) {
-  console.log('Note: one or more SSL paths were provided via environment variables and were preferred when present.');
-}
 
 const DEFAULT_PORT = Number(process.env.PORT) || 3000;
 
@@ -210,12 +110,9 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
   // Honor DISABLE_SSL or the temporary Easypanel skip flag set above
   const useHttp = DISABLE_SSL || process.env.EASYPANEL_SKIP_SSL_LOOKUP === '1';
   try {
-    if (useHttp) {
-      server = http.createServer(app);
-      console.log('Starting HTTP server (DISABLE_SSL active)');
-    } else {
-      server = https.createServer(options, app);
-    }
+    // Force HTTP server - TLS termination should happen upstream
+    server = http.createServer(app);
+    console.log('Starting HTTP server (TLS disabled in backend)');
   } catch (e) {
     console.error('❌ Failed to create server with the provided options:', e && e.message ? e.message : e);
     // If we tried a PFX earlier and it failed here, try to give a hint
@@ -241,10 +138,10 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
 
   server.listen(port, () => {
     const hostLabel = process.env.HOST || 'localhost';
-    console.log(`✅ HTTPS rodando em https://${hostLabel}:${port}`);
+    console.log(`✅ HTTP rodando em http://${hostLabel}:${port}`);
     try {
       const io = attachSocket(server);
-        console.log('🔌 Socket.IO anexado ao servidor HTTPS');
+        console.log('🔌 Socket.IO anexado ao servidor HTTP');
         // expose io instance to routes via app.locals so routes can emit to agents
         try { app.locals.io = io } catch (e) { console.warn('Could not set app.locals.io', e) }
       // start file watcher (if any paths configured)
