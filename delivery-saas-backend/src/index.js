@@ -48,6 +48,11 @@ import startReportsCleanup from './cleanupReports.js';
 import startForceOpenCleanup from './cleanupForceOpen.js';
 
 const app = express();
+// When running behind a reverse proxy (EasyPanel / nginx / Cloudflare), enable
+// `trust proxy` so Express can correctly detect `req.secure` and the original
+// client IP. This ensures cookies marked `secure` and other proxy-sensitive
+// behaviors work as expected when TLS is terminated upstream.
+app.set('trust proxy', true);
 
 // ==============================
 // 🌐 Middleware global
