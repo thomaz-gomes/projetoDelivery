@@ -23,6 +23,8 @@ Notes:
   - Frontend (Vite) will be available at http://localhost:5173
   - The compose file uses `DISABLE_SSL=1` so the backend serves plain HTTP for local dev and CORS is configured to accept `http://localhost:5173`.
 
+   If your host maps the frontend container to port 5173, use that port in the host URL (e.g. `http://168.231.94.97:5173`).
+
 2) Run without Docker (native Node.js)
 
 Prereqs: Node 20+, npm, and a local Postgres instance (or adjust DATABASE_URL to a local sqlite file if you prefer).

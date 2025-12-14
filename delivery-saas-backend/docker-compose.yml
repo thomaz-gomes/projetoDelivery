@@ -8,7 +8,8 @@ services:
     env_file:
       - .env
     ports:
-      - '3000:3000'
+      # map container port 3000 to host 3001 to avoid conflicts with other services
+      - '127.0.0.1:3001:3000'
     restart: unless-stopped
 
   db:
