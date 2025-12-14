@@ -15,6 +15,8 @@ services:
       context: ./delivery-saas-backend
     environment:
       DATABASE_URL: postgres://app:changeme@db:5432/appdb
+      # Allow the frontend served at 168.231.94.97:8080 to access the API
+      FRONTEND_ORIGINS: http://168.231.94.97:8080
       NODE_ENV: production
       PORT: 3000
     depends_on:
