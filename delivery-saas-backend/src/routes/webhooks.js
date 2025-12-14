@@ -151,7 +151,9 @@ webhooksRouter.post("/ifood", async (req, res) => {
     }
 
     // 🔎 Resolve empresa
-  const { companyId, merchantId, storeId } = await resolveCompanyByMerchant(req, order);
+    // normalize payload: some providers wrap the order under `order` property
+    const order = (body && (body.order || body)) || {};
+    const { companyId, merchantId, storeId } = await resolveCompanyByMerchant(req, order);
 
     // 🆔 Dados principais
     const externalId =
