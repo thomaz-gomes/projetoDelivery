@@ -13,25 +13,40 @@ services:
   backend:
     build:
       context: ./delivery-saas-backend
+    # Optionally load environment variables from a local .env file for development
+    # (do NOT commit your real .env to git). Docker Compose will read this file
+    # and pass variables to the container. If you prefer other secret managers,
+    # keep using platform env config instead.
+    env_file:
+      - ./delivery-saas-backend/.env
     environment:
       DATABASE_URL: postgres://app:changeme@db:5432/appdb
-      # Allow the frontend served at 168.231.94.97:8080 to access the API
-      FRONTEND_ORIGINS: http://168.231.94.97:8080
+      # Allow the frontend served at 168.231.94.97:5173 to access the API
+      FRONTEND_ORIGINS: http://168.231.94.97:5173
       NODE_ENV: production
       PORT: 3000
     depends_on:
       - migrate
     ports:
-      - '3000:3000'
+      # backend listens on 3000 inside the container; map to host 3001 to avoid EasyPanel conflict
+      - '127.0.0.1:3001:3000'
     restart: unless-stopped
 
   frontend:
     build:
       context: ./delivery-saas-frontend
+      # Allow build-time override of VITE_API_URL via build-arg in CI / deploy
+      args:
+        - VITE_API_URL
+    # When running the frontend container locally via docker compose you can
+    # provide runtime env values by creating a `.env.production` file and
+    # referencing it here. The file should NOT be committed with secrets.
+    env_file:
+      - ./delivery-saas-frontend/.env.production
     depends_on:
       - backend
     ports:
-      - '8080:80'
+      - '127.0.0.1:5173:80'
     restart: unless-stopped
 
   migrate:
