@@ -1,6 +1,6 @@
 services:
   delivery_db:
-    image: postgres:15-alpine
+    image: postgres:17
     environment:
       POSTGRES_USER: tomgomes
       POSTGRES_PASSWORD: 03t01F007TF
