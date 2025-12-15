@@ -1,14 +1,15 @@
 services:
-  db:
+  delivery_db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: changeme
-      POSTGRES_DB: appdb
+      POSTGRES_USER: tomgomes
+      POSTGRES_PASSWORD: 03t01F007TF
+      POSTGRES_DB: tomgomes
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
-      - '5432:5432'
+      # bind Postgres to localhost only for safety
+      - '127.0.0.1:5432:5432'
 
   backend:
     build:
@@ -20,9 +21,9 @@ services:
     env_file:
       - ./delivery-saas-backend/.env
     environment:
-      DATABASE_URL: postgres://app:changeme@db:5432/appdb
-      # Allow the frontend served at 168.231.94.97:5173 to access the API
-      FRONTEND_ORIGINS: http://168.231.94.97:5173
+      DATABASE_URL: postgres://tomgomes:03t01F007TF@delivery_db:5432/tomgomes
+      # Allow the frontend (production) domain to access the API
+      FRONTEND_ORIGINS: https://deliverywl.com.br
       NODE_ENV: production
       PORT: 3000
     depends_on:
@@ -54,9 +55,9 @@ services:
       context: ./delivery-saas-backend
     command: node scripts/wait-for-db-and-migrate.js
     environment:
-      DATABASE_URL: postgres://app:changeme@db:5432/appdb
+      DATABASE_URL: postgres://tomgomes:03t01F007TF@delivery_db:5432/tomgomes
     depends_on:
-      - db
+      - delivery_db
     restart: 'no'
 
 volumes:
