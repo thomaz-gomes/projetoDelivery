@@ -1,6 +1,6 @@
 LOAD DATABASE
   FROM sqlite:///data/dev.db
-  INTO postgres://tomgomes:03t01F007TF@168.231.94.97:5555/tomgomes_migrated_clean?sslmode=disable
+  INTO postgres://tomgomes:03t01F007TF@72.60.7.28:5555/tomgomes_migrated_clean?sslmode=disable
 
   WITH include drop, create tables, create indexes, reset sequences
 

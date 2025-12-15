@@ -3,7 +3,7 @@ Automated migration script: SQLite (dev.db) -> Postgres (remote)
 
 Usage (example):
   .\migrate-automated.ps1 \
-    -RemoteHost 168.231.94.97 -RemotePort 5555 -RemoteUser tomgomes -RemotePass 03t01F007TF \
+    -RemoteHost 72.60.7.28 -RemotePort 5555 -RemoteUser tomgomes -RemotePass 03t01F007TF \
     -RemoteDb tomgomes_migrated
 
 The script will:
@@ -19,7 +19,7 @@ Be careful: this script targets the remote DB you pass. Default uses a test DB n
 #>
 param(
   [string]$PrismaFolder = "C:\Users\gomes\projetoDelivery\delivery-saas-backend",
-  [string]$RemoteHost = "168.231.94.97",
+  [string]$RemoteHost = "72.60.7.28",
   [int]$RemotePort = 5555,
   [string]$RemoteUser = "tomgomes",
   [string]$RemotePass = "03t01F007TF",
