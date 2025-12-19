@@ -263,6 +263,7 @@ model WebhookEvent {
     clientId     String?
     clientSecret String?
     merchantId   String?
+    merchantUuid String?
     enabled      Boolean @default(true)
 
     // ---- OAuth (Authorization by store owner) ---- 

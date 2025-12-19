@@ -110,6 +110,30 @@ ordersRouter.post('/:id/assign', requireRole('ADMIN'), async (req, res) => {
   const newStatus = data.status || order.status;
   notifyCustomerStatus(order.id, newStatus).catch(() => {});
 
+  // If status changed to SAIU_PARA_ENTREGA, notify iFood asynchronously
+  if (newStatus === 'SAIU_PARA_ENTREGA') {
+    (async () => {
+      try {
+        const integ = await prisma.apiIntegration.findFirst({ where: { companyId: order.companyId, provider: 'IFOOD', enabled: true } });
+        if (!integ) return;
+        const orderExternalId = order.externalId || (order.payload && (order.payload.orderId || (order.payload.order && order.payload.order.id)));
+        if (!orderExternalId) {
+          console.warn('[orders.assign] no externalId found on order; skipping iFood dispatch notify', { orderId: order.id });
+          return;
+        }
+        const { updateIFoodOrderStatus } = await import('../integrations/ifood/orders.js');
+        try {
+          await updateIFoodOrderStatus(order.companyId, orderExternalId, 'DISPATCHED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'DISPATCHED' });
+          console.log('[orders.assign] notified iFood of dispatch for order', orderExternalId);
+        } catch (e) {
+          console.warn('[orders.assign] failed to notify iFood of dispatch', { orderExternalId, err: e?.message || e });
+        }
+      } catch (e) {
+        console.error('[orders.assign] error while attempting iFood notify', e?.message || e);
+      }
+    })();
+  }
+
   return res.json({ ok: true, order });
 });
 
@@ -137,6 +161,28 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
     // notify customer and emit socket (use new status)
     notifyCustomerStatus(updated.id, 'CONFIRMACAO_PAGAMENTO').catch(() => {});
     try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e) }
+
+    // If this order belongs to an IFOOD integration, notify iFood that payment confirmation/completion happened
+    (async () => {
+      try {
+        const integ = await prisma.apiIntegration.findFirst({ where: { companyId: updated.companyId, provider: 'IFOOD', enabled: true } });
+        if (!integ) return;
+        const orderExternalId = updated.externalId || (updated.payload && (updated.payload.orderId || (updated.payload.order && updated.payload.order.id)));
+        if (!orderExternalId) {
+          console.warn('[orders.complete] no externalId found on order; skipping iFood notify', { orderId: updated.id });
+          return;
+        }
+        const { updateIFoodOrderStatus } = await import('../integrations/ifood/orders.js');
+        try {
+          await updateIFoodOrderStatus(updated.companyId, orderExternalId, 'CONCLUDED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'CONCLUDED' });
+          console.log('[orders.complete] notified iFood of conclusion for order', orderExternalId);
+        } catch (e) {
+          console.warn('[orders.complete] failed to notify iFood of conclusion', { orderExternalId, err: e?.message || e });
+        }
+      } catch (e) {
+        console.error('[orders.complete] error while attempting iFood notify', e?.message || e);
+      }
+    })();
 
     // credit rider account (reuse same logic as status patch)
     try {
@@ -240,6 +286,51 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
     // notify customer and emit websocket update
     notifyCustomerStatus(updated.id, status).catch(() => {});
     try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e); }
+
+    // If this order belongs to an IFOOD integration, attempt to notify iFood of the status change
+    try {
+      const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD', enabled: true } });
+      const orderExternalId = updated.externalId || (updated.payload && (updated.payload.orderId || updated.payload.id));
+      if (integ && orderExternalId) {
+        try {
+          const { updateIFoodOrderStatus } = await import('../integrations/ifood/orders.js');
+
+          function mapLocalToIFood(localStatus, orderObj) {
+            const t = String(localStatus || '').toUpperCase();
+            const type = String((orderObj && (orderObj.orderType || orderObj.order_type)) || (orderObj && orderObj.payload && orderObj.payload.orderType) || (orderObj && orderObj.orderType) || '').toUpperCase();
+            // Delivery mapping
+            if (type === 'DELIVERY' || !type) {
+              if (t === 'EM_PREPARO') return 'PLACED';
+              if (t === 'SAIU_PARA_ENTREGA') return 'DISPATCHED';
+              if (t === 'CONFIRMACAO_PAGAMENTO' || t === 'CONCLUIDO') return 'CONCLUDED';
+              if (t === 'CANCELADO') return 'CANCELLED';
+            }
+            // Pickup mapping
+            if (type === 'PICKUP' || type === 'TAKEOUT' || type === 'TAKE-OUT') {
+              if (t === 'EM_PREPARO' || t === 'PRONTO') return 'PLACED';
+              if (t === 'CONFIRMACAO_PAGAMENTO' || t === 'CONCLUIDO') return 'READY_TO_PICKUP';
+              if (t === 'SAIU_PARA_ENTREGA' || t === 'DESPACHADO') return 'DISPATCHED';
+              if (t === 'CANCELADO') return 'CANCELLED';
+            }
+            // Fallback
+            if (t === 'CONCLUIDO') return 'CONCLUDED';
+            return null;
+          }
+
+          const target = mapLocalToIFood(status, updated);
+          if (target) {
+            try {
+              await updateIFoodOrderStatus(updated.companyId, orderExternalId, target, { merchantId: integ.merchantUuid || integ.merchantId });
+              console.log('Notified iFood of status change for order', orderExternalId, '->', target);
+            } catch (eNotify) {
+              console.warn('Failed to notify iFood of status change for', orderExternalId, eNotify && eNotify.message);
+            }
+          }
+        } catch (eImp) {
+          console.warn('Failed to import iFood update function:', eImp && eImp.message);
+        }
+      }
+    } catch (e) { console.warn('iFood notify attempt failed:', e && e.message); }
 
     // If order was completed and has a rider, credit rider's account
     try {

@@ -92,7 +92,7 @@ async function resolveCompanyByMerchant(req, order) {
       select: { companyId: true, storeId: true, merchantId: true, merchantUuid: true },
     });
     if (integ?.companyId) {
-      console.log("🏢 Empresa encontrada pelo merchantId/merchantUuid:", integ.companyId, 'storeId:', integ.storeId, 'matched:', integ.merchantId || integ.merchantUuid);
+      console.log("🏢 Empresa encontrada pelo merchantId:", integ.companyId, 'storeId:', integ.storeId, 'matched:', integ.merchantId);
       // If integration exists but storeId is not set, attempt a best-effort match using payload store info
       let resolvedStoreId = integ.storeId || null;
       if (!resolvedStoreId) {
@@ -120,13 +120,14 @@ async function resolveCompanyByMerchant(req, order) {
   // fallback: se houver apenas uma integração ativa
   const onlyOne = await prisma.apiIntegration.findMany({
     where: { provider: "IFOOD", enabled: true },
-    select: { companyId: true, merchantId: true },
+    select: { companyId: true, merchantId: true, merchantUuid: true, storeId: true },
   });
   if (onlyOne.length === 1) {
     console.log("🏢 Empresa fallback (única integração ativa):", onlyOne[0].companyId);
     return {
       companyId: onlyOne[0].companyId,
       merchantId: onlyOne[0].merchantId || null,
+      merchantUuid: onlyOne[0].merchantUuid || null,
       storeId: onlyOne[0].storeId || null,
     };
   }

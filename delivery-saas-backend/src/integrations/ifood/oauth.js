@@ -102,18 +102,26 @@ export async function startDistributedAuth({ companyId }) {
 // ================================================================
 export async function exchangeAuthorizationCode({ companyId, authorizationCode }) {
   const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
-  if (!integ?.clientId || !integ?.clientSecret || !integ?.codeVerifier) {
-    throw new Error('Integração incompleta. Gere o código de vínculo primeiro.');
+  // clientId/clientSecret are system-level credentials and may be kept in ENV.
+  // Prefer per-integration creds if present, otherwise fallback to ENV.
+  const clientId = integ?.clientId || process.env.IFOOD_CLIENT_ID || null;
+  const clientSecret = integ?.clientSecret || process.env.IFOOD_CLIENT_SECRET || null;
+  const codeVerifier = integ?.codeVerifier || null;
+  if (!clientId || !clientSecret) {
+    throw new Error('Faltam credenciais do cliente (clientId/clientSecret). Configure via variáveis de ambiente ou registre credenciais na integração.');
+  }
+  if (!codeVerifier) {
+    throw new Error('Faltando codeVerifier. Gere o código de vínculo (userCode) antes de confirmar.');
   }
 
   const api = http();
 
   const form = new URLSearchParams({
     grantType: 'authorization_code',
-    clientId: integ.clientId,
-    clientSecret: integ.clientSecret,
+    clientId,
+    clientSecret,
     authorizationCode,
-    authorizationCodeVerifier: integ.codeVerifier,
+    authorizationCodeVerifier: codeVerifier,
   });
 
   const { data } = await api.post(TOKEN_PATH, form.toString(), {
@@ -124,7 +132,10 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
   const refreshToken = data?.refreshToken;
   const tokenType = data?.tokenType || 'Bearer';
   const expiresIn = Number(data?.expiresIn || 10800);
-  const merchantId = data?.merchantId || integ.merchantId || null;
+  // save both merchantId (numeric id) and merchantUuid (UUID) when available
+  // Preserve existing values if provider response doesn't include them (avoid clearing DB fields)
+  const merchantUuid = (typeof data?.merchantUuid !== 'undefined' && data?.merchantUuid !== null) ? data.merchantUuid : integ.merchantUuid || null;
+  const merchantId = (typeof data?.merchantId !== 'undefined' && data?.merchantId !== null) ? data.merchantId : integ.merchantId || null;
 
   if (!accessToken) {
     throw new Error(`Sem access_token no retorno: ${JSON.stringify(data)}`);
@@ -138,6 +149,7 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
       refreshToken,
       tokenType,
       merchantId,
+      merchantUuid,
       tokenExpiresAt: new Date(Date.now() + expiresIn * 1000),
     },
   });
@@ -150,18 +162,21 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
 // ================================================================
 export async function refreshAccessToken({ companyId }) {
   const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
-
-  if (!integ?.clientId || !integ?.clientSecret || !integ?.refreshToken) {
-    throw new Error('Dados insuficientes para refresh');
+  // Allow client credentials to come from environment when per-integration values are not present.
+  const clientId = integ?.clientId || process.env.IFOOD_CLIENT_ID || null;
+  const clientSecret = integ?.clientSecret || process.env.IFOOD_CLIENT_SECRET || null;
+  const refreshToken = integ?.refreshToken || null;
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('Dados insuficientes para refresh: verifique clientId/clientSecret e refreshToken');
   }
 
   const api = http();
 
   const form = new URLSearchParams({
     grantType: 'refresh_token',
-    clientId: integ.clientId,
-    clientSecret: integ.clientSecret,
-    refreshToken: integ.refreshToken,
+    clientId,
+    clientSecret,
+    refreshToken,
   });
 
   try {

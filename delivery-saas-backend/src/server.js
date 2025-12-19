@@ -5,6 +5,7 @@ import { app, attachSocket } from "./index.js";
 import { prisma } from './prisma.js';
 import { sha256 } from './utils.js';
 import { startWatching } from './fileWatcher.js';
+import { startIFoodPollingWorker } from './jobs/ifoodPollWorker.js';
 
 function pickFirstExisting(dir, candidates) {
   for (const c of candidates) {
@@ -146,6 +147,13 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
         try { app.locals.io = io } catch (e) { console.warn('Could not set app.locals.io', e) }
       // start file watcher (if any paths configured)
       startWatching().catch(e => console.error('Failed to start file watcher:', e));
+      // start background iFood polling worker (polls all active integrations)
+      try {
+        startIFoodPollingWorker().catch(e => console.error('iFood polling worker failed to start:', e && e.message));
+        console.log('Started iFood polling worker');
+      } catch (e) {
+        console.error('Failed to start iFood polling worker:', e && e.message);
+      }
     } catch (e) {
       console.error('❌ Falha ao anexar Socket.IO:', e.message || e);
     }
