@@ -1,0 +1,51 @@
+{
+  "menus": {
+    "0cf2d4ea-fe4b-4d80-9d81-8030ff92fed9": {
+      "open24Hours": true,
+      "weeklySchedule": [
+        {
+          "day": 0,
+          "enabled": true,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 1,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 2,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 3,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 4,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 5,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 6,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        }
+      ]
+    }
+  }
+}

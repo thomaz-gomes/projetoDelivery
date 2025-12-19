@@ -101,6 +101,28 @@ ticketsRouter.post('/:token/claim', authMiddleware, requireRole('RIDER'), async 
   // notificações assíncronas (não bloqueiam a resposta)
   notifyRiderAssigned(result.id).catch(() => {});
   notifyCustomerStatus(result.id, 'SAIU_PARA_ENTREGA').catch(() => {});
+  // If this order belongs to an IFOOD integration, notify iFood that it was dispatched
+  (async () => {
+    try {
+      const integ = await prisma.apiIntegration.findFirst({ where: { companyId: result.companyId, provider: 'IFOOD', enabled: true } });
+      if (!integ) return;
+      // determine external iFood order id from order.externalId or payload
+      const orderExternalId = result.externalId || (result.payload && (result.payload.orderId || (result.payload.order && result.payload.order.id)));
+      if (!orderExternalId) {
+        console.warn('[tickets.claim] no externalId found on order; skipping iFood dispatch notify', { orderId: result.id });
+        return;
+      }
+      const { updateIFoodOrderStatus } = await import('../integrations/ifood/orders.js');
+      try {
+        await updateIFoodOrderStatus(result.companyId, orderExternalId, 'DISPATCHED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'DISPATCHED' });
+        console.log('[tickets.claim] notified iFood of dispatch for order', orderExternalId);
+      } catch (e) {
+        console.warn('[tickets.claim] failed to notify iFood of dispatch', { orderExternalId, err: e?.message || e });
+      }
+    } catch (e) {
+      console.error('[tickets.claim] error while attempting iFood notify', e?.message || e);
+    }
+  })();
   } catch (e) {
     res.status(400).json({ message: e.message || 'Falha ao atribuir pedido' });
   }

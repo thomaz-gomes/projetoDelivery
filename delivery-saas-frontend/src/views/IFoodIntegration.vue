@@ -2,8 +2,9 @@
 import { ref, onMounted, computed, onUnmounted } from 'vue';
 import Swal from 'sweetalert2';
 import api from '../api';
+import { ref as _ref } from 'vue';
 
-const form = ref({ storeId: null });
+const form = ref({ storeId: null, merchantId: '' });
 const integ = ref(null);
 const statusMsg = ref('');
 // computed status for visual feedback
@@ -117,16 +118,67 @@ async function copyPortalUrl() {
   }
 }
 const authCode = ref('');
+const debugInfo = ref(null);
+const isDevMode = (import.meta && import.meta.env && import.meta.env.MODE !== 'production');
+const fullToken = ref(null);
+const showingFullToken = ref(false);
+
+async function loadDebug() {
+  try {
+    const { data } = await api.get('/integrations/ifood/debug');
+    debugInfo.value = data;
+  } catch (e) {
+    console.error('loadDebug failed', e);
+    debugInfo.value = { error: e?.response?.data || e?.message || String(e) };
+  }
+}
 
 async function load() {
   const { data } = await api.get('/integrations/ifood');
-  integ.value = data || null;
-  if (integ.value) {
-    // server-side creds are not editable here; only bind storeId
-    form.value.storeId = integ.value.storeId || null;
+  // API returns an array of integrations for the company.
+  // Pick the most recently updated enabled integration if present, otherwise the most recently updated one.
+  if (Array.isArray(data)) {
+    const list = data || [];
+    if (list.length === 0) {
+      integ.value = null;
+    } else {
+      // prefer enabled & has tokens
+      const enabledWithToken = list.find(i => i.enabled && (i.accessToken || i.tokenExpiresAt));
+      if (enabledWithToken) {
+        integ.value = enabledWithToken;
+      } else {
+        // sort by updatedAt desc and pick first
+        list.sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        integ.value = list[0];
+      }
+    }
+  } else {
+    integ.value = data || null;
+  }
+    if (integ.value) {
+      // server-side creds are not editable here; only bind storeId
+      form.value.storeId = (integ.value.storeId && String(integ.value.storeId)) || null;
+      form.value.merchantId = integ.value.merchantUuid || integ.value.merchantId || '';
     // schedule token refresh when integration info loaded
     scheduleRefreshFromInteg();
   }
+}
+
+async function loadFullToken() {
+  try {
+    if (!integ.value || !integ.value.id) return;
+    const { data } = await api.get(`/integrations/by-id/${integ.value.id}`);
+    fullToken.value = data?.accessToken || null;
+    showingFullToken.value = true;
+  } catch (e) {
+    console.error('loadFullToken failed', e);
+    fullToken.value = null;
+    showingFullToken.value = false;
+  }
+}
+function hideFullToken() {
+  fullToken.value = null;
+  showingFullToken.value = false;
 }
 
 async function save() {
@@ -136,10 +188,22 @@ async function save() {
   }
   // Credentials (clientId/clientSecret/merchantId) are provided via server environment
   // and must not be edited from the UI. We only persist binding to a store and enable the integration.
-  await api.post('/integrations/IFOOD', {
+  // allow admin to provide merchantId/merchantUuid manually (from iFood panel)
+  const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(String(form.value.merchantId || '').trim());
+  const payload = {
     enabled: true,
     storeId: form.value.storeId,
-  });
+  };
+  if (form.value.merchantId && String(form.value.merchantId).trim().length > 0) {
+    if (isUuid) payload.merchantUuid = String(form.value.merchantId).trim(); else payload.merchantId = String(form.value.merchantId).trim();
+  }
+  if (integ.value && integ.value.id) {
+    console.log('[IFoodIntegration] PUT payload', payload);
+    await api.put(`/integrations/${integ.value.id}`, payload);
+  } else {
+    console.log('[IFoodIntegration] POST payload', payload);
+    await api.post('/integrations/IFOOD', payload);
+  }
   await load();
   statusMsg.value = 'Credenciais salvas.';
 }
@@ -154,23 +218,40 @@ async function loadStores() {
 }
 
 // when the integration already has a storeId set on the server, lock the selector
+// also lock when the integration is active (authorized) to prevent edits
 const storeLocked = computed(() => {
-  try { return Boolean(integ.value && integ.value.storeId); } catch(e){ return false }
+  try { return Boolean(integ.value && (integ.value.storeId || (integ.value.enabled && hasTokens.value))); } catch(e){ return false }
 });
 
 const linking = ref(false);
 const confirming = ref(false);
 async function startLink() {
   if (linking.value) return;
+  // Require a store selection before starting authorization
+  if (!form.value.storeId) {
+    statusMsg.value = 'Selecione a loja antes de iniciar a autorização.';
+    return;
+  }
+
   linking.value = true;
   statusMsg.value = '';
   try {
+    // Ensure there's an integration row for this store. If not, create it.
+    if (!integ.value || integ.value.storeId !== form.value.storeId) {
+      await api.post('/integrations/IFOOD', {
+        storeId: form.value.storeId,
+        enabled: true,
+      });
+      // reload integration list and pick the relevant one
+      await load();
+    }
+
     const { data } = await api.post('/integrations/ifood/link/start');
     // API returns { userCode | linkCode, codeVerifier, verificationUrlComplete | partnerUrl }
     link.value.linkCode = data.linkCode || data.userCode || '';
     link.value.partnerUrl = data.partnerUrl || data.verificationUrlComplete || '';
     link.value.codeVerifier = data.codeVerifier || '';
-    statusMsg.value = 'Código de vínculo gerado.';
+    statusMsg.value = 'Código de vínculo gerado (visível apenas para administradores em modo debug).';
   } catch (e) {
     console.error('startLink failed', e);
     const msg = e?.response?.data?.message || e?.message || 'Falha ao gerar código de vínculo';
@@ -214,6 +295,8 @@ async function testPoll() {
 
 onMounted(load);
 onMounted(loadStores);
+// load server-side env debug info (if authorized)
+try { onMounted(loadDebug); } catch (e) { /* ignore */ }
 
 async function unlinkStore(){
   const res = await Swal.fire({
@@ -234,6 +317,14 @@ async function unlinkStore(){
     statusMsg.value = e?.response?.data?.message || 'Falha ao desvincular loja';
   }
 }
+
+const linkedStoreName = computed(() => {
+  try {
+    if (!integ.value || !integ.value.storeId) return null;
+    const s = stores.value.find(x => x.id === integ.value.storeId);
+    return s ? s.name : integ.value.storeId;
+  } catch (e) { return null }
+});
 </script>
 
 <template>
@@ -258,6 +349,10 @@ async function unlinkStore(){
             </SelectInput>
           </div>
           <div class="col-md-6">
+            <label class="form-label">ID da loja (iFood)</label>
+            <input class="form-control" v-model="form.merchantId" :disabled="integrationActive" placeholder="Cole o ID da loja (UUID ou numérico)" />
+          </div>
+          <div class="col-md-6">
             <div class="d-flex gap-2">
               <button class="btn btn-primary" @click="save" :disabled="storeLocked">Salvar</button>
               <button class="btn btn-outline-secondary" @click="load">Recarregar</button>
@@ -270,10 +365,39 @@ async function unlinkStore(){
         <hr />
         <div class="small text-muted">Status das credenciais no servidor:</div>
         <ul class="small">
-          <li>Client ID: <strong>{{ integ?.clientId ? 'presente' : 'não configurado' }}</strong></li>
-          <li>Client Secret: <strong>{{ integ?.clientSecret ? 'presente' : 'não configurado' }}</strong></li>
-          <li>Merchant ID: <strong>{{ integ?.merchantId ? integ.merchantId : 'não configurado' }}</strong></li>
+          <li>
+            <div class="d-flex align-items-baseline">
+              <div class="me-2">Client ID:</div>
+              <div><strong>{{ integ?.clientId || (debugInfo && debugInfo.env && debugInfo.env.IFOOD_CLIENT_ID) || 'não configurado' }}</strong></div>
+            </div>
+          </li>
+          <li>
+            <div class="d-flex align-items-baseline">
+              <div class="me-2">Client Secret:</div>
+              <div>
+                <strong class="text-monospace">{{
+                  (integ?.clientSecret && integ.clientSecret.slice && integ.clientSecret.length > 0) ? (integ.clientSecret.slice(0,6) + '···' + integ.clientSecret.slice(-4)) : (debugInfo && debugInfo.env && debugInfo.env.IFOOD_CLIENT_SECRET) || 'não configurado'
+                }}</strong>
+              </div>
+            </div>
+          </li>
+          <li>
+            <div class="d-flex align-items-baseline">
+              <div class="me-2">Merchant ID:</div>
+              <div><strong>{{ integ?.merchantId || (debugInfo && debugInfo.env && debugInfo.env.IFOOD_MERCHANT_ID) || 'não configurado' }}</strong></div>
+            </div>
+          </li>
+          <li>
+            <div class="d-flex align-items-baseline">
+              <div class="me-2">Merchant UUID:</div>
+              <div><strong>{{ integ?.merchantUuid || 'não configurado' }}</strong></div>
+            </div>
+          </li>
         </ul>
+        <div v-if="isDevMode" class="mt-2">
+          <button class="btn btn-sm btn-outline-secondary" @click="loadDebug">Carregar debug (dev)</button>
+          <small class="text-muted ms-2">(somente em ambiente de desenvolvimento; protegido por autorização)</small>
+        </div>
       </div>
     </div>
 
@@ -329,7 +453,7 @@ async function unlinkStore(){
           </div>
         </div>
 
-  <div class="row g-2 align-items-end">
+        <div class="row g-2 align-items-end">
           <div class="col-md-6">
             <label class="form-label">Código de autorização (do lojista)</label>
             <TextInput v-model="authCode" placeholder="Cole o código aqui" inputClass="form-control" />
@@ -351,11 +475,24 @@ async function unlinkStore(){
     <div v-if="integ" class="card">
       <div class="card-header">Status atual</div>
       <div class="card-body">
+        <p><b>Loja vinculada:</b> {{ linkedStoreName || '-' }}</p>
         <p><b>Ativo:</b> {{ integ.enabled ? 'Sim' : 'Não' }}</p>
         <p><b>Token expira em:</b> {{ integ.tokenExpiresAt || '-' }}</p>
         <p><b>Tem token:</b> {{ integ.accessToken ? 'Sim' : 'Não' }}</p>
-        <p v-if="integ.accessToken"><b>Token (preview):</b> {{ integ.accessToken.slice(0,6) }}··· ({{ integ.accessToken.length }} chars)</p>
+        <p v-if="integ.accessToken">
+          <b>Token (preview):</b>
+          <span class="text-monospace">{{ integ.accessToken.slice(0,6) }}···</span>
+          <small class="text-muted">({{ integ.accessToken.length }} chars)</small>
+          <span v-if="isDevMode" class="ms-3">
+            <button class="btn btn-sm btn-outline-secondary" @click="loadFullToken" v-if="!showingFullToken">Mostrar token completo (dev)</button>
+            <button class="btn btn-sm btn-outline-secondary" @click="hideFullToken" v-else>Ocultar token</button>
+          </span>
+        </p>
         <p v-else class="text-muted small">Nenhum accessToken presente no objeto retornado pelo servidor.</p>
+        <div v-if="showingFullToken && fullToken" class="mt-2">
+          <div class="small text-muted">Access Token (dev):</div>
+          <pre class="bg-light p-2 text-monospace" style="overflow:auto;word-break:break-all">{{ fullToken }}</pre>
+        </div>
         <div class="small text-muted mt-2">Raw (masked) integração para debug:</div>
         <pre class="bg-light p-2" style="max-height:160px;overflow:auto">{{
           JSON.stringify({
@@ -368,6 +505,10 @@ async function unlinkStore(){
             tokenExpiresAt: integ.tokenExpiresAt || null
           }, null, 2)
         }}</pre>
+        <div v-if="debugInfo" class="mt-3">
+          <div class="small text-muted">ENV / debug (servidor):</div>
+          <pre class="bg-dark text-light p-2" style="max-height:220px;overflow:auto">{{ JSON.stringify(debugInfo, null, 2) }}</pre>
+        </div>
         <div class="btn-group">
           <button class="btn btn-outline-secondary" @click="refreshToken">Renovar token</button>
           <button class="btn btn-outline-primary" @click="testPoll">Executar Poll (teste)</button>

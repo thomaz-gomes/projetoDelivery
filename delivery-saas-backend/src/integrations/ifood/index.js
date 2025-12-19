@@ -15,13 +15,19 @@ export async function pollIFood(companyId) {
     throw new Error('Sem token. Finalize a vinculação com o iFood primeiro.');
   }
 
-  // ✅ usa o UUID salvo, não o merchantId numérico
+  // prefer merchantUuid when available, otherwise fallback to merchantId
   const merchantHeader = integration.merchantUuid || integration.merchantId;
 
   try {
-    const data = await ifoodGet(companyId, '/order/v1.0/events:polling', {}, {
-      'x-polling-merchants': merchantHeader
-    });
+    // ensure header is a JSON array string as required by iFood
+    const merchantHeaderValue = merchantHeader
+      ? JSON.stringify(Array.isArray(merchantHeader) ? merchantHeader : String(merchantHeader).split(',').map(s => s.trim()).filter(Boolean))
+      : undefined;
+
+    const headers = {};
+    if (merchantHeaderValue) headers['x-polling-merchants'] = merchantHeaderValue;
+
+    const data = await ifoodGet(companyId, '/order/v1.0/events:polling', {}, headers);
     console.log('[iFood Polling] OK:', data);
     return data;
   } catch (e) {

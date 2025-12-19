@@ -15,6 +15,15 @@ export function ensureDatabaseUrl() {
   const current = process.env.DATABASE_URL ? stripQuotes(process.env.DATABASE_URL) : undefined
   const nodeEnv = (process.env.NODE_ENV || 'development').toLowerCase()
 
+  // In development prefer an existing sqlite DATABASE_URL and do not override
+  // it by building a Postgres URL from DB_* parts. This allows dev to keep
+  // `file:./dev.db` even when DB_* variables are present for other reasons.
+  if (nodeEnv === 'development' && current && (current.startsWith('file:') || current.startsWith('sqlite:'))) {
+    process.env.DATABASE_URL = current
+    console.log('🔧 [dev] Keeping existing sqlite DATABASE_URL')
+    return
+  }
+
   // Normalize environment variable keys that may have accidental surrounding
   // whitespace from some control panels. For example a panel that saved
   // "DB_HOST " or " DB_NAME" will not populate process.env.DB_HOST normally.
@@ -103,6 +112,14 @@ export function ensureDatabaseUrl() {
   if (current) {
     // If current is present but looks like a sqlite file or similar, just keep it
     process.env.DATABASE_URL = current
+    return
+  }
+
+  // Safety: in development, if DATABASE_URL is missing or malformed, prefer local sqlite file
+  if (nodeEnv === 'development') {
+    const devUrl = 'file:./dev.db'
+    process.env.DATABASE_URL = devUrl
+    console.log(`🔧 [dev] DATABASE_URL not set or non-sqlite; falling back to ${devUrl}`)
     return
   }
 

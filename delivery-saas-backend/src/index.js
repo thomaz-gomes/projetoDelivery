@@ -230,6 +230,22 @@ app.get("/", (req, res) => {
   res.send("✅ API Online e funcional");
 });
 
+// Simple health endpoint used by Docker healthchecks and monitoring
+app.get('/health', async (req, res) => {
+  try {
+    // lightweight DB check: simple count query (fast on Postgres)
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch (e) {
+      console.error('Health DB check failed', e && e.message);
+      return res.status(500).json({ ok: false, db: false });
+    }
+    return res.json({ ok: true, uptimeSec: Math.floor(process.uptime()) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e && e.message) });
+  }
+});
+
 // Development-only: list connected Socket.IO agents and their metadata
 if (process.env.NODE_ENV !== 'production') {
   app.get('/debug/agents', (req, res) => {

@@ -22,6 +22,7 @@ services:
       - ./delivery-saas-backend/.env
     environment:
       DATABASE_URL: postgres://tomgomes:03t01F007TF@delivery_db:5432/tomgomes
+      PRISMA_PROVIDER: postgresql
       # Allow the frontend (production) domain to access the API
       FRONTEND_ORIGINS: https://deliverywl.com.br
       NODE_ENV: production
@@ -56,6 +57,7 @@ services:
     command: node scripts/wait-for-db-and-migrate.js
     environment:
       DATABASE_URL: postgres://tomgomes:03t01F007TF@delivery_db:5432/tomgomes
+      PRISMA_PROVIDER: postgresql
     depends_on:
       - delivery_db
     restart: 'no'

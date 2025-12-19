@@ -23,7 +23,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgres://tomgomes:03t01F007TF@delivery_db:5432/tomgomes?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/projetodelivery
       - JWT_SECRET=dev-jwt-secret
       - DISABLE_SSL=1
       - FRONTEND_ORIGIN=http://localhost:5173
