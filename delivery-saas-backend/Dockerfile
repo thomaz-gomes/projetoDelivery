@@ -15,6 +15,11 @@ RUN if [ -f prisma/schema.postgres.prisma ]; then npx prisma generate --schema=p
 FROM node:20-bullseye-slim AS runtime
 WORKDIR /app
 
+# Install runtime utilities required by healthchecks
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 # Copy node modules and built app from builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app .
