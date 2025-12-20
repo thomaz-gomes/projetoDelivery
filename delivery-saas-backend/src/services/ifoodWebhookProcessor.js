@@ -2,6 +2,7 @@
 import { prisma } from '../prisma.js';
 import { getIFoodOrderDetails } from '../integrations/ifood/orders.js';
 import { emitirNovoPedido } from '../index.js';
+import { canTransition } from '../stateMachine.js';
 
 /**
  * Extrai companyId a partir do merchantId do payload
@@ -222,12 +223,41 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     });
   }
 
-  // se já existe, só atualizamos campos principais (não recriamos itens)
-  return prisma.order.update({
-    where: { id: exists.id },
-    data: baseData,
-    include: { items: true },
-  });
+  // se já existe, atualizamos campos principais — mas NÃO sobrescrevemos o
+  // status indiscriminadamente. Apenas altere o status se a transição for
+  // permitida pelo `canTransition` centralizado (evita regressões como quando
+  // um evento PLACED é reprocessado após o pedido já ter sido concluído).
+  try {
+    const updateData = Object.assign({}, baseData);
+    // Determine whether we should change the status
+    const incomingStatus = mapped.status || null;
+    const currentStatus = exists.status || null;
+    if (incomingStatus && incomingStatus !== currentStatus) {
+      // Only set status when a valid forward transition exists
+      if (canTransition(currentStatus, incomingStatus)) {
+        updateData.status = incomingStatus;
+        // record history entry for status change
+        updateData.histories = { create: { from: currentStatus, to: incomingStatus, reason: 'iFood webhook (update)' } };
+      } else {
+        // Do not overwrite status; keep existing
+        delete updateData.status;
+      }
+    } else {
+      // Ensure we don't unset status unintentionally
+      delete updateData.status;
+    }
+
+    const updated = await prisma.order.update({
+      where: { id: exists.id },
+      data: updateData,
+      include: { items: true, histories: true },
+    });
+    return updated;
+  } catch (e) {
+    // Fallback: if update fails, log and rethrow
+    console.error('[iFood Processor] failed to update existing order:', e?.message || e);
+    throw e;
+  }
 }
 
 /**
