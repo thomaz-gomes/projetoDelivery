@@ -39,6 +39,10 @@ export const webhooksRouter = express.Router();
 const LOG_DIR = path.resolve("logs");
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
+// Control flag: enable automatic printing when receiving webhooks.
+// Default: disabled (require explicit ENABLE_AUTO_PRINT=1 to enable).
+const ENABLE_AUTO_PRINT = String(process.env.ENABLE_AUTO_PRINT || '').toLowerCase() === '1';
+
 /**
  * 🔐 Verifica assinatura do iFood (opcional)
  */
@@ -373,28 +377,133 @@ webhooksRouter.post("/ifood", async (req, res) => {
       emitirNovoPedido(saved);
     }
     console.log(`📦 Pedido salvo e emitido ao painel: ${displayId} (simple:${saved.displaySimple || 'N/A'})`);
-
-    // If saved.storeId is missing, persist the job to the print queue so it
-    // can be processed later when an agent connects. This helps cases where
-    // webhooks do not include storeId information but an agent is available.
-    try {
-      if (!saved.storeId) {
-        const QUEUE_FILE = path.join(process.cwd(), 'tmp', 'print-queue.json');
-        let existing = [];
-        try {
-          if (fs.existsSync(QUEUE_FILE)) {
-            existing = JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8') || '[]') || [];
-          }
-        } catch (e) { existing = [] }
-        const already = existing.find(it => it && it.order && (it.order.id === saved.id || it.order.externalId === saved.externalId));
-        if (!already) {
+    // Auto-print behavior can be toggled via `ENABLE_AUTO_PRINT` env var.
+    if (!ENABLE_AUTO_PRINT) {
+      console.log('Auto-print disabled (ENABLE_AUTO_PRINT not set to 1) — skipping enqueue/delivery logic');
+    } else {
+      // If saved.storeId is missing, persist the job to the print queue so it
+      // can be processed later when an agent connects. This helps cases where
+      // webhooks do not include storeId information but an agent is available.
+      try {
+        if (!saved.storeId) {
+          const QUEUE_FILE = path.join(process.cwd(), 'tmp', 'print-queue.json');
+          let existing = [];
           try {
-            const queued = printQueue.enqueue({ order: saved, storeId: saved.storeId || null });
-            console.log('Auto-print: saved.storeId missing — job enqueued for later processing', queued.id);
-            // try processing immediately using handshake-advertised storeIds
+            if (fs.existsSync(QUEUE_FILE)) {
+              existing = JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8') || '[]') || [];
+            }
+          } catch (e) { existing = [] }
+          const already = existing.find(it => it && it.order && (it.order.id === saved.id || it.order.externalId === saved.externalId));
+          if (!already) {
             try {
-              const io = req.app && req.app.locals && req.app.locals.io;
+              const queued = printQueue.enqueue({ order: saved, storeId: saved.storeId || null });
+              console.log('Auto-print: saved.storeId missing — job enqueued for later processing', queued.id);
+              // try processing immediately using handshake-advertised storeIds
+              try {
+                const io = req.app && req.app.locals && req.app.locals.io;
+                if (io) {
+                  const hsStoreIds = new Set();
+                  Array.from(io.sockets.sockets.values()).forEach(s => {
+                    try {
+                      const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+                      const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+                      if (Array.isArray(handshakeStoreIds)) handshakeStoreIds.forEach(id => hsStoreIds.add(id));
+                    } catch (e) {}
+                  });
+                  const toTry = Array.from(hsStoreIds).length ? Array.from(hsStoreIds) : null;
+                  if (toTry && toTry.length) {
+                    printQueue.processForStores(io, toTry).then(r => {
+                      if (r && r.ok) console.log('Auto-print: processed queue after enqueue (missing storeId), results:', r.results);
+                    }).catch(e => console.warn('Auto-print: processForStores after enqueue failed', e && e.message));
+                  }
+                }
+              } catch (e) { }
+            } catch (e) { console.warn('Auto-print: enqueue failed for missing storeId', e && e.message); }
+          }
+        }
+      } catch (e) { /* ignore */ }
+
+      // --- Auto-print: try to deliver the order to a connected print agent for this storeId
+      try {
+        const io = req.app && req.app.locals && req.app.locals.io;
+        const storeIdForPrint = saved.storeId || null;
+        // If we don't have a storeId but we do have a companyId, try to target
+        // agents by company as a best-effort (useful when webhooks don't include storeId).
+        const companyIdForPrint = saved.companyId || null;
+        if (io && (storeIdForPrint || companyIdForPrint)) {
+          let candidates = [];
+          if (storeIdForPrint) {
+            candidates = Array.from(io.sockets.sockets.values()).filter(s => {
+              const agentStoreIds = (s.agent && Array.isArray(s.agent.storeIds)) ? s.agent.storeIds : null;
+              const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+              const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+              const storeIds = agentStoreIds || handshakeStoreIds;
+              return storeIds && storeIds.includes(storeIdForPrint);
+            });
+          } else if (companyIdForPrint) {
+            // include sockets that authenticated as agents for this company
+            candidates = Array.from(io.sockets.sockets.values()).filter(s => {
+              try {
+                if (s.agent && s.agent.companyId === companyIdForPrint) return true;
+                const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+                const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+                if (!handshakeStoreIds || !handshakeStoreIds.length) return false;
+                // best-effort: check if any handshake store belongs to this company
+                return false; // placeholder, we'll filter below with DB check
+              } catch (e) { return false; }
+            });
+          }
+          // If we need to consider handshake storeIds for company matching, perform
+          // a single bulk DB query to find which handshake-advertised storeIds
+          // actually belong to the target company, then select matching sockets.
+          if (!storeIdForPrint && companyIdForPrint && io) {
+            try {
+              // map socket -> handshake storeIds and collect all handshake storeIds
+              const socketMap = new Map();
+              const allHsIds = new Set();
+              for (const s of Array.from(io.sockets.sockets.values())) {
+                try {
+                  const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+                  const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+                  if (Array.isArray(handshakeStoreIds) && handshakeStoreIds.length) {
+                    socketMap.set(s, handshakeStoreIds);
+                    handshakeStoreIds.forEach(id => allHsIds.add(id));
+                  }
+                } catch (e) { /* ignore per-socket */ }
+              }
+              const allIds = Array.from(allHsIds);
+              let validStoreIds = [];
+              if (allIds.length) {
+                try {
+                  const found = await prisma.store.findMany({ where: { id: { in: allIds }, companyId: companyIdForPrint }, select: { id: true } });
+                  validStoreIds = (found || []).map(f => String(f.id));
+                } catch (e) { /* ignore DB error, fall back to no matches */ }
+              }
+              // collect sockets whose handshake storeIds intersect validStoreIds
+              const matchedByHandshake = [];
+              if (validStoreIds.length) {
+                for (const [s, hsIds] of socketMap.entries()) {
+                  try {
+                    if (hsIds.some(id => validStoreIds.includes(String(id)))) matchedByHandshake.push(s);
+                  } catch (e) { /* ignore */ }
+                }
+              }
+              // also include sockets that authenticated as agents for the company
+              const authMatched = Array.from(io.sockets.sockets.values()).filter(s => s.agent && s.agent.companyId === companyIdForPrint);
+              const merged = [...new Set([...(authMatched || []), ...(matchedByHandshake || [])])];
+              candidates = merged;
+            } catch (e) {
+              // on unexpected errors, fall back to no candidates
+              candidates = [];
+            }
+          }
+          if (!candidates || candidates.length === 0) {
+            const queued = printQueue.enqueue({ order: saved, storeId: storeIdForPrint });
+            console.log('Auto-print: no agent connected; job queued', queued.id);
+            // Attempt to process the queue immediately for any connected agents
+            try {
               if (io) {
+                // collect handshake-advertised storeIds from connected sockets
                 const hsStoreIds = new Set();
                 Array.from(io.sockets.sockets.values()).forEach(s => {
                   try {
@@ -403,171 +512,70 @@ webhooksRouter.post("/ifood", async (req, res) => {
                     if (Array.isArray(handshakeStoreIds)) handshakeStoreIds.forEach(id => hsStoreIds.add(id));
                   } catch (e) {}
                 });
-                const toTry = Array.from(hsStoreIds).length ? Array.from(hsStoreIds) : null;
+                const toTry = storeIdForPrint ? [storeIdForPrint] : (Array.from(hsStoreIds).length ? Array.from(hsStoreIds) : null);
                 if (toTry && toTry.length) {
                   printQueue.processForStores(io, toTry).then(r => {
-                    if (r && r.ok) console.log('Auto-print: processed queue after enqueue (missing storeId), results:', r.results);
-                  }).catch(e => console.warn('Auto-print: processForStores after enqueue failed', e && e.message));
+                    if (r && r.ok) console.log('Auto-print: processed queue after enqueue, results:', r.results);
+                  }).catch(e => console.warn('Auto-print: immediate post-enqueue processForStores failed', e && e.message));
                 }
               }
-            } catch (e) { }
-          } catch (e) { console.warn('Auto-print: enqueue failed for missing storeId', e && e.message); }
-        }
-      }
-    } catch (e) { /* ignore */ }
-
-    // --- Auto-print: try to deliver the order to a connected print agent for this storeId
-    try {
-      const io = req.app && req.app.locals && req.app.locals.io;
-      const storeIdForPrint = saved.storeId || null;
-      // If we don't have a storeId but we do have a companyId, try to target
-      // agents by company as a best-effort (useful when webhooks don't include storeId).
-      const companyIdForPrint = saved.companyId || null;
-      if (io && (storeIdForPrint || companyIdForPrint)) {
-        let candidates = [];
-        if (storeIdForPrint) {
-          candidates = Array.from(io.sockets.sockets.values()).filter(s => {
-            const agentStoreIds = (s.agent && Array.isArray(s.agent.storeIds)) ? s.agent.storeIds : null;
-            const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
-            const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
-            const storeIds = agentStoreIds || handshakeStoreIds;
-            return storeIds && storeIds.includes(storeIdForPrint);
-          });
-        } else if (companyIdForPrint) {
-          // include sockets that authenticated as agents for this company
-          candidates = Array.from(io.sockets.sockets.values()).filter(s => {
-            try {
-              if (s.agent && s.agent.companyId === companyIdForPrint) return true;
-              const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
-              const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
-              if (!handshakeStoreIds || !handshakeStoreIds.length) return false;
-              // best-effort: check if any handshake store belongs to this company
-              return false; // placeholder, we'll filter below with DB check
-            } catch (e) { return false; }
-          });
-        }
-        // If we need to consider handshake storeIds for company matching, perform
-        // a single bulk DB query to find which handshake-advertised storeIds
-        // actually belong to the target company, then select matching sockets.
-        if (!storeIdForPrint && companyIdForPrint && io) {
-          try {
-            // map socket -> handshake storeIds and collect all handshake storeIds
-            const socketMap = new Map();
-            const allHsIds = new Set();
-            for (const s of Array.from(io.sockets.sockets.values())) {
-              try {
-                const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
-                const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
-                if (Array.isArray(handshakeStoreIds) && handshakeStoreIds.length) {
-                  socketMap.set(s, handshakeStoreIds);
-                  handshakeStoreIds.forEach(id => allHsIds.add(id));
-                }
-              } catch (e) { /* ignore per-socket */ }
-            }
-            const allIds = Array.from(allHsIds);
-            let validStoreIds = [];
-            if (allIds.length) {
-              try {
-                const found = await prisma.store.findMany({ where: { id: { in: allIds }, companyId: companyIdForPrint }, select: { id: true } });
-                validStoreIds = (found || []).map(f => String(f.id));
-              } catch (e) { /* ignore DB error, fall back to no matches */ }
-            }
-            // collect sockets whose handshake storeIds intersect validStoreIds
-            const matchedByHandshake = [];
-            if (validStoreIds.length) {
-              for (const [s, hsIds] of socketMap.entries()) {
-                try {
-                  if (hsIds.some(id => validStoreIds.includes(String(id)))) matchedByHandshake.push(s);
-                } catch (e) { /* ignore */ }
-              }
-            }
-            // also include sockets that authenticated as agents for the company
-            const authMatched = Array.from(io.sockets.sockets.values()).filter(s => s.agent && s.agent.companyId === companyIdForPrint);
-            const merged = [...new Set([...(authMatched || []), ...(matchedByHandshake || [])])];
-            candidates = merged;
-          } catch (e) {
-            // on unexpected errors, fall back to no candidates
-            candidates = [];
-          }
-        }
-        if (!candidates || candidates.length === 0) {
-          const queued = printQueue.enqueue({ order: saved, storeId: storeIdForPrint });
-          console.log('Auto-print: no agent connected; job queued', queued.id);
-          // Attempt to process the queue immediately for any connected agents
-          try {
-            if (io) {
-              // collect handshake-advertised storeIds from connected sockets
-              const hsStoreIds = new Set();
-              Array.from(io.sockets.sockets.values()).forEach(s => {
-                try {
-                  const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
-                  const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
-                  if (Array.isArray(handshakeStoreIds)) handshakeStoreIds.forEach(id => hsStoreIds.add(id));
-                } catch (e) {}
-              });
-              const toTry = storeIdForPrint ? [storeIdForPrint] : (Array.from(hsStoreIds).length ? Array.from(hsStoreIds) : null);
-              if (toTry && toTry.length) {
-                printQueue.processForStores(io, toTry).then(r => {
-                  if (r && r.ok) console.log('Auto-print: processed queue after enqueue, results:', r.results);
-                }).catch(e => console.warn('Auto-print: immediate post-enqueue processForStores failed', e && e.message));
-              }
-            }
-          } catch (e) { /* ignore */ }
-        } else {
-          // try recently connected agents first
-          const sorted = candidates.slice().sort((a, b) => {
-            const ta = (a.agent && a.agent.connectedAt) ? a.agent.connectedAt : 0;
-            const tb = (b.agent && b.agent.connectedAt) ? b.agent.connectedAt : 0;
-            return tb - ta;
-          });
-
-          const ACK_TIMEOUT_MS = process.env.PRINT_ACK_TIMEOUT_MS ? Number(process.env.PRINT_ACK_TIMEOUT_MS) : 10000;
-          let delivered = false;
-          let deliveredInfo = null;
-          for (const s of sorted) {
-            try {
-              const attempt = await new Promise(resolve => {
-                let resolved = false;
-                const timer = setTimeout(() => { if (!resolved) { resolved = true; resolve({ ok: false, error: 'ack_timeout', socketId: s.id }); } }, ACK_TIMEOUT_MS + 1000);
-                try {
-                  s.timeout(ACK_TIMEOUT_MS).emit('novo-pedido', saved, (...args) => {
-                    if (resolved) return;
-                    resolved = true; clearTimeout(timer);
-                    resolve({ ok: true, ack: args, socketId: s.id });
-                  });
-                } catch (e) {
-                  if (!resolved) { resolved = true; clearTimeout(timer); resolve({ ok: false, error: String(e && e.message), socketId: s.id }); }
-                }
-              });
-              if (attempt && attempt.ok) {
-                console.log('Auto-print: delivered to agent socket', attempt.socketId);
-                delivered = true;
-                deliveredInfo = { socketId: attempt.socketId, ack: attempt.ack }
-                break;
-              } else {
-                console.log('Auto-print: attempt failed for socket', attempt.socketId, attempt.error || '<no error>');
-              }
-            } catch (e) {
-              console.warn('Auto-print: delivery attempt error', e && e.message);
-            }
-          }
-          if (!delivered) {
-            const queued = printQueue.enqueue({ order: saved, storeId: storeIdForPrint });
-            console.log('Auto-print: no agent acknowledged; job queued', queued.id);
-            try { io.emit('print-result', { orderId: saved.id, status: 'queued', queuedId: queued.id }) } catch(_){}
+            } catch (e) { /* ignore */ }
           } else {
-            try { io.emit('print-result', { orderId: saved.id, status: 'printed', socketId: deliveredInfo && deliveredInfo.socketId, ack: deliveredInfo && deliveredInfo.ack }) } catch(_){}
+            // try recently connected agents first
+            const sorted = candidates.slice().sort((a, b) => {
+              const ta = (a.agent && a.agent.connectedAt) ? a.agent.connectedAt : 0;
+              const tb = (b.agent && b.agent.connectedAt) ? b.agent.connectedAt : 0;
+              return tb - ta;
+            });
+
+            const ACK_TIMEOUT_MS = process.env.PRINT_ACK_TIMEOUT_MS ? Number(process.env.PRINT_ACK_TIMEOUT_MS) : 10000;
+            let delivered = false;
+            let deliveredInfo = null;
+            for (const s of sorted) {
+              try {
+                const attempt = await new Promise(resolve => {
+                  let resolved = false;
+                  const timer = setTimeout(() => { if (!resolved) { resolved = true; resolve({ ok: false, error: 'ack_timeout', socketId: s.id }); } }, ACK_TIMEOUT_MS + 1000);
+                  try {
+                    s.timeout(ACK_TIMEOUT_MS).emit('novo-pedido', saved, (...args) => {
+                      if (resolved) return;
+                      resolved = true; clearTimeout(timer);
+                      resolve({ ok: true, ack: args, socketId: s.id });
+                    });
+                  } catch (e) {
+                    if (!resolved) { resolved = true; clearTimeout(timer); resolve({ ok: false, error: String(e && e.message), socketId: s.id }); }
+                  }
+                });
+                if (attempt && attempt.ok) {
+                  console.log('Auto-print: delivered to agent socket', attempt.socketId);
+                  delivered = true;
+                  deliveredInfo = { socketId: attempt.socketId, ack: attempt.ack }
+                  break;
+                } else {
+                  console.log('Auto-print: attempt failed for socket', attempt.socketId, attempt.error || '<no error>');
+                }
+              } catch (e) {
+                console.warn('Auto-print: delivery attempt error', e && e.message);
+              }
+            }
+            if (!delivered) {
+              const queued = printQueue.enqueue({ order: saved, storeId: storeIdForPrint });
+              console.log('Auto-print: no agent acknowledged; job queued', queued.id);
+              try { io.emit('print-result', { orderId: saved.id, status: 'queued', queuedId: queued.id }) } catch(_){ }
+            } else {
+              try { io.emit('print-result', { orderId: saved.id, status: 'printed', socketId: deliveredInfo && deliveredInfo.socketId, ack: deliveredInfo && deliveredInfo.ack }) } catch(_){ }
+            }
+          }
+        } else if (!io) {
+          // no Socket.IO instance available yet — enqueue for later
+          if (saved.storeId) {
+            const queued = printQueue.enqueue({ order: saved, storeId: saved.storeId });
+            console.log('Auto-print: Socket.IO not initialized; job queued', queued.id);
           }
         }
-      } else if (!io) {
-        // no Socket.IO instance available yet — enqueue for later
-        if (saved.storeId) {
-          const queued = printQueue.enqueue({ order: saved, storeId: saved.storeId });
-          console.log('Auto-print: Socket.IO not initialized; job queued', queued.id);
-        }
+      } catch (e) {
+        console.warn('Auto-print: unexpected error while attempting to deliver print job:', e && e.message);
       }
-    } catch (e) {
-      console.warn('Auto-print: unexpected error while attempting to deliver print job:', e && e.message);
     }
 
     return res.json({

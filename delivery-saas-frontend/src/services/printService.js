@@ -9,6 +9,11 @@ const BACKEND_BASE = (typeof import.meta !== 'undefined' && import.meta.env && i
   ? String(import.meta.env.VITE_API_URL).replace(/\/$/, '')
   : 'http://localhost:3000';
 
+// If running dev with QZ Tray enabled, don't poll the legacy `agent-print` service.
+const ENABLE_QZ = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ENABLE_QZ)
+  ? String(import.meta.env.VITE_ENABLE_QZ) === '1' || String(import.meta.env.VITE_ENABLE_QZ) === 'true'
+  : false;
+
 let connected = true; // optimistic default
 let defaultPrinter = null;
 const queue = [];
@@ -106,6 +111,17 @@ export function isConnecting() {
 // perform an async connectivity check against the agent-print endpoint
 export async function checkConnectivity() {
   if (connectingPromise) return connectingPromise;
+  // If QZ Tray is enabled we consider the print subsystem available
+  // (the frontend will try QZ first). Avoid polling the legacy agent-print.
+  if (ENABLE_QZ) {
+    connectingPromise = Promise.resolve(true).then(() => {
+      connected = true;
+      connectingPromise = null;
+      return connected;
+    });
+    return connectingPromise;
+  }
+
   connectingPromise = (async () => {
     try {
       const res = await fetch(`${BACKEND_BASE}/agent-print/printers`, { method: 'GET' });
@@ -121,7 +137,12 @@ export async function checkConnectivity() {
 }
 
 // kick off a background connectivity check
-try { checkConnectivity(); setInterval(() => { checkConnectivity().catch(()=>{}); }, 15000); } catch(e){}
+try {
+  checkConnectivity();
+  if (!ENABLE_QZ) {
+    setInterval(() => { checkConnectivity().catch(()=>{}); }, 15000);
+  }
+} catch(e){}
 
 // ================================
 // 🔧 Printer configuration helpers

@@ -24,7 +24,26 @@ import SelectInput from './components/form/select/SelectInput.vue';
 
 const app = createApp(App);
 
-initQZ();
+// During development you can enable loading the QZ Tray client script from
+// the local QZ Tray websocket server (default port 8181) by setting
+// VITE_ENABLE_QZ=1 in your dev environment. This helps local testing
+// without committing index.html changes. If enabled, dynamically load the
+// script and then initialize QZ.
+try {
+  const enableQz = import.meta.env.VITE_ENABLE_QZ === '1';
+  if (enableQz && typeof window !== 'undefined') {
+    const s = document.createElement('script');
+    s.src = 'http://localhost:8181/qz-tray.js';
+    s.async = true;
+    s.onload = () => { console.log('qz-tray script loaded (dev)'); initQZ().catch(()=>{}); };
+    s.onerror = () => { console.warn('Failed to load qz-tray.js from localhost:8181'); };
+    document.head.appendChild(s);
+  } else {
+    initQZ();
+  }
+} catch (e) {
+  initQZ();
+}
 
 // During local development, if a dev JWT is provided via VITE_DEV_JWT,
 // populate localStorage so the dev session is authenticated automatically.

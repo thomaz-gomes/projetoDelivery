@@ -22,6 +22,7 @@
               <option v-for="p in printers" :key="p" :value="p">{{ p }}</option>
             </SelectInput>
             <div class="mt-2 small text-muted">Se a lista estiver vazia, verifique se o agente de impressão está executando na loja.</div>
+            <div v-if="ENABLE_QZ" class="mt-2 small text-success">Impressão por QZ Tray ativada — não é necessário agente local.</div>
             <div class="mt-2">
               <div v-if="discovering" class="small text-muted">Procurando impressoras... ⏳</div>
               <div v-else-if="discoverError" class="small text-danger">{{ discoverError }}</div>
@@ -31,7 +32,7 @@
                 <div class="log-line" v-for="(l, idx) in logs" :key="idx">{{ l }}</div>
               </div>
               <div class="mt-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters" :disabled="ENABLE_QZ">Tentar novamente</button>
                     <button type="button" class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar token de agente</button>
               </div>
             </div>
@@ -79,6 +80,10 @@ import { ref, onMounted, watch } from 'vue';
 import printService from '../services/printService.js';
 import api from '../api';
 import { API_URL } from '../config';
+
+const ENABLE_QZ = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ENABLE_QZ)
+  ? String(import.meta.env.VITE_ENABLE_QZ) === '1' || String(import.meta.env.VITE_ENABLE_QZ) === 'true'
+  : false;
 
 const props = defineProps({ visible: Boolean });
 const emit = defineEmits(['update:visible','saved']);
@@ -136,6 +141,13 @@ async function discoverPrinters(){
   printers.value = [];
   discoverError.value = '';
   discovering.value = true;
+  if (ENABLE_QZ) {
+    // When using QZ Tray we don't rely on the legacy agent-print service
+    discoverError.value = 'QZ Tray ativado — descoberta de agentes não necessária.';
+    pushLog('QZ Tray enabled; skipping agent-print discovery');
+    discovering.value = false;
+    return;
+  }
   pushLog('discoverPrinters called; querying backend agent-print/printers');
   try {
     // call backend to ask a connected agent for printers

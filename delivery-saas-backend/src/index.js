@@ -34,6 +34,7 @@ import usersRouter from './routes/users.js'
 import rolesRouter from './routes/rolePermissions.js'
 import agentSetupRouter from './routes/agentSetup.js'
 import agentPrintRouter from './routes/agentPrint.js'
+import qzPrintRouter from './routes/qzPrint.js'
 import qrActionRouter from './routes/qrAction.js'
 import rasterizeRouter from './routes/rasterize.js'
 import printerSettingRouter from './routes/printerSetting.js'
@@ -171,6 +172,7 @@ app.use('/roles', rolesRouter);
 // Agent setup endpoint: returns socket URL and store IDs for the authenticated user's company
 app.use('/agent-setup', agentSetupRouter);
 app.use('/agent-print', agentPrintRouter);
+app.use('/qz-print', qzPrintRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
