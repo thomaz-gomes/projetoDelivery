@@ -17145,5 +17145,29 @@
       "total": 36.4
     },
     "includeFullOrder": true
+  },
+  {
+    "id": "1766282131170-221143",
+    "createdAt": 1766282131170,
+    "order": {
+      "id": "dev-test-1766282131157",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
   }
 ]

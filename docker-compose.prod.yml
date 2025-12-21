@@ -23,7 +23,8 @@ services:
       context: ./delivery-saas-backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      # Allow overriding via env or .env file; fall back to the internal service credentials
+      DATABASE_URL: ${DATABASE_URL:-postgresql://tomgomes:03t01F007TF@delivery_db:5432/tomgomes}
       NODE_ENV: production
       PORT: 3000
     # Persist uploads outside the ephemeral container filesystem
