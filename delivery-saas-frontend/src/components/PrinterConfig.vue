@@ -143,51 +143,48 @@ async function discoverPrinters(){
   discoverError.value = '';
   discovering.value = true;
   if (ENABLE_QZ) {
-    // When QZ Tray is enabled, prefer asking the browser-side QZ API for
-    // printers (if present). If the `qz` object isn't available, fall back
-    // to the local HTTP mock (ports 4000/4001) so dev still works.
-    pushLog('QZ Tray enabled; attempting browser QZ API discovery');
+    // When QZ Tray is enabled, query the real QZ API for printers.
+    pushLog('QZ Tray enabled; attempting real QZ printer discovery');
     try {
-      if (typeof window !== 'undefined' && window.qz && window.qz.printers && typeof window.qz.printers.find === 'function') {
-        try {
-          const result = await window.qz.printers.find();
-          if (Array.isArray(result) && result.length) {
-            printers.value = result;
-            if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
-            pushLog('qz.printers.find returned ' + printers.value.length + ' printers');
-            discovering.value = false;
-            return;
+      if (typeof window !== 'undefined' && window.qz) {
+        // Ensure QZ is connected and use findAll for a full list
+        const { initQZ } = await import('../plugins/qz.js');
+        await initQZ();
+        if (window.qz && window.qz.printers) {
+          const listFn = window.qz.printers.findAll || window.qz.printers.getAll;
+          if (typeof listFn === 'function') {
+            const result = await listFn();
+            if (Array.isArray(result) && result.length) {
+              printers.value = result;
+              if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
+              pushLog('QZ returned ' + printers.value.length + ' printers');
+              discovering.value = false;
+              return;
+            } else {
+              pushLog('QZ returned empty printer list');
+            }
+          } else if (typeof window.qz.printers.find === 'function') {
+            // As a last resort, try getting default printer name
+            try {
+              const def = await window.qz.printers.find();
+              if (def) {
+                printers.value = [def];
+                if (!printerName.value) printerName.value = def;
+                pushLog('QZ returned default printer');
+                discovering.value = false;
+                return;
+              }
+            } catch(e) {
+              pushLog('qz.printers.find (default) failed: ' + String(e?.message || e));
+            }
           }
-        } catch (e) {
-          pushLog('qz.printers.find failed: ' + String(e?.message || e));
         }
       }
 
-      // Fallback: try local mock (ports 4000 then 4001)
-      pushLog('Browser QZ API not available; trying local mock ports 4000/4001');
-      const ports = [4000, 4001];
-      for (const p of ports) {
-        try {
-          const res = await fetch(`http://localhost:${p}/printers`);
-          if (!res.ok) continue;
-          const body = await res.json();
-          if (body && Array.isArray(body.printers)) {
-            printers.value = body.printers;
-            if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
-            pushLog(`Local print mock:${p} returned ${printers.value.length} printers`);
-            discovering.value = false;
-            return;
-          }
-        } catch (e) {
-          // try next port
-        }
-      }
-
-      discoverError.value = 'QZ Tray ativado — descoberta de agentes não necessária.';
-      pushLog('Local discovery failed or returned no printers');
+      discoverError.value = 'QZ Tray não respondeu com lista de impressoras.';
     } catch (e) {
-      discoverError.value = 'QZ Tray ativado — descoberta de agentes não necessária.';
-      pushLog('Local discovery error: ' + String(e?.message || e));
+      discoverError.value = 'Erro consultando QZ: ' + String(e?.message || e);
+      pushLog('QZ discovery error: ' + String(e?.message || e));
     } finally {
       discovering.value = false;
     }
@@ -231,20 +228,30 @@ async function discoverPrintersQZ(){
   discoverError.value = '';
   discovering.value = true;
   try {
-    if (typeof window !== 'undefined' && window.qz && window.qz.printers && typeof window.qz.printers.find === 'function') {
-      try {
-        const result = await window.qz.printers.find();
+    if (typeof window !== 'undefined' && window.qz && window.qz.printers) {
+      const { initQZ } = await import('../plugins/qz.js');
+      await initQZ();
+      const listFn = window.qz.printers.findAll || window.qz.printers.getAll;
+      if (typeof listFn === 'function') {
+        const result = await listFn();
         if (Array.isArray(result) && result.length) {
           printers.value = result;
           if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
-          pushLog('qz.printers.find returned ' + printers.value.length + ' printers');
+          pushLog('QZ returned ' + printers.value.length + ' printers');
         } else {
           discoverError.value = 'QZ retornou lista vazia.';
-          pushLog('qz.printers.find returned empty');
+          pushLog('QZ returned empty');
         }
-      } catch (e) {
-        discoverError.value = 'Erro ao consultar QZ: ' + (e?.message || e);
-        pushLog('qz.printers.find failed: ' + String(e?.message || e));
+      } else {
+        // Fall back to default printer
+        const def = await window.qz.printers.find();
+        if (def) {
+          printers.value = [def];
+          if (!printerName.value) printerName.value = def;
+          pushLog('QZ returned default printer');
+        } else {
+          discoverError.value = 'QZ não retornou impressoras.';
+        }
       }
     } else {
       discoverError.value = 'QZ não disponível no navegador.';

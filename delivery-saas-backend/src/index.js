@@ -47,6 +47,7 @@ import { rotateAgentToken } from './agentTokenManager.js'
 import path from 'path';
 import startReportsCleanup from './cleanupReports.js';
 import startForceOpenCleanup from './cleanupForceOpen.js';
+import qzSecurityRouter from './routes/qzSecurity.js'
 
 const app = express();
 // When running behind a reverse proxy (EasyPanel / nginx / Cloudflare), enable
@@ -173,6 +174,8 @@ app.use('/roles', rolesRouter);
 app.use('/agent-setup', agentSetupRouter);
 app.use('/agent-print', agentPrintRouter);
 app.use('/qz-print', qzPrintRouter);
+// QZ Tray security endpoints: certificate and signing
+app.use('/qz', qzSecurityRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
