@@ -31,10 +31,11 @@
                 <div class="small text-muted mb-1">Logs:</div>
                 <div class="log-line" v-for="(l, idx) in logs" :key="idx">{{ l }}</div>
               </div>
-              <div class="mt-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters" :disabled="ENABLE_QZ">Tentar novamente</button>
+                  <div class="mt-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
+                    <button v-if="ENABLE_QZ" type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrintersQZ">Descobrir via QZ</button>
                     <button type="button" class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar token de agente</button>
-              </div>
+                  </div>
             </div>
           </div>
 
@@ -142,10 +143,54 @@ async function discoverPrinters(){
   discoverError.value = '';
   discovering.value = true;
   if (ENABLE_QZ) {
-    // When using QZ Tray we don't rely on the legacy agent-print service
-    discoverError.value = 'QZ Tray ativado — descoberta de agentes não necessária.';
-    pushLog('QZ Tray enabled; skipping agent-print discovery');
-    discovering.value = false;
+    // When QZ Tray is enabled, prefer asking the browser-side QZ API for
+    // printers (if present). If the `qz` object isn't available, fall back
+    // to the local HTTP mock (ports 4000/4001) so dev still works.
+    pushLog('QZ Tray enabled; attempting browser QZ API discovery');
+    try {
+      if (typeof window !== 'undefined' && window.qz && window.qz.printers && typeof window.qz.printers.find === 'function') {
+        try {
+          const result = await window.qz.printers.find();
+          if (Array.isArray(result) && result.length) {
+            printers.value = result;
+            if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
+            pushLog('qz.printers.find returned ' + printers.value.length + ' printers');
+            discovering.value = false;
+            return;
+          }
+        } catch (e) {
+          pushLog('qz.printers.find failed: ' + String(e?.message || e));
+        }
+      }
+
+      // Fallback: try local mock (ports 4000 then 4001)
+      pushLog('Browser QZ API not available; trying local mock ports 4000/4001');
+      const ports = [4000, 4001];
+      for (const p of ports) {
+        try {
+          const res = await fetch(`http://localhost:${p}/printers`);
+          if (!res.ok) continue;
+          const body = await res.json();
+          if (body && Array.isArray(body.printers)) {
+            printers.value = body.printers;
+            if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
+            pushLog(`Local print mock:${p} returned ${printers.value.length} printers`);
+            discovering.value = false;
+            return;
+          }
+        } catch (e) {
+          // try next port
+        }
+      }
+
+      discoverError.value = 'QZ Tray ativado — descoberta de agentes não necessária.';
+      pushLog('Local discovery failed or returned no printers');
+    } catch (e) {
+      discoverError.value = 'QZ Tray ativado — descoberta de agentes não necessária.';
+      pushLog('Local discovery error: ' + String(e?.message || e));
+    } finally {
+      discovering.value = false;
+    }
     return;
   }
   pushLog('discoverPrinters called; querying backend agent-print/printers');
@@ -175,6 +220,36 @@ async function discoverPrinters(){
     console.warn('discoverPrinters error', e);
     discoverError.value = String(e?.message || e || 'Erro desconhecido');
     pushLog('discover error: ' + String(e?.message || e));
+  } finally {
+    discovering.value = false;
+  }
+}
+
+// Force discovery via browser QZ API and show detailed errors
+async function discoverPrintersQZ(){
+  printers.value = [];
+  discoverError.value = '';
+  discovering.value = true;
+  try {
+    if (typeof window !== 'undefined' && window.qz && window.qz.printers && typeof window.qz.printers.find === 'function') {
+      try {
+        const result = await window.qz.printers.find();
+        if (Array.isArray(result) && result.length) {
+          printers.value = result;
+          if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
+          pushLog('qz.printers.find returned ' + printers.value.length + ' printers');
+        } else {
+          discoverError.value = 'QZ retornou lista vazia.';
+          pushLog('qz.printers.find returned empty');
+        }
+      } catch (e) {
+        discoverError.value = 'Erro ao consultar QZ: ' + (e?.message || e);
+        pushLog('qz.printers.find failed: ' + String(e?.message || e));
+      }
+    } else {
+      discoverError.value = 'QZ não disponível no navegador.';
+      pushLog('qz object not found in window');
+    }
   } finally {
     discovering.value = false;
   }

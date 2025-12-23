@@ -32,12 +32,90 @@ const app = createApp(App);
 try {
   const enableQz = import.meta.env.VITE_ENABLE_QZ === '1';
   if (enableQz && typeof window !== 'undefined') {
-    const s = document.createElement('script');
-    s.src = 'http://localhost:8181/qz-tray.js';
-    s.async = true;
-    s.onload = () => { console.log('qz-tray script loaded (dev)'); initQZ().catch(()=>{}); };
-    s.onerror = () => { console.warn('Failed to load qz-tray.js from localhost:8181'); };
-    document.head.appendChild(s);
+    // Try to load qz-tray.js using the same protocol as the page to avoid
+    // mixed-content blocks (https page can't load http script). Try
+    // localhost first, then 127.0.0.1 as a fallback.
+    const tryUrls = [
+      `${location.protocol}//localhost:8181/qz-tray.js`,
+      `${location.protocol}//127.0.0.1:8181/qz-tray.js`
+    ];
+
+    // First probe QZ Tray by attempting a WebSocket connection. Loading the
+    // `qz-tray.js` script can fail with a SyntaxError when the endpoint
+    // responds with an unexpected/legacy protocol or non-JS bytes (observed
+    // as illegal character U+0015). A successful websocket upgrade is a
+    // stronger signal that the QZ service is speaking the expected protocol
+    // and we can safely inject the script.
+    (async () => {
+      const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      const hosts = [`localhost:8181`, `127.0.0.1:8181`];
+      let wsOk = false;
+      for (const h of hosts) {
+        try {
+          wsOk = await new Promise((resolve) => {
+            let settled = false;
+            const url = `${wsScheme}://${h}`;
+            let socket;
+            try {
+              socket = new WebSocket(url);
+            } catch (e) {
+              // invalid url or protocol
+              return resolve(false);
+            }
+            const timer = setTimeout(() => { if (!settled) { settled = true; try { socket.close(); } catch(_){}; resolve(false); } }, 1000);
+            socket.addEventListener('open', () => { if (!settled) { settled = true; clearTimeout(timer); try { socket.close(); } catch(_){}; resolve(true); } });
+            socket.addEventListener('error', () => { if (!settled) { settled = true; clearTimeout(timer); try { socket.close(); } catch(_){}; resolve(false); } });
+            socket.addEventListener('close', () => { /* noop */ });
+          });
+        } catch (e) {
+          wsOk = false;
+        }
+        if (wsOk) {
+          // If websocket probe succeeded, inject the script from the matching URL
+          const scriptUrl = `${location.protocol}//${h.replace(/:8181$/, ':8181')}/qz-tray.js`;
+          const s = document.createElement('script');
+          s.src = scriptUrl;
+          s.async = true;
+          s.onload = () => { console.log('qz-tray script loaded from', scriptUrl); initQZ().catch(()=>{}); };
+          s.onerror = (e) => { console.warn('Failed to load qz-tray.js from', scriptUrl, e); initQZ().catch(()=>{}); };
+          document.head.appendChild(s);
+          return;
+        }
+      }
+      // No websocket endpoint responded — try loading a local static stub to
+      // allow development when the real QZ Tray webserver isn't available.
+      try {
+        // First, attempt to load the real QZ Tray client script from the
+        // local QZ Tray webserver (port 8181). If that fails, fall back to
+        // the local stub served at `/qz-tray.js`.
+        const remoteScript = document.createElement('script');
+        const remoteUrl = `${location.protocol}//localhost:8181/qz-tray.js`;
+        remoteScript.src = remoteUrl;
+        remoteScript.async = true;
+        let remoteLoaded = false;
+        remoteScript.onload = () => { remoteLoaded = true; console.log('qz-tray script loaded from', remoteUrl); initQZ().catch(()=>{}); };
+        remoteScript.onerror = (e) => {
+          console.warn('Failed to load qz-tray.js from', remoteUrl, e);
+          // Fall back to local stub
+          try {
+            const s = document.createElement('script');
+            s.src = '/qz-tray.js';
+            s.async = true;
+            s.onload = () => { console.log('qz-tray script loaded from /qz-tray.js (fallback)'); initQZ().catch(()=>{}); };
+            s.onerror = (err) => { console.warn('Failed to load local /qz-tray.js fallback', err); initQZ().catch(()=>{}); };
+            document.head.appendChild(s);
+          } catch (err) {
+            console.warn('qz-tray websocket probe failed; skipping script injection and calling initQZ fallback', err);
+            initQZ().catch(()=>{});
+          }
+        };
+        document.head.appendChild(remoteScript);
+        return;
+      } catch (e) {
+        console.warn('qz-tray websocket probe failed; skipping script injection and calling initQZ fallback', e);
+        initQZ().catch(()=>{});
+      }
+    })();
   } else {
     initQZ();
   }

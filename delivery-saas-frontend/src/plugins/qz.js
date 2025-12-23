@@ -6,6 +6,11 @@
 
 import { API_URL } from '../config';
 
+// Build-time flag (Vite) to indicate QZ-enabled builds
+const ENABLE_QZ = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ENABLE_QZ)
+  ? String(import.meta.env.VITE_ENABLE_QZ) === '1' || String(import.meta.env.VITE_ENABLE_QZ) === 'true'
+  : false;
+
 // Try to initialize QZ Tray (if available in the page). Returns true if
 // QZ websocket connection was established or the `qz` object is present.
 export async function initQZ() {
@@ -44,6 +49,13 @@ export async function printComanda(order) {
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
       console.error('print plugin: /qz-print failed', res.status, txt);
+      // fallback behaviour: when the app is explicitly built/started with
+      // QZ enabled, prefer preview fallback instead of sending to the legacy
+      // `agent-print` endpoint. Avoid referencing `html` here since it isn't
+      // available on error paths.
+      if (ENABLE_QZ) {
+        return fallbackPreview(txt || '<p>Preview unavailable</p>');
+      }
       // fallback to legacy agent-print
       return fallbackAgentPrint(base, order);
     }
@@ -71,6 +83,7 @@ export async function printComanda(order) {
     return fallbackPreview(html);
   } catch (e) {
     console.error('print plugin: unexpected error while printing', e && e.message);
+    if (ENABLE_QZ) return fallbackPreview('<p>Preview unavailable</p>');
     return fallbackAgentPrint(base, order);
   }
 }

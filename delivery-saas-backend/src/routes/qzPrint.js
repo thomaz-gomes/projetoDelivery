@@ -10,7 +10,15 @@ router.post('/', async (req, res) => {
     const orderId = req.body && (req.body.orderId || req.body.id);
     if (!orderId) return res.status(400).json({ ok: false, message: 'orderId required' });
 
-    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, store: true } });
+    let order = null;
+    if (orderId) {
+      order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, store: true } });
+    }
+    // Allow development/testing clients to post a full `order` object when the
+    // order isn't persisted in the database (e.g., `dev-test-*` orders).
+    if (!order && req.body && req.body.order) {
+      order = req.body.order;
+    }
     if (!order) return res.status(404).json({ ok: false, message: 'Order not found' });
 
     // Minimal printable template (HTML). Frontend/QZ Tray can render this or convert to ESC/POS.

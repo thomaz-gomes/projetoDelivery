@@ -64,7 +64,21 @@ export { formatOrderText };
 // ================================
 export async function enqueuePrint(order) {
   if (!order) return;
+  // If frontend was built with QZ enabled, prefer the QZ flow and avoid
+  // posting to the legacy `/agent-print` endpoint. This prevents accidental
+  // delivery to print agents when the operator expects QZ Tray to handle
+  // printing locally.
   try {
+    if (ENABLE_QZ) {
+      try {
+        const { printComanda } = await import('../plugins/qz.js');
+        const ok = await printComanda(order);
+        if (ok) return true;
+      } catch (e) {
+        console.warn('printService: QZ print failed, falling back to /agent-print', e && e.message);
+      }
+    }
+
     const res = await fetch(`${BACKEND_BASE}/agent-print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -111,21 +125,43 @@ export function isConnecting() {
 // perform an async connectivity check against the agent-print endpoint
 export async function checkConnectivity() {
   if (connectingPromise) return connectingPromise;
-  // If QZ Tray is enabled we consider the print subsystem available
-  // (the frontend will try QZ first). Avoid polling the legacy agent-print.
+  // If QZ Tray is enabled we try to detect a real QZ client in-browser
+  // (the frontend will try QZ first). If none is present, fall back to
+  // probing the legacy `agent-print/printers` endpoint so local dev can
+  // exercise printing flows without a native QZ Tray installation.
   if (ENABLE_QZ) {
-    connectingPromise = Promise.resolve(true).then(() => {
-      connected = true;
-      connectingPromise = null;
+    connectingPromise = (async () => {
+      try {
+        if (typeof window !== 'undefined' && window.qz) {
+          connected = true;
+          return connected;
+        }
+
+        try {
+          const res = await fetch(`${BACKEND_BASE}/agent-print/printers`, { method: 'GET' });
+          connected = res.ok;
+        } catch (e) {
+          connected = false;
+        }
+      } finally {
+        connectingPromise = null;
+      }
       return connected;
-    });
+    })();
     return connectingPromise;
   }
 
   connectingPromise = (async () => {
     try {
       const res = await fetch(`${BACKEND_BASE}/agent-print/printers`, { method: 'GET' });
-      connected = res.ok;
+      // If the backend returns 404 it means no agent is connected — treat as
+      // "not connected" but avoid throwing. This prevents noisy error handling
+      // while the UI can display "no printers" gracefully.
+      if (res.status === 404) {
+        connected = false;
+      } else {
+        connected = res.ok;
+      }
     } catch (e) {
       connected = false;
     } finally {
@@ -140,7 +176,7 @@ export async function checkConnectivity() {
 try {
   checkConnectivity();
   if (!ENABLE_QZ) {
-    setInterval(() => { checkConnectivity().catch(()=>{}); }, 15000);
+    setInterval(() => { checkConnectivity().catch(()=>{}); }, 30000);
   }
 } catch(e){}
 

@@ -17169,5 +17169,1166 @@
       "total": 36.4
     },
     "includeFullOrder": true
+  },
+  {
+    "id": "1766285223739-154896",
+    "createdAt": 1766285223739,
+    "order": {
+      "id": "dev-test-1766285223730",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766288054880-563948",
+    "createdAt": 1766288054880,
+    "order": {
+      "id": "dev-test-1766288054871",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766289591145-218336",
+    "createdAt": 1766289591146,
+    "order": {
+      "id": "dev-test-1766289591135",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766290044883-852181",
+    "createdAt": 1766290044883,
+    "order": {
+      "id": "dev-test-1766290044874",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766314777133-582309",
+    "createdAt": 1766314777133,
+    "order": {
+      "id": "dev-test-1766314777122",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766314855268-602746",
+    "createdAt": 1766314855268,
+    "order": {
+      "id": "ab0e0a9c-359a-480a-8790-f27ef62eb9cc",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "33e61747-b455-4742-807a-913fd1540149",
+      "externalId": "783fb5af-58f9-42d6-9133-445abc9d9383",
+      "displayId": "3632",
+      "displaySimple": 4,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE -  Thomaz Campos Gomes",
+      "customerPhone": "0800 705 3040",
+      "customerSource": "MANUAL",
+      "customerId": null,
+      "address": "Rua TESTE, 999999",
+      "latitude": null,
+      "longitude": null,
+      "total": "27",
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "5",
+      "payload": {
+        "id": "e8368ef0-83ed-49b5-95d3-ef1e69e329ec",
+        "code": "PLC",
+        "order": {
+          "id": "783fb5af-58f9-42d6-9133-445abc9d9383",
+          "items": [
+            {
+              "id": "b65b8a07-6628-489d-baaa-3cfd7851bfe3",
+              "ean": "",
+              "name": "PRODUTO 1 - NÃO ENTREGAR - Primeiro Nível",
+              "unit": "UN",
+              "index": 1,
+              "price": 5,
+              "options": [],
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg",
+              "quantity": 1,
+              "uniqueId": "c1f92161-8150-4ce3-b5c9-9928c8deb1f6",
+              "unitPrice": 5,
+              "totalPrice": 5,
+              "externalCode": "6521",
+              "observations": "",
+              "optionsPrice": 0,
+              "customizationPrice": 0
+            },
+            {
+              "id": "1da28fbd-8cc4-4967-8954-ec41f93d45ae",
+              "ean": "",
+              "name": "PRODUTO 2 (COMBO) - NÃO ENTREGAR - Primeiro Nível",
+              "type": "COMBO_V2",
+              "unit": "UN",
+              "index": 2,
+              "price": 5,
+              "options": [
+                {
+                  "id": "bf9f6c5c-2e4c-4c13-891f-d928c1ff1387",
+                  "ean": "",
+                  "name": "Complemento 1 - Segundo Nível",
+                  "type": "SPECIFICATION",
+                  "unit": "UN",
+                  "index": 3,
+                  "price": 2,
+                  "addition": 0,
+                  "quantity": 1,
+                  "groupName": "Adicione mais ingredientes",
+                  "unitPrice": 2,
+                  "externalCode": "8389"
+                },
+                {
+                  "id": "461ce019-53b0-47a7-8787-76eb88f72437",
+                  "ean": "",
+                  "name": "Complemento 2 - Segundo Nível",
+                  "type": "OFFER_UNIT",
+                  "unit": "UN",
+                  "index": 4,
+                  "price": 2,
+                  "addition": 0,
+                  "quantity": 1,
+                  "groupName": "Deseja adicionar molhos?",
+                  "unitPrice": 2,
+                  "externalCode": "5838"
+                },
+                {
+                  "id": "3f83ede5-317a-4c83-847a-ec0506635e19",
+                  "ean": "",
+                  "name": "Complemento 3 - Segundo Nível",
+                  "type": "OFFER_UNIT",
+                  "unit": "UN",
+                  "index": 5,
+                  "price": 2,
+                  "addition": 0,
+                  "quantity": 1,
+                  "groupName": "Escolha seu acompanhamento",
+                  "unitPrice": 2,
+                  "externalCode": "9281"
+                },
+                {
+                  "id": "6c1e30ad-5001-4fd1-b6e2-ab3987549732",
+                  "ean": "",
+                  "name": "Complemento 4 - Segundo Nível",
+                  "type": "MAIN",
+                  "unit": "UN",
+                  "index": 6,
+                  "price": 2,
+                  "addition": 0,
+                  "quantity": 1,
+                  "groupName": "Meu sanduíche favorito",
+                  "unitPrice": 2,
+                  "externalCode": "7696",
+                  "customizations": [
+                    {
+                      "id": "20cd02cb-b2fa-4856-86fd-f7da5ed3851c",
+                      "name": "Customização 1 do Complemento 4 - Terceiro Nível",
+                      "type": "SPECIFICATION",
+                      "price": 1,
+                      "addition": 0,
+                      "quantity": 1,
+                      "groupName": "Grupo de Complemento Obrigatório",
+                      "unitPrice": 1,
+                      "externalCode": "9771"
+                    },
+                    {
+                      "id": "0c24d8a4-f4db-4f17-a10f-39f97fdbf6b2",
+                      "name": "Customização 2 do Complemento 4 - Terceiro Nível",
+                      "type": "SPECIFICATION",
+                      "price": 1,
+                      "addition": 0,
+                      "quantity": 1,
+                      "groupName": "Grupo de Complemento Opcional",
+                      "unitPrice": 1,
+                      "externalCode": "1338"
+                    },
+                    {
+                      "id": "d0f3204d-2768-44fa-bbad-f6c4d18b392f",
+                      "name": "Customização 3 do Complemento 4 - Terceiro Nível",
+                      "type": "SPECIFICATION",
+                      "price": 1,
+                      "addition": 0,
+                      "quantity": 1,
+                      "groupName": "Escolha seu acompanhamento",
+                      "unitPrice": 1,
+                      "externalCode": "5810"
+                    }
+                  ]
+                }
+              ],
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg",
+              "quantity": 1,
+              "uniqueId": "c2a36724-f1f7-405a-84b9-e567c3104e52",
+              "unitPrice": 5,
+              "totalPrice": 16,
+              "externalCode": "9030",
+              "observations": "",
+              "optionsPrice": 8,
+              "customizationPrice": 3
+            }
+          ],
+          "total": {
+            "benefits": 0,
+            "subTotal": 21,
+            "deliveryFee": 5,
+            "orderAmount": 27,
+            "additionalFees": 1
+          },
+          "isTest": true,
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "category": "FOOD",
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE -  Thomaz Campos Gomes",
+            "phone": {
+              "number": "0800 705 3040",
+              "localizer": "69929034",
+              "localizerExpiration": "2025-12-21T15:01:21.491Z"
+            },
+            "segmentation": "Cliente",
+            "documentNumber": "123456789-00",
+            "ordersCountOnMerchant": 0
+          },
+          "delivery": {
+            "mode": "DEFAULT",
+            "pickupCode": "0104",
+            "deliveredBy": "MERCHANT",
+            "description": "Padrão",
+            "observations": "Este pedido foi gerado automaticamente pelo Developer Portal.",
+            "deliveryAddress": {
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "streetName": "Rua TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              },
+              "neighborhood": "Bairro TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999"
+            },
+            "deliveryDateTime": "2025-12-21T11:46:21.491Z"
+          },
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "payments": {
+            "methods": [
+              {
+                "card": {
+                  "brand": "SODEXO"
+                },
+                "type": "ONLINE",
+                "value": 27,
+                "method": "MEAL_VOUCHER",
+                "prepaid": true,
+                "currency": "BRL"
+              }
+            ],
+            "pending": 0,
+            "prepaid": 27
+          },
+          "createdAt": "2025-12-21T11:01:21.491Z",
+          "displayId": "3632",
+          "orderType": "DELIVERY",
+          "orderTiming": "IMMEDIATE",
+          "salesChannel": "IFOOD",
+          "additionalFees": [
+            {
+              "type": "SMALL_ORDER_FEE_35_PROMOTIONS",
+              "value": 1,
+              "description": "Taxa de Serviço",
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ],
+              "fullDescription": "Cobramos uma taxa que nos ajuda a cobrir os custos operacionais e manter a melhor experiência de compra para você."
+            }
+          ],
+          "additionalInfo": {
+            "metadata": {
+              "developerId": "03254750-72a0-4d95-9bc1-5dcbce37f271",
+              "customerEmail": "CONTATO@REDEMULTILINK.COM.BR",
+              "developerEmail": "contato@redemultilink.com.br"
+            }
+          },
+          "preparationStartDateTime": "2025-12-21T11:01:21.491Z"
+        },
+        "orderId": "783fb5af-58f9-42d6-9133-445abc9d9383",
+        "fullCode": "PLACED",
+        "createdAt": "2025-12-21T11:01:21.952Z",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "salesChannel": "IFOOD"
+      },
+      "createdAt": "2025-12-21T11:01:31.439Z",
+      "updatedAt": "2025-12-21T11:01:31.439Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "fa47aaa4-45c4-4dce-ba95-3eb73e850742",
+          "orderId": "ab0e0a9c-359a-480a-8790-f27ef62eb9cc",
+          "name": "PRODUTO 1 - NÃO ENTREGAR - Primeiro Nível",
+          "quantity": 1,
+          "price": "5",
+          "notes": null,
+          "options": null
+        },
+        {
+          "id": "38ecc566-39f8-41eb-a1cb-3077b2dd6b6c",
+          "orderId": "ab0e0a9c-359a-480a-8790-f27ef62eb9cc",
+          "name": "PRODUTO 2 (COMBO) - NÃO ENTREGAR - Primeiro Nível",
+          "quantity": 1,
+          "price": "5",
+          "notes": null,
+          "options": null
+        }
+      ]
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766315334286-469187",
+    "createdAt": 1766315334286,
+    "order": {
+      "id": "ab0e0a9c-359a-480a-8790-f27ef62eb9cc",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "33e61747-b455-4742-807a-913fd1540149",
+      "externalId": "783fb5af-58f9-42d6-9133-445abc9d9383",
+      "displayId": "3632",
+      "displaySimple": 4,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE -  Thomaz Campos Gomes",
+      "customerPhone": "0800 705 3040",
+      "customerSource": "MANUAL",
+      "customerId": null,
+      "address": "Rua TESTE, 999999",
+      "latitude": null,
+      "longitude": null,
+      "total": "27",
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "5",
+      "payload": {
+        "id": "d15721ff-e47f-4603-b273-bdeec46ebbb5",
+        "code": "CAR",
+        "order": {
+          "id": "783fb5af-58f9-42d6-9133-445abc9d9383",
+          "items": [
+            {
+              "id": "b65b8a07-6628-489d-baaa-3cfd7851bfe3",
+              "ean": "",
+              "name": "PRODUTO 1 - NÃO ENTREGAR - Primeiro Nível",
+              "unit": "UN",
+              "index": 1,
+              "price": 5,
+              "options": [],
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg",
+              "quantity": 1,
+              "uniqueId": "c1f92161-8150-4ce3-b5c9-9928c8deb1f6",
+              "unitPrice": 5,
+              "totalPrice": 5,
+              "externalCode": "6521",
+              "observations": "",
+              "optionsPrice": 0,
+              "customizationPrice": 0
+            },
+            {
+              "id": "1da28fbd-8cc4-4967-8954-ec41f93d45ae",
+              "ean": "",
+              "name": "PRODUTO 2 (COMBO) - NÃO ENTREGAR - Primeiro Nível",
+              "type": "COMBO_V2",
+              "unit": "UN",
+              "index": 2,
+              "price": 5,
+              "options": [
+                {
+                  "id": "bf9f6c5c-2e4c-4c13-891f-d928c1ff1387",
+                  "ean": "",
+                  "name": "Complemento 1 - Segundo Nível",
+                  "type": "SPECIFICATION",
+                  "unit": "UN",
+                  "index": 3,
+                  "price": 2,
+                  "addition": 0,
+                  "quantity": 1,
+                  "groupName": "Adicione mais ingredientes",
+                  "unitPrice": 2,
+                  "externalCode": "8389"
+                },
+                {
+                  "id": "461ce019-53b0-47a7-8787-76eb88f72437",
+                  "ean": "",
+                  "name": "Complemento 2 - Segundo Nível",
+                  "type": "OFFER_UNIT",
+                  "unit": "UN",
+                  "index": 4,
+                  "price": 2,
+                  "addition": 0,
+                  "quantity": 1,
+                  "groupName": "Deseja adicionar molhos?",
+                  "unitPrice": 2,
+                  "externalCode": "5838"
+                },
+                {
+                  "id": "3f83ede5-317a-4c83-847a-ec0506635e19",
+                  "ean": "",
+                  "name": "Complemento 3 - Segundo Nível",
+                  "type": "OFFER_UNIT",
+                  "unit": "UN",
+                  "index": 5,
+                  "price": 2,
+                  "addition": 0,
+                  "quantity": 1,
+                  "groupName": "Escolha seu acompanhamento",
+                  "unitPrice": 2,
+                  "externalCode": "9281"
+                },
+                {
+                  "id": "6c1e30ad-5001-4fd1-b6e2-ab3987549732",
+                  "ean": "",
+                  "name": "Complemento 4 - Segundo Nível",
+                  "type": "MAIN",
+                  "unit": "UN",
+                  "index": 6,
+                  "price": 2,
+                  "addition": 0,
+                  "quantity": 1,
+                  "groupName": "Meu sanduíche favorito",
+                  "unitPrice": 2,
+                  "externalCode": "7696",
+                  "customizations": [
+                    {
+                      "id": "20cd02cb-b2fa-4856-86fd-f7da5ed3851c",
+                      "name": "Customização 1 do Complemento 4 - Terceiro Nível",
+                      "type": "SPECIFICATION",
+                      "price": 1,
+                      "addition": 0,
+                      "quantity": 1,
+                      "groupName": "Grupo de Complemento Obrigatório",
+                      "unitPrice": 1,
+                      "externalCode": "9771"
+                    },
+                    {
+                      "id": "0c24d8a4-f4db-4f17-a10f-39f97fdbf6b2",
+                      "name": "Customização 2 do Complemento 4 - Terceiro Nível",
+                      "type": "SPECIFICATION",
+                      "price": 1,
+                      "addition": 0,
+                      "quantity": 1,
+                      "groupName": "Grupo de Complemento Opcional",
+                      "unitPrice": 1,
+                      "externalCode": "1338"
+                    },
+                    {
+                      "id": "d0f3204d-2768-44fa-bbad-f6c4d18b392f",
+                      "name": "Customização 3 do Complemento 4 - Terceiro Nível",
+                      "type": "SPECIFICATION",
+                      "price": 1,
+                      "addition": 0,
+                      "quantity": 1,
+                      "groupName": "Escolha seu acompanhamento",
+                      "unitPrice": 1,
+                      "externalCode": "5810"
+                    }
+                  ]
+                }
+              ],
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg",
+              "quantity": 1,
+              "uniqueId": "c2a36724-f1f7-405a-84b9-e567c3104e52",
+              "unitPrice": 5,
+              "totalPrice": 16,
+              "externalCode": "9030",
+              "observations": "",
+              "optionsPrice": 8,
+              "customizationPrice": 3
+            }
+          ],
+          "total": {
+            "benefits": 0,
+            "subTotal": 21,
+            "deliveryFee": 5,
+            "orderAmount": 27,
+            "additionalFees": 1
+          },
+          "isTest": true,
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "category": "FOOD",
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE -  Thomaz Campos Gomes",
+            "phone": {
+              "number": "0800 705 3040",
+              "localizer": "69929034",
+              "localizerExpiration": "2025-12-21T15:01:21.491Z"
+            },
+            "segmentation": "Cliente",
+            "documentNumber": "123456789-00",
+            "ordersCountOnMerchant": 0
+          },
+          "delivery": {
+            "mode": "DEFAULT",
+            "pickupCode": "0104",
+            "deliveredBy": "MERCHANT",
+            "description": "Padrão",
+            "observations": "Este pedido foi gerado automaticamente pelo Developer Portal.",
+            "deliveryAddress": {
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "streetName": "Rua TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              },
+              "neighborhood": "Bairro TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999"
+            },
+            "deliveryDateTime": "2025-12-21T11:46:21.491Z"
+          },
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "payments": {
+            "methods": [
+              {
+                "card": {
+                  "brand": "SODEXO"
+                },
+                "type": "ONLINE",
+                "value": 27,
+                "method": "MEAL_VOUCHER",
+                "prepaid": true,
+                "currency": "BRL"
+              }
+            ],
+            "pending": 0,
+            "prepaid": 27
+          },
+          "createdAt": "2025-12-21T11:01:21.491Z",
+          "displayId": "3632",
+          "orderType": "DELIVERY",
+          "orderTiming": "IMMEDIATE",
+          "salesChannel": "IFOOD",
+          "additionalFees": [
+            {
+              "type": "SMALL_ORDER_FEE_35_PROMOTIONS",
+              "value": 1,
+              "description": "Taxa de Serviço",
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ],
+              "fullDescription": "Cobramos uma taxa que nos ajuda a cobrir os custos operacionais e manter a melhor experiência de compra para você."
+            }
+          ],
+          "additionalInfo": {
+            "metadata": {
+              "developerId": "03254750-72a0-4d95-9bc1-5dcbce37f271",
+              "customerEmail": "CONTATO@REDEMULTILINK.COM.BR",
+              "developerEmail": "contato@redemultilink.com.br"
+            }
+          },
+          "preparationStartDateTime": "2025-12-21T11:01:21.491Z"
+        },
+        "orderId": "783fb5af-58f9-42d6-9133-445abc9d9383",
+        "fullCode": "CANCELLATION_REQUESTED",
+        "metadata": {
+          "ORIGIN": "SYSTEM",
+          "details": "O pedido não foi confirmado pela loja",
+          "reason_code": "902"
+        },
+        "createdAt": "2025-12-21T11:09:21.338Z",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "salesChannel": "IFOOD"
+      },
+      "createdAt": "2025-12-21T11:01:31.439Z",
+      "updatedAt": "2025-12-21T11:09:31.401Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "fa47aaa4-45c4-4dce-ba95-3eb73e850742",
+          "orderId": "ab0e0a9c-359a-480a-8790-f27ef62eb9cc",
+          "name": "PRODUTO 1 - NÃO ENTREGAR - Primeiro Nível",
+          "quantity": 1,
+          "price": "5",
+          "notes": null,
+          "options": null
+        },
+        {
+          "id": "38ecc566-39f8-41eb-a1cb-3077b2dd6b6c",
+          "orderId": "ab0e0a9c-359a-480a-8790-f27ef62eb9cc",
+          "name": "PRODUTO 2 (COMBO) - NÃO ENTREGAR - Primeiro Nível",
+          "quantity": 1,
+          "price": "5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "24cbaa92-272e-423a-8cc7-bf69a0dbf918",
+          "orderId": "ab0e0a9c-359a-480a-8790-f27ef62eb9cc",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2025-12-21T11:01:31.439Z"
+        }
+      ]
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766316481796-749177",
+    "createdAt": 1766316481796,
+    "order": {
+      "id": "dev-test-1766316481447",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766316895539-102943",
+    "createdAt": 1766316895539,
+    "order": {
+      "id": "dev-test-1766316895530",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766405711551-827647",
+    "createdAt": 1766405711551,
+    "order": {
+      "id": "dev-test-1766405711538",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766411167016-596967",
+    "createdAt": 1766411167016,
+    "order": {
+      "id": "dev-test-1766411166985",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766412190720-387600",
+    "createdAt": 1766412190720,
+    "order": {
+      "id": "dev-test-1766412190709",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766412451109-94472",
+    "createdAt": 1766412451109,
+    "order": {
+      "id": "dev-test-1766412450529",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766413050414-433493",
+    "createdAt": 1766413050414,
+    "order": {
+      "id": "dev-test-1766413050357",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766414607098-326033",
+    "createdAt": 1766414607098,
+    "order": {
+      "id": "dev-test-1766414607084",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766415512385-389416",
+    "createdAt": 1766415512385,
+    "order": {
+      "id": "dev-test-1766415512373",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766415770196-411291",
+    "createdAt": 1766415770196,
+    "order": {
+      "id": "dev-test-1766415770186",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766420967185-130107",
+    "createdAt": 1766420967185,
+    "order": {
+      "id": "dev-test-1766420967135",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766425850348-319245",
+    "createdAt": 1766425850348,
+    "order": {
+      "id": "dev-test-1766425850337",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766427959562-2947",
+    "createdAt": 1766427959562,
+    "order": {
+      "id": "dev-test-1766427959521",
+      "displaySimple": "TT",
+      "customerName": "Cliente Teste",
+      "address": "Rua Exemplo, 123",
+      "items": [
+        {
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "unitPrice": 29.9
+        },
+        {
+          "name": "Coca-Cola 350ml",
+          "quantity": 1,
+          "unitPrice": 6.5
+        }
+      ],
+      "total": 36.4
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766430745409-397014",
+    "createdAt": 1766430745409,
+    "order": {
+      "id": "9becc01e-995f-446f-b412-4776fd75f4ab",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "87add3d8-526e-4b3f-92b4-71c463c3b2a7",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "26",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Pix",
+          "methodCode": "Pix",
+          "amount": 26,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Tropeiro com carne",
+              "quantity": 1,
+              "price": 26,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        }
+      },
+      "createdAt": "2025-12-22T19:12:22.030Z",
+      "updatedAt": "2025-12-22T19:12:22.030Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "4daa1439-384a-420e-ac08-9eec482e0054",
+          "orderId": "9becc01e-995f-446f-b412-4776fd75f4ab",
+          "name": "Tropeiro com carne",
+          "quantity": 1,
+          "price": "26",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766430745458-60960",
+    "createdAt": 1766430745458,
+    "order": {
+      "id": "d90e82bd-764f-454f-b2c6-95dabe2a7116",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "1df82ea3-920a-4e1b-b74a-16b2068b3636",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "26",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Pix",
+          "methodCode": "Pix",
+          "amount": 26,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Tropeiro com carne",
+              "quantity": 1,
+              "price": 26,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        }
+      },
+      "createdAt": "2025-12-22T19:12:21.854Z",
+      "updatedAt": "2025-12-22T19:12:21.854Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "3de03d18-cb21-4d47-9cb0-d9b210a6b83c",
+          "orderId": "d90e82bd-764f-454f-b2c6-95dabe2a7116",
+          "name": "Tropeiro com carne",
+          "quantity": 1,
+          "price": "26",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "includeFullOrder": true
   }
 ]
