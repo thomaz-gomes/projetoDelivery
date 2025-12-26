@@ -704,6 +704,23 @@ const displayPickup = computed(() => {
   return storeAddr || companyAddr || '';
 });
 
+// Helper: produce an effective settings object that prefers menu-level meta
+function effectiveSettings(){
+  try{
+    const base = company.value ? { ...company.value } : {}
+    // menu-level direct fields (menu may store open24Hours, weeklySchedule, timezone, openFrom/openTo)
+    const menuMeta = menu.value ? { ...menu.value } : {}
+    // also support company.value.menus[menuId] (menu-specific meta stored under store settings)
+    try{
+      const menusMap = company.value && company.value.menus ? company.value.menus : null
+      if(menuId.value && menusMap && menusMap[String(menuId.value)]){
+        Object.assign(menuMeta, menusMap[String(menuId.value)])
+      }
+    }catch(e){}
+    return { ...base, ...menuMeta }
+  }catch(e){ return company.value || {} }
+}
+
 // Sticky categories bar state
 const heroRef = ref(null)
 const navRef = ref(null)
@@ -952,7 +969,7 @@ const visibleCategories = computed(() => {
 
 // compute if company is open (client-side check)
 const isOpen = computed(() => {
-  const c = company.value
+  const c = effectiveSettings()
   if(!c) return true
   if(c.alwaysOpen) return true
 
@@ -1042,7 +1059,7 @@ const isOpen = computed(() => {
 })
 
 const companyHoursText = computed(() => {
-  const c = company.value
+  const c = effectiveSettings()
   if(!c) return ''
   if(c.alwaysOpen) return '24h'
 
@@ -1069,7 +1086,7 @@ const companyHoursText = computed(() => {
  
 
 const nextOpenText = computed(() => {
-  const c = company.value
+  const c = effectiveSettings()
   if(!c) return ''
   if(c.alwaysOpen) return ''
 
@@ -1111,7 +1128,7 @@ const nextOpenText = computed(() => {
   const openUntilText = computed(() => {
     // when store is open, return a friendly 'Aberto até as HH:MM' when possible
     try{
-      const c = company.value
+      const c = effectiveSettings()
       if(!c) return ''
       if(c.alwaysOpen) return 'Aberto — 24h'
       // prefer weeklySchedule today's 'to'

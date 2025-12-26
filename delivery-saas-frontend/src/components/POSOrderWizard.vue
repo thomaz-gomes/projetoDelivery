@@ -47,7 +47,7 @@
                 <div class="flex-grow-1">
                   <div class="fw-semibold">{{ a.formatted || [a.street, a.number].filter(Boolean).join(', ') || 'Endereço sem rua' }}</div>
                   <div class="small text-muted">
-                    {{ a.neighborhood || 'Sem bairro' }}{{ a.city ? (' - ' + a.city) : '' }}
+                    {{ a.neighborhood || 'Sem bairro' }}
                   </div>
                   <div v-if="a.complement" class="small text-muted">{{ a.complement }}</div>
                 </div>
@@ -83,10 +83,7 @@
                 </option>
               </SelectInput>
             </div>
-            <div class="col-6">
-              <label class="form-label small">Cidade</label>
-              <TextInput v-model="addr.city" inputClass="form-control" />
-            </div>
+            <!-- cidade removida: todas as entregas na mesma cidade -->
             <div class="col-12">
               <label class="form-label small">Complemento</label>
               <TextInput v-model="addr.complement" inputClass="form-control" />
@@ -327,7 +324,7 @@ const customerNotFound = ref(false);
 const customerSearchLoading = ref(false);
 const newCustomerName = ref('');
 const orderType = ref('BALCAO');
-const addr = ref({ street:'', number:'', neighborhood:'', city:'', complement:'', formatted:'' });
+const addr = ref({ street:'', number:'', neighborhood:'', complement:'', formatted:'' });
 
 const menuLoading = ref(false);
 const allProducts = ref([]);
@@ -395,7 +392,6 @@ function selectSavedAddress(address){
   let street = address.street || '';
   let number = address.number || '';
   let neighborhood = address.neighborhood || '';
-  let city = address.city || '';
   let complement = address.complement || '';
   
   // Se não tem campos separados mas tem formatted, tenta extrair do formatted
@@ -409,7 +405,6 @@ function selectSavedAddress(address){
     street,
     number,
     neighborhood,
-    city: city || 'Aracaju', // Default city se não tiver
     complement,
     formatted: address.formatted || ''
   };
@@ -764,6 +759,24 @@ async function finalize(){
     // Para pedido balcão sem identificação, usa nome genérico
     const customerNameFinal = newCustomerName.value.trim() || (orderType.value === 'BALCAO' ? 'Cliente Balcão' : '');
     const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value };
+    // If customer was found and we're using a new address (not selecting existing), persist address to customer first
+    try{
+      if(orderType.value === 'DELIVERY' && !selectedAddressId.value && foundCustomer.value){
+        const formatted = addr.value.formatted || [addr.value.street, addr.value.number].filter(Boolean).join(', ');
+        const payload = {
+          street: addr.value.street || null,
+          number: addr.value.number || null,
+          complement: addr.value.complement || null,
+          neighborhood: addr.value.neighborhood || null,
+          formatted: formatted || null
+        };
+        // create address on customer and set customerId on order body so backend uses existing customer
+        await api.post(`/customers/${foundCustomer.value.id}/addresses`, payload);
+        body.customerId = foundCustomer.value.id;
+        // ensure order.address is the formatted string
+        if(formatted) body.address = formatted;
+      }
+    }catch(addrErr){ console.warn('Falha ao persistir endereço no cliente:', addrErr); }
     // include coupon information when applied so backend can persist and track usage
     try{
       if(couponApplied.value && couponInfo.value){
@@ -805,6 +818,17 @@ watch(()=>props.visible, async (v)=>{
           const ot = String(props.preset.orderType).toUpperCase();
           if(ot === 'RETIRADA' || ot === 'BALCAO' || ot === 'BALCÃO') orderType.value = 'BALCAO';
           else orderType.value = ot;
+        }
+        // if preset requests a start step (e.g. autoStep: 2 -> address selection)
+        if(props.preset.autoStep){
+          const s = Number(props.preset.autoStep) || 1;
+          step.value = s;
+          if(s === 2){
+            if(neighborhoods.value.length === 0) await loadNeighborhoods();
+          } else if(s === 3){
+            await loadMenu();
+            return;
+          }
         }
         // if preset indicates skipAddress or it's a balcão/retirada, jump to products
         if(props.preset.skipAddress || orderType.value === 'BALCAO'){

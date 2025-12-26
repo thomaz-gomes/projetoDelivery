@@ -48,6 +48,8 @@ import path from 'path';
 import startReportsCleanup from './cleanupReports.js';
 import startForceOpenCleanup from './cleanupForceOpen.js';
 import qzSecurityRouter from './routes/qzSecurity.js'
+import saasRouter from './routes/saas.js'
+import { requireModule } from './modules.js'
 
 const app = express();
 // When running behind a reverse proxy (EasyPanel / nginx / Cloudflare), enable
@@ -150,7 +152,7 @@ app.use("/orders", ordersRouter);
 app.use("/tickets", ticketsRouter);
 app.use("/integrations", integrationsRouter);
 app.use('/file-sources', fileSourcesRouter);
-app.use("/ifood", ifoodRouter);
+app.use("/ifood", requireModule('ifood'), ifoodRouter);
 app.use("/riders", ridersRouter);
 app.use("/customers", customersRouter);
 app.use("/neighborhoods", neighborhoodsRouter);
@@ -160,7 +162,7 @@ app.use('/coupons', couponsRouter);
 app.use('/public', publicMenuRouter);
 app.use('/menu', menuAdminRouter);
 app.use('/menu/options', menuOptionsRouter);
-app.use('/nfe', nfeRouter);
+app.use('/nfe', requireModule('nfe'), nfeRouter);
 app.use('/settings', companiesRouter);
 // Mount menu admin router also under /settings to provide backward-compatible
 // API paths such as /settings/payment-methods for external consumers that
@@ -172,10 +174,12 @@ app.use('/users', usersRouter);
 app.use('/roles', rolesRouter);
 // Agent setup endpoint: returns socket URL and store IDs for the authenticated user's company
 app.use('/agent-setup', agentSetupRouter);
-app.use('/agent-print', agentPrintRouter);
-app.use('/qz-print', qzPrintRouter);
+app.use('/agent-print', requireModule('printing'), agentPrintRouter);
+app.use('/qz-print', requireModule('printing'), qzPrintRouter);
 // QZ Tray security endpoints: certificate and signing
 app.use('/qz', qzSecurityRouter);
+// SaaS management (plans, modules, subscriptions, invoices)
+app.use('/saas', saasRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
@@ -538,6 +542,24 @@ export function emitirNovoPedido(pedido) {
     return;
   }
   try {
+    // Ensure payload carries a convenient `address` string to help frontends render immediately.
+    try {
+      if (pedido && !pedido.address) {
+        const p = pedido.payload || {};
+        const tryFormatted = (obj) => { try { if (!obj) return null; if (typeof obj === 'string') return obj; return obj.formatted || obj.formattedAddress || obj.formatted_address || null; } catch(e){return null} };
+        const candidates = [
+          pedido.address,
+          tryFormatted(p.rawPayload && p.rawPayload.address),
+          tryFormatted(p.delivery && p.delivery.deliveryAddress),
+          tryFormatted(p.deliveryAddress),
+          tryFormatted(p.order && p.order.delivery && p.order.delivery.address),
+          (p.rawPayload && p.rawPayload.neighborhood) || null,
+          (pedido.customer && pedido.customer.address && (typeof pedido.customer.address === 'string' ? pedido.customer.address : tryFormatted(pedido.customer.address))) || null,
+        ];
+        const addr = candidates.find(c => c && String(c).trim());
+        if (addr) pedido.address = String(addr).trim();
+      }
+    } catch(e) { /* ignore */ }
     // Avoid re-emitting the same order id repeatedly in a short window
     const oid = pedido && (pedido.id || pedido.orderId || pedido.externalId) ? (pedido.id || pedido.orderId || pedido.externalId) : null;
     if (oid && isRecentlyEmitted(oid)) {

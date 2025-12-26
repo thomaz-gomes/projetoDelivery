@@ -59,6 +59,13 @@ import RiderOrders from './views/rider/Orders.vue';
 import RiderQrCode from './views/rider/QrReader.vue';
 import RiderAccountSelf from './views/rider/Account.vue';
 import RiderDashboard from './views/rider/Dashboard.vue';
+import SaasPlans from './views/SaasPlans.vue';
+import SaasCompanies from './views/SaasCompanies.vue';
+import SaasCompanyNew from './views/SaasCompanyNew.vue';
+import SaasCompanyEdit from './views/SaasCompanyEdit.vue';
+import SaasBilling from './views/SaasBilling.vue';
+import SaasModules from './views/SaasModules.vue';
+import SaasAdmin from './views/SaasAdmin.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -135,6 +142,13 @@ const router = createRouter({
   ,{ path: '/sales', component: SalesHistory, meta: { requiresAuth: true } }
   ,{ path: '/sales/:id', component: SaleDetails, meta: { requiresAuth: true } }
   ,{ path: '/reports/cash-fronts', component: CashFronts, meta: { requiresAuth: true } }
+  ,{ path: '/saas/plans', component: SaasPlans, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/companies', component: SaasCompanies, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/companies/new', component: SaasCompanyNew, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/companies/:id/edit', component: SaasCompanyEdit, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/modules', component: SaasModules, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/billing', component: SaasBilling, meta: { requiresAuth: true, role: ['ADMIN','SUPER_ADMIN'] } }
+  ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ]
 });
 
@@ -157,9 +171,9 @@ router.beforeEach(async (to) => {
         console.warn('router.beforeEach: /auth/me failed', e?.message || e);
       }
     }
-    const roleNeeded = String(to.meta.role || '').toUpperCase();
+    const allowed = Array.isArray(to.meta.role) ? to.meta.role.map(r => String(r).toUpperCase()) : String(to.meta.role || '').split(/[,|]/).map(s => s.trim().toUpperCase()).filter(Boolean)
     const userRole = String(auth.user?.role || '').toUpperCase();
-    if (!auth.user || userRole !== roleNeeded) {
+    if (!auth.user || !allowed.includes(userRole)) {
       // if rider trying to access admin route, send them to rider self page
       if (userRole === 'RIDER') return { path: '/rider/account' };
       return { path: '/' };

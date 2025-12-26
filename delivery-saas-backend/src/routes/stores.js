@@ -5,6 +5,7 @@ import { normalizeSlug, isValidSlug, isReservedSlug } from '../utils/slug.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { runForceOpenCleanupOnce } from '../cleanupForceOpen.js'
 import { encryptText } from '../utils/secretStore.js'
+import { assertLimit } from '../utils/saas.js'
 
 // helper: persist store settings file under public/uploads/store/<storeId>/settings.json
 async function persistStoreSettings(storeId, toSave) {
@@ -181,7 +182,13 @@ storesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         }
       }
 
-  const s = await prisma.store.create({ data: { companyId, name, cnpj: cnpj || null, logoUrl: logoUrl || null, bannerUrl: bannerUrl || null, timezone: timezone || null, address: address || null, isActive: isActive ?? true, open24Hours: open24Hours ?? false, weeklySchedule: open24Hours ? null : (weeklySchedule ?? null), slug: normalizedSlug || null } })
+      // SaaS limit: ensure store count does not exceed plan
+      try { await assertLimit(companyId, 'stores') } catch (e) {
+        const status = e && e.statusCode ? e.statusCode : 403
+        return res.status(status).json({ message: e?.message || 'Limite de lojas atingido para seu plano' })
+      }
+
+      const s = await prisma.store.create({ data: { companyId, name, cnpj: cnpj || null, logoUrl: logoUrl || null, bannerUrl: bannerUrl || null, timezone: timezone || null, address: address || null, isActive: isActive ?? true, open24Hours: open24Hours ?? false, weeklySchedule: open24Hours ? null : (weeklySchedule ?? null), slug: normalizedSlug || null } })
 
     // handle certificate upload: certBase64 (data URL or raw base64) -> secure/certs/<storeId>.pfx
     if (certBase64) {

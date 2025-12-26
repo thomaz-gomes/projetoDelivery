@@ -4,6 +4,7 @@ import { normalizeSlug, isValidSlug, isReservedSlug } from '../utils/slug.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import fs from 'fs'
 import path from 'path'
+import { assertLimit } from '../utils/saas.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -16,7 +17,7 @@ router.use(authMiddleware)
 // GET /menu/menus
 router.get('/menus', async (req, res) => {
   const companyId = req.user.companyId
-  const rows = await prisma.menu.findMany({ where: { store: { companyId } }, orderBy: { position: 'asc' } })
+  const rows = await prisma.menu.findMany({ where: { store: { is: { companyId } } }, orderBy: { position: 'asc' } })
   res.json(rows)
 })
 
@@ -38,6 +39,12 @@ router.post('/menus', requireRole('ADMIN'), async (req, res) => {
     if (!isValidSlug(normalized) || isReservedSlug(normalized)) return res.status(400).json({ message: 'Slug inválido' })
     const exists = await prisma.menu.findFirst({ where: { slug: normalized } })
     if (exists) return res.status(400).json({ message: 'Slug já em uso' })
+  }
+
+  // SaaS limit: ensure menu count does not exceed plan
+  try { await assertLimit(companyId, 'menus') } catch (e) {
+    const status = e && e.statusCode ? e.statusCode : 403
+    return res.status(status).json({ message: e?.message || 'Limite de cardápios atingido para seu plano' })
   }
 
   const created = await prisma.menu.create({ data: { name, description, storeId, logoUrl, position: Number(position || 0), isActive: Boolean(isActive), slug: normalized } })

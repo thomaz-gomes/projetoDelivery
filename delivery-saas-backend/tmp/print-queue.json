@@ -18330,5 +18330,612 @@
       "qrText": null
     },
     "includeFullOrder": true
+  },
+  {
+    "id": "1766604516813-634318",
+    "createdAt": 1766604516813,
+    "order": {
+      "id": "bd1e6d57-7c1e-4083-9166-ce3fdc1595ce",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "142bb2d0-8e76-41e4-b6b4-2054849c0ea5",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "20",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Dinheiro",
+          "methodCode": "Dinheiro",
+          "amount": 20,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Produto 1",
+              "quantity": 1,
+              "price": 20,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        }
+      },
+      "createdAt": "2025-12-24T19:28:36.508Z",
+      "updatedAt": "2025-12-24T19:28:36.508Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "f14867c9-5d8f-48fc-a51b-eb0b7210808b",
+          "orderId": "bd1e6d57-7c1e-4083-9166-ce3fdc1595ce",
+          "name": "Produto 1",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766604578296-509395",
+    "createdAt": 1766604578296,
+    "order": {
+      "id": "1c7ed879-6324-45ce-8e0f-8983594664f4",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "142bb2d0-8e76-41e4-b6b4-2054849c0ea5",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "20",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "PIX",
+          "methodCode": "PIX",
+          "amount": 20,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Produto 1",
+              "quantity": 1,
+              "price": 20,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        }
+      },
+      "createdAt": "2025-12-24T19:29:37.951Z",
+      "updatedAt": "2025-12-24T19:29:37.951Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "9428bf55-8fe7-45ac-97df-c8d8b8a51531",
+          "orderId": "1c7ed879-6324-45ce-8e0f-8983594664f4",
+          "name": "Produto 1",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766604664454-596264",
+    "createdAt": 1766604664454,
+    "order": {
+      "id": "9ca1f2a7-5315-4dbd-ace1-62f5c9726510",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "7399142976",
+      "customerSource": "MANUAL",
+      "customerId": "c0d69dbf-45c6-4a38-ba36-ef360b7a8fd5",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "25",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "5",
+      "payload": {
+        "payment": {
+          "method": "PIX",
+          "methodCode": "PIX",
+          "amount": 25,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Produto 1",
+              "quantity": 1,
+              "price": 20,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Thomaz",
+            "contact": "7399142976"
+          },
+          "address": {
+            "street": "Av Jose tertuliano dos santos",
+            "number": "243",
+            "neighborhood": "Centro",
+            "city": "eunapolis",
+            "complement": "",
+            "formatted": ""
+          }
+        }
+      },
+      "createdAt": "2025-12-24T19:31:04.090Z",
+      "updatedAt": "2025-12-24T19:31:04.090Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "e0ddfe13-61dc-4dc8-bfb4-4289a7f13ccb",
+          "orderId": "9ca1f2a7-5315-4dbd-ace1-62f5c9726510",
+          "name": "Produto 1",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766625141709-461401",
+    "createdAt": 1766625141709,
+    "order": {
+      "id": "9b5e770b-56c4-4de6-971b-76e692b3f2ec",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": "05",
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "142bb2d0-8e76-41e4-b6b4-2054849c0ea5",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "20",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "PIX",
+          "methodCode": "PIX",
+          "amount": 20,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Produto 1",
+              "quantity": 1,
+              "price": 20,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        }
+      },
+      "createdAt": "2025-12-25T01:12:20.855Z",
+      "updatedAt": "2025-12-25T01:12:20.855Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "67bc323f-028c-4976-bff8-fa59f895c47e",
+          "orderId": "9b5e770b-56c4-4de6-971b-76e692b3f2ec",
+          "name": "Produto 1",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "rider": null,
+      "company": {
+        "id": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+        "name": "Minha Loja de Testes",
+        "slug": null,
+        "createdAt": "2025-11-28T04:09:06.300Z",
+        "alwaysOpen": true,
+        "timezone": null,
+        "weeklySchedule": null
+      },
+      "store": null,
+      "_isNew": true
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766625141757-841048",
+    "createdAt": 1766625141757,
+    "order": {
+      "id": "9b5e770b-56c4-4de6-971b-76e692b3f2ec",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "142bb2d0-8e76-41e4-b6b4-2054849c0ea5",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "20",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "PIX",
+          "methodCode": "PIX",
+          "amount": 20,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Produto 1",
+              "quantity": 1,
+              "price": 20,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        }
+      },
+      "createdAt": "2025-12-25T01:12:20.855Z",
+      "updatedAt": "2025-12-25T01:12:20.855Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "67bc323f-028c-4976-bff8-fa59f895c47e",
+          "orderId": "9b5e770b-56c4-4de6-971b-76e692b3f2ec",
+          "name": "Produto 1",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766625141804-236689",
+    "createdAt": 1766625141804,
+    "order": {
+      "id": "9b5e770b-56c4-4de6-971b-76e692b3f2ec",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": "05",
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "142bb2d0-8e76-41e4-b6b4-2054849c0ea5",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "20",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "PIX",
+          "methodCode": "PIX",
+          "amount": 20,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Produto 1",
+              "quantity": 1,
+              "price": 20,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        }
+      },
+      "createdAt": "2025-12-25T01:12:20.855Z",
+      "updatedAt": "2025-12-25T01:12:20.855Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "67bc323f-028c-4976-bff8-fa59f895c47e",
+          "orderId": "9b5e770b-56c4-4de6-971b-76e692b3f2ec",
+          "name": "Produto 1",
+          "quantity": 1,
+          "price": "20",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "rider": null,
+      "company": {
+        "id": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+        "name": "Minha Loja de Testes",
+        "slug": null,
+        "createdAt": "2025-11-28T04:09:06.300Z",
+        "alwaysOpen": true,
+        "timezone": null,
+        "weeklySchedule": null
+      },
+      "store": null,
+      "_isNew": true
+    },
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766770787485-292813",
+    "createdAt": 1766770787485,
+    "order": {
+      "id": "18a3262e-cae7-4506-b468-083d7b5b618a",
+      "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+      "storeId": "dab7bb9d-52ab-40cc-bba7-37348af2caf2",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "PICKUP",
+      "status": "EM_PREPARO",
+      "customerName": "thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "00f84118-fb7f-4f81-81f7-07484bab0a0c",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "20",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 20,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "PICKUP",
+        "rawPayload": {
+          "customer": {
+            "name": "thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 20,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "PICKUP",
+          "neighborhood": "",
+          "items": [
+            {
+              "productId": "74d2ac8c-22f2-4939-b559-98bd1b8d458f",
+              "name": "coxinha",
+              "quantity": 4,
+              "price": 5,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "store": {
+            "id": "dab7bb9d-52ab-40cc-bba7-37348af2caf2",
+            "name": "Matriz",
+            "slug": null
+          }
+        }
+      },
+      "createdAt": "2025-12-26T17:39:47.367Z",
+      "updatedAt": "2025-12-26T17:39:47.367Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "0d83d486-65c1-4aa2-b546-c0aa67e26b6d",
+          "orderId": "18a3262e-cae7-4506-b468-083d7b5b618a",
+          "name": "coxinha",
+          "quantity": 4,
+          "price": "5",
+          "notes": null,
+          "options": []
+        }
+      ]
+    },
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1766770816031-370765",
+    "createdAt": 1766770816031,
+    "order": {
+      "id": "5b91f5d1-aff3-471f-9671-5b9451a38de7",
+      "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+      "storeId": "dab7bb9d-52ab-40cc-bba7-37348af2caf2",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "00f84118-fb7f-4f81-81f7-07484bab0a0c",
+      "address": "Tordesilha 243",
+      "latitude": null,
+      "longitude": null,
+      "total": "11.5",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "1.5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Cartão",
+          "method": "Cartão",
+          "amount": 11.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Cartão",
+            "method": "Cartão",
+            "amount": 11.5,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Centro",
+          "items": [
+            {
+              "productId": "74d2ac8c-22f2-4939-b559-98bd1b8d458f",
+              "name": "coxinha",
+              "quantity": 2,
+              "price": 5,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "store": {
+            "id": "dab7bb9d-52ab-40cc-bba7-37348af2caf2",
+            "name": "Matriz",
+            "slug": null
+          }
+        }
+      },
+      "createdAt": "2025-12-26T17:40:15.813Z",
+      "updatedAt": "2025-12-26T17:40:15.813Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "d8795d04-c0c8-42ee-836c-2f08bec78282",
+          "orderId": "5b91f5d1-aff3-471f-9671-5b9451a38de7",
+          "name": "coxinha",
+          "quantity": 2,
+          "price": "5",
+          "notes": null,
+          "options": []
+        }
+      ]
+    },
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
   }
 ]

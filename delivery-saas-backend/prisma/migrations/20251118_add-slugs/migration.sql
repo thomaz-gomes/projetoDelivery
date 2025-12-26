@@ -6,11 +6,8 @@ PRAGMA foreign_keys=off;
 BEGIN TRANSACTION;
 
 -- Add nullable slug columns
-ALTER TABLE "Company" ADD COLUMN "slug" TEXT;
-CREATE UNIQUE INDEX IF NOT EXISTS "Company_slug_key" ON "Company"("slug");
-
-ALTER TABLE "Store" ADD COLUMN "slug" TEXT;
-CREATE UNIQUE INDEX IF NOT EXISTS "Store_slug_key" ON "Store"("slug");
+-- Superseded by 20251118041000_add_slugs. No-op for ordering compatibility.
+SELECT 1;
 
 COMMIT;
 PRAGMA foreign_keys=on;

@@ -96,6 +96,19 @@
       "closedAt": null,
       "closedBy": null,
       "closingSummary": null
+    },
+    {
+      "id": "7197e297-422d-464b-a6e5-0fc838c2314d",
+      "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+      "openedAt": "2025-12-26T01:12:23.065Z",
+      "openedBy": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+      "openingAmount": 0.01,
+      "balance": 0.01,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
     }
   ]
 }

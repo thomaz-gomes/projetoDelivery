@@ -5,9 +5,21 @@ import riderAccountService from '../services/riderAccount.js';
 import { evoSendDocument, evoSendMediaUrl, evoSendText, normalizePhone } from '../wa.js';
 import fs from 'fs';
 import path from 'path';
+import { assertModuleEnabled } from '../utils/saas.js';
 
 export const ridersRouter = express.Router();
 ridersRouter.use(authMiddleware);
+
+// Enforce SaaS module availability: RIDERS must be enabled in the company's plan
+ridersRouter.use(async (req, res, next) => {
+  try {
+    await assertModuleEnabled(req.user.companyId, 'RIDERS')
+    return next()
+  } catch (e) {
+    const status = e && e.statusCode ? e.statusCode : 403
+    return res.status(status).json({ message: 'Módulo de entregadores não está disponível no seu plano.' })
+  }
+});
 
 ridersRouter.get('/', async (req, res) => {
   const companyId = req.user.companyId;

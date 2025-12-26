@@ -215,4 +215,6 @@ export default {
   formatOrderText,
   getPrinterConfig,
   setPrinterConfig,
+  // Expose a simple route hint so UI can decide when to auto-print
+  getPrintRoute: () => (ENABLE_QZ ? 'qz' : 'agent'),
 };

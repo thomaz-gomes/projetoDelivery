@@ -3,7 +3,8 @@ import { ref } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { useRoute, useRouter } from 'vue-router';
 
-const email = ref('admin@example.com');
+// Default dev login matches the seeded demo company (see backend scripts/seed_demo_company.mjs)
+const email = ref('admin@demo.local');
 const password = ref('admin123');
 const whatsapp = ref('');
 const loginType = ref('operator'); // 'operator' = email, 'rider' = whatsapp (motoboy), 'affiliate' = whatsapp (afiliado)
@@ -32,10 +33,11 @@ async function onSubmit() {
     } else {
       await auth.login(email.value, password.value);
     }
-  // redirect: affiliates -> /affiliate, riders -> /rider, otherwise redirect param or /orders
+  // redirect: affiliates -> /affiliate, riders -> /rider, super admin -> /saas, otherwise redirect param or /orders
   let destination = route.query.redirect || '/orders';
   if (auth.user?.affiliateId) destination = '/affiliate';
   else if (auth.user?.role === 'RIDER') destination = '/rider';
+  else if (auth.user?.role === 'SUPER_ADMIN') destination = '/saas';
   router.push(destination);
   } catch (e) {
     error.value = e?.response?.data?.message || 'Falha ao entrar';

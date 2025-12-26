@@ -60,6 +60,8 @@ model Company {
   weeklySchedule    Json?
   // one-to-one optional file source configured for this company
   fileSource        FileSource?
+  // SaaS subscription (one-to-one)
+  saasSubscription SaasSubscription?
 }
 
 model User {
@@ -511,6 +513,100 @@ model Product {
   linkedOptions       Option[]
 
   @@index([companyId, name], name: "company_product_name_idx")
+}
+// =============================
+// SaaS: Plans, Modules, Subscriptions, Invoices
+// =============================
+
+enum ModuleKey {
+  RIDERS
+  AFFILIATES
+}
+
+// Feature module that plans can enable/disable
+model SaasModule {
+  id          String    @id @default(uuid())
+  key         ModuleKey @unique
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  plans SaasPlanModule[]
+}
+
+// Subscription plan with price, limits and enabled modules
+model SaasPlan {
+  id              String           @id @default(uuid())
+  name            String
+  price           Decimal          @default(0)
+  // Limits: when null -> unlimited (or use flags below)
+  menuLimit       Int?
+  storeLimit      Int?
+  unlimitedMenus  Boolean          @default(false)
+  unlimitedStores Boolean          @default(false)
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+
+  modules         SaasPlanModule[]
+  prices          SaasPlanPrice[]
+  subscriptions   SaasSubscription[]
+}
+
+// Pricing tiers for plans (periodic prices)
+model SaasPlanPrice {
+  id        String   @id @default(uuid())
+  planId    String
+  plan      SaasPlan @relation(fields: [planId], references: [id])
+  period    String   // e.g. MONTHLY, BIMONTHLY, QUARTERLY, ANNUAL
+  price     Decimal
+  createdAt DateTime @default(now())
+
+  @@index([planId], name: "plan_price_idx")
+}
+
+// Join table Plan <-> Module
+model SaasPlanModule {
+  planId   String
+  plan     SaasPlan   @relation(fields: [planId], references: [id])
+  moduleId String
+  module   SaasModule @relation(fields: [moduleId], references: [id])
+
+  @@id([planId, moduleId])
+}
+
+// Company subscription to a plan
+model SaasSubscription {
+  id          String   @id @default(uuid())
+  companyId   String   @unique
+  company     Company  @relation(fields: [companyId], references: [id])
+  planId      String
+  plan        SaasPlan @relation(fields: [planId], references: [id])
+  status      String   @default("ACTIVE") // ACTIVE, SUSPENDED, CANCELED
+  // chosen billing period for this subscription (e.g. MONTHLY)
+  period      String?
+  startedAt   DateTime @default(now())
+  nextDueAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoices SaasInvoice[]
+}
+
+// Monthly invoice (mensalidade)
+model SaasInvoice {
+  id             String           @id @default(uuid())
+  subscriptionId String
+  subscription   SaasSubscription @relation(fields: [subscriptionId], references: [id])
+  year           Int
+  month          Int // 1..12
+  amount         Decimal
+  status         String           @default("PENDING") // PENDING, PAID, OVERDUE
+  dueDate        DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([subscriptionId, year, month], name: "sub_month_idx")
 }
 
 model PaymentMethod {

@@ -8,6 +8,7 @@ import Swal from 'sweetalert2';
 import { io } from 'socket.io-client';
 import 'sweetalert2/dist/sweetalert2.min.css';
 import printService from "../services/printService.js";
+import { useModulesStore } from '../stores/modules.js';
 import PrinterStatus from '../components/PrinterStatus.vue';
 import PrinterConfig from '../components/PrinterConfig.vue';
 import POSOrderWizard from '../components/POSOrderWizard.vue';
@@ -24,6 +25,7 @@ import { bindLoading } from '../state/globalLoading.js';
 import Sortable from 'sortablejs';
 const store = useOrdersStore();
 const auth = useAuthStore();
+const modules = useModulesStore();
 const router = useRouter();
 
 // helper para formatar displayId com dois dígitos e garantir consistência
@@ -61,6 +63,11 @@ const now = ref(Date.now());
 // connection state for a dev-friendly badge (moved to module scope so computed can access it)
 const connectionState = ref({ status: 'idle', since: Date.now(), url: null });
 const showPrinterConfig = ref(false);
+// compute module gating flags
+const printingEnabled = computed(() => modules.has('printing'));
+const ridersEnabled = computed(() => {
+  return modules.has('riders') || modules.has('rider') || modules.has('delivery') || modules.has('entregadores') || modules.has('motoboy') || modules.has('motoboys')
+});
 const showPdv = ref(false);
 const newOrderPhone = ref('');
 const pdvPreset = ref(null);
@@ -126,12 +133,25 @@ function showNotification(pedido) {
 // =============================
 onMounted(async () => {
   await requestNotificationPermission();
+  // load enabled modules for this company to gate features
+  try { await modules.fetchEnabled(); } catch (e) { /* ignore */ }
+
+  // If this is a SaaS Super Admin session, do not initialize restaurant listeners or fetching —
+  // redirect the admin to the SaaS dashboard instead.
+  try {
+    if (auth.user && String(auth.user.role || '').toUpperCase() === 'SUPER_ADMIN') {
+      try { console.log('SUPER_ADMIN detected — skipping Orders listeners and redirecting to /saas'); } catch(e){}
+      try { router.replace('/saas'); } catch(e){}
+      return;
+    }
+
+  } catch (e) { /* ignore detection errors */ }
 
   try {
     await store.fetch();
     // ensure store names are hydrated when backend omitted the relation
     await hydrateMissingStores();
-    await store.fetchRiders();
+    if (ridersEnabled.value) await store.fetchRiders();
     // load company payment methods (admin endpoint)
     try {
       const cid = auth?.user?.companyId || null;
@@ -144,7 +164,8 @@ onMounted(async () => {
     }
   } catch (e) {
     console.error(e);
-    Swal.fire('Erro', 'Falha ao carregar pedidos/entregadores.', 'error');
+    const msg = ridersEnabled.value ? 'Falha ao carregar pedidos/entregadores.' : 'Falha ao carregar pedidos.';
+    Swal.fire('Erro', msg, 'error');
   }
 
   // 🔌 Conectar ao servidor (tempo real)
@@ -248,11 +269,11 @@ onMounted(async () => {
       // and emit `print-result` events back to the UI — avoid double-printing.
       try {
         const route = (printService && printService.getPrintRoute) ? printService.getPrintRoute() : null;
-        if (route === 'agent') {
+        if (printingEnabled.value && (route === 'agent' || route === 'qz' || route == null)) {
           await printService.enqueuePrint(full);
           console.log(`🖨️ Impressão automática (frontend->agent) enviada: ${formatDisplay(full)}`);
         } else {
-          console.log(`🖨️ Frontend print skipped (route=${route}) — backend will handle auto-print.`);
+          console.log(`🖨️ Frontend print skipped (module printing disabled or route=${route}).`);
         }
       } catch (e) {
         console.warn('printService check/print failed', e);
@@ -668,7 +689,51 @@ function normalizeOrder(o){
   // build a robust address extraction checking many common payload shapes
   function extractAddress(o) {
     if (!o) return '';
-    const a = o.address ||
+    // helper to format address objects consistently
+    const formatAddrObj = (addr) => {
+      if (!addr) return '';
+      // common keys
+      const formatted = addr.formatted || addr.formattedAddress || addr.formatted_address;
+      if (formatted) return String(formatted);
+      const street = addr.street || addr.streetName || '';
+      const number = addr.number || addr.streetNumber || '';
+      const neighborhood = addr.neighborhood || '';
+      const city = addr.city || '';
+      const complement = addr.complement || '';
+      const base = [street, number].filter(Boolean).join(', ');
+      const tail = [neighborhood, city, complement].filter(Boolean).join(' - ');
+      return [base, tail].filter(Boolean).join(' | ');
+    };
+
+    // address could be a string or an object created by PDV wizard
+    if (typeof o.address === 'string') return o.address;
+    if (o.address && typeof o.address === 'object') return formatAddrObj(o.address);
+
+    // customer attached addresses (created via PDV/customer book)
+    if (o.customerAddress) {
+      const ca = typeof o.customerAddress === 'string' ? o.customerAddress : formatAddrObj(o.customerAddress);
+      if (ca) return ca;
+    }
+    if (o.customer && Array.isArray(o.customer.addresses) && o.customer.addresses.length) {
+      // prefer default, else first
+      const def = o.customer.addresses.find(a => a && a.isDefault) || o.customer.addresses[0];
+      const ca = typeof def === 'string' ? def : formatAddrObj(def);
+      if (ca) return ca;
+    }
+    if (o.customer && o.customer.address) {
+      const ca = typeof o.customer.address === 'string' ? o.customer.address : formatAddrObj(o.customer.address);
+      if (ca) return ca;
+    }
+
+    // payload shapes from integrators/backends
+    // Try formatting known object shapes when formatted string is missing
+    const fromPayloadObj = (
+      formatAddrObj(o.payload?.rawPayload?.address) ||
+      formatAddrObj(o.payload?.delivery?.deliveryAddress) ||
+      formatAddrObj(o.payload?.order?.delivery?.address)
+    );
+
+    const a = fromPayloadObj ||
       o.payload?.delivery?.deliveryAddress?.formattedAddress ||
       o.payload?.deliveryAddress?.formattedAddress ||
       o.payload?.delivery?.address?.formattedAddress ||
@@ -682,11 +747,11 @@ function normalizeOrder(o){
       o.payload?.rawPayload?.address?.formatted ||
       o.payload?.rawPayload?.address?.formattedAddress ||
       o.payload?.rawPayload?.address?.formatted_address ||
-      o.rawPayload?.neighborhood ||
       (typeof o.rawPayload?.address === 'string' ? o.rawPayload.address : null) ||
+      o.rawPayload?.neighborhood ||
       o.customer?.address?.formattedAddress ||
       '';
-    return a;
+    return a || '';
   }
 
   const normalized = {
@@ -823,7 +888,7 @@ const filteredOrders = computed(() => {
     // filtro de status/entregador
     const statusMatch = selectedStatus.value === 'TODOS' || o.status === selectedStatus.value;
     // compare as strings to avoid numeric/string id mismatches
-    const riderMatch = selectedRider.value === 'TODOS' || (o.rider && String(o.rider.id) === String(selectedRider.value));
+    const riderMatch = !ridersEnabled.value || selectedRider.value === 'TODOS' || (o.rider && String(o.rider.id) === String(selectedRider.value));
 
     // order number filter (match display or id)
     const qOrder = String(searchOrderNumber.value || '').trim().toLowerCase();
@@ -1077,6 +1142,10 @@ async function viewReceipt(order) {
 
 // Dev helper: send a canned test order to the print service
 async function sendTestPrint() {
+  if (!printingEnabled.value) {
+    Swal.fire({ icon: 'warning', title: 'Impressão desabilitada', text: 'O módulo de impressão não está habilitado para esta empresa.', timer: 3500, toast: true, position: 'top-end', showConfirmButton: false });
+    return;
+  }
   const testOrder = {
     id: `dev-test-${Date.now()}`,
     displaySimple: 'TT',
@@ -1100,31 +1169,38 @@ async function sendTestPrint() {
 }
 
 async function openAssignModal(order) {
-  const riders = (await store.fetchRiders()) || [];
-  const options = riders.reduce((acc, r) => {
-    acc[r.id] = `${r.name} — ${r.whatsapp || 'sem WhatsApp'}`;
-    return acc;
-  }, {});
+  if (!ridersEnabled.value) {
+    // Riders module disabled: do not show assignment modal
+    return
+  }
+  if (ridersEnabled.value) {
+    const riders = (await store.fetchRiders()) || [];
+    const options = riders.reduce((acc, r) => {
+      acc[r.id] = `${r.name} — ${r.whatsapp || 'sem WhatsApp'}`;
+      return acc;
+    }, {});
 
-  const { value: riderId } = await Swal.fire({
-    title: 'Escolher entregador',
-    input: 'select',
-    inputOptions: options,
-    inputPlaceholder: 'Selecione um entregador',
-    showCancelButton: true,
-    confirmButtonText: 'Atribuir',
-    cancelButtonText: 'Cancelar',
-  });
+    const { value: riderId } = await Swal.fire({
+      title: 'Escolher entregador',
+      input: 'select',
+      inputOptions: options,
+      inputPlaceholder: 'Selecione um entregador',
+      showCancelButton: true,
+      confirmButtonText: 'Atribuir',
+      cancelButtonText: 'Cancelar',
+    });
 
-  if (riderId) {
-    await store.assignOrder(order.id, { riderId, alsoSetStatus: true });
-    await store.fetch();
-    Swal.fire('OK', 'Pedido atribuído e notificado via WhatsApp.', 'success');
-    return;
+    if (riderId) {
+      await store.assignOrder(order.id, { riderId, alsoSetStatus: true });
+      await store.fetch();
+      Swal.fire('OK', 'Pedido atribuído e notificado via WhatsApp.', 'success');
+      return;
+    }
   }
 
+  // Fallback (or when riders module disabled): ask for phone and assign by phone
   const { value: phone } = await Swal.fire({
-    title: 'WhatsApp do entregador',
+    title: ridersEnabled.value ? 'WhatsApp do entregador' : 'Atribuir entregador (módulo desabilitado)',
     input: 'text',
     inputPlaceholder: '5599999999999',
     showCancelButton: true,
@@ -1141,6 +1217,12 @@ async function openAssignModal(order) {
 async function changeStatus(order, to) {
   try {
     if (to === 'SAIU_PARA_ENTREGA') {
+      if (!ridersEnabled.value) {
+        // Riders module disabled: just change status without asking for a rider
+        await store.updateStatus(order.id, 'SAIU_PARA_ENTREGA')
+        await store.fetch()
+        return
+      }
       await openAssignModal(order);
       return;
     }
@@ -1357,10 +1439,28 @@ function toggleSound() {
   playSound.value = !playSound.value;
 }
 
-function openPdv(){
+async function openPdv(){
   try{
     pdvPreset.value = null;
   }catch(e){}
+  // If a phone is provided, try to preload customer and if they have saved addresses,
+  // open the PDV wizard directly on the address-selection step.
+  try{
+    const phone = String(newOrderPhone.value || '').replace(/\D/g,'');
+    if (phone) {
+      const res = await api.get(`/customers?q=${encodeURIComponent(phone)}`);
+      const rows = res.data?.rows || [];
+      const match = rows.find(c => {
+        const d = String((c.whatsapp||c.phone||'')).replace(/\D/g,'');
+        return d.length>0 && d.slice(-8) === phone.slice(-8);
+      });
+      if (match && Array.isArray(match.addresses) && match.addresses.length>0) {
+        pdvPreset.value = { customerName: match.fullName || match.name || '', orderType: 'DELIVERY', autoStep: 2 };
+      } else {
+        pdvPreset.value = null;
+      }
+    }
+  }catch(e){ pdvPreset.value = null }
   showPdv.value = true;
 }
 
@@ -1428,7 +1528,7 @@ function pulseButton() {
         </span>
       </div>
       <PrinterWatcher />
-      <PrinterStatus />
+      <PrinterStatus v-if="printingEnabled" />
       <!-- Dev: quick test print button -->
       <div class="ms-2 d-flex gap-2 align-items-center">
         
@@ -1447,16 +1547,16 @@ function pulseButton() {
           ></i>
         </button>
 
-        <button type="button" class="btn btn-sm btn-outline-primary" @click="showPrinterConfig = true" title="Configurar impressora">
+        <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="showPrinterConfig = true" title="Configurar impressora">
           <i class="bi bi-gear"></i>&nbsp;Configurar Impressora
         </button>
-        <button type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
+        <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
           <i class="bi bi-printer"></i>&nbsp;Teste Impressão
         </button>
         <CashControl />
       </div>
     </header>
-    <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
+    <PrinterConfig v-if="printingEnabled" v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
     <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
 
         <div class="row">
@@ -1523,6 +1623,7 @@ function pulseButton() {
 
       <!-- Filtros adicionais -->
       <div class="d-flex align-items-center gap-2">
+        <template v-if="ridersEnabled">
         <SelectInput 
            v-model="selectedRider" 
           class="form-select form-select"
@@ -1534,6 +1635,7 @@ function pulseButton() {
             {{ r.name }}
           </option>
         </SelectInput>
+        </template>
 
         <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control form-control" />
         <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control form-control" />
@@ -1577,6 +1679,7 @@ function pulseButton() {
                               <span v-if="normalizeOrder(o).paymentChange" class="ms-2 text-muted">• Troco: {{ formatCurrency(normalizeOrder(o).paymentChange) }}</span>
                             </span>
                           </div>
+                          <template v-if="ridersEnabled">
                           <div class="mt-1 small text-muted d-flex align-items-center">
                             <i class="bi bi-person-badge me-1"></i>
                             <span v-if="o.rider">{{ o.rider.name }}</span>
@@ -1585,6 +1688,7 @@ function pulseButton() {
                               <i class="bi bi-whatsapp text-success"></i>
                             </button>
                           </div>
+                          </template>
                     </div>
                     <!-- status badge removed from card; column header indicates status -->
                   </div>

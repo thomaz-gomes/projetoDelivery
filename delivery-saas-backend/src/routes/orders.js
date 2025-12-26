@@ -531,16 +531,22 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       };
     }
 
-    // find or create customer (best-effort)
+    // find or create customer (best-effort). If client provided an explicit customerId, prefer it.
     let persistedCustomer = null;
     try {
-      const contact = String(customerPhone || '').trim();
-      const name = String(customerName || '').trim();
-      if (contact || name) {
-        const addressPayload = address && type === 'DELIVERY' ? {
-          delivery: { deliveryAddress: { formattedAddress: address.formatted || [address.street, address.number].filter(Boolean).join(', '), streetName: address.street || null, streetNumber: address.number || null, neighborhood: address.neighborhood || null } }
-        } : null;
-        persistedCustomer = await findOrCreateCustomer({ companyId, fullName: name || null, whatsapp: contact || null, phone: contact || null, addressPayload });
+      if (req.body && req.body.customerId) {
+        const c = await prisma.customer.findFirst({ where: { id: req.body.customerId, companyId } });
+        if (c) persistedCustomer = c;
+      }
+      if (!persistedCustomer) {
+        const contact = String(customerPhone || '').trim();
+        const name = String(customerName || '').trim();
+        if (contact || name) {
+          const addressPayload = address && type === 'DELIVERY' ? {
+            delivery: { deliveryAddress: { formattedAddress: address.formatted || [address.street, address.number].filter(Boolean).join(', '), streetName: address.street || null, streetNumber: address.number || null, neighborhood: address.neighborhood || null, city: address.city || null } }
+          } : null;
+          persistedCustomer = await findOrCreateCustomer({ companyId, fullName: name || null, whatsapp: contact || null, phone: contact || null, addressPayload });
+        }
       }
     } catch (e) { console.warn('PDV: falha ao criar/achar cliente', e?.message || e); }
 
@@ -641,7 +647,9 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
           rasterDataUrl: created.rasterDataUrl || (created.payload && created.payload.rasterDataUrl) || null,
           qrText: created.qrText || (created.payload && created.payload.qrText) || null,
           payload: created.payload || null,
-          items: created.items || null
+          items: created.items || null,
+          // include address when available to help frontends render immediately
+          address: created.address || (created.payload && (created.payload.rawPayload?.address || created.payload.delivery?.deliveryAddress?.formattedAddress || created.payload.deliveryAddress?.formattedAddress)) || null
         };
         try { const idx = await import('../index.js'); idx.emitirNovoPedido(emitObj); } catch (e) { console.warn('emitirNovoPedido failed for created order', emitObj && emitObj.id, e && e.message); }
       } catch (eEmit) {

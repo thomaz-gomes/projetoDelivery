@@ -28,6 +28,8 @@ async function setupQZSecurity(qz) {
           body: JSON.stringify({ toSign })
         }).then(r => r.text())
       })
+      // Match backend signing algorithm (RSA-SHA256)
+      try { if (typeof qz.security.setSignatureAlgorithm === 'function') qz.security.setSignatureAlgorithm('SHA256') } catch (_) {}
     }
   } catch (e) {
     console.warn('print plugin: setupQZSecurity failed', e?.message || e)

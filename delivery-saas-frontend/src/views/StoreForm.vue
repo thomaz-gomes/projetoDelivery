@@ -8,12 +8,11 @@
         <div v-if="loading" class="text-center">Carregando...</div>
         <div v-else>
           <ul class="nav nav-tabs mb-3">
-            <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='geral'}" href="#" @click.prevent="setActiveTab('geral')">Geral</a></li>
-            <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='horario'}" href="#" @click.prevent="setActiveTab('horario')">Horário</a></li>
-            <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='fiscal'}" href="#" @click.prevent="setActiveTab('fiscal')">Fiscal</a></li>
-          </ul>
+                  <li class="nav-item"><a class="nav-link active" href="#">Geral</a></li>
+                  <li class="nav-item"><a class="nav-link" href="#" @click.prevent="setActiveTab('fiscal')">Fiscal</a></li>
+                </ul>
 
-          <div v-show="activeTab==='geral'">
+                <div>
             <div class="mb-3"><label class="form-label">Nome</label><TextInput v-model="form.name" inputClass="form-control" /></div>
               <div class="mb-3"><label class="form-label">Slug público (opcional)</label>
                 <TextInput v-model="form.slug" placeholder="ex: nomedaloja" inputClass="form-control" />
@@ -32,46 +31,17 @@
             </div>
           </div>
 
-          <div v-show="activeTab==='horario'">
-            <div class="card mt-3">
-              <div class="card-body">
-                <h5>Horário por dia</h5>
-                <div class="form-text mb-2">Defina dias e intervalos.</div>
-
-                <div class="form-check mb-2">
-                  <input class="form-check-input" type="checkbox" id="open24" v-model="form.open24Hours" />
-                  <label class="form-check-label" for="open24">Aberto 24 horas (ocultar horários)</label>
-                </div>
-
-                <div v-if="!form.open24Hours" class="table-responsive">
-                  <table class="table table-sm">
-                    <thead><tr><th>Dia</th><th>Ativo</th><th>De</th><th>Até</th><th></th></tr></thead>
-                    <tbody>
-                      <tr v-for="(day, idx) in weekDays" :key="day.value">
-                        <td>{{ day.label }}</td>
-                        <td><input type="checkbox" v-model="form.weeklySchedule[day.value].enabled" /></td>
-                        <td><input type="time" class="form-control form-control-sm" v-model="form.weeklySchedule[day.value].from" :disabled="!form.weeklySchedule[day.value].enabled" /></td>
-                        <td><input type="time" class="form-control form-control-sm" v-model="form.weeklySchedule[day.value].to" :disabled="!form.weeklySchedule[day.value].enabled" /></td>
-                        <td style="width:1%;white-space:nowrap">
-                          <button class="btn btn-sm btn-outline-secondary" type="button" :disabled="saving || day.value >= 6" @click.prevent="copyToNext(day.value)" title="Copiar para o próximo dia">
-                            <!-- simple copy icon -->
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M13 1H3a1 1 0 0 0-1 1v9h1V2h10V1z"/><path d="M11 4H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zm-1 9H5V6h5v7z"/></svg>
-                          </button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div v-else class="small text-muted">A loja está marcada como aberta 24 horas — os horários estão ocultos.</div>
-              </div>
-            </div>
-          </div>
+          <!-- Horário moved to menu configuration; store-level schedule removed -->
 
                   <div v-show="activeTab==='fiscal'">
                     <div class="mb-2"><label class="form-label">CNPJ</label><TextInput v-model="form.cnpj" placeholder="Apenas dígitos" inputClass="form-control" /></div>
                     <div class="mb-2"><label class="form-label">Inscrição Estadual</label><TextInput v-model="form.ie" inputClass="form-control" /></div>
-                    <div class="mb-2"><label class="form-label">Timezone (IANA)</label><TextInput v-model="form.timezone" inputClass="form-control" /></div>
+                    <div class="mb-2"><label class="form-label">Timezone (IANA)</label>
+                      <select class="form-select" v-model="form.timezone">
+                        <option v-for="tz in TIMEZONES" :key="tz" :value="tz">{{ tz }}</option>
+                      </select>
+                      <div class="form-text">Fuso horário IANA — exemplo: <strong>America/Sao_Paulo</strong>. Deixe vazio para usar o timezone do servidor.</div>
+                    </div>
 
                     <div class="card mt-3 p-3">
                       <h6 class="mb-2">Certificado NF-e (PFX)</h6>
@@ -159,8 +129,13 @@ const message = ref('')
 const messageClass = ref('')
 
 const DEFAULT_TZ = 'America/Sao_Paulo'
-const defaultWeek = Array.from({ length: 7 }).map((_, i) => ({ day: i, enabled: false, from: '', to: '' }))
-const form = ref({ name: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, weeklySchedule: defaultWeek, cnpj: '', ie: '', certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, open24Hours: false })
+// Common IANA timezone options for select
+const TIMEZONES = [
+  'America/Sao_Paulo', 'UTC', 'America/New_York', 'America/Los_Angeles', 'America/Chicago',
+  'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
+  'Asia/Shanghai', 'Australia/Sydney'
+]
+const form = ref({ name: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false })
 
 const activeTab = ref('geral')
 const weekDays = [ { value:0,label:'Domingo'},{value:1,label:'Segunda'},{value:2,label:'Terça'},{value:3,label:'Quarta'},{value:4,label:'Quinta'},{value:5,label:'Sexta'},{value:6,label:'Sábado'} ]
@@ -184,10 +159,6 @@ async function load() {
   form.value.bannerUrl = s.bannerUrl ? assetUrl(s.bannerUrl) : ''
       form.value.cnpj = s.cnpj || ''
   form.value.timezone = s.timezone || DEFAULT_TZ
-    // weekly schedule (may be null)
-    form.value.weeklySchedule = s.weeklySchedule && Array.isArray(s.weeklySchedule) ? s.weeklySchedule : JSON.parse(JSON.stringify(defaultWeek))
-    // open24Hours flag
-  form.value.open24Hours = !!s.open24Hours
       // populate certificate state if present
       form.value.storedCertExists = !!s.certExists
       form.value.storedCertFilename = s.certFilename || null
@@ -254,20 +225,7 @@ async function deleteCert(){
   }
 }
 
-function copyToNext(dayIndex){
-  try{
-    const next = dayIndex + 1
-    if (next > 6) return
-    const src = form.value.weeklySchedule[dayIndex]
-    if (!src) return
-    // copy values to next day
-    form.value.weeklySchedule[next].enabled = !!src.enabled
-    form.value.weeklySchedule[next].from = src.from || ''
-    form.value.weeklySchedule[next].to = src.to || ''
-  } catch (e) {
-    console.warn('copyToNext failed', e)
-  }
-}
+// schedule management moved to menu-level settings
 
 // handlers used by ImageUploader
 // handlers used by ImageUploader
@@ -328,7 +286,7 @@ async function save(){
       address: form.value.address || undefined,
       timezone: form.value.timezone || undefined,
       cnpj: form.value.cnpj || undefined,
-      open24Hours: !!form.value.open24Hours,
+      // schedule handled at menu level; do not send store-level schedule flags
       // prefer persisted settings-stored logo URL when available; fall back to existing logoUrl
       logoUrl: form.value.logoUrl || undefined,
       // include banner URL when present

@@ -51,7 +51,10 @@
             <div class="row gx-2">
               <div class="col mb-2">
                 <label class="form-label small">Fuso horário</label>
-                <TextInput v-model="form.timezone" placeholder="America/Sao_Paulo" inputClass="form-control" />
+                    <select class="form-select" v-model="form.timezone">
+                      <option value="">-- Usar padrão da loja --</option>
+                      <option v-for="tz in TIMEZONES" :key="tz" :value="tz">{{ tz }}</option>
+                    </select>
               </div>
             </div>
           <div class="mt-2">
@@ -131,6 +134,13 @@ const isEdit = Boolean(id)
 const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, open24Hours: false, timezone: '' })
 const dayNames = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado']
 const weeklySchedule = ref(Array.from({length:7}).map((_,i)=>({ day: i, enabled: false, from: '', to: '' })))
+
+// Common IANA timezone options for select
+const TIMEZONES = [
+  'America/Sao_Paulo', 'UTC', 'America/New_York', 'America/Los_Angeles', 'America/Chicago',
+  'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
+  'Asia/Shanghai', 'Australia/Sydney'
+]
 
 function copyFromPrev(idx){
   try{

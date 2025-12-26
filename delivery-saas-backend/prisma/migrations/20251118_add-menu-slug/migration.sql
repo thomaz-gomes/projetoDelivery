@@ -3,10 +3,8 @@
 PRAGMA foreign_keys=OFF;
 BEGIN TRANSACTION;
 
-ALTER TABLE "Menu" ADD COLUMN "slug" TEXT;
-
--- Create unique index for slug to enforce uniqueness (SQLite)
-CREATE UNIQUE INDEX IF NOT EXISTS "Menu_slug_key" ON "Menu" ("slug");
+-- Superseded by 20251118040000_add_menu_slug. No-op for ordering compatibility.
+SELECT 1;
 
 COMMIT;
 PRAGMA foreign_keys=ON;

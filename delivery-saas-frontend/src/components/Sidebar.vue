@@ -1,6 +1,8 @@
 <script setup>
 import { computed, reactive, ref, onMounted, onUpdated, nextTick, onUnmounted } from 'vue';
+import { useModulesStore } from '../stores/modules'
 import api from '../api'
+import { useSaasStore } from '../stores/saas'
 import { assetUrl } from '../utils/assetUrl.js'
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -9,6 +11,8 @@ import * as bootstrap from 'bootstrap';
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const saas = useSaasStore();
+const modules = useModulesStore();
 
 // Menu lateral (use Bootstrap Icons classes in `icon`)
 const nav = [
@@ -41,6 +45,13 @@ const nav = [
     { name: 'Formas de pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card-2-front' },
     { name: 'Gestão de Acessos', to: '/settings/access-control', icon: 'bi bi-shield-lock' },
   ] },
+  // SaaS admin area (parent with CRUD children for SUPER_ADMIN)
+  { name: 'SaaS', to: '/saas', icon: 'bi bi-grid-3x3-gap', role: 'SUPER_ADMIN', children: [
+    { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
+    { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },
+    { name: 'Empresas', to: '/saas/companies', icon: 'bi bi-building' },
+    { name: 'Mensalidades', to: '/saas/billing', icon: 'bi bi-receipt' }
+  ] }
 ];
 
 // collapsed state for parent items with children (true = collapsed)
@@ -163,11 +174,65 @@ function toggleMini(){
 
 onMounted(() => { nextTick(initLocalTooltips); document.addEventListener('click', onDocumentClick); document.addEventListener('keydown', onDocumentKeydown); window.addEventListener('resize', updateIsMobile); updateIsMobile(); });
 onMounted(()=>{ loadMenusWidget().catch(()=>{}) })
+onMounted(()=>{ saas.fetchMySubscription().catch(()=>{}) })
 onUpdated(() => { nextTick(initLocalTooltips); });
 onUnmounted(() => { try{ document.removeEventListener('click', onDocumentClick); document.removeEventListener('keydown', onDocumentKeydown); window.removeEventListener('resize', updateIsMobile); }catch(e){} });
  
 
 const isActive = (to) => computed(() => route.path.startsWith(to));
+
+const visibleNav = computed(() => {
+  try{
+    const role = auth.user && auth.user.role ? String(auth.user.role).toUpperCase() : null;
+    // For SaaS Super Admin, show a flat list of admin links (no submenus)
+    if (role === 'SUPER_ADMIN') {
+      return [
+        { name: 'SaaS Dashboard', to: '/saas', icon: 'bi bi-grid-3x3-gap' },
+        { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
+        { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },
+        { name: 'Empresas', to: '/saas/companies', icon: 'bi bi-building' },
+        { name: 'Mensalidades', to: '/saas/billing', icon: 'bi bi-receipt' }
+      ]
+    }
+
+    // Default: hide items that explicitly require a role the user doesn't have
+    const enabled = (saas.enabledModules || []).map(k => String(k).toLowerCase())
+    return nav.map((item) => {
+      if(item.role && role !== String(item.role).toUpperCase()) return null;
+      const copy = { ...item };
+      if(Array.isArray(copy.children)){
+        copy.children = copy.children.filter(c => !c.role || String(c.role).toUpperCase() === role);
+      }
+      // Module gating: hide Riders/nav when module not enabled for this company
+      try{
+        if (String(copy.to || '').startsWith('/riders') || (copy.children && copy.children.some(c=>String(c.to||'').startsWith('/riders')))){
+          const ok = enabled.includes('riders') || enabled.includes('rider') || enabled.includes('motoboy') || enabled.includes('motoboys') || enabled.includes('entregadores')
+          if(!ok) return null
+        }
+        // Hide Affiliates menu if affiliate module disabled
+        if (String(copy.to || '').startsWith('/affiliates') || (copy.children && copy.children.some(c=>String(c.to||'').startsWith('/affiliates')))){
+          const ok2 = enabled.includes('affiliates') || enabled.includes('affiliate') || enabled.includes('afiliados')
+          if(!ok2) return null
+        }
+      }catch(e){}
+      return copy;
+    }).filter(Boolean);
+  }catch(e){ return nav }
+});
+
+
+const planBadge = computed(() => {
+  try {
+    if (!saas.subscription || !saas.subscription.plan) return null
+    const p = saas.subscription.plan
+    const parts = []
+    if (p.unlimitedStores) parts.push('Lojas: ilimitado')
+    else if (p.storeLimit !== null && p.storeLimit !== undefined) parts.push(`Lojas: ${p.storeLimit}`)
+    if (p.unlimitedMenus) parts.push('Cardápios: ilimitado')
+    else if (p.menuLimit !== null && p.menuLimit !== undefined) parts.push(`Cardápios: ${p.menuLimit}`)
+    return { name: p.name, parts }
+  } catch (e) { return null }
+})
 
 // menus widget state (cardápios are the storefronts)
 const menusList = ref([])
@@ -299,7 +364,7 @@ function findNextSchedulePoint(weekly, mode='nextOpen', tz='America/Sao_Paulo'){
 
 function computeOpenStatus(s){
   try{
-    // If settings file includes a forced flag, respect it but only while it hasn't expired
+    // respect forced override while valid
     const forced = s.forceOpen
     try{
       if(forced !== undefined && forced !== null){
@@ -307,57 +372,58 @@ function computeOpenStatus(s){
         if(!expires || Date.now() < expires){
           return { isOpen: !!forced, forced: !!forced, source: 'forced', forceOpenExpiresAt: s.forceOpenExpiresAt }
         }
-        // expired: ignore forced flag and allow schedule to take precedence
       }
-    }catch(e){ /* ignore parsing errors and fallthrough to schedule */ }
-    // follow schedule: reuse PublicMenu logic (simplified)
-    if(s.open24Hours || s.alwaysOpen) return { isOpen: true, forced: undefined, source: 'schedule' }
+    }catch(e){ }
+
+    // Treat several possible 'always-open' flags for compatibility
+    if(s.open24Hours || s.alwaysOpen || s.open24 || s.always_open) return { isOpen: true, forced: undefined, source: 'schedule' }
 
     const parseHM = (str) => {
       if(!str) return null
-      const parts = String(str).split(':').map(x=>Number(x))
-      if(parts.length<2) return null
-      const [hh, mm] = parts
+      const m = String(str).match(/^(\d{1,2}):(\d{2})$/)
+      if(!m) return null
+      const hh = Number(m[1]), mm = Number(m[2])
       if(Number.isNaN(hh) || Number.isNaN(mm)) return null
       return { hh, mm }
+    }
+
+    const getNowInTz = (tz) => {
+      try{
+        const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'short', hour12: false, hour: '2-digit', minute: '2-digit' })
+        if(fmt.formatToParts){
+          const parts = fmt.formatToParts(new Date()).reduce((acc,p)=>{ acc[p.type]=p.value; return acc },{})
+          const hh = Number(parts.hour || parts.hour12 || 0)
+          const mm = Number(parts.minute || 0)
+          // weekday fallback: use local Date if not provided in parts
+          const weekday = (new Date()).getDay()
+          return { hh, mm, weekday }
+        }
+        const s = fmt.format(new Date()) // fallback
+        const [hh, mm] = s.split(':').map(x=>Number(x))
+        const wd = new Date().getDay()
+        return { hh, mm, weekday: wd }
+      }catch(e){ const d = new Date(); return { hh: d.getHours(), mm: d.getMinutes(), weekday: d.getDay() } }
     }
 
     if(Array.isArray(s.weeklySchedule) && s.weeklySchedule.length){
       const tz = s.timezone || 'America/Sao_Paulo'
       try{
-        const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
-        const parts = fmt.format(new Date()).split('/')
-        const [dd, mm, yyyy] = parts
-        const tzDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
-        const weekDay = tzDate.getUTCDay()
-        const today = s.weeklySchedule.find(d => Number(d?.day) === Number(weekDay))
+        const now = getNowInTz(tz)
+        const today = s.weeklySchedule.find(d => Number(d?.day) === Number(now.weekday))
         if(!today || !today.enabled) return { isOpen: false, forced: undefined, source: 'schedule' }
         const from = parseHM(today.from)
         const to = parseHM(today.to)
         if(!from || !to) return { isOpen: false, forced: undefined, source: 'schedule' }
-        // compute now in tz
-        let nowParts
-        try{
-          const fmt2 = new Intl.DateTimeFormat(undefined, { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' })
-          if(fmt2.formatToParts){
-            const p = fmt2.formatToParts(new Date())
-            nowParts = { hh: Number(p.find(x=>x.type==='hour')?.value), mm: Number(p.find(x=>x.type==='minute')?.value) }
-          } else {
-            const s2 = fmt2.format(new Date())
-            const [hh, mm] = s2.split(':').map(x=>Number(x))
-            nowParts = { hh, mm }
-          }
-        }catch(e){ const d = new Date(); nowParts = { hh: d.getHours(), mm: d.getMinutes() } }
-        const toM = p => p.hh*60 + p.mm
-        const nowM = toM(nowParts)
-        const fromM = toM(from)
-        const toMval = toM(to)
-        if(fromM <= toMval) return { isOpen: nowM >= fromM && nowM <= toMval, forced: undefined, source: 'schedule' }
-        return { isOpen: (nowM >= fromM) || (nowM <= toMval), forced: undefined, source: 'schedule' }
+        const toMinutes = p => p.hh*60 + p.mm
+        const nowM = toMinutes(now)
+        const fromM = toMinutes(from)
+        const toMVal = toMinutes(to)
+        if(fromM <= toMVal) return { isOpen: nowM >= fromM && nowM <= toMVal, forced: undefined, source: 'schedule' }
+        return { isOpen: (nowM >= fromM) || (nowM <= toMVal), forced: undefined, source: 'schedule' }
       }catch(e){ console.warn('computeOpenStatus weeklySchedule error', e) }
     }
 
-    // fallback to openFrom/openTo
+    // fallback to openFrom/openTo single range
     const from = parseHM(s.openFrom)
     const to = parseHM(s.openTo)
     if(!from || !to) return { isOpen: false, forced: undefined, source: 'schedule' }
@@ -437,6 +503,14 @@ function logout() {
           <div v-else>
             <h5 class="mb-0">Delivery SaaS</h5>
             <small class="text-muted">Painel Administrativo</small>
+          </div>
+        </div>
+        <div class="ms-2 text-end">
+          <div v-if="planBadge && planBadge.name && !mini" class="small text-white">
+            <div>{{ planBadge.name }}</div>
+            <div class="small text-light-50" v-if="planBadge.parts && planBadge.parts.length">
+              <span v-for="(p,i) in planBadge.parts" :key="i" class="badge bg-white bg-opacity-10 text-white me-1">{{ p }}</span>
+            </div>
           </div>
         </div>
         <div class="d-none d-md-block">
@@ -528,7 +602,7 @@ function logout() {
     <!-- Navegação -->
     <nav class="flex-grow-1 p-2">
         <ul class="nav flex-column">
-        <li v-for="item in nav" :key="item.to" class="nav-item mb-1">
+        <li v-for="item in visibleNav" :key="item.to" class="nav-item mb-1">
           <div class="d-flex flex-column">
             <template v-if="!item.children">
               <router-link
@@ -586,7 +660,7 @@ function logout() {
     <div v-if="mini && openSub" id="sidebar-mini-popup" :style="{ position: 'absolute', top: subMenuPos.top + 'px', left: subMenuPos.left + 'px', zIndex: 1050 }">
       <div style="background:#0d6efd; border:1px solid rgba(255,255,255,0.06); padding:8px; border-radius:6px; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,0.12)">
         <ul class="nav flex-column">
-          <li v-for="p in nav.filter(n=>n.to===openSub)" :key="p.to">
+          <li v-for="p in visibleNav.filter(n=>n.to===openSub)" :key="p.to">
             <template v-for="child in (p.children||[])">
               <li class="nav-item"><router-link :to="child.to" class="nav-link px-2 py-1 text-white" @click.native="closeMiniSub"> <i :class="child.icon + ' me-2'"></i> <span>{{ child.name }}</span></router-link></li>
             </template>
