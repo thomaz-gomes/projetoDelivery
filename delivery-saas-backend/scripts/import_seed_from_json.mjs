@@ -11,11 +11,19 @@ async function main() {
   }
 
   const raw = JSON.parse(fs.readFileSync(file))
+  // helper: accept multiple possible key names (PascalCase, camelCase, plural)
+  function getArray(obj, ...keys) {
+    for (const k of keys) {
+      if (obj[k] && Array.isArray(obj[k])) return obj[k]
+    }
+    return null
+  }
   const prisma = new PrismaClient()
   try {
     // Companies
-    if (raw.companies && Array.isArray(raw.companies)) {
-      for (const c of raw.companies) {
+    const companies = getArray(raw, 'companies', 'Companies', 'Company')
+    if (companies && Array.isArray(companies)) {
+      for (const c of companies) {
         const data = {
           id: c.id || undefined,
           name: c.name || c.nome || 'Imported Company',
@@ -27,8 +35,9 @@ async function main() {
     }
 
     // Stores
-    if (raw.stores && Array.isArray(raw.stores)) {
-      for (const s of raw.stores) {
+    const stores = getArray(raw, 'stores', 'Stores', 'Store')
+    if (stores && Array.isArray(stores)) {
+      for (const s of stores) {
         const data = { slug: s.slug || (s.name ? s.name.toLowerCase().replace(/[^a-z0-9]+/g,'-') : undefined), name: s.name || s.nome, companyId: s.companyId }
         const where = data.slug ? { slug: data.slug } : { id: s.id }
         await prisma.store.upsert({ where, update: data, create: { ...data, address: s.address || s.endereco || '' } }).catch(()=>{})
@@ -36,8 +45,9 @@ async function main() {
     }
 
     // Users
-    if (raw.users && Array.isArray(raw.users)) {
-      for (const u of raw.users) {
+    const users = getArray(raw, 'users', 'Users', 'User')
+    if (users && Array.isArray(users)) {
+      for (const u of users) {
         const email = u.email || u.username
         if (!email) continue
         const password = u.password || u.senha || 'change-me'
@@ -48,16 +58,18 @@ async function main() {
     }
 
     // Printer settings
-    if (raw.printerSettings && Array.isArray(raw.printerSettings)) {
-      for (const p of raw.printerSettings) {
+    const printerSettings = getArray(raw, 'printerSettings', 'PrinterSetting', 'PrinterSettings', 'printer_setting')
+    if (printerSettings && Array.isArray(printerSettings)) {
+      for (const p of printerSettings) {
         const rec = { companyId: p.companyId, interface: p.interface || p.type || 'printer:EPSON', type: p.type || 'EPSON', width: p.width || p.paperWidth || 48 }
         await prisma.printerSetting.upsert({ where: { companyId: rec.companyId }, update: rec, create: rec }).catch(()=>{})
       }
     }
 
     // Payment methods
-    if (raw.paymentMethods && Array.isArray(raw.paymentMethods)) {
-      for (const pm of raw.paymentMethods) {
+    const paymentMethods = getArray(raw, 'paymentMethods', 'PaymentMethod', 'PaymentMethods')
+    if (paymentMethods && Array.isArray(paymentMethods)) {
+      for (const pm of paymentMethods) {
         const code = pm.code || pm.codigo || pm.name
         const rec = { code, name: pm.name || pm.nome || code, isActive: typeof pm.isActive !== 'undefined' ? pm.isActive : true, companyId: pm.companyId || undefined }
         await prisma.paymentMethod.upsert({ where: { code: rec.code }, update: rec, create: rec }).catch(()=>{})
@@ -65,8 +77,9 @@ async function main() {
     }
 
     // Menu categories
-    if (raw.menuCategories && Array.isArray(raw.menuCategories)) {
-      for (const mc of raw.menuCategories) {
+    const menuCategories = getArray(raw, 'menuCategories', 'MenuCategory', 'MenuCategories')
+    if (menuCategories && Array.isArray(menuCategories)) {
+      for (const mc of menuCategories) {
         const rec = { companyId: mc.companyId, menuId: mc.menuId, name: mc.name, position: mc.position || 0 }
         const where = mc.id ? { id: mc.id } : { name: rec.name }
         await prisma.menuCategory.upsert({ where, update: rec, create: { id: mc.id, ...rec } }).catch(()=>{})
@@ -74,8 +87,9 @@ async function main() {
     }
 
     // Products
-    if (raw.products && Array.isArray(raw.products)) {
-      for (const p of raw.products) {
+    const products = getArray(raw, 'products', 'Product', 'Products')
+    if (products && Array.isArray(products)) {
+      for (const p of products) {
         const pd = { id: p.id, companyId: p.companyId, menuId: p.menuId, categoryId: p.categoryId, name: p.name, price: String(p.price || p.preco || 0), position: p.position || 0 }
         const where = pd.id ? { id: pd.id } : { name: pd.name }
         await prisma.product.upsert({ where, update: pd, create: pd }).catch(()=>{})
@@ -83,8 +97,9 @@ async function main() {
     }
 
     // Option groups + options
-    if (raw.optionGroups && Array.isArray(raw.optionGroups)) {
-      for (const g of raw.optionGroups) {
+    const optionGroups = getArray(raw, 'optionGroups', 'OptionGroup', 'OptionGroups')
+    if (optionGroups && Array.isArray(optionGroups)) {
+      for (const g of optionGroups) {
         const grp = await prisma.optionGroup.upsert({ where: { id: g.id || g.name }, update: { name: g.name, min: g.min || 0, max: g.max || 0, companyId: g.companyId }, create: { id: g.id, name: g.name, min: g.min || 0, max: g.max || 0, companyId: g.companyId } }).catch(()=>null)
         if (g.options && Array.isArray(g.options)) {
           for (const o of g.options) {
@@ -96,8 +111,9 @@ async function main() {
     }
 
     // Customers and addresses
-    if (raw.customers && Array.isArray(raw.customers)) {
-      for (const c of raw.customers) {
+    const customers = getArray(raw, 'customers', 'Customers', 'Customer')
+    if (customers && Array.isArray(customers)) {
+      for (const c of customers) {
         const rec = { id: c.id || undefined, companyId: c.companyId || undefined, fullName: c.fullName || c.nome || 'Cliente', whatsapp: c.whatsapp || c.phone || null }
         const where = rec.id ? { id: rec.id } : { fullName: rec.fullName }
         await prisma.customer.upsert({ where, update: rec, create: rec }).catch(()=>{})
