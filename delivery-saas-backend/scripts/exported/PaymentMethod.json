@@ -1,0 +1,22 @@
+[
+  {
+    "id": "ad4f203c-2829-492f-83be-a67089504cd9",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "name": "Dinheiro",
+    "code": "CASH",
+    "isActive": true,
+    "config": {},
+    "createdAt": "2025-12-26T01:47:26.113Z",
+    "updatedAt": "2025-12-26T01:47:26.113Z"
+  },
+  {
+    "id": "341cff31-4e9d-4818-b6be-99e689504899",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "name": "Cartão",
+    "code": "cartao",
+    "isActive": true,
+    "config": {},
+    "createdAt": "2025-12-26T01:54:16.568Z",
+    "updatedAt": "2025-12-26T01:54:16.568Z"
+  }
+]

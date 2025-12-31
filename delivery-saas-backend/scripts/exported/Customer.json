@@ -1,0 +1,22 @@
+[
+  {
+    "id": "00f84118-fb7f-4f81-81f7-07484bab0a0c",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "fullName": "Thomaz",
+    "cpf": null,
+    "whatsapp": "5573991429676",
+    "phone": "5573991429676",
+    "createdAt": "2025-12-26T01:54:55.302Z",
+    "updatedAt": "2025-12-26T01:54:55.302Z"
+  },
+  {
+    "id": "0dc529f9-620a-4bd8-bc0d-2b50abebd26b",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "fullName": "Balcão",
+    "cpf": null,
+    "whatsapp": null,
+    "phone": null,
+    "createdAt": "2025-12-29T03:17:03.421Z",
+    "updatedAt": "2025-12-29T03:17:03.421Z"
+  }
+]

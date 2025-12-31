@@ -1,0 +1,16 @@
+[
+  {
+    "id": "74d2ac8c-22f2-4939-b559-98bd1b8d458f",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "menuId": "48209fba-bd8e-4f08-81c8-20239fc2a428",
+    "categoryId": "6200b1e7-c253-49d0-8bf7-b6a0fa47b873",
+    "image": "http://localhost:3000/public/uploads/products/74d2ac8c-22f2-4939-b559-98bd1b8d458f.jpg",
+    "name": "coxinha",
+    "description": "",
+    "price": "5",
+    "isActive": true,
+    "position": 0,
+    "createdAt": "2025-12-26T01:45:58.055Z",
+    "updatedAt": "2025-12-26T16:31:43.619Z"
+  }
+]

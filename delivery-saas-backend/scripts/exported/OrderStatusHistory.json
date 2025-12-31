@@ -1,0 +1,152 @@
+[
+  {
+    "id": "af0c83b8-e81a-426e-9022-98dbae3ff282",
+    "orderId": "d6b57093-ceb8-40ae-b72d-36c9930cb772",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-26T01:54:55.830Z"
+  },
+  {
+    "id": "065381dd-2f51-46a4-98fb-45371b65f9a9",
+    "orderId": "d6b57093-ceb8-40ae-b72d-36c9930cb772",
+    "from": "EM_PREPARO",
+    "to": "SAIU_PARA_ENTREGA",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Manual",
+    "createdAt": "2025-12-26T01:56:28.073Z"
+  },
+  {
+    "id": "ee6287d7-4951-412c-beb5-3a834c36a858",
+    "orderId": "4508c284-b0c1-4769-8db7-fc1ca991ebd7",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-26T01:57:48.981Z"
+  },
+  {
+    "id": "e05c6180-fdcb-451f-9f2b-530fefbca98b",
+    "orderId": "4508c284-b0c1-4769-8db7-fc1ca991ebd7",
+    "from": "EM_PREPARO",
+    "to": "SAIU_PARA_ENTREGA",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Manual",
+    "createdAt": "2025-12-26T01:57:52.147Z"
+  },
+  {
+    "id": "9bbb7e87-4c20-4ced-8e0a-17a8685d39aa",
+    "orderId": "2cb64a80-f9ae-4126-b9e4-a9ca2d034a11",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-26T02:10:26.509Z"
+  },
+  {
+    "id": "5f1ed992-ed03-482f-8068-716267b223ae",
+    "orderId": "56913a79-a7d5-44ba-b838-8cc15d6995bf",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-26T11:37:12.899Z"
+  },
+  {
+    "id": "e4436633-7107-4674-9e5d-76910752590a",
+    "orderId": "6d678a1c-12a7-439a-957c-9b3311a9e542",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-26T11:43:41.705Z"
+  },
+  {
+    "id": "d9d81738-ce86-4448-90cb-be86ae27e5b0",
+    "orderId": "9ff621b0-504d-4ced-9612-e5f50b67d937",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-26T12:08:11.320Z"
+  },
+  {
+    "id": "440338d9-ae31-44ec-bba8-e8f754e7c208",
+    "orderId": "f4ea24cc-9d03-481d-aca2-73f95804763a",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-27T18:25:44.098Z"
+  },
+  {
+    "id": "eaf65486-1cc0-4fbc-8f48-86a503641418",
+    "orderId": "d46c6522-26c2-4f64-ac71-ea6fd8dc20f7",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-27T18:26:02.537Z"
+  },
+  {
+    "id": "06a6b510-187e-413f-bda1-eba6958f1d3c",
+    "orderId": "d149daa3-d929-44a6-b10f-1e5bdda1a3e0",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-29T03:17:04.209Z"
+  },
+  {
+    "id": "54eeff56-9314-4025-830e-a25448a529af",
+    "orderId": "9e7eb0bb-81a7-426f-b06f-a79822baae61",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-29T03:38:24.064Z"
+  },
+  {
+    "id": "bb66f444-2b29-4344-82c4-f859452ccd2b",
+    "orderId": "75628505-716f-4beb-b3a8-29da8173c427",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-30T19:02:44.246Z"
+  },
+  {
+    "id": "5f6cf70d-5a8c-44f2-8c81-b9608b981570",
+    "orderId": "ad68e508-8c65-42ed-9840-ad4d6898dfe5",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-31T03:56:19.392Z"
+  },
+  {
+    "id": "90d87154-f255-4d92-b5a6-c9630b5f0d0d",
+    "orderId": "e9b77373-3b63-494c-83ae-38483c7776e4",
+    "from": null,
+    "to": "EM_PREPARO",
+    "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "byRiderId": null,
+    "reason": "Criação PDV",
+    "createdAt": "2025-12-31T04:04:44.100Z"
+  }
+]

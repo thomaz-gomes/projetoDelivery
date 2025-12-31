@@ -1,0 +1,12 @@
+[
+  {
+    "id": "6200b1e7-c253-49d0-8bf7-b6a0fa47b873",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "menuId": "48209fba-bd8e-4f08-81c8-20239fc2a428",
+    "name": "Teste",
+    "isActive": true,
+    "position": 0,
+    "createdAt": "2025-12-26T01:45:41.680Z",
+    "updatedAt": "2025-12-26T01:45:41.680Z"
+  }
+]

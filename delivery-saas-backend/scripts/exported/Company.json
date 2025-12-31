@@ -1,0 +1,20 @@
+[
+  {
+    "id": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+    "name": "Dev Company",
+    "slug": null,
+    "createdAt": "2025-12-25T02:36:54.544Z",
+    "alwaysOpen": true,
+    "timezone": null,
+    "weeklySchedule": null
+  },
+  {
+    "id": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "name": "Demo Lanchonete",
+    "slug": "demo-lanchonete",
+    "createdAt": "2025-12-25T23:08:08.543Z",
+    "alwaysOpen": true,
+    "timezone": "America/Sao_Paulo",
+    "weeklySchedule": null
+  }
+]

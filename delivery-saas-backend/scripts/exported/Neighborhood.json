@@ -1,0 +1,13 @@
+[
+  {
+    "id": "bab5f8ad-957a-4242-8135-a6711f235c20",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "name": "Centro",
+    "aliases": [
+      "centro"
+    ],
+    "deliveryFee": "1.5",
+    "riderFee": "2.5",
+    "createdAt": "2025-12-26T01:46:43.428Z"
+  }
+]

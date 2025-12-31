@@ -1,0 +1,24 @@
+[
+  {
+    "id": "91320493-e297-464a-a676-d3c62d6b7c88",
+    "name": "Starter",
+    "price": "59.9",
+    "menuLimit": 10,
+    "storeLimit": 1,
+    "unlimitedMenus": false,
+    "unlimitedStores": false,
+    "isActive": true,
+    "createdAt": "2025-12-25T02:35:00.960Z"
+  },
+  {
+    "id": "e21165e7-a909-48cb-90ba-7d4c1081f50c",
+    "name": "Plano Básico",
+    "price": "99",
+    "menuLimit": 2,
+    "storeLimit": 5,
+    "unlimitedMenus": false,
+    "unlimitedStores": false,
+    "isActive": true,
+    "createdAt": "2025-12-26T00:14:03.496Z"
+  }
+]
