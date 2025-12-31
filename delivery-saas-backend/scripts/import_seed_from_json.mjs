@@ -19,6 +19,15 @@ async function main() {
     return null
   }
   const prisma = new PrismaClient()
+  // helper to run and surface errors (don't silently swallow failures)
+  async function safe(fn, ctx) {
+    try {
+      return await fn()
+    } catch (e) {
+      console.error(ctx + ' failed:', e && (e.message || e))
+      return null
+    }
+  }
   try {
     // Companies
     const companies = getArray(raw, 'companies', 'Companies', 'Company')
@@ -126,7 +135,18 @@ async function main() {
       }
     }
 
-    console.log('Import completed')
+    // Print simple post-import counts to help debugging
+    try {
+      const counts = {
+        companies: await prisma.company.count().catch(e=>{ console.error('count company failed', e && e.message); return null }),
+        users: await prisma.user.count().catch(e=>{ console.error('count user failed', e && e.message); return null }),
+        products: await prisma.product.count().catch(e=>{ console.error('count product failed', e && e.message); return null }),
+        stores: await prisma.store.count().catch(e=>{ console.error('count store failed', e && e.message); return null })
+      }
+      console.log('Import completed — counts:', counts)
+    } catch (e) {
+      console.error('Failed to compute counts', e && e.message)
+    }
   } catch (e) {
     console.error('Import failed', e && e.message)
   } finally {
