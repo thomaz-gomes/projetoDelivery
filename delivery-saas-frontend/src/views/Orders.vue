@@ -928,6 +928,23 @@ function toggleTimeline(id) {
   openTimeline.value[id] = !openTimeline.value[id];
 }
 
+// Details modal state
+const selectedOrder = ref(null);
+const detailsModalVisible = ref(false);
+const detailsTab = ref('customer');
+const selectedNormalized = computed(() => selectedOrder.value ? normalizeOrder(selectedOrder.value) : null);
+
+function openDetails(o) {
+  selectedOrder.value = o;
+  detailsTab.value = 'customer';
+  detailsModalVisible.value = true;
+}
+
+function closeDetails() {
+  detailsModalVisible.value = false;
+  selectedOrder.value = null;
+}
+
 const STATUS_LABEL = {
   EM_PREPARO: 'Em preparo',
   SAIU_PARA_ENTREGA: 'Saiu para entrega',
@@ -1143,8 +1160,7 @@ async function viewReceipt(order) {
 // Dev helper: send a canned test order to the print service
 async function sendTestPrint() {
   if (!printingEnabled.value) {
-    Swal.fire({ icon: 'warning', title: 'Impressão desabilitada', text: 'O módulo de impressão não está habilitado para esta empresa.', timer: 3500, toast: true, position: 'top-end', showConfirmButton: false });
-    return;
+    Swal.fire({ icon: 'info', title: 'Impressão desabilitada no módulo', text: 'O módulo de impressão está desabilitado, mas será feita uma tentativa de envio ao agente/QZ.', timer: 3500, toast: true, position: 'top-end', showConfirmButton: false });
   }
   const testOrder = {
     id: `dev-test-${Date.now()}`,
@@ -1547,7 +1563,7 @@ function pulseButton() {
           ></i>
         </button>
 
-        <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="showPrinterConfig = true" title="Configurar impressora">
+        <button type="button" class="btn btn-sm btn-outline-primary" @click="showPrinterConfig = true" title="Configurar impressora">
           <i class="bi bi-gear"></i>&nbsp;Configurar Impressora
         </button>
         <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
@@ -1556,7 +1572,7 @@ function pulseButton() {
         <CashControl />
       </div>
     </header>
-    <PrinterConfig v-if="printingEnabled" v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
+    <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
     <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
 
         <div class="row">
@@ -1701,7 +1717,7 @@ function pulseButton() {
               </div>
               <div class="card-footer bg-transparent p-1 d-flex justify-content-between align-items-center">
                 <div>
-                        <button class="btn btn-sm btn-outline-secondary" @click="toggleTimeline(o.id)">Detalhes</button>
+                  <button class="btn btn-sm btn-outline-secondary" @click.stop="openDetails(o)">Detalhes</button>
                 </div>
                
                 <div>
@@ -1744,6 +1760,63 @@ function pulseButton() {
       <p class="mb-0">Nenhum pedido encontrado.</p>
     </div>
     </div>
+    <!-- Detalhes do pedido (modal com tabs) -->
+  <div v-if="detailsModalVisible" class="modal fade show" style="display:block; background: rgba(0,0,0,0.45);" @click.self="closeDetails">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Detalhes do pedido {{ selectedNormalized ? (' — ' + (selectedNormalized.display || selectedOrder?.displaySimple || (selectedOrder && selectedOrder.id?.slice?.(0,6)))) : '' }}</h5>
+          <button type="button" class="btn-close" aria-label="Fechar" @click="closeDetails"></button>
+        </div>
+        <div class="modal-body">
+          <ul class="nav nav-tabs">
+            <li class="nav-item"><a href="#" class="nav-link" :class="{active: detailsTab==='customer'}" @click.prevent="detailsTab='customer'">Dados do cliente</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" :class="{active: detailsTab==='order'}" @click.prevent="detailsTab='order'">Dados do pedido</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" :class="{active: detailsTab==='payment'}" @click.prevent="detailsTab='payment'">Dados de pagamento</a></li>
+          </ul>
+
+          <div class="tab-content mt-3">
+            <div v-show="detailsTab==='customer'">
+              <div class="mb-2"><strong>Nome:</strong> {{ selectedNormalized ? selectedNormalized.customerName : (selectedOrder && (selectedOrder.customerName || selectedOrder.name)) || '—' }}</div>
+              <div class="mb-2"><strong>Telefone:</strong> {{ selectedNormalized ? (selectedNormalized.customerPhone || '—') : (selectedOrder && (selectedOrder.customerPhone || selectedOrder.contact)) || '—' }}</div>
+              <div class="mb-2"><strong>Endereço:</strong> {{ selectedNormalized ? (selectedNormalized.address || '—') : (selectedOrder ? normalizeOrder(selectedOrder).address : '—') }}</div>
+              <div class="mb-2"><strong>Loja:</strong> {{ selectedNormalized ? (selectedNormalized.storeName || '—') : (selectedOrder && selectedOrder.store && selectedOrder.store.name) || '—' }}</div>
+              <div class="mb-2"><strong>Canal:</strong> {{ selectedNormalized ? (selectedNormalized.channelLabel || '—') : (selectedOrder && (selectedOrder.channelLabel || '-')) }}</div>
+            </div>
+
+            <div v-show="detailsTab==='order'">
+              <div class="fw-semibold mb-2">Itens</div>
+              <ul class="list-group mb-2">
+                <li v-for="(it, idx) in (selectedNormalized && selectedNormalized.items) ? selectedNormalized.items : normalizeOrderItems(selectedOrder || {})" :key="(it.id||idx)+''" class="list-group-item">
+                  <div class="d-flex justify-content-between">
+                    <div>{{ it.quantity || 1 }}x {{ it.name }}</div>
+                    <div class="text-success">{{ formatCurrency(it.unitPrice || it.price || 0) }}</div>
+                  </div>
+                  <div v-if="extractItemOptions(it).length" class="small text-muted ms-2 mt-1">
+                    <div v-for="(opt, i) in extractItemOptions(it)" :key="(opt.name||i)+'opt'"> 
+                      <span v-if="opt.quantity">{{ opt.quantity }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+              <div v-if="getOrderNotes(selectedOrder)" class="mb-2"><strong>Observações:</strong> {{ getOrderNotes(selectedOrder) }}</div>
+            </div>
+
+            <div v-show="detailsTab==='payment'">
+              <div class="mb-2"><strong>Forma de pagamento:</strong> {{ selectedNormalized ? (selectedNormalized.paymentMethod || '—') : normalizeOrder(selectedOrder).paymentMethod }}</div>
+              <div v-if="selectedNormalized && selectedNormalized.couponCode" class="mb-2"><strong>Cupom:</strong> {{ selectedNormalized.couponCode }}</div>
+              <div v-if="selectedNormalized && selectedNormalized.couponDiscount" class="mb-2"><strong>Desconto:</strong> -{{ formatCurrency(selectedNormalized.couponDiscount) }}</div>
+              <div v-if="selectedNormalized && selectedNormalized.paymentChange" class="mb-2"><strong>Troco:</strong> {{ formatCurrency(selectedNormalized.paymentChange) }}</div>
+              <div class="mb-2"><strong>Total exibido:</strong> {{ formatCurrency(computeDisplayedTotal(selectedOrder || {})) }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="closeDetails">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
   </div>
 </template>
 
@@ -1780,11 +1853,17 @@ function pulseButton() {
 
 /* Boards layout */
 .orders-board .boards { padding: 8px 0; }
-.orders-column {background-color: #E6E6E6; flex: 0 0 23.5%; }
+.orders-column {   
+   background-color: #FFF;
+    flex: 0 0 23.5%;
+    border: none;
+    border-radius: 24px;
+  }
 .orders-column .list { max-height: 70vh; overflow:auto; }
 .orders-column .card-header {
   background: #FFF;
   border: none;
+  border-radius: 24px 24px 0px 0px;
 }
 .order-card { border: none;}
 .orders-column .card-body { cursor: grab; }

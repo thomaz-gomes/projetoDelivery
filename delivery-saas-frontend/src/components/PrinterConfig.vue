@@ -61,6 +61,63 @@
             <label class="form-check-label" for="includeDesc">incluir descrição de itens na impressão</label>
           </div>
 
+          <hr />
+          <h6 class="small">Opções avançadas (QZ / Pixel)</h6>
+          <div class="row g-2">
+            <div class="col-md-3 mb-2">
+              <label class="form-label">pageWidth</label>
+              <input v-model="pageWidth" type="text" class="form-control form-control-sm" placeholder="ex: 8.5" />
+            </div>
+            <div class="col-md-3 mb-2">
+              <label class="form-label">pageHeight</label>
+              <input v-model="pageHeight" type="text" class="form-control form-control-sm" placeholder="ex: 11" />
+            </div>
+            <div class="col-md-2 mb-2">
+              <label class="form-label">Unidades</label>
+              <SelectInput v-model="units" class="form-select form-select-sm">
+                <option value="in">in</option>
+                <option value="mm">mm</option>
+              </SelectInput>
+            </div>
+            <div class="col-md-2 mb-2">
+              <label class="form-label">scaleContent</label>
+              <SelectInput v-model="scaleContent" class="form-select form-select-sm">
+                <option :value="undefined">auto</option>
+                <option :value="true">false (no scale)</option>
+                <option :value="false">true (scale)</option>
+              </SelectInput>
+            </div>
+            <div class="col-md-2 mb-2">
+              <label class="form-label">density</label>
+              <input v-model="density" type="text" class="form-control form-control-sm" placeholder="ex: 300" />
+            </div>
+          </div>
+
+          <div class="row g-2 mt-2">
+            <div class="col-md-2 mb-2">
+              <label class="form-label">copies</label>
+              <input v-model.number="copies" type="number" min="1" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-3 mb-2">
+              <label class="form-label">colorType</label>
+              <SelectInput v-model="colorType" class="form-select form-select-sm">
+                <option value="color">color</option>
+                <option value="grayscale">grayscale</option>
+                <option value="blackwhite">blackwhite</option>
+                <option value="default">default</option>
+              </SelectInput>
+            </div>
+            <div class="col-md-7 mb-2">
+              <label class="form-label">margins (top,right,bottom,left)</label>
+              <div class="d-flex gap-1">
+                <input v-model.number="margins.top" type="number" step="0.1" class="form-control form-control-sm" placeholder="top" />
+                <input v-model.number="margins.right" type="number" step="0.1" class="form-control form-control-sm" placeholder="right" />
+                <input v-model.number="margins.bottom" type="number" step="0.1" class="form-control form-control-sm" placeholder="bottom" />
+                <input v-model.number="margins.left" type="number" step="0.1" class="form-control form-control-sm" placeholder="left" />
+              </div>
+            </div>
+          </div>
+
         </div>
         <div class="modal-footer">
           <div class="me-auto text-start">
@@ -96,11 +153,38 @@ const alias = ref('');
 const printType = ref('thermal');
 const paperWidth = ref('80');
 const includeItemDescription = ref(false);
+const pageWidth = ref('');
+const pageHeight = ref('');
+const units = ref('in');
+const scaleContent = ref(undefined);
+const margins = ref({ top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 });
+const density = ref('');
+const copies = ref(1);
+const colorType = ref('default');
 const discovering = ref(false);
 const discoverError = ref('');
 const qzAvailable = ref(false);
 const generatedToken = ref('');
 const logs = ref([]);
+
+// Normalize various shapes returned by QZ into an array of unique printer names
+function normalizePrinters(raw) {
+  let v = raw;
+  try {
+    if (typeof v === 'string') {
+      // Some QZ clients may return a JSON string
+      const parsed = JSON.parse(v);
+      v = parsed;
+    }
+  } catch (e) {
+    // keep original
+  }
+  // Flatten one-level nested arrays
+  if (Array.isArray(v) && v.length === 1 && Array.isArray(v[0])) v = v[0];
+  if (!Array.isArray(v)) return [];
+  const flat = v.map(i => (typeof i === 'string' ? i : JSON.stringify(i))).filter(Boolean);
+  return Array.from(new Set(flat));
+}
 
 function pushLog(msg){
   try{
@@ -134,6 +218,14 @@ function loadSaved(){
       printType.value = cfg.printType || 'thermal';
       paperWidth.value = cfg.paperWidth || '80';
       includeItemDescription.value = !!cfg.includeItemDescription;
+      pageWidth.value = cfg.pageWidth || '';
+      pageHeight.value = cfg.pageHeight || '';
+      units.value = cfg.units || 'in';
+      scaleContent.value = typeof cfg.scaleContent === 'undefined' ? undefined : cfg.scaleContent;
+      if (cfg.margins) margins.value = Object.assign({}, margins.value, cfg.margins);
+      density.value = cfg.density || '';
+      copies.value = typeof cfg.copies !== 'undefined' ? cfg.copies : 1;
+      colorType.value = cfg.colorType || 'default';
     }
   }catch(e){ console.warn('Failed to load saved printer config', e); }
 }
@@ -152,25 +244,47 @@ async function discoverPrinters(){
         await initQZ();
         if (window.qz && window.qz.printers) {
           const listFn = window.qz.printers.findAll || window.qz.printers.getAll;
-          if (typeof listFn === 'function') {
+            if (typeof listFn === 'function') {
             const result = await listFn();
-            if (Array.isArray(result) && result.length) {
-              printers.value = result;
-              if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
-              pushLog('QZ returned ' + printers.value.length + ' printers');
-              discovering.value = false;
-              return;
-            } else {
-              pushLog('QZ returned empty printer list');
-            }
+            // TEMP LOG: show raw result from QZ before normalization
+            console.debug('QZ raw result (discoverPrinters):', result);
+            pushLog('Raw QZ result logged to console');
+              // Normalize result: QZ client may return an array, or a JSON string
+              // containing an array. Also handle nested arrays.
+              let normalized = result;
+              try {
+                if (typeof normalized === 'string') {
+                  const parsed = JSON.parse(normalized);
+                  normalized = parsed;
+                }
+              } catch (e) { /* keep original */ }
+
+              // If nested array like [["p1","p2"]], flatten once
+              if (Array.isArray(normalized) && normalized.length === 1 && Array.isArray(normalized[0])) {
+                normalized = normalized[0];
+              }
+
+              if (Array.isArray(normalized) && normalized.length) {
+                // Ensure all items are strings and unique
+                const flat = normalized.map(i => (typeof i === 'string' ? i : JSON.stringify(i))).filter(Boolean);
+                const unique = Array.from(new Set(flat));
+                printers.value = unique;
+                if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
+                pushLog('QZ returned ' + printers.value.length + ' printers');
+                discovering.value = false;
+                return;
+              } else {
+                pushLog('QZ returned empty printer list');
+              }
           } else if (typeof window.qz.printers.find === 'function') {
-            // As a last resort, try getting default printer name
+            // As a last resort, try getting default printer name or an alternate
             try {
               const def = await window.qz.printers.find();
-              if (def) {
-                printers.value = [def];
-                if (!printerName.value) printerName.value = def;
-                pushLog('QZ returned default printer');
+              const arr = normalizePrinters(def);
+              if (arr.length) {
+                printers.value = arr;
+                if (!printerName.value) printerName.value = arr[0];
+                pushLog('QZ returned default printer(s): ' + arr.length);
                 discovering.value = false;
                 return;
               }
@@ -190,36 +304,11 @@ async function discoverPrinters(){
     }
     return;
   }
-  pushLog('discoverPrinters called; querying backend agent-print/printers');
-  try {
-    // call backend to ask a connected agent for printers
-    const storeId = (window && window.currentStoreId) || '';
-    const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : '';
-    const base = String((API_URL || '')).replace(/\/$/, '') || '';
-    const res = await fetch(`${base}/agent-print/printers${qs}`);
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      discoverError.value = `Falha ao consultar agentes: ${res.status} ${txt}`;
-      pushLog('agent-print/printers failed: ' + String(txt || res.status));
-      discovering.value = false;
-      return;
-    }
-    const body = await res.json();
-    if (body && Array.isArray(body.printers)) {
-      printers.value = body.printers;
-      if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
-      pushLog('agent-print/printers found ' + printers.value.length + ' printers');
-    } else {
-      discoverError.value = 'Nenhum agente respondeu com lista de impressoras.';
-      pushLog('agent-print/printers returned no printers');
-    }
-  } catch (e) {
-    console.warn('discoverPrinters error', e);
-    discoverError.value = String(e?.message || e || 'Erro desconhecido');
-    pushLog('discover error: ' + String(e?.message || e));
-  } finally {
-    discovering.value = false;
-  }
+  // Legacy agent-based discovery has been removed. Inform the user and
+  // allow manual configuration or QZ-based discovery instead.
+  pushLog('agent-print discovery removed; use QZ Tray or enter printer name manually');
+  discoverError.value = 'A descoberta via agentes foi removida — insira o nome da impressora manualmente ou use QZ Tray.';
+  discovering.value = false;
 }
 
 // Force discovery via browser QZ API and show detailed errors
@@ -234,8 +323,17 @@ async function discoverPrintersQZ(){
       const listFn = window.qz.printers.findAll || window.qz.printers.getAll;
       if (typeof listFn === 'function') {
         const result = await listFn();
-        if (Array.isArray(result) && result.length) {
-          printers.value = result;
+        // TEMP LOG: show raw result from QZ before normalization
+        console.debug('QZ raw result (discoverPrintersQZ):', result);
+        pushLog('Raw QZ result logged to console');
+        // Normalize similar to discoverPrinters
+        let normalized = result;
+        try { if (typeof normalized === 'string') normalized = JSON.parse(normalized); } catch(e){}
+        if (Array.isArray(normalized) && normalized.length === 1 && Array.isArray(normalized[0])) normalized = normalized[0];
+        if (Array.isArray(normalized) && normalized.length) {
+          const flat = normalized.map(i => (typeof i === 'string' ? i : JSON.stringify(i))).filter(Boolean);
+          const unique = Array.from(new Set(flat));
+          printers.value = unique;
           if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
           pushLog('QZ returned ' + printers.value.length + ' printers');
         } else {
@@ -243,12 +341,13 @@ async function discoverPrintersQZ(){
           pushLog('QZ returned empty');
         }
       } else {
-        // Fall back to default printer
+        // Fall back to default printer or alternate shapes
         const def = await window.qz.printers.find();
-        if (def) {
-          printers.value = [def];
-          if (!printerName.value) printerName.value = def;
-          pushLog('QZ returned default printer');
+        const arr = normalizePrinters(def);
+        if (arr.length) {
+          printers.value = arr;
+          if (!printerName.value) printerName.value = arr[0];
+          pushLog('QZ returned default printer(s): ' + arr.length);
         } else {
           discoverError.value = 'QZ não retornou impressoras.';
         }
@@ -291,6 +390,14 @@ function save(){
     printType: printType.value,
     paperWidth: paperWidth.value,
     includeItemDescription: includeItemDescription.value,
+    pageWidth: pageWidth.value,
+    pageHeight: pageHeight.value,
+    units: units.value,
+    scaleContent: scaleContent.value,
+    margins: margins.value,
+    density: density.value,
+    copies: copies.value,
+    colorType: colorType.value,
   };
   try{ localStorage.setItem('printerConfig', JSON.stringify(cfg)); } catch(e){ console.warn('Failed to save printer config', e); }
 

@@ -136,13 +136,9 @@ export async function checkConnectivity() {
           connected = true;
           return connected;
         }
-
-        try {
-          const res = await fetch(`${BACKEND_BASE}/agent-print/printers`, { method: 'GET' });
-          connected = res.ok;
-        } catch (e) {
-          connected = false;
-        }
+        // If QZ is enabled but not available in-window, consider not connected.
+        // Legacy `/agent-print/printers` endpoint was removed; avoid probing it.
+        connected = false;
       } finally {
         connectingPromise = null;
       }
@@ -150,25 +146,13 @@ export async function checkConnectivity() {
     })();
     return connectingPromise;
   }
-
-  connectingPromise = (async () => {
-    try {
-      const res = await fetch(`${BACKEND_BASE}/agent-print/printers`, { method: 'GET' });
-      // If the backend returns 404 it means no agent is connected — treat as
-      // "not connected" but avoid throwing. This prevents noisy error handling
-      // while the UI can display "no printers" gracefully.
-      if (res.status === 404) {
-        connected = false;
-      } else {
-        connected = res.ok;
-      }
-    } catch (e) {
-      connected = false;
-    } finally {
-      connectingPromise = null;
-      return connected;
-    }
-  })();
+  // For non-QZ builds, the legacy agent discovery endpoint was removed.
+  // Mark connectivity as false by default and avoid network probes.
+  connectingPromise = Promise.resolve(false).then(() => {
+    connected = false;
+    connectingPromise = null;
+    return connected;
+  });
   return connectingPromise;
 }
 

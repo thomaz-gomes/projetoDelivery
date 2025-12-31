@@ -1,0 +1,19 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | Frango empanado | 22.9
+
+
+[alignLeft]
+Cliente: Cliente
+Endereço: -
+Total: R$ 0.00
+
+
+FORMAS DE PAGAMENTO
+
+
+[alignCenter]
+Obrigado!
+[CUT]

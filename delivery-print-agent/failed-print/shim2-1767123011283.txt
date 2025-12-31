@@ -1,0 +1,18 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+
+
+[alignLeft]
+Cliente: PEDIDO DE TESTE -  Thomaz Campos Gomes
+Endereço: Rua TESTE, 999999
+Total: R$ 27.00
+
+
+FORMAS DE PAGAMENTO
+
+
+[alignCenter]
+Obrigado!
+[CUT]

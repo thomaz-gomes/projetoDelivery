@@ -1,0 +1,20 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | Pizza Margherita | 0
+1 | Coca-Cola 350ml | 0
+
+
+[alignLeft]
+Cliente: Cliente Teste
+Endereço: Rua Exemplo, 123
+Total: R$ 36.40
+
+
+FORMAS DE PAGAMENTO
+
+
+[alignCenter]
+Obrigado!
+[CUT]

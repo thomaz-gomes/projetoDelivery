@@ -1,0 +1,19 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | Produto 1 | 20
+
+
+[alignLeft]
+Cliente: Thomaz Gomes
+Endereço: -
+Total: R$ 30.00
+
+
+FORMAS DE PAGAMENTO
+
+
+[alignCenter]
+Obrigado!
+[CUT]
