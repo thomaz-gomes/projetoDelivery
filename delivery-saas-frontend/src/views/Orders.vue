@@ -1736,7 +1736,7 @@ function pulseButton() {
                     <div class="fw-semibold">{{ it.quantity || 1 }}x {{ it.name }} <span class="text-success ms-2">{{ formatCurrency(it.unitPrice || 0) }}</span></div>
                     <div v-if="extractItemOptions(it).length" class="small text-muted ms-3 mt-1">
                       <div v-for="(opt, idx) in extractItemOptions(it)" :key="(opt.name || idx) + idx">
-                        <span v-if="opt.quantity">{{ opt.quantity }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
+                        <span v-if="opt.quantity">{{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
                       </div>
                     </div>
                   </li>
@@ -1794,7 +1794,7 @@ function pulseButton() {
                   </div>
                   <div v-if="extractItemOptions(it).length" class="small text-muted ms-2 mt-1">
                     <div v-for="(opt, i) in extractItemOptions(it)" :key="(opt.name||i)+'opt'"> 
-                      <span v-if="opt.quantity">{{ opt.quantity }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
+                      <span v-if="opt.quantity">{{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
                     </div>
                   </div>
                 </li>

@@ -23,13 +23,25 @@
               <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
             </SelectInput>
           </div>
-          <div class="col-md-4">
-            <label class="form-label">Menu (opcional)</label>
-            <SelectInput   v-model="form.menuId"  class="form-control">
-              <option :value="null">-- Nenhum --</option>
-              <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
-            </SelectInput>
-          </div>
+            <div class="col-md-4">
+              <label class="form-label">Menu (opcional)</label>
+              <SelectInput   v-model="form.menuId"  class="form-control">
+                <option :value="null">-- Nenhum --</option>
+                <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
+              </SelectInput>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Ficha Técnica (opcional)</label>
+              <SelectInput v-model="form.technicalSheetId" class="form-control">
+                <option :value="null">-- Nenhuma --</option>
+                <option v-for="s in technicalSheets" :key="s.id" :value="s.id">{{ s.name }} ({{ s.itemCount || 0 }} itens)</option>
+              </SelectInput>
+              <div class="small text-muted mt-1">
+                <div v-if="sheetCost !== undefined && sheetCost !== null">Custo da ficha: <strong>{{ sheetCost.toFixed(2) }}</strong></div>
+                <div v-if="cmvPercent !== null">CMV: <strong>{{ cmvPercent.toFixed(2) }}%</strong> (R$ {{ sheetCost.toFixed(2) }})</div>
+                <div v-else class="text-muted">Preencha o preço para ver o CMV</div>
+              </div>
+            </div>
           <div class="col-md-4">
             <label class="form-label">Posição</label>
             <input v-model.number="form.position" type="number" class="form-control" />
@@ -92,10 +104,11 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null })
 const groups = ref([])
 const categories = ref([])
 const menus = ref([])
+const technicalSheets = ref([])
 const saving = ref(false)
 const error = ref('')
 const uploadProgress = ref(0)
@@ -121,6 +134,8 @@ async function load(){
     }catch(e){ categories.value = [] }
     // load menus for select
     try{ const mr = await api.get('/menu/menus'); menus.value = mr.data || [] }catch(e){ menus.value = [] }
+    // load technical sheets for select and CMV calc
+    try{ const ts = await api.get('/technical-sheets'); technicalSheets.value = ts.data || [] }catch(e){ technicalSheets.value = [] }
     // prefill category and menu if passed in query
     if(!isEdit){
       if(route.query.categoryId){ form.value.categoryId = route.query.categoryId }
@@ -145,7 +160,7 @@ async function save(){
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
     if(isEdit){
-      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId }
+      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId }
       await api.patch(`/menu/products/${id}`, payload)
       // sync groups
       try{ await api.post(`/menu/products/${id}/option-groups`, { groupIds: form.value.optionGroupIds || [] }) }catch(e){ console.warn('Failed to sync groups', e) }
@@ -162,7 +177,7 @@ async function save(){
         else { router.push({ path: '/menu/admin' }) }
       }
     } else {
-  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId }
+  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId }
       const res = await api.post('/menu/products', payload)
       const newId = res.data.id
       // attach groups
@@ -213,6 +228,25 @@ onBeforeUnmount(()=>{
 
 // register components
 const __components = { ImageUploader, TextInput, TextareaInput }
+
+// computed helpers for CMV
+const selectedTechnicalSheet = computed(() => {
+  try{ return technicalSheets.value.find(s => String(s.id) === String(form.value.technicalSheetId)) || null }catch(e){ return null }
+})
+function sheetTotalCost(sheet){
+  if(!sheet || !sheet.items) return 0
+  return sheet.items.reduce((acc, it) => {
+    const cost = (it.ingredient && it.ingredient.avgCost) ? Number(it.ingredient.avgCost) : 0
+    const qty = Number(it.quantity || 0)
+    return acc + (cost * qty)
+  }, 0)
+}
+const sheetCost = computed(() => sheetTotalCost(selectedTechnicalSheet.value))
+const cmvPercent = computed(() => {
+  const price = Number(form.value.price || 0)
+  if(!price || price <= 0) return null
+  return (sheetCost.value / price) * 100
+})
 </script>
 
 <style scoped>

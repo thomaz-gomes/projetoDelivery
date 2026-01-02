@@ -32,6 +32,10 @@ import companiesRouter from './routes/companies.js'
 import storesRouter from './routes/stores.js'
 import usersRouter from './routes/users.js'
 import rolesRouter from './routes/rolePermissions.js'
+import ingredientGroupsRouter from './routes/ingredientGroups.js'
+import ingredientsRouter from './routes/ingredients.js'
+import technicalSheetsRouter from './routes/technicalSheets.js'
+import stockMovementsRouter from './routes/stockMovements.js'
 import agentSetupRouter from './routes/agentSetup.js'
 import agentPrintRouter from './routes/agentPrint.js'
 import qzPrintRouter from './routes/qzPrint.js'
@@ -172,6 +176,10 @@ app.use('/settings', menuAdminRouter);
 app.use('/stores', storesRouter);
 app.use('/users', usersRouter);
 app.use('/roles', rolesRouter);
+app.use('/ingredient-groups', ingredientGroupsRouter);
+app.use('/ingredients', ingredientsRouter);
+app.use('/technical-sheets', technicalSheetsRouter);
+app.use('/stock-movements', stockMovementsRouter);
 // Agent setup endpoint: returns socket URL and store IDs for the authenticated user's company
 app.use('/agent-setup', agentSetupRouter);
 app.use('/agent-print', requireModule('printing'), agentPrintRouter);

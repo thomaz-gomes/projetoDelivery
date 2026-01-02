@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, onMounted, onUpdated, nextTick, onUnmounted } from 'vue';
+import { computed, reactive, ref, onMounted, onUpdated, nextTick, onUnmounted, watch } from 'vue';
 import { useModulesStore } from '../stores/modules'
 import api from '../api'
 import { useSaasStore } from '../stores/saas'
@@ -28,6 +28,12 @@ const nav = [
   ] },
   { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill' },
   { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated' },
+  { name: 'Ingredientes', to: '/ingredient-groups', icon: 'bi bi-box', children: [
+    { name: 'Grupos de Ingredientes', to: '/ingredient-groups', icon: 'bi bi-list' },
+    { name: 'Ingredientes', to: '/ingredients', icon: 'bi bi-basket' },
+    { name: 'Fichas Técnicas', to: '/technical-sheets', icon: 'bi bi-file-earmark-text' }
+    , { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat' }
+  ] },
     { name: 'Lista de cardápios', to: '/menu/menus', icon: 'bi bi-list' },
  
   
@@ -56,6 +62,25 @@ const nav = [
 
 // collapsed state for parent items with children (true = collapsed)
 const parentsCollapsed = reactive({})
+
+// initialize collapsed state for parents based on current route
+function initParentsCollapsed(){
+  try{
+    const p = String(route.path || '');
+    // load persisted collapsed state if present
+    let stored = {};
+    try{ const raw = localStorage.getItem('sidebar-parents-collapsed'); if (raw) stored = JSON.parse(raw); }catch(e){}
+    visibleNav.value && visibleNav.value.forEach(item => {
+      if (item && Array.isArray(item.children) && item.to) {
+        if (Object.prototype.hasOwnProperty.call(stored, item.to)) {
+          parentsCollapsed[item.to] = !!stored[item.to];
+        } else {
+          parentsCollapsed[item.to] = !p.startsWith(item.to);
+        }
+      }
+    });
+  }catch(e){}
+}
 
 // when sidebar is mini, allow opening a floating submenu on parent click
 const openSub = ref(null);
@@ -172,10 +197,22 @@ function toggleMini(){
   nextTick(() => { try{ initLocalTooltips(); } catch(e){} });
 }
 
-onMounted(() => { nextTick(initLocalTooltips); document.addEventListener('click', onDocumentClick); document.addEventListener('keydown', onDocumentKeydown); window.addEventListener('resize', updateIsMobile); updateIsMobile(); });
+onMounted(() => { nextTick(initLocalTooltips); document.addEventListener('click', onDocumentClick); document.addEventListener('keydown', onDocumentKeydown); window.addEventListener('resize', updateIsMobile); updateIsMobile(); nextTick(initParentsCollapsed); });
 onMounted(()=>{ loadMenusWidget().catch(()=>{}) })
 onMounted(()=>{ saas.fetchMySubscription().catch(()=>{}) })
-onUpdated(() => { nextTick(initLocalTooltips); });
+onUpdated(() => { nextTick(initLocalTooltips); nextTick(initParentsCollapsed); });
+
+// keep parent collapse state in sync when route changes
+watch(() => route.path, () => { try{ initParentsCollapsed(); }catch(e){} });
+
+// persist parentsCollapsed to localStorage whenever it changes
+watch(parentsCollapsed, () => {
+  try{
+    const plain = {};
+    for (const k in parentsCollapsed) { plain[k] = parentsCollapsed[k]; }
+    localStorage.setItem('sidebar-parents-collapsed', JSON.stringify(plain));
+  }catch(e){}
+}, { deep: true });
 onUnmounted(() => { try{ document.removeEventListener('click', onDocumentClick); document.removeEventListener('keydown', onDocumentKeydown); window.removeEventListener('resize', updateIsMobile); }catch(e){} });
  
 

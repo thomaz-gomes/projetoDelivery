@@ -7,6 +7,13 @@ import WhatsAppConnect from './views/WhatsAppConnect.vue';
 import Riders from './views/Riders.vue';
 import RiderForm from './views/RiderForm.vue';
 import Neighborhoods from './views/Neighborhoods.vue';
+import IngredientGroups from './views/IngredientGroups.vue';
+import Ingredients from './views/Ingredients.vue';
+import IngredientGroupForm from './views/ingredients/IngredientGroupForm.vue';
+import IngredientForm from './views/ingredients/IngredientForm.vue';
+import TechnicalSheets from './views/TechnicalSheets.vue';
+import StockMovements from './views/StockMovements.vue';
+import StockMovementForm from './views/StockMovementForm.vue';
 import RiderAccount from './views/RiderAccount.vue';
 import RiderAccountAdmin from './views/RiderAccountAdmin.vue';
 import api from './api';
@@ -84,6 +91,16 @@ const router = createRouter({
   { path: '/riders/:id/account', component: RiderAccountAdmin, meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/rider-adjustments', component: RiderAdjustments, meta: { requiresAuth: true } },
   { path: '/settings/neighborhoods', component: Neighborhoods, meta: { requiresAuth: true } },
+  { path: '/ingredient-groups', component: IngredientGroups, meta: { requiresAuth: true } },
+  { path: '/ingredient-groups/new', component: IngredientGroupForm, meta: { requiresAuth: true } },
+  { path: '/ingredient-groups/:id/edit', component: IngredientGroupForm, meta: { requiresAuth: true } },
+  { path: '/ingredients', component: Ingredients, meta: { requiresAuth: true } },
+  { path: '/ingredients/new', component: IngredientForm, meta: { requiresAuth: true } },
+  { path: '/ingredients/:id', component: IngredientForm, meta: { requiresAuth: true } },
+  { path: '/technical-sheets', component: TechnicalSheets, meta: { requiresAuth: true } },
+  { path: '/stock-movements', component: StockMovements, meta: { requiresAuth: true } },
+  { path: '/stock-movements/new', component: StockMovementForm, meta: { requiresAuth: true } },
+  { path: '/stock-movements/:id', component: StockMovementForm, meta: { requiresAuth: true } },
   { path: '/settings/company', component: CompanySettings, meta: { requiresAuth: true } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true } },
   { path: '/settings/ifood', component: IFoodIntegration }, // 👈 AQUI

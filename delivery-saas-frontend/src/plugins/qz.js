@@ -121,10 +121,21 @@ export async function printComanda(order) {
   const base = getBaseApi();
 
   try {
+    // Send both `orderId` (when available) and the full `order` object when
+    // present. The backend will prefer `orderId` lookup but can render a
+    // printable payload from the supplied `order` when the record is not
+    // persisted (useful for dev/test orders or preview flows).
+    const payload = {};
+    if (order && typeof order === 'object') {
+      if (order.id) payload.orderId = order.id;
+      payload.order = order;
+    } else {
+      payload.orderId = order;
+    }
     const res = await fetch(`${base}/qz-print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: order.id || order })
+      body: JSON.stringify(payload)
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => '');

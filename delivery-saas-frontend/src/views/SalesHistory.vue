@@ -6,11 +6,11 @@
       <div class="card-body">
         <div class="row g-2 align-items-end">
           <div class="col-md-3">
-            <label class="form-label">Data início <small class="text-muted">(padrão: hoje)</small></label>
+            <label class="form-label">Data início</label>
             <DateInput v-model="filters.from" inputClass="form-control" />
           </div>
           <div class="col-md-3">
-            <label class="form-label">Data fim <small class="text-muted">(padrão: hoje)</small></label>
+            <label class="form-label">Data fim</label>
             <DateInput v-model="filters.to" inputClass="form-control" />
           </div>
           <div class="col-md-3">

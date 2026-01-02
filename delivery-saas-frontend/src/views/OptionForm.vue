@@ -18,6 +18,18 @@
             <label class="form-label">Preço</label>
             <CurrencyInput v-model="form.price" inputClass="form-control" :min="0" placeholder="0,00" />
           </div>
+            <div class="col-md-3">
+              <label class="form-label">Ficha Técnica (opcional)</label>
+              <SelectInput v-model="form.technicalSheetId" class="form-select">
+                <option :value="null">-- Nenhuma --</option>
+                <option v-for="s in technicalSheets" :key="s.id" :value="s.id">{{ s.name }} ({{ s.itemCount || 0 }} itens)</option>
+              </SelectInput>
+              <div class="small text-muted mt-1">
+                <div v-if="sheetCost !== undefined && sheetCost !== null">Custo: <strong>{{ sheetCost.toFixed(2) }}</strong></div>
+                <div v-if="cmvPercent !== null">CMV: <strong>{{ cmvPercent.toFixed(2) }}%</strong> (R$ {{ sheetCost.toFixed(2) }})</div>
+                <div v-else class="text-muted">Preencha o preço para ver o CMV</div>
+              </div>
+            </div>
           <div class="col-md-3">
             <label class="form-label">Posição</label>
             <input v-model.number="form.position" type="number" class="form-control" />
@@ -143,8 +155,9 @@ const isEdit = Boolean(id)
 const query = route.query || {}
 const groupId = query.groupId || null
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isAvailable: true, alwaysAvailable: true, availableDays: [], availableFrom: '', availableTo: '', linkedProductId: null, image: null })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isAvailable: true, alwaysAvailable: true, availableDays: [], availableFrom: '', availableTo: '', linkedProductId: null, image: null, technicalSheetId: null })
 const productsList = ref([])
+const technicalSheets = ref([])
 const saving = ref(false)
 const error = ref('')
 
@@ -185,12 +198,15 @@ async function load(){
           availableFrom: o.availableFrom || '',
           availableTo: o.availableTo || '',
           linkedProductId: o.linkedProductId || null,
-          image: o.image || null
+          image: o.image || null,
+          technicalSheetId: o.technicalSheetId || null
         }
       }
     } else if(groupId){
       // prefill groupId context if provided
     }
+    // load technical sheets
+    try{ const ts = await api.get('/technical-sheets'); technicalSheets.value = ts.data || [] }catch(e){ technicalSheets.value = [] }
   }catch(e){ console.error(e); error.value = 'Falha ao carregar dados' }
 }
 
@@ -206,6 +222,7 @@ async function save(){
     const payload = {
       name: form.value.name,
       description: form.value.description,
+      technicalSheetId: form.value.technicalSheetId || null,
       price: Number(form.value.price || 0),
       position: Number(form.value.position || 0),
       isAvailable: !!form.value.isAvailable,
@@ -258,6 +275,25 @@ function onImageLoaded(e){ const img = cropperImage.value; if(!img) return; cons
 
 const cropBoxStyle = computed(() => {
   const dw = imgDisplay.w || 0; const dh = imgDisplay.h || 0; const side = Math.min(dw, dh) * (cropSizePct.value / 100); const offsetX = imgDisplay.leftInContainer || 0; const offsetY = imgDisplay.topInContainer || 0; const left = offsetX + (dw - side) / 2 + (cropPos.value.x || 0); const top = offsetY + (dh - side) / 2 + (cropPos.value.y || 0); return { left: `${left}px`, top: `${top}px`, width: `${side}px`, height: `${side}px` }
+})
+
+// CMV helpers for option
+const selectedTechnicalSheet = computed(() => {
+  try{ return technicalSheets.value.find(s => String(s.id) === String(form.value.technicalSheetId)) || null }catch(e){ return null }
+})
+function sheetTotalCost(sheet){
+  if(!sheet || !sheet.items) return 0
+  return sheet.items.reduce((acc, it) => {
+    const cost = (it.ingredient && it.ingredient.avgCost) ? Number(it.ingredient.avgCost) : 0
+    const qty = Number(it.quantity || 0)
+    return acc + (cost * qty)
+  }, 0)
+}
+const sheetCost = computed(() => sheetTotalCost(selectedTechnicalSheet.value))
+const cmvPercent = computed(() => {
+  const price = Number(form.value.price || 0)
+  if(!price || price <= 0) return null
+  return (sheetCost.value / price) * 100
 })
 
 function startDrag(e){ const p = e; dragging = true; dragStart = { x: p.clientX, y: p.clientY, startPos: { ...cropPos.value } }; window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', endDrag) }

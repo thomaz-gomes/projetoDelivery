@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
 import { formatCurrency } from '../utils/formatters.js';
@@ -30,6 +30,22 @@ async function fetchList() {
 
 function edit(n) {
   form.value = { id: n.id, name: n.name, aliases: Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '').toString(), deliveryFee: (n.deliveryFee || 0).toString(), riderFee: (n.riderFee || 0).toString() };
+  nextTick(() => {
+    const el = document.querySelector('input[placeholder="Nome do bairro"]');
+    if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  });
+}
+
+async function removeNeighborhood(n) {
+  if (!confirm(`Remover bairro "${n.name}"? Esta ação não pode ser desfeita.`)) return;
+  try {
+    await api.delete(`/neighborhoods/${n.id}`);
+    if (form.value.id === n.id) resetForm();
+    await fetchList();
+  } catch (e) {
+    console.error(e);
+    error.value = e?.response?.data?.message || 'Erro ao remover bairro';
+  }
 }
 
 function resetForm() {
@@ -149,7 +165,12 @@ async function testMatch() {
               <td>{{ Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '') }}</td>
               <td>{{ formatCurrency(n.deliveryFee) }}</td>
               <td>{{ formatCurrency(n.riderFee) }}</td>
-              <td><button class="btn btn-sm btn-outline-secondary" @click="edit(n)">Editar</button></td>
+              <td>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-sm btn-outline-secondary" @click="edit(n)">Editar</button>
+                  <button class="btn btn-sm btn-outline-danger" @click="removeNeighborhood(n)">Remover</button>
+                </div>
+              </td>
             </tr>
             <tr v-if="list.length === 0">
               <td colspan="5" class="text-center text-muted py-4">Nenhum bairro cadastrado.</td>

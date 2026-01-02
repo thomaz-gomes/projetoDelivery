@@ -25,24 +25,62 @@ let connectingPromise = null;
 // ================================
 function formatOrderText(order) {
   const display = order.displaySimple != null ? String(order.displaySimple).padStart(2, '0') : (order.displayId != null ? String(order.displayId).padStart(2,'0') : "PEDIDO");
+  // resolve address with several fallbacks and ensure it's a string
+  function formatAddress(a) {
+    if (!a && !order) return '-';
+    const src = a ?? null;
+    if (!src) return '-';
+    if (typeof src === 'string') return src;
+    // common shapes: { formattedAddress }, { formatted }, { address }, { street, number, neighborhood, city }
+    if (typeof src === 'object') {
+      if (src.formattedAddress) return String(src.formattedAddress);
+      if (src.formatted) return String(src.formatted);
+      if (src.fullAddress) return String(src.fullAddress);
+      if (src.line) return String(src.line);
+      // nested formatted inside deliveryAddress
+      if (src.deliveryAddress && src.deliveryAddress.formattedAddress) return String(src.deliveryAddress.formattedAddress);
+      // try common fields
+      const parts = [];
+      if (src.street || src.logradouro || src.streetName) parts.push(src.street || src.logradouro || src.streetName);
+      if (src.number || src.numero) parts.push(src.number || src.numero);
+      if (src.neighborhood || src.bairro) parts.push(src.neighborhood || src.bairro);
+      if (src.city || src.cidade) parts.push(src.city || src.cidade);
+      if (parts.length) return parts.join(', ');
+      // last resort: JSON stringify concise
+      try { return JSON.stringify(src); } catch(e){ return String(src); }
+    }
+    return String(src);
+  }
+
+  const rawAddr = order.address || (order.payload && (order.payload.rawPayload?.address || order.payload.delivery?.deliveryAddress?.formattedAddress || order.payload.delivery?.deliveryAddress)) || order.addressText || null;
+  const resolvedAddress = formatAddress(rawAddr);
   const header = `
 ==============================
       ${display}
 ==============================
 Cliente: ${order.customerName || "Não informado"}
-Endereço: ${order.address || "-"}
+Endereço: ${resolvedAddress}
 ------------------------------
 `;
-  const items = (order.items || [])
-    .map(
-      (it) => {
-        const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
-        const name = String(it.name || it.title || it.productName || '').slice(0, 25);
-        const priceNum = Number(it.price ?? it.unitPrice ?? it.unit_price ?? it.amount ?? 0) || 0;
-        return `${String(qty).padStart(2, " ")}x ${name.padEnd(25, " ")} R$${priceNum.toFixed(2).padStart(6, " ")}`;
-      }
-    )
-    .join("\n");
+
+  // build items block including selected options per item
+  const itemsArr = Array.isArray(order.items) ? order.items : (order.payload && Array.isArray(order.payload.items) ? order.payload.items : []);
+  const items = itemsArr.map((it) => {
+    const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
+    const name = String(it.name || it.title || it.productName || '').slice(0, 25);
+    const priceNum = Number(it.price ?? it.unitPrice ?? it.unit_price ?? it.amount ?? it.unitPrice ?? 0) || 0;
+    const mainLine = `${String(qty).padStart(2, " ")}x ${name.padEnd(25, " ")} R$${priceNum.toFixed(2).padStart(6, " ")}`;
+    const opts = Array.isArray(it.options) ? it.options : (Array.isArray(it.addons) ? it.addons : []);
+    const optsLines = (opts || []).map(o => {
+      const oq = Number(o.quantity ?? o.qty ?? 1) || 1;
+      const oname = String(o.name || o.title || o.productName || '').slice(0, 30);
+      const op = Number(o.price ?? o.unitPrice ?? o.amount ?? 0) || 0;
+        const totalOptQty = oq * qty; // multiply option qty by item qty to display total option units
+        const prefix = totalOptQty && totalOptQty > 1 ? `${totalOptQty}x ` : '';
+      return `  - ${prefix}${oname}${op ? ` — R$${op.toFixed(2)}` : ''}`;
+    }).join('\\n');
+    return mainLine + (optsLines ? '\\n' + optsLines : '');
+  }).join('\\n');
 
   const totalNum = Number(order.total ?? order.amount ?? order.orderAmount ?? 0) || 0;
   const footer = `

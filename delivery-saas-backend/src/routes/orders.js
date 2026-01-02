@@ -9,6 +9,7 @@ import { trackAffiliateSale } from '../services/affiliates.js';
 import { canTransition } from '../stateMachine.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
 import riderAccountService from '../services/riderAccount.js';
+import { buildAndPersistStockMovementFromOrderItems } from '../services/stockFromOrder.js';
 
 export const ordersRouter = express.Router();
 
@@ -473,7 +474,8 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       quantity: Number(it.quantity || 1),
       price: Number(it.price || 0),
       notes: it.notes ? String(it.notes) : null,
-      options: Array.isArray(it.options) ? it.options.map(o => ({ name: String(o.name || ''), price: Number(o.price || 0) })) : null
+      // preserve option quantity/id when provided so frontend displays totals correctly
+      options: Array.isArray(it.options) ? it.options.map(o => ({ id: o.id ?? null, name: String(o.name || ''), price: Number(o.price || 0), quantity: Number(o.quantity ?? o.qty ?? 1) })) : null
     }));
     const subtotal = cleanItems.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
 
@@ -658,6 +660,16 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       }
     } catch (e) { console.warn('Emitir novo pedido falhou:', e && e.message); }
     try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(created); } catch (e) { /* ignore */ }
+
+    // attempt to decrement stock for items that reference technical sheets (best-effort)
+    (async () => {
+      try {
+        await buildAndPersistStockMovementFromOrderItems(prisma, created);
+      } catch (e) {
+        console.warn('[orders.create] failed to create stock movement for order', created && created.id, e && e.message);
+      }
+    })();
+
     return res.status(201).json(created);
   } catch (e) {
     console.error('Erro ao criar pedido PDV', e && (e.stack || e.message || e));

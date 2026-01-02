@@ -118,10 +118,16 @@ router.post('/:groupId/options', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const group = await prisma.optionGroup.findFirst({ where: { id: groupId, companyId } })
   if (!group) return res.status(404).json({ message: 'Grupo não encontrado' })
-  const { name, price = 0, image = null, position = 0, availableDays = null, availableFrom = null, availableTo = null, isAvailable = true, linkedProductId = null } = req.body || {}
+  const { name, price = 0, image = null, position = 0, availableDays = null, availableFrom = null, availableTo = null, isAvailable = true, linkedProductId = null, technicalSheetId = null } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
   try {
     const data = { groupId, name, price: Number(price || 0), image: image ?? null, position: Number(position || 0) }
+    // validate and attach technicalSheetId when provided
+    if (technicalSheetId) {
+      const ts = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
+      if (!ts || ts.companyId !== companyId) return res.status(400).json({ message: 'technicalSheetId inválido' })
+      data.technicalSheetId = technicalSheetId
+    }
     // If this option links to a product, record the relation and DO NOT accept availability fields
     if (linkedProductId) {
       data.linkedProductId = linkedProductId
@@ -159,9 +165,19 @@ router.patch('/options/:id', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params
   const existing = await prisma.option.findUnique({ where: { id } })
   if (!existing) return res.status(404).json({ message: 'Opção não encontrada' })
-  const { name, price, image, position, availableDays, availableFrom, availableTo, isAvailable, linkedProductId } = req.body || {}
+  const { name, price, image, position, availableDays, availableFrom, availableTo, isAvailable, linkedProductId, technicalSheetId } = req.body || {}
   try {
     const data = {}
+    // validate and attach technicalSheetId when provided
+    if (technicalSheetId !== undefined) {
+      if (technicalSheetId === null) {
+        data.technicalSheetId = null
+      } else {
+        const ts = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
+        if (!ts || ts.companyId !== existing.group.companyId) return res.status(400).json({ message: 'technicalSheetId inválido' })
+        data.technicalSheetId = technicalSheetId
+      }
+    }
     if (name !== undefined) data.name = name
     if (price !== undefined) data.price = Number(price)
     if (image !== undefined) data.image = image

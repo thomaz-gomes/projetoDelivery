@@ -11,7 +11,6 @@ router.use(authMiddleware)
 
 // ------- Menus (multi-menu support) -------
 // NOTE: This router is mounted under both `/menu` and `/settings` in
-// `src/index.js` to preserve backwards compatibility with existing
 // clients. Keep route paths relative (no leading prefix) so they work
 // correctly regardless of which mount point the app uses.
 // GET /menu/menus
@@ -262,7 +261,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null } = body
+  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -276,7 +275,12 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       if (!menu) return res.status(400).json({ message: 'Menu inválido' })
       if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
     }
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId } })
+    // validate technicalSheetId if provided
+    if (technicalSheetId) {
+      const sheet = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
+      if (!sheet || sheet.companyId !== companyId) return res.status(400).json({ message: 'Ficha técnica inválida' })
+    }
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -331,7 +335,7 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const existing = await prisma.product.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Produto não encontrado' })
-  const { name, description, price, categoryId, position, isActive, image, menuId } = req.body || {}
+  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -383,6 +387,12 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
     if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
   }
 
+  // validate technicalSheetId if provided
+  if (technicalSheetId) {
+    const sheet = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
+    if (!sheet || sheet.companyId !== companyId) return res.status(400).json({ message: 'Ficha técnica inválida' })
+  }
+
   const updated = await prisma.product.update({ where: { id }, data: {
     name: name ?? existing.name,
     description: description ?? existing.description,
@@ -391,7 +401,8 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
     position: position !== undefined ? Number(position) : existing.position,
     isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
     image: imageValue,
-    menuId: menuId !== undefined ? menuId : existing.menuId
+    menuId: menuId !== undefined ? menuId : existing.menuId,
+    technicalSheetId: technicalSheetId !== undefined ? technicalSheetId : existing.technicalSheetId
   } })
   res.json(updated)
 })

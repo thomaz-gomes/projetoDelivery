@@ -105,5 +105,112 @@
     "printerType": "EPSON",
     "paperWidth": 80,
     "includeFullOrder": true
+  },
+  {
+    "id": "1767226750149-13296",
+    "createdAt": 1767226750149,
+    "order": {
+      "id": "dbedc271-082f-4048-a5b6-9dc6e0f4b7e7",
+      "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+      "storeId": "dab7bb9d-52ab-40cc-bba7-37348af2caf2",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": "03",
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "0dc529f9-620a-4bd8-bc0d-2b50abebd26b",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "5",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Dinheiro",
+          "methodCode": "Dinheiro",
+          "amount": 5,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "coxinha",
+              "quantity": 1,
+              "price": 5,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        }
+      },
+      "createdAt": "2025-12-31T20:19:40.438Z",
+      "updatedAt": "2025-12-31T20:19:40.438Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "5434027d-320a-436e-924a-167d0b42ac83",
+          "orderId": "dbedc271-082f-4048-a5b6-9dc6e0f4b7e7",
+          "name": "coxinha",
+          "quantity": 1,
+          "price": "5",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "rider": null,
+      "histories": [
+        {
+          "id": "5a067f69-7b5c-4024-b631-c8d2a7fabd31",
+          "orderId": "dbedc271-082f-4048-a5b6-9dc6e0f4b7e7",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+          "byRiderId": null,
+          "reason": "Criação PDV",
+          "createdAt": "2025-12-31T20:19:40.438Z"
+        }
+      ],
+      "store": {
+        "id": "dab7bb9d-52ab-40cc-bba7-37348af2caf2",
+        "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+        "name": "Matriz",
+        "slug": null,
+        "cnpj": null,
+        "logoUrl": null,
+        "bannerUrl": null,
+        "timezone": null,
+        "open24Hours": false,
+        "weeklySchedule": null,
+        "address": null,
+        "isActive": true,
+        "createdAt": "2025-12-25T23:08:08.750Z",
+        "updatedAt": "2025-12-25T23:08:08.750Z"
+      },
+      "company": {
+        "id": "a114f704-6c82-4fcb-9021-271ef756846e",
+        "name": "Demo Lanchonete",
+        "slug": "demo-lanchonete",
+        "createdAt": "2025-12-25T23:08:08.543Z",
+        "alwaysOpen": true,
+        "timezone": "America/Sao_Paulo",
+        "weeklySchedule": null
+      }
+    },
+    "printerInterface": "printer:HP Smart Tank 510 series",
+    "printerType": "EPSON",
+    "paperWidth": 80,
+    "includeFullOrder": true
   }
 ]

@@ -151,7 +151,7 @@
               <div>{{ formatCurrency(it.price*it.quantity) }}</div>
             </div>
               <div v-if="it.options && it.options.length" class="small text-muted ms-2">
-              <div v-for="(o,i2) in it.options" :key="i2">- {{ o.name }} ({{ formatCurrency(o.price) }})</div>
+              <div v-for="(o,i2) in it.options" :key="i2">- {{ (o.quantity && Number(o.quantity) > 1) ? (o.quantity + 'x ') : '' }}{{ o.name }} ({{ formatCurrency(o.price) }})</div>
             </div>
             <div class="small d-flex gap-2 mt-1">
               <button class="btn btn-sm btn-outline-secondary" @click="it.quantity++; recalc()">+1</button>
@@ -236,7 +236,7 @@
                   <div class="small fw-semibold mb-2">Opcionais selecionados</div>
                   <ul class="list-unstyled small text-muted mb-2">
                     <li v-for="(opt, oi) in chosenOptions" :key="oi" class="d-flex justify-content-between align-items-center">
-                      <div>{{ opt.name }} <span class="text-muted">({{ formatCurrency(opt.price) }})</span></div>
+                      <div>{{ (opt.quantity && Number(opt.quantity) > 1) ? (opt.quantity + 'x ') : '' }}{{ opt.name }} <span class="text-muted">({{ formatCurrency(opt.price) }})</span></div>
                       <div>
                         <button class="btn btn-sm btn-outline-danger" @click.prevent="removeChosenOption(oi)">Remover</button>
                       </div>

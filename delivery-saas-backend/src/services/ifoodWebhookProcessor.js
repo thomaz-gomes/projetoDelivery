@@ -2,6 +2,7 @@
 import { prisma } from '../prisma.js';
 import { getIFoodOrderDetails } from '../integrations/ifood/orders.js';
 import { emitirNovoPedido } from '../index.js';
+import buildAndPersistStockMovementFromOrderItems from './stockFromOrder.js';
 import { canTransition } from '../stateMachine.js';
 
 /**
@@ -330,6 +331,13 @@ export async function processIFoodWebhook(eventId) {
         if (inferred) mapped.status = inferred;
       } catch (e) { /* ignore */ }
       const saved = await upsertOrder({ companyId, mapped, storeId });
+
+      // attempt to decrement stock for items that reference technical sheets (best-effort)
+      try {
+        await buildAndPersistStockMovementFromOrderItems(prisma, saved);
+      } catch (e) {
+        console.warn('[iFood Processor] failed to create stock movement for order', saved && saved.id, e && e.message);
+      }
 
       // Emite o novo pedido ao painel (Socket.IO) para evitar necessidade de refresh
       try {

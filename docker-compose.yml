@@ -27,6 +27,11 @@ services:
       FRONTEND_ORIGINS: https://deliverywl.com.br
       NODE_ENV: production
       PORT: 3000
+      # QZ Tray signing certs mounted into the container (read-only)
+      QZ_CERT_FILE: /app/secure/qz-cert.pem
+      QZ_PRIVATE_KEY_FILE: /app/secure/qz-private.key
+    volumes:
+      - ./delivery-saas-backend/secure:/app/secure:ro
     depends_on:
       - migrate
     ports:
