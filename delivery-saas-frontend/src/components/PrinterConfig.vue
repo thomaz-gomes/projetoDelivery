@@ -47,7 +47,7 @@
                 <option value="generic">impressão genérica (navegador)</option>
               </SelectInput>
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-3 mb-3">
               <label class="form-label">Largura de papel</label>
               <SelectInput   v-model="paperWidth"  class="form-select">
                 <option value="80">80 mm</option>
@@ -64,14 +64,6 @@
           <hr />
           <h6 class="small">Opções avançadas (QZ / Pixel)</h6>
           <div class="row g-2">
-            <div class="col-md-3 mb-2">
-              <label class="form-label">pageWidth</label>
-              <input v-model="pageWidth" type="text" class="form-control form-control-sm" placeholder="ex: 8.5" />
-            </div>
-            <div class="col-md-3 mb-2">
-              <label class="form-label">pageHeight</label>
-              <input v-model="pageHeight" type="text" class="form-control form-control-sm" placeholder="ex: 11" />
-            </div>
             <div class="col-md-2 mb-2">
               <label class="form-label">Unidades</label>
               <SelectInput v-model="units" class="form-select form-select-sm">
@@ -87,10 +79,16 @@
                 <option :value="false">true (scale)</option>
               </SelectInput>
             </div>
-            <div class="col-md-2 mb-2">
-              <label class="form-label">density</label>
-              <input v-model="density" type="text" class="form-control form-control-sm" placeholder="ex: 300" />
+            <div class="col-md-3 mb-2">
+              <TextInput v-model="pageWidth" label="pageWidth" labelClass="form-label" inputClass="form-control form-control-sm" placeholder="ex: 8.5" />
             </div>
+            <div class="col-md-3 mb-2">
+              <TextInput v-model="pageHeight" label="pageHeight" labelClass="form-label" inputClass="form-control form-control-sm" placeholder="ex: 11" />
+            </div>
+            
+                      <div class="col-md-2 mb-2">
+                        <TextInput v-model="density" label="density" labelClass="form-label" inputClass="form-control form-control-sm" placeholder="ex: 300" />
+                      </div>
           </div>
 
           <div class="row g-2 mt-2">

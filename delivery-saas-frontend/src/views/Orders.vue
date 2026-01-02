@@ -20,7 +20,7 @@ import QRCode from 'qrcode';
 import { formatCurrency, formatAmount } from '../utils/formatters.js';
 import { formatDate, formatTime } from '../utils/dates'
 import { createApp, h } from 'vue';
-import CurrencyInput from '../components/CurrencyInput.vue';
+import CurrencyInput from '../components/form/input/CurrencyInput.vue';
 import { bindLoading } from '../state/globalLoading.js';
 import Sortable from 'sortablejs';
 const store = useOrdersStore();
@@ -513,6 +513,20 @@ function getCreatedAt(o) {
 // Compute displayed total as sum(items + options) + delivery fee, robust to different payload shapes
 function computeDisplayedTotal(o){
   try{
+    // Prefer an explicit persisted total when available to avoid double-counting
+    // scenarios where `item.price` already includes option values while `options`
+    // are also present in the payload. Use available total/amount fields first.
+    // Prefer explicit payment total from the persisted payload when present
+    // (covers PDV and public flows where `payload.payment.amount` is authoritative)
+    const paymentAmount = Number(
+      o.payload?.payment?.amount ??
+      o.payload?.rawPayload?.payment?.amount ??
+      o.payload?.total?.orderAmount ??
+      o.total ??
+      o.amount ??
+      0
+    ) || 0;
+    if(paymentAmount > 0) return paymentAmount;
     const items = normalizeOrderItems(o) || [];
     let subtotal = 0;
     for(const it of items){

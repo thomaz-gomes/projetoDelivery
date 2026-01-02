@@ -290,8 +290,8 @@
                   </div>
                 </div>
 
-                <div class="mb-2"><label class="form-label">Nome</label><TextInput v-model="customer.name" inputClass="form-control" /></div>
-                <div class="mb-2"><label class="form-label">WhatsApp / Telefone</label><TextInput v-model="customer.contact" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleContactInput" /></div>
+                <div class="mb-2"><TextInput label="Nome" labelClass="form-label" v-model="customer.name" inputClass="form-control" /></div>
+                <div class="mb-2"><TextInput label="WhatsApp / Telefone" labelClass="form-label" v-model="customer.contact" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleContactInput" /></div>
               </div>
 
               <div class="d-flex justify-content-between mt-3">
@@ -404,9 +404,9 @@
                   </div>
 
                   <div v-if="paymentMethod === 'CASH'" class="mt-2">
-                    <div class="input-group">
+                      <div class="input-group">
                       <span class="input-group-text">R$</span>
-                      <CurrencyInput v-model="changeFor" :min="0" inputClass="form-control" placeholder="Troco para (ex: 50,00)" />
+                      <CurrencyInput label="Troco para (ex: 50,00)" labelClass="form-label" v-model="changeFor" :min="0" inputClass="form-control" placeholder="Troco para (ex: 50,00)" />
                     </div>
                   </div>
                 </div>
@@ -721,6 +721,13 @@ function effectiveSettings(){
   }catch(e){ return company.value || {} }
 }
 
+// Normalize different names used across API versions for the "always open / 24h" flag
+function isAlwaysOpenFlag(c){
+  try{
+    return !!(c && (c.alwaysOpen || c.open24Hours || c.open24 || c.always_open))
+  }catch(e){ return false }
+}
+
 // Sticky categories bar state
 const heroRef = ref(null)
 const navRef = ref(null)
@@ -971,7 +978,7 @@ const visibleCategories = computed(() => {
 const isOpen = computed(() => {
   const c = effectiveSettings()
   if(!c) return true
-  if(c.alwaysOpen) return true
+  if(isAlwaysOpenFlag(c)) return true
 
   const parseHM = (s) => {
     if(!s) return null
@@ -1061,7 +1068,7 @@ const isOpen = computed(() => {
 const companyHoursText = computed(() => {
   const c = effectiveSettings()
   if(!c) return ''
-  if(c.alwaysOpen) return '24h'
+  if(isAlwaysOpenFlag(c)) return '24h'
 
   // If weeklySchedule is present, prefer today's schedule range
   try{
@@ -1088,7 +1095,7 @@ const companyHoursText = computed(() => {
 const nextOpenText = computed(() => {
   const c = effectiveSettings()
   if(!c) return ''
-  if(c.alwaysOpen) return ''
+  if(isAlwaysOpenFlag(c)) return ''
 
   const padTime = (s) => s || '--:--'
 
@@ -1130,7 +1137,7 @@ const nextOpenText = computed(() => {
     try{
       const c = effectiveSettings()
       if(!c) return ''
-      if(c.alwaysOpen) return 'Aberto — 24h'
+      if(isAlwaysOpenFlag(c)) return 'Aberto — 24h'
       // prefer weeklySchedule today's 'to'
       if(Array.isArray(c.weeklySchedule) && c.weeklySchedule.length){
         const tz = c.timezone || 'America/Sao_Paulo'

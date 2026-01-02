@@ -268,8 +268,7 @@
           </SelectInput>
         </div>
         <div v-if="isCashPayment" class="mb-2">
-          <label class="form-label small">Troco para (opcional)</label>
-          <CurrencyInput v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />
+          <CurrencyInput label="Troco para (opcional)" labelClass="form-label small" v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />
         </div>
         <div class="alert alert-light small">Total: <strong>{{ formatCurrency(totalWithDelivery) }}</strong> (Entrega: {{ formatCurrency(deliveryFee) }})</div>
         <div class="d-flex justify-content-between mt-3">
@@ -643,7 +642,12 @@ function validateOptionGroups(){
   }catch(e){ console.warn('validateOptionGroups failed', e); return true; }
 }
 
-const subtotal = computed(()=> cart.value.reduce((s,it)=> s + (Number(it.price||0)*Number(it.quantity||1) + (it.options||[]).reduce((so,o)=> so + (Number(o.price||0) * (Number(o.quantity||1) || 1)),0)),0));
+const subtotal = computed(()=> cart.value.reduce((s,it)=> {
+  const qty = Number(it.quantity || 1) || 1;
+  const unit = Number(it.price || 0) || 0;
+  const optsPerUnit = (it.options || []).reduce((so,o)=> so + (Number(o.price || 0) * (Number(o.quantity || 1) || 1)), 0);
+  return s + (unit + optsPerUnit) * qty;
+}, 0));
 const deliveryFee = computed(()=> orderType.value==='DELIVERY' ? estimateDeliveryFee() : 0);
 const matchedNeighborhood = computed(()=>{
   if(orderType.value!=='DELIVERY') return null;

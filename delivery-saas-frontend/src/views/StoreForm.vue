@@ -13,14 +13,13 @@
                 </ul>
 
                 <div>
-            <div class="mb-3"><label class="form-label">Nome</label><TextInput v-model="form.name" inputClass="form-control" /></div>
-              <div class="mb-3"><label class="form-label">Slug público (opcional)</label>
-                <TextInput v-model="form.slug" placeholder="ex: nomedaloja" inputClass="form-control" />
+            <div class="mb-3"><TextInput label="Nome" labelClass="form-label" v-model="form.name" inputClass="form-control" /></div>
+              <div class="mb-3"><TextInput label="Slug público (opcional)" labelClass="form-label" v-model="form.slug" placeholder="ex: nomedaloja" inputClass="form-control" />
                 <div class="form-text small">Se preenchido, a URL pública ficará em <code>/public/SEU_SLUG</code>. Caso vazio, o sistema gerará/resolve um slug automaticamente.</div>
               </div>
-            <div class="mb-3"><label class="form-label">Endereço</label><TextInput v-model="form.address" inputClass="form-control" /></div>
-            <div class="mb-3"><label class="form-label">Telefone</label><TextInput v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
-            <div class="mb-3"><label class="form-label">WhatsApp</label><TextInput v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
+            <div class="mb-3"><TextInput label="Endereço" labelClass="form-label" v-model="form.address" inputClass="form-control" /></div>
+            <div class="mb-3"><TextInput label="Telefone" labelClass="form-label" v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
+            <div class="mb-3"><TextInput label="WhatsApp" labelClass="form-label" v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
             <div class="row">
               <div class="col-md-6 mb-3">
                 <ImageUploader label="Banner" :initialUrl="form.bannerUrl" :aspect="1200/400" :targetWidth="1200" :targetHeight="400" :uploadUrl="!isNew ? `/stores/${id}/settings/upload` : null" uploadKey="bannerBase64" @cropped="onBannerCropped" @uploaded="onBannerUploaded" />
@@ -34,8 +33,8 @@
           <!-- Horário moved to menu configuration; store-level schedule removed -->
 
                   <div v-show="activeTab==='fiscal'">
-                    <div class="mb-2"><label class="form-label">CNPJ</label><TextInput v-model="form.cnpj" placeholder="Apenas dígitos" inputClass="form-control" /></div>
-                    <div class="mb-2"><label class="form-label">Inscrição Estadual</label><TextInput v-model="form.ie" inputClass="form-control" /></div>
+                    <div class="mb-2"><TextInput label="CNPJ" labelClass="form-label" v-model="form.cnpj" placeholder="Apenas dígitos" inputClass="form-control" /></div>
+                    <div class="mb-2"><TextInput label="Inscrição Estadual" labelClass="form-label" v-model="form.ie" inputClass="form-control" /></div>
                     <div class="mb-2"><label class="form-label">Timezone (IANA)</label>
                       <select class="form-select" v-model="form.timezone">
                         <option v-for="tz in TIMEZONES" :key="tz" :value="tz">{{ tz }}</option>
@@ -67,10 +66,9 @@
                         </div>
                       </div>
 
-                      <div class="mb-2">
-                        <label class="form-label">Senha do PFX (opcional)</label>
-                        <TextInput v-model="form.certPassword" placeholder="Senha do certificado (deixe vazio para manter/limpar)" inputClass="form-control" />
-                      </div>
+                        <div class="mb-2">
+                          <TextInput label="Senha do PFX (opcional)" labelClass="form-label" v-model="form.certPassword" placeholder="Senha do certificado (deixe vazio para manter/limpar)" inputClass="form-control" />
+                        </div>
 
                       <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="clearCert" v-model="form.clearCert">

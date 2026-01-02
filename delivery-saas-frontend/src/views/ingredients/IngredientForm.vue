@@ -4,7 +4,7 @@
     <div class="card">
       <div class="card-body">
         <form @submit.prevent="save" class="row g-2">
-          <div class="col-md-4"><input v-model="form.description" class="form-control" placeholder="Descrição" required /></div>
+          <div class="col-md-4"><TextInput v-model="form.description" inputClass="form-control" placeholder="Descrição" required /></div>
           <div class="col-md-2"><select v-model="form.unit" class="form-select"> <option v-for="u in UNITS" :key="u">{{u}}</option></select></div>
           <div class="col-md-3"><select v-model="form.groupId" class="form-select"><option :value="null">-- Grupo (opcional) --</option><option v-for="g in groups" :key="g.id" :value="g.id">{{g.name}}</option></select></div>
           <div class="col-md-3 d-flex align-items-center"><div class="form-check"><input class="form-check-input" type="checkbox" v-model="form.controlsStock" id="ctrlstock" /><label class="form-check-label" for="ctrlstock">Controla estoque</label></div></div>

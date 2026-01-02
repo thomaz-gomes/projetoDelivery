@@ -77,8 +77,7 @@ async function deletePlan(p){
           <div class="card-body">
             <h5 class="card-title">Criar plano</h5>
             <div class="mb-2">
-              <label class="form-label">Nome do plano</label>
-              <input v-model="newPlan.name" class="form-control" />
+              <TextInput v-model="newPlan.name" label="Nome do plano" inputClass="form-control" />
             </div>
             <div class="mb-2">
               <label class="form-label">Preço padrão (R$) — usado se não houver preços por período</label>

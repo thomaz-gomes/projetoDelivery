@@ -19,7 +19,7 @@ import TextInput from './components/form/input/TextInput.vue';
 import TextareaInput from './components/form/input/TextareaInput.vue';
 import BaseButton from './components/BaseButton.vue';
 import BaseIconButton from './components/BaseIconButton.vue';
-import CurrencyInput from './components/CurrencyInput.vue';
+import CurrencyInput from './components/form/input/CurrencyInput.vue';
 import SelectInput from './components/form/select/SelectInput.vue';
 
 const app = createApp(App);

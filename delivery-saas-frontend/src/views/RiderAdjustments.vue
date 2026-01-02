@@ -92,8 +92,7 @@ onMounted(async () => {
             <div class="form-control-plaintext">{{ selectedBalance !== null ? formatCurrency(selectedBalance) : '—' }}</div>
           </div>
           <div class="col-md-2">
-            <label class="form-label small">Valor</label>
-            <CurrencyInput v-model="form.amount" inputClass="form-control" placeholder="0,00" />
+            <CurrencyInput label="Valor" labelClass="form-label small" v-model="form.amount" inputClass="form-control" placeholder="0,00" />
           </div>
           <div class="col-md-2">
             <label class="form-label small">Tipo</label>

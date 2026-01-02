@@ -767,7 +767,12 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
     couponDiscount = 0
   }
 
-  const total = Math.max(0, subtotal - Number(couponDiscount || 0)) + Number(deliveryFee || 0)
+  const computedTotal = Math.max(0, subtotal - Number(couponDiscount || 0)) + Number(deliveryFee || 0)
+
+  // Prefer client-provided payment.amount when present and greater than 0.
+  // This ensures we persist the authoritative amount when frontends send it
+  // (avoids double-counting when item.price already included option prices).
+  const total = (payment && Number.isFinite(Number(payment.amount)) && Number(payment.amount) > 0) ? Number(payment.amount) : computedTotal
 
     // optional: validate payment method. Accept either code or name from incoming payload,
     // but store the canonical payment method NAME in the persisted payload (user requested)
@@ -964,7 +969,10 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         publicOrder: true,
         payment: payment || null,
         orderType: orderType,
-        rawPayload: safePayload
+        rawPayload: safePayload,
+        // persist computed and chosen totals to make the source explicit
+        computedTotal: computedTotal,
+        total: total
       }
 
       const created = await prisma.order.create({

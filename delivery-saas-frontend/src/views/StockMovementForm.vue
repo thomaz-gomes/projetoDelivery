@@ -10,7 +10,7 @@
               <option value="OUT">Saída</option>
             </select>
           </div>
-          <div class="col-md-4"><input v-model="form.reason" class="form-control" placeholder="Motivo (opcional)" /></div>
+          <div class="col-md-4"><TextInput v-model="form.reason" inputClass="form-control" placeholder="Motivo (opcional)" /></div>
           <div class="col-md-5 text-end"><button class="btn btn-primary" :disabled="saving">Salvar</button></div>
         </form>
       </div>

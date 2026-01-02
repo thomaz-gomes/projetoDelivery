@@ -4,8 +4,7 @@
     <div class="card p-4 mt-3">
       <form @submit.prevent="save">
         <div class="mb-3">
-          <label class="form-label">Nome</label>
-          <TextInput v-model="form.name" placeholder="Ex: Extra queijo" required maxlength="80" />
+          <TextInput label="Nome" labelClass="form-label" v-model="form.name" placeholder="Ex: Extra queijo" required maxlength="80" />
         </div>
 
         <div class="mb-3">
@@ -15,8 +14,7 @@
 
         <div class="row mb-3">
           <div class="col-md-3">
-            <label class="form-label">Preço</label>
-            <CurrencyInput v-model="form.price" inputClass="form-control" :min="0" placeholder="0,00" />
+            <CurrencyInput label="Preço" labelClass="form-label" v-model="form.price" inputClass="form-control" :min="0" placeholder="0,00" />
           </div>
             <div class="col-md-3">
               <label class="form-label">Ficha Técnica (opcional)</label>
@@ -147,6 +145,8 @@ import Swal from 'sweetalert2'
 import { assetUrl } from '../utils/assetUrl.js'
 import TextInput from '../components/form/input/TextInput.vue'
 import TextareaInput from '../components/form/input/TextareaInput.vue'
+import CurrencyInput from '../components/form/input/CurrencyInput.vue'
+import SelectInput from '../components/form/select/SelectInput.vue'
 
 const route = useRoute()
 const router = useRouter()

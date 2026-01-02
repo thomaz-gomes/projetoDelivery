@@ -13,13 +13,11 @@
           <div v-if="serverError" class="alert alert-warning">{{ serverError }}</div>
 
           <div class="mb-3">
-            <label class="form-label">Código</label>
-            <TextInput v-model="form.code" required />
+            <TextInput label="Código" labelClass="form-label" v-model="form.code" required inputClass="form-control" />
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Descrição</label>
-            <TextInput v-model="form.description" />
+            <TextInput label="Descrição" labelClass="form-label" v-model="form.description" inputClass="form-control" />
           </div>
 
           <div class="row g-3">
@@ -32,8 +30,7 @@
             </div>
 
             <div class="col-md-8">
-              <label class="form-label">Valor (se percentual coloque 0.1 = 10%)</label>
-              <CurrencyInput v-model="form.value" inputClass="form-control" placeholder="0,00" />
+              <CurrencyInput label="Valor (se percentual coloque 0.1 = 10%)" labelClass="form-label" v-model="form.value" inputClass="form-control" placeholder="0,00" />
             </div>
           </div>
 
@@ -63,8 +60,7 @@
               </div>
             </div>
             <div class="col-md-6">
-              <label class="form-label">Subtotal mínimo (opcional)</label>
-              <CurrencyInput v-model="form.minSubtotal" inputClass="form-control" :min="0" placeholder="0,00" />
+              <CurrencyInput label="Subtotal mínimo (opcional)" labelClass="form-label" v-model="form.minSubtotal" inputClass="form-control" :min="0" placeholder="0,00" />
             </div>
           </div>
 
@@ -94,11 +90,13 @@ import { ref, onMounted, watch } from 'vue'
 import api from '@/api.js'
 import TextInput from '../components/form/input/TextInput.vue'
 import DateInput from '../components/form/date/DateInput.vue'
+import CurrencyInput from '../components/form/input/CurrencyInput.vue'
+import SelectInput from '../components/form/select/SelectInput.vue'
 import { useRoute, useRouter } from 'vue-router'
 
 export default {
   name: 'CouponForm',
-  components: { TextInput, DateInput },
+  components: { TextInput, DateInput, CurrencyInput, SelectInput },
   setup() {
     const route = useRoute()
     const router = useRouter()

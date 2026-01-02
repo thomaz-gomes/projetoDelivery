@@ -113,10 +113,10 @@ async function testMatch() {
             <TextInput v-model="form.aliases" placeholder="Apelidos (vírgula separado)" inputClass="form-control" />
           </div>
           <div class="col-md-2">
-            <CurrencyInput v-model="form.deliveryFee" inputClass="form-control" placeholder="Taxa entrega" />
+            <CurrencyInput label="Taxa entrega" labelClass="form-label" v-model="form.deliveryFee" inputClass="form-control" placeholder="Taxa entrega" />
           </div>
           <div class="col-md-2">
-            <CurrencyInput v-model="form.riderFee" inputClass="form-control" placeholder="Taxa motoboy" />
+            <CurrencyInput label="Taxa motoboy" labelClass="form-label" v-model="form.riderFee" inputClass="form-control" placeholder="Taxa motoboy" />
           </div>
           <div class="col-12 mt-2">
             <div class="d-flex gap-2">

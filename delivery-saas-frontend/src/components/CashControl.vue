@@ -23,7 +23,7 @@
 import Swal from 'sweetalert2';
 import api from '../api';
 import { ref, createApp, h, onMounted, onUnmounted } from 'vue';
-import CurrencyInput from './CurrencyInput.vue';
+import CurrencyInput from './form/input/CurrencyInput.vue';
 import { formatCurrency, formatAmount } from '../utils/formatters.js';
 
 const loading = ref(false);

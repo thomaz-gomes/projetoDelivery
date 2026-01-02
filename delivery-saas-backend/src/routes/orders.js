@@ -516,7 +516,10 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       } catch (e) { couponDiscount = 0; }
     }
 
-    const total = Math.max(0, subtotal - couponDiscount) + Number(deliveryFee || 0);
+    const computedTotal = Math.max(0, subtotal - couponDiscount) + Number(deliveryFee || 0);
+
+    // Prefer payment amount when provided by PDV client as authoritative total
+    const total = (payment && Number.isFinite(Number(payment.amount)) && Number(payment.amount) > 0) ? Number(payment.amount) : computedTotal;
 
     // validate payment method if provided
     let paymentPayload = null;
@@ -591,7 +594,10 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         payload: {
           payment: paymentPayload,
           orderType: type,
-          rawPayload: { source: 'PDV', items: cleanItems, customer: { name: customerName || null, contact: customerPhone || null }, address }
+          rawPayload: { source: 'PDV', items: cleanItems, customer: { name: customerName || null, contact: customerPhone || null }, address },
+          // persist computed and chosen totals for clarity
+          computedTotal: computedTotal,
+          total: total
         },
         items: {
           create: cleanItems.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes, options: it.options || null }))

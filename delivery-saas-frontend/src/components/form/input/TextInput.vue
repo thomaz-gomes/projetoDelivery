@@ -1,19 +1,22 @@
 <template>
-  <input
-    :id="id"
-    :class="['form-control', inputClass]"
-    :type="type"
-    :placeholder="placeholder"
-    :required="required"
-    :maxlength="maxlength"
-    :min="min"
-    :max="max"
-    :pattern="pattern"
-    :autocomplete="autocomplete"
-    :inputmode="inputmode"
-    :value="internalValue"
-    @input="onInput"
-  />
+  <div>
+    <label v-if="label" :for="id" :class="labelClass"><strong>{{ label }}</strong></label>
+    <input
+      :id="id"
+      :class="['form-control', inputClass]"
+      :type="type"
+      :placeholder="placeholder"
+      :required="required"
+      :maxlength="maxlength"
+      :min="min"
+      :max="max"
+      :pattern="pattern"
+      :autocomplete="autocomplete"
+      :inputmode="inputmode"
+      :value="internalValue"
+      @input="onInput"
+    />
+  </div>
 </template>
 
 <script setup>
@@ -31,7 +34,10 @@ const props = defineProps({
   autocomplete: { type: String, default: 'off' },
   inputClass: { type: String, default: '' },
   type: { type: String, default: 'text' },
-  inputmode: { type: String, default: undefined }
+  inputmode: { type: String, default: undefined },
+  // optional label support
+  label: { type: String, default: null },
+  labelClass: { type: String, default: '' }
 })
 const emit = defineEmits(['update:modelValue', 'input'])
 

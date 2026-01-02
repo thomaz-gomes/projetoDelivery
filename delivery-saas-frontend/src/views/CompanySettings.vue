@@ -20,17 +20,16 @@
             </div>
 
             <div class="mb-3">
-              <label class="form-label">Timezone (IANA)</label>
-              <TextInput v-model="form.timezone" placeholder="Ex: America/Sao_Paulo" inputClass="form-control" />
+              <TextInput label="Timezone (IANA)" labelClass="form-label" v-model="form.timezone" placeholder="Ex: America/Sao_Paulo" inputClass="form-control" />
               <div class="form-text">Timezone padrão: <strong>America/Sao_Paulo</strong> (Horário de Brasília). Use uma string IANA válida, ex: <code>America/Sao_Paulo</code>. Deixe em branco para usar o timezone do servidor.</div>
             </div>
 
             <hr />
             <h5>Informações da loja</h5>
-            <div class="mb-2"><label class="form-label">Nome do restaurante</label><TextInput v-model="form.name" inputClass="form-control" /></div>
-            <div class="mb-2"><label class="form-label">Endereço</label><TextInput v-model="form.address" inputClass="form-control" /></div>
-            <div class="mb-2"><label class="form-label">Telefone</label><TextInput v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
-            <div class="mb-2"><label class="form-label">WhatsApp</label><TextInput v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
+            <div class="mb-2"><TextInput label="Nome do restaurante" labelClass="form-label" v-model="form.name" inputClass="form-control" /></div>
+            <div class="mb-2"><TextInput label="Endereço" labelClass="form-label" v-model="form.address" inputClass="form-control" /></div>
+            <div class="mb-2"><TextInput label="Telefone" labelClass="form-label" v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
+            <div class="mb-2"><TextInput label="WhatsApp" labelClass="form-label" v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
 
             <div class="row">
               <div class="col-md-6 mb-3">
@@ -85,14 +84,14 @@
 
           <div v-show="activeTab==='fiscal'">
             <h5>Configurações fiscais (ambiente de homologação)</h5>
-            <div class="mb-2"><label class="form-label">CNPJ</label><TextInput v-model="form.cnpj" placeholder="Apenas dígitos" inputClass="form-control" /></div>
-            <div class="mb-2"><label class="form-label">Inscrição Estadual (IE)</label><TextInput v-model="form.ie" inputClass="form-control" /></div>
-            <div class="mb-2"><label class="form-label">Série NFC-e</label><TextInput v-model="form.nfeSerie" inputClass="form-control" /></div>
+            <div class="mb-2"><TextInput label="CNPJ" labelClass="form-label" v-model="form.cnpj" placeholder="Apenas dígitos" inputClass="form-control" /></div>
+            <div class="mb-2"><TextInput label="Inscrição Estadual (IE)" labelClass="form-label" v-model="form.ie" inputClass="form-control" /></div>
+            <div class="mb-2"><TextInput label="Série NFC-e" labelClass="form-label" v-model="form.nfeSerie" inputClass="form-control" /></div>
             <div class="mb-2"><label class="form-label">Ambiente</label>
               <SelectInput  class="form-select"  v-model="form.nfeEnvironment" ><option value="2">Homologação (2)</option><option value="1">Produção (1)</option></SelectInput>
             </div>
-            <div class="mb-2"><label class="form-label">CSC (Código de Segurança do Contribuinte)</label><TextInput v-model="form.csc" inputClass="form-control" /></div>
-            <div class="mb-2"><label class="form-label">CSC ID</label><TextInput v-model="form.cscId" inputClass="form-control" /></div>
+            <div class="mb-2"><TextInput label="CSC (Código de Segurança do Contribuinte)" labelClass="form-label" v-model="form.csc" inputClass="form-control" /></div>
+            <div class="mb-2"><TextInput label="CSC ID" labelClass="form-label" v-model="form.cscId" inputClass="form-control" /></div>
             <div class="mb-2">
               <label class="form-label">Certificado PFX (.pfx / .p12)</label>
               <div v-if="form.certExists || form.certFilename" class="mb-2">
@@ -105,7 +104,7 @@
                 <small class="text-muted">Envie o arquivo .pfx e informe a senha para que o backend grave o certificado de forma segura.</small>
               </div>
             </div>
-            <div class="mb-2"><label class="form-label">Senha do certificado</label><TextInput v-model="form.certPassword" inputClass="form-control" /></div>
+            <div class="mb-2"><TextInput label="Senha do certificado" labelClass="form-label" v-model="form.certPassword" inputClass="form-control" /></div>
           </div>
 
           <div class="d-flex gap-2">

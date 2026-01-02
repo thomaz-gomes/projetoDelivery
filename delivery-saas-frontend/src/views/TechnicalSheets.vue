@@ -76,8 +76,8 @@ onMounted(fetch);
     <div class="card mb-3">
       <div class="card-body">
         <form @submit.prevent="save" class="row g-2">
-          <div class="col-md-6"><input v-model="form.name" class="form-control" placeholder="Nome da ficha" required /></div>
-          <div class="col-md-6"><input v-model="form.notes" class="form-control" placeholder="Observações (opcional)" /></div>
+          <div class="col-md-6"><TextInput v-model="form.name" inputClass="form-control" placeholder="Nome da ficha" required /></div>
+          <div class="col-md-6"><TextInput v-model="form.notes" inputClass="form-control" placeholder="Observações (opcional)" /></div>
           <div class="col-12 mt-2"><div class="d-flex gap-2"><button class="btn btn-primary" :disabled="saving">Salvar</button><button type="button" class="btn btn-outline-secondary" @click="reset">Limpar</button></div>
           <div v-if="error" class="text-danger small mt-2">{{ error }}</div></div>
         </form>

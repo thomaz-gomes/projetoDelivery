@@ -48,7 +48,7 @@ import { ref, onMounted, createApp } from 'vue';
 import api from '../api';
 import Swal from 'sweetalert2';
 import { formatCurrency } from '../utils/formatters.js';
-import CurrencyInput from '../components/CurrencyInput.vue';
+import CurrencyInput from '../components/form/input/CurrencyInput.vue';
 
 const sessions = ref([]);
 const loading = ref(false);

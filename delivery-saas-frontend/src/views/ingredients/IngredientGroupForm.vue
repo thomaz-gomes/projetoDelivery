@@ -5,7 +5,7 @@
       <div class="card-body">
         <form @submit.prevent="save" class="row g-2">
           <div class="col-md-6">
-            <input v-model="form.name" placeholder="Nome" class="form-control" required />
+            <TextInput v-model="form.name" placeholder="Nome" inputClass="form-control" required />
           </div>
           <div class="col-md-3">
             <select v-model="form.parentId" class="form-select">
