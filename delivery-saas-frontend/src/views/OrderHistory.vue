@@ -37,15 +37,15 @@
 
   <!-- Mobile bottom navigation (visible on small screens) -->
   <nav class="mobile-bottom-nav d-lg-none">
-    <button class="nav-item" @click.prevent="goProfile" aria-label="Perfil">
+    <button :class="{active: navActive('/profile')}" class="nav-item" @click.prevent="goProfile" aria-label="Perfil">
       <i class="bi bi-person nav-icon" aria-hidden="true"></i>
       <div class="nav-label">Perfil</div>
     </button>
-    <button class="nav-item" @click.prevent="goOrders" aria-label="Histórico de pedidos">
+    <button :class="{active: navActive('/history')}" class="nav-item" @click.prevent="goOrders" aria-label="Histórico de pedidos">
       <i class="bi bi-journal-text nav-icon" aria-hidden="true"></i>
       <div class="nav-label">Histórico</div>
     </button>
-    <button class="nav-item" @click.prevent="goMenu" aria-label="Cardápio">
+    <button :class="{active: navActive('/menu')}" class="nav-item" @click.prevent="goMenu" aria-label="Cardápio">
       <i class="bi bi-list nav-icon" aria-hidden="true"></i>
       <div class="nav-label">Cardápio</div>
     </button>
@@ -163,6 +163,10 @@ function _publicNavigate(pathSuffix, extraQuery = {}){
 function goProfile(){ _publicNavigate('/profile') }
 function goOrders(){ _publicNavigate('/orders') }
 function goMenu(){ _publicNavigate('/menu') }
+
+function navActive(suffix){
+  try{ const p = route.path || ''; return p.endsWith(suffix) }catch(e){ return false }
+}
 </script>
 
 <style scoped>
@@ -184,4 +188,5 @@ function goMenu(){ _publicNavigate('/menu') }
 .mobile-bottom-nav .nav-icon { font-size:20px; line-height:1 }
 .mobile-bottom-nav .nav-label { font-size:12px; margin-top:4px }
 .mobile-bottom-nav .cart-badge { background:#0d6efd; color:#fff; border-radius:10px; padding:2px 6px; font-size:11px; position:absolute; top:6px; right:12px; margin-left:0 }
+.mobile-bottom-nav .nav-item.active, .mobile-bottom-nav .nav-item.active .nav-label, .mobile-bottom-nav .nav-item.active .nav-icon{ color: rgb(255 147 7) !important }
 </style>

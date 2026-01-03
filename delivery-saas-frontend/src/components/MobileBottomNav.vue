@@ -72,5 +72,5 @@ function isActive(path){
 .mobile-bottom-nav .nav-item{ background:transparent;border:0;padding:.25rem .4rem;display:flex;flex-direction:column;align-items:center }
 .mobile-bottom-nav .nav-icon{ display:block }
 .mobile-bottom-nav .nav-label{ font-size:11px; line-height:1 }
-.mobile-bottom-nav .nav-item.active, .mobile-bottom-nav .nav-item.active .nav-label, .mobile-bottom-nav .nav-item.active .nav-icon{ color: var(--bs-primary,#0d6efd) !important }
+.mobile-bottom-nav .nav-item.active, .mobile-bottom-nav .nav-item.active .nav-label, .mobile-bottom-nav .nav-item.active .nav-icon{ color: rgb(255 147 7) !important }
 </style>

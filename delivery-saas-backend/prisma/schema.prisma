@@ -47,6 +47,7 @@ model Company {
   stores            Store[]
   affiliates        Affiliate[]
   coupons           Coupon[]
+  customerAccounts  CustomerAccount[]
   // relations for menu / payments (inverse relation fields required by Prisma)
   menuCategories    MenuCategory[]
   products          Product[]
@@ -233,9 +234,25 @@ model Customer {
   updatedAt DateTime          @updatedAt
   addresses CustomerAddress[]
   orders    Order[]
+  accounts  CustomerAccount[]
 
   @@unique([companyId, cpf], name: "company_cpf")
   @@unique([companyId, whatsapp], name: "company_whatsapp")
+}
+
+// Customer-facing accounts for public users (optional, per-company)
+model CustomerAccount {
+  id         String   @id @default(uuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  email      String?
+  password   String   // bcrypt hash
+  createdAt  DateTime @default(now())
+
+  @@unique([companyId, email], name: "company_email")
+  @@index([companyId], name: "idx_customeraccount_company")
 }
 
 model CustomerAddress {

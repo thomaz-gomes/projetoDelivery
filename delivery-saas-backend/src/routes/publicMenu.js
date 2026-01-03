@@ -1,5 +1,7 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
+import { signToken } from '../auth.js'
+import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId } from '../services/customerAccounts.js'
 import { findOrCreateCustomer } from '../services/customers.js'
 
 export const publicMenuRouter = express.Router()
@@ -1022,6 +1024,69 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   } catch (e) {
     console.error('Error creating public order', e)
     res.status(500).json({ message: 'Erro ao criar pedido' })
+  }
+})
+
+// POST /public/:companyId/register
+// body: { name, whatsapp, email?, password }
+publicMenuRouter.post('/:companyId/register', async (req, res) => {
+  const { companyId } = req.params
+  const { name, whatsapp, email, password } = req.body || {}
+  if (!whatsapp || !password) return res.status(400).json({ message: 'whatsapp e password são obrigatórios' })
+  try {
+    // ensure company exists
+    const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true } })
+    if (!company) return res.status(404).json({ message: 'Empresa não encontrada' })
+
+    // create or find customer by whatsapp/name
+    const customer = await findOrCreateCustomer({ companyId, fullName: name || null, whatsapp: whatsapp || null })
+
+    // ensure there isn't already an account for this customer
+    const existingByCustomer = await findAccountByCustomerId({ companyId, customerId: customer.id })
+    if (existingByCustomer) return res.status(409).json({ message: 'Já existe conta para este número de WhatsApp' })
+
+    // if email provided, ensure unique per company
+    if (email) {
+      const existingEmail = await findAccountByEmail({ companyId, email })
+      if (existingEmail) return res.status(409).json({ message: 'Já existe conta com este email' })
+    }
+
+    const account = await createCustomerAccount({ companyId, customerId: customer.id, email, password })
+    const token = signToken({ accountId: account.id, customerId: account.customerId, companyId, type: 'customer' })
+    return res.status(201).json({ account: { id: account.id, email: account.email, customerId: account.customerId }, token, customer })
+  } catch (e) {
+    console.error('Erro register public account', e)
+    return res.status(500).json({ message: 'Erro ao criar conta' })
+  }
+})
+
+// POST /public/:companyId/login
+// Accepts { whatsapp, email?, password }
+publicMenuRouter.post('/:companyId/login', async (req, res) => {
+  const { companyId } = req.params
+  const { whatsapp, email, password } = req.body || {}
+  if ((!whatsapp && !email) || !password) return res.status(400).json({ message: 'whatsapp/email e password são obrigatórios' })
+  try {
+    let account = null
+    if (email) {
+      account = await findAccountByEmail({ companyId, email })
+    }
+    if (!account && whatsapp) {
+      // find customer by whatsapp then account by customerId
+      const cust = await prisma.customer.findFirst({ where: { companyId, whatsapp: String(whatsapp) } })
+      if (!cust) return res.status(404).json({ message: 'Conta não encontrada' })
+      account = await findAccountByCustomerId({ companyId, customerId: cust.id })
+    }
+    if (!account) return res.status(404).json({ message: 'Conta não encontrada' })
+    const ok = await verifyPassword(account, password)
+    if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' })
+    const token = signToken({ accountId: account.id, customerId: account.customerId, companyId, type: 'customer' })
+    // return customer profile as well
+    const customer = await prisma.customer.findUnique({ where: { id: account.customerId }, include: { addresses: true } })
+    return res.json({ token, account: { id: account.id, email: account.email, customerId: account.customerId }, customer })
+  } catch (e) {
+    console.error('Erro login public account', e)
+    return res.status(500).json({ message: 'Erro ao autenticar' })
   }
 })
 

@@ -291,12 +291,21 @@
                 </div>
 
                 <div class="mb-2"><TextInput label="Nome" labelClass="form-label" v-model="customer.name" inputClass="form-control" /></div>
-                <div class="mb-2"><TextInput label="WhatsApp / Telefone" labelClass="form-label" v-model="customer.contact" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleContactInput" /></div>
+                <div class="mb-2">
+                  <TextInput label="WhatsApp / Telefone" labelClass="form-label" :value="customer.contact" inputClass="form-control" placeholder="(00) 9 0000-0000" maxlength="16" @input="handleContactInput" />
+                  <div class="small mt-1" :class="customerPhoneValid ? 'text-success' : 'text-danger'">
+                    <template v-if="customer.contact && customer.contact.length">
+                      <span v-if="customerPhoneValid">Número válido</span>
+                      <span v-else>Formato inválido — inclua DDD (ex: (11) 9 9123-4567)</span>
+                    </template>
+                  </div>
+                </div>
+                <div class="small mt-2"><a href="#" @click.prevent="openRegister">Não tem conta? Criar conta</a></div>
               </div>
 
               <div class="d-flex justify-content-between mt-3">
                 <button class="btn btn-outline-secondary" @click="closeCheckout">Cancelar</button>
-                <button class="btn btn-primary" @click="nextFromCustomer">Próximo</button>
+                <button class="btn btn-primary" @click="nextFromCustomer" :disabled="!customer.name || !customerPhoneValid">Próximo</button>
               </div>
             </div>
 
@@ -314,6 +323,19 @@
               </div>
 
               <div v-if="orderType === 'DELIVERY'">
+                <!-- Banner for logged-in public customer: quick account actions -->
+                <div v-if="publicCustomerConnected" class="mb-3">
+                  <div class="alert alert-light d-flex justify-content-between align-items-center" style="border-radius:12px;">
+                    <div>
+                      <div class="fw-bold">Conectado como {{ publicCustomerConnected.name || publicCustomerConnected.contact }}</div>
+                      <div class="small text-muted">Você está comprando com sua conta pública.</div>
+                    </div>
+                    <div class="d-flex gap-2">
+                      <button class="btn btn-sm btn-outline-secondary" @click.prevent="switchAccount">Usar outra conta</button>
+                      <button class="btn btn-sm btn-outline-danger" @click.prevent="logoutPublicCustomer">Sair</button>
+                    </div>
+                  </div>
+                </div>
                 <!-- No saved addresses: show the inline address form so the user can
                      enter an address and continue without having to persist it. -->
                 <div v-if="addresses.length === 0">
@@ -652,7 +674,7 @@ import { bindLoading } from '../state/globalLoading.js';
 import api from '../api';
 import { useRoute, useRouter } from 'vue-router';
 import { assetUrl } from '../utils/assetUrl.js';
-import { applyPhoneMask } from '../utils/phoneMask';
+import { applyPhoneMask, removePhoneMask } from '../utils/phoneMask';
 
 const route = useRoute();
 const router = useRouter();
@@ -844,12 +866,34 @@ const LOCAL_ADDR_KEY = `public_addresses_${companyId}`
 // load persisted customer/address
 const addresses = ref(JSON.parse(localStorage.getItem(LOCAL_ADDR_KEY) || '[]'))
 const selectedAddressId = ref(addresses.value.length ? addresses.value[0].id : null)
+  // if user is authenticated via public profile, prefill addresses and select first
+  try{
+    const token = localStorage.getItem('token')
+    const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
+    if(token && stored && stored.addresses && Array.isArray(stored.addresses) && stored.addresses.length){
+      addresses.value = stored.addresses.map(a => ({ id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8), label: a.label || a.formatted || '', formattedAddress: a.formatted || a.formattedAddress || '', neighborhood: a.neighborhood || a.neigh || '' }))
+      selectedAddressId.value = addresses.value.length ? addresses.value[0].id : selectedAddressId.value
+    }
+  }catch(e){ /* ignore */ }
 
 function openCheckout(){
   checkoutModalOpen.value = true
+  // if a public customer is already authenticated (token + stored customer), skip customer step
+  try{
+    const token = localStorage.getItem('token')
+    const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
+    if(token && stored){
+      checkoutStep.value = 'delivery'
+      return
+    }
+  }catch(e){ /* ignore parse errors */ }
   checkoutStep.value = 'customer'
 }
 function closeCheckout(){ checkoutModalOpen.value = false }
+
+function openRegister(){
+  router.push({ path: `/public/${companyId}/profile`, query: { tab: 'register' } })
+}
 
 function saveCustomerToLocal(){
   localStorage.setItem(LOCAL_CUSTOMER_KEY, JSON.stringify({ name: customer.value.name, contact: customer.value.contact }))
@@ -928,7 +972,8 @@ try{
 }catch(e){ console.warn('restore cart from localStorage failed', e) }
 const customer = ref({ name: '', contact: '', address: { formattedAddress: '', neighborhood: '' } });
 // load persisted customer if any (after customer is defined)
-const savedCustomer = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || 'null')
+const savedCustomerRaw = localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || null
+const savedCustomer = JSON.parse(savedCustomerRaw || 'null')
 if(savedCustomer) {
   // merge with default shape to ensure nested fields (like address) exist
   customer.value = {
@@ -955,7 +1000,39 @@ const submitting = ref(false);
 const serverError = ref('');
 const clientError = ref('');
 const orderResponse = ref(null);
+const customerPhoneValid = computed(() => {
+  try{
+    const digits = removePhoneMask(customer.value.contact || '')
+    return !!digits && (String(digits).length >= 10)
+  }catch(e){ return false }
+})
 const isDev = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV
+
+// compute whether a public customer is connected (token + stored customer)
+const publicCustomerConnected = computed(() => {
+  try{
+    const token = localStorage.getItem('token')
+    if(!token) return null
+    if(!customer.value) return null
+    return { name: customer.value.name || null, contact: customer.value.contact || null }
+  }catch(e){ return null }
+})
+
+function logoutPublicCustomer(){
+  try{
+    localStorage.removeItem('token')
+    localStorage.removeItem(LOCAL_CUSTOMER_KEY)
+    localStorage.removeItem(`public_customer_${companyId}`)
+  }catch(e){}
+  customer.value = { name: '', contact: '', address: { formattedAddress: '', neighborhood: '' } }
+  addresses.value = []
+  selectedAddressId.value = null
+  checkoutStep.value = 'customer'
+}
+
+function switchAccount(){
+  router.push({ path: `/public/${companyId}/profile`, query: { tab: 'login' } })
+}
 
 // helper to build public API paths with optional storeId/menuId query params
 function publicPath(path){
@@ -1962,6 +2039,14 @@ function nextFromCustomer(){
     clientError.value = 'Preencha nome e WhatsApp'
     return
   }
+  // validate whatsapp digits (require DDD + number -> 10 or 11 digits)
+  try{
+    const digits = removePhoneMask(customer.value.contact || '')
+    if(!digits || String(digits).length < 10){
+      clientError.value = 'Informe um número de WhatsApp válido (inclua DDD)'
+      return
+    }
+  }catch(e){ /* ignore */ }
   saveCustomerToLocal()
   checkoutStep.value = 'delivery'
 }
@@ -2795,6 +2880,7 @@ try{
 .mobile-bottom-nav .nav-icon { font-size:20px; line-height:1 }
 .mobile-bottom-nav .nav-label { font-size:12px; margin-top:4px }
 .mobile-bottom-nav .cart-badge { background:#0d6efd; color:#fff; border-radius:10px; padding:2px 6px; font-size:11px; position:absolute; top:6px; right:12px; margin-left:0 }
+.mobile-bottom-nav .nav-item.active, .mobile-bottom-nav .nav-item.active .nav-label, .mobile-bottom-nav .nav-item.active .nav-icon{ color: rgb(255 147 7) !important }
 
 /* make mobile cart bar fixed above the bottom nav so it's always visible while scrolling */
 .mobile-cart-bar { position:fixed; left:0; right:0;  z-index:1048; display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:#fff; border-top:1px solid rgba(0,0,0,0.06) }

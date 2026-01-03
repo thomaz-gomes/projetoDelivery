@@ -19,20 +19,22 @@ const nav = [
   { name: 'Pedidos', to: '/orders', icon: 'bi bi-box-seam' },
   { name: 'Relatórios', to: '/reports', icon: 'bi bi-file-earmark-bar-graph', children: [
     { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
-    { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' }
+    { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
+    { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat' }
   ] },
   { name: 'Clientes', to: '/customers', icon: 'bi bi-person' },
   { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', children: [
     { name: 'Lista', to: '/riders', icon: 'bi bi-people' },
     { name: 'Créditos/Débitos', to: '/rider-adjustments', icon: 'bi bi-credit-card' },
   ] },
-  { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill' },
-  { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated' },
+  { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', children: [
+    { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill' },
+    { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated' }
+  ] },
   { name: 'Ingredientes', to: '/ingredient-groups', icon: 'bi bi-box', children: [
     { name: 'Grupos de Ingredientes', to: '/ingredient-groups', icon: 'bi bi-list' },
     { name: 'Ingredientes', to: '/ingredients', icon: 'bi bi-basket' },
     { name: 'Fichas Técnicas', to: '/technical-sheets', icon: 'bi bi-file-earmark-text' }
-    , { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat' }
   ] },
     { name: 'Lista de cardápios', to: '/menu/menus', icon: 'bi bi-list' },
  

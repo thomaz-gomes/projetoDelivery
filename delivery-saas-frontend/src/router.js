@@ -45,6 +45,10 @@ import CouponsList from './views/CouponsList.vue';
 import CouponForm from './views/CouponForm.vue';
 import PublicMenu from './views/PublicMenu.vue';
 import PublicSlugResolver from './views/PublicSlugResolver.vue';
+import PublicProfile from './views/PublicProfile.vue';
+import PublicProfileEdit from './views/PublicProfileEdit.vue';
+import PublicProfilePassword from './views/PublicProfilePassword.vue';
+import PublicAddresses from './views/PublicAddresses.vue';
 import OrderStatus from './views/OrderStatus.vue';
 import OrderHistory from './views/OrderHistory.vue';
 import MenuAdmin from './views/MenuAdmin.vue';
@@ -128,6 +132,10 @@ const router = createRouter({
    ,{ path: '/rider/claim/:token', component: () => import('./views/RiderClaim.vue'), meta: { requiresAuth: true, noSidebar: true } }
    ,{ path: '/public/:storeSlug', component: PublicSlugResolver }
    ,{ path: '/public/:companyId/menu', component: PublicMenu }
+  ,{ path: '/public/:companyId/profile', component: PublicProfile }
+  ,{ path: '/public/:companyId/profile/edit', component: PublicProfileEdit }
+  ,{ path: '/public/:companyId/profile/password', component: PublicProfilePassword }
+  ,{ path: '/public/:companyId/addresses', component: PublicAddresses }
   ,{ path: '/public/:companyId/order/:orderId', component: OrderStatus }
   ,{ path: '/public/:companyId/history', component: OrderHistory }
   ,{ path: '/public/:companyId/orders', redirect: to => ({ path: `/public/${to.params.companyId}/history`, query: to.query }) }
