@@ -122,7 +122,12 @@ function handlePhoneInput(e) {
           >
             <div class="row g-2">
               <div class="col-md-5">
-                <TextInput label="Rua" labelClass="form-label" v-model="addr.street" inputClass="form-control" />
+                <div v-if="addr.formatted && !addr.street">
+                  <TextInput label="Endereço (formatado)" labelClass="form-label" v-model="addr.formatted" inputClass="form-control" />
+                </div>
+                <div v-else>
+                  <TextInput label="Rua" labelClass="form-label" v-model="addr.street" inputClass="form-control" />
+                </div>
               </div>
               <div class="col-md-2">
                 <TextInput label="Número" labelClass="form-label" v-model="addr.number" inputClass="form-control" />

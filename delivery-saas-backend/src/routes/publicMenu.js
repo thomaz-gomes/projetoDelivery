@@ -3,6 +3,7 @@ import { prisma } from '../prisma.js'
 import { signToken } from '../auth.js'
 import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId } from '../services/customerAccounts.js'
 import { findOrCreateCustomer } from '../services/customers.js'
+import jwt from 'jsonwebtoken'
 
 export const publicMenuRouter = express.Router()
 
@@ -1189,5 +1190,134 @@ publicMenuRouter.post('/:companyId/logout', async (req, res) => {
   return res.json({ ok: true })
 })
 
+// Public: GET /public/:companyId/addresses
+publicMenuRouter.get('/:companyId/addresses', async (req, res) => {
+  const { companyId } = req.params;
+  try {
+    const customer = await resolvePublicCustomer(req, companyId);
+    if (!customer) return res.status(404).json({ message: 'Cliente público não encontrado' });
+    // return addresses array
+    const addrs = Array.isArray(customer.addresses) ? customer.addresses : [];
+    return res.json(addrs);
+  } catch (e) {
+    console.error('GET /public/:companyId/addresses', e);
+    return res.status(500).json({ message: 'Erro ao buscar endereços' });
+  }
+});
+
+// Public: POST /public/:companyId/addresses
+// body: { formatted?, street?, number?, neighborhood?, postalCode?, complement? }
+publicMenuRouter.post('/:companyId/addresses', async (req, res) => {
+  const { companyId } = req.params;
+  const body = req.body || {};
+  try {
+    const customer = await resolvePublicCustomer(req, companyId);
+    if (!customer) return res.status(404).json({ message: 'Cliente público não encontrado; crie conta ou envie número' });
+
+    // unset previous default
+    try { await prisma.customerAddress.updateMany({ where: { customerId: customer.id, isDefault: true }, data: { isDefault: false } }); } catch(e){}
+
+    // avoid duplicates by formatted/postalCode/number+street
+    const whereOr = [];
+    if (body.formatted) whereOr.push({ formatted: body.formatted });
+    if (body.postalCode) whereOr.push({ postalCode: body.postalCode });
+    if (body.street && body.number) whereOr.push({ street: body.street, number: body.number });
+    if (whereOr.length) {
+      const exists = await prisma.customerAddress.findFirst({ where: { customerId: customer.id, OR: whereOr } });
+      if (exists) {
+        try { await prisma.customerAddress.update({ where: { id: exists.id }, data: { isDefault: true } }); } catch(_){}
+        return res.status(200).json(exists);
+      }
+    }
+
+    const created = await prisma.customerAddress.create({ data: {
+      customerId: customer.id,
+      label: body.label || null,
+      street: body.street || null,
+      number: body.number || null,
+      complement: body.complement || null,
+      neighborhood: body.neighborhood || null,
+      city: body.city || null,
+      state: body.state || null,
+      postalCode: body.postalCode || null,
+      formatted: body.formatted || null,
+      latitude: Number.isFinite(Number(body.latitude)) ? Number(body.latitude) : null,
+      longitude: Number.isFinite(Number(body.longitude)) ? Number(body.longitude) : null,
+      isDefault: true,
+    } });
+
+    return res.status(201).json(created);
+  } catch (e) {
+    console.error('POST /public/:companyId/addresses', e);
+    return res.status(500).json({ message: 'Erro ao criar endereço' });
+  }
+});
+
+// Public: DELETE /public/:companyId/addresses/:addressId
+publicMenuRouter.delete('/:companyId/addresses/:addressId', async (req, res) => {
+  const { companyId, addressId } = req.params;
+  try {
+    const customer = await resolvePublicCustomer(req, companyId);
+    if (!customer) return res.status(404).json({ message: 'Cliente público não encontrado' });
+    const addr = await prisma.customerAddress.findUnique({ where: { id: addressId } });
+    if (!addr || addr.customerId !== customer.id) return res.status(404).json({ message: 'Endereço não encontrado' });
+    await prisma.customerAddress.delete({ where: { id: addressId } });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /public/:companyId/addresses/:addressId', e);
+    return res.status(500).json({ message: 'Erro ao excluir endereço' });
+  }
+});
+
 export default publicMenuRouter
 // (mantido export default acima; colocar novas rotas antes dele)
+
+// Helper: try to resolve a customer for public endpoints using Authorization token or public_phone cookie
+async function resolvePublicCustomer(req, companyId) {
+  // 1) try Authorization Bearer token (customer account token)
+  try {
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (token && process.env.JWT_SECRET) {
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        if (payload && payload.customerId && String(payload.companyId) === String(companyId)) {
+          const cust = await prisma.customer.findUnique({ where: { id: payload.customerId }, include: { addresses: true } });
+          if (cust) return cust;
+        }
+      } catch (e) { /* invalid token */ }
+    }
+  } catch (e) { /* ignore */ }
+
+  // 2) try public_phone cookie
+  try {
+    let phone = String(req.query.phone || '').trim();
+    if (!phone) {
+      const rawCookie = req.headers.cookie || '';
+      const parts = rawCookie.split(/;\s*/);
+      for (const p of parts) {
+        const [k,v] = p.split('=');
+        if (k === 'public_phone') { phone = decodeURIComponent(v || '').trim(); break }
+      }
+    }
+    if (phone) {
+      const byPhone = await prisma.customer.findFirst({ where: { companyId, OR: [{ whatsapp: phone }, { phone: phone }] }, include: { addresses: true } });
+      if (byPhone) return byPhone;
+      // also try matching orders payload
+      const orders = await prisma.order.findMany({ where: { companyId }, orderBy: { createdAt: 'desc' }, take: 200 });
+      for (const o of (orders || [])) {
+        try {
+          const p = o.payload && o.payload.rawPayload && o.payload.rawPayload.customer && o.payload.rawPayload.customer.contact;
+          if (p && String(p).replace(/\D/g,'') === String(phone).replace(/\D/g,'')) {
+            if (o.customerId) {
+              const c = await prisma.customer.findUnique({ where: { id: o.customerId }, include: { addresses: true } });
+              if (c) return c;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  return null;
+}

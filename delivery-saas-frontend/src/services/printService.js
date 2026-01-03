@@ -54,14 +54,22 @@ function formatOrderText(order) {
 
   const rawAddr = order.address || (order.payload && (order.payload.rawPayload?.address || order.payload.delivery?.deliveryAddress?.formattedAddress || order.payload.delivery?.deliveryAddress)) || order.addressText || null;
   const resolvedAddress = formatAddress(rawAddr);
-  const header = `
-==============================
-      ${display}
-==============================
-Cliente: ${order.customerName || "Não informado"}
-Endereço: ${resolvedAddress}
-------------------------------
-`;
+  // Header in a single line as requested: "#14 - Cliente: Thomaz"
+  const header = `#${display} - Cliente: ${order.customerName || 'Não informado'}\nEndereço: ${resolvedAddress}\n`;
+  // phone
+  const phone = order.customerPhone || order.customer?.phone || order.customer?.whatsapp || order.contact || '';
+  const phoneLine = phone ? `Telefone: ${phone}\n` : '';
+  // ifood locator / pickup
+  const ifoodLines = (() => {
+    try {
+      const loc = order.ifood?.externalCode || order.externalCode || order.payload?.rawPayload?.externalCode || null;
+      const pickup = order.pickupCode || order.pickup_code || order.retrievalCode || order.payload?.pickupCode || null;
+      if (!loc && !pickup) return '';
+      return `${loc ? `Localizador:${loc}\n` : ''}${pickup ? `Código de retirada: ${pickup}\n` : ''}`;
+    } catch (e) { return ''; }
+  })();
+
+  let headerBlock = `${header}${phoneLine}${ifoodLines}------------------------------\n`;
 
   // build items block including selected options per item
   const itemsArr = Array.isArray(order.items) ? order.items : (order.payload && Array.isArray(order.payload.items) ? order.payload.items : []);
@@ -79,19 +87,43 @@ Endereço: ${resolvedAddress}
         const prefix = totalOptQty && totalOptQty > 1 ? `${totalOptQty}x ` : '';
       return `  - ${prefix}${oname}${op ? ` — R$${op.toFixed(2)}` : ''}`;
     }).join('\\n');
-    return mainLine + (optsLines ? '\\n' + optsLines : '');
+    return mainLine + (optsLines ? '\n' + optsLines : '');
   }).join('\\n');
+  // compute subtotal from items
+  const subtotalNum = itemsArr.reduce((s, it) => {
+    const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
+    const unit = Number(it.price ?? it.unitPrice ?? it.unit_price ?? 0) || 0;
+    let optsSum = 0;
+    const opts = Array.isArray(it.options) ? it.options : (Array.isArray(it.addons) ? it.addons : []);
+    for (const o of (opts || [])) {
+      const oq = Number(o.quantity ?? o.qty ?? 1) || 1;
+      const op = Number(o.price ?? o.unitPrice ?? o.amount ?? 0) || 0;
+      optsSum += (op * oq);
+    }
+    return s + (unit * qty) + (optsSum * qty);
+  }, 0);
 
-  const totalNum = Number(order.total ?? order.amount ?? order.orderAmount ?? 0) || 0;
-  const footer = `
-------------------------------
-TOTAL: R$ ${totalNum.toFixed(2)}
-==============================
-  Obrigado e bom apetite!
-==============================
-\n\n\n`;
+  const discountNum = Number(order.discount ?? order.discountAmount ?? 0) || 0;
+  const totalNum = Number(order.total ?? order.amount ?? order.orderAmount ?? subtotalNum - discountNum) || subtotalNum - discountNum;
 
-  return header + items + footer;
+  // payment info
+  const paymentMethod = (order.payload && order.payload.payment && (order.payload.payment.method || order.payload.payment.type)) || order.paymentMethod || order.payment || (order.payload && order.payload.payments && order.payload.payments[0] && (order.payload.payments[0].method || order.payload.payments[0].type)) || '—';
+  const changeFor = Number(order.changeFor ?? order.paymentChange ?? order.payment?.changeFor ?? order.payload?.payment?.changeFor ?? 0) || 0;
+
+  const summaryLines = [];
+  summaryLines.push('------------------------------');
+  summaryLines.push(`Sub-total = R$ ${subtotalNum.toFixed(2)}`);
+  if (discountNum && discountNum > 0) summaryLines.push(`Desconto: R$ ${discountNum.toFixed(2)}`);
+  summaryLines.push('');
+  summaryLines.push(`TOTAL a cobrar: R$ ${totalNum.toFixed(2)}`);
+  summaryLines.push(`Pagamento: ${paymentMethod}`);
+  if (changeFor && changeFor > 0) summaryLines.push(`Troco para R$ ${changeFor.toFixed(2)}`);
+  summaryLines.push('==============================');
+  summaryLines.push(`${order.payload?.integration?.provider || order.channel || order.source || 'Canal de venda'} - ${order.storeName || order.companyName || ''}`);
+  summaryLines.push('Obrigado e bom apetite!');
+  summaryLines.push('==============================\n\n\n');
+
+  return headerBlock + items + '\n' + summaryLines.join('\n');
 }
 
 // expose formatter so UI can preview the comanda without printing
@@ -110,7 +142,9 @@ export async function enqueuePrint(order) {
     if (ENABLE_QZ) {
       try {
         const { printComanda } = await import('../plugins/qz.js');
-        const ok = await printComanda(order);
+        // provide formatted text as well so QZ plugin can print same layout
+        const text = formatOrderText(order);
+        const ok = await printComanda(order, text);
         if (ok) return true;
       } catch (e) {
         console.warn('printService: QZ print failed, falling back to /agent-print', e && e.message);
@@ -120,7 +154,7 @@ export async function enqueuePrint(order) {
     const res = await fetch(`${BACKEND_BASE}/agent-print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order })
+      body: JSON.stringify({ order, text: formatOrderText(order) })
     });
     if (!res.ok) throw new Error('failed to post to /agent-print: ' + res.status);
     return true;

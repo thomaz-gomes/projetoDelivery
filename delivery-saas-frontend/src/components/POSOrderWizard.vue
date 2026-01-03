@@ -15,9 +15,10 @@
         </div>
         <div v-else>
           <div v-if="foundCustomer" class="alert alert-success py-2 mb-3">
-            <strong>Cliente encontrado:</strong><br>
-            {{ foundCustomer.fullName }} ({{ foundCustomer.whatsapp || foundCustomer.phone }})
-          </div>
+                    <strong>Cliente encontrado:</strong><br>
+                    <span v-if="fetchingFullCustomer" class="spinner-border spinner-border-sm text-primary me-2" role="status" aria-hidden="true"></span>
+                    {{ foundCustomer.fullName }} ({{ foundCustomer.whatsapp || foundCustomer.phone }})
+                  </div>
           <div v-else-if="customerNotFound" class="alert alert-warning py-2 mb-3">Cliente não encontrado.</div>
           
           <label class="form-label small fw-semibold">Tipo do pedido</label>
@@ -358,12 +359,14 @@ const phoneDigits = computed(()=> {
   // Remove DDI 55 se presente, pega últimos 11 dígitos
   return digits.length > 11 ? digits.slice(-11) : digits;
 });
-function searchCustomer(){
+const fetchingFullCustomer = ref(false);
+async function searchCustomer(){
   if(!phoneDigits.value) return;
   customerSearchLoading.value = true;
   foundCustomer.value = null; customerNotFound.value = false;
   console.log('Buscando cliente com telefone:', phoneDigits.value);
-  api.get(`/customers?q=${encodeURIComponent(phoneDigits.value)}`).then(r=>{
+  try {
+    const r = await api.get(`/customers?q=${encodeURIComponent(phoneDigits.value)}`);
     const rows = r.data?.rows || [];
     console.log('Resultados da busca:', rows.length, rows);
     // Normaliza telefones removendo não-dígitos e pegando últimos 11
@@ -374,15 +377,32 @@ function searchCustomer(){
     const match = rows.find(c => normalizePhone(c.whatsapp)===phoneDigits.value || normalizePhone(c.phone)===phoneDigits.value);
     console.log('Cliente encontrado:', match);
     if(match){ 
-      foundCustomer.value = match; 
-      newCustomerName.value = match.fullName; 
+      // fetch full customer record to ensure we have all addresses and latest data
+      fetchingFullCustomer.value = true;
+      try{
+        const full = await api.get(`/customers/${match.id}`);
+        foundCustomer.value = full.data || match;
+        savedAddresses.value = (full.data && full.data.addresses) ? full.data.addresses : (match.addresses || []);
+      }catch(fetchErr){
+        // fallback to match if full fetch fails
+        console.warn('Falha ao buscar cliente completo, usando resultado parcial', fetchErr);
+        foundCustomer.value = match;
+        savedAddresses.value = match.addresses || [];
+      } finally {
+        fetchingFullCustomer.value = false;
+      }
+      newCustomerName.value = foundCustomer.value.fullName;
       orderType.value='BALCAO';
-      // Carrega endereços salvos do cliente
-      savedAddresses.value = match.addresses || [];
       console.log('Endereços do cliente:', savedAddresses.value);
+    } else {
+      customerNotFound.value = true;
     }
-    else { customerNotFound.value = true; }
-  }).catch(e=>{ console.error('Erro na busca:', e); customerNotFound.value = true; }).finally(()=> customerSearchLoading.value=false);
+  } catch(e){
+    console.error('Erro na busca:', e);
+    customerNotFound.value = true;
+  } finally {
+    customerSearchLoading.value=false;
+  }
 }
 
 function selectSavedAddress(address){

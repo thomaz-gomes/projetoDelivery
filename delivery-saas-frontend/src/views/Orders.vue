@@ -20,6 +20,7 @@ import QRCode from 'qrcode';
 import { formatCurrency, formatAmount } from '../utils/formatters.js';
 import { formatDate, formatTime } from '../utils/dates'
 import { createApp, h } from 'vue';
+import OrderTicketPreview from '../components/OrderTicketPreview.vue';
 import CurrencyInput from '../components/form/input/CurrencyInput.vue';
 import { bindLoading } from '../state/globalLoading.js';
 import Sortable from 'sortablejs';
@@ -1126,37 +1127,45 @@ async function viewReceipt(order) {
     const text = (printService && printService.formatOrderText) ? printService.formatOrderText(order) : null;
     const content = text || (`Comanda: ${formatDisplay(order)}\n\n` + JSON.stringify(order, null, 2));
 
-    // show QR and receipt directly in a modal (no separate page)
+    // show QR and receipt using the Vue ticket component mounted inside the Swal modal
     try {
-      let modalHtml = '';
-      modalHtml += `<div style="max-width:520px;margin:0 auto;text-align:left"><div style="white-space:pre-wrap;font-family:monospace;margin-bottom:12px">${escapeHtml(content)}</div>`;
-      if (qrDataUrl) {
-        modalHtml += `<div style="display:flex;justify-content:center;margin-top:6px"><img src="${qrDataUrl}" alt="QR do pedido" style="width:220px;height:220px;object-fit:contain;border:0;border-radius:8px"/></div>`;
-        // small tip for riders explaining how to claim the order
-        modalHtml += `<div style="margin-top:8px;padding:10px;border-radius:8px;background:#f8f9fa;border:1px solid #e9ecef;color:#333;font-size:13px;text-align:center;">`;
-        modalHtml += `<strong>Como o motoboy deve proceder:</strong><br/>Abra o app "Painel do Motoboy" e toque em <em>Ler pedido (QR)</em>. Aponte a câmera para este QR; ao escanear, o pedido será atribuído a você automaticamente.`;
-        modalHtml += `</div>`;
-        modalHtml += `<div style="text-align:center;font-size:12px;color:#666;margin-top:6px">Escaneie para despachar</div>`;
-      }
-      modalHtml += `</div>`;
-
+      // if server returned an explicit QR URL token, attach to order so component can build QR
+      if (qrDataUrl && t && t.qrUrl) order.url = t.qrUrl;
+      const rootId = `ticket-root-${Date.now()}`;
+      let appInstance = null;
       await Swal.fire({
         title: `Comanda ${escapeHtml(formatDisplay(order))}`,
-        html: modalHtml,
+        html: `<div id="${rootId}" style="display:flex;justify-content:center"></div>`,
         width: Math.min(window.innerWidth - 40, 560),
         showCloseButton: true,
+        didOpen: () => {
+          try {
+            const el = document.getElementById(rootId);
+            if (el) {
+              appInstance = createApp(OrderTicketPreview, { order });
+              appInstance.mount(el);
+            }
+          } catch (err) {
+            console.warn('Failed to mount OrderTicketPreview', err);
+          }
+        },
+        willClose: () => {
+          try { if (appInstance) appInstance.unmount(); } catch(e) {}
+        },
         confirmButtonText: 'Fechar',
         focusConfirm: false,
       });
     } catch (e) {
-      console.warn('Falha ao abrir modal de visualização, tentando abrir em nova aba', e);
+      console.warn('Falha ao abrir componente de pré-visualização, tentando fallback', e);
+      // fallback: open a plain new tab with textual preview
       const w = window.open('', '_blank');
       if (!w) {
         Swal.fire('Bloqueado', 'Não foi possível abrir a janela de visualização (bloqueador de popups).', 'warning');
         return;
       }
+      const textFallback = (printService && printService.formatOrderText) ? printService.formatOrderText(order) : (`Comanda: ${formatDisplay(order)}\n\n` + JSON.stringify(order, null, 2));
       let html = `<!doctype html><html><head><meta charset="utf-8"><title>Comanda ${escapeHtml(formatDisplay(order))}</title>
-        <style>body{font-family:monospace;white-space:pre-wrap;padding:16px} .qr-wrap{display:flex;justify-content:center;margin-top:12px} .receipt-box{max-width:520px;margin:0 auto}</style></head><body><div class="receipt-box"><pre>${escapeHtml(content)}</pre>`;
+        <style>body{font-family:monospace;white-space:pre-wrap;padding:16px} .qr-wrap{display:flex;justify-content:center;margin-top:12px} .receipt-box{max-width:520px;margin:0 auto}</style></head><body><div class="receipt-box"><pre>${escapeHtml(textFallback)}</pre>`;
       if (qrDataUrl) {
         html += `<div class="qr-wrap"><img src="${qrDataUrl}" alt="QR do pedido" style="width:180px;height:180px;object-fit:contain;border:0;" /></div><div style="text-align:center;font-size:12px;color:#666;margin-top:6px;">Escaneie para despachar</div>`;
       }

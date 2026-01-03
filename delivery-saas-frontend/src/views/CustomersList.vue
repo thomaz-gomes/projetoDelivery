@@ -114,7 +114,12 @@ function editCustomer(id){ router.push(`/customers/${id}/edit`) }
                 <td>{{ c.cpf || '—' }}</td>
                 <td>{{ c.whatsapp || c.phone || '—' }}</td>
                 <td>
-                  <div class="small text-dark">{{ c.addresses?.[0]?.formatted || [c.addresses?.[0]?.street, c.addresses?.[0]?.number].filter(Boolean).join(', ') || '—' }}</div>
+                  <div class="small text-dark">
+                    <div v-if="c.addresses && c.addresses.length">
+                      <div v-for="a in c.addresses" :key="a.id">{{ a.formatted || [a.street, a.number].filter(Boolean).join(', ') }}</div>
+                    </div>
+                    <div v-else>—</div>
+                  </div>
                 </td>
                 <td>{{ c.orders?.length || 0 }}</td>
                 <td>

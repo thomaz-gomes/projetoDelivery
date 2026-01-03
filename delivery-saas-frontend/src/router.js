@@ -49,6 +49,7 @@ import PublicProfile from './views/PublicProfile.vue';
 import PublicProfileEdit from './views/PublicProfileEdit.vue';
 import PublicProfilePassword from './views/PublicProfilePassword.vue';
 import PublicAddresses from './views/PublicAddresses.vue';
+import PublicOrderPrint from './views/PublicOrderPrint.vue';
 import OrderStatus from './views/OrderStatus.vue';
 import OrderHistory from './views/OrderHistory.vue';
 import MenuAdmin from './views/MenuAdmin.vue';
@@ -137,6 +138,7 @@ const router = createRouter({
   ,{ path: '/public/:companyId/profile/password', component: PublicProfilePassword }
   ,{ path: '/public/:companyId/addresses', component: PublicAddresses }
   ,{ path: '/public/:companyId/order/:orderId', component: OrderStatus }
+  ,{ path: '/public/:companyId/order/:orderId/print', component: PublicOrderPrint }
   ,{ path: '/public/:companyId/history', component: OrderHistory }
   ,{ path: '/public/:companyId/orders', redirect: to => ({ path: `/public/${to.params.companyId}/history`, query: to.query }) }
   ,{ path: '/menu/admin', component: MenuAdmin, meta: { requiresAuth: true } }
