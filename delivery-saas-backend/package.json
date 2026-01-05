@@ -15,6 +15,7 @@
     "migrate": "prisma migrate dev --name init",
     "db:seed": "node src/seed.js",
     "seed:manual": "node src/seed.js",
+    "db:seed:custom": "node src/seed-custom.js",
     "db:seed:large": "node src/seed-large.js",
     "db:seed:full": "prisma generate && prisma db push && node src/seed.js && node src/seed-large.js",
     "migrate:sqlite-to-postgres": "bash scripts/migrate_sqlite_to_postgres.sh",

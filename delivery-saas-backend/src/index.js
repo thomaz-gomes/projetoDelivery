@@ -25,6 +25,7 @@ import { waRouter } from "./routes/wa.js";
 import { affiliatesRouter } from "./routes/affiliates.js";
 import { couponsRouter } from "./routes/coupons.js";
 import publicMenuRouter from './routes/publicMenu.js'
+import publicCartRouter from './routes/publicCart.js'
 import menuAdminRouter from './routes/menu.js'
 import menuOptionsRouter from './routes/menuOptions.js'
 import { nfeRouter } from './routes/nfe.js'
@@ -43,6 +44,7 @@ import qrActionRouter from './routes/qrAction.js'
 import rasterizeRouter from './routes/rasterize.js'
 import printerSettingRouter from './routes/printerSetting.js'
 import cashRouter from './routes/cash.js'
+import customerGroupsRouter from './routes/customerGroups.js'
 import events from './utils/events.js'
 import printQueue from './printQueue.js'
 import { prisma } from './prisma.js'
@@ -164,6 +166,8 @@ app.use("/wa", waRouter);
 app.use("/affiliates", affiliatesRouter);
 app.use('/coupons', couponsRouter);
 app.use('/public', publicMenuRouter);
+// Public cart endpoints (evaluations) for a given companyId
+app.use('/public/:companyId/cart', publicCartRouter);
 app.use('/menu', menuAdminRouter);
 app.use('/menu/options', menuOptionsRouter);
 app.use('/nfe', requireModule('nfe'), nfeRouter);
@@ -191,6 +195,7 @@ app.use('/saas', saasRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
+app.use('/customer-groups', customerGroupsRouter);
 app.use('/qr-action', qrActionRouter);
 // Server-side rasterization endpoint (returns PNG data URL)
 app.use('/rasterize', rasterizeRouter);

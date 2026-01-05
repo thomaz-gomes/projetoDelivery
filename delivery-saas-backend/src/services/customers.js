@@ -1,14 +1,14 @@
 // src/services/customer.js
 import { prisma } from '../prisma.js';
 
-// normaliza telefone → apenas dígitos + garante DDI 55 se parecer BR
+// normaliza telefone → apenas dígitos; NÃO armazena DDI '55'.
+// The DDI (country code) should be considered only when sending messages.
 export function normalizePhone(n) {
   const digits = String(n || '').replace(/\D+/g, '');
   if (!digits) return '';
-  // se já tiver 55 e tiver tamanho plausível, mantém
-  if (digits.startsWith('55')) return digits;
-  // se tiver tamanho de celular BR (10~11) adiciona 55
-  if (digits.length >= 10 && digits.length <= 11) return '55' + digits;
+  // If caller provided a number with leading '55', strip it for storage.
+  if (digits.startsWith('55')) return digits.slice(2);
+  // Otherwise return digits as-is (do not auto-prepend any DDI).
   return digits;
 }
 
@@ -21,6 +21,8 @@ function mapAddressFromPayload(payload) {
     number: a.streetNumber || null,
     complement: a.complement || null,
     neighborhood: a.neighborhood || null,
+    reference: a.reference || a.referencePoint || a.referencia || null,
+    observation: a.note || a.notes || a.observation || a.observacao || null,
     city: a.city || null,
     state: a.state || null,
     postalCode: a.postalCode || null,

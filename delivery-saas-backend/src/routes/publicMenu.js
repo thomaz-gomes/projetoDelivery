@@ -1,8 +1,8 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
-import { signToken } from '../auth.js'
+import { signToken, authMiddleware } from '../auth.js'
 import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId } from '../services/customerAccounts.js'
-import { findOrCreateCustomer } from '../services/customers.js'
+import { findOrCreateCustomer, normalizePhone } from '../services/customers.js'
 import jwt from 'jsonwebtoken'
 
 export const publicMenuRouter = express.Router()
@@ -216,8 +216,13 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
       }
     }
     // include publicly-visible payment methods (active) and pickup info (from printer settings as a lightweight store address)
-    const paymentMethods = await prisma.paymentMethod.findMany({ where: { companyId, isActive: true }, orderBy: { createdAt: 'asc' } })
+    let paymentMethods = await prisma.paymentMethod.findMany({ where: { companyId, isActive: true }, orderBy: { createdAt: 'asc' } })
     const printer = await prisma.printerSetting.findFirst({ where: { companyId } })
+    // If no payment methods are configured for the company, expose a default
+    // 'Dinheiro' (cash) option so public frontend can show a sensible default
+    if (!Array.isArray(paymentMethods) || paymentMethods.length === 0) {
+      paymentMethods = [{ id: 'default_cash', code: 'DINHEIRO', name: 'Dinheiro', isActive: true, isDefault: true }]
+    }
     if (company) company.paymentMethods = paymentMethods || []
     if (company) company.pickupInfo = printer ? `${printer.headerName || ''}${printer.headerCity ? ' - ' + printer.headerCity : ''}`.trim() : null
 
@@ -390,6 +395,104 @@ publicMenuRouter.get('/:companyId/neighborhoods', async (req, res) => {
   } catch (e) {
     console.error('Error loading public neighborhoods', e)
     return res.status(500).json({ message: 'Erro ao carregar bairros' })
+  }
+})
+
+// GET /public/:companyId/profile
+// If the request contains a valid Bearer token for a CUSTOMER, return the
+// customer's profile including saved addresses (ordered by isDefault).
+publicMenuRouter.get('/:companyId/profile', authMiddleware, async (req, res) => {
+  const { companyId } = req.params
+  try {
+    // Ensure token belongs to same company
+    if (!req.user || !req.user.customerId || String(req.user.companyId) !== String(companyId)) {
+      return res.status(403).json({ message: 'Forbidden' })
+    }
+    const custId = req.user.customerId || req.user.id
+    const customer = await prisma.customer.findFirst({ where: { id: custId, companyId }, include: { addresses: { orderBy: { isDefault: 'desc' } } } })
+    if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' })
+    return res.json(customer)
+  } catch (e) {
+    console.error('GET /public/:companyId/profile failed', e)
+    return res.status(500).json({ message: 'Erro ao carregar perfil' })
+  }
+})
+
+// GET /public/:companyId/addresses
+// Return saved addresses for the authenticated public customer (requires valid JWT issued by /public/:companyId/login)
+publicMenuRouter.get('/:companyId/addresses', authMiddleware, async (req, res) => {
+  const { companyId } = req.params
+  try {
+    if (!req.user || !req.user.customerId || String(req.user.companyId) !== String(companyId)) {
+      return res.status(403).json({ message: 'Forbidden' })
+    }
+    const custId = req.user.customerId || req.user.id
+    const cust = await prisma.customer.findFirst({ where: { id: custId, companyId }, include: { addresses: { orderBy: { isDefault: 'desc' } } } })
+    if (!cust) return res.status(404).json({ message: 'Cliente não encontrado' })
+    const out = (cust.addresses || []).map(a => ({ id: a.id, label: a.label || a.formatted || '', formattedAddress: a.formatted || a.formattedAddress || a.street || '', neighborhood: a.neighborhood || '', fullDisplay: a.formatted || a.street || '' }))
+    return res.json(out)
+  } catch (e) {
+    console.error('GET /public/:companyId/addresses failed', e)
+    return res.status(500).json({ message: 'Erro ao carregar endereços' })
+  }
+})
+
+// POST /public/:companyId/login
+// Authenticate a public customer by email or whatsapp + password and return a JWT
+publicMenuRouter.post('/:companyId/login', async (req, res) => {
+  const { companyId } = req.params
+  const { whatsapp, login, email, password } = req.body || {}
+  if (!password) return res.status(400).json({ message: 'Informe senha' })
+
+  try {
+    // Email-based auth (preferred when provided)
+    if (email) {
+      const acct = await findAccountByEmail({ companyId, email })
+      if (!acct) return res.status(401).json({ message: 'Credenciais inválidas' })
+      const ok = await verifyPassword(acct, password)
+      if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' })
+      const customer = await prisma.customer.findUnique({ where: { id: acct.customerId } })
+      const token = signToken({ id: customer.id, role: 'CUSTOMER', companyId: companyId, customerId: customer.id, name: customer.name })
+      return res.json({ token, customer })
+    }
+
+    // Whatsapp/login based auth
+    const raw = whatsapp || login || ''
+    if (!raw) return res.status(400).json({ message: 'Informe whatsapp/email e senha' })
+    const digits = String(raw).replace(/\D/g,'')
+    if (!digits) return res.status(400).json({ message: 'WhatsApp inválido' })
+
+    // Normalize incoming phone for DB matching (we store numbers without DDI)
+    const phoneClean = normalizePhone(digits);
+    // Try to locate the Customer by whatsapp using multiple heuristics to be compatible
+    // with existing records that may contain leading '55'.
+    let customer = null
+    try {
+      customer = await prisma.customer.findFirst({
+        where: {
+          companyId,
+          OR: [
+            { whatsapp: phoneClean },
+            { whatsapp: '55' + phoneClean },
+            { whatsapp: { endsWith: phoneClean } },
+            { whatsapp: { contains: phoneClean } }
+          ]
+        }
+      })
+    } catch (e) { /* ignore */ }
+
+    if (!customer) return res.status(401).json({ message: 'Credenciais inválidas' })
+
+    const acct = await findAccountByCustomerId({ companyId, customerId: customer.id })
+    if (!acct) return res.status(401).json({ message: 'Credenciais inválidas' })
+    const ok = await verifyPassword(acct, password)
+    if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' })
+
+    const token = signToken({ id: customer.id, role: 'CUSTOMER', companyId: companyId, customerId: customer.id, name: customer.name })
+    return res.json({ token, customer })
+  } catch (e) {
+    console.error('POST /public/:companyId/login', e)
+    return res.status(500).json({ message: 'Erro ao autenticar' })
   }
 })
 
@@ -781,10 +884,20 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
     // but store the canonical payment method NAME in the persisted payload (user requested)
     if (payment && payment.methodCode) {
       const pm = await prisma.paymentMethod.findFirst({ where: { companyId, isActive: true, OR: [{ code: payment.methodCode }, { name: payment.methodCode }] } })
-      if (!pm) return res.status(400).json({ message: 'Método de pagamento inválido' })
-      // prefer storing the user-friendly name in the payload (keeps display consistent)
-      payment.method = pm.name
-      payment.methodCode = pm.name
+      if (!pm) {
+        // Allow a sensible default for cash when no DB payment method matches.
+        // Accept common cash identifiers like 'dinheiro' (case-insensitive).
+        if (/dinheiro|cash|money/i.test(String(payment.methodCode || ''))) {
+          payment.method = 'Dinheiro'
+          payment.methodCode = 'Dinheiro'
+        } else {
+          return res.status(400).json({ message: 'Método de pagamento inválido' })
+        }
+      } else {
+        // prefer storing the user-friendly name in the payload (keeps display consistent)
+        payment.method = pm.name
+        payment.methodCode = pm.name
+      }
     }
 
     // Try to create/find a Customer when contact (whatsapp/phone) or name is provided from public menu.

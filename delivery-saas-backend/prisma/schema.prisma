@@ -48,6 +48,7 @@ model Company {
   affiliates        Affiliate[]
   coupons           Coupon[]
   customerAccounts  CustomerAccount[]
+  customerGroups    CustomerGroup[]
   // relations for menu / payments (inverse relation fields required by Prisma)
   menuCategories    MenuCategory[]
   products          Product[]
@@ -235,6 +236,7 @@ model Customer {
   addresses CustomerAddress[]
   orders    Order[]
   accounts  CustomerAccount[]
+  groupMemberships CustomerGroupMember[]
 
   @@unique([companyId, cpf], name: "company_cpf")
   @@unique([companyId, whatsapp], name: "company_whatsapp")
@@ -265,6 +267,8 @@ model CustomerAddress {
   number       String?
   complement   String?
   neighborhood String?
+  reference    String?
+  observation  String?
   city         String?
   state        String?
   postalCode   String?
@@ -276,6 +280,67 @@ model CustomerAddress {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Customer Groups: allow grouping customers and attaching discount rules
+enum CustomerGroupRuleType {
+  PERCENT
+  FIXED
+}
+
+enum CustomerGroupRuleTarget {
+  PRODUCT
+  CATEGORY
+  ORDER
+}
+
+model CustomerGroup {
+  id          String                   @id @default(uuid())
+  companyId   String
+  company     Company                  @relation(fields: [companyId], references: [id])
+  name        String
+  description String?
+  active      Boolean                  @default(true)
+  rules       CustomerGroupRule[]
+  members     CustomerGroupMember[]
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@unique([companyId, name], name: "company_customergroup_name")
+  @@index([companyId], name: "idx_customergroup_company")
+}
+
+model CustomerGroupMember {
+  id         String      @id @default(uuid())
+  groupId    String
+  group      CustomerGroup @relation(fields: [groupId], references: [id])
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  createdAt  DateTime    @default(now())
+
+  @@index([groupId], name: "idx_cgmember_group")
+  @@index([customerId], name: "idx_cgmember_customer")
+}
+
+model CustomerGroupRule {
+  id          String                 @id @default(uuid())
+  groupId     String
+  group       CustomerGroup          @relation(fields: [groupId], references: [id])
+  type        CustomerGroupRuleType
+  target      CustomerGroupRuleTarget
+  // when target is PRODUCT or CATEGORY, targetRef holds the referenced id (productId or categoryId)
+  targetRef   String?
+  // value: percent (0-100) when type=PERCENT, or fixed currency amount when type=FIXED
+  value       Decimal
+  // optional minimum subtotal to apply rule
+  minSubtotal Decimal?
+  // optional schedule or restrictions (days/times) as JSON
+  schedule    Json?
+  active      Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([groupId], name: "idx_cgrule_group")
 }
 
 model ApiIntegration {

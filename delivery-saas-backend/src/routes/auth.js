@@ -76,6 +76,7 @@ authRouter.post('/login-whatsapp', async (req, res) => {
 
   const digits = String(raw).replace(/\D/g, '');
   if (!digits) return res.status(400).json({ message: 'WhatsApp inválido' });
+    const phoneClean = normalizePhone(digits);
 
   try {
     console.debug('[auth] login-whatsapp payload received (raw):', raw);
@@ -85,17 +86,17 @@ authRouter.post('/login-whatsapp', async (req, res) => {
   // Try to find user by rider.whatsapp (exact / endsWith / with leading 55 / contains)
   let finalUser = null;
   try {
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { rider: { whatsapp: digits } },
-          { rider: { whatsapp: { endsWith: digits } } },
-          { rider: { whatsapp: '55' + digits } },
-          { rider: { whatsapp: { contains: digits } } }
-        ]
-      },
-      include: { rider: true }
-    });
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { rider: { whatsapp: phoneClean } },
+            { rider: { whatsapp: '55' + phoneClean } },
+            { rider: { whatsapp: { endsWith: phoneClean } } },
+            { rider: { whatsapp: { contains: phoneClean } } }
+          ]
+        },
+        include: { rider: true }
+      });
     if (user) finalUser = user;
   } catch (eFindUser) {
     console.warn('[auth] login-whatsapp: error searching user by rider relation:', eFindUser && eFindUser.message);
@@ -104,16 +105,16 @@ authRouter.post('/login-whatsapp', async (req, res) => {
   // Fallback: if no user was found, look for a Rider record and load its linked user (rider.userId)
   if (!finalUser) {
     try {
-      const rider = await prisma.rider.findFirst({
-        where: {
-          OR: [
-            { whatsapp: digits },
-            { whatsapp: { endsWith: digits } },
-            { whatsapp: '55' + digits },
-            { whatsapp: { contains: digits } }
-          ]
-        }
-      });
+        const rider = await prisma.rider.findFirst({
+          where: {
+            OR: [
+              { whatsapp: phoneClean },
+              { whatsapp: '55' + phoneClean },
+              { whatsapp: { endsWith: phoneClean } },
+              { whatsapp: { contains: phoneClean } }
+            ]
+          }
+        });
       if (rider) {
         if (rider.userId) {
           const u = await prisma.user.findUnique({ where: { id: rider.userId }, include: { rider: true } });

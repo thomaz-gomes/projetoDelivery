@@ -26,12 +26,23 @@ technicalSheetsRouter.get('/:id', async (req, res) => {
 
 // create
 technicalSheetsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
-  const companyId = req.user.companyId;
+  const companyId = req.user?.companyId;
   const { name, notes = '' } = req.body || {};
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' });
+  if (!companyId) return res.status(400).json({ message: 'Usuário não está associado a uma empresa (companyId ausente)' });
 
-  const created = await prisma.technicalSheet.create({ data: { companyId, name, notes } });
-  res.status(201).json(created);
+  // ensure company exists to avoid foreign-key violations
+  const company = await prisma.company.findUnique({ where: { id: companyId } });
+  if (!company) return res.status(400).json({ message: 'Empresa não encontrada para o usuário' });
+
+  try {
+    const created = await prisma.technicalSheet.create({ data: { companyId, name, notes } });
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('technicalSheets.create error', err);
+    // return limited info to client, log full error on server
+    return res.status(500).json({ message: 'Erro ao criar ficha técnica', detail: err?.message });
+  }
 });
 
 // patch
