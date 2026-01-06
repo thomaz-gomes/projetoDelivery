@@ -32,7 +32,8 @@ const nav = [
   ] },
   { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', children: [
     { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill' },
-    { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated' }
+    { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated' },
+    { name: 'Cashback', to: '/settings/cashback', icon: 'bi bi-cash-stack' }
   ] },
   { name: 'Ingredientes', to: '/ingredient-groups', icon: 'bi bi-box', children: [
     { name: 'Grupos de Ingredientes', to: '/ingredient-groups', icon: 'bi bi-list' },

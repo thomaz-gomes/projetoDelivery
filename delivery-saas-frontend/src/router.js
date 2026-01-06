@@ -80,6 +80,7 @@ import SaasCompanyEdit from './views/SaasCompanyEdit.vue';
 import SaasBilling from './views/SaasBilling.vue';
 import SaasModules from './views/SaasModules.vue';
 import SaasAdmin from './views/SaasAdmin.vue';
+import CashbackSettings from './views/CashbackSettings.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -145,7 +146,10 @@ const router = createRouter({
   ,{ path: '/public/:companyId/order/:orderId', component: OrderStatus }
   ,{ path: '/public/:companyId/order/:orderId/print', component: PublicOrderPrint }
   ,{ path: '/public/:companyId/history', component: OrderHistory }
-  ,{ path: '/public/:companyId/orders', redirect: to => ({ path: `/public/${to.params.companyId}/history`, query: to.query }) }
+  ,{ path: '/public/:companyId/orders', redirect: (to) => {
+      if(!to || !to.params) return '/';
+      return { path: `/public/${to.params.companyId}/history`, query: to.query || {} };
+    } }
   ,{ path: '/menu/admin', component: MenuAdmin, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus', component: Menus, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus/new', component: MenuEdit, meta: { requiresAuth: true } }
@@ -180,7 +184,8 @@ const router = createRouter({
   ,{ path: '/saas/companies/:id/edit', component: SaasCompanyEdit, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/modules', component: SaasModules, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/billing', component: SaasBilling, meta: { requiresAuth: true, role: ['ADMIN','SUPER_ADMIN'] } }
-  ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
+    { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true } },
   ]
 });
 

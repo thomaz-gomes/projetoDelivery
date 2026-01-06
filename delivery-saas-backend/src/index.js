@@ -45,6 +45,8 @@ import rasterizeRouter from './routes/rasterize.js'
 import printerSettingRouter from './routes/printerSetting.js'
 import cashRouter from './routes/cash.js'
 import customerGroupsRouter from './routes/customerGroups.js'
+import cashbackRouter from './routes/cashback.js'
+import checkoutRouter from './routes/checkout.js'
 import events from './utils/events.js'
 import printQueue from './printQueue.js'
 import { prisma } from './prisma.js'
@@ -197,6 +199,8 @@ app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
 app.use('/customer-groups', customerGroupsRouter);
 app.use('/qr-action', qrActionRouter);
+app.use('/cashback', cashbackRouter);
+app.use('/checkout', checkoutRouter);
 // Server-side rasterization endpoint (returns PNG data URL)
 app.use('/rasterize', rasterizeRouter);
 // Dev-only debug agent print route (bypass auth for local development convenience)

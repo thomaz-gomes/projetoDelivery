@@ -70,6 +70,10 @@ model Company {
   fileSource        FileSource?
   // SaaS subscription (one-to-one)
   saasSubscription  SaasSubscription?
+  // cashback relations
+  cashbackSetting   CashbackSetting?
+  cashbackProductRules CashbackProductRule[]
+  cashbackWallets   CashbackWallet[]
 }
 
 model User {
@@ -138,6 +142,7 @@ model Order {
   riderTransactions RiderTransaction[]
   affiliateSales    AffiliateSale[]
   nfeProtocols      NfeProtocol[]
+  cashbackTransactions CashbackTransaction[]
 
   // Index to speed up queries by company + couponCode
   @@index([companyId, couponCode], name: "idx_order_company_coupon")
@@ -236,6 +241,7 @@ model Customer {
   addresses CustomerAddress[]
   orders    Order[]
   accounts  CustomerAccount[]
+  cashbackWallets CashbackWallet[]
   groupMemberships CustomerGroupMember[]
 
   @@unique([companyId, cpf], name: "company_cpf")
@@ -615,7 +621,71 @@ model Product {
   linkedOptions       Option[]
 
   @@index([companyId, name], name: "company_product_name_idx")
+
 }
+
+enum CashbackTransactionType {
+  CREDIT
+  DEBIT
+}
+
+model CashbackSetting {
+  id               String   @id @default(uuid())
+  companyId        String  @unique
+  company          Company  @relation(fields: [companyId], references: [id])
+  enabled          Boolean  @default(false)
+  defaultPercent   Decimal  @default(0)
+  minRedeemValue   Decimal  @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([companyId], name: "idx_cashbacksetting_company")
+}
+
+model CashbackProductRule {
+  id              String   @id @default(uuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id])
+  productId       String
+  cashbackPercent Decimal  @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, productId], name: "uniq_cashback_product")
+  @@index([companyId], name: "idx_cashbackproduct_company")
+}
+
+model CashbackWallet {
+  id         String    @id @default(uuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id])
+  clientId   String
+  client     Customer  @relation(fields: [clientId], references: [id])
+  balance    Decimal   @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  transactions CashbackTransaction[]
+
+  @@index([companyId, clientId], name: "idx_cashbackwallet_company_client")
+  @@unique([companyId, clientId], name: "uniq_cashback_wallet_company_client")
+}
+
+model CashbackTransaction {
+  id         String                     @id @default(uuid())
+  walletId   String
+  wallet     CashbackWallet             @relation(fields: [walletId], references: [id])
+  orderId    String?
+  order      Order?                     @relation(fields: [orderId], references: [id])
+  type       CashbackTransactionType
+  amount     Decimal
+  description String?
+  createdAt  DateTime                   @default(now())
+
+  @@index([walletId], name: "idx_cashbacktx_wallet")
+  @@index([orderId], name: "idx_cashbacktx_order")
+}
+
 
 // =============================
 // SaaS: Plans, Modules, Subscriptions, Invoices

@@ -488,6 +488,36 @@
                   </div>
                 </div>
               </div>
+              <div v-if="cashbackEnabled" class="mt-3 alert alert-light p-2">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="summary-icon"><i class="bi bi-cash-stack"></i></div>
+                    <div>
+                      <div class="small">Saldo de cashback</div>
+                      <div class="fw-bold">{{ walletLoaded ? new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(wallet.balance||0)) : '—' }}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <template v-if="publicCustomerConnected">
+                      <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="useCashbackSwitch" v-model="useCashback">
+                        <label class="form-check-label small" for="useCashbackSwitch">Usar cashback</label>
+                      </div>
+                    </template>
+                    <template v-else>
+                      <small class="text-muted">Conecte-se para usar cashback</small>
+                    </template>
+                  </div>
+                </div>
+                <div v-if="useCashback" class="mt-2">
+                  <div class="input-group">
+                    <span class="input-group-text">R$</span>
+                    <CurrencyInput v-model="useCashbackAmount" :min="0" :max="Math.min(Number(wallet.balance||0), Number(finalTotal))" inputClass="form-control" />
+                    <button class="btn btn-outline-secondary" type="button" @click="useCashbackAmount = Math.min(Number(wallet.balance||0), Number(finalTotal))">Usar máximo</button>
+                  </div>
+                  <div class="small text-muted mt-1">Máximo utilizável: {{ formatCurrency(Math.min(Number(wallet.balance||0), Number(finalTotal))) }}</div>
+                </div>
+              </div>
                   <div v-for="m in paymentMethods" :key="m.code" :class="['payment-method','mb-3',{ selected: paymentMethod === m.code }]" @click="paymentMethod = m.code" style="cursor:pointer;">
                     <div class="d-flex justify-content-between align-items-center">
                       <div class="d-flex align-items-center gap-2">
@@ -571,11 +601,12 @@
               <div class="checkout-totals mb-2" style="max-width:420px">
                 <div class="d-flex justify-content-between"><div class="text-muted">Subtotal</div><div>{{ formatCurrency(subtotal) }}</div></div>
                 <div v-if="couponApplied" class="d-flex justify-content-between text-success"><div>Cupom</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
+                <div v-if="discountsTotal > 0" class="d-flex justify-content-between text-success"><div>Descontos</div><div>-{{ formatCurrency(discountsTotal) }}</div></div>
                 <div v-if="orderType==='DELIVERY'">
                   <div class="d-flex justify-content-between"><div class="text-muted">Taxa de entrega</div><div>{{ Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee) }}</div></div>
-                  <div class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0)) + currentDeliveryFee) }}</div></div>
                 </div>
-                <div v-else class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0))) }}</div></div>
+                <div v-if="useCashback && Number(useCashbackAmount) > 0" class="d-flex justify-content-between text-success"><div>Cashback usado</div><div>-{{ formatCurrency(useCashbackAmount) }}</div></div>
+                <div class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(finalTotal) }}</div></div>
               </div>
 
               <!-- Payment row with quick edit -->
@@ -614,7 +645,7 @@
   </div>
    <!-- Unified slide-in drawer (used on desktop and mobile) -->
   <div class="drawer-backdrop" v-if="cartModalOpen && cart.length > 0" @click="closeCartModal"></div>
-  <aside class="cart-drawer" :class="{ open: cartModalOpen && cart.length > 0 }" aria-hidden="!cartModalOpen" role="dialog" aria-label="Carrinho">
+  <aside class="cart-drawer" :class="{ open: cartModalOpen && cart.length > 0 }" :aria-hidden="!cartModalOpen" role="dialog" aria-label="Carrinho">
           <div class="drawer-header d-flex justify-content-between align-items-center p-3 border-bottom">
             <h5 class="m-0">Sua sacola</h5>
             <div class="d-flex align-items-center gap-2">
@@ -1065,7 +1096,13 @@ function removeAddress(id){
 // Fetch server-side public profile and addresses when we have a token but no cached customer
 async function fetchProfileAndAddresses(){
   try{
-    const p = await api.get(`/public/${companyId}/profile`)
+    // if we have a stored public customer contact, send it as x-public-phone so server can resolve guest customer
+    const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
+    const storedContact = stored && (stored.contact || stored.whatsapp || stored.phone) ? (stored.contact || stored.whatsapp || stored.phone) : null
+    const cfg = {}
+    if(storedContact) cfg.headers = { 'x-public-phone': storedContact }
+
+    const p = await api.get(`/public/${companyId}/profile`, cfg)
     const prof = p && p.data ? p.data : null
     if(prof){
       try{ localStorage.setItem(LOCAL_CUSTOMER_KEY, JSON.stringify(prof)) }catch(e){}
@@ -1085,7 +1122,9 @@ async function fetchProfileAndAddresses(){
   }catch(e){ /* ignore profile fetch errors */ }
 
   try{
-    const r = await api.get(`/public/${companyId}/addresses`)
+    const cfg2 = {}
+    if(storedContact) cfg2.headers = { 'x-public-phone': storedContact }
+    const r = await api.get(`/public/${companyId}/addresses`, cfg2)
     const addrData = (r && r.data) ? (Array.isArray(r.data) ? r.data : r.data.addresses || []) : []
     if(Array.isArray(addrData) && addrData.length){
       addresses.value = addrData.map(a => ({ id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8), label: a.label || a.formatted || '', formattedAddress: a.formatted || a.formattedAddress || '', neighborhood: a.neighborhood || a.neigh || '', reference: a.reference || a.ref || '', observation: a.observation || a.observacao || '' }))
@@ -1231,6 +1270,23 @@ function refreshDeliveryFee(){
 const paymentMethod = ref('CASH');
 // when paying with cash, customer may provide a 'troco' amount
 const changeFor = ref('');
+// cashback state
+const cashbackEnabled = ref(false)
+const cashbackSettings = ref(null)
+const wallet = ref({ balance: 0 })
+const walletLoaded = ref(false)
+
+// debug: log wallet changes to help trace why balance may be zero
+try{
+  watch([
+    () => wallet.value,
+    () => walletLoaded.value
+  ], ([w, l]) => {
+    try{ console.debug('[debug] wallet change', { wallet: w, walletLoaded: l, customer: (customer && customer.value) ? { name: customer.value.name, contact: customer.value.contact } : null }) }catch(e){}
+  }, { deep: true })
+}catch(e){}
+const useCashback = ref(false)
+const useCashbackAmount = ref(0)
 // (info modal removed) handlers and visibility state deleted
 const submitting = ref(false);
 const serverError = ref('');
@@ -1285,6 +1341,22 @@ function publicPath(path){
 const visibleCategories = computed(() => {
   // show all categories — navigation is handled via anchors now
   return categories.value || []
+})
+
+// map productId -> cashback percent (when provided on product object)
+const productCashbackMap = computed(() => {
+  const map = {}
+  try{
+    for(const c of (categories.value || [])){
+      for(const p of (c.products || [])){
+        if(p && (p.cashback || p.cashbackPercent)) map[String(p.id)] = Number(p.cashback || p.cashbackPercent || 0)
+      }
+    }
+    for(const p of (uncategorized.value || [])){
+      if(p && (p.cashback || p.cashbackPercent)) map[String(p.id)] = Number(p.cashback || p.cashbackPercent || 0)
+    }
+  }catch(e){}
+  return map
 })
 
 // compute if company is open (client-side check)
@@ -2196,9 +2268,11 @@ const finalTotal = computed(() => {
   try{
     const base = Math.max(0, subtotal.value - (couponDiscount.value || 0) - (discountsTotal.value || 0))
     const includeDelivery = orderType.value === 'DELIVERY' && neighborhood.value && String(neighborhood.value).trim() !== ''
-      // prefer explicit refreshed fee when available
-      const fee = Number(currentDeliveryFee.value || 0) || Number(deliveryFee.value || 0)
-      return base + (includeDelivery ? fee : 0)
+    // prefer explicit refreshed fee when available
+    const fee = Number(currentDeliveryFee.value || 0) || Number(deliveryFee.value || 0)
+    const beforeCashback = base + (includeDelivery ? fee : 0)
+    const cashbackDeduction = Number(useCashbackAmount.value || 0)
+    return Math.max(0, beforeCashback - cashbackDeduction)
   }catch(e){ return subtotal.value }
 })
 
@@ -2656,6 +2730,8 @@ onMounted(async ()=>{
     
     // initial evaluation of discounts for the persisted cart
     try{ scheduleEvaluateDiscounts() }catch(e){}
+    // fetch cashback settings and wallet when menu/company loaded
+    try{ fetchCashbackSettingsAndWallet() }catch(e){}
   }catch(e){
     console.error(e);
     serverError.value = 'Não foi possível carregar o cardápio.';
@@ -2686,6 +2762,56 @@ function selectCategory(id){
     }
   }catch(e){ console.warn('selectCategory err', e) }
 }
+
+// fetch cashback settings for company and (if logged) the customer's wallet
+async function fetchCashbackSettingsAndWallet(){
+  try{
+    // fetch settings (public endpoint)
+    try{
+      const r = await api.get(`/cashback/settings?companyId=${companyId}`)
+      cashbackSettings.value = r.data || null
+      cashbackEnabled.value = !!(cashbackSettings.value && (cashbackSettings.value.enabled || cashbackSettings.value.isEnabled))
+    }catch(e){ cashbackSettings.value = null; cashbackEnabled.value = false }
+
+    // fetch wallet for logged-in public customer when possible, or when we have a stored public customer id
+    walletLoaded.value = false
+    try{
+      // try to derive clientId from stored profile (namespaced or legacy key)
+      const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
+      const storedClientId = stored && (stored.id || stored.clientId || stored.customerId) ? (stored.id || stored.clientId || stored.customerId) : null
+
+      // prefer authenticated connected customer, but allow fetching wallet when only storedClientId exists
+      const clientIdToUse = storedClientId || null
+
+      if(clientIdToUse){
+        try{
+          const w = await api.get(`/cashback/wallet?clientId=${encodeURIComponent(clientIdToUse)}&companyId=${companyId}`)
+          try{ console.debug('[debug] fetchCashbackSettingsAndWallet -> wallet response', w && w.data) }catch(e){}
+          wallet.value = w.data || { balance: 0 }
+        }catch(e){ console.debug('[debug] fetchCashbackSettingsAndWallet -> wallet fetch error', e); wallet.value = { balance: 0 } }
+      } else {
+        wallet.value = { balance: 0 }
+      }
+    }catch(e){ console.debug('[debug] fetchCashbackSettingsAndWallet -> derive client id error', e); wallet.value = { balance: 0 } }
+    walletLoaded.value = true
+  }catch(e){ console.debug('[debug] fetchCashbackSettingsAndWallet -> outer error', e); walletLoaded.value = true }
+}
+
+// refresh wallet when user logs in/out
+watch(() => publicCustomerConnected.value, (v) => {
+  try{ if(v) fetchCashbackSettingsAndWallet(); else { wallet.value = { balance: 0 }; walletLoaded.value = true; useCashback.value = false; useCashbackAmount.value = 0 } }catch(e){}
+})
+
+// clamp cashback amount to allowable range
+watch(() => useCashbackAmount.value, (v) => {
+  try{
+    let val = Number(v || 0)
+    const max = Math.min(Number(wallet.value?.balance || 0), Number(finalTotal))
+    if(Number.isNaN(val) || val < 0) val = 0
+    if(val > max) val = max
+    if(val !== v) useCashbackAmount.value = Number(Math.round(val * 100) / 100)
+  }catch(e){}
+})
 
 function _publicNavigate(pathSuffix, extraQuery = {}){
   try{
@@ -2777,7 +2903,7 @@ async function submitOrder(){
       // can prefer/store the name without relying only on codes
       method: (paymentMethods.value || []).find(m => m.code === paymentMethod.value)?.name || null,
       // include customer-group discounts in the final amount calculation
-      amount: Number(Math.max(0, subtotal.value - (couponDiscount.value || 0) - (discountsTotal.value || 0)) + Number(deliveryFee.value || 0))
+      amount: Number(Math.max(0, subtotal.value - (couponDiscount.value || 0) - (discountsTotal.value || 0)) + Number(deliveryFee.value || 0)) - Number(useCashbackAmount.value || 0)
     };
     if (Number(changeFor.value) > 0) paymentObj.changeFor = Number(changeFor.value);
     payload.payment = paymentObj;
@@ -2850,6 +2976,8 @@ try{
 
   // debug: log outgoing payload to help diagnose server-side validation errors (400)
   try { console.debug && console.debug('Submitting public order payload', payload) } catch(e){}
+  // include applied cashback for backend processing when present
+  try{ payload.appliedCashback = Number(useCashback && Number(useCashbackAmount) > 0 ? Number(useCashbackAmount) : 0) }catch(e){ payload.appliedCashback = 0 }
   const res = await api.post(publicPath(`/public/${companyId}/orders`), payload);
   orderResponse.value = res.data;
   cart.value = [];

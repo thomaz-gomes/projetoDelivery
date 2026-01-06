@@ -4,6 +4,7 @@ import { signToken, authMiddleware } from '../auth.js'
 import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId } from '../services/customerAccounts.js'
 import { findOrCreateCustomer, normalizePhone } from '../services/customers.js'
 import jwt from 'jsonwebtoken'
+import { resolvePublicCustomerFromReq } from './publicHelpers.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -395,6 +396,47 @@ publicMenuRouter.get('/:companyId/neighborhoods', async (req, res) => {
   } catch (e) {
     console.error('Error loading public neighborhoods', e)
     return res.status(500).json({ message: 'Erro ao carregar bairros' })
+  }
+})
+
+// GET /public/:companyId/profile
+// Resolve a public customer from Authorization Bearer token or x-public-phone / cookie and
+// return a lightweight profile object suitable for the public UI. Returns 403 when
+// no public customer can be resolved.
+publicMenuRouter.get('/:companyId/profile', async (req, res) => {
+  const { companyId } = req.params
+  try {
+    const customer = await resolvePublicCustomerFromReq(req, companyId)
+    if (!customer) return res.status(403).json({ message: 'public-customer-not-resolved' })
+
+    // return minimal public-safe profile (include addresses when present)
+    const addresses = await prisma.customerAddress.findMany({ where: { customerId: customer.id } })
+    const prof = {
+      id: customer.id,
+      name: customer.fullName || customer.name || null,
+      contact: customer.whatsapp || customer.phone || null,
+      email: customer.email || null,
+      addresses: addresses || []
+    }
+    return res.json(prof)
+  } catch (e) {
+    console.error('Error resolving public profile', e)
+    return res.status(500).json({ message: 'Erro ao resolver perfil público' })
+  }
+})
+
+// GET /public/:companyId/addresses
+// Return addresses for resolved public customer (403 when not resolved)
+publicMenuRouter.get('/:companyId/addresses', async (req, res) => {
+  const { companyId } = req.params
+  try {
+    const customer = await resolvePublicCustomerFromReq(req, companyId)
+    if (!customer) return res.status(403).json({ message: 'public-customer-not-resolved' })
+    const addresses = await prisma.customerAddress.findMany({ where: { customerId: customer.id } })
+    return res.json(addresses || [])
+  } catch (e) {
+    console.error('Error resolving public addresses', e)
+    return res.status(500).json({ message: 'Erro ao resolver endereços públicos' })
   }
 })
 

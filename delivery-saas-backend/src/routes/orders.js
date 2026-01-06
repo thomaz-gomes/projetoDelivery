@@ -6,6 +6,7 @@ import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { upsertCustomerFromIfood, findOrCreateCustomer } from '../services/customers.js';
 import { trackAffiliateSale } from '../services/affiliates.js';
+import * as cashbackSvc from '../services/cashback.js';
 import { canTransition } from '../stateMachine.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
 import riderAccountService from '../services/riderAccount.js';
@@ -75,7 +76,8 @@ ordersRouter.get('/', async (req, res) => {
 });
 
 // POST atribuir entregador manualmente
-ordersRouter.post('/:id/assign', requireRole('ADMIN'), async (req, res) => {
+// allow ADMIN and store-level users to assign riders
+ordersRouter.post('/:id/assign', requireRole('ADMIN','STORE'), async (req, res) => {
   const { id } = req.params;
   const { riderId, riderPhone, alsoSetStatus } = req.body || {};
   if (!riderId && !riderPhone) return res.status(400).json({ message: 'Informe riderId ou riderPhone' });
@@ -238,7 +240,8 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
 });
 
 // Admin: patch order status (manual change)
-ordersRouter.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
+// allow ADMIN and store-level users to change status from the admin panel / PDV
+ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body || {};
   const companyId = req.user.companyId;
@@ -393,6 +396,33 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
         }
       }
     } catch (e) { console.error('Error while attempting affiliate tracking on order status change:', e?.message || e); }
+
+    // If order was completed, attempt to credit cashback to customer wallet
+    try {
+      if (status === 'CONCLUIDO') {
+        (async () => {
+          try {
+            let clientId = updated.customerId || null;
+            // try to derive clientId from order data (phone or payload) when customerId missing
+            if (!clientId) {
+              try {
+                const phone = updated.customerPhone || (updated.payload && (updated.payload.customer && (updated.payload.customer.contact || updated.payload.customer.phone))) || null;
+                if (phone) {
+                  const cust = await prisma.customer.findFirst({ where: { companyId: updated.companyId, OR: [{ whatsapp: phone }, { phone }] } });
+                  if (cust) clientId = cust.id;
+                }
+              } catch (eFind) { /* ignore */ }
+            }
+            if (clientId) {
+              await cashbackSvc.creditWalletForOrder(updated.companyId, clientId, updated, 'Cashback automático de compra')
+              console.log('Cashback credited for order', updated.id)
+            } else {
+              console.log('No clientId found for order; skipping cashback credit for order', updated.id)
+            }
+          } catch (e) { console.error('Failed to credit cashback for order', updated.id, e?.message || e) }
+        })()
+      }
+    } catch (e) { console.error('Error while attempting to credit cashback on order status change:', e?.message || e); }
 
     return res.json(updated);
   } catch (e) {

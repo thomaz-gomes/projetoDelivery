@@ -40,6 +40,15 @@
               </div>
             </div>
           </div>
+          <div v-if="wallet && (wallet.balance!==undefined)" class="card mt-3">
+            <div class="card-body">
+              <h5 class="card-title">Saldo de Cashback</h5>
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="fw-semibold">{{ new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(wallet.balance||0)) }}</div>
+                <div><button class="btn btn-sm btn-outline-secondary" @click.prevent="_publicNavigate('/profile/transactions')">Ver extrato</button></div>
+              </div>
+            </div>
+          </div>
         </div>
           <ul v-if="!profile && !tokenPresent" class="nav nav-tabs mb-3">
           <li class="nav-item"><a class="nav-link" :class="{active: tab==='login'}" href="#" @click.prevent="tab='login'">Entrar</a></li>
@@ -159,6 +168,7 @@ const reg = ref({ name: '', whatsapp: '', email: '', password: '' })
 const profile = ref(null)
 const lastOrder = ref(null)
 const loadingLast = ref(false)
+const wallet = ref({ balance: 0, transactions: [] })
 const tokenPresent = ref(false)
 
 const COMPANY_CUSTOMER_KEY = `public_customer_${companyId}`
@@ -209,8 +219,18 @@ async function fetchLastOrder(){
         profile.value = arr[0].customer
         try{ localStorage.setItem(COMPANY_CUSTOMER_KEY, JSON.stringify(profile.value)) }catch{}
       }
+      // if we have profile, fetch wallet
+      if(profile.value && profile.value.id) fetchWallet()
     }
   }catch(e){ console.warn('fetchLastOrder err', e) }finally{ loadingLast.value = false }
+}
+
+async function fetchWallet(){
+  try{
+    if(!profile.value || !profile.value.id) return
+    const res = await api.get(`/cashback/wallet?clientId=${profile.value.id}`)
+    wallet.value = res.data || { balance: 0, transactions: [] }
+  }catch(e){ console.warn('fetchWallet', e) }
 }
 
 function repeatOrder(order){
