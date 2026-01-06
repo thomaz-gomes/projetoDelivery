@@ -89,6 +89,14 @@
               <label class="form-label small">Complemento</label>
               <TextInput v-model="addr.complement" inputClass="form-control" />
             </div>
+            <div class="col-12">
+              <label class="form-label small">Referência</label>
+              <TextInput v-model="addr.reference" inputClass="form-control" />
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Observação</label>
+              <TextInput v-model="addr.observation" inputClass="form-control" />
+            </div>
           </div>
               <div class="mt-2 small">
             <div v-if="neighborhoodsLoading">Calculando taxa...</div>
@@ -364,6 +372,9 @@ async function searchCustomer(){
   if(!phoneDigits.value) return;
   customerSearchLoading.value = true;
   foundCustomer.value = null; customerNotFound.value = false;
+  // clear any previously loaded addresses to avoid showing stale data
+  savedAddresses.value = [];
+  selectedAddressId.value = null;
   console.log('Buscando cliente com telefone:', phoneDigits.value);
   try {
     const r = await api.get(`/customers?q=${encodeURIComponent(phoneDigits.value)}`);
@@ -412,6 +423,8 @@ function selectSavedAddress(address){
   let number = address.number || '';
   let neighborhood = address.neighborhood || '';
   let complement = address.complement || '';
+  let reference = address.reference || '';
+  let observation = address.observation || '';
   
   // Se não tem campos separados mas tem formatted, tenta extrair do formatted
   if(!street && address.formatted){
@@ -425,6 +438,8 @@ function selectSavedAddress(address){
     number,
     neighborhood,
     complement,
+    reference,
+    observation,
     formatted: address.formatted || ''
   };
   showNewAddressForm.value = false;
@@ -792,6 +807,8 @@ async function finalize(){
           number: addr.value.number || null,
           complement: addr.value.complement || null,
           neighborhood: addr.value.neighborhood || null,
+          reference: addr.value.reference || null,
+          observation: addr.value.observation || null,
           formatted: formatted || null
         };
         // create address on customer and set customerId on order body so backend uses existing customer
@@ -823,6 +840,11 @@ function resetWizard(){
   paymentMethodCode.value=''; 
   changeFor.value=null;
   phoneInput.value = '';
+  // clear addresses and address form state to avoid reusing previous customer's data
+  savedAddresses.value = [];
+  selectedAddressId.value = null;
+  showNewAddressForm.value = false;
+  addr.value = { street:'', number:'', neighborhood:'', complement:'', formatted:'', reference:'', observation:'' };
 }
 
 watch(()=>props.visible, async (v)=>{ 

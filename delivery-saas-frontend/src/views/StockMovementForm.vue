@@ -16,28 +16,33 @@
       </div>
     </div>
 
-    <div class="card mb-3">
-      <div class="card-body">
+    <ListCard title="Itens" icon="bi bi-list-ul" :subtitle="form.items.length ? `${form.items.length} itens` : ''">
+      <template #actions>
         <div class="d-flex gap-2 mb-2">
           <select v-model="item.ingredientId" class="form-select"><option :value="null">-- Selecione ingrediente --</option><option v-for="ing in ingredients" :key="ing.id" :value="ing.id">{{ ing.description }} ({{ ing.unit }})</option></select>
           <input v-model="item.quantity" type="number" step="any" class="form-control" placeholder="Quantidade" />
           <input v-model="item.unitCost" type="number" step="0.01" class="form-control" placeholder="Custo unit. (opcional)" />
           <button class="btn btn-secondary" @click="addItem">Adicionar</button>
         </div>
+      </template>
 
-        <table class="table table-sm"><thead><tr><th>Ingrediente</th><th>Qtd</th><th>Custo Unit.</th><th>Ações</th></tr></thead>
-          <tbody>
-            <tr v-for="(it, idx) in form.items" :key="idx">
-              <td>{{ it.ingredientDesc || it.ingredientId }}</td>
-              <td>{{ it.quantity }}</td>
-              <td>{{ it.unitCost !== null ? Number(it.unitCost).toFixed(2) : '-' }}</td>
-              <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(idx)">Remover</button></td>
-            </tr>
-            <tr v-if="!form.items.length"><td colspan="4" class="text-center text-muted py-4">Nenhum item adicionado.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <template #default>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>Ingrediente</th><th>Qtd</th><th>Custo Unit.</th><th>Ações</th></tr></thead>
+            <tbody>
+              <tr v-for="(it, idx) in form.items" :key="idx">
+                <td>{{ it.ingredientDesc || it.ingredientId }}</td>
+                <td>{{ it.quantity }}</td>
+                <td>{{ it.unitCost !== null ? Number(it.unitCost).toFixed(2) : '-' }}</td>
+                <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(idx)">Remover</button></td>
+              </tr>
+              <tr v-if="!form.items.length"><td colspan="4" class="text-center text-muted py-4">Nenhum item adicionado.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </ListCard>
 
   </div>
 </template>
@@ -46,6 +51,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
+import ListCard from '../components/ListCard.vue';
 
 const route = useRoute();
 const router = useRouter();

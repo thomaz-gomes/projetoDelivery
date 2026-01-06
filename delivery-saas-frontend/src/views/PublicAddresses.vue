@@ -21,7 +21,15 @@
                         <div class="mb-2"><input v-model="editing.street" class="form-control" placeholder="Rua"/></div>
                         <div class="mb-2"><input v-model="editing.number" class="form-control" placeholder="Número"/></div>
                         <div class="mb-2"><input v-model="editing.complement" class="form-control" placeholder="Complemento"/></div>
-                        <div class="mb-2"><input v-model="editing.neighborhood" class="form-control" placeholder="Bairro"/></div>
+                        <div class="mb-2">
+                          <label class="form-label small">Bairro</label>
+                          <select v-model="editing.neighborhood" class="form-select">
+                            <option value="">Selecione o bairro</option>
+                            <option v-for="b in neighborhoods" :key="b.id" :value="b.name">{{ b.name }}</option>
+                          </select>
+                        </div>
+                        <div class="mb-2"><input v-model="editing.reference" class="form-control" placeholder="Referência (pontos de referência)"/></div>
+                        <div class="mb-2"><input v-model="editing.observation" class="form-control" placeholder="Observação (ex: tocar campainha)"/></div>
                         <button class="btn btn-primary" :disabled="saving">Salvar</button>
                         <button class="btn btn-secondary ms-2" type="button" @click="cancelEdit">Cancelar</button>
                       </form>
@@ -80,6 +88,7 @@ const editing = ref({})
 const formRef = ref(null)
 const LOCAL_KEY = `public_addresses_${companyId}`
 const showForm = ref(false)
+const neighborhoods = ref([])
 
 function newAddress(){
   editing.value = {}
@@ -90,10 +99,14 @@ function newAddress(){
 async function load() {
   loading.value = true
   try {
-    const res = await api.get(`/public/${companyId}/addresses`)
+    const [res, nbRes] = await Promise.all([
+      api.get(`/public/${companyId}/addresses`),
+      api.get(`/public/${companyId}/neighborhoods`).catch(() => ({ data: [] })),
+    ])
     const data = res?.data
     if (Array.isArray(data)) addresses.value = data
     else addresses.value = data?.addresses || []
+    neighborhoods.value = Array.isArray(nbRes?.data) ? nbRes.data : (nbRes?.data?.neighborhoods || [])
     try{ localStorage.setItem(LOCAL_KEY, JSON.stringify(addresses.value)) }catch{}
   } catch (e) {
     console.warn('load addresses failed, falling back to localStorage', e?.message || e)
@@ -125,13 +138,30 @@ async function save() {
           await api.put(`/public/${companyId}/addresses/${editing.value.id}`, editing.value)
         } else {
           const res = await api.post(`/public/${companyId}/addresses`, editing.value)
-          if (res && res.data) {
-            await load()
-            editing.value = {}
-            showForm.value = false
-            saving.value = false
-            return
-          }
+        if (res && res.data) {
+              // Use returned created address to update local state immediately
+              try{
+                const created = res.data
+                const normalized = {
+                  id: created.id || String(Date.now()) + '-' + Math.random().toString(36).slice(2,8),
+                  label: created.label || created.formatted || created.street || '',
+                  formattedAddress: created.formatted || created.formattedAddress || ((created.street ? (created.street + (created.number ? (', ' + created.number) : '')) : '')),
+                  neighborhood: created.neighborhood || '',
+                  reference: created.reference || '',
+                  observation: created.observation || '',
+                }
+                const idx = addresses.value.findIndex(a => String(a.id) === String(normalized.id))
+                if(idx === -1) addresses.value.unshift(normalized)
+                else addresses.value.splice(idx, 1, normalized)
+                try{ localStorage.setItem(LOCAL_KEY, JSON.stringify(addresses.value)) }catch(e){}
+                // notify other components (PublicMenu) that addresses changed
+                try{ window.dispatchEvent(new CustomEvent('app:addresses-updated', { detail: { addresses: addresses.value } })) }catch(e){}
+              }catch(e){}
+              editing.value = {}
+              showForm.value = false
+              saving.value = false
+              return
+            }
         }
         await load()
         editing.value = {}

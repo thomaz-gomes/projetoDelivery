@@ -294,6 +294,12 @@ enum CustomerGroupRuleTarget {
   ORDER
 }
 
+enum DeliveryType {
+  ANY
+  DELIVERY
+  PICKUP
+}
+
 model CustomerGroup {
   id          String                   @id @default(uuid())
   companyId   String
@@ -336,6 +342,10 @@ model CustomerGroupRule {
   minSubtotal Decimal?
   // optional schedule or restrictions (days/times) as JSON
   schedule    Json?
+  // delivery type condition: ANY | DELIVERY | PICKUP
+  deliveryType DeliveryType @default(ANY)
+  // if true, this rule will not be applied when a coupon is used (coupon takes precedence)
+  noCoupon    Boolean                 @default(false)
   active      Boolean                @default(true)
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt

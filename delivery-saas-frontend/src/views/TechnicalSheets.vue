@@ -1,13 +1,19 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api';
+import ListCard from '../components/ListCard.vue';
+import TechnicalSheetForm from '../components/TechnicalSheetForm.vue';
 
 const list = ref([]);
+const q = ref('')
 const loading = ref(false);
 const form = ref({ id: null, name: '', notes: '' });
 const saving = ref(false);
 const error = ref('');
 const selected = ref(null);
+const showModal = ref(false);
+const router = useRouter();
 const ingredients = ref([]);
 const itemQty = ref('');
 const itemIng = ref(null);
@@ -33,13 +39,15 @@ async function fetch(){
   finally{ loading.value = false }
 }
 
-function edit(s){ form.value = { id: s.id, name: s.name, notes: s.notes || '' }; loadSheet(s.id) }
+function edit(s){ router.push(`/technical-sheets/${s.id}/edit`) }
+
+function openCreate(){ reset(); showModal.value = true }
 
 async function loadSheet(id){
   try{ const { data } = await api.get(`/technical-sheets/${id}`); selected.value = data; }catch(e){ selected.value = null }
 }
 
-function reset(){ form.value = { id: null, name: '', notes: '' }; selected.value = null }
+function reset(){ form.value = { id: null, name: '', notes: '' }; selected.value = null; showModal.value = false }
 
 async function save(){ saving.value = true; error.value='';
   try{
@@ -47,7 +55,12 @@ async function save(){ saving.value = true; error.value='';
     if(form.value.id) await api.patch(`/technical-sheets/${form.value.id}`, payload);
     else await api.post('/technical-sheets', payload);
     await fetch(); reset();
-  }catch(e){ error.value = e?.response?.data?.message || 'Erro' }
+  }catch(e){
+    // show detailed server error when available to aid debugging
+    const serverBody = e?.response?.data;
+    error.value = serverBody?.message || (serverBody ? JSON.stringify(serverBody) : (e.message || String(e)));
+    console.error('TechnicalSheets.save error', e, serverBody);
+  }
   finally{ saving.value = false }
 }
 
@@ -67,77 +80,107 @@ async function removeItem(id){
 }
 
 onMounted(fetch);
+
+const displayed = computed(() => {
+  if(!q.value) return list.value
+  const term = q.value.toLowerCase()
+  return (list.value || []).filter(s => (s.name || '').toLowerCase().includes(term))
+})
+
+function onQuickSearch(val){ q.value = val }
+function onQuickClear(){ q.value = '' }
 </script>
 
 <template>
   <div class="p-4">
-    <h2 class="h4 mb-3">Fichas Técnicas</h2>
 
-    <div class="card mb-3">
-      <div class="card-body">
-        <form @submit.prevent="save" class="row g-2">
-          <div class="col-md-6"><TextInput v-model="form.name" inputClass="form-control" placeholder="Nome da ficha" required /></div>
-          <div class="col-md-6"><TextInput v-model="form.notes" inputClass="form-control" placeholder="Observações (opcional)" /></div>
-          <div class="col-12 mt-2"><div class="d-flex gap-2"><button class="btn btn-primary" :disabled="saving">Salvar</button><button type="button" class="btn btn-outline-secondary" @click="reset">Limpar</button></div>
-          <div v-if="error" class="text-danger small mt-2">{{ error }}</div></div>
-        </form>
-      </div>
-    </div>
+    <ListCard title="Fichas Técnicas" icon="bi bi-file-earmark-text" :subtitle="list.length ? `${list.length} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
+      <template #actions>
+        <button class="btn btn-primary" @click="openCreate">Nova Ficha</button>
+      </template>
 
-    <div class="row">
-      <div class="col-md-5">
-        <div class="card">
-          <div class="list-group list-group-flush">
-            <button v-for="s in list" :key="s.id" class="list-group-item list-group-item-action" @click="edit(s)">
-              <div class="d-flex justify-content-between"><div>{{ s.name }}</div><small class="text-muted">{{ s.itemCount || 0 }} itens</small></div>
-            </button>
-          </div>
+      <template #default>
+        <div class="table-responsive">
+          <table class="table table-hover table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th class="text-end">Itens</th>
+                <th class="text-end">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in displayed" :key="s.id">
+                <td>{{ s.name }}</td>
+                <td class="text-end">{{ s.itemCount || 0 }}</td>
+                <td class="text-end">
+                  <button class="btn btn-sm btn-outline-secondary" @click="edit(s)">Editar</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </div>
-      <div class="col-md-7">
-        <div v-if="selected" class="card">
-          <div class="card-body">
-            <h5>{{ selected.name }}</h5>
-            <p class="small text-muted">{{ selected.notes }}</p>
-            <hr />
-            <h6>Itens</h6>
-            <div class="mb-2">
-              <div class="d-flex gap-2">
-                <select v-model="itemIng" class="form-select"><option :value="null">-- Selecione ingrediente --</option><option v-for="i in ingredients" :key="i.id" :value="i.id">{{ i.description }} ({{ i.unit }})</option></select>
-                <input v-model="itemQty" type="number" step="any" class="form-control" placeholder="Quantidade" />
-                <button class="btn btn-primary" @click="addItem">Adicionar</button>
-              </div>
-              <div class="mt-2 small text-muted">
-                <span v-if="selectedIngredient">Unidade: <strong>{{ selectedIngredient.unit }}</strong></span>
-                <span v-if="selectedIngredient" class="ms-3">Custo unit.: <strong>{{ fmtMoney(selectedIngredient.avgCost) }}</strong></span>
-              </div>
+      </template>
+    </ListCard>
+
+    <div v-if="showModal">
+      <div class="modal-backdrop fade show"></div>
+      <div class="modal d-block" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Nova Ficha Técnica</h5>
+              <button type="button" class="btn-close" aria-label="Close" @click="showModal = false"></button>
             </div>
-            <table class="table table-sm">
-              <thead>
-                <tr>
-                  <th>Ingrediente</th>
-                  <th>Unidade</th>
-                  <th>Custo Unit.</th>
-                  <th>Qtd</th>
-                  <th>Custo Total</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="it in selected.items" :key="it.id">
-                  <td>{{ it.ingredient.description }}</td>
-                  <td>{{ it.ingredient.unit || '-' }}</td>
-                  <td>{{ fmtMoney(it.ingredient.avgCost) }}</td>
-                  <td>{{ it.quantity }}</td>
-                  <td>{{ fmtMoney((it.ingredient.avgCost || 0) * (it.quantity || 0)) }}</td>
-                  <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(it.id)">Remover</button></td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="modal-body">
+              <TechnicalSheetForm :initial="form" @saved="() => { showModal = false; fetch(); }" @cancel="() => { showModal = false }" />
+            </div>
           </div>
         </div>
-        <div v-else class="card p-4 text-muted">Selecione uma ficha para editar seus itens.</div>
       </div>
     </div>
+
+    <div v-if="selected" class="card">
+      <div class="card-body">
+        <h5>{{ selected.name }}</h5>
+        <p class="small text-muted">{{ selected.notes }}</p>
+        <hr />
+        <h6>Itens</h6>
+        <div class="mb-2">
+          <div class="d-flex gap-2">
+            <select v-model="itemIng" class="form-select"><option :value="null">-- Selecione ingrediente --</option><option v-for="i in ingredients" :key="i.id" :value="i.id">{{ i.description }} ({{ i.unit }})</option></select>
+            <input v-model="itemQty" type="number" step="any" class="form-control" placeholder="Quantidade" />
+            <button class="btn btn-primary" @click="addItem">Adicionar</button>
+          </div>
+          <div class="mt-2 small text-muted">
+            <span v-if="selectedIngredient">Unidade: <strong>{{ selectedIngredient.unit }}</strong></span>
+            <span v-if="selectedIngredient" class="ms-3">Custo unit.: <strong>{{ fmtMoney(selectedIngredient.avgCost) }}</strong></span>
+          </div>
+        </div>
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Ingrediente</th>
+              <th>Unidade</th>
+              <th>Custo Unit.</th>
+              <th>Qtd</th>
+              <th>Custo Total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="it in selected.items" :key="it.id">
+              <td>{{ it.ingredient.description }}</td>
+              <td>{{ it.ingredient.unit || '-' }}</td>
+              <td>{{ fmtMoney(it.ingredient.avgCost) }}</td>
+              <td>{{ it.quantity }}</td>
+              <td>{{ fmtMoney((it.ingredient.avgCost || 0) * (it.quantity || 0)) }}</td>
+              <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(it.id)">Remover</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 </template>

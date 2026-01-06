@@ -22,7 +22,10 @@ const nav = [
     { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
     { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat' }
   ] },
-  { name: 'Clientes', to: '/customers', icon: 'bi bi-person' },
+  { name: 'Clientes', to: '/customers', icon: 'bi bi-person', children: [
+    { name: 'Listar clientes', to: '/customers', icon: 'bi bi-people' },
+    { name: 'Grupos de clientes', to: '/customer-groups', icon: 'bi bi-people-fill' }
+  ] },
   { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', children: [
     { name: 'Lista', to: '/riders', icon: 'bi bi-people' },
     { name: 'Créditos/Débitos', to: '/rider-adjustments', icon: 'bi bi-credit-card' },
@@ -40,7 +43,7 @@ const nav = [
  
   
   // Configurações has sub-items
-    { name: 'Configurações', to: '/settings/company', icon: 'bi bi-gear', children: [
+    { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', children: [
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt' },
     { name: 'iFood', to: '/settings/ifood', icon: 'bi bi-shop' },
     { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug' },
@@ -48,7 +51,6 @@ const nav = [
     { name: 'Pasta (import)', to: '/settings/file-source', icon: 'bi bi-folder' },
     { name: 'Preview (pasta)', to: '/settings/file-source/preview', icon: 'bi bi-eye' },
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp' },
-    { name: 'Geral', to: '/settings/company', icon: 'bi bi-sliders' },
     { name: 'Dev Tools', to: '/settings/devtools', icon: 'bi bi-tools' },
     { name: 'Formas de pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card-2-front' },
     { name: 'Gestão de Acessos', to: '/settings/access-control', icon: 'bi bi-shield-lock' },

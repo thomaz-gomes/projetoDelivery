@@ -1,14 +1,11 @@
 <template>
-  <ListCard title="Cupons" icon="bi bi-ticket-detailed" :subtitle="total ? `${total} itens` : ''" variant="compact">
+  <ListCard title="Cupons" icon="bi bi-ticket-detailed" :subtitle="total ? `${total} itens` : ''" variant="compact" :quickSearch="true" quickSearchPlaceholder="Pesquisar código..." @quick-search="onQuickSearch" @quick-clear="onQuickClear">
     <template #actions>
       <button @click="goNew" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Novo Cupom</button>
     </template>
 
     <template #filters>
       <div class="filters row g-2">
-        <div class="col-md-4">
-          <TextInput v-model="q" placeholder="Pesquisar código..." inputClass="form-control" />
-        </div>
         <div class="col-md-2">
           <SelectInput  class="form-select"  v-model="filterActive"  @change="load">
             <option value="">Todos</option>
@@ -162,7 +159,10 @@ export default {
     }
 
     onMounted(() => { load(); loadAffiliates() })
-    return { coupons, loading, error, formatValue, goNew, edit, remove, isAdmin, q, filterActive, filterType, filterAffiliate, affiliates, resetFilters, nextPage, prevPage, offset, limit, total }
+    function onQuickSearch(val){ q.value = val; offset.value = 0; load() }
+    function onQuickClear(){ q.value = ''; offset.value = 0; load() }
+
+    return { coupons, loading, error, formatValue, goNew, edit, remove, isAdmin, q, filterActive, filterType, filterAffiliate, affiliates, resetFilters, nextPage, prevPage, offset, limit, total, onQuickSearch, onQuickClear }
   }
 }
 </script>

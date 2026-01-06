@@ -16,7 +16,12 @@
       <div class="d-flex align-items-start justify-content-between gap-3">
         <div class="d-flex align-items-start gap-3">
           <div class="company-logo-wrapper d-flex d-md-none d-lg-flex align-items-center justify-content-center">
-            <img :src="assetUrl(menu?.logo || company?.logo || 'default-logo.svg')" alt="logo" class="company-logo" />
+            <template v-if="menu?.logo || company?.logo">
+              <img :src="assetUrl(menu?.logo || company?.logo)" alt="logo" class="company-logo" />
+            </template>
+            <div v-else id="logo-indisponivel" class="d-flex align-items-center justify-content-center">
+              <i class="bi bi-camera" aria-hidden="true" style="font-size:2rem"></i>
+            </div>
           </div>
           <div>
             <h3 class="mb-1 company-name">{{ displayName }}</h3>
@@ -272,9 +277,27 @@
       </div>
       <div v-if="checkoutModalOpen" class="product-modal checkout-modal full-mobile" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:11000">
   <div :class="['modal-content','bg-white','rounded','shadow','modal-content-padding']">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <h5 class="m-0">Checkout — {{ checkoutStep }}</h5>
-              <div><button class="btn btn-sm btn-outline-secondary close-x" @click="closeCheckout" aria-label="Fechar">&times;</button></div>
+    <div class="d-flex align-items-center justify-content-between mb-3 checkout-header">
+      <div class="step-back">
+        <button v-if="stepIndex > 0" class="btn btn-outline-secondary btn-sm close-x" @click="goBackFromStep"><i class="bi bi-chevron-left"></i></button>
+      </div>
+      <div class="modal-title text-center flex-fill">
+        <h5 class="m-0">{{ stepLabels[checkoutStep] }}</h5>
+      </div>
+      <div class="step-close">
+        <button class="btn btn-sm btn-outline-secondary close-x" @click="closeCheckout" aria-label="Fechar">&times;</button>
+      </div>
+        </div>
+        <div class="checkout-body">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+              <div class="checkout-stepper w-100">
+                <div v-for="(s, idx) in stepOrder" :key="s" :class="['step', { completed: idx < stepIndex, active: idx === stepIndex }]">
+                  <div class="step-icon" aria-hidden="true">
+                    <i :class="['bi', stepIcons[s]]"></i>
+                  </div>
+                  <div class="step-label">{{ stepLabels[s] }}</div>
+                </div>
+              </div>
             </div>
 
             <div v-if="checkoutStep === 'customer'">
@@ -305,20 +328,24 @@
 
               <div class="d-flex justify-content-between mt-3">
                 <button class="btn btn-outline-secondary" @click="closeCheckout">Cancelar</button>
-                <button class="btn btn-primary" @click="nextFromCustomer" :disabled="!customer.name || !customerPhoneValid">Próximo</button>
+                <button class="btn btn-primary btn-confirm" @click="nextFromCustomer" :disabled="!customer.name || !customerPhoneValid">Próximo</button>
               </div>
             </div>
 
             <div v-if="checkoutStep === 'delivery'">
               <!-- Mirror review spacing: group controls and content into tidy vertical rhythm -->
               <div class="mb-3">
-                <div class="form-check form-check-inline">
-                  <input class="form-check-input" type="radio" id="modalOrderTypeDelivery" value="DELIVERY" v-model="orderType">
-                  <label class="form-check-label" for="modalOrderTypeDelivery">Entrega</label>
-                </div>
-                <div class="form-check form-check-inline">
-                  <input class="form-check-input" type="radio" id="modalOrderTypePickup" value="PICKUP" v-model="orderType">
-                  <label class="form-check-label" for="modalOrderTypePickup">Retirada</label>
+                <div class="order-type-toggle d-flex gap-3">
+                  <label :class="['ot-btn', { active: orderType === 'DELIVERY' }]">
+                    <input type="radio" id="modalOrderTypeDelivery" value="DELIVERY" v-model="orderType" />
+                    <span class="ot-circle" aria-hidden="true"></span>
+                    <span class="ot-label">Entrega</span>
+                  </label>
+                  <label :class="['ot-btn', { active: orderType === 'PICKUP' }]">
+                    <input type="radio" id="modalOrderTypePickup" value="PICKUP" v-model="orderType" />
+                    <span class="ot-circle" aria-hidden="true"></span>
+                    <span class="ot-label">Retirada</span>
+                  </label>
                 </div>
               </div>
 
@@ -328,11 +355,10 @@
                   <div class="alert alert-light d-flex justify-content-between align-items-center" style="border-radius:12px;">
                     <div>
                       <div class="fw-bold">Conectado como {{ publicCustomerConnected.name || publicCustomerConnected.contact }}</div>
-                      <div class="small text-muted">Você está comprando com sua conta pública.</div>
                     </div>
                     <div class="d-flex gap-2">
-                      <button class="btn btn-sm btn-outline-secondary" @click.prevent="switchAccount">Usar outra conta</button>
-                      <button class="btn btn-sm btn-outline-danger" @click.prevent="logoutPublicCustomer">Sair</button>
+                      <button class="btn btn-sm btn-outline-secondary btn-action" @click.prevent="switchAccount"><i class="bi bi-arrow-down-up"></i></button>
+                      <button class="btn btn-sm btn-outline-danger btn-delete" @click.prevent="logoutPublicCustomer">Sair</button>
                     </div>
                   </div>
                 </div>
@@ -341,7 +367,13 @@
                 <div v-if="addresses.length === 0">
                   <div class="mb-3 border p-2">
                     <h6 class="mb-2">Endereço</h6>
-                    <div class="mb-2"><TextInput v-model="_newAddrFormatted" placeholder="Endereço completo" inputClass="form-control" /></div>
+                    <div class="row mb-2">
+                      <div class="col-8"><TextInput v-model="_newAddrFormatted" placeholder="Endereço (rua, avenida)" inputClass="form-control" /></div>
+                      <div class="col-4"><TextInput v-model="_newAddrNumber" placeholder="Número" inputClass="form-control" /></div>
+                    </div>
+                    <div class="mb-2"><TextInput v-model="_newAddrComplement" placeholder="Complemento (apto, bloco, etc)" inputClass="form-control" /></div>
+                    <div class="mb-2"><TextInput v-model="_newAddrReference" placeholder="Referência (ex: Apt 4, próximo ao mercado)" inputClass="form-control" /></div>
+                    <div class="mb-2"><TextInput v-model="_newAddrObservation" placeholder="Observação (ex: deixar na portaria)" inputClass="form-control" /></div>
                       <div class="mb-2">
                         <label class="form-label small">Bairro</label>
                         <SelectInput   v-model="_newAddrNeighborhood"  class="form-select">
@@ -349,7 +381,6 @@
                           <option v-for="n in neighborhoodsList" :key="n.id" :value="n.name">{{ n.name }} — {{ formatCurrency(n.deliveryFee) }}</option>
                         </SelectInput>
                       </div>
-                      <div class="mb-2"><TextInput v-model="_newAddrReference" placeholder="Referência (ex: Apt 4, próximo ao mercado)" inputClass="form-control" /></div>
                     <!-- Buttons removed: advancing will save and proceed; clear removed per UX request -->
                   </div>
                   <div class="mt-2">
@@ -360,23 +391,29 @@
                 <!-- User has saved addresses: show selector + small shortcut to reveal the "new address" form -->
                 <div v-else>
                   <ul class="list-group mb-2">
-                    <li class="list-group-item d-flex justify-content-between align-items-center" v-for="a in addresses" :key="a.id">
-                      <div>
-                        <div><strong>{{ a.label || a.formattedAddress }}</strong></div>
-                        <div class="small text-muted" :title="a.fullDisplay || a.formattedAddress">{{ a.formattedAddress }} — {{ a.neighborhood }}</div>
-                      </div>
-                      <div class="d-flex align-items-center gap-2">
-                        <input type="radio" :value="a.id" v-model="selectedAddressId" />
-                        <button class="btn btn-sm btn-outline-secondary" @click="editAddress(a.id)">Editar</button>
-                        <button class="btn btn-sm btn-outline-danger" @click="removeAddress(a.id)">Remover</button>
+                    <li :class="['list-group-item','p-2', { selected: selectedAddressId === a.id }]" v-for="a in addresses" :key="a.id" @click="selectedAddressId = a.id" style="cursor:pointer;">
+                      <div class="d-flex justify-content-between align-items-center w-100">
+                        <div class="d-flex align-items-center gap-3">
+                          <span class="radio-wrapper">
+                            <input type="radio" :value="a.id" v-model="selectedAddressId" class="custom-radio" @click.stop aria-label="Selecionar endereço" />
+                          </span>
+                          <div>
+                            <div><strong>{{ a.label || a.formattedAddress }}</strong></div>
+                            <div class="small text-muted" :title="a.fullDisplay || a.formattedAddress">{{ a.formattedAddress }} — {{ a.neighborhood }}</div>
+                          </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                          <button class="btn btn-sm btn-outline-secondary btn-action" @click.stop="editAddress(a.id)" style="position:relative;z-index:3"><i class="bi bi-pencil"></i></button>
+                          <button class="btn btn-sm btn-outline-danger btn-delete" @click.stop="removeAddress(a.id)" style="position:relative;z-index:3"><i class="bi bi-trash"></i></button>
+                        </div>
                       </div>
                     </li>
                   </ul>
 
                   <div class="small mb-2"><a href="#" @click.prevent="showNewAddressForm = !showNewAddressForm">Cadastrar novo endereço</a></div>
 
-                  <div v-if="showNewAddressForm" class="mb-3 border p-2" style="border-radius: 16px;">
-                    <h6 class="mb-2">Adicionar novo endereço</h6>
+                  <div v-if="showNewAddressForm" class="mb-3 border p-3" style="border-radius: 12px;">
+                    <h6 class="mb-2"><strong>Endereço</strong></h6>
                     <div class="row mb-2">
                       <div class="col-8">
                         <TextInput v-model="_newAddrFormatted" placeholder="Endereço (rua, avenida)" inputClass="form-control" />
@@ -396,6 +433,7 @@
                       </SelectInput>
                     </div>
                     <div class="mb-2"><TextInput v-model="_newAddrReference" placeholder="Referência (ex: próximo ao mercado)" inputClass="form-control" /></div>
+                    <div class="mb-2"><TextInput v-model="_newAddrObservation" placeholder="Observação (ex: deixar na portaria)" inputClass="form-control" /></div>
                     <div class="d-flex gap-2">
                       <button v-if="!editingAddressId" class="btn btn-sm btn-primary" @click="addNewAddress">Adicionar</button>
                       <button v-else class="btn btn-sm btn-success" @click="saveEditedAddress">Salvar</button>
@@ -411,59 +449,98 @@
               </div>
 
               <div class="d-flex justify-content-between mt-3">
-                <button class="btn btn-outline-secondary" @click="goToCustomer">Voltar</button>
-                <button class="btn btn-primary" @click="nextFromDelivery">Próximo</button>
+                <button class="btn btn-primary btn-next d-none d-sm-block" @click="nextFromDelivery">Próximo <i class="bi bi-chevron-right"></i></button>
               </div>
             </div>
 
             <div v-if="checkoutStep === 'payment'">
-              <div class="mb-2"><label class="form-label">Forma de pagamento</label>
-                <div>
-                  <div v-for="m in paymentMethods" :key="m.code" class="form-check mb-3">
-                    <input class="form-check-input" type="radio" :id="`pm_${m.code}`" :value="m.code" v-model="paymentMethod" />
-                    <label class="form-check-label" :for="`pm_${m.code}`">{{ m.name }}</label>
-                    <div class="small text-muted" v-if="m.description">{{ m.description }}</div>
+              <div class="alert alert-light flex-column d-flex justify-content-between align-items-center mb-3 p-2">
+                
+
+                <div class="coupon-block" style="width:100%">
+                  <div class="d-flex justify-content-between align-items-center">
+                     <div class="summary-icon"><i class="bi bi-ticket-perforated"></i></div>
+                    <div class="small">Tem um cupom? Clique e insira o código</div>
+                    <button class="btn btn-sm btn-outline-secondary" @click.prevent="openCoupon = !openCoupon">›</button>
+                  </div>
+
+                  <div v-show="openCoupon" class="mt-2" style="width:100%">
+                    <div v-if="couponApplied" class="d-flex align-items-center justify-content-between mb-2">
+                      <div>
+                        <div class="small text-success">Cupom aplicado: <strong>{{ couponInfo?.code }}</strong></div>
+                        <div class="small text-success">Desconto: {{ formatCurrency(couponDiscount) }}</div>
+                      </div>
+                      <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" @click="removeCoupon">Remover</button>
+                        <button class="btn btn-sm btn-outline-secondary" @click.prevent="openCoupon = true">Editar</button>
+                      </div>
+                    </div>
+                    <div v-else>
+                      <div class="input-group">
+                        <TextInput v-model="couponCode" placeholder="Código do cupom" inputClass="form-control" />
+                        <button class="btn btn-primary" @click="applyCoupon" :disabled="couponLoading">
+                          <span v-if="couponLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          Aplicar
+                        </button>
+                      </div>
+                      <div v-if="tipMessages['coupon']" class="small text-danger mt-1">{{ tipMessages['coupon'] }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+                  <div v-for="m in paymentMethods" :key="m.code" :class="['payment-method','mb-3',{ selected: paymentMethod === m.code }]" @click="paymentMethod = m.code" style="cursor:pointer;">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <div class="d-flex align-items-center gap-2">
+                        <span class="radio-wrapper" @click.stop>
+                          <input type="radio" :id="`pm_${m.code}`" :value="m.code" v-model="paymentMethod" class="custom-radio" @click.stop aria-label="Selecionar forma de pagamento" />
+                        </span>
+                        <label :for="`pm_${m.code}`" class="mb-0" @click.stop>{{ m.name }}</label>
+                      </div>
+                      <div class="small text-muted" v-if="m.description">{{ m.description }}</div>
+                    </div>
                   </div>
 
                   <div v-if="paymentMethod === 'CASH'" class="mt-2">
                       <div class="input-group">
                       <span class="input-group-text">R$</span>
-                      <CurrencyInput label="Troco para (ex: 50,00)" labelClass="form-label" v-model="changeFor" :min="0" inputClass="form-control" placeholder="Troco para (ex: 50,00)" />
+                      <CurrencyInput labelClass="form-label" v-model="changeFor" :min="0" inputClass="form-control" placeholder="Troco para..." />
                     </div>
                   </div>
-                </div>
-              </div>
+                
+                
+                
+                
               <div class="d-flex justify-content-between mt-3">
-                <button class="btn btn-outline-secondary" @click="goToDelivery">Voltar</button>
-                <button class="btn btn-primary" @click="goToReview">Próximo</button>
+                <button class="btn btn-primary btn-next d-none d-sm-block" @click="goToReview">Próximo <i class="bi bi-chevron-right"></i></button>
               </div>
             </div>
 
             <div v-if="checkoutStep === 'review'">
-              <h6>Resumo</h6>
 
               <!-- Customer & Address quick-edit rows (matches drawer spacing) -->
               <div class="mb-3">
                 <div class="d-flex justify-content-between align-items-start mb-2">
                   <div class="d-flex align-items-center">
-                    <i class="bi bi-person me-2 text-muted" aria-hidden="true"></i>
+                    <div class="summary-icon"><i class="bi bi-person text-muted" aria-hidden="true"></i></div>
                     <div>
                       <div class="fw-bold">{{ customer.name || '' }}</div>
                       <div class="small text-muted">{{ customer.contact || '' }}</div>
                     </div>
                   </div>
-                  <button class="btn btn-link p-0" @click="checkoutStep = 'customer'" aria-label="Editar cliente"><i class="bi bi-pencil"></i></button>
+                  <button class="btn btn-link btn-summary" @click="checkoutStep = 'customer'" aria-label="Editar cliente"><i class="bi bi-pencil"></i></button>
                 </div>
 
                 <div class="d-flex justify-content-between align-items-start">
                   <div class="d-flex align-items-center">
-                    <i class="bi bi-geo-alt me-2 text-muted" aria-hidden="true"></i>
+                    <div class="summary-icon"><i class="bi bi-geo-alt text-muted" aria-hidden="true"></i></div>
                     <div>
                       <div class="fw-bold">{{ (addresses.find(a=>a.id===selectedAddressId) || {}).formattedAddress || '' }}</div>
                       <div class="small text-muted">{{ (addresses.find(a=>a.id===selectedAddressId) || {}).neighborhood || '' }}</div>
+                      <div v-if="(addresses.find(a=>a.id===selectedAddressId) || {}).reference" class="small text-muted">Ref.: {{ (addresses.find(a=>a.id===selectedAddressId) || {}).reference }}</div>
+                      <div v-if="(addresses.find(a=>a.id===selectedAddressId) || {}).observation" class="small text-muted">Obs.: {{ (addresses.find(a=>a.id===selectedAddressId) || {}).observation }}</div>
                     </div>
                   </div>
-                  <button class="btn btn-link p-0" @click="checkoutStep = 'delivery'" aria-label="Editar endereço"><i class="bi bi-pencil"></i></button>
+                  <button class="btn btn-link btn-summary" @click="checkoutStep = 'delivery'" aria-label="Editar endereço"><i class="bi bi-pencil"></i></button>
                 </div>
               </div>
 
@@ -475,8 +552,17 @@
                     <div class="cart-item-name flex-fill me-3" style="min-width:0">
                       <div class="product-name">{{ it.name }}</div>
                       <div v-if="it.options && it.options.length" class="small text-muted option-summary drawer-wrap">{{ optionsSummaryNoPrice(it) }}</div>
+                      <div v-for="(e, idx) in getLineDiscountEntries(it)" :key="idx" class="small text-success mt-1">{{ e.description }}: -{{ formatCurrency(e.amount) }}</div>
                     </div>
-                    <div class="cart-item-price text-end">{{ formatCurrency(it.price * it.quantity) }}</div>
+                    <div class="cart-item-price text-end">
+                      <template v-if="computeLineDiscount(it) > 0">
+                        <div class="small text-muted text-decoration-line-through">{{ formatCurrency(it.price * it.quantity) }}</div>
+                        <div class="fw-bold">{{ formatCurrency((it.price * it.quantity) - computeLineDiscount(it)) }}</div>
+                      </template>
+                      <template v-else>
+                        {{ formatCurrency(it.price * it.quantity) }}
+                      </template>
+                    </div>
                   </div>
                 </li>
               </ul>
@@ -486,8 +572,8 @@
                 <div class="d-flex justify-content-between"><div class="text-muted">Subtotal</div><div>{{ formatCurrency(subtotal) }}</div></div>
                 <div v-if="couponApplied" class="d-flex justify-content-between text-success"><div>Cupom</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
                 <div v-if="orderType==='DELIVERY'">
-                  <div class="d-flex justify-content-between"><div class="text-muted">Taxa de entrega</div><div>{{ Number(deliveryFee) === 0 ? 'Grátis' : formatCurrency(deliveryFee) }}</div></div>
-                  <div class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0)) + deliveryFee) }}</div></div>
+                  <div class="d-flex justify-content-between"><div class="text-muted">Taxa de entrega</div><div>{{ Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee) }}</div></div>
+                  <div class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0)) + currentDeliveryFee) }}</div></div>
                 </div>
                 <div v-else class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0))) }}</div></div>
               </div>
@@ -495,21 +581,33 @@
               <!-- Payment row with quick edit -->
               <div class="d-flex justify-content-between align-items-center mt-3">
                 <div class="d-flex align-items-center">
-                  <i class="bi bi-credit-card me-2 text-muted" aria-hidden="true"></i>
+                  <div class="summary-icon"><i class="bi bi-credit-card text-muted" aria-hidden="true"></i></div>
                   <div>
                     <div class="fw-bold">Pagamento</div>
                     <div class="small text-muted">{{ (paymentMethods.find(m=>m.code===paymentMethod) || {}).name }}</div>
                     <div class="small text-muted" v-if="Number(changeFor) > 0">Troco para: {{ formatCurrency(Number(changeFor) || 0) }}</div>
                   </div>
                 </div>
-                <button class="btn btn-link p-0" @click="checkoutStep = 'payment'" aria-label="Editar pagamento"><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-link btn-summary" @click="checkoutStep = 'payment'" aria-label="Editar pagamento"><i class="bi bi-pencil"></i></button>
               </div>
 
               <div class="d-flex justify-content-between mt-3">
-                <button class="btn btn-outline-secondary" @click="backFromReview">Voltar</button>
-                <button class="btn btn-success" @click="performOrderFromModal">Confirmar pedido</button>
+                <button class="btn btn-success btn-next d-none d-sm-block" @click="performOrderFromModal">Confirmar pedido</button>
               </div>
             </div>
+          </div>
+    </div>
+
+    <!-- Mobile fixed footer for checkout actions (visible only on small screens) -->
+    <div class="checkout-footer d-flex d-lg-none justify-content-between align-items-center">
+      <!-- <button class="btn btn-outline-secondary flex-fill me-2" @click="stepIndex > 0 ? goBackFromStep() : closeCheckout()">{{ stepIndex > 0 ? 'Voltar' : 'Cancelar' }}</button>
+      <div style="width:12px"></div>-->
+      <button v-if="checkoutStep === 'review'" class="btn btn-success flex-fill btn-next" @click="performOrderFromModal">Confirmar pedido</button>
+      <button v-else-if="checkoutStep === 'customer'" class="btn btn-primary flex-fill btn-next" :disabled="!customer.name || !customerPhoneValid" @click="nextFromCustomer">Próximo</button>
+      <button v-else-if="checkoutStep === 'delivery'" class="btn btn-primary flex-fill btn-next" @click="nextFromDelivery">Próximo</button>
+      <button v-else-if="checkoutStep === 'payment'" class="btn btn-primary flex-fill btn-next" @click="goToReview">Próximo</button>
+    </div>
+
           </div>
         </div>
     </div>
@@ -533,22 +631,23 @@
                   <div class="d-flex w-100">
                   <div class="cart-item-name flex-fill me-3" style="min-width:0">
                     <div class="product-name">{{ it.name }}</div>
+                    <div v-for="(e, idx) in getLineDiscountEntries(it)" :key="'d2-'+idx" class="small text-success mt-1">{{ e.description }}: -{{ formatCurrency(e.amount) }}</div>
                   </div>
-                  <div class="cart-item-price text-end me-3">{{ formatCurrency(it.price * it.quantity) }}</div>
+                  <div class="cart-item-price text-end me-3">
+                    <template v-if="computeLineDiscount(it) > 0">
+                      <div class="small text-muted text-decoration-line-through">{{ formatCurrency(it.price * it.quantity) }}</div>
+                      <div class="fw-bold">{{ formatCurrency((it.price * it.quantity) - computeLineDiscount(it)) }}</div>
+                    </template>
+                    <template v-else>
+                      {{ formatCurrency(it.price * it.quantity) }}
+                    </template>
+                  </div>
                   </div>
                   <div class="d-flex w-100 justify-content-between">
                     <div class="small text-muted option-summary drawer-wrap">{{ optionsSummaryNoPrice(it) }}</div>
-                  <div class="cart-item-actions d-flex flex-row align-items-end">
-                    <button class="action-btn edit btn btn-link p-0 small" @click="editCartItem(i)" aria-label="Editar item" title="Editar item">
-                      <i class="bi bi-pencil action-icon" aria-hidden="true"></i>
-                    </button>
-                    <button class="action-btn remove btn btn-link p-0 small" @click="removeItem(i)">
-                      <i class="bi bi-trash action-icon" aria-hidden="true"></i>
-                    </button>
-                  </div>
-                  </div>
                   </div>
                 </div>
+              </div>
               </li>
             </ul>
 
@@ -558,7 +657,7 @@
                         <div class="d-flex justify-content-between mb-2"><div>Taxa de entrega</div><div>
                           <template v-if="orderType==='DELIVERY'">
                             <template v-if="neighborhood && String(neighborhood).trim() !== ''">
-                              {{ Number(deliveryFee) === 0 ? 'Grátis' : formatCurrency(deliveryFee) }}
+                              {{ Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee) }}
                             </template>
                             <template v-else>
                               Será calculada após escolher o endereço
@@ -570,7 +669,8 @@
                         </div></div>
                         <hr />
                         <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
-                        <div class="d-flex justify-content-between fw-bold mb-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0)) + deliveryFee) }}</div></div>
+                        <div v-if="discountsList.length>0" class="d-flex justify-content-between mb-2 text-success"><div>Desconto(s)</div><div>-{{ formatCurrency(discountsTotal) }}</div></div>
+                        <div class="d-flex justify-content-between fw-bold mb-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0) - (discountsTotal || 0)) + currentDeliveryFee) }}</div></div>
 
               <div class="coupon-block mt-3">
                 <div class="d-flex justify-content-between align-items-center">
@@ -665,8 +765,7 @@
         </div>
 
         <!-- Info modal removed -->
-  </div>
-</template>
+      </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed, reactive, watch, nextTick } from 'vue';
@@ -833,13 +932,33 @@ onMounted(()=>{
   }
   window.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onScroll)
+    // listen for login events so we can fetch server-side customer data when token is set
+    const onAppUserLoggedIn = () => { try{ fetchProfileAndAddresses() }catch(e){} }
+    try{ window.addEventListener('app:user-logged-in', onAppUserLoggedIn) }catch(e){}
+    // listen for addresses updates from other views (e.g., PublicAddresses) and refresh local addresses
+    const onAddressesUpdated = (ev) => {
+      try{
+        const arr = (ev && ev.detail && ev.detail.addresses) ? ev.detail.addresses : null
+        if(Array.isArray(arr) && arr.length){
+          try{ addresses.value = arr }catch(e){}
+          try{ selectedAddressId.value = addresses.value.length ? addresses.value[0].id : selectedAddressId.value }catch(e){}
+          try{ localStorage.setItem(LOCAL_ADDR_KEY, JSON.stringify(addresses.value)) }catch(e){}
+          try{ console.debug('[debug] addresses updated via event', { addresses: addresses.value, selectedAddressId: selectedAddressId.value }) }catch(e){}
+          try{ refreshDeliveryFee() }catch(e){}
+        }
+      }catch(e){}
+    }
+    try{ window.addEventListener('app:addresses-updated', onAddressesUpdated) }catch(e){}
   // init
   handleScroll()
   updateActiveCategory()
   onBeforeUnmount(() => {
     window.removeEventListener('scroll', onScroll)
     window.removeEventListener('resize', onScroll)
+      try{ window.removeEventListener('app:user-logged-in', onAppUserLoggedIn) }catch(e){}
+      try{ window.removeEventListener('app:addresses-updated', onAddressesUpdated) }catch(e){}
     if(rafId) cancelAnimationFrame(rafId)
+    try{ if(_discountsDebounce) clearTimeout(_discountsDebounce) }catch(e){}
     // ensure styles cleared
     try{ if(navRef.value){ navRef.value.style.position=''; navRef.value.style.top=''; navRef.value.style.left=''; navRef.value.style.width=''; navRef.value.style.zIndex=''; } }catch(e){}
   })
@@ -851,6 +970,12 @@ function toggleOrderType(){
 // checkout modal state (multi-step)
 const checkoutModalOpen = ref(false)
 const checkoutStep = ref('customer') // 'customer' | 'delivery' | 'payment' | 'review'
+// Stepper configuration for checkout modal
+const stepOrder = ['customer','delivery','payment','review']
+const stepLabels = { customer: 'Cliente', delivery: 'Entrega', payment: 'Pagamento', review: 'Resumo' }
+const stepIcons = { customer: 'bi-person', delivery: 'bi-geo-alt', payment: 'bi-credit-card', review: 'bi-list-check' }
+const stepIndex = computed(() => Math.max(0, stepOrder.indexOf(checkoutStep.value)))
+// simple info modal state (opened by 'Mais informações')
 // simple info modal state (opened by 'Mais informações')
 const infoModalOpen = ref(false)
 // which tab inside the info modal is active: 'hours' | 'contacts' | 'payments'
@@ -871,8 +996,15 @@ const selectedAddressId = ref(addresses.value.length ? addresses.value[0].id : n
     const token = localStorage.getItem('token')
     const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
     if(token && stored && stored.addresses && Array.isArray(stored.addresses) && stored.addresses.length){
-      addresses.value = stored.addresses.map(a => ({ id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8), label: a.label || a.formatted || '', formattedAddress: a.formatted || a.formattedAddress || '', neighborhood: a.neighborhood || a.neigh || '' }))
+      addresses.value = stored.addresses.map(a => ({ id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8), label: a.label || a.formatted || '', formattedAddress: a.formatted || a.formattedAddress || '', neighborhood: a.neighborhood || a.neigh || '', reference: a.reference || a.ref || '', observation: a.observation || a.observacao || '' }))
       selectedAddressId.value = addresses.value.length ? addresses.value[0].id : selectedAddressId.value
+      // debug: log loaded addresses and selection for troubleshooting delivery fee
+      try{ console.debug('[debug] loaded stored public customer addresses', { addresses: addresses.value, selectedAddressId: selectedAddressId.value }) }catch(e){}
+      // ensure delivery fee is computed for the pre-selected address
+      try{ refreshDeliveryFee() }catch(e){}
+    } else if (token && !stored) {
+          // token exists but we have no cached customer info — try to fetch profile and addresses from server
+          try{ fetchProfileAndAddresses() }catch(e){}
     }
   }catch(e){ /* ignore */ }
 
@@ -881,15 +1013,25 @@ function openCheckout(){
   // if a public customer is already authenticated (token + stored customer), skip customer step
   try{
     const token = localStorage.getItem('token')
+    // ensure we try to fetch server-side profile/addresses when opening checkout
+    if(token){ try{ fetchProfileAndAddresses() }catch(e){} }
     const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
     if(token && stored){
       checkoutStep.value = 'delivery'
+      // compute delivery fee immediately even if the selected address was already set
+      try{ refreshDeliveryFee() }catch(e){}
       return
     }
   }catch(e){ /* ignore parse errors */ }
   checkoutStep.value = 'customer'
 }
 function closeCheckout(){ checkoutModalOpen.value = false }
+
+function goBackFromStep(){
+  const idx = stepOrder.indexOf(checkoutStep.value)
+  if(idx > 0){ checkoutStep.value = stepOrder[idx - 1] }
+  else { closeCheckout() }
+}
 
 function openRegister(){
   router.push({ path: `/public/${companyId}/profile`, query: { tab: 'register' } })
@@ -906,6 +1048,8 @@ function addAddress(addr){
   const a = { id, ...addr }
   // ensure label is present; default to the formatted address for identification
   try{ a.label = String(a.label || a.formattedAddress || '').trim() }catch(e){ a.label = String(a.formattedAddress || '') }
+  try{ a.reference = a.reference || a.ref || '' }catch(e){}
+  try{ a.observation = a.observation || a.observacao || '' }catch(e){}
   addresses.value.push(a)
   selectedAddressId.value = id
   localStorage.setItem(LOCAL_ADDR_KEY, JSON.stringify(addresses.value))
@@ -916,6 +1060,41 @@ function removeAddress(id){
   if(idx>=0) addresses.value.splice(idx,1)
   if(selectedAddressId.value===id) selectedAddressId.value = addresses.value.length ? addresses.value[0].id : null
   localStorage.setItem(LOCAL_ADDR_KEY, JSON.stringify(addresses.value))
+}
+
+// Fetch server-side public profile and addresses when we have a token but no cached customer
+async function fetchProfileAndAddresses(){
+  try{
+    const p = await api.get(`/public/${companyId}/profile`)
+    const prof = p && p.data ? p.data : null
+    if(prof){
+      try{ localStorage.setItem(LOCAL_CUSTOMER_KEY, JSON.stringify(prof)) }catch(e){}
+      // also populate runtime `customer` so `publicCustomerConnected` becomes available
+      try{
+        const resolvedName = String(prof.name || prof.fullName || prof.customerName || (prof.customer && (prof.customer.fullName || prof.customer.name)) || '')
+        const resolvedContact = String(prof.contact || prof.whatsapp || prof.phone || (prof.customer && (prof.customer.whatsapp || prof.customer.phone)) || '')
+        customer.value = {
+          name: resolvedName,
+          contact: resolvedContact,
+          address: (prof.addresses && prof.addresses.length && prof.addresses[0]) ? { formattedAddress: prof.addresses[0].formatted || prof.addresses[0].formattedAddress || '', neighborhood: prof.addresses[0].neighborhood || '' } : (customer.value && customer.value.address) ? { ...customer.value.address } : { formattedAddress: '', neighborhood: '' }
+        }
+        // refresh discounts now that we have customer context
+        try{ scheduleEvaluateDiscounts() }catch(e){}
+      }catch(e){}
+    }
+  }catch(e){ /* ignore profile fetch errors */ }
+
+  try{
+    const r = await api.get(`/public/${companyId}/addresses`)
+    const addrData = (r && r.data) ? (Array.isArray(r.data) ? r.data : r.data.addresses || []) : []
+    if(Array.isArray(addrData) && addrData.length){
+      addresses.value = addrData.map(a => ({ id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8), label: a.label || a.formatted || '', formattedAddress: a.formatted || a.formattedAddress || '', neighborhood: a.neighborhood || a.neigh || '', reference: a.reference || a.ref || '', observation: a.observation || a.observacao || '' }))
+      selectedAddressId.value = addresses.value.length ? addresses.value[0].id : selectedAddressId.value
+      try{ localStorage.setItem(LOCAL_ADDR_KEY, JSON.stringify(addresses.value)) }catch(e){}
+      try{ console.debug('[debug] fetched server addresses for logged-in customer', { addresses: addresses.value, selectedAddressId: selectedAddressId.value }) }catch(e){}
+      try{ refreshDeliveryFee() }catch(e){}
+    }
+  }catch(e){ /* ignore addresses fetch errors */ }
 }
 
 const activeCategoryId = ref(null)
@@ -950,6 +1129,7 @@ function updateActiveCategory(){
 }
 
 const cart = ref([]);
+const subtotal = computed(()=> cart.value.reduce((s,it)=> s + (it.price * it.quantity),0));
 // storage key per company so different menus don't clash
 const CART_STORAGE_KEY = `public_cart_${PUBLIC_NS}`
 // try to restore cart from localStorage (keep numeric types safe)
@@ -976,9 +1156,12 @@ const savedCustomerRaw = localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorag
 const savedCustomer = JSON.parse(savedCustomerRaw || 'null')
 if(savedCustomer) {
   // merge with default shape to ensure nested fields (like address) exist
+  // Support multiple customer shapes returned by backend: { name, contact } or { fullName, whatsapp } or nested 'customer' object
+  const resolvedName = String(savedCustomer.name || savedCustomer.fullName || savedCustomer.customerName || (savedCustomer.customer && (savedCustomer.customer.fullName || savedCustomer.customer.name)) || '')
+  const resolvedContact = String(savedCustomer.contact || savedCustomer.whatsapp || savedCustomer.phone || (savedCustomer.customer && (savedCustomer.customer.whatsapp || savedCustomer.customer.phone)) || '')
   customer.value = {
-    name: String(savedCustomer.name || ''),
-    contact: String(savedCustomer.contact || ''),
+    name: resolvedName,
+    contact: resolvedContact,
     address: (customer.value && customer.value.address) ? { ...customer.value.address } : { formattedAddress: '', neighborhood: '' }
   }
 }
@@ -988,10 +1171,63 @@ const neighborhoodsList = ref([])
 
 const deliveryFee = computed(() => {
   try{
-    const n = (neighborhoodsList.value || []).find(x => String(x.name || '').trim().toLowerCase() === String((neighborhood.value || '')).trim().toLowerCase())
-    return Number(n?.deliveryFee || 0)
+    // robust matching: try exact, id match, alias, and accent-insensitive match
+    const normalize = (s) => {
+      try{ return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g,'') }catch(e){ return String(s||'').trim().toLowerCase() }
+    }
+    const needleRaw = String(neighborhood.value || '')
+    const needle = normalize(needleRaw)
+    let found = null
+    for(const x of (neighborhoodsList.value || [])){
+      if(!x) continue
+      // match by id directly
+      if(String(x.id) === String(needleRaw)) { found = x; break }
+      // exact name (case-insensitive)
+      if(String(x.name || '').trim().toLowerCase() === String(needleRaw).trim().toLowerCase()){ found = x; break }
+      // alias match
+      if(Array.isArray(x.aliases) && x.aliases.some(a => String(a||'').trim().toLowerCase() === String(needleRaw).trim().toLowerCase())){ found = x; break }
+      // normalized match to ignore accents/spaces/punctuation
+      if(normalize(x.name) === needle) { found = x; break }
+      if(Array.isArray(x.aliases) && x.aliases.some(a => normalize(a) === needle)){ found = x; break }
+    }
+    // dev-only debug info to diagnose why fee may appear as 0
+    try{
+      if(typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV){
+        console.debug('[debug] deliveryFee lookup:', { needleRaw, found, neighborhoodsCount: (neighborhoodsList.value||[]).length })
+      }
+    }catch(e){}
+    return Number(found?.deliveryFee || 0)
   }catch(e){ return 0 }
 })
+// explicit delivery fee used by UI/totals to ensure fee is calculated
+import { ref as _ref } from 'vue'
+const currentDeliveryFee = _ref(0)
+
+function refreshDeliveryFee(){
+  try{
+    const normalize = (s) => {
+      try{ return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g,'') }catch(e){ return String(s||'').trim().toLowerCase() }
+    }
+    // allow neighborhood to be an object (from some address shapes)
+    let needleRaw = neighborhood.value || ''
+    try{ if(needleRaw && typeof needleRaw === 'object') needleRaw = needleRaw.name || needleRaw.id || String(needleRaw) }catch(e){}
+    needleRaw = String(needleRaw || '')
+    const needle = normalize(needleRaw)
+    let found = null
+    for(const x of (neighborhoodsList.value || [])){
+      if(!x) continue
+      if(String(x.id) === String(needleRaw)) { found = x; break }
+      if(String(x.name || '').trim().toLowerCase() === String(needleRaw).trim().toLowerCase()){ found = x; break }
+      if(Array.isArray(x.aliases) && x.aliases.some(a => String(a||'').trim().toLowerCase() === String(needleRaw).trim().toLowerCase())){ found = x; break }
+      if(normalize(x.name) === needle) { found = x; break }
+      if(Array.isArray(x.aliases) && x.aliases.some(a => normalize(a) === needle)){ found = x; break }
+    }
+    currentDeliveryFee.value = Number(found?.deliveryFee || 0)
+    if(typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV){
+      console.debug('[debug] refreshDeliveryFee ->', { neighborhood: neighborhood.value, currentDeliveryFee: currentDeliveryFee.value, found })
+    }
+  }catch(e){ currentDeliveryFee.value = 0 }
+}
 const paymentMethod = ref('CASH');
 // when paying with cash, customer may provide a 'troco' amount
 const changeFor = ref('');
@@ -1384,7 +1620,15 @@ function proceedFromCart(){ closeCartModal(); openCheckout() }
 watch(selectedAddressId, (v) => {
   try{
     const a = addresses.value.find(x => x.id === v)
-    neighborhood.value = a ? (a.neighborhood || '') : ''
+    let n = a ? (a.neighborhood || '') : ''
+    // normalize if neighborhood stored as object { id,name }
+    try{ if(n && typeof n === 'object'){ n = n.name || n.title || n.id || String(n) } }catch(e){}
+    neighborhood.value = n || ''
+    // ensure delivery fee is refreshed when selected address changes
+    try{
+      console.debug('[debug] selectedAddressId changed ->', { v, neighborhood: neighborhood.value })
+      refreshDeliveryFee()
+    }catch(e){}
   }catch(e){ console.warn('watch selectedAddressId', e) }
 })
 
@@ -1398,7 +1642,25 @@ watch(cartModalOpen, v => {
 watch(cart, (v) => {
   try{ localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(v || [])) }catch(e){ console.warn('persist cart failed', e) }
 }, { deep: true })
+
+// re-evaluate customer-group discounts when cart or customer state changes
+watch([
+  () => cart.value.length,
+  () => subtotal.value,
+  () => publicCustomerConnected.value,
+  () => (customer.value && customer.value.contact) ? String(customer.value.contact) : ''
+], () => {
+  try{ scheduleEvaluateDiscounts() }catch(e){}
+}, { deep: true })
+
+// refresh delivery fee when inline customer address changes
+watch(() => (customer.value && customer.value.address && customer.value.address.formattedAddress) ? String(customer.value.address.formattedAddress) : '', (v) => {
+  try{ refreshDeliveryFee() }catch(e){}
+})
 // Note: automatic opening of the cart when items are added was removed.
+
+// re-evaluate discounts when order type changes (PICKUP/DELIVERY)
+watch(orderType, (v) => { try{ scheduleEvaluateDiscounts() }catch(e){} })
 
 function formatCurrency(v){
   try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)); }catch(e){ return v; }
@@ -1509,7 +1771,7 @@ function validatePersistedCart(){
 
       const unit = Number(p.price || 0) + optionsTotal
       const qty = Math.max(1, Number(it.quantity || 1))
-      newCart.push({ lineId: it.lineId || _makeLineId(), productId: p.id, name: p.name, price: unit, quantity: qty, options: validatedOptions, image: it.image })
+      newCart.push({ lineId: it.lineId || _makeLineId(), productId: p.id, name: p.name, price: unit, quantity: qty, options: validatedOptions, image: it.image, categoryId: p.categoryId || null })
       if(optionDropped) removedItems.push(`${it.name} (opções removidas)`)
     }
 
@@ -1525,7 +1787,7 @@ function addToCart(p, options = []){
   const idx = findCartIndex(p.id, options)
   if(idx >= 0){ cart.value[idx].quantity += 1 }
   else {
-    cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: Number(p.price), quantity: 1, options: options || [] })
+    cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: Number(p.price), quantity: 1, options: options || [], categoryId: p.categoryId || null })
   }
 }
 
@@ -1547,7 +1809,7 @@ function addToCartWithOptions(p, selections, qty=1){
   // try to merge with existing line that has same productId+options
   const idx = findCartIndex(p.id, selectedOptions)
   if(idx >= 0){ cart.value[idx].quantity += qty }
-  else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions }) }
+  else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, categoryId: p.categoryId || null }) }
 }
 
 function openProductModal(p, force = false){
@@ -1680,6 +1942,56 @@ function isOptionSelected(group, option){
   if(Array.isArray(sel)) return sel.indexOf(option.id) >= 0
   // object map: selected if qty>0
   return Number((sel && sel[option.id]) || 0) > 0
+}
+
+function computeLineDiscount(it){
+  try{
+    if(!it || !it.productId) return 0
+    // aggregate total discount for this productId from discountsList
+    const prodId = String(it.productId)
+    const entries = (discountsList.value || []).filter(d => d.productId && String(d.productId) === prodId)
+    if(!entries.length) return 0
+    const totalForProduct = entries.reduce((s,e)=>s + Number(e.amount || 0), 0)
+    // if multiple cart lines with same productId, distribute proportionally by line total
+    const lines = (cart.value || []).filter(x => String(x.productId) === prodId)
+    const productSum = lines.reduce((s,x)=> s + (Number(x.price||0) * Number(x.quantity||0)), 0)
+    if(productSum <= 0) return 0
+    const lineTotal = Number(it.price||0) * Number(it.quantity||0)
+    const share = (lineTotal / productSum)
+    const allocated = Math.round((totalForProduct * share) * 100) / 100
+    return allocated
+  }catch(e){ return 0 }
+}
+
+function getLineDiscountEntries(it){
+  try{
+    if(!it || !it.productId) return []
+    const prodId = String(it.productId)
+    const entries = (discountsList.value || []).filter(d => d.productId && String(d.productId) === prodId)
+    if(!entries.length) return []
+    // group by ruleId+description
+    const map = {}
+    for(const e of entries){
+      const key = `${e.ruleId || ''}::${e.description || ''}`
+      map[key] = map[key] || { description: e.description || 'Desconto', amount: 0 }
+      map[key].amount += Number(e.amount || 0)
+    }
+    // allocate per-line share for each group
+    const lines = (cart.value || []).filter(x => String(x.productId) === prodId)
+    const productSum = lines.reduce((s,x)=> s + (Number(x.price||0) * Number(x.quantity||0)), 0)
+    const lineTotal = Number(it.price||0) * Number(it.quantity||0)
+    const result = []
+    for(const k of Object.keys(map)){
+      const grp = map[k]
+      let allocated = grp.amount
+      if(productSum > 0){
+        const share = lineTotal / productSum
+        allocated = Math.round((grp.amount * share) * 100) / 100
+      }
+      if(allocated > 0) result.push({ description: grp.description, amount: allocated })
+    }
+    return result
+  }catch(e){ return [] }
 }
 
 function confirmAddFromModal(){
@@ -1832,26 +2144,63 @@ function getCartQty(productId){
   return cart.value.filter(i=>i.productId===productId).reduce((s,it)=>s+it.quantity,0)
 }
 
-const subtotal = computed(()=> cart.value.reduce((s,it)=> s + (it.price * it.quantity),0));
-
-// Final total after coupon discount. Delivery fee is calculated only after the
-// customer selects an address (neighborhood). The CTA and cart should not
-// include delivery fee until a neighborhood is chosen.
-const finalTotal = computed(() => {
-  try{
-    const base = Math.max(0, subtotal.value - (couponDiscount.value || 0))
-    // include delivery only when a neighborhood is selected and order is DELIVERY
-    const includeDelivery = orderType.value === 'DELIVERY' && neighborhood.value && String(neighborhood.value).trim() !== ''
-    return base + (includeDelivery ? Number(deliveryFee.value || 0) : 0)
-  }catch(e){ return subtotal.value }
-})
-
+// Coupon and discounts state
 const openCoupon = ref(false)
 const couponCode = ref('')
 const couponApplied = ref(false)
 const couponDiscount = ref(0)
 const couponInfo = ref(null)
 const couponLoading = ref(false)
+
+const discountsList = ref([])
+const discountsTotal = ref(0)
+const discountsLoading = ref(false)
+let _discountsDebounce = null
+
+async function evaluateDiscountsNow(){
+  try{
+    discountsLoading.value = true
+    const items = cart.value.map(i=>({ productId: i.productId, categoryId: i.categoryId, price: i.price, quantity: i.quantity }))
+    // only evaluate customer-group discounts for logged-in customers
+    if(!publicCustomerConnected.value){
+      discountsList.value = []
+      discountsTotal.value = 0
+      return
+    }
+    // include customer phone, order type and coupon state so backend can resolve the logged customer and delivery restrictions
+    const payload = {
+      items,
+      subtotal: subtotal.value,
+      customerPhone: (customer.value && customer.value.contact) ? customer.value.contact : undefined,
+      orderType: orderType.value,
+      couponApplied: couponApplied.value
+    }
+    const resp = await api.post(`/public/${companyId}/cart/discounts`, payload)
+    discountsList.value = resp.data?.discounts || []
+    discountsTotal.value = Number(resp.data?.totalDiscount || 0)
+  }catch(e){
+    discountsList.value = []
+    discountsTotal.value = 0
+  }finally{ discountsLoading.value = false }
+}
+
+function scheduleEvaluateDiscounts(){
+  try{ if(_discountsDebounce) clearTimeout(_discountsDebounce) }catch(e){}
+  _discountsDebounce = setTimeout(()=> evaluateDiscountsNow(), 300)
+}
+
+// Final total after coupon discount and customer-group discounts. Delivery fee is calculated only after the
+// customer selects an address (neighborhood). The CTA and cart should not
+// include delivery fee until a neighborhood is chosen.
+const finalTotal = computed(() => {
+  try{
+    const base = Math.max(0, subtotal.value - (couponDiscount.value || 0) - (discountsTotal.value || 0))
+    const includeDelivery = orderType.value === 'DELIVERY' && neighborhood.value && String(neighborhood.value).trim() !== ''
+      // prefer explicit refreshed fee when available
+      const fee = Number(currentDeliveryFee.value || 0) || Number(deliveryFee.value || 0)
+      return base + (includeDelivery ? fee : 0)
+  }catch(e){ return subtotal.value }
+})
 
 async function applyCoupon(){
     try{
@@ -1870,6 +2219,8 @@ async function applyCoupon(){
         couponDiscount.value = Number(data.discountAmount || 0)
         couponInfo.value = data.coupon || null
         openCoupon.value = false
+          // re-evaluate customer-group discounts when a coupon is applied
+          try{ scheduleEvaluateDiscounts() }catch(e){}
         tipMessages['coupon-success'] = `Cupom aplicado: -${formatCurrency(couponDiscount.value)}`
         setTimeout(()=>{ try{ delete tipMessages['coupon-success'] }catch(e){} }, 2000)
         return
@@ -1886,7 +2237,7 @@ async function applyCoupon(){
     }
 }
 
-function removeCoupon(){ couponApplied.value = false; couponDiscount.value = 0; couponInfo.value = null }
+function removeCoupon(){ couponApplied.value = false; couponDiscount.value = 0; couponInfo.value = null; try{ scheduleEvaluateDiscounts() }catch(e){} }
 
 function editCartItem(i){
   try{
@@ -1968,6 +2319,7 @@ const _newAddrNumber = ref('')
 const _newAddrComplement = ref('')
 const _newAddrNeighborhood = ref('')
 const _newAddrReference = ref('')
+const _newAddrObservation = ref('')
 const _newAddrLat = ref(null)
 const _newAddrLon = ref(null)
 const _newAddrFull = ref('') // store full display_name from reverse geocode if available
@@ -1987,10 +2339,13 @@ function clearNewAddress(){
   _newAddrComplement.value = ''
   _newAddrNeighborhood.value = ''
   _newAddrReference.value = ''
+  _newAddrObservation.value = ''
   _newAddrLat.value = null
   _newAddrLon.value = null
   _newAddrFull.value = ''
   editingAddressId.value = null
+  // hide the new-address form when user has saved addresses
+  showNewAddressForm.value = addresses.value.length === 0
 }
 
 async function performOrderFromModal(){
@@ -2069,7 +2424,7 @@ function addNewAddress(){
   if(editingAddressId.value){
     const idx = addresses.value.findIndex(a=>a.id===editingAddressId.value)
     if(idx >= 0){
-      const upd = { ...addresses.value[idx], label: (_newAddrLabel.value || _newAddrFormatted.value), formattedAddress: _newAddrFormatted.value, number: _newAddrNumber.value, complement: _newAddrComplement.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, reference: _newAddrReference.value }
+      const upd = { ...addresses.value[idx], label: (_newAddrLabel.value || _newAddrFormatted.value), formattedAddress: _newAddrFormatted.value, number: _newAddrNumber.value, complement: _newAddrComplement.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, reference: _newAddrReference.value, observation: _newAddrObservation.value }
       if(_newAddrFull.value) upd.fullDisplay = _newAddrFull.value
       addresses.value.splice(idx, 1, upd)
       localStorage.setItem(LOCAL_ADDR_KEY, JSON.stringify(addresses.value))
@@ -2079,7 +2434,7 @@ function addNewAddress(){
     return
   }
 
-  addAddress({ label: _newAddrLabel.value, formattedAddress: _newAddrFormatted.value, number: _newAddrNumber.value, complement: _newAddrComplement.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, fullDisplay: _newAddrFull.value, reference: _newAddrReference.value })
+  addAddress({ label: _newAddrLabel.value, formattedAddress: _newAddrFormatted.value, number: _newAddrNumber.value, complement: _newAddrComplement.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, fullDisplay: _newAddrFull.value, reference: _newAddrReference.value, observation: _newAddrObservation.value })
   clearNewAddress()
 }
 
@@ -2183,7 +2538,10 @@ function editAddress(id){
   _newAddrLon.value = a.longitude || null
   _newAddrFull.value = a.fullDisplay || ''
   _newAddrReference.value = a.reference || ''
+  _newAddrObservation.value = a.observation || ''
   selectedAddressId.value = id
+  // reveal the edit form so user can modify the address
+  showNewAddressForm.value = true
 }
 
 function saveEditedAddress(){
@@ -2216,7 +2574,16 @@ function nextFromDelivery(){
       const a = addresses.value.find(x => x.id === selectedAddressId.value)
       if(a){ neighborhood.value = a.neighborhood || '' }
     }
+    // if user provided a temporary inline address directly into customer.value.address
+    // (not saved via _newAddrFormatted), ensure neighborhood is set so delivery fee displays
+    if(!hasSaved && ! _newAddrFormatted.value && customer.value.address && customer.value.address.formattedAddress){
+      let n = customer.value.address.neighborhood || _newAddrNeighborhood.value || ''
+      try{ if(n && typeof n === 'object'){ n = n.name || n.id || String(n) } }catch(e){}
+      neighborhood.value = n || ''
+    }
   }
+  // ensure delivery fee is refreshed before moving to next step
+  try{ refreshDeliveryFee() }catch(e){}
   checkoutStep.value = (orderType.value === 'DELIVERY' ? 'payment' : 'review')
 }
 
@@ -2284,8 +2651,11 @@ onMounted(async ()=>{
     try{
   const nr = await api.get(publicPath(`/public/${companyId}/neighborhoods`))
       neighborhoodsList.value = Array.isArray(nr.data) ? nr.data : []
+      try{ refreshDeliveryFee() }catch(e){}
     }catch(e){ console.warn('failed to load public neighborhoods', e) }
     
+    // initial evaluation of discounts for the persisted cart
+    try{ scheduleEvaluateDiscounts() }catch(e){}
   }catch(e){
     console.error(e);
     serverError.value = 'Não foi possível carregar o cardápio.';
@@ -2371,6 +2741,9 @@ async function submitOrder(){
       submitting.value = false
       return;
     }
+    // Ensure discounts are up-to-date with current orderType/coupon before building payload
+    try{ await evaluateDiscountsNow() }catch(e){}
+
     // Build a plain JS payload (avoid sending reactive refs / proxies which cause cyclic errors)
     const payload = {
       customer: {
@@ -2379,7 +2752,8 @@ async function submitOrder(){
         address: {
           formattedAddress: String((customer.value.address && customer.value.address.formattedAddress) || ''),
           neighborhood: String(neighborhood.value || ''),
-          reference: String((customer.value.address && customer.value.address.reference) || '')
+          reference: String((customer.value.address && customer.value.address.reference) || ''),
+          observation: String((customer.value.address && customer.value.address.observation) || '')
         }
       },
       items: (cart.value || []).map(i => ({
@@ -2402,7 +2776,8 @@ async function submitOrder(){
       // also include the human-friendly method name when available so backend
       // can prefer/store the name without relying only on codes
       method: (paymentMethods.value || []).find(m => m.code === paymentMethod.value)?.name || null,
-      amount: Number(Math.max(0, subtotal.value - (couponDiscount.value || 0)) + Number(deliveryFee.value || 0))
+      // include customer-group discounts in the final amount calculation
+      amount: Number(Math.max(0, subtotal.value - (couponDiscount.value || 0) - (discountsTotal.value || 0)) + Number(deliveryFee.value || 0))
     };
     if (Number(changeFor.value) > 0) paymentObj.changeFor = Number(changeFor.value);
     payload.payment = paymentObj;
@@ -2411,6 +2786,12 @@ async function submitOrder(){
   // include coupon information when applied so backend can persist and track usage
   if (couponApplied.value && couponInfo.value) {
     payload.coupon = { code: couponInfo.value.code, discountAmount: Number(couponDiscount.value || 0) }
+  }
+
+  // include customer-group discounts (if any) so backend can persist and reflect in order totals
+  if (discountsList.value && discountsList.value.length) {
+    payload.discounts = discountsList.value
+    payload.discountsTotal = Number(discountsTotal.value || 0)
   }
 
   // Include canonical store/menu identifiers when present so the backend
@@ -2467,6 +2848,8 @@ try{
   if(route.query && route.query.menuId){ localStorage.setItem(menuStorageKey, String(route.query.menuId)) }
 }catch(e){}
 
+  // debug: log outgoing payload to help diagnose server-side validation errors (400)
+  try { console.debug && console.debug('Submitting public order payload', payload) } catch(e){}
   const res = await api.post(publicPath(`/public/${companyId}/orders`), payload);
   orderResponse.value = res.data;
   cart.value = [];
@@ -2478,6 +2861,9 @@ try{
   try { _publicNavigate(`/order/${oid}`, { phone, storeId: storeId.value || undefined, menuId: menuId.value || undefined }) } catch(e) { console.warn('Redirect failed', e) }
   }catch(err){
     console.error(err);
+    // surface server response body and status to browser console for debugging
+    try { console.error('Order create response data:', err?.response?.data) } catch (e) {}
+    try { console.error('Order create response status:', err?.response?.status) } catch (e) {}
     serverError.value = err?.response?.data?.message || err.message || 'Erro ao enviar pedido';
   }finally{ submitting.value = false; }
 }
@@ -2500,13 +2886,22 @@ try{
 .store-closed-panel { color: #d23a3a; }
 .delivery-pickup-btn { background: #f1fbfd; color: #0d6efd; border: 1px solid rgba(13,110,253,0.12); border-radius: 10px; padding: 8px 12px; font-weight:600 }
 .calc-delivery { background: #f8fafb; border: 1px solid #eef4f6; }
-.list-group-item {
+.list-group-item, .payment-method {
   border: 2px solid #DDD !important;
   margin-bottom: 6px;
-  border-radius: 16px 16px 16px 16px !important;
-  padding: 16px;
+  border-radius: 12px !important;
+  padding: 8px;
 }/*
+
 .list-group-item:last-child { border-bottom: none }*/
+li.list-group-item.selected, .payment-method.selected {
+    border-color: #8cbf62 !important;
+    background-color: #d6ffb3 !important;
+    color: rgb(66, 114, 26) !important;
+}
+.payment-method.selected {
+  font-weight: 600;
+}
 .hero-image { transition: transform .35s ease }
 .public-hero:hover .hero-image { transform: scale(1.02) }
 
@@ -2645,10 +3040,10 @@ try{
 
   /* Title/header spacing: make the checkout modal header match the drawer spacing
      (reduce the mb-3 gap and match h5 size/weight) */
-  .product-modal.checkout-modal.full-mobile .modal-content .d-flex.justify-content-between.align-items-center.mb-3 {
-    margin-bottom: 8px !important; /* drawer uses tighter spacing */
+ /* .product-modal.checkout-modal.full-mobile .modal-content .d-flex.justify-content-between.align-items-center.mb-3 {
+    margin-bottom: 8px !important; /* drawer uses tighter spacing 
     padding-top: 0 !important;
-  }
+  }*/
   .product-modal.checkout-modal.full-mobile .modal-content h5 {
     font-size: 1.05rem !important;
     font-weight: 700 !important;
@@ -3013,5 +3408,82 @@ body { padding-bottom: 110px; }
 @media (max-width:480px){
   .modal-content .nav-tabs .nav-link { padding: 8px 10px; font-size: 0.95rem }
 }
+.btn-delete{
+  background: #f8d7da;
+  color: #842029;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+.btn-action{ 
+  background: #e2e6ea;
+  color: #333;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+.form-check-inline{
+  border:2px solid #DDD !important;
+  border-radius:12px !important;
+}
+/* Checkout stepper */
+.checkout-stepper{ display:flex; gap:12px; align-items:center; position:relative }
+.checkout-stepper .step{ flex:1 1 0; display:flex; flex-direction:column; align-items:center; position:relative; text-align:center; padding:6px 8px }
+.checkout-stepper .step::after{ content: '';
+    position: absolute;
+    right: -45%;
+    top: 17px;
+    width: 73%;
+    height: 4px;
+    background: #eef2f5;
+    z-index: 0;
+    margin: 0 auto;
+    border-radius: 88px;
+   }
+.checkout-stepper .step:last-child::after{ display:none }
+.checkout-stepper .step .step-icon{ width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#f3f5f7; border:2px solid #e0e6ea; z-index:2 }
+.checkout-stepper .step .step-icon .bi{ font-size:0.7rem }
+.checkout-stepper .step .step-label{ font-size:0.6rem; margin-top:6px; color:#556 }
+.checkout-stepper .step.completed .step-icon{ background:#8cbf62; border-color:#8cbf62; color:#fff }
+.checkout-stepper .step.completed::after{ background:#c9e9a8 }
+.checkout-stepper .step.active .step-icon{ background:rgb(66, 114, 26) !important; border-color:rgb(66, 114, 26) !important; color:#fff }
+.checkout-stepper .step.active .step-label{ font-weight:700; color:rgb(66, 114, 26) !important}
+.checkout-stepper .step-close{ position: absolute; right: 8px; top: 6px; z-index:3 }
+
+
+.summary-icon{
+    padding: 5px 10px;
+    background-color: var(--brand-lightest);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    margin-right: 8px;
+}
+  .summary-icon i{
+    color: #42721a !important;
+    }
+    .btn-summary{    
+      background-color: #e5e5e5 !important;;
+      color: #7b7b7b !important;
+      padding: 4px 8px !important;
+      border-radius: 8px !important;
+    }
+  .btn-next{
+    background-color: var(--brand);
+    width: 100%;
+    border: 2px solid var(--brand);
+    font-weight: bold;
+    font-size: 1.1rem;
+    border-radius: 12px;
+  }
+   .btn-confirm{
+    background-color: var(--brand);
+    border: 2px solid var(--brand);
+    font-size: 1.1rem;
+    border-radius: 12px;
+  }
 </style>
 

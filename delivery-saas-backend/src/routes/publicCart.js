@@ -24,7 +24,9 @@ router.post('/discounts', async (req, res) => {
       } catch (e) { /* ignore */ }
     }
     const customerId = customer ? customer.id : null
-    const result = await evaluateCartDiscounts(companyId, cart, customerId)
+    const orderType = req.body && (req.body.orderType || (req.body.order && req.body.order.type))
+    const couponApplied = !!(req.body && (req.body.couponApplied || req.body.couponCode || (req.body.coupon && (req.body.coupon.discountAmount || req.body.coupon.code))))
+    const result = await evaluateCartDiscounts(companyId, cart, customerId, { orderType, couponApplied })
     res.json(result)
   } catch (e) {
     console.error('Failed to evaluate discounts', e)

@@ -23,50 +23,54 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="table-responsive">
-        <table class="table table-hover mb-0">
-          <thead>
-            <tr><th>Data</th><th>Descrição</th><th>Quantidade</th><th>Tipo</th><th>Valor</th><th></th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in paged" :key="row.uid">
-              <td>{{ formatDate(row.movement.createdAt) }}</td>
-              <td>{{ row.item.ingredient ? row.item.ingredient.description : row.item.ingredientId }}</td>
-              <td>{{ Number(row.item.quantity || 0) }}</td>
-              <td>{{ row.movement.type === 'OUT' ? 'Saída' : 'Entrada' }}</td>
-              <td>{{ formatCurrency(row.signedValue) }}</td>
-              <td><button class="btn btn-sm btn-outline-secondary" @click="view(row.movement)">Ver</button></td>
-            </tr>
-            <tr v-if="!paged.length"><td colspan="6" class="text-center text-muted py-4">Nenhuma movimentação.</td></tr>
-          </tbody>
-        </table>
-        <div class="d-flex justify-content-between align-items-center mt-2">
-          <div class="text-muted">Mostrando {{ startIndex }} - {{ endIndex }} de {{ filtered.length }}</div>
-          <div class="d-flex gap-2 align-items-center">
-            <label class="mb-0">Por página</label>
-            <select class="form-select form-select-sm" v-model.number="perPage">
-              <option :value="10">10</option>
-              <option :value="25">25</option>
-              <option :value="50">50</option>
-            </select>
-            <button class="btn btn-sm btn-outline-secondary" :disabled="page<=1" @click="page--">Anterior</button>
-            <button class="btn btn-sm btn-outline-secondary" :disabled="page>=totalPages" @click="page++">Próxima</button>
+    <ListCard title="Movimentações de Estoque" icon="bi bi-arrow-repeat" :subtitle="filtered.length ? `${filtered.length} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por ingrediente, descrição" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
+      <template #default>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead>
+              <tr><th>Data</th><th>Descrição</th><th>Quantidade</th><th>Tipo</th><th>Valor</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in paged" :key="row.uid">
+                <td>{{ formatDate(row.movement.createdAt) }}</td>
+                <td>{{ row.item.ingredient ? row.item.ingredient.description : row.item.ingredientId }}</td>
+                <td>{{ Number(row.item.quantity || 0) }}</td>
+                <td>{{ row.movement.type === 'OUT' ? 'Saída' : 'Entrada' }}</td>
+                <td>{{ formatCurrency(row.signedValue) }}</td>
+                <td><button class="btn btn-sm btn-outline-secondary" @click="view(row.movement)">Ver</button></td>
+              </tr>
+              <tr v-if="!paged.length"><td colspan="6" class="text-center text-muted py-4">Nenhuma movimentação.</td></tr>
+            </tbody>
+          </table>
+          <div class="d-flex justify-content-between align-items-center mt-2">
+            <div class="text-muted">Mostrando {{ startIndex }} - {{ endIndex }} de {{ displayed.length }}</div>
+            <div class="d-flex gap-2 align-items-center">
+              <label class="mb-0">Por página</label>
+              <select class="form-select form-select-sm" v-model.number="perPage">
+                <option :value="10">10</option>
+                <option :value="25">25</option>
+                <option :value="50">50</option>
+              </select>
+              <button class="btn btn-sm btn-outline-secondary" :disabled="page<=1" @click="page--">Anterior</button>
+              <button class="btn btn-sm btn-outline-secondary" :disabled="page>=totalPages" @click="page++">Próxima</button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </ListCard>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import DateInput from '../components/form/date/DateInput.vue';
+import ListCard from '../components/ListCard.vue';
 import { useRouter } from 'vue-router';
 import api from '../api';
 
 const router = useRouter();
 const list = ref([]);
+const q = ref('')
 
 const rows = computed(() => {
   // flatten movements into one row per stockMovementItem
@@ -102,16 +106,26 @@ const filtered = computed(() => {
   });
 });
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage.value)));
+const displayed = computed(() => {
+  if(!q.value) return filtered.value
+  const term = q.value.toLowerCase()
+  return (filtered.value || []).filter(r => {
+    const ing = (r.item && r.item.ingredient && r.item.ingredient.description) || ''
+    const desc = (r.movement && r.movement.description) || ''
+    return (ing + ' ' + desc).toLowerCase().includes(term)
+  })
+})
+
+const totalPages = computed(() => Math.max(1, Math.ceil(displayed.value.length / perPage.value)));
 
 const paged = computed(() => {
   if (page.value > totalPages.value) page.value = totalPages.value;
   const start = (page.value - 1) * perPage.value;
-  return filtered.value.slice(start, start + perPage.value);
+  return displayed.value.slice(start, start + perPage.value);
 });
 
-const startIndex = computed(() => filtered.value.length === 0 ? 0 : (page.value - 1) * perPage.value + 1);
-const endIndex = computed(() => Math.min(filtered.value.length, page.value * perPage.value));
+const startIndex = computed(() => displayed.value.length === 0 ? 0 : (page.value - 1) * perPage.value + 1);
+const endIndex = computed(() => Math.min(displayed.value.length, page.value * perPage.value));
 
 
 async function load(){
@@ -138,6 +152,9 @@ function formatDate(d){ try{ return new Date(d).toLocaleString(); }catch(e){ ret
 
 function goNew(){ router.push('/stock-movements/new'); }
 function view(m){ router.push(`/stock-movements/${m.id}`); }
+
+function onQuickSearch(val){ q.value = val; page.value = 1 }
+function onQuickClear(){ q.value = '' }
 
 onMounted(load);
 </script>

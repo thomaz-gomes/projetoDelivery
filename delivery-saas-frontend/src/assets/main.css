@@ -1,3 +1,11 @@
+:root {
+  --brand: #8bbf62;
+  --brand-dark: rgb(66, 114, 26);
+  --brand-light: #d6ffb3;
+  --brand-lightest: #c9e9a8;
+  --border-color: #DDD;
+}
+
 body {
   background-color: #f8f9fa;
   font-family: "Roboto", sans-serif;
@@ -6,4 +14,169 @@ body {
 /* Utility: consistent modal content padding used across components */
 .modal-content-padding {
   padding: 16px !important;
+}
+.list-group-item .small{
+  font-size: 0.7em !important;
+}
+.list-group-item .custom-radio, .payment-method .custom-radio {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #212529 !important;
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.list-group-item.selected .custom-radio, .payment-method.selected .custom-radio {
+  border: 2px solid var(--brand-dark) !important;
+}
+.list-group-item .custom-radio:focus, .payment-method .custom-radio:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--brand-dark) !important;
+}
+.list-group-item.selected .custom-radio::after, .payment-method.selected .custom-radio::after {
+  background:  var(--brand-dark) !important;
+}
+.list-group-item .custom-radio::after, .payment-method .custom-radio::after {
+  background:#212529 !important;
+}
+.list-group-item .custom-radio::after, .payment-method .custom-radio::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.6);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.list-group-item .custom-radio:checked, .payment-method .custom-radio:checked {
+  border-color: var(--brand-dark) !important;
+}
+.list-group-item .custom-radio:checked::after, .payment-method .custom-radio:checked::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Slightly increase clickable area without changing visual size */
+.list-group-item .radio-wrapper, .payment-method .radio-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 36px;
+}
+
+/* Selected list item visual */
+.list-group-item.selected, .payment-method.selected {
+  background: rgba(13,110,253,0.04);
+  border-color: rgba(13,110,253,0.12);
+}
+
+/* Order type toggle (Entrega / Retirada) */
+.order-type-toggle .ot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color) !important;
+  background: transparent;
+  color: #212529;
+  cursor: pointer;
+  user-select: none;
+}
+.order-type-toggle .ot-btn input[type=radio] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.order-type-toggle .ot-btn .ot-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid var(--border-color);
+  display: inline-block;
+  box-sizing: border-box;
+  background: white;
+}
+.order-type-toggle .ot-btn.active{
+  border: 2px solid var(--brand-dark) !important;
+}
+.order-type-toggle .ot-btn .ot-label {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.order-type-toggle .ot-btn.active {
+  background: var(--brand-light) !important;
+  color: var(--brand-dark) !important;
+  border-color: #8cbf62 !important;
+}
+.order-type-toggle .ot-btn.active .ot-circle {
+  background: var(--brand-dark);
+  box-shadow: none;
+  border-color: #FFF;
+}
+.order-type-toggle .ot-btn:not(.active) {
+  background: transparent;
+}
+
+/* Checkout modal: mobile-only layout tweaks
+   - make modal-content full-height on small screens
+   - keep header sticky and footer fixed; body scrolls
+*/
+@media (max-width: 991.98px) {
+  .checkout-modal .modal-content {
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .checkout-modal .modal-content .checkout-header {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1076;
+    padding-top: 0px;
+    padding-bottom: 12px;
+  }
+
+  .checkout-modal .modal-content .checkout-body {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto;
+    padding-right: 8px;
+    padding-left: 8px;
+    padding-bottom: 96px; /* room for fixed footer */
+  }
+
+  .checkout-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1080;
+    padding: 12px;
+    background: #fff;
+    box-shadow: 0 -6px 18px rgba(0,0,0,0.08);
+    gap: 8px;
+  }
+
+  /* Hide per-step inline action rows on mobile (we show the fixed footer instead) */
+  .checkout-modal .modal-content .d-flex.justify-content-between.mt-3 {
+    display: none;
+  }
 }

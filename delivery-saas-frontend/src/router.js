@@ -12,6 +12,7 @@ import Ingredients from './views/Ingredients.vue';
 import IngredientGroupForm from './views/ingredients/IngredientGroupForm.vue';
 import IngredientForm from './views/ingredients/IngredientForm.vue';
 import TechnicalSheets from './views/TechnicalSheets.vue';
+import TechnicalSheetEdit from './views/TechnicalSheetEdit.vue';
 import StockMovements from './views/StockMovements.vue';
 import StockMovementForm from './views/StockMovementForm.vue';
 import RiderAccount from './views/RiderAccount.vue';
@@ -22,6 +23,8 @@ import RiderAdjustments from './views/RiderAdjustments.vue';
 import CustomersList from './views/CustomersList.vue';
 import CustomerForm from './views/CustomerForm.vue';
 import CustomerProfile from './views/CustomerProfile.vue';
+import CustomerGroupsList from './views/CustomerGroupsList.vue';
+import CustomerGroupForm from './views/CustomerGroupForm.vue';
 import IFoodIntegration from './views/IFoodIntegration.vue';
 import Integrations from './views/Integrations.vue';
 import IntegrationForm from './views/IntegrationForm.vue';
@@ -31,7 +34,6 @@ import PrinterSetup from './components/PrinterSetup.vue';
 import AgentTokenAdmin from './views/AgentTokenAdmin.vue';
 import StoreForm from './views/StoreForm.vue';
 import FileSourceSettings from './views/FileSourceSettings.vue';
-import CompanySettings from './views/CompanySettings.vue';
 import FileSourcePreview from './views/FileSourcePreview.vue';
 import AffiliateListing from './views/AffiliateListing.vue';
 import AffiliateCreate from './views/AffiliateCreate.vue';
@@ -90,6 +92,9 @@ const router = createRouter({
   { path: '/customers/new', component: CustomerForm, meta: { requiresAuth: true } },
   { path: '/customers/:id/edit', component: CustomerForm, meta: { requiresAuth: true } },
   { path: '/customers/:id', component: CustomerProfile, meta: { requiresAuth: true } },
+  { path: '/customer-groups', component: CustomerGroupsList, meta: { requiresAuth: true } },
+  { path: '/customer-groups/new', component: CustomerGroupForm, meta: { requiresAuth: true } },
+  { path: '/customer-groups/:id', component: CustomerGroupForm, meta: { requiresAuth: true } },
   { path: '/riders', component: Riders, meta: { requiresAuth: true } },
   { path: '/riders/new', component: RiderForm, meta: { requiresAuth: true } },
   { path: '/riders/:id', component: RiderForm, meta: { requiresAuth: true } },
@@ -103,10 +108,10 @@ const router = createRouter({
   { path: '/ingredients/new', component: IngredientForm, meta: { requiresAuth: true } },
   { path: '/ingredients/:id', component: IngredientForm, meta: { requiresAuth: true } },
   { path: '/technical-sheets', component: TechnicalSheets, meta: { requiresAuth: true } },
+  { path: '/technical-sheets/:id/edit', component: TechnicalSheetEdit, meta: { requiresAuth: true } },
   { path: '/stock-movements', component: StockMovements, meta: { requiresAuth: true } },
   { path: '/stock-movements/new', component: StockMovementForm, meta: { requiresAuth: true } },
   { path: '/stock-movements/:id', component: StockMovementForm, meta: { requiresAuth: true } },
-  { path: '/settings/company', component: CompanySettings, meta: { requiresAuth: true } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true } },
   { path: '/settings/ifood', component: IFoodIntegration }, // 👈 AQUI
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true } },

@@ -8,36 +8,41 @@
     <div v-else>
       <div v-if="!sessions.length" class="text-muted">Nenhuma sessão encontrada.</div>
 
-      <div v-else class="table-responsive">
-        <table class="table table-sm table-hover">
-          <thead>
-            <tr>
-              <th>Abertura</th>
-              <th>Fechamento</th>
-              <th>Abertura (R$)</th>
-              <th>Saldo registrado (R$)</th>
-              <th>Retiradas</th>
-              <th>Reforços</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(s, idx) in sessions" :key="s.id">
-              <td>{{ formatDate(s.openedAt) }}</td>
-              <td>{{ s.closedAt ? formatDate(s.closedAt) : '-' }}</td>
-              <td class="text-end">{{ formatCurrency(Number(s.openingAmount || 0)) }}</td>
-              <td class="text-end">{{ formatCurrency(Number(s.balance || 0)) }}</td>
-              <td class="text-end">{{ formatCurrency(Number(s.summary?.totalWithdrawals || totalWithdrawalsFor(s) )) }}</td>
-              <td class="text-end">{{ formatCurrency(Number(s.summary?.totalReinforcements || totalReinforcementsFor(s) )) }}</td>
-              <td class="text-end">
-                <button class="btn btn-sm btn-outline-secondary" @click="showSessionDetails(s)">
-                  Mais detalhes
-                </button>
-              </td>
-            </tr>
-            
-          </tbody>
-        </table>
+      <div v-else>
+        <ListCard title="Frentes de Caixa" icon="bi bi-cash-stack" :subtitle="sessions.length ? `${sessions.length} sessões` : ''">
+          <template #default>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr>
+                    <th>Abertura</th>
+                    <th>Fechamento</th>
+                    <th>Abertura (R$)</th>
+                    <th>Saldo registrado (R$)</th>
+                    <th>Retiradas</th>
+                    <th>Reforços</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(s, idx) in sessions" :key="s.id">
+                    <td>{{ formatDate(s.openedAt) }}</td>
+                    <td>{{ s.closedAt ? formatDate(s.closedAt) : '-' }}</td>
+                    <td class="text-end">{{ formatCurrency(Number(s.openingAmount || 0)) }}</td>
+                    <td class="text-end">{{ formatCurrency(Number(s.balance || 0)) }}</td>
+                    <td class="text-end">{{ formatCurrency(Number(s.summary?.totalWithdrawals || totalWithdrawalsFor(s) )) }}</td>
+                    <td class="text-end">{{ formatCurrency(Number(s.summary?.totalReinforcements || totalReinforcementsFor(s) )) }}</td>
+                    <td class="text-end">
+                      <button class="btn btn-sm btn-outline-secondary" @click="showSessionDetails(s)">
+                        Mais detalhes
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </ListCard>
       </div>
     </div>
   </div>
@@ -49,6 +54,7 @@ import api from '../api';
 import Swal from 'sweetalert2';
 import { formatCurrency } from '../utils/formatters.js';
 import CurrencyInput from '../components/form/input/CurrencyInput.vue';
+import ListCard from '../components/ListCard.vue';
 
 const sessions = ref([]);
 const loading = ref(false);

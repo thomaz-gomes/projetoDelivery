@@ -40,6 +40,9 @@ function search(){ load() }
 function goNew(){ router.push('/customers/new') }
 function goProfile(id){ router.push(`/customers/${id}`) }
 
+function onQuickSearch(val){ q.value = val; offset.value = 0; load() }
+function onQuickClear(){ resetFilters() }
+
 async function onImport(e){
   const file = e.target.files?.[0]
   if(!file) return
@@ -66,7 +69,7 @@ function editCustomer(id){ router.push(`/customers/${id}/edit`) }
 </script>
 
 <template>
-  <ListCard :title="`Clientes (${total || store.list.length})`" icon="bi bi-people" :subtitle="total ? `${total} itens` : ''">
+  <ListCard :title="`Clientes (${total || store.list.length})`" icon="bi bi-people" :subtitle="total ? `${total} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome, CPF, WhatsApp" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
     <template #actions>
       <div class="d-flex align-items-center gap-2">
         <label class="btn btn-outline-secondary btn-sm mb-0">
@@ -78,16 +81,7 @@ function editCustomer(id){ router.push(`/customers/${id}/edit`) }
       </div>
     </template>
 
-    <template #filters>
-      <div class="filters row g-2">
-        <div class="col-md-6">
-          <TextInput v-model="q" placeholder="Buscar por nome, CPF, WhatsApp" inputClass="form-control" />
-        </div>
-        <div class="col-md-2 d-flex align-items-center">
-          <button class="btn btn-outline-secondary w-100" @click="resetFilters">Limpar</button>
-        </div>
-      </div>
-    </template>
+    
 
     <template #default>
       <div v-if="loading" class="text-center py-4">Carregando...</div>
