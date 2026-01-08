@@ -348,8 +348,7 @@
                 <!-- Banner for logged-in public customer: quick account actions -->
                 <div v-if="publicCustomerConnected" class="mb-3">
                   <div class="alert alert-light d-flex justify-content-between align-items-center" style="border-radius:12px;">
-                    <div>
-                      <div class="fw-bold">Conectado como {{ publicCustomerConnected.name || publicCustomerConnected.contact }}</div>
+                    <div><small>Conectado como:  <div class="fw-bold">{{ publicCustomerConnected.name || publicCustomerConnected.contact }}</div></small>
                     </div>
                     <div class="d-flex gap-2">
                       <button class="btn btn-sm btn-outline-secondary btn-action" @click.prevent="switchAccount"><i class="bi bi-arrow-down-up"></i></button>
@@ -453,20 +452,25 @@
                       </div>
                     </div>
                     <div v-else>
-                      <div class="input-group">
+                      <div class="d-flex gap-2">
                         <TextInput v-model="couponCode" placeholder="Código do cupom" inputClass="form-control" />
-                        <button class="btn btn-primary" @click="applyCoupon" :disabled="couponLoading">
+                        <button class="btn btn-primary btn-sm" @click="applyCoupon" :disabled="couponLoading">
                           <span v-if="couponLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                           Aplicar
                         </button>
-                      </div>
+                        </div>
                       <div v-if="tipMessages['coupon']" class="small text-danger mt-1">{{ tipMessages['coupon'] }}</div>
                     </div>
                   </div>
                 </div>
               </div>
-              <div v-if="cashbackEnabled" class="mt-3 alert alert-light p-2">
-                <div class="d-flex justify-content-between align-items-center">
+              <div v-if="cashbackEnabled" class="mt-3 alert alert-light p-2":class="{ 'use-cashback': publicCustomerConnected, 'use-cashback--active': useCashback }
+                  "
+                  role="button"
+                  tabindex="0"
+                  @click="publicCustomerConnected ? (useCashback = !useCashback) : null"
+                  @keydown.enter.prevent="publicCustomerConnected ? (useCashback = !useCashback) : null">
+                <div   class="d-flex justify-content-between align-items-center">
                   <div class="d-flex align-items-center gap-2">
                     <div class="summary-icon"><i class="bi bi-cash-stack"></i></div>
                     <div>
@@ -476,9 +480,16 @@
                   </div>
                   <div>
                     <template v-if="publicCustomerConnected">
-                      <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="useCashbackSwitch" v-model="useCashback">
-                        <label class="form-check-label small" for="useCashbackSwitch">Usar cashback</label>
+                      <div class="d-flex align-items-center">
+                        <button
+                          type="button"
+                          class="btn btn-primary btn-sm cashback-toggle"
+                          :class="{ active: useCashback }"
+                          @click.stop="useCashback = !useCashback"
+                          :aria-pressed="String(useCashback)"
+                        >
+                          Usar cashback
+                        </button>
                       </div>
                     </template>
                     <template v-else>
@@ -487,30 +498,26 @@
                   </div>
                 </div>
                 <div v-if="useCashback" class="mt-2">
-                  <div class="input-group">
-                    <span class="input-group-text">R$</span>
-                    <CurrencyInput v-model="useCashbackAmount" :min="0" :max="Math.min(Number(wallet.balance||0), Number(finalTotal))" inputClass="form-control" />
-                    <button class="btn btn-outline-secondary" type="button" @click="useCashbackAmount = Math.min(Number(wallet.balance||0), Number(finalTotal))">Usar máximo</button>
+                  <div class="d-flex" style="gap: 8px;">
+                      <CurrencyInput v-model="useCashbackAmount" :min="0" :max="Math.min(Number(wallet.balance||0), Number(finalTotal))" inputClass="form-control" @click.stop @pointerdown.stop />
+                    <button class="btn btn-primary btn-sm" type="button" @click.stop="useCashbackAmount = Math.min(Number(wallet.balance||0), Number(finalTotal))">Máx</button>
+
                   </div>
-                  <div class="small text-muted mt-1">Máximo utilizável: {{ formatCurrency(Math.min(Number(wallet.balance||0), Number(finalTotal))) }}</div>
+                  
+                  <div class="small text-muted mt-1">Máx. {{ formatCurrency(Math.min(Number(wallet.balance||0), Number(finalTotal))) }}</div>
                 </div>
               </div>
-                  <div v-for="m in paymentMethods" :key="m.code" :class="['payment-method','mb-3',{ selected: paymentMethod === m.code }]" @click="paymentMethod = m.code" style="cursor:pointer;">
-                    <div class="d-flex justify-content-between align-items-center">
-                      <div class="d-flex align-items-center gap-2">
-                        <span class="radio-wrapper" @click.stop>
-                          <input type="radio" :id="`pm_${m.code}`" :value="m.code" v-model="paymentMethod" class="custom-radio" @click.stop aria-label="Selecionar forma de pagamento" />
-                        </span>
-                        <label :for="`pm_${m.code}`" class="mb-0" @click.stop>{{ m.name }}</label>
-                      </div>
-                      <div class="small text-muted" v-if="m.description">{{ m.description }}</div>
-                    </div>
-                  </div>
+                  <ListGroup :items="paymentMethods" itemKey="code" :selectedId="paymentMethod" :showActions="false" @select="paymentMethod = $event">
+                    <template #primary="{ item }">
+                      <div><strong>{{ item.name }}</strong></div>
+                      <div v-if="item.description" class="small text-muted">{{ item.description }}</div>
+                    </template>
+                  </ListGroup>
 
                   <div v-if="paymentMethod === 'CASH'" class="mt-2">
                       <div class="input-group">
                       <span class="input-group-text">R$</span>
-                      <CurrencyInput labelClass="form-label" v-model="changeFor" :min="0" inputClass="form-control" placeholder="Troco para..." />
+                      <CurrencyInput labelClass="form-label" v-model="changeFor" :min="0" inputClass="form-control" placeholder="Troco para..."/>
                     </div>
                   </div>
                 

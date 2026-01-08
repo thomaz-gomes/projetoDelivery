@@ -24,6 +24,7 @@ import OrderTicketPreview from '../components/OrderTicketPreview.vue';
 import CurrencyInput from '../components/form/input/CurrencyInput.vue';
 import { bindLoading } from '../state/globalLoading.js';
 import Sortable from 'sortablejs';
+import ListGroup from '../components/form/list-group/ListGroup.vue';
 const store = useOrdersStore();
 const auth = useAuthStore();
 const modules = useModulesStore();
@@ -957,6 +958,13 @@ const detailsModalVisible = ref(false);
 const detailsTab = ref('customer');
 const selectedNormalized = computed(() => selectedOrder.value ? normalizeOrder(selectedOrder.value) : null);
 
+// Assign rider modal state
+const assignModalVisible = ref(false);
+const assignModalOrder = ref(null);
+const assignModalRiders = ref([]);
+const assignSelectedRider = ref(null);
+const assignOrderId = computed(() => (assignModalOrder && assignModalOrder.value && assignModalOrder.value.id) || null);
+
 function openDetails(o) {
   selectedOrder.value = o;
   detailsTab.value = 'customer';
@@ -1220,45 +1228,18 @@ async function openAssignModal(order) {
     // Riders module disabled: do not show assignment modal
     return
   }
-  if (ridersEnabled.value) {
-    const riders = (await store.fetchRiders()) || [];
-    const options = riders.reduce((acc, r) => {
-      acc[r.id] = `${r.name} — ${r.whatsapp || 'sem WhatsApp'}`;
-      return acc;
-    }, {});
+  // Fetch riders and open a Vue modal that uses ListGroup for selection
+  const riders = (await store.fetchRiders()) || [];
+  assignModalRiders.value = riders.map(r => ({ id: r.id, name: r.name, description: r.whatsapp || 'sem WhatsApp', whatsapp: r.whatsapp || '' }));
+  assignSelectedRider.value = null;
+  // store only the id to avoid references being lost; handlers only need the id
+  assignModalOrder.value = order ? { id: order.id } : null;
+  // Close any open SweetAlert modal to avoid overlays stacking
+  try { Swal.close(); } catch(e) {}
+  await nextTick();
+  assignModalVisible.value = true;
 
-    const { value: riderId } = await Swal.fire({
-      title: 'Escolher entregador',
-      input: 'select',
-      inputOptions: options,
-      inputPlaceholder: 'Selecione um entregador',
-      showCancelButton: true,
-      confirmButtonText: 'Atribuir',
-      cancelButtonText: 'Cancelar',
-    });
-
-    if (riderId) {
-      await store.assignOrder(order.id, { riderId, alsoSetStatus: true });
-      await store.fetch();
-      Swal.fire('OK', 'Pedido atribuído e notificado via WhatsApp.', 'success');
-      return;
-    }
-  }
-
-  // Fallback (or when riders module disabled): ask for phone and assign by phone
-  const { value: phone } = await Swal.fire({
-    title: ridersEnabled.value ? 'WhatsApp do entregador' : 'Atribuir entregador (módulo desabilitado)',
-    input: 'text',
-    inputPlaceholder: '5599999999999',
-    showCancelButton: true,
-    confirmButtonText: 'Atribuir via WhatsApp',
-  });
-
-  if (phone) {
-    await store.assignOrder(order.id, { riderPhone: phone, alsoSetStatus: true });
-    await store.fetch();
-    Swal.fire('OK', 'Pedido atribuído e notificado via WhatsApp.', 'success');
-  }
+  // Modal Vue opened; selection/dispatch handled inside the modal UI
 }
 
 async function changeStatus(order, to) {
@@ -1414,18 +1395,11 @@ async function openWhatsAppToRider(order) {
   const phone = order.rider.whatsapp || order.rider.phone || order.rider.mobile;
   const opts = {};
   Object.keys(riderWhatsAppMessages).forEach((k) => { opts[k] = riderWhatsAppMessages[k]; });
-  // build html with buttons for preview
-  const choicesHtml = Object.keys(riderWhatsAppMessages).map(k => {
-    const txt = String(riderWhatsAppMessages[k]).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    // button full width, text aligned left so preview is easier to read
-    return `<button type="button" data-key="${k}" data-txt="${encodeURIComponent(String(riderWhatsAppMessages[k]))}" class="wa-choose btn btn-outline-primary w-100 text-start mb-2">${txt}</button>`;
-  }).join('');
-
   const html = `
     <div class="wa-choices">
       <div class="mb-2 small text-muted">Escolha uma mensagem:</div>
       <div id="wa_preview" class="wa-preview mb-2 small text-muted">(nenhuma mensagem selecionada)</div>
-      <div>${choicesHtml}</div>
+      <div id="wa_vue"></div>
       <input type="hidden" id="wa_selected" />
     </div>
   `;
@@ -1446,21 +1420,45 @@ async function openWhatsAppToRider(order) {
     didOpen: () => {
       const popup = Swal.getPopup();
       if (!popup) return;
-      popup.querySelectorAll('.wa-choose').forEach((btn) => {
-        btn.addEventListener('click', (ev) => {
-          // mark selection
-          popup.querySelectorAll('.wa-choose').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          const key = btn.getAttribute('data-key');
-          const hid = popup.querySelector('#wa_selected');
-          if (hid) hid.value = key;
-          // update preview area with original text (decoded)
-          const raw = btn.getAttribute('data-txt') || '';
-          const decoded = decodeURIComponent(raw);
-          const preview = popup.querySelector('#wa_preview');
-          if (preview) preview.innerText = decoded;
-        });
-      });
+      const mountEl = popup.querySelector('#wa_vue');
+      if (!mountEl) return;
+      const msgs = Object.keys(riderWhatsAppMessages).map(k => ({ key: k, text: String(riderWhatsAppMessages[k]) }));
+      const App = {
+        components: { ListGroup },
+        data() { return { msgs, selected: null }; },
+        template: `<div><ListGroup :items="msgs" itemKey="key" :selectedId="selected" :showActions="false" @select="onSelect"><template #primary="{ item }"><div class=\"small text-start\">{{ item.text }}</div></template></ListGroup></div>`,
+        methods: {
+          onSelect(v){
+            this.selected = v;
+            const hid = document.getElementById('wa_selected'); if(hid) hid.value = v;
+            const preview = popup.querySelector('#wa_preview'); if(preview) preview.innerText = (riderWhatsAppMessages && riderWhatsAppMessages[v]) || '(nenhuma mensagem selecionada)';
+            // visually mark active via ListGroup selected class
+          }
+        }
+      };
+      try{
+        const vm = createApp({
+          data(){ return { selected: null, msgs } },
+          render() {
+            return h(ListGroup, {
+              items: this.msgs,
+              itemKey: 'key',
+              selectedId: this.selected,
+              showActions: false,
+              onSelect: (v) => this.onSelect(v)
+            }, {
+              primary: ({ item }) => h('div', { class: 'small text-start' }, item.text)
+            });
+          },
+          methods: {
+            onSelect(v){
+              this.selected = v;
+              const hid = document.getElementById('wa_selected'); if(hid) hid.value = v;
+              const preview = popup.querySelector('#wa_preview'); if(preview) preview.innerText = (riderWhatsAppMessages && riderWhatsAppMessages[v]) || '(nenhuma mensagem selecionada)';
+            }
+          }
+        }).mount(mountEl);
+      }catch(e){ console.error('failed to mount wa list', e); }
     }
   });
 
@@ -1844,6 +1842,38 @@ function pulseButton() {
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" @click="closeDetails">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Atribuir entregador (modal custom usando ListGroup) -->
+  <div v-if="assignModalVisible" class="modal fade show" style="display:block; background: rgba(0,0,0,0.45); z-index:20000;" @click.self="(assignModalVisible=false)">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Escolher entregador</h5>
+          <button type="button" class="btn-close" aria-label="Fechar" @click="assignModalVisible=false"></button>
+        </div>
+        <div class="modal-body">
+          <div v-if="assignModalRiders && assignModalRiders.length">
+            <ListGroup :items="assignModalRiders" itemKey="id" :selectedId="assignSelectedRider" :showActions="false" @select="assignSelectedRider = $event">
+              <template #primary="{ item }">
+                <div><strong>{{ item.name }}</strong></div>
+                <div v-if="item.description" class="small text-muted">{{ item.description }}</div>
+              </template>
+            </ListGroup>
+          </div>
+          <div v-else class="text-muted">Nenhum entregador disponível.</div>
+        </div>
+        <div class="modal-footer d-flex justify-content-between">
+          <div>
+            <button class="btn btn-outline-secondary" type="button" @click="assignModalVisible=false">Cancelar</button>
+            <button class="btn btn-outline-danger ms-2" type="button" :disabled="!assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } assignModalVisible=false; await store.updateStatus(id, 'SAIU_PARA_ENTREGA'); await store.fetch(); Swal.fire('OK','Pedido despachado sem entregador.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao despachar pedido.','error') } })()">Despachar sem entregador</button>
+          </div>
+          <div>
+            <button class="btn btn-secondary" type="button" :disabled="!assignSelectedRider || !assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } await store.assignOrder(id, { riderId: assignSelectedRider, alsoSetStatus: true }); await store.fetch(); assignModalVisible=false; Swal.fire('OK','Pedido atribuído e notificado via WhatsApp.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao atribuir entregador.','error') } })()">Atribuir</button>
+          </div>
         </div>
       </div>
     </div>

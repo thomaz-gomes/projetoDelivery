@@ -259,9 +259,12 @@
         <h6 class="fw-semibold mb-3">Pagamento</h6>
         <div class="mb-2">
           <label class="form-label small">Forma</label>
-          <SelectInput   v-model="paymentMethodCode"  class="form-select">
-            <option v-for="pm in paymentMethods" :key="pm.id" :value="pm.code || pm.name">{{ pm.name }}</option>
-          </SelectInput>
+          <ListGroup :items="paymentMethods" itemKey="code" :selectedId="paymentMethodCode" :showActions="false" @select="paymentMethodCode = $event">
+            <template #primary="{ item }">
+              <div><strong>{{ item.name }}</strong></div>
+              <div v-if="item.description" class="small text-muted">{{ item.description }}</div>
+            </template>
+          </ListGroup>
         </div>
         <div v-if="isCashPayment" class="mb-2">
           <CurrencyInput label="Troco para (opcional)" labelClass="form-label small" v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />

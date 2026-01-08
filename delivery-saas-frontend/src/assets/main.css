@@ -109,7 +109,7 @@ body {
   background: white;
 }
 .order-type-toggle .ot-btn.active{
-  border: 2px solid var(--brand-dark) !important;
+  border: 1px solid var(--brand-dark) !important;
 }
 .order-type-toggle .ot-btn .ot-label {
   font-weight: 600;
@@ -179,4 +179,94 @@ body {
   .checkout-modal .modal-content .d-flex.justify-content-between.mt-3 {
     display: none;
   }
+}
+
+/* Cashback box: full-box clickable + easy-to-style class
+   - Use `.use-cashback` on the container that wraps the cashback radio/input and labels
+   - Browsers that support `:has()` will highlight the container when the internal input is checked
+   - JS-driven toggles can add `.use-cashback--active` as a fallback
+*//*
+.use-cashback {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(139,191,98,0.08);
+  border: 1px solid rgba(139,191,98,0.12);
+  position: relative;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.use-cashback:hover {
+  box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+}
+.use-cashback label {
+  display: block;
+  cursor: pointer;
+}
+.use-cashback .cashback-radio, .use-cashback input[type=radio] {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+}*/
+
+/* Active styles: prefer CSS :has() when available, otherwise use the helper class */
+.use-cashback:has(input[type=radio]:checked),
+.use-cashback.use-cashback--active {
+  background: rgba(139,191,98,0.18);
+  border-color: rgba(139,191,98,0.28);
+}
+
+/* Smaller helper when the UI contains descriptive text inside */
+.use-cashback .cashback-amount {
+  font-weight: 600;
+  color: var(--brand-dark);
+}
+
+/* Ensure cashback input-group stays in a single row
+   - Make the input group a flex container
+   - Let the input expand, keep prefix and button compact
+*/
+.use-cashback .input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.use-cashback .input-group .form-control {
+  flex: 1 1 auto;
+  min-width: 0; /* allow shrinking in narrow containers */
+}
+.use-cashback .input-group .input-group-text {
+  flex: 0 0 auto;
+  cursor: default;
+}
+.use-cashback .input-group .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/*BUTTONS*/
+.btn-primary {
+  background-color: var(--brand) !important;
+  border-color: var(--brand) !important;
+  color: #fff !important;
+}
+.btn-secondary {
+  background-color: var(--brand-lightest) !important;
+  border-color: var(--brand-lightest) !important;
+  color: var(--brand-dark) !important;
+}
+.btn-outline-primary {
+  color: var(--brand-dark) !important;
+  border-color: var(--brand-dark) !important;
+}
+.btn-outline-primary:hover {
+  background-color: var(--brand-light) !important;
+  border-color: var(--brand-dark) !important;
+  color: var(--brand-dark) !important;
+}
+.btn-outline-secondary {
+  color: var(--brand-dark) !important;
+  border-color: var(--brand-dark) !important;
 }
