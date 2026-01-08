@@ -42,20 +42,7 @@
         <!-- Lista de endereços salvos -->
         <div v-if="savedAddresses.length > 0" class="mb-3">
           <label class="form-label small fw-semibold">Endereços salvos</label>
-          <ul class="list-unstyled">
-            <li v-for="a in savedAddresses" :key="a.id" class="border rounded p-2 mb-2" :class="{'border-primary bg-light': selectedAddressId === a.id}">
-              <div class="d-flex justify-content-between align-items-start gap-2">
-                <div class="flex-grow-1">
-                  <div class="fw-semibold">{{ a.formatted || [a.street, a.number].filter(Boolean).join(', ') || 'Endereço sem rua' }}</div>
-                  <div class="small text-muted">
-                    {{ a.neighborhood || 'Sem bairro' }}
-                  </div>
-                  <div v-if="a.complement" class="small text-muted">{{ a.complement }}</div>
-                </div>
-                <input type="radio" :value="a.id" v-model="selectedAddressId" @change="selectSavedAddress(a)" />
-              </div>
-            </li>
-          </ul>
+          <ListGroup :items="savedAddresses" item-key="id" :selected-id="selectedAddressId" @select="selectSavedAddress" @edit="editSavedAddress" @remove="removeSavedAddress" />
         </div>
 
         <div class="small mb-2">
@@ -299,6 +286,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue';
+import ListGroup from './form/list-group/ListGroup.vue';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
 import { formatCurrency } from '../utils/formatters.js';
@@ -422,8 +410,22 @@ async function searchCustomer(){
   }
 }
 
-function selectSavedAddress(address){
-  console.log('Endereço selecionado:', address);
+function selectSavedAddress(addressOrId){
+  console.log('Endereço selecionado (raw):', addressOrId);
+  // support either an address object or an id emitted by ListGroup
+  let address = null
+  try{
+    if(addressOrId && typeof addressOrId === 'object') address = addressOrId
+    else address = savedAddresses.value.find(s => String(s.id) === String(addressOrId))
+  }catch(e){ address = null }
+  if(!address){
+    // still set selected id if we received a primitive id
+    try{ selectedAddressId.value = addressOrId }catch(e){}
+    return
+  }
+  // ensure selected id sync
+  selectedAddressId.value = address.id
+
   // Extrai dados do endereço (pode estar em formatted ou campos separados)
   let street = address.street || '';
   let number = address.number || '';
@@ -450,6 +452,26 @@ function selectSavedAddress(address){
   };
   showNewAddressForm.value = false;
   console.log('Campos preenchidos:', addr.value);
+}
+function editSavedAddress(id){
+  const a = savedAddresses.value.find(s => s.id === id);
+  if(!a) return;
+  addr.value = {
+    street: a.street || '',
+    number: a.number || '',
+    neighborhood: a.neighborhood || '',
+    complement: a.complement || '',
+    reference: a.reference || '',
+    observation: a.observation || '',
+    formatted: a.formatted || ''
+  };
+  showNewAddressForm.value = true;
+  selectedAddressId.value = id;
+}
+
+function removeSavedAddress(id){
+  savedAddresses.value = savedAddresses.value.filter(s => s.id !== id);
+  if(selectedAddressId.value === id) selectedAddressId.value = null;
 }
 const canConfirmCustomer = computed(()=> {
   // DELIVERY exige nome preenchido

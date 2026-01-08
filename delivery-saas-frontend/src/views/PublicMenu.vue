@@ -16,16 +16,11 @@
       <div class="d-flex align-items-start justify-content-between gap-3">
         <div class="d-flex align-items-start gap-3">
           <div class="company-logo-wrapper d-flex d-md-none d-lg-flex align-items-center justify-content-center">
-            <template v-if="menu?.logo || company?.logo">
-              <img :src="assetUrl(menu?.logo || company?.logo)" alt="logo" class="company-logo" />
-            </template>
-            <div v-else id="logo-indisponivel" class="d-flex align-items-center justify-content-center">
-              <i class="bi bi-camera" aria-hidden="true" style="font-size:2rem"></i>
-            </div>
+            <img :src="assetUrl(menu?.logo || company?.logo || 'default-logo.svg')" alt="logo" class="company-logo" />
           </div>
           <div>
-            <h3 class="mb-1 company-name">{{ displayName }}</h3>
-            <div v-if="displayPickup" class="small company-address text-muted">{{ displayPickup }}</div>
+            <h3 class="mb-1 company-name">{{ company?.store?.name || company?.name || 'Cardápio' }}</h3>
+            <div class="small company-address text-muted">{{ company?.pickupInfo || company?.address || '' }}</div>
             <div class="small mt-1"><a href="#" class="text-muted" @click.prevent="openInfoModal">Mais informações</a></div>
             <div class="store-closed-panel mt-2">
               <strong v-if="isOpen" class="text-success">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</strong>
@@ -102,7 +97,6 @@
               <div class="row gx-3 gy-3">
                 <div class="col-12 col-lg-6" v-for="p in cat.products" :key="p.id">
                   <div class="product-card d-flex justify-content-between align-items-start p-3" @click="openProductModal(p)" tabindex="0" @keydown.enter="openProductModal(p)">
-                    <div v-if="p.cashback || p.cashbackPercent" class="cashback-badge">{{ p.cashback || p.cashbackPercent }}% de cashback</div>
                     <div class="product-card-body">
                       <h6 class="mb-1 product-title">{{ p.name }}</h6>
                       <div class="small text-muted product-desc">{{ p.description }}</div>
@@ -116,7 +110,7 @@
                         <img v-if="p.image" :src="assetUrl(p.image)" class="product-image" />
                         <div v-else class="bg-light product-image-placeholder"></div>
                       </div>
-                      
+                      <div v-if="p.cashback" class="badge bg-success mt-2">{{ p.cashback }}% cashback</div>
                     </div>
                   </div>
                 </div>
@@ -391,30 +385,7 @@
 
                 <!-- User has saved addresses: show selector + small shortcut to reveal the "new address" form -->
                 <div v-else>
-                  <ul class="list-group mb-2">
-                    <li :class="['list-group-item','p-2', { selected: selectedAddressId === a.id }]" v-for="a in addresses" :key="a.id" @click="selectedAddressId = a.id" style="cursor:pointer;">
-                      <div class="d-flex justify-content-between align-items-center w-100">
-                        <div class="d-flex align-items-center gap-3">
-                          <span class="radio-wrapper">
-                            <input type="radio" :value="a.id" v-model="selectedAddressId" class="custom-radio" @click.stop aria-label="Selecionar endereço" />
-                          </span>
-                          <div>
-                            <div><strong>{{ a.label || a.formattedAddress }}</strong></div>
-                            <div class="small text-muted" :title="a.fullDisplay || a.formattedAddress">
-                              {{ a.formattedAddress }}<span v-if="a.number">, {{ a.number }}</span> — {{ a.neighborhood }}
-                            </div>
-                            <div v-if="a.complement" class="small text-muted">Comp.: {{ a.complement }}</div>
-                            <div v-if="a.reference" class="small text-muted">Ref.: {{ a.reference }}</div>
-                            <div v-if="a.observation" class="small text-muted">Obs.: {{ a.observation }}</div>
-                          </div>
-                        </div>
-                        <div class="d-flex align-items-center gap-2">
-                          <button class="btn btn-sm btn-outline-secondary btn-action" @click.stop="editAddress(a.id)" style="position:relative;z-index:3"><i class="bi bi-pencil"></i></button>
-                          <button class="btn btn-sm btn-outline-danger btn-delete" @click.stop="removeAddress(a.id)" style="position:relative;z-index:3"><i class="bi bi-trash"></i></button>
-                        </div>
-                      </div>
-                    </li>
-                  </ul>
+                  <ListGroup :items="addresses" item-key="id" :selected-id="selectedAddressId" @select="selectedAddressId = $event" @edit="editAddress" @remove="removeAddress" />
 
                   <div class="small mb-2"><a href="#" @click.prevent="showNewAddressForm = !showNewAddressForm">Cadastrar novo endereço</a></div>
 
@@ -812,6 +783,7 @@ import api from '../api';
 import { useRoute, useRouter } from 'vue-router';
 import { assetUrl } from '../utils/assetUrl.js';
 import { applyPhoneMask, removePhoneMask } from '../utils/phoneMask';
+import ListGroup from '../components/form/list-group/ListGroup.vue';
 
 const route = useRoute();
 const router = useRouter();
