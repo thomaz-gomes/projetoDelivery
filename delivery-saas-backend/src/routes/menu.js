@@ -261,7 +261,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null } = body
+  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, cashbackPercent = undefined } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -280,7 +280,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       const sheet = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
       if (!sheet || sheet.companyId !== companyId) return res.status(400).json({ message: 'Ficha técnica inválida' })
     }
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId } })
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -335,7 +335,7 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const existing = await prisma.product.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Produto não encontrado' })
-  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId } = req.body || {}
+  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId, cashbackPercent } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -403,6 +403,9 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
     image: imageValue,
     menuId: menuId !== undefined ? menuId : existing.menuId,
     technicalSheetId: technicalSheetId !== undefined ? technicalSheetId : existing.technicalSheetId
+  ,
+    // set cashbackPercent if provided (allow null to clear)
+    cashbackPercent: cashbackPercent !== undefined ? (cashbackPercent === null ? null : Number(cashbackPercent)) : existing.cashbackPercent
   } })
   res.json(updated)
 })

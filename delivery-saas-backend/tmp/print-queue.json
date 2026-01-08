@@ -212,5 +212,1052 @@
     "printerType": "EPSON",
     "paperWidth": 80,
     "includeFullOrder": true
+  },
+  {
+    "id": "1767759310728-874684",
+    "createdAt": 1767759310728,
+    "order": {
+      "id": "6e03bff6-4bf0-42dc-8eec-cc51785ebe4c",
+      "companyId": "877421c2-fe39-4ac2-ad3e-98f22c4339cb",
+      "storeId": "5584d0ed-0bef-4f72-89a6-c4211c670419",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "4d9d2133-3f0b-430d-817b-f99143d20f0d",
+      "address": "Avenida teste 3",
+      "latitude": null,
+      "longitude": null,
+      "total": "10.04",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "2.5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 10.04,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 10.04,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Centro",
+          "items": [
+            {
+              "productId": "dd1c750a-6585-46a5-9327-bf37a4881159",
+              "name": "Teste de produto 2",
+              "quantity": 1,
+              "price": 25,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "store": {
+            "id": "5584d0ed-0bef-4f72-89a6-c4211c670419",
+            "name": "Matriz",
+            "slug": null
+          }
+        },
+        "computedTotal": 27.5,
+        "total": 10.04,
+        "appliedCashback": 0
+      },
+      "createdAt": "2026-01-07T04:14:55.687Z",
+      "updatedAt": "2026-01-07T04:14:55.687Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "b49f15a5-7dfd-4691-b963-18c30b54a35c",
+          "orderId": "6e03bff6-4bf0-42dc-8eec-cc51785ebe4c",
+          "name": "Teste de produto 2",
+          "quantity": 1,
+          "price": "25",
+          "notes": null,
+          "options": []
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Thomaz\nEndereço: Avenida teste 3\nTelefone: 73991429676\n------------------------------\n 1x Teste de produto 2        R$ 25.00\n------------------------------\nSub-total = R$ 25.00\n\nTOTAL a cobrar: R$ 10.04\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1767810239842-352906",
+    "createdAt": 1767810239842,
+    "order": {
+      "id": "2859687c-d03c-4889-94aa-591ad2a13f71",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": "Av Ruy barbosa",
+      "latitude": null,
+      "longitude": null,
+      "total": "45.5",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 45.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 45.5,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Centro",
+          "items": [
+            {
+              "productId": "5639db4c-c5dc-4607-a5aa-a02eedf47629",
+              "name": "Pizza Margherita",
+              "quantity": 1,
+              "price": 40.5,
+              "notes": null,
+              "options": [
+                {
+                  "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                  "name": "Médio",
+                  "price": 6
+                }
+              ]
+            }
+          ]
+        },
+        "computedTotal": 45.5,
+        "total": 45.5,
+        "appliedCashback": 0
+      },
+      "createdAt": "2026-01-07T18:23:56.165Z",
+      "updatedAt": "2026-01-07T18:23:56.165Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "4e1210a5-a9b5-4cd3-afab-1a3d4448d26f",
+          "orderId": "2859687c-d03c-4889-94aa-591ad2a13f71",
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "price": "40.5",
+          "notes": null,
+          "options": [
+            {
+              "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+              "name": "Médio",
+              "price": 6
+            }
+          ]
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Thomaz\nEndereço: Av Ruy barbosa\nTelefone: 73991429676\n------------------------------\n 1x Pizza Margherita          R$ 40.50\n  - Médio — R$6.00\n------------------------------\nSub-total = R$ 46.50\n\nTOTAL a cobrar: R$ 45.50\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "includeFullOrder": true
+  },
+  {
+    "id": "1767814033253-625157",
+    "createdAt": 1767814033253,
+    "order": {
+      "id": "c9a98128-f12c-4f6b-9d64-4262e4857437",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": "Av Ruy barbosa",
+      "latitude": null,
+      "longitude": null,
+      "total": "79.5",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 79.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 79.5,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Centro",
+          "items": [
+            {
+              "productId": "5639db4c-c5dc-4607-a5aa-a02eedf47629",
+              "name": "Pizza Margherita",
+              "quantity": 1,
+              "price": 40.5,
+              "notes": null,
+              "options": [
+                {
+                  "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                  "name": "Médio",
+                  "price": 6
+                }
+              ]
+            },
+            {
+              "productId": "ef7c70e9-8d8a-48f9-9dcb-fa556486c1f3",
+              "name": "X-Burger Especial",
+              "quantity": 1,
+              "price": 34,
+              "notes": null,
+              "options": [
+                {
+                  "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                  "name": "Médio",
+                  "price": 6
+                }
+              ]
+            }
+          ]
+        },
+        "computedTotal": 79.5,
+        "total": 79.5,
+        "appliedCashback": 0
+      },
+      "createdAt": "2026-01-07T19:27:10.307Z",
+      "updatedAt": "2026-01-07T19:27:10.307Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "3dbc3068-1fe8-4426-bf55-5550df82348d",
+          "orderId": "c9a98128-f12c-4f6b-9d64-4262e4857437",
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "price": "40.5",
+          "notes": null,
+          "options": [
+            {
+              "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+              "name": "Médio",
+              "price": 6
+            }
+          ]
+        },
+        {
+          "id": "3e9fce0a-9ac2-4036-9cae-fe308a7fe107",
+          "orderId": "c9a98128-f12c-4f6b-9d64-4262e4857437",
+          "name": "X-Burger Especial",
+          "quantity": 1,
+          "price": "34",
+          "notes": null,
+          "options": [
+            {
+              "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+              "name": "Médio",
+              "price": 6
+            }
+          ]
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Thomaz\nEndereço: Av Ruy barbosa\nTelefone: 73991429676\n------------------------------\n 1x Pizza Margherita          R$ 40.50\n  - Médio — R$6.00\\n 1x X-Burger Especial         R$ 34.00\n  - Médio — R$6.00\n------------------------------\nSub-total = R$ 86.50\n\nTOTAL a cobrar: R$ 79.50\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "includeFullOrder": true
+  },
+  {
+    "id": "1767821304536-563326",
+    "createdAt": 1767821304536,
+    "order": {
+      "id": "f7da9e8d-7e84-44aa-ac41-9c7733e30a62",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": "Av tordesilha",
+      "latitude": null,
+      "longitude": null,
+      "total": "48",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "6.5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 48,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 48,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Bairro Demo",
+          "items": [
+            {
+              "productId": "3a9a683b-ea5d-4829-84ab-af51694877a7",
+              "name": "Suco Natural 500ml",
+              "quantity": 1,
+              "price": 13.5,
+              "notes": null,
+              "options": [
+                {
+                  "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                  "name": "Médio",
+                  "price": 6
+                }
+              ]
+            },
+            {
+              "productId": "1951b5b0-27dc-450e-a602-1209472db28a",
+              "name": "Salada Caesar",
+              "quantity": 1,
+              "price": 28,
+              "notes": null,
+              "options": [
+                {
+                  "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                  "name": "Médio",
+                  "price": 6
+                }
+              ]
+            }
+          ]
+        },
+        "computedTotal": 48,
+        "total": 48,
+        "appliedCashback": 0
+      },
+      "createdAt": "2026-01-07T21:28:20.223Z",
+      "updatedAt": "2026-01-07T21:28:20.223Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "3f587429-31f5-4820-945f-4327d2aeda08",
+          "orderId": "f7da9e8d-7e84-44aa-ac41-9c7733e30a62",
+          "name": "Suco Natural 500ml",
+          "quantity": 1,
+          "price": "13.5",
+          "notes": null,
+          "options": [
+            {
+              "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+              "name": "Médio",
+              "price": 6
+            }
+          ]
+        },
+        {
+          "id": "54b448c8-ebea-4432-b98d-60f0a6d90049",
+          "orderId": "f7da9e8d-7e84-44aa-ac41-9c7733e30a62",
+          "name": "Salada Caesar",
+          "quantity": 1,
+          "price": "28",
+          "notes": null,
+          "options": [
+            {
+              "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+              "name": "Médio",
+              "price": 6
+            }
+          ]
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Thomaz\nEndereço: Av tordesilha\nTelefone: 73991429676\n------------------------------\n 1x Suco Natural 500ml        R$ 13.50\n  - Médio — R$6.00\\n 1x Salada Caesar             R$ 28.00\n  - Médio — R$6.00\n------------------------------\nSub-total = R$ 53.50\n\nTOTAL a cobrar: R$ 48.00\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "includeFullOrder": true
+  },
+  {
+    "id": "1767825334105-258117",
+    "createdAt": 1767825334105,
+    "order": {
+      "id": "fc83cf7d-4b41-4354-a5f1-5fc14195cbc6",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": "Av tordesilha",
+      "latitude": null,
+      "longitude": null,
+      "total": "34.5",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "6.5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 34.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 34.5,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Bairro Demo",
+          "items": [
+            {
+              "productId": "1951b5b0-27dc-450e-a602-1209472db28a",
+              "name": "Salada Caesar",
+              "quantity": 1,
+              "price": 28,
+              "notes": null,
+              "options": [
+                {
+                  "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                  "name": "Médio",
+                  "price": 6
+                }
+              ]
+            }
+          ]
+        },
+        "computedTotal": 34.5,
+        "total": 34.5,
+        "appliedCashback": 0,
+        "delivery": {
+          "deliveryAddress": {
+            "formattedAddress": "Av tordesilha",
+            "streetName": null,
+            "streetNumber": null,
+            "complement": "teste comp",
+            "neighborhood": "Bairro Demo",
+            "reference": "teste ref",
+            "observation": "teste bos",
+            "city": null,
+            "state": null,
+            "postalCode": null,
+            "country": "BR",
+            "latitude": null,
+            "longitude": null
+          }
+        }
+      },
+      "createdAt": "2026-01-07T22:35:26.760Z",
+      "updatedAt": "2026-01-07T22:35:26.760Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "b1527929-a11d-483d-8269-4b380c38d291",
+          "orderId": "fc83cf7d-4b41-4354-a5f1-5fc14195cbc6",
+          "name": "Salada Caesar",
+          "quantity": 1,
+          "price": "28",
+          "notes": null,
+          "options": [
+            {
+              "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+              "name": "Médio",
+              "price": 6
+            }
+          ]
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Thomaz\nEndereço: Av tordesilha\nTelefone: 73991429676\n------------------------------\n 1x Salada Caesar             R$ 28.00\n  - Médio — R$6.00\n------------------------------\nSub-total = R$ 34.00\n\nTOTAL a cobrar: R$ 34.50\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "includeFullOrder": true
+  },
+  {
+    "id": "1767841643980-811888",
+    "createdAt": 1767841643980,
+    "order": {
+      "id": "dee4c99b-3659-443c-9ff3-c9b3dd193e97",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": "Av tordesilha",
+      "latitude": null,
+      "longitude": null,
+      "total": "20",
+      "deliveryNeighborhood": "Bairro Demo",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "6.5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 20,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 20,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Bairro Demo",
+          "items": [
+            {
+              "productId": "3a9a683b-ea5d-4829-84ab-af51694877a7",
+              "name": "Suco Natural 500ml",
+              "quantity": 1,
+              "price": 13.5,
+              "notes": null,
+              "options": [
+                {
+                  "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                  "name": "Médio",
+                  "price": 6
+                }
+              ]
+            }
+          ],
+          "store": {
+            "id": "8433873c-5512-47aa-8847-c2f7282d9788",
+            "name": "Minha Loja de Testes - Loja 1",
+            "slug": "minha-loja-de-testes-store"
+          }
+        },
+        "computedTotal": 20,
+        "total": 20,
+        "appliedCashback": 0,
+        "delivery": {
+          "deliveryAddress": {
+            "formattedAddress": "Av tordesilha",
+            "streetName": null,
+            "streetNumber": "243",
+            "complement": "teste comp",
+            "neighborhood": "Bairro Demo",
+            "reference": "teste ref",
+            "observation": "teste bos",
+            "city": null,
+            "state": null,
+            "postalCode": null,
+            "country": "BR",
+            "latitude": null,
+            "longitude": null
+          }
+        }
+      },
+      "createdAt": "2026-01-08T03:07:17.491Z",
+      "updatedAt": "2026-01-08T03:07:17.491Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "47fd10c4-0e98-4c7b-bd0e-5ff6c15fba18",
+          "orderId": "dee4c99b-3659-443c-9ff3-c9b3dd193e97",
+          "name": "Suco Natural 500ml",
+          "quantity": 1,
+          "price": "13.5",
+          "notes": null,
+          "options": [
+            {
+              "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+              "name": "Médio",
+              "price": 6
+            }
+          ]
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Thomaz\nEndereço: Av tordesilha\nTelefone: 73991429676\n------------------------------\n 1x Suco Natural 500ml        R$ 13.50\n  - Médio — R$6.00\n------------------------------\nSub-total = R$ 19.50\n\nTOTAL a cobrar: R$ 20.00\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1767842558896-39493",
+    "createdAt": 1767842558896,
+    "order": {
+      "id": "12d1ab35-c8ad-4025-a28f-5520d320ad74",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Teste Público",
+      "customerPhone": "559900112233",
+      "customerSource": "PUBLIC",
+      "customerId": "93e5ed09-8a99-427e-9e1f-28d84e06ba8c",
+      "address": "Rua de Teste, 123, Centro",
+      "latitude": null,
+      "longitude": null,
+      "total": "10",
+      "deliveryNeighborhood": "Centro",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 10,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Teste Público",
+            "contact": "559900112233"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 10,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Centro",
+          "items": [
+            {
+              "productId": "sample-product-1",
+              "name": "Producto de Teste",
+              "quantity": 1,
+              "price": 10,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "address": {
+            "formattedAddress": "Rua de Teste, 123",
+            "streetName": null,
+            "streetNumber": null,
+            "complement": null,
+            "neighborhood": "Centro",
+            "reference": null,
+            "observation": null,
+            "postalCode": null,
+            "city": null,
+            "state": null,
+            "coordinates": null
+          },
+          "store": {
+            "id": "8433873c-5512-47aa-8847-c2f7282d9788",
+            "name": "Minha Loja de Testes - Loja 1",
+            "slug": "minha-loja-de-testes-store"
+          }
+        },
+        "computedTotal": 15,
+        "total": 10,
+        "appliedCashback": 0,
+        "delivery": {
+          "deliveryAddress": {
+            "formattedAddress": "Rua de Teste, 123",
+            "streetName": null,
+            "streetNumber": null,
+            "complement": null,
+            "neighborhood": "Centro",
+            "reference": null,
+            "observation": null,
+            "city": null,
+            "state": null,
+            "postalCode": null,
+            "country": "BR",
+            "latitude": null,
+            "longitude": null
+          }
+        }
+      },
+      "createdAt": "2026-01-08T03:22:35.872Z",
+      "updatedAt": "2026-01-08T03:22:35.872Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "e48374cf-aa2f-4785-98a8-7bebdd533b41",
+          "orderId": "12d1ab35-c8ad-4025-a28f-5520d320ad74",
+          "name": "Producto de Teste",
+          "quantity": 1,
+          "price": "10",
+          "notes": null,
+          "options": []
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Teste Público\nEndereço: Rua de Teste, 123, Centro\nTelefone: 559900112233\n------------------------------\n 1x Producto de Teste         R$ 10.00\n------------------------------\nSub-total = R$ 10.00\n\nTOTAL a cobrar: R$ 10.00\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1767842614017-793843",
+    "createdAt": 1767842614017,
+    "order": {
+      "id": "e625b9be-ff8f-4c95-9106-a3fec409123d",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Teste Público",
+      "customerPhone": "559900112233",
+      "customerSource": "PUBLIC",
+      "customerId": "93e5ed09-8a99-427e-9e1f-28d84e06ba8c",
+      "address": "Rua de Teste, 123, Centro",
+      "latitude": null,
+      "longitude": null,
+      "total": "10",
+      "deliveryNeighborhood": "Centro",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 10,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Teste Público",
+            "contact": "559900112233"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 10,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Centro",
+          "items": [
+            {
+              "productId": "sample-product-1",
+              "name": "Producto de Teste",
+              "quantity": 1,
+              "price": 10,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "address": {
+            "formattedAddress": "Rua de Teste, 123",
+            "streetName": null,
+            "streetNumber": null,
+            "complement": null,
+            "neighborhood": "Centro",
+            "reference": null,
+            "observation": null,
+            "postalCode": null,
+            "city": null,
+            "state": null,
+            "coordinates": null
+          },
+          "store": {
+            "id": "8433873c-5512-47aa-8847-c2f7282d9788",
+            "name": "Minha Loja de Testes - Loja 1",
+            "slug": "minha-loja-de-testes-store"
+          }
+        },
+        "computedTotal": 15,
+        "total": 10,
+        "appliedCashback": 0,
+        "delivery": {
+          "deliveryAddress": {
+            "formattedAddress": "Rua de Teste, 123",
+            "streetName": null,
+            "streetNumber": null,
+            "complement": null,
+            "neighborhood": "Centro",
+            "reference": null,
+            "observation": null,
+            "city": null,
+            "state": null,
+            "postalCode": null,
+            "country": "BR",
+            "latitude": null,
+            "longitude": null
+          }
+        }
+      },
+      "createdAt": "2026-01-08T03:23:31.711Z",
+      "updatedAt": "2026-01-08T03:23:31.711Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "7ffd601c-f567-476c-b225-4415c75c41cf",
+          "orderId": "e625b9be-ff8f-4c95-9106-a3fec409123d",
+          "name": "Producto de Teste",
+          "quantity": 1,
+          "price": "10",
+          "notes": null,
+          "options": []
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Teste Público\nEndereço: Rua de Teste, 123, Centro\nTelefone: 559900112233\n------------------------------\n 1x Producto de Teste         R$ 10.00\n------------------------------\nSub-total = R$ 10.00\n\nTOTAL a cobrar: R$ 10.00\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1767842672327-42506",
+    "createdAt": 1767842672327,
+    "order": {
+      "id": "84194ac0-23b6-4cb0-89ba-e835b3634a1b",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": "Av tordesilha, teste comp, Bairro Demo, ref: teste ref, obs: teste bos",
+      "latitude": null,
+      "longitude": null,
+      "total": "78.5",
+      "deliveryNeighborhood": "Bairro Demo",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "6.5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 78.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Dinheiro",
+            "method": "Dinheiro",
+            "amount": 78.5,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Bairro Demo",
+          "items": [
+            {
+              "productId": "ef7c70e9-8d8a-48f9-9dcb-fa556486c1f3",
+              "name": "X-Burger Especial",
+              "quantity": 1,
+              "price": 34,
+              "notes": null,
+              "options": [
+                {
+                  "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                  "name": "Médio",
+                  "price": 6
+                }
+              ]
+            },
+            {
+              "productId": "ef7c70e9-8d8a-48f9-9dcb-fa556486c1f3",
+              "name": "X-Burger Especial",
+              "quantity": 1,
+              "price": 38,
+              "notes": null,
+              "options": [
+                {
+                  "id": "123618c9-c034-4907-a6dc-a21979169316",
+                  "name": "Grande",
+                  "price": 10
+                }
+              ]
+            }
+          ],
+          "address": {
+            "formattedAddress": "Av tordesilha",
+            "streetName": null,
+            "streetNumber": "243",
+            "complement": "teste comp",
+            "neighborhood": "Bairro Demo",
+            "reference": "teste ref",
+            "observation": "teste bos",
+            "postalCode": null,
+            "city": null,
+            "state": null,
+            "coordinates": null
+          },
+          "store": {
+            "id": "8433873c-5512-47aa-8847-c2f7282d9788",
+            "name": "Minha Loja de Testes - Loja 1",
+            "slug": "minha-loja-de-testes-store"
+          }
+        },
+        "computedTotal": 78.5,
+        "total": 78.5,
+        "appliedCashback": 0,
+        "delivery": {
+          "deliveryAddress": {
+            "formattedAddress": "Av tordesilha",
+            "streetName": null,
+            "streetNumber": "243",
+            "complement": "teste comp",
+            "neighborhood": "Bairro Demo",
+            "reference": "teste ref",
+            "observation": "teste bos",
+            "city": null,
+            "state": null,
+            "postalCode": null,
+            "country": "BR",
+            "latitude": null,
+            "longitude": null
+          }
+        }
+      },
+      "createdAt": "2026-01-08T03:24:27.487Z",
+      "updatedAt": "2026-01-08T03:24:27.487Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "d8cfde82-0bb6-4e78-a860-3e46f466beab",
+          "orderId": "84194ac0-23b6-4cb0-89ba-e835b3634a1b",
+          "name": "X-Burger Especial",
+          "quantity": 1,
+          "price": "34",
+          "notes": null,
+          "options": [
+            {
+              "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+              "name": "Médio",
+              "price": 6
+            }
+          ]
+        },
+        {
+          "id": "0e870141-e555-4cfe-82c6-416a4af25ec9",
+          "orderId": "84194ac0-23b6-4cb0-89ba-e835b3634a1b",
+          "name": "X-Burger Especial",
+          "quantity": 1,
+          "price": "38",
+          "notes": null,
+          "options": [
+            {
+              "id": "123618c9-c034-4907-a6dc-a21979169316",
+              "name": "Grande",
+              "price": 10
+            }
+          ]
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Thomaz\nEndereço: Av tordesilha, teste comp, Bairro Demo, ref: teste ref, obs: teste bos\nTelefone: 73991429676\n------------------------------\n 1x X-Burger Especial         R$ 34.00\n  - Médio — R$6.00\\n 1x X-Burger Especial         R$ 38.00\n  - Grande — R$10.00\n------------------------------\nSub-total = R$ 88.00\n\nTOTAL a cobrar: R$ 78.50\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
   }
 ]

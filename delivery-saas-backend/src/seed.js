@@ -22,7 +22,20 @@ async function createDemoData() {
   const store = await prisma.store.upsert({
     where: { slug: 'minha-loja-de-testes-store' },
     update: { name: 'Minha Loja de Testes - Loja 1', companyId: company.id },
-    create: { slug: 'minha-loja-de-testes-store', name: 'Minha Loja de Testes - Loja 1', companyId: company.id, address: 'Rua dos Testes, 123' }
+    create: { slug: 'minha-loja-de-testes-store', name: 'Minha Loja de Testes - Loja 1', companyId: company.id, address: 'Rua dos Testes, 123', open24Hours: true }
+  })
+
+  // Create two more stores (open 24h) so we have 3 stores total for this company
+  const store2 = await prisma.store.upsert({
+    where: { slug: 'minha-loja-de-testes-store-2' },
+    update: { name: 'Minha Loja de Testes - Loja 2', companyId: company.id },
+    create: { slug: 'minha-loja-de-testes-store-2', name: 'Minha Loja de Testes - Loja 2', companyId: company.id, address: 'Av. Secundária, 45', open24Hours: true }
+  })
+
+  const store3 = await prisma.store.upsert({
+    where: { slug: 'minha-loja-de-testes-store-3' },
+    update: { name: 'Minha Loja de Testes - Loja 3', companyId: company.id },
+    create: { slug: 'minha-loja-de-testes-store-3', name: 'Minha Loja de Testes - Loja 3', companyId: company.id, address: 'Praça Central, 9', open24Hours: true }
   })
 
   // Ensure company's pickupInfo reflects the store address (avoid mocked pickup text)
@@ -48,8 +61,16 @@ async function createDemoData() {
   await prisma.paymentMethod.upsert({ where: { code: 'CARD' }, update: { name: 'Cartão (crédito)', isActive: true, companyId: company.id }, create: { companyId: company.id, name: 'Cartão (crédito)', code: 'CARD', isActive: true } }).catch(()=>{})
   await prisma.paymentMethod.upsert({ where: { code: 'DEBIT' }, update: { name: 'Cartão (débito)', isActive: true, companyId: company.id }, create: { companyId: company.id, name: 'Cartão (débito)', code: 'DEBIT', isActive: true } }).catch(()=>{})
 
+  // Cashback setting (enable cashback for the company)
+  try{
+    await prisma.cashbackSetting.upsert({ where: { companyId: company.id }, update: { enabled: true, defaultPercent: '5' }, create: { companyId: company.id, enabled: true, defaultPercent: '5' } })
+  }catch(e){ /* ignore cashback seed errors */ }
+
   // Menu
   const menu = await prisma.menu.upsert({ where: { slug: 'main-menu' }, update: { name: 'Cardápio Principal', storeId: store.id }, create: { slug: 'main-menu', name: 'Cardápio Principal', storeId: store.id } })
+
+  // Secondary menu for the same company (menu #2) attached to store2 (or fallback to store)
+  const menu2 = await prisma.menu.upsert({ where: { slug: 'secondary-menu' }, update: { name: 'Cardápio Secundário', storeId: store2.id || store.id }, create: { slug: 'secondary-menu', name: 'Cardápio Secundário', storeId: store2.id || store.id } })
 
   // Categories
   const categories = []
@@ -62,6 +83,20 @@ async function createDemoData() {
       cat = await prisma.menuCategory.create({ data: { companyId: company.id, menuId: menu.id, name, position: i } })
     }
     categories.push(cat)
+  }
+
+  // Create some categories for the secondary menu
+  const categoriesMenu2 = [];
+  const secCatNames = ['Lanches', 'Bebidas', 'Sobremesas'];
+  for (let i = 0; i < secCatNames.length; i++) {
+    const name = secCatNames[i]
+    let cat = await prisma.menuCategory.findFirst({ where: { companyId: company.id, menuId: menu2.id, name } })
+    if (cat) {
+      cat = await prisma.menuCategory.update({ where: { id: cat.id }, data: { position: i + 1 } })
+    } else {
+      cat = await prisma.menuCategory.create({ data: { companyId: company.id, menuId: menu2.id, name, position: i + 1 } })
+    }
+    categoriesMenu2.push(cat)
   }
 
   // Products
@@ -98,12 +133,33 @@ async function createDemoData() {
     }
   } catch (e) { console.warn('attach option groups failed', e && e.message) }
 
-  // Customer
-  const customer = await prisma.customer.upsert({ where: { id: 'cust-demo-1' }, update: { fullName: 'João da Silva' }, create: { id: 'cust-demo-1', companyId: company.id, fullName: 'João da Silva', whatsapp: '11987654321', phone: '11987654321' } }).catch(()=>null)
-  try { if (customer) await prisma.address.create({ data: { companyId: company.id, customerId: customer.id, label: 'Casa', street: 'Rua dos Testes', number: '123', neighborhood: 'Centro', city: 'São Paulo', state: 'SP', postalCode: '01000000', formatted: 'Rua dos Testes, 123 - Centro - São Paulo/SP', isDefault: true, latitude: -23.55052, longitude: -46.633308 } }) } catch(e){}
+  // Customers (create 5 sample customers)
+  const sampleCustomers = [
+    { id: 'cust-demo-1', fullName: 'João da Silva', whatsapp: '11987654321', phone: '11987654321', addr: { label: 'Casa', street: 'Rua dos Testes', number: '123', neighborhood: 'Centro', city: 'São Paulo', state: 'SP', postalCode: '01000000', formatted: 'Rua dos Testes, 123 - Centro - São Paulo/SP', latitude: -23.55052, longitude: -46.633308 } },
+    { id: 'cust-demo-2', fullName: 'Maria Oliveira', whatsapp: '11981234567', phone: '11981234567', addr: { label: 'Casa', street: 'Rua das Flores', number: '45', neighborhood: 'Jardim Teste', city: 'São Paulo', state: 'SP', postalCode: '02000000', formatted: 'Rua das Flores, 45 - Jardim Teste - São Paulo/SP', latitude: -23.56052, longitude: -46.643308 } },
+    { id: 'cust-demo-3', fullName: 'Carlos Pereira', whatsapp: '11980123456', phone: '11980123456', addr: { label: 'Trabalho', street: 'Av. Central', number: '200', neighborhood: 'Bairro Demo', city: 'São Paulo', state: 'SP', postalCode: '03000000', formatted: 'Av. Central, 200 - Bairro Demo - São Paulo/SP', latitude: -23.57052, longitude: -46.653308 } },
+    { id: 'cust-demo-4', fullName: 'Ana Souza', whatsapp: '11982345678', phone: '11982345678', addr: { label: 'Casa', street: 'Praça Alegre', number: '10', neighborhood: 'Centro', city: 'São Paulo', state: 'SP', postalCode: '04000000', formatted: 'Praça Alegre, 10 - Centro - São Paulo/SP', latitude: -23.58052, longitude: -46.663308 } },
+    { id: 'cust-demo-5', fullName: 'Pedro Gomes', whatsapp: '11983456789', phone: '11983456789', addr: { label: 'Casa', street: 'Rua Nova', number: '77', neighborhood: 'Jardim Teste', city: 'São Paulo', state: 'SP', postalCode: '05000000', formatted: 'Rua Nova, 77 - Jardim Teste - São Paulo/SP', latitude: -23.59052, longitude: -46.673308 } }
+  ]
 
-  // Rider
-  await prisma.rider.upsert({ where: { id: 'rider-demo-1' }, update: { name: 'Entregador Demo' }, create: { id: 'rider-demo-1', companyId: company.id, name: 'Entregador Demo', whatsapp: '55999999999', dailyRate: '50.00', active: true } }).catch(()=>{})
+  let customer = null
+  for (const sc of sampleCustomers) {
+    try{
+      const c = await prisma.customer.upsert({ where: { id: sc.id }, update: { fullName: sc.fullName, whatsapp: sc.whatsapp, phone: sc.phone, companyId: company.id }, create: { id: sc.id, companyId: company.id, fullName: sc.fullName, whatsapp: sc.whatsapp, phone: sc.phone } })
+      // create address if missing
+      try{
+        const existingAddr = await prisma.address.findFirst({ where: { customerId: c.id } })
+        if (!existingAddr) {
+          await prisma.address.create({ data: { companyId: company.id, customerId: c.id, label: sc.addr.label, street: sc.addr.street, number: sc.addr.number, neighborhood: sc.addr.neighborhood, city: sc.addr.city, state: sc.addr.state, postalCode: sc.addr.postalCode, formatted: sc.addr.formatted, isDefault: true, latitude: sc.addr.latitude, longitude: sc.addr.longitude } }).catch(()=>{})
+        }
+      }catch(e){}
+      if (!customer) customer = c
+    }catch(e){ console.warn('customer upsert failed', e && e.message) }
+  }
+
+  // Riders (create 2 riders)
+  await prisma.rider.upsert({ where: { id: 'rider-demo-1' }, update: { name: 'Entregador Demo 1' }, create: { id: 'rider-demo-1', companyId: company.id, name: 'Entregador Demo 1', whatsapp: '55999999999', dailyRate: '50.00', active: true } }).catch(()=>{})
+  await prisma.rider.upsert({ where: { id: 'rider-demo-2' }, update: { name: 'Entregador Demo 2' }, create: { id: 'rider-demo-2', companyId: company.id, name: 'Entregador Demo 2', whatsapp: '55998888888', dailyRate: '45.00', active: true } }).catch(()=>{})
 
   // Sample orders (create with nested items)
   try {

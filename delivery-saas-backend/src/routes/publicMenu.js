@@ -2,7 +2,7 @@ import express from 'express'
 import { prisma } from '../prisma.js'
 import { signToken, authMiddleware } from '../auth.js'
 import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId } from '../services/customerAccounts.js'
-import { findOrCreateCustomer, normalizePhone } from '../services/customers.js'
+import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js'
 import jwt from 'jsonwebtoken'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
 
@@ -707,6 +707,8 @@ publicMenuRouter.post('/:companyId/coupons/validate', async (req, res) => {
 publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   const { companyId } = req.params
   const payload = req.body || {}
+  try { console.log('POST /public/:companyId/orders - incoming rawBody snippet:', (req.rawBody || '').toString().slice(0,2000).replace(/\n/g,'\\n')) } catch(e){}
+  try { console.log('POST /public/:companyId/orders - parsed payload keys:', Object.keys(payload || {}).join(', ')) } catch(e){}
   try {
     // load company to check operating hours
   const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, alwaysOpen: true, timezone: true, weeklySchedule: true } })
@@ -789,6 +791,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   const raw = payload || {}
   const customer = (raw.customer && { name: String(raw.customer.name || ''), contact: String(raw.customer.contact || '') }) || { name: String(raw.customerName || ''), contact: String(raw.customerPhone || '') }
   const address = (raw.customer && raw.customer.address) || raw.address || {}
+  try { console.log('Parsed customer/contact/address shapes:', { customer: { name: customer.name, contact: customer.contact }, addressKeys: address ? Object.keys(address) : null }) } catch(e){}
   const items = Array.isArray(raw.items) ? raw.items.map(it => ({ productId: it.productId || null, name: String(it.name || it.productName || 'Item'), quantity: Number(it.quantity || 1), price: Number(it.price || 0), notes: it.notes || null, options: Array.isArray(it.options) ? it.options.map(o => ({ id: o.id, name: o.name, price: Number(o.price || 0) })) : null })) : []
   // normalize payment object: include changeFor (troco) and support both code/name incoming values
   const payment = raw.payment ? {
@@ -801,6 +804,8 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   } : null
   const neighborhoodFromPayload = String(raw.neighborhood || (address && (address.neighborhood || address.neigh)) || '')
 
+  try { console.log('Computed orderType/subtotal/neighborhoodFromPayload:', { orderType: (raw.orderType || 'DELIVERY'), subtotal, neighborhoodFromPayload }) } catch(e){}
+
   if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Itens são obrigatórios' })
 
     // enforce delivery address when orderType explicitly requests DELIVERY
@@ -808,6 +813,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
     if (orderType === 'DELIVERY') {
       const formatted = String((address && (address.formatted || address.formattedAddress)) || '')
       const neigh = String(neighborhoodFromPayload || '')
+      try { console.log('Delivery validation check - formatted:', formatted, 'neigh:', neigh) } catch(e){}
       if (!formatted || !neigh) return res.status(400).json({ message: 'Endereço completo e bairro são obrigatórios para entrega' })
     }
 
@@ -965,12 +971,19 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
               formattedAddress: getFormatted(address),
               streetName: address?.street || address?.streetName || null,
               streetNumber: address?.number || address?.streetNumber || null,
+              complement: address?.complement || address?.complemento || null,
               neighborhood: address?.neighborhood || address?.neigh || null,
-              postalCode: address?.postalCode || address?.zip || null
+              reference: address?.reference || address?.referencia || null,
+              observation: address?.observation || address?.observacao || address?.note || null,
+              postalCode: address?.postalCode || address?.zip || null,
+              city: address?.city || null,
+              state: address?.state || null,
+              country: address?.country || null,
+              coordinates: (address && (address.coordinates || (address.latitude && address.longitude ? { latitude: address.latitude, longitude: address.longitude } : null))) || null
             }
           }
         }
-        console.log('Public order addressPayload:', addressPayload)
+        console.log('Public order addressPayload:', JSON.stringify(addressPayload).slice(0,1000))
         persistedCustomer = await findOrCreateCustomer({ companyId, fullName: maybeName || null, cpf: null, whatsapp: maybeContact || null, phone: maybeContact || null, addressPayload })
         console.log('findOrCreateCustomer result:', persistedCustomer ? { id: persistedCustomer.id, whatsapp: persistedCustomer.whatsapp, fullName: persistedCustomer.fullName } : null)
       }
@@ -981,6 +994,30 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
       // create order with nested items
       // build a sanitized payload to store in DB (avoid keeping the entire raw input with unknown fields)
       const safePayload = { customer, payment, orderType, neighborhood: neighborhoodFromPayload, items }
+
+      // Include explicit address parts in the rawPayload so admin UIs can easily
+      // display number, complement, reference and observation without parsing
+      // nested JSON. Prefer normalized fields when available, otherwise use
+      // the raw `address` object provided by the client (support many aliases).
+      try {
+        const addr = address || {}
+        const addrNormalized = {
+          formattedAddress: addr.formatted || addr.formattedAddress || null,
+          streetName: addr.street || addr.streetName || null,
+          streetNumber: addr.number || addr.streetNumber || null,
+          complement: addr.complement || addr.complemento || null,
+          neighborhood: addr.neighborhood || addr.neigh || null,
+          reference: addr.reference || addr.referencia || null,
+          observation: addr.observation || addr.observacao || addr.note || null,
+          postalCode: addr.postalCode || addr.zip || null,
+          city: addr.city || null,
+          state: addr.state || null,
+          coordinates: (addr.coordinates || (addr.latitude && addr.longitude ? { latitude: addr.latitude, longitude: addr.longitude } : null)) || null
+        }
+        safePayload.address = addrNormalized
+      } catch (e) {
+        console.warn('Failed to build safePayload.address for public order:', e?.message || e)
+      }
 
       // Attempt to resolve a store for public orders when provided via query/payload/menuId
       // so we can persist storeId on the order and include canonical store data in the payload.
@@ -1118,6 +1155,21 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
             }
           }
 
+          // Final fallback: if still unresolved, pick the first active store for the company
+          if (!resolvedStore) {
+            try {
+              const firstActive = await prisma.store.findFirst({ where: { companyId, isActive: true }, orderBy: { createdAt: 'asc' } })
+              if (firstActive) {
+                resolvedStore = firstActive
+                console.log('Auto-resolved store via first-active fallback:', { id: firstActive.id, name: firstActive.name })
+              } else {
+                console.log('No active stores found for company; leaving store unresolved')
+              }
+            } catch (e) {
+              console.warn('First-active store fallback failed:', e?.message || e)
+            }
+          }
+
       // If we have resolved store, include a store hint in the safe payload and persist storeId on order
       if (resolvedStore) {
         safePayload.store = { id: resolvedStore.id, name: resolvedStore.name || null, slug: resolvedStore.slug || null }
@@ -1130,8 +1182,28 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         rawPayload: safePayload,
         // persist computed and chosen totals to make the source explicit
         computedTotal: computedTotal,
-        total: total
+        total: total,
+        // include any applied cashback from the client payload for auditing
+        appliedCashback: (raw && (raw.appliedCashback || raw.payload?.appliedCashback)) ? Number(raw.appliedCashback || raw.payload?.appliedCashback || 0) : 0
       }
+
+      // Defensive normalization: ensure a canonical structured delivery address
+      // is present under payload.delivery.deliveryAddress so downstream code
+      // (admin UI, riders, integrations) can rely on the same shape regardless
+      // of client version. Use available `address` object when possible.
+      let normalizedDelivery = null
+      try {
+        normalizedDelivery = (orderType === 'DELIVERY' && address && Object.keys(address).length) ? normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: address } }) : null;
+        if (normalizedDelivery) {
+          payloadToPersist.delivery = { deliveryAddress: normalizedDelivery };
+        }
+      } catch (e) {
+        console.warn('Failed to normalize delivery address for public order persistence', e?.message || e)
+      }
+      try { console.log('Payload to persist (snippet):', JSON.stringify(payloadToPersist).slice(0,2000)) } catch(e){}
+
+      // compute denormalized neighborhood for quick queries/displays
+      const denormNeighborhood = (payloadToPersist.delivery && payloadToPersist.delivery.deliveryAddress && payloadToPersist.delivery.deliveryAddress.neighborhood) || neighborhoodFromPayload || (address && (address.neighborhood || address.neigh)) || null
 
       const created = await prisma.order.create({
         data: {
@@ -1140,7 +1212,10 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
           customerSource: 'PUBLIC',
           customerName: customer.name || null,
           customerPhone: customer.contact || null,
-          address: ((address && (address.formatted || address.formattedAddress)) || [address.street, address.number].filter(Boolean).join(', ')) || null,
+          address: (buildConcatenatedAddress({ delivery: { deliveryAddress: address } }) || ((address && (address.formatted || address.formattedAddress)) || [address.street, address.number].filter(Boolean).join(', '))) || null,
+          latitude: (normalizedDelivery && (normalizedDelivery.latitude ?? null)) || (address && address.coordinates && (address.coordinates.latitude ?? null)) || null,
+          longitude: (normalizedDelivery && (normalizedDelivery.longitude ?? null)) || (address && address.coordinates && (address.coordinates.longitude ?? null)) || null,
+          deliveryNeighborhood: denormNeighborhood,
           // Persist the final total (after coupon discount + delivery fee)
           total: total,
           // persist coupon info if provided in payload (new columns)
@@ -1165,14 +1240,51 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         include: { items: true }
       })
 
+    try { console.log('Order created:', { id: created.id, address: created.address, payloadDelivery: created.payload && created.payload.delivery ? created.payload.delivery : null }) } catch(e){}
+
     // emit socket to panel if available (dynamic import to avoid circular dependency)
     try {
       const idx = await import('../index.js')
       if (idx && typeof idx.emitirNovoPedido === 'function') {
-        try { idx.emitirNovoPedido(created) } catch (e) { console.warn('Emit novo pedido falhou:', e.message || e) }
+        try {
+          console.log('About to emitirNovoPedido for order', created.id)
+          idx.emitirNovoPedido(created)
+          console.log('emitirNovoPedido called for order', created.id)
+        } catch (e) { console.warn('Emit novo pedido falhou:', e.message || e) }
       }
     } catch (e) {
       console.warn('Emit novo pedido dynamic import failed:', e?.message || e)
+    }
+
+    // If the public order included an applied cashback amount, attempt to debit the
+    // customer's cashback wallet. This is best-effort: failures should not block order creation.
+    try {
+      const applied = (raw && (raw.appliedCashback || raw.payload?.appliedCashback)) ? Number(raw.appliedCashback || raw.payload?.appliedCashback || 0) : 0
+      if (applied > 0) {
+        // determine clientId: prefer persistedCustomer, else try to resolve by phone
+        let clientId = persistedCustomer ? persistedCustomer.id : null
+        if (!clientId) {
+          try {
+            const phone = (customer && (customer.contact || '')) ? String(customer.contact).replace(/\D/g, '') : null
+            if (phone) {
+              const cust = await prisma.customer.findFirst({ where: { companyId, OR: [{ whatsapp: phone }, { phone }] } })
+              if (cust) clientId = cust.id
+            }
+          } catch (e) { /* ignore */ }
+        }
+        if (clientId) {
+          try {
+            await cashbackSvc.debitWallet(companyId, clientId, applied, created.id, 'Uso de cashback no checkout (public)')
+            console.log('Applied public cashback debit', { orderId: created.id, clientId, amount: applied })
+          } catch (eDebit) {
+            console.warn('Failed to debit cashback for public order', created.id, eDebit?.message || eDebit)
+          }
+        } else {
+          console.log('No clientId found to debit applied cashback for public order', created.id)
+        }
+      }
+    } catch (e) {
+      console.warn('Error while attempting to apply cashback debit for public order', e?.message || e)
     }
 
     // Return the stored total (already includes deliveryFee) and deliveryFee separately

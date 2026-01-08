@@ -3,7 +3,7 @@ import path from 'path';
 import { prisma } from './prisma.js';
 import { emitirNovoPedido } from './index.js';
 import { parseSaiposWithAI } from './aiParser.js';
-import { upsertCustomerFromPayloadTx } from './services/customers.js';
+import { upsertCustomerFromPayloadTx, buildConcatenatedAddress } from './services/customers.js';
 import { trackAffiliateSale } from './services/affiliates.js';
 
 const watchers = new Map(); // companyId -> fs.FSWatcher
@@ -438,7 +438,7 @@ async function processFile(companyId, filePath) {
 
   const customerName = payload?.customer?.name || null;
   const total = payload?.total?.orderAmount ?? 0;
-  const address = payload?.delivery?.deliveryAddress?.formattedAddress || null;
+  const address = buildConcatenatedAddress(payload) || payload?.delivery?.deliveryAddress?.formattedAddress || null;
   const items = Array.isArray(payload?.items) ? payload.items : [];
   // try to extract storeId from normalized payload (some importers include store id in metadata)
   const rawStoreId = payload?.additionalInfo?.metadata?.storeId || payload?.additionalInfo?.metadata?.idStore || payload?.storeId || payload?.additionalInfo?.storeId || null;
@@ -468,6 +468,7 @@ async function processFile(companyId, filePath) {
               address: address || existing.address,
               latitude: payload?.delivery?.deliveryAddress?.coordinates?.latitude ?? existing.latitude,
               longitude: payload?.delivery?.deliveryAddress?.coordinates?.longitude ?? existing.longitude,
+                deliveryNeighborhood: payload?.delivery?.deliveryAddress?.neighborhood || payload?.neighborhood || existing.deliveryNeighborhood,
               total: total || existing.total,
               payload
             }
@@ -492,6 +493,7 @@ async function processFile(companyId, filePath) {
           address: address || null,
           latitude: payload?.delivery?.deliveryAddress?.coordinates?.latitude ?? null,
           longitude: payload?.delivery?.deliveryAddress?.coordinates?.longitude ?? null,
+          deliveryNeighborhood: payload?.delivery?.deliveryAddress?.neighborhood || payload?.neighborhood || null,
           total: total || 0,
           payload
         } });

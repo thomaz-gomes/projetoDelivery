@@ -273,6 +273,8 @@ async function doRegister(){
       if(res.data.customer) localStorage.setItem(COMPANY_CUSTOMER_KEY, JSON.stringify(res.data.customer))
       setMsg('Conta criada com sucesso', 'alert-success')
       if(res.data.customer) profile.value = res.data.customer
+      // notify other components (e.g. PublicMenu) to refresh profile/addresses/wallet
+      try{ window.dispatchEvent(new CustomEvent('app:user-logged-in')) }catch(e){}
       if(props.embedded){
         emit('authenticated', res.data.customer || null)
       } else {
@@ -315,6 +317,8 @@ async function doLogin(){
       if(res.data.customer) localStorage.setItem(COMPANY_CUSTOMER_KEY, JSON.stringify(res.data.customer))
       setMsg('Login efetuado', 'alert-success')
       if(res.data.customer) profile.value = res.data.customer
+      // notify other components (e.g. PublicMenu) to refresh profile/addresses/wallet
+      try{ window.dispatchEvent(new CustomEvent('app:user-logged-in')) }catch(e){}
       if(props.embedded){ emit('authenticated', res.data.customer || null) }
       else { router.push({ path: `/public/${companyId}/menu` }) }
     }

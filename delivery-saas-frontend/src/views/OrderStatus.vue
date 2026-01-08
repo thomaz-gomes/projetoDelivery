@@ -57,8 +57,20 @@
               <div class="info-row mb-2">
                 <i class="bi bi-geo-alt icon" aria-hidden="true"></i>
                 <div>
-                  <div class="fw-semibold">{{ order?.address || order?.payload?.rawPayload?.customer?.address?.formattedAddress || '—' }}</div>
-                  <div class="text-muted small" v-if="order?.payload?.rawPayload?.neighborhood">{{ order.payload.rawPayload.neighborhood }}</div>
+                  <div class="fw-semibold">{{ order?.address || order?.payload?.delivery?.deliveryAddress?.formattedAddress || order?.payload?.rawPayload?.address?.formattedAddress || '—' }}</div>
+                  <div class="text-muted small" v-if="order?.payload?.delivery?.deliveryAddress?.neighborhood">{{ order.payload.delivery.deliveryAddress.neighborhood }}</div>
+                  <div class="text-muted small" v-if="(order?.payload?.delivery?.deliveryAddress?.streetNumber) || (order?.payload?.rawPayload?.address?.streetNumber)">
+                    Nº: {{ order?.payload?.delivery?.deliveryAddress?.streetNumber || order?.payload?.rawPayload?.address?.streetNumber }}
+                  </div>
+                  <div class="text-muted small" v-if="order?.payload?.delivery?.deliveryAddress?.complement || order?.payload?.rawPayload?.address?.complement">
+                    Comp.: {{ order?.payload?.delivery?.deliveryAddress?.complement || order?.payload?.rawPayload?.address?.complement }}
+                  </div>
+                  <div class="text-muted small" v-if="order?.payload?.delivery?.deliveryAddress?.reference || order?.payload?.rawPayload?.address?.reference">
+                    Ref.: {{ order?.payload?.delivery?.deliveryAddress?.reference || order?.payload?.rawPayload?.address?.reference }}
+                  </div>
+                  <div class="text-muted small" v-if="order?.payload?.delivery?.deliveryAddress?.observation || order?.payload?.rawPayload?.address?.observation">
+                    Obs.: {{ order?.payload?.delivery?.deliveryAddress?.observation || order?.payload?.rawPayload?.address?.observation }}
+                  </div>
                 </div>
               </div>
             </div>

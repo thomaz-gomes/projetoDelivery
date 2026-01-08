@@ -113,23 +113,60 @@ onMounted(async () => {
 
 function extractAddress(order) {
   if (!order) return '';
+  const formatAddrObj = (addr) => {
+    if (!addr) return '';
+    const formatted = addr.formatted || addr.formattedAddress || addr.formatted_address;
+    if (formatted) return String(formatted);
+    const street = addr.street || addr.streetName || '';
+    const number = addr.number || addr.streetNumber || '';
+    const complement = addr.complement || addr.complemento || '';
+    const neighborhood = addr.neighborhood || '';
+    const city = addr.city || '';
+    const state = addr.state || '';
+    const postalCode = addr.postalCode || addr.zip || '';
+    const reference = addr.reference || addr.ref || '';
+    const observation = addr.observation || addr.observacao || '';
+    const base = [street, number].filter(Boolean).join(', ');
+    const tailParts = [neighborhood, city, state].filter(Boolean);
+    if (postalCode) tailParts.push(postalCode);
+    if (complement) tailParts.push('Comp: ' + complement);
+    if (reference) tailParts.push('Ref: ' + reference);
+    if (observation) tailParts.push('Obs: ' + observation);
+    const tail = tailParts.filter(Boolean).join(' - ');
+    return [base, tail].filter(Boolean).join(' | ');
+  };
+
+  if (order.address && typeof order.address === 'object') return formatAddrObj(order.address);
+  if (typeof order.address === 'string' && order.address) return order.address;
+
+  const maybeObj = order.payload?.delivery?.deliveryAddress || order.payload?.deliveryAddress || order.payload?.delivery?.address || order.payload?.order?.delivery?.address || order.payload?.shippingAddress || order.payload?.shipping?.address || order.payload?.rawPayload?.deliveryAddress || order.payload?.rawPayload?.address;
+  if (maybeObj) {
+    if (typeof maybeObj === 'string') return maybeObj;
+    return formatAddrObj(maybeObj);
+  }
+
   return order.address ||
     order.payload?.delivery?.deliveryAddress?.formattedAddress ||
     order.payload?.deliveryAddress?.formattedAddress ||
     order.payload?.delivery?.address?.formattedAddress ||
-    order.payload?.delivery?.address ||
     order.payload?.order?.delivery?.address?.formattedAddress ||
-    order.payload?.order?.delivery?.address ||
-    order.payload?.shippingAddress?.formattedAddress ||
-    order.payload?.shipping?.address?.formattedAddress ||
-    order.payload?.delivery_address?.formatted_address ||
-    order.payload?.rawPayload?.deliveryAddress?.formattedAddress ||
-    order.payload?.rawPayload?.address?.formatted ||
     order.payload?.rawPayload?.address?.formattedAddress ||
-    order.payload?.rawPayload?.address?.formatted_address ||
-    order.rawPayload?.neighborhood ||
-    (typeof order.rawPayload?.address === 'string' ? order.rawPayload.address : null) ||
     '';
+}
+
+function getAddressObj(order) {
+  if (!order) return null;
+  // prefer normalized delivery address
+  const d = order.payload?.delivery?.deliveryAddress || order.payload?.deliveryAddress || order.payload?.rawPayload?.address || null;
+  if (d) return d;
+  if (order.address && typeof order.address === 'object') return order.address;
+  return null;
+}
+
+function getMainAddress(order) {
+  const a = getAddressObj(order);
+  if (!a) return order.address || '';
+  return a.formatted || a.formattedAddress || [a.street || a.streetName, a.number || a.streetNumber].filter(Boolean).join(', ');
 }
 
 async function associateCustomer() {
@@ -166,7 +203,15 @@ async function associateCustomer() {
             <button @click="associateCustomer" :disabled="assocLoading">{{ assocLoading ? 'Associando...' : 'Associar cliente' }}</button>
           </div>
         </div>
-        <div class="small"><b>Endereço:</b> {{ extractAddress(order) || '-' }}</div>
+        <div class="small">
+          <b>Endereço:</b>
+          <div>{{ getMainAddress(order) || '-' }}</div>
+          <div v-if="getAddressObj(order) && (getAddressObj(order).streetNumber || getAddressObj(order).number)" class="muted">Nº: {{ getAddressObj(order).streetNumber || getAddressObj(order).number }}</div>
+          <div v-if="getAddressObj(order) && (getAddressObj(order).complement || getAddressObj(order).complemento)" class="muted">Comp.: {{ getAddressObj(order).complement || getAddressObj(order).complemento }}</div>
+          <div v-if="getAddressObj(order) && (getAddressObj(order).reference || getAddressObj(order).referencia)" class="muted">Ref.: {{ getAddressObj(order).reference || getAddressObj(order).referencia }}</div>
+          <div v-if="getAddressObj(order) && (getAddressObj(order).observation || getAddressObj(order).observacao)" class="muted">Obs.: {{ getAddressObj(order).observation || getAddressObj(order).observacao }}</div>
+          <div v-if="getAddressObj(order) && getAddressObj(order).neighborhood" class="muted">{{ getAddressObj(order).neighborhood }}</div>
+        </div>
       </section>
 
       <section class="sec">

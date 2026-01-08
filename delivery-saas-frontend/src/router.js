@@ -48,6 +48,7 @@ import CouponForm from './views/CouponForm.vue';
 import PublicMenu from './views/PublicMenu.vue';
 import PublicSlugResolver from './views/PublicSlugResolver.vue';
 import PublicProfile from './views/PublicProfile.vue';
+import PublicTransactions from './views/PublicTransactions.vue';
 import PublicProfileEdit from './views/PublicProfileEdit.vue';
 import PublicProfilePassword from './views/PublicProfilePassword.vue';
 import PublicAddresses from './views/PublicAddresses.vue';
@@ -140,6 +141,7 @@ const router = createRouter({
    ,{ path: '/public/:storeSlug', component: PublicSlugResolver }
    ,{ path: '/public/:companyId/menu', component: PublicMenu }
   ,{ path: '/public/:companyId/profile', component: PublicProfile }
+  ,{ path: '/public/:companyId/profile/transactions', component: PublicTransactions }
   ,{ path: '/public/:companyId/profile/edit', component: PublicProfileEdit }
   ,{ path: '/public/:companyId/profile/password', component: PublicProfilePassword }
   ,{ path: '/public/:companyId/addresses', component: PublicAddresses }

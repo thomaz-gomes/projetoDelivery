@@ -102,6 +102,7 @@
               <div class="row gx-3 gy-3">
                 <div class="col-12 col-lg-6" v-for="p in cat.products" :key="p.id">
                   <div class="product-card d-flex justify-content-between align-items-start p-3" @click="openProductModal(p)" tabindex="0" @keydown.enter="openProductModal(p)">
+                    <div v-if="p.cashback || p.cashbackPercent" class="cashback-badge">{{ p.cashback || p.cashbackPercent }}% de cashback</div>
                     <div class="product-card-body">
                       <h6 class="mb-1 product-title">{{ p.name }}</h6>
                       <div class="small text-muted product-desc">{{ p.description }}</div>
@@ -115,7 +116,7 @@
                         <img v-if="p.image" :src="assetUrl(p.image)" class="product-image" />
                         <div v-else class="bg-light product-image-placeholder"></div>
                       </div>
-                      <div v-if="p.cashback" class="badge bg-success mt-2">{{ p.cashback }}% cashback</div>
+                      
                     </div>
                   </div>
                 </div>
@@ -399,7 +400,12 @@
                           </span>
                           <div>
                             <div><strong>{{ a.label || a.formattedAddress }}</strong></div>
-                            <div class="small text-muted" :title="a.fullDisplay || a.formattedAddress">{{ a.formattedAddress }} — {{ a.neighborhood }}</div>
+                            <div class="small text-muted" :title="a.fullDisplay || a.formattedAddress">
+                              {{ a.formattedAddress }}<span v-if="a.number">, {{ a.number }}</span> — {{ a.neighborhood }}
+                            </div>
+                            <div v-if="a.complement" class="small text-muted">Comp.: {{ a.complement }}</div>
+                            <div v-if="a.reference" class="small text-muted">Ref.: {{ a.reference }}</div>
+                            <div v-if="a.observation" class="small text-muted">Obs.: {{ a.observation }}</div>
                           </div>
                         </div>
                         <div class="d-flex align-items-center gap-2">
@@ -564,8 +570,9 @@
                   <div class="d-flex align-items-center">
                     <div class="summary-icon"><i class="bi bi-geo-alt text-muted" aria-hidden="true"></i></div>
                     <div>
-                      <div class="fw-bold">{{ (addresses.find(a=>a.id===selectedAddressId) || {}).formattedAddress || '' }}</div>
+                      <div class="fw-bold">{{ (addresses.find(a=>a.id===selectedAddressId) || {}).formattedAddress || '' }}<span v-if="(addresses.find(a=>a.id===selectedAddressId) || {}).number">, {{ (addresses.find(a=>a.id===selectedAddressId) || {}).number }}</span></div>
                       <div class="small text-muted">{{ (addresses.find(a=>a.id===selectedAddressId) || {}).neighborhood || '' }}</div>
+                      <div v-if="(addresses.find(a=>a.id===selectedAddressId) || {}).complement" class="small text-muted">Comp.: {{ (addresses.find(a=>a.id===selectedAddressId) || {}).complement }}</div>
                       <div v-if="(addresses.find(a=>a.id===selectedAddressId) || {}).reference" class="small text-muted">Ref.: {{ (addresses.find(a=>a.id===selectedAddressId) || {}).reference }}</div>
                       <div v-if="(addresses.find(a=>a.id===selectedAddressId) || {}).observation" class="small text-muted">Obs.: {{ (addresses.find(a=>a.id===selectedAddressId) || {}).observation }}</div>
                     </div>
@@ -1027,7 +1034,23 @@ const selectedAddressId = ref(addresses.value.length ? addresses.value[0].id : n
     const token = localStorage.getItem('token')
     const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
     if(token && stored && stored.addresses && Array.isArray(stored.addresses) && stored.addresses.length){
-      addresses.value = stored.addresses.map(a => ({ id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8), label: a.label || a.formatted || '', formattedAddress: a.formatted || a.formattedAddress || '', neighborhood: a.neighborhood || a.neigh || '', reference: a.reference || a.ref || '', observation: a.observation || a.observacao || '' }))
+      addresses.value = stored.addresses.map(a => ({
+        id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8),
+        label: a.label || a.formatted || '',
+        formattedAddress: a.formatted || a.formattedAddress || '',
+        number: a.number || a.numero || '',
+        complement: a.complement || a.complemento || '',
+        neighborhood: a.neighborhood || a.neigh || '',
+        reference: a.reference || a.ref || '',
+        observation: a.observation || a.observacao || '',
+        postalCode: a.postalCode || a.postal_code || a.zip || '',
+        city: a.city || '',
+        state: a.state || '',
+        country: a.country || '',
+        latitude: a.latitude || a.lat || null,
+        longitude: a.longitude || a.lon || a.lng || null,
+        fullDisplay: a.fullDisplay || a.display_name || ''
+      }))
       selectedAddressId.value = addresses.value.length ? addresses.value[0].id : selectedAddressId.value
       // debug: log loaded addresses and selection for troubleshooting delivery fee
       try{ console.debug('[debug] loaded stored public customer addresses', { addresses: addresses.value, selectedAddressId: selectedAddressId.value }) }catch(e){}
@@ -1039,13 +1062,24 @@ const selectedAddressId = ref(addresses.value.length ? addresses.value[0].id : n
     }
   }catch(e){ /* ignore */ }
 
-function openCheckout(){
+async function openCheckout(){
   checkoutModalOpen.value = true
   // if a public customer is already authenticated (token + stored customer), skip customer step
   try{
     const token = localStorage.getItem('token')
     // ensure we try to fetch server-side profile/addresses when opening checkout
-    if(token){ try{ fetchProfileAndAddresses() }catch(e){} }
+    if(token){
+      try{
+        // if we have no addresses yet, wait a short time for the fetch to complete
+        if(!addresses.value.length){
+          const p = fetchProfileAndAddresses()
+          const timeout = new Promise(r => setTimeout(r, 800))
+          await Promise.race([p, timeout])
+        } else {
+          try{ fetchProfileAndAddresses() }catch(e){}
+        }
+      }catch(e){}
+    }
     const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
     if(token && stored){
       checkoutStep.value = 'delivery'
@@ -1081,6 +1115,15 @@ function addAddress(addr){
   try{ a.label = String(a.label || a.formattedAddress || '').trim() }catch(e){ a.label = String(a.formattedAddress || '') }
   try{ a.reference = a.reference || a.ref || '' }catch(e){}
   try{ a.observation = a.observation || a.observacao || '' }catch(e){}
+  try{ a.number = a.number || a.num || '' }catch(e){}
+  try{ a.complement = a.complement || a.complemento || '' }catch(e){}
+  try{ a.latitude = a.latitude || a.lat || null }catch(e){}
+  try{ a.longitude = a.longitude || a.lon || a.lng || null }catch(e){}
+  try{ a.postalCode = a.postalCode || a.postal_code || a.zip || '' }catch(e){}
+  try{ a.city = a.city || '' }catch(e){}
+  try{ a.state = a.state || '' }catch(e){}
+  try{ a.country = a.country || '' }catch(e){}
+  try{ a.fullDisplay = a.fullDisplay || a.display_name || '' }catch(e){}
   addresses.value.push(a)
   selectedAddressId.value = id
   localStorage.setItem(LOCAL_ADDR_KEY, JSON.stringify(addresses.value))
@@ -1095,15 +1138,17 @@ function removeAddress(id){
 
 // Fetch server-side public profile and addresses when we have a token but no cached customer
 async function fetchProfileAndAddresses(){
+  let storedContact = null
+  let prof = null
   try{
     // if we have a stored public customer contact, send it as x-public-phone so server can resolve guest customer
     const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
-    const storedContact = stored && (stored.contact || stored.whatsapp || stored.phone) ? (stored.contact || stored.whatsapp || stored.phone) : null
+    storedContact = stored && (stored.contact || stored.whatsapp || stored.phone) ? (stored.contact || stored.whatsapp || stored.phone) : null
     const cfg = {}
     if(storedContact) cfg.headers = { 'x-public-phone': storedContact }
 
     const p = await api.get(`/public/${companyId}/profile`, cfg)
-    const prof = p && p.data ? p.data : null
+    prof = p && p.data ? p.data : null
     if(prof){
       try{ localStorage.setItem(LOCAL_CUSTOMER_KEY, JSON.stringify(prof)) }catch(e){}
       // also populate runtime `customer` so `publicCustomerConnected` becomes available
@@ -1113,7 +1158,17 @@ async function fetchProfileAndAddresses(){
         customer.value = {
           name: resolvedName,
           contact: resolvedContact,
-          address: (prof.addresses && prof.addresses.length && prof.addresses[0]) ? { formattedAddress: prof.addresses[0].formatted || prof.addresses[0].formattedAddress || '', neighborhood: prof.addresses[0].neighborhood || '' } : (customer.value && customer.value.address) ? { ...customer.value.address } : { formattedAddress: '', neighborhood: '' }
+          address: (prof.addresses && prof.addresses.length && prof.addresses[0]) ? {
+            formattedAddress: prof.addresses[0].formatted || prof.addresses[0].formattedAddress || '',
+            number: prof.addresses[0].number || prof.addresses[0].numero || '',
+            complement: prof.addresses[0].complement || prof.addresses[0].complemento || '',
+            neighborhood: prof.addresses[0].neighborhood || prof.addresses[0].neigh || '',
+            reference: prof.addresses[0].reference || prof.addresses[0].ref || '',
+            observation: prof.addresses[0].observation || prof.addresses[0].observacao || '',
+            latitude: prof.addresses[0].latitude || prof.addresses[0].lat || null,
+            longitude: prof.addresses[0].longitude || prof.addresses[0].lon || prof.addresses[0].lng || null,
+            fullDisplay: prof.addresses[0].fullDisplay || prof.addresses[0].display_name || ''
+          } : (customer.value && customer.value.address) ? { ...customer.value.address } : { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' }
         }
         // refresh discounts now that we have customer context
         try{ scheduleEvaluateDiscounts() }catch(e){}
@@ -1125,10 +1180,33 @@ async function fetchProfileAndAddresses(){
     const cfg2 = {}
     if(storedContact) cfg2.headers = { 'x-public-phone': storedContact }
     const r = await api.get(`/public/${companyId}/addresses`, cfg2)
-    const addrData = (r && r.data) ? (Array.isArray(r.data) ? r.data : r.data.addresses || []) : []
+    let addrData = (r && r.data) ? (Array.isArray(r.data) ? r.data : r.data.addresses || []) : []
+    // fallback to profile addresses when the addresses endpoint returns empty
+    if((!Array.isArray(addrData) || !addrData.length) && prof && Array.isArray(prof.addresses) && prof.addresses.length){
+      addrData = prof.addresses
+    }
     if(Array.isArray(addrData) && addrData.length){
-      addresses.value = addrData.map(a => ({ id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8), label: a.label || a.formatted || '', formattedAddress: a.formatted || a.formattedAddress || '', neighborhood: a.neighborhood || a.neigh || '', reference: a.reference || a.ref || '', observation: a.observation || a.observacao || '' }))
-      selectedAddressId.value = addresses.value.length ? addresses.value[0].id : selectedAddressId.value
+      addresses.value = addrData.map(a => ({
+        id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8),
+        label: a.label || a.formatted || '',
+        formattedAddress: a.formatted || a.formattedAddress || '',
+        number: a.number || a.numero || '',
+        complement: a.complement || a.complemento || '',
+        neighborhood: a.neighborhood || a.neigh || '',
+        reference: a.reference || a.ref || '',
+        observation: a.observation || a.observacao || '',
+        postalCode: a.postalCode || a.postal_code || a.zip || '',
+        city: a.city || '',
+        state: a.state || '',
+        country: a.country || '',
+        latitude: a.latitude || a.lat || null,
+        longitude: a.longitude || a.lon || a.lng || null,
+        fullDisplay: a.fullDisplay || a.display_name || '',
+        isDefault: !!a.isDefault
+      }))
+      // prefer address marked as default when available
+      const def = addresses.value.find(a => a.isDefault)
+      selectedAddressId.value = def ? def.id : (addresses.value.length ? addresses.value[0].id : selectedAddressId.value)
       try{ localStorage.setItem(LOCAL_ADDR_KEY, JSON.stringify(addresses.value)) }catch(e){}
       try{ console.debug('[debug] fetched server addresses for logged-in customer', { addresses: addresses.value, selectedAddressId: selectedAddressId.value }) }catch(e){}
       try{ refreshDeliveryFee() }catch(e){}
@@ -1189,7 +1267,7 @@ try{
     }
   }
 }catch(e){ console.warn('restore cart from localStorage failed', e) }
-const customer = ref({ name: '', contact: '', address: { formattedAddress: '', neighborhood: '' } });
+const customer = ref({ name: '', contact: '', address: { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' } });
 // load persisted customer if any (after customer is defined)
 const savedCustomerRaw = localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || null
 const savedCustomer = JSON.parse(savedCustomerRaw || 'null')
@@ -1201,7 +1279,7 @@ if(savedCustomer) {
   customer.value = {
     name: resolvedName,
     contact: resolvedContact,
-    address: (customer.value && customer.value.address) ? { ...customer.value.address } : { formattedAddress: '', neighborhood: '' }
+    address: (customer.value && customer.value.address) ? { ...customer.value.address } : { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' }
   }
 }
 const neighborhood = ref('');
@@ -1316,7 +1394,7 @@ function logoutPublicCustomer(){
     localStorage.removeItem(LOCAL_CUSTOMER_KEY)
     localStorage.removeItem(`public_customer_${companyId}`)
   }catch(e){}
-  customer.value = { name: '', contact: '', address: { formattedAddress: '', neighborhood: '' } }
+  customer.value = { name: '', contact: '', address: { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' } }
   addresses.value = []
   selectedAddressId.value = null
   checkoutStep.value = 'customer'
@@ -2429,10 +2507,21 @@ async function performOrderFromModal(){
     // flow (customer.value.address) when the user didn't save it.
     const a = addresses.value.find(x=>x.id===selectedAddressId.value)
     if(a){
-      if(!customer.value.address) customer.value.address = { formattedAddress: '', neighborhood: '' }
+      if(!customer.value.address) customer.value.address = { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' }
       customer.value.address.formattedAddress = a.formattedAddress
+      customer.value.address.number = a.number || ''
+      customer.value.address.complement = a.complement || ''
       customer.value.address.neighborhood = a.neighborhood || ''
       customer.value.address.reference = a.reference || ''
+      customer.value.address.observation = a.observation || ''
+      customer.value.address.fullDisplay = a.fullDisplay || ''
+      // copy additional optional fields so payload contains full address shape
+      try{ customer.value.address.postalCode = a.postalCode || a.postal_code || '' }catch(e){}
+      try{ customer.value.address.city = a.city || '' }catch(e){}
+      try{ customer.value.address.state = a.state || '' }catch(e){}
+      try{ customer.value.address.country = a.country || '' }catch(e){}
+      try{ customer.value.address.latitude = a.latitude ?? a.lat ?? null }catch(e){}
+      try{ customer.value.address.longitude = a.longitude ?? a.lon ?? a.lng ?? null }catch(e){}
       neighborhood.value = a.neighborhood || ''
     } else if(customer.value.address && customer.value.address.formattedAddress){
       // already filled via inline "Usar para este pedido" or nextFromDelivery copy
@@ -2766,28 +2855,49 @@ function selectCategory(id){
 // fetch cashback settings for company and (if logged) the customer's wallet
 async function fetchCashbackSettingsAndWallet(){
   try{
-    // fetch settings (public endpoint)
+    // fetch settings (may require admin role). If forbidden, don't treat as fatal — continue to try wallet fetch.
     try{
       const r = await api.get(`/cashback/settings?companyId=${companyId}`)
       cashbackSettings.value = r.data || null
       cashbackEnabled.value = !!(cashbackSettings.value && (cashbackSettings.value.enabled || cashbackSettings.value.isEnabled))
-    }catch(e){ cashbackSettings.value = null; cashbackEnabled.value = false }
+    }catch(e){
+      cashbackSettings.value = null
+      try{ console.debug('[debug] cashback settings fetch failed', e?.response?.status || e) }catch(_){}
+      // do not assume disabled here; continue and try to fetch wallet below
+    }
 
     // fetch wallet for logged-in public customer when possible, or when we have a stored public customer id
     walletLoaded.value = false
     try{
       // try to derive clientId from stored profile (namespaced or legacy key)
-      const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
-      const storedClientId = stored && (stored.id || stored.clientId || stored.customerId) ? (stored.id || stored.clientId || stored.customerId) : null
+      let stored = null
+      try{ stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null') }catch(e){ stored = null }
+      let storedClientId = stored && (stored.id || stored.clientId || stored.customerId) ? (stored.id || stored.clientId || stored.customerId) : null
 
-      // prefer authenticated connected customer, but allow fetching wallet when only storedClientId exists
+      // If we have a token but no stored client id, try to fetch the profile (server-resolved) to obtain id
+      const token = localStorage.getItem('token')
+      if(!storedClientId && token){
+        try{
+          const p = await api.get(`/public/${companyId}/profile`)
+          const prof = p && p.data ? p.data : null
+          if(prof){
+            // persist legacy key for compatibility
+            try{ localStorage.setItem(`public_customer_${companyId}`, JSON.stringify(prof)) }catch(e){}
+            storedClientId = prof.id || prof.clientId || prof.customerId || null
+          }
+        }catch(e){ /* ignore profile fetch error */ }
+      }
+
       const clientIdToUse = storedClientId || null
-
       if(clientIdToUse){
         try{
           const w = await api.get(`/cashback/wallet?clientId=${encodeURIComponent(clientIdToUse)}&companyId=${companyId}`)
           try{ console.debug('[debug] fetchCashbackSettingsAndWallet -> wallet response', w && w.data) }catch(e){}
           wallet.value = w.data || { balance: 0 }
+          // if wallet exists, enable cashback UI even if settings endpoint was not accessible
+          if(wallet.value && (wallet.value.balance !== undefined || (Array.isArray(wallet.value.transactions) && wallet.value.transactions.length > 0))){
+            cashbackEnabled.value = true
+          }
         }catch(e){ console.debug('[debug] fetchCashbackSettingsAndWallet -> wallet fetch error', e); wallet.value = { balance: 0 } }
       } else {
         wallet.value = { balance: 0 }
@@ -2877,9 +2987,16 @@ async function submitOrder(){
         contact: String(customer.value.contact || ''),
         address: {
           formattedAddress: String((customer.value.address && customer.value.address.formattedAddress) || ''),
+          number: String((customer.value.address && customer.value.address.number) || ''),
+          complement: String((customer.value.address && customer.value.address.complement) || ''),
           neighborhood: String(neighborhood.value || ''),
-          reference: String((customer.value.address && customer.value.address.reference) || ''),
-          observation: String((customer.value.address && customer.value.address.observation) || '')
+            reference: String((customer.value.address && customer.value.address.reference) || ''),
+            observation: String((customer.value.address && customer.value.address.observation) || ''),
+            postalCode: String((customer.value.address && (customer.value.address.postalCode || customer.value.address.postal_code)) || ''),
+            city: String((customer.value.address && customer.value.address.city) || ''),
+            state: String((customer.value.address && customer.value.address.state) || ''),
+            country: String((customer.value.address && customer.value.address.country) || ''),
+            coordinates: (customer.value.address && (customer.value.address.latitude != null || customer.value.address.longitude != null)) ? { latitude: customer.value.address.latitude || null, longitude: customer.value.address.longitude || null } : null
         }
       },
       items: (cart.value || []).map(i => ({
@@ -2894,6 +3011,29 @@ async function submitOrder(){
       neighborhood: String(neighborhood.value || ''),
       orderType: String(orderType.value || '')
     };
+
+    // Ensure we include the structured delivery address in shapes the backend may expect
+    try{
+      const structuredAddr = {
+        formattedAddress: String((customer.value.address && customer.value.address.formattedAddress) || ''),
+        number: String((customer.value.address && customer.value.address.number) || ''),
+        complement: String((customer.value.address && customer.value.address.complement) || ''),
+        neighborhood: String((customer.value.address && customer.value.address.neighborhood) || neighborhood.value || ''),
+        reference: String((customer.value.address && customer.value.address.reference) || ''),
+        observation: String((customer.value.address && customer.value.address.observation) || ''),
+        postalCode: String((customer.value.address && (customer.value.address.postalCode || customer.value.address.postal_code)) || ''),
+        city: String((customer.value.address && customer.value.address.city) || ''),
+        state: String((customer.value.address && customer.value.address.state) || ''),
+        country: String((customer.value.address && customer.value.address.country) || ''),
+        coordinates: (customer.value.address && (customer.value.address.latitude != null || customer.value.address.longitude != null)) ? { latitude: customer.value.address.latitude || null, longitude: customer.value.address.longitude || null } : null
+      }
+      // attach in multiple places for compatibility with older/newer backend shapes
+      payload.customer = payload.customer || {}
+      payload.customer.address = payload.customer.address || structuredAddr
+      payload.delivery = payload.delivery || {}
+      payload.delivery.deliveryAddress = structuredAddr
+      payload.deliveryAddress = structuredAddr
+    }catch(e){ /* ignore */ }
 
   // build payment object and include optional 'changeFor' when customer requested troco
   try{
@@ -3033,8 +3173,7 @@ li.list-group-item.selected, .payment-method.selected {
 .hero-image { transition: transform .35s ease }
 .public-hero:hover .hero-image { transform: scale(1.02) }
 
-/* Product card styles to match mockups */
-.product-card { background: #fff; border-radius: 18px;}
+.product-card { background: #fff; border-radius: 18px; position: relative;}
 .product-card-body { flex: 1 1 auto; padding-right: 1rem; }
 .product-title { font-size: 1.05rem; font-weight: 600; }
 .product-desc { color: #666; font-size:12px; line-height:135%; max-height: 3em; overflow: hidden; text-overflow: ellipsis; }
@@ -3043,6 +3182,21 @@ li.list-group-item.selected, .payment-method.selected {
 .product-image { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; }
 .product-image-placeholder { width: 96px; height: 96px; border-radius: 8px; }
 .badge.bg-success { background-color: #dff3e9; color: #056937; font-weight:600; border-radius:8px; padding:4px 6px; font-size:0.8rem }
+
+/* Cashback badge shown on product cards */
+.cashback-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: linear-gradient(180deg,#e6f9ef,#c8f1dc);
+  color: #056937;
+  font-weight:700;
+  padding:6px 8px;
+  border-radius:10px;
+  font-size:0.85rem;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+  z-index: 5;
+}
 
 @media (max-width: 991px){
   .product-card { border-radius: 8px; }

@@ -14,6 +14,11 @@
           <div class="col-md-4">
             <CurrencyInput label="Preço" labelClass="form-label" v-model="form.price" inputClass="form-control" placeholder="0,00" />
           </div>
+          <div v-if="cashbackEnabled" class="col-md-4">
+            <label class="form-label">Cashback (%)</label>
+            <input type="number" step="0.01" class="form-control" v-model.number="form.cashbackPercent" placeholder="Ex: 3.5" />
+            <div class="small text-muted">Deixe vazio para usar o percentual padrão da loja</div>
+          </div>
           <div class="col-md-4">
             <label class="form-label">Categoria</label>
             <SelectInput   v-model="form.categoryId"  class="form-control">
@@ -104,7 +109,8 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null })
+const cashbackEnabled = ref(false)
 const groups = ref([])
 const categories = ref([])
 const menus = ref([])
@@ -122,7 +128,7 @@ async function load(){
       const res = await api.get('/menu/products')
       const all = res.data || []
       const p = all.find(x=>x.id===id)
-      if(p){ form.value = { ...p, optionGroupIds: [], categoryId: p.categoryId || (p.category && p.category.id) || null } }
+      if(p){ form.value = { ...p, optionGroupIds: [], categoryId: p.categoryId || (p.category && p.category.id) || null, cashbackPercent: (p.cashbackPercent !== undefined ? p.cashbackPercent : (p.cashback || null)) } }
       // load attached groups
       try{ const att = await api.get(`/menu/products/${id}/option-groups`); form.value.optionGroupIds = att.data.attachedIds || [] }catch(e){}
     }
@@ -141,6 +147,12 @@ async function load(){
       if(route.query.categoryId){ form.value.categoryId = route.query.categoryId }
       if(route.query.menuId){ form.value.menuId = route.query.menuId }
     }
+    // load cashback settings to decide whether to show product-level input
+    try{
+      const cr = await api.get('/cashback/settings')
+      const s = cr.data || null
+      cashbackEnabled.value = !!(s && (s.enabled || s.isEnabled))
+    }catch(e){ cashbackEnabled.value = false }
   }catch(e){ console.error(e); error.value = 'Falha ao carregar dados' }
 }
 
@@ -161,6 +173,8 @@ async function save(){
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
     if(isEdit){
       const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId }
+      // include cashbackPercent when cashback module is enabled (allow null to clear)
+      if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       await api.patch(`/menu/products/${id}`, payload)
       // sync groups
       try{ await api.post(`/menu/products/${id}/option-groups`, { groupIds: form.value.optionGroupIds || [] }) }catch(e){ console.warn('Failed to sync groups', e) }
@@ -178,6 +192,7 @@ async function save(){
       }
     } else {
   const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId }
+  if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       const res = await api.post('/menu/products', payload)
       const newId = res.data.id
       // attach groups

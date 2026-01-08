@@ -315,7 +315,13 @@ async function resolveCompanyId(){
       if(u){ auth.user = u; return u.companyId; }
     }
   } catch(e){ console.warn('PDV: falha ao hidratar /auth/me', e); }
-  return null;
+  // Fallback: allow PDV to operate using a developer/local companyId saved in localStorage
+  try {
+    const fromStorage = localStorage.getItem('companyId');
+    if(fromStorage) return fromStorage;
+  } catch(e){}
+  // final fallback to company 1 for local dev/public menus
+  return '1';
 }
 // use shared `formatCurrency` helper from `src/utils/formatters.js`
 const props = defineProps({ 
@@ -719,10 +725,36 @@ watch(paymentMethodCode, ()=> { if(!isCashPayment.value) changeFor.value = null;
 async function loadMenu(){
   if(menuLoading.value) return; menuLoading.value=true;
   try {
-    const companyId = await resolveCompanyId();
-    if(!companyId){ console.warn('PDV: companyId não encontrado'); return; }
-    console.log('Carregando menu para companyId:', companyId);
-    const { data } = await api.get(`/public/${companyId}/menu`);
+    let companyId = await resolveCompanyId();
+    console.log('PDV: resolved companyId initial=', companyId);
+    // Ensure stores are loaded so we can request a store-scoped public menu when possible
+    if(!stores.value || stores.value.length === 0) {
+      try { await loadStores(); } catch(e) { console.warn('PDV: loadStores failed', e); }
+    }
+    console.log('PDV: stores count=', (stores.value || []).length, 'selectedStoreId=', selectedStoreId.value);
+    // if stores available but no selection, pick the first as default to fetch store-scoped menu
+    if((stores.value || []).length > 0 && !selectedStoreId.value) selectedStoreId.value = stores.value[0].id;
+    // If we have a selected store, prefer its companyId for public menu requests
+    try{
+      const storeObj = (stores.value || []).find(s => String(s.id) === String(selectedStoreId.value));
+      if(storeObj && storeObj.companyId){
+        companyId = storeObj.companyId;
+        console.log('PDV: using store.companyId for menu request=', companyId);
+      }
+    }catch(e){ console.warn('PDV: error resolving store.companyId', e); }
+    const params = {};
+    if(selectedStoreId.value) params.storeId = selectedStoreId.value;
+    console.log('PDV: requesting public menu with params=', params);
+    let resp;
+    try {
+      resp = await api.get(`/public/${companyId}/menu`, { params });
+      console.log('PDV: menu request status=', resp.status);
+    } catch (err) {
+      console.error('PDV: menu request failed', err?.response?.status, err?.response?.data || err);
+      throw err;
+    }
+    const data = resp.data || {};
+    console.log('PDV: /public/' + companyId + '/menu response:', data);
     // merge categories + uncategorized
     const rawCats = data.categories || [];
     // filtra categorias e produtos inativos para evitar lixo no PDV
@@ -732,6 +764,11 @@ async function loadMenu(){
     // each product ensure price property (fallback to first option price or 0)
     cats.forEach(c=> c.products.forEach(p=> { if(p.price==null) p.price = Number(p.basePrice||0); }));
     allProducts.value = cats;
+    console.log('PDV: processed categories count=', cats.length, 'uncategorized count=', (data.uncategorized || []).length);
+    if(cats && cats.length > 0){
+      console.log('PDV: first category sample=', cats[0]);
+      console.log('PDV: first product sample=', (cats[0].products || [])[0] || null);
+    }
     paymentMethods.value = data.company?.paymentMethods || [];
     // ensure stores are loaded so the user can assign a store before finalizing
     if(!stores.value || stores.value.length===0) await loadStores();

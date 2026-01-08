@@ -176,6 +176,8 @@ function determineStatusFromIFoodEvent(payload, orderObj) {
 /**
  * Upsert do pedido no nosso banco
  */
+import { buildConcatenatedAddress, normalizeDeliveryAddressFromPayload } from './customers.js';
+
 async function upsertOrder({ companyId, mapped, storeId = null }) {
   const exists = mapped.externalId
     ? await prisma.order.findUnique({ where: { externalId: mapped.externalId } })
@@ -188,7 +190,8 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     status: mapped.status,
     customerName: mapped.customerName,
     customerPhone: mapped.customerPhone,
-    address: mapped.address,
+    address: buildConcatenatedAddress(mapped.raw) || mapped.address,
+    deliveryNeighborhood: (mapped.raw && (mapped.raw.delivery && mapped.raw.delivery.deliveryAddress && mapped.raw.delivery.deliveryAddress.neighborhood)) || (normalizeDeliveryAddressFromPayload(mapped.raw || {})?.neighborhood) || mapped.raw?.neighborhood || null,
     latitude: mapped.latitude,
     longitude: mapped.longitude,
     total: mapped.total,

@@ -15,7 +15,7 @@ const customer = ref({
   cpf: '',
   whatsapp: '',
   phone: '',
-  addresses: [{ street: '', number: '', city: '', state: '', zip: '' }]
+  addresses: [{ street: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', postalCode: '' }]
 });
 
 const loading = ref(false);
@@ -40,11 +40,34 @@ onMounted(async () => {
         neighborhood: a.neighborhood,
         city: a.city,
         state: a.state,
-        zip: a.postalCode,
+        postalCode: a.postalCode,
+        reference: a.reference || '',
+        observation: a.observation || '',
         isDefault: a.isDefault,
         formatted: a.formatted,
       }));
-      if (!customer.value.addresses.length) customer.value.addresses = [{ street: '', number: '', city: '', state: '', zip: '' }];
+      if (!customer.value.addresses.length) customer.value.addresses = [{ street: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', postalCode: '' }];
+      // support opening the edit page and immediately adding a new address
+      try {
+        if (route.query && route.query.addAddress === '1') {
+          customer.value.addresses.push({ street: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', postalCode: '' });
+          // remove the query param so subsequent navigation is clean
+          const q = { ...route.query };
+          delete q.addAddress;
+          window.history.replaceState({}, '', `${window.location.pathname}${Object.keys(q).length ? '?' + new URLSearchParams(q).toString() : ''}`);
+        }
+        if (route.query && route.query.editAddressIndex) {
+          // optional: focus/scroll to address index when provided (basic behavior)
+          const idx = Number(route.query.editAddressIndex);
+          if (!Number.isNaN(idx) && idx >= 0 && idx < customer.value.addresses.length) {
+            // brief timeout to ensure DOM rendered; then scroll
+            setTimeout(() => {
+              const els = document.querySelectorAll('.customer-address-block');
+              if (els && els[idx]) els[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 250);
+          }
+        }
+      } catch (e) { /* ignore query handling errors */ }
     } catch (e) {
       console.error(e);
       error.value = 'Falha ao carregar cliente';
@@ -72,7 +95,7 @@ async function save() {
 }
 
 function addAddress() {
-  customer.value.addresses.push({ street: '', number: '', city: '', state: '', zip: '' });
+  customer.value.addresses.push({ street: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', postalCode: '' });
 }
 
 function removeAddress(index) {
@@ -118,7 +141,7 @@ function handlePhoneInput(e) {
           <div
             v-for="(addr, i) in customer.addresses"
             :key="i"
-            class="border rounded p-3 mb-2 bg-light"
+            class="border rounded p-3 mb-2 bg-light customer-address-block"
           >
             <div class="row g-2">
               <div class="col-md-5">
@@ -140,8 +163,26 @@ function handlePhoneInput(e) {
               </div>
             </div>
 
+            <div class="row g-2 mt-2">
+              <div class="col-md-6">
+                <TextInput label="Complemento" labelClass="form-label" v-model="addr.complement" inputClass="form-control" />
+              </div>
+              <div class="col-md-4">
+                <TextInput label="Bairro" labelClass="form-label" v-model="addr.neighborhood" inputClass="form-control" />
+              </div>
+            </div>
+
+            <div class="row g-2 mt-2">
+              <div class="col-md-6">
+                <TextInput label="Referência" labelClass="form-label" v-model="addr.reference" inputClass="form-control" />
+              </div>
+              <div class="col-md-6">
+                <TextInput label="Observação" labelClass="form-label" v-model="addr.observation" inputClass="form-control" />
+              </div>
+            </div>
+
             <div class="mt-2 d-flex justify-content-between align-items-center">
-              <div class="text-muted small">CEP: <TextInput label="" v-model="addr.zip" inputClass="form-control form-control-sm d-inline w-auto" /></div>
+              <div class="text-muted small">CEP: <TextInput label="" v-model="addr.postalCode" inputClass="form-control form-control-sm d-inline w-auto" /></div>
               <button type="button" class="btn btn-sm btn-outline-danger" @click="removeAddress(i)">Remover</button>
             </div>
           </div>

@@ -43,6 +43,8 @@
                                 <div class="fw-bold">{{ addr.label || addr.street }}</div>
                                 <div>{{ addr.street }}, {{ addr.number }} {{ addr.complement || '' }}</div>
                                 <div>{{ addr.neighborhood || '' }}</div>
+                                <div v-if="addr.reference" class="small text-muted">Ref.: {{ addr.reference }}</div>
+                                <div v-if="addr.observation" class="small text-muted">Obs.: {{ addr.observation }}</div>
                             </div>
                             <div>
                                 <button class="btn btn-sm btn-outline-primary me-2" @click="edit(addr)">Editar</button>

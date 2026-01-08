@@ -42,19 +42,35 @@ const customerName = computed(() => {
 })
 const addressLine = computed(() => {
   const o = props.order || {}
+  const formatObj = (addr) => {
+    if (!addr) return '';
+    if (addr.formatted) return addr.formatted;
+    const street = addr.street || addr.streetName || '';
+    const number = addr.number || addr.streetNumber || '';
+    const complement = addr.complement || addr.complemento || '';
+    const neighborhood = addr.neighborhood || '';
+    const city = addr.city || '';
+    const reference = addr.reference || addr.ref || '';
+    const obs = addr.observation || addr.observacao || '';
+    const base = [street, number].filter(Boolean).join(' ');
+    const parts = [base, complement, neighborhood, city].filter(Boolean);
+    if (reference) parts.push('Ref: ' + reference);
+    if (obs) parts.push('Obs: ' + obs);
+    return parts.join(' | ') || '-';
+  }
   // many payload shapes - try prioritized fields
   if (typeof o.address === 'string') return o.address
-  if (o.address && typeof o.address === 'object') {
-    return o.address.formatted || [o.address.street, o.address.number].filter(Boolean).join(' ') || '-'
-  }
+  if (o.address && typeof o.address === 'object') return formatObj(o.address)
   if (typeof o.customerAddress === 'string') return o.customerAddress
   if (o.customer && o.customer.address) {
     const ca = o.customer.address;
     if (typeof ca === 'string') return ca
-    return ca.formatted || [ca.street, ca.number].filter(Boolean).join(' ') || '-'
+    return formatObj(ca)
   }
   // payload fallbacks
-  return o.payload?.delivery?.deliveryAddress?.formattedAddress || o.payload?.deliveryAddress?.formattedAddress || o.deliveryAddress || o.addressFormatted || '-'
+  const maybe = o.payload?.delivery?.deliveryAddress || o.payload?.deliveryAddress || o.deliveryAddress || o.addressFormatted
+  if (maybe) return (typeof maybe === 'string') ? maybe : (maybe.formatted || formatObj(maybe))
+  return '-'
 })
 const phoneLine = computed(() => {
   const o = props.order || {}

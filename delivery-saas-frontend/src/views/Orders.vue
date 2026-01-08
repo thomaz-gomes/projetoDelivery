@@ -707,16 +707,24 @@ function normalizeOrder(o){
     // helper to format address objects consistently
     const formatAddrObj = (addr) => {
       if (!addr) return '';
-      // common keys
       const formatted = addr.formatted || addr.formattedAddress || addr.formatted_address;
       if (formatted) return String(formatted);
       const street = addr.street || addr.streetName || '';
       const number = addr.number || addr.streetNumber || '';
+      const complement = addr.complement || addr.complemento || '';
       const neighborhood = addr.neighborhood || '';
       const city = addr.city || '';
-      const complement = addr.complement || '';
+      const state = addr.state || addr.uf || '';
+      const postalCode = addr.postalCode || addr.zip || addr.postal_code || '';
+      const reference = addr.reference || addr.ref || '';
+      const observation = addr.observation || addr.observacao || '';
       const base = [street, number].filter(Boolean).join(', ');
-      const tail = [neighborhood, city, complement].filter(Boolean).join(' - ');
+      const tailParts = [neighborhood, city, state].filter(Boolean);
+      if (postalCode) tailParts.push(postalCode);
+      if (complement) tailParts.push('Comp: ' + complement);
+      if (reference) tailParts.push('Ref: ' + reference);
+      if (observation) tailParts.push('Obs: ' + observation);
+      const tail = tailParts.filter(Boolean).join(' - ');
       return [base, tail].filter(Boolean).join(' | ');
     };
 

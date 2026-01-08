@@ -3,7 +3,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { prisma } from "../prisma.js";
-import { upsertCustomerFromIfood } from "../services/customers.js";
+import { upsertCustomerFromIfood, normalizeDeliveryAddressFromPayload } from "../services/customers.js";
 import { emitirNovoPedido } from "../index.js"; // envia o pedido ao front via Socket.IO
 import printQueue from '../printQueue.js'
 
@@ -199,15 +199,13 @@ webhooksRouter.post("/ifood", async (req, res) => {
       order.deliveryAddress ||
       body.deliveryAddress ||
       {};
-    const address =
-      addr.formattedAddress ||
-      [addr.streetName, addr.streetNumber, addr.neighborhood]
-        .filter(Boolean)
-        .join(", ") ||
-      null;
 
-    const latitude = Number(addr.coordinates?.latitude ?? 0) || null;
-    const longitude = Number(addr.coordinates?.longitude ?? 0) || null;
+    // normalize delivery address into a consistent shape for storage/processing
+    const normalizedDelivery = normalizeDeliveryAddressFromPayload(order) || normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: addr } }) || null;
+    const address = normalizedDelivery && normalizedDelivery.formattedAddress ? normalizedDelivery.formattedAddress : (addr.formattedAddress || [addr.streetName, addr.streetNumber, addr.neighborhood].filter(Boolean).join(', ') || null);
+
+    const latitude = normalizedDelivery && normalizedDelivery.latitude != null ? normalizedDelivery.latitude : (Number(addr.coordinates?.latitude ?? 0) || null);
+    const longitude = normalizedDelivery && normalizedDelivery.longitude != null ? normalizedDelivery.longitude : (Number(addr.coordinates?.longitude ?? 0) || null);
 
     // 💰 Valores
     const total = Number(
@@ -625,6 +623,15 @@ webhooksRouter.get("/generate-test", async (req, res) => {
       console.warn('generate-test: upsertCustomerFromIfood failed:', e?.message || e);
     }
 
+    // ensure payload has a normalized deliveryAddress shape for consistency
+    try {
+      const norm = normalizeDeliveryAddressFromPayload(orderPayload);
+      if (norm) {
+        orderPayload.delivery = orderPayload.delivery || {};
+        orderPayload.delivery.deliveryAddress = norm;
+      }
+    } catch (e) {}
+
     const externalId = orderPayload.id || 'TEST-' + Date.now();
     const displayId = orderPayload.displayId || `SIMULADO-${new Date().toISOString().slice(11,19).replace(/:/g,'')}`;
 
@@ -642,8 +649,8 @@ webhooksRouter.get("/generate-test", async (req, res) => {
         customerName: (orderPayload.customer && (orderPayload.customer.name || orderPayload.customer.fullName)) || 'Cliente',
         customerPhone: orderPayload.customer && (orderPayload.customer.phone?.number || orderPayload.customer.phone || null),
         address: orderPayload.delivery && orderPayload.delivery.deliveryAddress && (orderPayload.delivery.deliveryAddress.formattedAddress || [orderPayload.delivery.deliveryAddress.streetName, orderPayload.delivery.deliveryAddress.streetNumber].filter(Boolean).join(', ')) || null,
-        latitude: Number(orderPayload.delivery?.deliveryAddress?.coordinates?.latitude ?? null) || null,
-        longitude: Number(orderPayload.delivery?.deliveryAddress?.coordinates?.longitude ?? null) || null,
+        latitude: Number(orderPayload.delivery?.deliveryAddress?.latitude ?? orderPayload.delivery?.deliveryAddress?.coordinates?.latitude ?? null) || null,
+        longitude: Number(orderPayload.delivery?.deliveryAddress?.longitude ?? orderPayload.delivery?.deliveryAddress?.coordinates?.longitude ?? null) || null,
         total: Number(orderPayload.total?.orderAmount ?? orderPayload.totalAmount ?? orderPayload.amount ?? 0),
         deliveryFee: Number(orderPayload.total?.deliveryFee ?? orderPayload.deliveryFee ?? 0),
         payload: orderPayload,
@@ -659,8 +666,8 @@ webhooksRouter.get("/generate-test", async (req, res) => {
         customerName: (orderPayload.customer && (orderPayload.customer.name || orderPayload.customer.fullName)) || 'Cliente',
         customerPhone: orderPayload.customer && (orderPayload.customer.phone?.number || orderPayload.customer.phone || null),
         address: orderPayload.delivery && orderPayload.delivery.deliveryAddress && (orderPayload.delivery.deliveryAddress.formattedAddress || [orderPayload.delivery.deliveryAddress.streetName, orderPayload.delivery.deliveryAddress.streetNumber].filter(Boolean).join(', ')) || null,
-        latitude: Number(orderPayload.delivery?.deliveryAddress?.coordinates?.latitude ?? null) || null,
-        longitude: Number(orderPayload.delivery?.deliveryAddress?.coordinates?.longitude ?? null) || null,
+        latitude: Number(orderPayload.delivery?.deliveryAddress?.latitude ?? orderPayload.delivery?.deliveryAddress?.coordinates?.latitude ?? null) || null,
+        longitude: Number(orderPayload.delivery?.deliveryAddress?.longitude ?? orderPayload.delivery?.deliveryAddress?.coordinates?.longitude ?? null) || null,
         total: Number(orderPayload.total?.orderAmount ?? orderPayload.totalAmount ?? orderPayload.amount ?? 0),
         deliveryFee: Number(orderPayload.total?.deliveryFee ?? orderPayload.deliveryFee ?? 0),
         payload: orderPayload,

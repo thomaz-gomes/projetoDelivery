@@ -4,7 +4,7 @@ import { prisma } from '../prisma.js';
 // When we need to emit socket events, use dynamic import inside async handlers:
 // const { emitirPedidoAtualizado } = await import('../index.js');
 import { authMiddleware, requireRole } from '../auth.js';
-import { upsertCustomerFromIfood, findOrCreateCustomer } from '../services/customers.js';
+import { upsertCustomerFromIfood, findOrCreateCustomer, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js';
 import { trackAffiliateSale } from '../services/affiliates.js';
 import * as cashbackSvc from '../services/cashback.js';
 import { canTransition } from '../stateMachine.js';
@@ -414,8 +414,14 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res
               } catch (eFind) { /* ignore */ }
             }
             if (clientId) {
-              await cashbackSvc.creditWalletForOrder(updated.companyId, clientId, updated, 'Cashback automático de compra')
-              console.log('Cashback credited for order', updated.id)
+              try{
+                const res = await cashbackSvc.creditWalletForOrder(updated.companyId, clientId, updated, 'Cashback automático de compra')
+                if(res && res.amount){
+                  console.log('Cashback credited for order', updated.id, 'amount', res.amount)
+                } else {
+                  console.log('No cashback created for order (service returned null) for order', updated.id)
+                }
+              }catch(e){ console.error('Failed to credit cashback for order (service error)', updated.id, e?.message || e) }
             } else {
               console.log('No clientId found for order; skipping cashback credit for order', updated.id)
             }
@@ -606,6 +612,10 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       }
     } catch (e) { /* ignore */ }
 
+    // normalize delivery address into a consistent shape and persist it under payload.delivery.deliveryAddress
+    const normalizedDelivery = (type === 'DELIVERY' && address && Object.keys(address).length) ? normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: address } }) : null;
+    const pdvDenormNeighborhood = (normalizedDelivery && normalizedDelivery.neighborhood) || (address && (address.neighborhood || address.neigh)) || null;
+
     const created = await prisma.order.create({
       data: {
         companyId,
@@ -613,7 +623,8 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         customerId: persistedCustomer ? persistedCustomer.id : undefined,
         customerName: customerName || (persistedCustomer ? persistedCustomer.fullName : null),
         customerPhone: customerPhone || (persistedCustomer ? (persistedCustomer.whatsapp || persistedCustomer.phone) : null),
-        address: type === 'DELIVERY' ? (address.formatted || [address.street, address.number].filter(Boolean).join(', ')) : null,
+        address: type === 'DELIVERY' ? (buildConcatenatedAddress({ delivery: { deliveryAddress: address } }) || (normalizedDelivery && normalizedDelivery.formattedAddress) || (address.formatted || [address.street, address.number].filter(Boolean).join(', '))) : null,
+        deliveryNeighborhood: pdvDenormNeighborhood || (normalizedDelivery && normalizedDelivery.neighborhood) || null,
         total,
         couponCode,
         couponDiscount: Number(couponDiscount || 0),
@@ -625,6 +636,8 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
           payment: paymentPayload,
           orderType: type,
           rawPayload: { source: 'PDV', items: cleanItems, customer: { name: customerName || null, contact: customerPhone || null }, address },
+          // persist normalized delivery address for consistency across flows
+          delivery: normalizedDelivery ? { deliveryAddress: normalizedDelivery } : (address && Object.keys(address).length ? { deliveryAddress: normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: address } }) } : undefined),
           // persist computed and chosen totals for clarity
           computedTotal: computedTotal,
           total: total
@@ -687,7 +700,9 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
           payload: created.payload || null,
           items: created.items || null,
           // include address when available to help frontends render immediately
-          address: created.address || (created.payload && (created.payload.rawPayload?.address || created.payload.delivery?.deliveryAddress?.formattedAddress || created.payload.deliveryAddress?.formattedAddress)) || null
+          address: created.address || (created.payload && (created.payload.delivery && created.payload.delivery.deliveryAddress && created.payload.delivery.deliveryAddress.formattedAddress)) || (created.payload && (created.payload.rawPayload?.address || created.payload.deliveryAddress?.formattedAddress)) || null,
+          // include structured deliveryAddress so consumers always receive a normalized object when present
+          deliveryAddress: created.payload && created.payload.delivery ? created.payload.delivery.deliveryAddress : null
         };
         try { const idx = await import('../index.js'); idx.emitirNovoPedido(emitObj); } catch (e) { console.warn('emitirNovoPedido failed for created order', emitObj && emitObj.id, e && e.message); }
       } catch (eEmit) {

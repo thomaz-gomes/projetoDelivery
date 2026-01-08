@@ -50,7 +50,19 @@ function formatOrderNumber(o){
   if(o.number !== undefined && o.number !== null) return String(o.number);
   return o.id ? String(o.id).slice(0,6) : '';
 }
-function formatAddress(o){ if(!o) return '-'; const a = o.address || o.deliveryAddress || o.customerAddress; if(!a) return o.addressText || '-'; return [a.street, a.number, a.complement, a.city].filter(Boolean).join(', '); }
+function formatAddress(o){
+  if(!o) return '-';
+  const a = o.address || o.deliveryAddress || o.customerAddress || o.payload?.delivery?.deliveryAddress;
+  if(!a) return o.addressText || '-';
+  const main = a.formatted || a.formattedAddress || [a.street || a.streetName, a.number || a.streetNumber].filter(Boolean).join(', ');
+  const tail = []
+  if(a.neighborhood) tail.push(a.neighborhood)
+  if(a.complement) tail.push('Comp: ' + a.complement)
+  if(a.reference) tail.push('Ref: ' + a.reference)
+  if(a.observation) tail.push('Obs: ' + a.observation)
+  if(a.city && !tail.includes(a.city)) tail.push(a.city)
+  return [main, tail.filter(Boolean).join(' — ')].filter(Boolean).join(' | ')
+}
 
 async function load(){
   try{

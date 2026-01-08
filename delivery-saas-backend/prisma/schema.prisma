@@ -127,6 +127,8 @@ model Order {
   latitude          Float?
   longitude         Float?
   total             Decimal              @default(0)
+  // keep a denormalized neighborhood column for efficient queries/filters
+  deliveryNeighborhood String?
   // persisted coupon information (nullable - may be null for older orders)
   couponCode        String?
   couponDiscount    Decimal?
@@ -614,6 +616,7 @@ model Product {
   price               Decimal              @default(0)
   isActive            Boolean              @default(true)
   position            Int                  @default(0)
+  cashbackPercent     Decimal?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   productOptionGroups ProductOptionGroup[]
