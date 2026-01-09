@@ -1,0 +1,33 @@
+maxCum 7 maxLine 388
+ 380:       try{ localStorage.setItem(LOCAL_CUSTOMER_KEY, JSON.stringify(prof)) }catch(e){}
+ 381:       // also populate runtime `customer` so `publicCustomerConnected` becomes available
+ 382:       try{
+ 383:         const resolvedName = String(prof.name || prof.fullName || prof.customerName || (prof.customer && (prof.customer.fullName || prof.customer.name)) || '')
+ 384:         const resolvedContact = String(prof.contact || prof.whatsapp || prof.phone || (prof.customer && (prof.customer.whatsapp || prof.customer.phone)) || '')
+ 385:         customer.value = {
+ 386:           name: resolvedName,
+ 387:           contact: resolvedContact,
+ 388:           address: (prof.addresses && prof.addresses.length && prof.addresses[0]) ? {
+ 389:             formattedAddress: prof.addresses[0].formatted || prof.addresses[0].formattedAddress || '',
+ 390:             number: prof.addresses[0].number || prof.addresses[0].numero || '',
+ 391:             complement: prof.addresses[0].complement || prof.addresses[0].complemento || '',
+ 392:             neighborhood: prof.addresses[0].neighborhood || prof.addresses[0].neigh || '',
+ 393:             reference: prof.addresses[0].reference || prof.addresses[0].ref || '',
+ 394:             observation: prof.addresses[0].observation || prof.addresses[0].observacao || '',
+ 395:             latitude: prof.addresses[0].latitude || prof.addresses[0].lat || null,
+ 396:             longitude: prof.addresses[0].longitude || prof.addresses[0].lon || prof.addresses[0].lng || null,
+
+paren maxCum 3 maxLine 264
+ 258: const selectedAddressId = ref(addresses.value.length ? addresses.value[0].id : null)
+ 259:   // if user is authenticated via public profile, prefill addresses and select first
+ 260:   try{
+ 261:     const token = localStorage.getItem('token')
+ 262:     const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
+ 263:     if(token && stored && stored.addresses && Array.isArray(stored.addresses) && stored.addresses.length){
+ 264:       addresses.value = stored.addresses.map(a => ({
+ 265:         id: a.id || String(Date.now()) + Math.random().toString(36).slice(2,8),
+ 266:         label: a.label || a.formatted || '',
+ 267:         formattedAddress: a.formatted || a.formattedAddress || '',
+ 268:         number: a.number || a.numero || '',
+ 269:         complement: a.complement || a.complemento || '',
+ 270:         neighborhood: a.neighborhood || a.neigh || '',

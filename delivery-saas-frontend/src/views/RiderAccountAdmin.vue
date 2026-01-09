@@ -4,6 +4,7 @@ import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../api';
 import { formatCurrency } from '../utils/formatters.js';
+import { formatDateWithOptionalTime } from '../utils/dates.js';
 import { useAuthStore } from '../stores/auth';
 import Swal from 'sweetalert2';
 import DateInput from '../components/form/date/DateInput.vue';
@@ -268,7 +269,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             </thead>
             <tbody>
               <tr v-for="t in transactions" :key="t.id">
-                <td>{{ t.date }}</td>
+                <td>{{ formatDateWithOptionalTime(t.date) }}</td>
                 <td>{{ t.type }}</td>
                 <td>
                   <div v-if="isAdmin && editingId === t.id" class="d-flex gap-2 align-items-center">

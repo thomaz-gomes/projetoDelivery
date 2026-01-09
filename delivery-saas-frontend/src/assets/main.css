@@ -246,6 +246,22 @@ body {
   white-space: nowrap;
 }
 
+/* Icon used when pickup: keep it subtle and not interactive */
+.address-edit-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(33,37,41,0.65);
+  opacity: 0.9;
+}
+.address-edit-icon i {
+  font-size: 1.05rem;
+}
+
 /*BUTTONS*/
 .btn-primary {
   background-color: var(--brand) !important;

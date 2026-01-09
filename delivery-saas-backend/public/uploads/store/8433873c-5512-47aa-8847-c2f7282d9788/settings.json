@@ -1,0 +1,53 @@
+{
+  "menus": {
+    "f1c84643-92a8-427e-a099-f8e846fa176b": {
+      "address": "Av Ruy barbosa 118",
+      "open24Hours": false,
+      "timezone": "America/Sao_Paulo",
+      "weeklySchedule": [
+        {
+          "day": 0,
+          "enabled": true,
+          "from": "10:00",
+          "to": "22:00"
+        },
+        {
+          "day": 1,
+          "enabled": true,
+          "from": "10:00",
+          "to": "22:00"
+        },
+        {
+          "day": 2,
+          "enabled": true,
+          "from": "10:00",
+          "to": "22:00"
+        },
+        {
+          "day": 3,
+          "enabled": true,
+          "from": "10:00",
+          "to": "22:00"
+        },
+        {
+          "day": 4,
+          "enabled": true,
+          "from": "10:00",
+          "to": "22:00"
+        },
+        {
+          "day": 5,
+          "enabled": true,
+          "from": "00:01",
+          "to": "22:00"
+        },
+        {
+          "day": 6,
+          "enabled": true,
+          "from": "10:00",
+          "to": "22:00"
+        }
+      ]
+    }
+  }
+}

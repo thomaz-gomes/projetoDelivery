@@ -1,0 +1,122 @@
+final cum 0
+2296:         observation: String((customer.value.address && customer.value.address.observation) || ''),
+2297:         postalCode: String((customer.value.address && (customer.value.address.postalCode || customer.value.address.postal_code)) || ''),
+2298:         city: String((customer.value.address && customer.value.address.city) || ''),
+2299:         state: String((customer.value.address && customer.value.address.state) || ''),
+2300:         country: String((customer.value.address && customer.value.address.country) || ''),
+2301:         coordinates: (customer.value.address && (customer.value.address.latitude != null || customer.value.address.longitude != null)) ? { latitude: customer.value.address.latitude || null, longitude: customer.value.address.longitude || null } : null
+2302:       }
+2303:       // attach in multiple places for compatibility with older/newer backend shapes
+2304:       payload.customer = payload.customer || {}
+2305:       payload.customer.address = payload.customer.address || structuredAddr
+2306:       payload.delivery = payload.delivery || {}
+2307:       payload.delivery.deliveryAddress = structuredAddr
+2308:       payload.deliveryAddress = structuredAddr
+2309:     }catch(e){ /* ignore */ }
+2310: 
+2311:   // build payment object and include optional 'changeFor' when customer requested troco
+2312:   try{
+2313:     const paymentObj = {
+2314:       methodCode: String(paymentMethod.value || ''),
+2315:       // also include the human-friendly method name when available so backend
+2316:       // can prefer/store the name without relying only on codes
+2317:       method: (paymentMethods.value || []).find(m => m.code === paymentMethod.value)?.name || null,
+2318:       // include customer-group discounts in the final amount calculation
+2319:       amount: Number(Math.max(0, subtotal.value - (couponDiscount.value || 0) - (discountsTotal.value || 0)) + Number(deliveryFee.value || 0)) - Number(useCashbackAmount.value || 0)
+2320:     };
+2321:     if (Number(changeFor.value) > 0) paymentObj.changeFor = Number(changeFor.value);
+2322:     payload.payment = paymentObj;
+2323:   }catch(e){ /* ignore */ }
+2324: 
+2325:   // include coupon information when applied so backend can persist and track usage
+2326:   if (couponApplied.value && couponInfo.value) {
+2327:     payload.coupon = { code: couponInfo.value.code, discountAmount: Number(couponDiscount.value || 0) }
+2328:   }
+2329: 
+2330:   // include customer-group discounts (if any) so backend can persist and reflect in order totals
+2331:   if (discountsList.value && discountsList.value.length) {
+2332:     payload.discounts = discountsList.value
+2333:     payload.discountsTotal = Number(discountsTotal.value || 0)
+2334:   }
+2335: 
+2336:   // Include canonical store/menu identifiers when present so the backend
+2337:   // can persist the relation and the Orders board will show the store name.
+2338:   if (storeId.value) {
+2339:     try {
+2340:       // keep both forms for compatibility: payload.store (object) and payload.storeId (flat)
+2341:       payload.store = { id: String(storeId.value) }
+2342:       payload.storeId = String(storeId.value)
+2343:     } catch(e) { /* ignore */ }
+2344:   }
+2345:   if (menuId.value) {
+2346:     try { payload.menuId = String(menuId.value) } catch(e) { /* ignore */ }
+2347:   }
+2348: 
+2349:   // If the page didn't include storeId/menuId query params, try to derive them
+2350:   // from the loaded `menu` or `company` objects returned by the public menu API.
+2351:   try {
+2352:     // prefer existing payload values; only set when missing
+2353:     if (!payload.menuId && menu && menu.value && menu.value.id) {
+2354:       payload.menuId = String(menu.value.id)
+2355:       // persist derived menuId for session continuity
+2356:       try { menuId.value = String(menu.value.id); localStorage.setItem(menuStorageKey, String(menu.value.id)) } catch(e){}
+2357:     }
+2358:     // menu may include menu.value.storeId linking it to a store
+2359:     if (!payload.storeId && menu && menu.value && menu.value.storeId) {
+2360:       payload.storeId = String(menu.value.storeId)
+2361:       payload.store = payload.store || { id: String(menu.value.storeId) }
+2362:       // persist derived storeId for session continuity
+2363:       try { storeId.value = String(menu.value.storeId); localStorage.setItem(storeStorageKey, String(menu.value.storeId)) } catch(e){}
+2364:     }
+2365:     // as a last resort, if the public API returned a store in company context, use it
+2366:     if (!payload.storeId && company && company.value && company.value.store && company.value.store.id) {
+2367:       payload.storeId = String(company.value.store.id)
+2368:       payload.store = payload.store || { id: String(company.value.store.id) }
+2369:       try { storeId.value = String(company.value.store.id); localStorage.setItem(storeStorageKey, String(company.value.store.id)) } catch(e){}
+2370:     }
+2371:     // If we have a store id and the loaded company/menu returned a store name,
+2372:     // attach the canonical store name to the payload for deterministic display.
+2373:     try {
+2374:       const storeNameFromMenu = menu && menu.value && menu.value.store && menu.value.store.name;
+2375:       const storeNameFromCompany = company && company.value && company.value.store && company.value.store.name;
+2376:       const candidateName = storeNameFromMenu || storeNameFromCompany || null;
+2377:       if (candidateName && payload.storeId) {
+2378:         payload.store = payload.store || { id: String(payload.storeId) };
+2379:         payload.store.name = String(candidateName);
+2380:       }
+2381:     } catch (e) { /* ignore */ }
+2382:   } catch(e) { /* ignore derivation errors */ }
+2383: 
+2384: // persist store/menu ids when route query provides them (keep storage updated)
+2385: try{
+2386:   if(route.query && route.query.storeId){ localStorage.setItem(storeStorageKey, String(route.query.storeId)) }
+2387:   if(route.query && route.query.menuId){ localStorage.setItem(menuStorageKey, String(route.query.menuId)) }
+2388: }catch(e){}
+2389: 
+2390:   // debug: log outgoing payload to help diagnose server-side validation errors (400)
+2391:   try { console.debug && console.debug('Submitting public order payload', payload) } catch(e){}
+2392:   // include applied cashback for backend processing when present
+2393:   try{ payload.appliedCashback = Number(useCashback && Number(useCashbackAmount) > 0 ? Number(useCashbackAmount) : 0) }catch(e){ payload.appliedCashback = 0 }
+2394:   const res = await api.post(publicPath(`/public/${companyId}/orders`), payload);
+2395:   orderResponse.value = res.data;
+2396:   cart.value = [];
+2397:   // persist customer contact so user can view history/status later
+2398:   saveCustomerToLocal()
+2399:   // redirect to public order status page (include phone for verification)
+2400:   const phone = encodeURIComponent(String(customer.value.contact || ''))
+2401:   const oid = encodeURIComponent(String(res.data.id || ''))
+2402:   try { _publicNavigate(`/order/${oid}`, { phone, storeId: storeId.value || undefined, menuId: menuId.value || undefined }) } catch(e) { console.warn('Redirect failed', e) }
+2403:   }catch(err){
+2404:     console.error(err);
+2405:     // surface server response body and status to browser console for debugging
+2406:     try { console.error('Order create response data:', err?.response?.data) } catch (e) {}
+2407:     try { console.error('Order create response status:', err?.response?.status) } catch (e) {}
+2408:     serverError.value = err?.response?.data?.message || err.message || 'Erro ao enviar pedido';
+2409:   }finally{ submitting.value = false; }
+2410: }
+2411: 
+2412: // Dev helper removed: sendDevTestOrder has been removed to avoid accidental test orders
+2413: 
+2414: })
+2415: 
+2416: 

@@ -61,7 +61,12 @@ publicMenuRouter.get('/:storeSlug', async (req, res, next) => {
 // GET /public/:companyId/menu
 publicMenuRouter.get('/:companyId/menu', async (req, res) => {
   const { companyId } = req.params
-  const { storeId, menuId } = req.query || {}
+  const query = req.query || {}
+  let storeId = query.storeId
+  let menuId = query.menuId
+  // normalize query params: when a query param is repeated it becomes an array
+  if (Array.isArray(menuId)) menuId = menuId.length ? String(menuId[0]) : null
+  if (Array.isArray(storeId)) storeId = storeId.length ? String(storeId[0]) : null
   try {
     let categories
     if (menuId) {
@@ -217,6 +222,31 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
       }
     }
     // include publicly-visible payment methods (active) and pickup info (from printer settings as a lightweight store address)
+    // If a menuObj was selected (menuId present) and company-level schedule is empty,
+    // try to resolve the menu's store and merge store-level schedule/open24Hours
+    // into the `company` object so public consumers receive correct hours.
+    try {
+      if (menuObj && menuObj.id) {
+        try {
+          const menuDb = await prisma.menu.findUnique({ where: { id: menuObj.id }, select: { storeId: true } })
+          if (menuDb && menuDb.storeId) {
+            const storeForMenu = await prisma.store.findUnique({ where: { id: menuDb.storeId } })
+            if (storeForMenu && storeForMenu.companyId === companyId) {
+              company = company || { id: companyId }
+              if (storeForMenu.timezone) company.timezone = storeForMenu.timezone
+              if (storeForMenu.weeklySchedule) company.weeklySchedule = storeForMenu.weeklySchedule
+              company.alwaysOpen = !!storeForMenu.open24Hours
+              company.store = company.store || {}
+              company.store.id = storeForMenu.id
+              company.store.name = storeForMenu.name
+              company.store.logoUrl = storeForMenu.logoUrl || null
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to merge store schedule for menu', e?.message || e)
+        }
+      }
+    } catch (e) { /* non-fatal */ }
     let paymentMethods = await prisma.paymentMethod.findMany({ where: { companyId, isActive: true }, orderBy: { createdAt: 'asc' } })
     const printer = await prisma.printerSetting.findFirst({ where: { companyId } })
     // If no payment methods are configured for the company, expose a default
