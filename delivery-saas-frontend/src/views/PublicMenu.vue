@@ -104,7 +104,10 @@
                       </div>
                       <div>
                       <div class="d-flex align-items-center gap-3">
-                        <strong class="product-price">{{ formatCurrency(p.price) }}</strong>
+                        <strong class="product-price">
+                          <span v-if="getStartingPrice(p) > Number(p.price || 0)">A partir de {{ formatCurrency(getStartingPrice(p)) }}</span>
+                          <span v-else>{{ formatCurrency(p.price) }}</span>
+                        </strong>
                         <div v-if="(p.cashback || p.cashbackPercent) && Number(p.cashback || p.cashbackPercent) > 0" class="badge bg-success">{{ Number(p.cashback || p.cashbackPercent) }}% cashback</div>
                       </div>
                       </div>
@@ -2608,6 +2611,27 @@ function editCartItem(i){
 }
 
 // modal total: product price + selected options (per unit) multiplied by quantity
+    // compute product starting price considering required option groups
+    function getStartingPrice(p){
+      try{
+        if(!p) return 0
+        const base = Number(p.price || 0)
+        let extra = 0
+        if(p.optionGroups && p.optionGroups.length){
+          for(const g of p.optionGroups){
+            const minReq = Math.max(0, Number(g.min || 0))
+            if(minReq <= 0) continue
+            const prices = (g.options || []).map(o => Number(o.price || 0)).sort((a,b)=>a-b)
+            if(!prices.length) continue
+            for(let i=0;i<minReq && i<prices.length;i++){
+              extra += prices[i]
+            }
+          }
+        }
+        return base + extra
+      }catch(e){ return Number(p.price || 0) }
+    }
+
 const modalTotal = computed(() => {
   try{
     const p = selectedProduct.value
