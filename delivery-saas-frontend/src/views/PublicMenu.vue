@@ -3,7 +3,28 @@
     <!-- Hero banner -->
   <div class="public-hero position-relative text-white" ref="heroRef">
     <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
-    
+    <!-- Top navigation overlay (desktop + mobile) -->
+    <header class="top-public-nav position-absolute w-100" style="top:0;left:0;z-index:1050">
+      <div class="container d-flex justify-content-end align-items-center py-2">
+        <div class="nav-actions d-flex align-items-center gap-3 text-white">
+          <a href="#" class="d-none d-md-inline text-white small me-3" @click.prevent="openRegister">Entre ou Cadastre-se</a>
+          <button class="btn btn-link text-white p-0 d-flex align-items-center" @click.prevent="goProfile" aria-label="Perfil"><i class="bi bi-person" aria-hidden="true"></i></button>
+          <button class="btn btn-link text-white p-0 d-flex align-items-center position-relative" @click.prevent="goOrders" aria-label="Histórico"><i class="bi bi-heart" aria-hidden="true"></i></button>
+          <button class="btn btn-link text-white p-0 d-flex align-items-center position-relative" @click.prevent="openCartModal" aria-label="Carrinho">
+            <i class="bi bi-cart-fill" aria-hidden="true"></i>
+            <span v-if="cart.length>0" class="cart-badge-top badge bg-danger rounded-pill">{{ cart.length }}</span>
+          </button>
+          <button class="btn btn-link text-white p-0 d-lg-none" @click.prevent="toggleMobileMenu" aria-label="Menu"><i class="bi bi-list"></i></button>
+        </div>
+      </div>
+      <div v-if="mobileMenuOpen" class="mobile-top-menu d-lg-none bg-dark py-2">
+        <div class="container d-flex flex-column gap-2">
+          <a href="#" class="text-white" @click.prevent="goProfile">Perfil</a>
+          <a href="#" class="text-white" @click.prevent="goOrders">Histórico</a>
+          <a href="#" class="text-white" @click.prevent="openRegister">Entrar / Cadastrar</a>
+        </div>
+      </div>
+    </header>
     </div>
     <!-- migration toast: shown when persisted cart was reconciled and items/options were removed -->
     <div v-if="showCartMigration" class="migration-toast" role="status" aria-live="polite">
@@ -922,6 +943,9 @@ function isAlwaysOpenFlag(c){
 const heroRef = ref(null)
 const navRef = ref(null)
 const isNavSticky = ref(false)
+// mobile top menu state
+const mobileMenuOpen = ref(false)
+function toggleMobileMenu(){ mobileMenuOpen.value = !mobileMenuOpen.value }
 let rafId = null
 function handleScroll() {
   try{
@@ -3499,6 +3523,10 @@ try{
 <style scoped>
  .public-hero { background: #222; color: #fff; height: 220px; overflow: hidden; }
 .public-hero h3 { font-weight:700; color:#fff }
+.top-public-nav .nav-actions a, .top-public-nav .nav-actions button { color: #fff; opacity: .95 }
+.top-public-nav .nav-actions a:hover, .top-public-nav .nav-actions button:hover { opacity: 1 }
+.cart-badge-top { font-size: 11px; position: absolute; top: -6px; right: -8px; padding: 3px 6px; }
+.mobile-top-menu a { text-decoration: none }
 .nav-pills { position: sticky; top: 0; z-index: 5; padding-bottom: 8px; background: transparent; }
 .nav-pills.stuck { background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.06); padding-top: 8px; padding-bottom: 8px; z-index: 1040; }
 
@@ -3533,7 +3561,7 @@ li.list-group-item.selected, .payment-method.selected {
 .product-title { font-size: 1.05rem; font-weight: 600; }
 .product-desc { color: #666; font-size:12px; line-height:135%; max-height: 3em; overflow: hidden; text-overflow: ellipsis; }
 .product-price {
-  font-size: 1.1rem;
+  font-size: .9rem;
   font-weight: 600;
   color: var(--brand-dark);
 }
