@@ -817,13 +817,15 @@
       </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, reactive, watch, nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, reactive, watch, nextTick, onUnmounted } from 'vue';
 import { bindLoading } from '../state/globalLoading.js';
 import api from '../api';
 import { useRoute, useRouter } from 'vue-router';
 import { assetUrl } from '../utils/assetUrl.js';
 import { applyPhoneMask, removePhoneMask } from '../utils/phoneMask';
 import ListGroup from '../components/form/list-group/ListGroup.vue';
+import { io } from 'socket.io-client'
+import { SOCKET_URL } from '@/config'
 
 let route;
 let router;
@@ -1564,6 +1566,29 @@ const productCashbackMap = computed(() => {
 const isOpen = computed(() => {
   const c = effectiveSettings()
   if(!c) return true
+  // respect admin "force open" override when present (with optional expiry)
+  try{
+    if(c.forceOpen === true || c.force_open === true){
+      const exp = c.forceOpenExpiresAt || c.force_open_expires_at
+      if(!exp) return true
+      const t = Date.parse(String(exp))
+      if(!isNaN(t) && t > Date.now()) return true
+    }
+  }catch(e){}
+  // respect manual activation flag on store/settings: if store explicitly deactivated, treat as closed
+  try{
+    if(c.isActive === false || c.active === false || c.isOpen === false || c.closed === true || c.isClosed === true || c.closedUntilNextShift === true || c.closed_until_next_shift === true) return false
+  }catch(e){}
+  // respect temporary pause flags persisted into store settings (pauseUntil / pausedUntil / pause_until)
+  try{
+    const pauseKeys = ['pauseUntil','pausedUntil','pause_until']
+    for(const k of pauseKeys){
+      if(c[k]){
+        const t = Date.parse(String(c[k]))
+        if(!isNaN(t) && t > Date.now()) return false
+      }
+    }
+  }catch(e){}
   // Prefer detailed weeklySchedule when present — it should take precedence
   // over coarse always-open flags stored at company level.
 
@@ -1726,6 +1751,25 @@ const nextOpenText = computed(() => {
     try{
       const c = effectiveSettings()
       if(!c) return ''
+      // if store is paused temporarily, show pause until time
+      try{
+        const pauseKeys = ['pauseUntil','pausedUntil','pause_until']
+        for(const k of pauseKeys){
+          if(c[k]){
+            const t = Date.parse(String(c[k]))
+            if(!isNaN(t) && t > Date.now()){
+              const d = new Date(t)
+              const hh = String(d.getHours()).padStart(2,'0')
+              const mm = String(d.getMinutes()).padStart(2,'0')
+              return `Fechado temporariamente — volta às ${hh}:${mm}`
+            }
+          }
+        }
+      }catch(e){}
+      // closed until next shift flag
+      try{
+        if(c.closedUntilNextShift === true || c.closed_until_next_shift === true) return 'Fechado até o próximo expediente'
+      }catch(e){}
         // prefer weeklySchedule today's 'to'
       if(Array.isArray(c.weeklySchedule) && c.weeklySchedule.length){
         const tz = c.timezone || 'America/Sao_Paulo'
@@ -2895,6 +2939,8 @@ onMounted(async ()=>{
   const menuUrl = publicPath(`/public/${companyId}/menu${menuQuery.length ? ('?' + menuQuery.join('&')) : ''}`)
   const res = await api.get(menuUrl);
   const data = res.data || {};
+  // store last-loaded storeId so updates can be applied selectively
+  let _lastLoadedStoreId = storeId.value || (data.company && data.company.store && data.company.store.id) || null
     // TEMP LOG: inspect payload in browser console to debug schedule fields
     try{ console.log('[PublicMenu] payload', {
       company: data.company,
@@ -3020,6 +3066,120 @@ function selectCategory(id){
     }
   }catch(e){ console.warn('selectCategory err', e) }
 }
+
+// listen for settings updates so public menu can refresh without full page reload
+function onStoreSettingsUpdated(ev){
+  try{
+    const updatedStoreId = ev && ev.detail && ev.detail.storeId ? String(ev.detail.storeId) : null
+    if(!updatedStoreId) return
+    // if this public view is scoped to a particular store, only refresh when it matches
+    const scopedStoreId = storeId.value || (company && company.store && company.store.id) || null
+    if(scopedStoreId && String(scopedStoreId) !== String(updatedStoreId)) return
+    // otherwise, reload the public menu data
+    try{ console.log('[PublicMenu] detected settings update for store', updatedStoreId, ' — refreshing public payload') }catch(e){}
+    // re-run the mounted fetch logic (simple approach: reload the page data)
+    // minor optimization: call the same fetch path used on mount
+    (async () => {
+      try{
+        const menuQuery = []
+        if(menuId.value) menuQuery.push(`menuId=${encodeURIComponent(menuId.value)}`)
+        if(storeId.value) menuQuery.push(`storeId=${encodeURIComponent(storeId.value)}`)
+        const menuUrl = publicPath(`/public/${companyId}/menu${menuQuery.length ? ('?' + menuQuery.join('&')) : ''}`)
+        const r = await api.get(menuUrl)
+        const d = r.data || {}
+        // update displayed data similar to initial mount flow
+        categories.value = (d.categories || []).map(c => ({ ...c, products: (c.products || []).filter(p => p.isActive !== false) })).filter(c => c.isActive !== false)
+        uncategorized.value = (d.uncategorized || []).filter(p => p.isActive !== false)
+        company.value = d.company || company.value
+        menu.value = d.menu || menu.value
+        // recompute open state by reusing any existing logic (toggle any derived/computed values by touching reactive state)
+        try{ /* trigger any watchers that depend on company/store data */ }catch(e){}
+      }catch(e){ console.warn('[PublicMenu] failed to refresh after settings update', e) }
+    })()
+  }catch(e){ }
+}
+
+onMounted(()=>{ try{ window.addEventListener('store:settings-updated', onStoreSettingsUpdated); }catch(e){} })
+onBeforeUnmount(()=>{ try{ window.removeEventListener('store:settings-updated', onStoreSettingsUpdated); }catch(e){} })
+
+// storage event handler for cross-tab updates
+function onStorageEvent(ev){
+  try{
+    if(!ev || !ev.key) return
+    if(ev.key.startsWith('store_settings_updated_')){
+      const sid = ev.key.replace('store_settings_updated_', '')
+      try{ onStoreSettingsUpdated({ detail: { storeId: sid } }) }catch(e){}
+    }
+  }catch(e){}
+}
+
+onMounted(()=>{ try{ window.addEventListener('storage', onStorageEvent); }catch(e){} })
+onBeforeUnmount(()=>{ try{ window.removeEventListener('storage', onStorageEvent); }catch(e){} })
+
+// Socket listener to receive server-side broadcasts when store settings change.
+let _publicMenuSocket = null
+onMounted(() => {
+  try {
+    // If SOCKET_URL is undefined, io() will connect to same-origin which may
+    // be proxied to the backend in dev. Use polling first for better reliability.
+    // include companyId in handshake so server can add this socket to a company room
+    _publicMenuSocket = io(SOCKET_URL, { auth: { companyId }, transports: ['polling', 'websocket'], reconnectionAttempts: Infinity, reconnectionDelay: 2000, timeout: 30000 })
+    _publicMenuSocket.on('connect', () => { try{ console.log('[PublicMenu] socket connected', _publicMenuSocket.id) }catch(e){} })
+    _publicMenuSocket.on('disconnect', (reason) => { try{ console.log('[PublicMenu] socket disconnected', reason) }catch(e){} })
+    _publicMenuSocket.on('store-settings-updated', (payload) => {
+      try{
+        // Ensure payload is for our company (defensive) and only react when relevant keys changed
+        const sid = payload && payload.storeId ? String(payload.storeId) : null
+        const pid = payload && payload.companyId ? String(payload.companyId) : null
+        const changed = Array.isArray(payload && payload.changedKeys) ? payload.changedKeys : []
+        if (!sid) return
+        if (pid && String(pid) !== String(companyId)) return
+
+        // If the server provided a `meta` snapshot, apply it immediately to the in-memory
+        // company/store objects so open/close UI updates instantly while we refresh.
+        const meta = payload && payload.meta ? payload.meta : null
+        if (meta) {
+          try {
+            // prefer store-scoped merge
+            if (company.value && company.value.store && String(company.value.store.id) === String(sid)) {
+              const storeObj = company.value.store
+              if (typeof meta.isActive !== 'undefined') storeObj.isActive = meta.isActive
+              if (typeof meta.open24Hours !== 'undefined') storeObj.open24Hours = meta.open24Hours
+              if (meta.pauseUntil) storeObj.pauseUntil = meta.pauseUntil
+              if (meta.pausedUntil) storeObj.pauseUntil = meta.pausedUntil
+              if (meta.pause_until) storeObj.pauseUntil = meta.pause_until
+              if (meta.closedUntilNextShift) storeObj.closedUntilNextShift = meta.closedUntilNextShift
+              if (meta.closed_until_next_shift) storeObj.closedUntilNextShift = meta.closed_until_next_shift
+              if (typeof meta.forceOpen !== 'undefined') storeObj.forceOpen = meta.forceOpen
+              if (meta.forceOpenExpiresAt) storeObj.forceOpenExpiresAt = meta.forceOpenExpiresAt
+              // reflect back to company.value so effectiveSettings() picks it up
+              company.value = { ...(company.value || {}), store: storeObj }
+            } else if (meta && typeof meta.isActive !== 'undefined') {
+              // if store info not yet present, apply to company top-level as fallback
+              company.value = { ...(company.value || {}), isActive: meta.isActive }
+            }
+            try{ console.log('[PublicMenu] applied settings meta from socket', meta) }catch(e){}
+          } catch (e) { /* ignore meta apply errors */ }
+        }
+
+        // Only refresh when changed keys include things that affect public menu display
+        const interesting = ['forceOpen','forceOpenExpiresAt','pauseUntil','pausedUntil','pause_until','closedUntilNextShift','closed_until_next_shift','isActive','menus','menuMeta','logo','banner', 'isActive']
+        const intersect = changed.filter(k => interesting.includes(k))
+        const metaRelevant = meta && (meta.forceOpen || meta.forceOpenExpiresAt || meta.pauseUntil || meta.pausedUntil || meta.pause_until || meta.closedUntilNextShift || meta.closed_until_next_shift || typeof meta.isActive !== 'undefined')
+        if (changed.length && !intersect.length && !metaRelevant) {
+          try{ console.debug('[PublicMenu] store-settings-updated received but no relevant keys changed', changed, meta) }catch(e){}
+          return
+        }
+
+        // trigger full refresh to fetch canonical settings and other menu info
+        onStoreSettingsUpdated({ detail: { storeId: sid } })
+      }catch(e){}
+    })
+  } catch (e) {
+    try{ console.warn('[PublicMenu] socket init failed', e) }catch(_){ }
+  }
+})
+onBeforeUnmount(() => { try{ _publicMenuSocket && _publicMenuSocket.disconnect() }catch(e){} })
 
 // fetch cashback settings for company and (if logged) the customer's wallet
 async function fetchCashbackSettingsAndWallet(){
@@ -3341,7 +3501,7 @@ li.list-group-item.selected, .payment-method.selected {
 .hero-image { transition: transform .35s ease }
 .public-hero:hover .hero-image { transform: scale(1.02) }
 
-.product-card { background: #fff; border-radius: 18px; position: relative;}
+.product-card { background: #fff; border-radius: 18px; position: relative; padding:16px 0px 16px 16px !important;}
 .product-card-body { flex: 1 1 auto; padding-right: 1rem; }
 .product-title { font-size: 1.05rem; font-weight: 600; }
 .product-desc { color: #666; font-size:12px; line-height:135%; max-height: 3em; overflow: hidden; text-overflow: ellipsis; }

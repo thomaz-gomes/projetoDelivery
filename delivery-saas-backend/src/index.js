@@ -219,6 +219,13 @@ if (process.env.NODE_ENV !== 'production') {
   } catch (e) {
     console.warn('Failed to mount debug emit route', e && e.message);
   }
+  try {
+    const debugEmitStoreRouter = await import('./routes/debugEmitStoreUpdate.js');
+    app.use('/debug/emit-store-update', debugEmitStoreRouter.default || debugEmitStoreRouter);
+    console.log('Mounted /debug/emit-store-update (dev only)');
+  } catch (e) {
+    console.warn('Failed to mount debug emit-store-update route', e && e.message);
+  }
 }
 
 // Serve public files (e.g., generated reports)
@@ -522,6 +529,26 @@ export function attachSocket(server) {
     } catch (e) {
       // ignore
     }
+
+    // Join company-specific room when possible so we can emit scoped events.
+    try {
+      // 1) agent sockets carry companyId
+      if (socket.agent && socket.agent.companyId) {
+        try { socket.join(`company_${socket.agent.companyId}`); console.log('Socket joined company room', `company_${socket.agent.companyId}`) } catch (e) {}
+      }
+      // 2) identified users via 'identify' will have socket.user set by the 'identify' handler above
+      if (socket.user && socket.user.companyId) {
+        try { socket.join(`company_${socket.user.companyId}`); console.log('Socket joined company room', `company_${socket.user.companyId}`) } catch (e) {}
+      }
+      // 3) allow clients to request joining by providing companyId in handshake.auth
+      try {
+        const hsAuth = socket.handshake && socket.handshake.auth ? socket.handshake.auth : null
+        if (hsAuth && (hsAuth.companyId || hsAuth.company)) {
+          const cid = hsAuth.companyId || hsAuth.company
+          try { socket.join(`company_${cid}`); console.log('Socket joined company room from handshake', `company_${cid}`) } catch (e) {}
+        }
+      } catch (e) {}
+    } catch (e) { /* non-fatal */ }
 
     // Allow agents to explicitly signal readiness after connect (agent may emit this)
     socket.on('agent-ready', (payload) => {

@@ -490,6 +490,14 @@ function computeOpenStatus(s){
 
 async function onToggleForce(item, ev){
   try{
+    // prevent unauthenticated users from attempting to persist forceOpen
+    if (!auth.user) {
+      try { if (ev && ev.target) ev.target.checked = !ev.target.checked; } catch(e){}
+      alert('Faça login para alterar o status do cardápio.');
+      return;
+    }
+    // debug: log auth state and token used for requests
+    try { console.debug('[sidebar] onToggleForce auth.user=', auth.user, 'local token=', localStorage.getItem('token')); } catch(e){}
     const newVal = !!ev.target.checked
     const storeId = item.storeId || item._meta?.id || item._meta?.storeId || null
     if(!storeId) throw new Error('Store id not found for this menu')
@@ -512,7 +520,16 @@ async function onToggleForce(item, ev){
     }catch(e){ /* ignore calculation errors */ }
     const payload = { menuId: item.id, forceOpen: newVal }
     if(forceOpenExpiresAt) payload.forceOpenExpiresAt = forceOpenExpiresAt
-    await api.post(`/stores/${storeId}/settings/upload`, payload)
+    try {
+      console.debug('[sidebar] persisting forceOpen payload=', payload)
+      await api.post(`/stores/${storeId}/settings/upload`, payload)
+      try { window.dispatchEvent(new CustomEvent('store:settings-updated', { detail: { storeId } })); } catch(e){}
+      // also write a localStorage key so other browser tabs/windows detect the update via the storage event
+      try { localStorage.setItem(`store_settings_updated_${storeId}`, String(Date.now())); } catch(e){}
+    } catch (err) {
+      // rethrow to be caught by outer catch
+      throw err
+    }
     item._meta = item._meta || {}
     item._meta.forceOpen = newVal
     if(forceOpenExpiresAt) item._meta.forceOpenExpiresAt = forceOpenExpiresAt
@@ -606,7 +623,11 @@ function logout() {
               </div>
               <div class="d-flex align-items-center gap-2">
                 <div class="form-check form-switch m-0">
-                  <input class="form-check-input" type="checkbox" role="switch" :checked="m._status && m._status.forced !== undefined ? m._status.forced : false" @change="onToggleForce(m, $event)" />
+                  <input class="form-check-input" type="checkbox" role="switch"
+                    :checked="m._status && m._status.forced !== undefined ? m._status.forced : false"
+                    @change="onToggleForce(m, $event)"
+                    :disabled="!auth.user"
+                    :title="auth.user ? '' : 'Faça login para alterar'" />
                 </div>
               </div>
             </li>
@@ -632,7 +653,11 @@ function logout() {
               </div>
               <div class="d-flex align-items-center gap-2">
                 <div class="form-check form-switch m-0">
-                  <input class="form-check-input" type="checkbox" role="switch" :checked="m._status && m._status.forced !== undefined ? m._status.forced : false" @change="onToggleForce(m, $event)" />
+                  <input class="form-check-input" type="checkbox" role="switch"
+                    :checked="m._status && m._status.forced !== undefined ? m._status.forced : false"
+                    @change="onToggleForce(m, $event)"
+                    :disabled="!auth.user"
+                    :title="auth.user ? '' : 'Faça login para alterar'" />
                 </div>
               </div>
             </li>

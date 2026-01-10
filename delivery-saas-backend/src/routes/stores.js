@@ -254,6 +254,16 @@ storesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
 
   const updated = await prisma.store.update({ where: { id }, data: { name: body.name ?? existing.name, cnpj: body.cnpj ?? existing.cnpj, logoUrl: body.logoUrl ?? existing.logoUrl, bannerUrl: body.bannerUrl ?? existing.bannerUrl, timezone: body.timezone ?? existing.timezone, address: body.address ?? existing.address, isActive: body.isActive ?? existing.isActive, open24Hours: body.open24Hours ?? existing.open24Hours, weeklySchedule: (body.open24Hours ? null : (body.weeklySchedule !== undefined ? body.weeklySchedule : existing.weeklySchedule)), slug: slugToSet !== undefined ? slugToSet : existing.slug } })
 
+    // Emit a company-scoped update so public clients refresh when top-level store fields change
+    try {
+      const io = req && req.app && req.app.locals && req.app.locals.io ? req.app.locals.io : null
+      if (io) {
+        const meta = { isActive: updated.isActive ?? null, open24Hours: updated.open24Hours ?? null, timezone: updated.timezone || null, weeklySchedule: updated.weeklySchedule || null }
+        const payload = { storeId: id, companyId: companyId, changedKeys: Object.keys(body || {}), meta }
+        try { console.log('[stores] emitting store-settings-updated to', `company_${companyId}`, 'payload keys:', Object.keys(payload || {})); io.to(`company_${companyId}`).emit('store-settings-updated', payload) } catch (e) { /* ignore */ }
+      }
+    } catch (e) { /* non-fatal */ }
+
     // handle certificate upload/update for store
     if (body.certBase64 || body.certPassword !== undefined) {
       try {
@@ -531,6 +541,35 @@ storesRouter.post('/:id/settings/upload', requireRole('ADMIN'), async (req, res)
     } catch (e) {
       console.warn('Failed to persist uploaded image URLs to store record', e)
     }
+
+    // Emit socket event so connected clients (public menus, dashboards) can
+    // refresh when store settings change. Use app.locals.io if Socket.IO is
+    // attached (server.js sets app.locals.io when attaching the socket).
+    try {
+      const io = req && req.app && req.app.locals && req.app.locals.io ? req.app.locals.io : null
+      if (io) {
+        try {
+          // build meta info from merged settings so public clients can react to pause/force flags
+          const meta = {
+            forceOpen: existingNew.forceOpen || null,
+            forceOpenExpiresAt: existingNew.forceOpenExpiresAt || null,
+            pauseUntil: existingNew.pauseUntil || existingNew.pausedUntil || existingNew.pause_until || null,
+            closedUntilNextShift: existingNew.closedUntilNextShift || existingNew.closed_until_next_shift || null,
+            menus: existingNew.menus || null
+          }
+          // include current DB isActive flag
+          let isActiveFlag = null
+          try {
+            const srec = await prisma.store.findUnique({ where: { id }, select: { isActive: true } })
+            if (srec) isActiveFlag = srec.isActive
+          } catch (e) { /* ignore */ }
+
+          const payload = { storeId: id, companyId: companyId, menuId: menuId || null, changedKeys: Object.keys(saved || {}), meta: { ...meta, isActive: isActiveFlag } }
+          // Emit only to the company room to reduce cross-company noise
+          try { console.log('[stores] emitting store-settings-updated to', `company_${companyId}`, 'payload keys:', Object.keys(payload || {})); io.to(`company_${companyId}`).emit('store-settings-updated', payload) } catch (e) { /* ignore */ }
+        } catch (e) { /* ignore */ }
+      }
+    } catch (e) { /* non-fatal */ }
 
     return res.json({ ok: true, saved })
   } catch (e) {

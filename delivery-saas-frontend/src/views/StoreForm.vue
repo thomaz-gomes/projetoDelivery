@@ -14,6 +14,14 @@
 
                 <div>
             <div class="mb-3"><TextInput label="Nome" labelClass="form-label" v-model="form.name" inputClass="form-control" /></div>
+                <div class="mb-3 form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="store-active" :checked="form.isActive" @change.prevent="handleActiveToggle($event)" />
+                  <label class="form-check-label small" for="store-active">Loja ativa</label>
+                </div>
+                <div v-if="remainingPauseText" class="mt-2">
+                  <small class="text-muted">Pausa ativa: <strong>{{ remainingPauseText }}</strong></small>
+                  <button class="btn btn-sm btn-link" @click.prevent="clearPauseNow">Cancelar pausa</button>
+                </div>
               <div class="mb-3"><TextInput label="Slug público (opcional)" labelClass="form-label" v-model="form.slug" placeholder="ex: nomedaloja" inputClass="form-control" />
                 <div class="form-text small">Se preenchido, a URL pública ficará em <code>/public/SEU_SLUG</code>. Caso vazio, o sistema gerará/resolve um slug automaticamente.</div>
               </div>
@@ -111,6 +119,7 @@
 <script setup>
 import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import api from '../api'
+import Swal from 'sweetalert2'
 import { assetUrl } from '../utils/assetUrl.js'
 import ImageUploader from '../components/ImageUploader.vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -133,12 +142,33 @@ const TIMEZONES = [
   'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
   'Asia/Shanghai', 'Australia/Sydney'
 ]
-const form = ref({ name: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false })
+const form = ref({ name: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
+
 
 const activeTab = ref('geral')
 const weekDays = [ { value:0,label:'Domingo'},{value:1,label:'Segunda'},{value:2,label:'Terça'},{value:3,label:'Quarta'},{value:4,label:'Quinta'},{value:5,label:'Sexta'},{value:6,label:'Sábado'} ]
 
-// Note: banner/logo cropper is now handled by ImageUploader component
+const remainingPauseText = computed(() => {
+  try{
+    if(closedUntilNextShift.value) return 'Fechado até o próximo expediente'
+    if(!pauseUntil.value) return ''
+    const t = Date.parse(String(pauseUntil.value))
+    if(isNaN(t)) return ''
+    const diff = t - Date.now()
+    if(diff <= 0) return ''
+    const mins = Math.floor(diff / 60000)
+    const secs = Math.floor((diff % 60000) / 1000)
+    if(mins >= 60){ const h = Math.floor(mins / 60); const m = mins % 60; return `${h}h ${m}m` }
+    if(mins > 0) return `${mins}m ${secs}s`
+    return `${secs}s`
+  }catch(e){ return '' }
+})
+
+function _startPauseTicker(){
+  if(_pauseTicker) return
+  _pauseTicker = setInterval(()=>{ try{ /* trigger recompute */ pauseUntil.value = pauseUntil.value ? pauseUntil.value : pauseUntil.value }catch(e){} }, 1000)
+}
+function _clearPauseTicker(){ if(_pauseTicker){ clearInterval(_pauseTicker); _pauseTicker = null } }
 const certInput = ref(null)
 const showDeleteModal = ref(false)
 
@@ -161,6 +191,12 @@ async function load() {
       form.value.storedCertExists = !!s.certExists
       form.value.storedCertFilename = s.certFilename || null
       form.value.storedCertPasswordStored = !!s.certPasswordStored
+        // isActive and pause/closed flags from merged settings
+        form.value.isActive = s.isActive === undefined ? true : !!s.isActive
+        try{
+          pauseUntil.value = s.pauseUntil || s.pausedUntil || s.pause_until || null
+          closedUntilNextShift.value = !!(s.closedUntilNextShift || s.closed_until_next_shift)
+        }catch(_) { pauseUntil.value = null; closedUntilNextShift.value = false }
     }
   } catch (e) {
     console.error('Failed to load store', e)
@@ -200,6 +236,50 @@ function handlePhoneInput(e) {
 
 function handleWhatsAppInput(e) {
   form.value.whatsapp = applyPhoneMask(e.target.value)
+}
+
+async function handleActiveToggle(e){
+  // guard: only for existing stores
+  if(!id){ e.target.checked = true; form.value.isActive = true; await Swal.fire({ icon:'warning', text: 'Salve a loja antes de alterar o status.' }); return }
+  const checked = !!e.target.checked
+  // opening the store: clear any pause flags and set active
+  if(checked){
+    try{
+      await api.put(`/stores/${id}`, { isActive: true })
+      // clear pause flags in settings (best-effort)
+      try{ await api.post(`/stores/${id}/settings/upload`, { pauseUntil: null, pausedUntil: null, pause_until: null, closedUntilNextShift: false }) }catch(_){ }
+      form.value.isActive = true
+      await Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1200, icon:'success', title: 'Loja aberta' })
+    }catch(err){ console.error('Failed to open store', err); e.target.checked = false; form.value.isActive = false; await Swal.fire({ icon:'error', text: err?.response?.data?.message || 'Falha ao abrir loja' }) }
+    return
+  }
+
+  // ask pause options when closing
+  try{
+    const inputOptions = { '15': '15 minutos', '30': '30 minutos', '60': '1 hora', '180': '3 horas', 'untilNext': 'Fechar até o próximo expediente' }
+    const res = await Swal.fire({ title: 'Fechar loja?', input: 'radio', inputOptions, inputValidator: (v) => v ? null : 'Escolha uma opção', showCancelButton: true, confirmButtonText: 'Confirmar', cancelButtonText: 'Cancelar' })
+    if(!res.isConfirmed){ e.target.checked = true; form.value.isActive = true; return }
+    const val = res.value
+    if(val === 'untilNext'){
+      // persist closedUntilNextShift flag in settings
+      try{ await api.post(`/stores/${id}/settings/upload`, { closedUntilNextShift: true }) }catch(e){ console.warn('failed to persist closedUntilNextShift', e) }
+      try{ await api.put(`/stores/${id}`, { isActive: false }) }catch(e){ console.warn('failed to set isActive false', e) }
+      form.value.isActive = false
+      await Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1500, icon:'success', title: 'Loja fechada até o próximo expediente' })
+      return
+    }
+    const mins = Number(val || 0)
+    if(mins > 0){
+      const pauseUntil = new Date(Date.now() + mins * 60000).toISOString()
+      try{ await api.post(`/stores/${id}/settings/upload`, { pauseUntil }) }catch(e){ console.warn('failed to persist pauseUntil', e) }
+      try{ await api.put(`/stores/${id}`, { isActive: false }) }catch(e){ console.warn('failed to set isActive false', e) }
+      form.value.isActive = false
+      await Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1500, icon:'success', title: `Loja pausada por ${mins} minutos` })
+      return
+    }
+    // fallback: revert
+    e.target.checked = true; form.value.isActive = true
+  }catch(err){ console.error('handleActiveToggle error', err); e.target.checked = true; form.value.isActive = true; await Swal.fire({ icon:'error', text: 'Operação cancelada' }) }
 }
 
 async function deleteCert(){
@@ -284,6 +364,7 @@ async function save(){
       address: form.value.address || undefined,
       timezone: form.value.timezone || undefined,
       cnpj: form.value.cnpj || undefined,
+      isActive: form.value.isActive,
       // schedule handled at menu level; do not send store-level schedule flags
       // prefer persisted settings-stored logo URL when available; fall back to existing logoUrl
       logoUrl: form.value.logoUrl || undefined,
@@ -340,8 +421,8 @@ async function save(){
 
 function cancel(){ router.push('/settings/stores') }
 
-onMounted(()=>{ load() })
-onBeforeUnmount(()=>{ /* nothing to clean here; ImageUploader handles object URLs */ })
+onMounted(()=>{ load(); _startPauseTicker() })
+onBeforeUnmount(()=>{ _clearPauseTicker(); /* ImageUploader handles object URLs */ })
 </script>
 
 <style scoped>
