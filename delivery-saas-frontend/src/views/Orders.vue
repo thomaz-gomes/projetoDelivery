@@ -1621,12 +1621,12 @@ function pulseButton() {
           <div class="flex-grow-1" style="max-width: 500px;">
             <TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control" />
           </div>
-          <button type="button" class="btn btn-success" @click="openPdv">
+          <button type="button" class="btn btn-primary" @click="openPdv">
             <i class="bi bi-arrow-right-circle"></i>
             Criar Pedido
           </button>
 
-           <button type="button" class="btn btn-outline-secondary ms-2" @click="openBalcao" title="Pedido balcão">
+           <button type="button" class="btn btn-outline-primary ms-2" @click="openBalcao" title="Pedido balcão">
             <i class="bi bi-shop"></i>
             &nbsp;Pedido balcão
           </button>
@@ -1638,9 +1638,7 @@ function pulseButton() {
 
           <div class="col-sm-6">
 
-              <div
-      class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;"
-    >
+              <div class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;">
     <div class="card-body">
       <div class="d-flex align-items-center justify-content-between">
           <div>
@@ -1696,7 +1694,7 @@ function pulseButton() {
     
     <!-- Orders board: columns with drag & drop -->
     <div v-if="store.orders && store.orders.length > 0" class="orders-board">
-      <div class="boards d-flex gap-3 overflow-auto py-2">
+      <div class="boards d-flex gap-3 overflow-auto justify-content-between">
         <div class="orders-column card" v-for="col in (isMobile ? COLUMNS.filter(c => c.key === selectedStatus) : COLUMNS)" :key="col.key" :data-status="col.key">
           <div class="card-header d-flex align-items-center justify-content-between">
             <div class="fw-semibold">{{ col.label }}</div>

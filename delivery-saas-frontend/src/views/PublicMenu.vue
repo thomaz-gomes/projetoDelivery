@@ -97,13 +97,16 @@
               <div class="row gx-3 gy-3">
                 <div class="col-12 col-lg-6" v-for="p in cat.products" :key="p.id">
                   <div class="product-card d-flex justify-content-between align-items-start p-3" @click="openProductModal(p)" tabindex="0" @keydown.enter="openProductModal(p)">
-                    <div class="product-card-body">
+                    <div class="product-card-body d-flex flex-column justify-content-between">
+                      <div>
                       <h6 class="mb-1 product-title">{{ p.name }}</h6>
-                      
                       <div class="small text-muted product-desc">{{ p.description }}</div>
+                      </div>
+                      <div>
                       <div class="d-flex align-items-center gap-3">
                         <strong class="product-price">{{ formatCurrency(p.price) }}</strong>
                         <div v-if="(p.cashback || p.cashbackPercent) && Number(p.cashback || p.cashbackPercent) > 0" class="badge bg-success">{{ Number(p.cashback || p.cashbackPercent) }}% cashback</div>
+                      </div>
                       </div>
                     </div>
                     <div class="product-card-media text-end">
@@ -3502,7 +3505,7 @@ li.list-group-item.selected, .payment-method.selected {
 .public-hero:hover .hero-image { transform: scale(1.02) }
 
 .product-card { background: #fff; border-radius: 18px; position: relative; padding:16px 0px 16px 16px !important;}
-.product-card-body { flex: 1 1 auto; padding-right: 1rem; }
+.product-card-body { flex: 1 1 auto; padding-right: 1rem; min-height:100px; }
 .product-title { font-size: 1.05rem; font-weight: 600; }
 .product-desc { color: #666; font-size:12px; line-height:135%; max-height: 3em; overflow: hidden; text-overflow: ellipsis; }
 .product-price {

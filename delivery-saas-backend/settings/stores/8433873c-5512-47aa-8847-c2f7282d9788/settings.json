@@ -48,7 +48,7 @@
           "to": "22:00"
         }
       ],
-      "forceOpen": false
+      "forceOpen": true
     }
   }
 }
