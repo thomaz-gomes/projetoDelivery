@@ -455,6 +455,39 @@ publicMenuRouter.get('/:companyId/profile', async (req, res) => {
   }
 })
 
+// GET /public/:companyId/account?phone=<phone>
+// Returns { exists: boolean, hasPassword: boolean }
+publicMenuRouter.get('/:companyId/account', async (req, res) => {
+  const { companyId } = req.params
+  const phoneRaw = req.query.phone || req.headers['x-public-phone'] || ''
+  if(!phoneRaw) return res.status(400).json({ message: 'phone é obrigatório' })
+  try{
+    const digits = String(phoneRaw).replace(/\D/g,'')
+    const phoneClean = normalizePhone(digits)
+    // try to locate the Customer by whatsapp using multiple heuristics
+    let customer = null
+    try {
+      customer = await prisma.customer.findFirst({
+        where: {
+          companyId,
+          OR: [
+            { whatsapp: phoneClean },
+            { whatsapp: '55' + phoneClean },
+            { whatsapp: { endsWith: phoneClean } },
+            { whatsapp: { contains: phoneClean } }
+          ]
+        }
+      })
+    } catch (e) { /* ignore */ }
+    if(!customer) return res.json({ exists: false, hasPassword: false })
+    const acct = await findAccountByCustomerId({ companyId, customerId: customer.id })
+    return res.json({ exists: true, hasPassword: !!acct })
+  }catch(e){
+    console.error('GET /public/:companyId/account failed', e)
+    return res.status(500).json({ message: 'Erro ao verificar conta' })
+  }
+})
+
 // GET /public/:companyId/addresses
 // Return addresses for resolved public customer (403 when not resolved)
 publicMenuRouter.get('/:companyId/addresses', async (req, res) => {

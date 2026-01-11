@@ -164,6 +164,26 @@ const remainingPauseText = computed(() => {
   }catch(e){ return '' }
 })
 
+// pause / closed state used by UI (declared here to avoid ReferenceError)
+let _pauseTicker = null
+const pauseUntil = ref(null)
+const closedUntilNextShift = ref(false)
+
+async function clearPauseNow(){
+  // clear pause flags for existing stores, or reset local state for new stores
+  if (isNew) { pauseUntil.value = null; closedUntilNextShift.value = false; form.value.isActive = true; return }
+  try{
+    await api.post(`/stores/${id}/settings/upload`, { pauseUntil: null, pausedUntil: null, pause_until: null, closedUntilNextShift: false })
+    pauseUntil.value = null
+    closedUntilNextShift.value = false
+    form.value.isActive = true
+    await Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1200, icon:'success', title: 'Pausa cancelada' })
+  }catch(e){
+    console.warn('clearPauseNow failed', e)
+    await Swal.fire({ icon:'error', text: e?.response?.data?.message || 'Falha ao cancelar pausa' })
+  }
+}
+
 function _startPauseTicker(){
   if(_pauseTicker) return
   _pauseTicker = setInterval(()=>{ try{ /* trigger recompute */ pauseUntil.value = pauseUntil.value ? pauseUntil.value : pauseUntil.value }catch(e){} }, 1000)

@@ -1,29 +1,37 @@
 <template>
-  <div class="container-fluid px-0">
+  <div id="mainMenu" class="container-fluid px-0">
     <!-- Hero banner -->
   <div class="public-hero position-relative text-white" ref="heroRef">
     <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
     <!-- Top navigation overlay (desktop + mobile) -->
-    <header class="top-public-nav position-absolute w-100" style="top:0;left:0;z-index:1050">
+    <header class="top-public-nav position-absolute w-100" style="top:0;left:0;z-index:1015">
       <div class="container d-flex justify-content-end align-items-center py-2">
-        <div class="nav-actions d-flex align-items-center gap-3 text-white">
-          <a href="#" class="d-none d-md-inline text-white small me-3" @click.prevent="openRegister">Entre ou Cadastre-se</a>
-          <button class="btn btn-link text-white p-0 d-flex align-items-center" @click.prevent="goProfile" aria-label="Perfil"><i class="bi bi-person" aria-hidden="true"></i></button>
-          <button class="btn btn-link text-white p-0 d-flex align-items-center position-relative" @click.prevent="goOrders" aria-label="Histórico"><i class="bi bi-heart" aria-hidden="true"></i></button>
-          <button class="btn btn-link text-white p-0 d-flex align-items-center position-relative" @click.prevent="openCartModal" aria-label="Carrinho">
-            <i class="bi bi-cart-fill" aria-hidden="true"></i>
-            <span v-if="cart.length>0" class="cart-badge-top badge bg-danger rounded-pill">{{ cart.length }}</span>
-          </button>
-          <button class="btn btn-link text-white p-0 d-lg-none" @click.prevent="toggleMobileMenu" aria-label="Menu"><i class="bi bi-list"></i></button>
+        <div class="row">
+          <div class="col-12">
+
+              <div class="nav-actions d-flex align-items-center gap-3 text-white">
+                <a href="#" class="d-none d-md-inline text-white small me-3" @click.prevent="openRegister">Entre ou Cadastre-se</a>
+                <button class="btn btn-link text-white p-0 d-flex align-items-center" @click.prevent="goProfile" aria-label="Perfil"><i class="bi bi-person" aria-hidden="true"></i></button>
+                <button class="btn btn-link text-white p-0 d-flex align-items-center position-relative" @click.prevent="openCartModal" aria-label="Carrinho">
+                  <i class="bi bi-cart-fill" aria-hidden="true"></i>
+                  <span v-if="cart.length>0" class="cart-badge-top badge bg-danger rounded-pill">{{ cart.length }}</span>
+                </button>
+                <button class="btn btn-link text-white p-0 d-lg-none" @click.prevent="toggleMobileMenu" aria-label="Menu"><i class="bi bi-list"></i></button>
+              </div>
+              <div v-if="mobileMenuOpen" class="mobile-top-menu d-lg-none bg-dark py-2">
+              <div class="container d-flex flex-column gap-2">
+                <a href="#" class="text-white" @click.prevent="goProfile">Perfil</a>
+                <a href="#" class="text-white" @click.prevent="goOrders">Histórico</a>
+                <a href="#" class="text-white" @click.prevent="openRegister">Entrar / Cadastrar</a>
+              </div>
+            </div>
+
+
+          </div>
         </div>
+        
       </div>
-      <div v-if="mobileMenuOpen" class="mobile-top-menu d-lg-none bg-dark py-2">
-        <div class="container d-flex flex-column gap-2">
-          <a href="#" class="text-white" @click.prevent="goProfile">Perfil</a>
-          <a href="#" class="text-white" @click.prevent="goOrders">Histórico</a>
-          <a href="#" class="text-white" @click.prevent="openRegister">Entrar / Cadastrar</a>
-        </div>
-      </div>
+      
     </header>
     </div>
     <!-- migration toast: shown when persisted cart was reconciled and items/options were removed -->
@@ -42,16 +50,20 @@
           <div>
             <h3 class="mb-1 company-name">{{ company?.store?.name || company?.name || 'Cardápio' }}</h3>
             <div class="small company-address text-muted">{{ company?.pickupInfo || company?.address || '' }}</div>
-            <div class="small mt-1"><a href="#" class="text-muted" @click.prevent="openInfoModal">Mais informações</a></div>
-            <div class="store-closed-panel mt-2">
-              <strong v-if="isOpen" class="text-success">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</strong>
-              <strong v-else>Fechado no momento{{ nextOpenText ? (', ' + nextOpenText) : '' }}</strong>
+            <div class="small"><a href="#" class="text-muted" @click.prevent="openInfoModal">Mais informações</a></div>
+            <div class="d-flex align-items-start gap-2">
+
+            <div class="store-closed-panel">
+              <span v-if="isOpen" class="badge bg-primary">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</span>
+              <span v-else class="badge bg-secondary">Fechado no momento{{ nextOpenText ? (', ' + nextOpenText) : '' }}</span>
             </div>
+            
+          <span class="badge bg-secondary">Entrega e Retirada</span>
+
+        </div>
           </div>
         </div>
-        <div class="d-flex align-items-start">
-          <button class="btn btn-light-outline delivery-pickup-btn" @click.prevent="toggleOrderType">Entrega e Retirada</button>
-        </div>
+        
       </div>
       
     </div>
@@ -126,7 +138,7 @@
                       <div>
                       <div class="d-flex align-items-center gap-3">
                         <strong class="product-price">
-                          <span v-if="getStartingPrice(p) > Number(p.price || 0)">A partir de {{ formatCurrency(getStartingPrice(p)) }}</span>
+                          <span v-if="getStartingPrice(p) > Number(p.price || 0)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
                           <span v-else>{{ formatCurrency(p.price) }}</span>
                         </strong>
                         <div v-if="(p.cashback || p.cashbackPercent) && Number(p.cashback || p.cashbackPercent) > 0" class="badge bg-success">{{ Number(p.cashback || p.cashbackPercent) }}% cashback</div>
@@ -172,7 +184,7 @@
         <!-- Product options modal -->
         <div v-if="modalOpen" class="product-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:11000">
           <div class="modal-content bg-white rounded shadow p-0">
-            <div class="modal-body p-4" ref="modalContentRef" @pointerdown="onPointerDown" style="overflow:auto;max-height:95vh;">
+            <div class="modal-body p-4" ref="modalContentRef" @pointerdown="onPointerDown" style="overflow:auto;max-height:100vh;">
           <div class="row">
               <!-- product image hero inside modal -->
               <div class="col-12 col-sm-6">
@@ -336,7 +348,6 @@
                   </div>
                 </div>
 
-                <div class="mb-2"><TextInput label="Nome" labelClass="form-label" v-model="customer.name" inputClass="form-control" /></div>
                 <div class="mb-2">
                   <TextInput label="WhatsApp / Telefone" labelClass="form-label" :value="customer.contact" inputClass="form-control" placeholder="(00) 9 0000-0000" maxlength="16" @input="handleContactInput" />
                   <div class="small mt-1" :class="customerPhoneValid ? 'text-success' : 'text-danger'">
@@ -346,12 +357,20 @@
                     </template>
                   </div>
                 </div>
-                <div class="small mt-2"><a href="#" @click.prevent="openRegister">Não tem conta? Criar conta</a></div>
+                <div class="mb-2">
+                  <TextInput v-if="!accountHasPassword" label="Nome" labelClass="form-label" v-model="customer.name" inputClass="form-control" />
+                  <TextInput v-else type="password" label="Senha" labelClass="form-label" v-model="customerPassword" inputClass="form-control" autocomplete="current-password" />
+                  <div v-if="accountCheckLoading" class="small text-muted mt-1">Verificando conta...</div>
+                </div>
+                <div class="small mt-2">
+                  <a v-if="!accountHasPassword" href="#" @click.prevent="openRegister">Não tem conta? Criar conta</a>
+                  <span v-if="accountExists && !accountHasPassword" class="text-muted ms-2">Conta encontrada sem senha</span>
+                </div>
               </div>
 
               <div class="d-flex justify-content-between mt-3">
                 <button class="btn btn-outline-secondary" @click="closeCheckout">Cancelar</button>
-                <button class="btn btn-primary btn-confirm" @click="nextFromCustomer" :disabled="!customer.name || !customerPhoneValid">Próximo</button>
+                <button class="btn btn-primary btn-confirm" @click="nextFromCustomer" :disabled="accountHasPassword ? (!customerPhoneValid || !customerPassword) : (!customer.name || !customerPhoneValid)">Próximo</button>
               </div>
             </div>
 
@@ -492,8 +511,7 @@
                   </div>
                 </div>
               </div>
-              <div v-if="cashbackEnabled" class="mt-3 alert alert-light p-2":class="{ 'use-cashback': publicCustomerConnected, 'use-cashback--active': useCashback }
-                  "
+                <div v-if="cashbackEnabled" class="mt-3 alert alert-light p-2" :class="{ 'use-cashback': publicCustomerConnected, 'use-cashback--active': useCashback }"
                   role="button"
                   tabindex="0"
                   @click="publicCustomerConnected ? (useCashback = !useCashback) : null"
@@ -971,7 +989,7 @@ function handleScroll() {
           navEl.style.transform = 'translateY(-10px)'
         }catch(e){}
         navEl.style.position = 'fixed'
-        navEl.style.top = `${headerH}px`
+        navEl.style.top = `0px`
         // constrain to container left/width so the sticky isn't full-viewport width
         navEl.style.left = `${containerRect.left}px`
         navEl.style.width = `${containerRect.width}px`
@@ -1002,12 +1020,13 @@ function handleScroll() {
         const containerEl2 = (navEl.closest && navEl.closest('.container')) || document.querySelector('.container') || null
         if(containerEl2){
           const containerRect2 = containerEl2.getBoundingClientRect()
-          navEl.style.top = `${headerH2}px`
+          navEl.style.top = `0px`
           navEl.style.left = `${containerRect2.left}px`
           navEl.style.width = `${containerRect2.width}px`
         } else {
           const navRect2 = navEl.getBoundingClientRect()
-          navEl.style.top = `${headerH2}px`
+         /* navEl.style.top = `${headerH2}px`*/
+           navEl.style.top = `0px`
           navEl.style.left = `${navRect2.left}px`
           navEl.style.width = `${navRect2.width}px`
         }
@@ -1026,7 +1045,7 @@ onMounted(()=>{
   window.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onScroll)
     // listen for login events so we can fetch server-side customer data when token is set
-    const onAppUserLoggedIn = () => { try{ fetchProfileAndAddresses() }catch(e){} }
+    const onAppUserLoggedIn = (ev) => { try{ tokenRef.value = (ev && ev.detail && ev.detail.token) ? ev.detail.token : (localStorage.getItem('token') || null); fetchProfileAndAddresses() }catch(e){} }
     try{ window.addEventListener('app:user-logged-in', onAppUserLoggedIn) }catch(e){}
     // listen for addresses updates from other views (e.g., PublicAddresses) and refresh local addresses
     const onAddressesUpdated = (ev) => {
@@ -1424,6 +1443,13 @@ try{
   }
 }catch(e){ console.warn('restore cart from localStorage failed', e) }
 const customer = ref({ name: '', contact: '', address: { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' } });
+// reactive token so UI recomputes when login sets/removes token
+const tokenRef = ref(localStorage.getItem('token') || null)
+const accountExists = ref(false)
+const accountHasPassword = ref(false)
+const customerPassword = ref('')
+const accountCheckLoading = ref(false)
+const lastCheckedPhone = ref('')
 // load persisted customer if any (after customer is defined)
 const savedCustomerRaw = localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || null
 const savedCustomer = JSON.parse(savedCustomerRaw || 'null')
@@ -1536,7 +1562,7 @@ const isDev = typeof import.meta !== 'undefined' && import.meta.env && import.me
 // compute whether a public customer is connected (token + stored customer)
 const publicCustomerConnected = computed(() => {
   try{
-    const token = localStorage.getItem('token')
+    const token = tokenRef.value || localStorage.getItem('token')
     if(!token) return null
     if(!customer.value) return null
     return { name: customer.value.name || null, contact: customer.value.contact || null }
@@ -1546,8 +1572,11 @@ const publicCustomerConnected = computed(() => {
 function logoutPublicCustomer(){
   try{
     localStorage.removeItem('token')
+    tokenRef.value = null
     localStorage.removeItem(LOCAL_CUSTOMER_KEY)
     localStorage.removeItem(`public_customer_${companyId}`)
+    try{ localStorage.removeItem(LOCAL_ADDR_KEY) }catch(e){}
+    try{ localStorage.removeItem(CART_STORAGE_KEY) }catch(e){}
   }catch(e){}
   customer.value = { name: '', contact: '', address: { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' } }
   addresses.value = []
@@ -2770,24 +2799,96 @@ async function performOrderFromModal(){
   if(orderResponse.value){ closeCheckout() }
 }
 
-function handleContactInput(e) {
-  customer.value.contact = applyPhoneMask(e.target.value)
+async function handleContactInput(e) {
+  try{
+    let raw = ''
+    if(e && e.target && typeof e.target.value !== 'undefined') raw = e.target.value
+    else if(typeof e === 'string' || typeof e === 'number') raw = String(e)
+    customer.value.contact = applyPhoneMask(raw)
+
+    // when user types a full phone (DDD + number) try to detect existing account
+    try{
+      const digits = removePhoneMask(customer.value.contact || '')
+      if(digits && String(digits).length >= 10 && lastCheckedPhone.value !== String(digits)){
+        lastCheckedPhone.value = String(digits)
+        accountCheckLoading.value = true
+        try{
+          const resp = await api.get(`/public/${companyId}/account?phone=${digits}`)
+          const data = resp && resp.data ? resp.data : {}
+          accountExists.value = !!data.exists
+          accountHasPassword.value = !!data.hasPassword
+          if(accountHasPassword.value){ customerPassword.value = '' }
+        }catch(err){
+          accountExists.value = false
+          accountHasPassword.value = false
+        } finally { accountCheckLoading.value = false }
+      }
+    }catch(inner){ /* ignore */ }
+
+  }catch(e){ console.warn('handleContactInput err', e) }
 }
 
-function nextFromCustomer(){
+async function nextFromCustomer(){
   clientError.value = ''
-  if(!customer.value || !customer.value.name || !customer.value.contact){
-    clientError.value = 'Preencha nome e WhatsApp'
+  // basic contact validation
+  if(!customer.value || !customer.value.contact){
+    clientError.value = 'Preencha WhatsApp'
     return
   }
-  // validate whatsapp digits (require DDD + number -> 10 or 11 digits)
   try{
     const digits = removePhoneMask(customer.value.contact || '')
     if(!digits || String(digits).length < 10){
       clientError.value = 'Informe um número de WhatsApp válido (inclua DDD)'
       return
     }
+    // if account requires password, validate and attempt login
+    if(accountHasPassword.value){
+      if(!customerPassword.value){ clientError.value = 'Informe a senha da conta existente'; return }
+      try{
+        const body = { whatsapp: digits, password: customerPassword.value }
+        const res = await api.post(`/public/${companyId}/login`, body, { headers: { 'x-no-redirect': '1' } })
+        if(res && res.data && res.data.token){
+          try{ localStorage.setItem('token', res.data.token) }catch(e){}
+          try{ tokenRef.value = res.data.token }catch(e){}
+          if(res.data.customer) {
+            try{ localStorage.setItem(LOCAL_CUSTOMER_KEY, JSON.stringify(res.data.customer)) }catch(e){}
+            try{
+              const prof = res.data.customer
+              const resolvedName = String(prof.name || prof.fullName || prof.customerName || (prof.customer && (prof.customer.fullName || prof.customer.name)) || '')
+              const resolvedContact = String(prof.contact || prof.whatsapp || prof.phone || (prof.customer && (prof.customer.whatsapp || prof.customer.phone)) || '')
+              customer.value = {
+                name: resolvedName,
+                contact: resolvedContact,
+                address: (prof.addresses && prof.addresses.length && prof.addresses[0]) ? {
+                  formattedAddress: prof.addresses[0].formatted || prof.addresses[0].formattedAddress || '',
+                  number: prof.addresses[0].number || prof.addresses[0].numero || '',
+                  complement: prof.addresses[0].complement || prof.addresses[0].complemento || '',
+                  neighborhood: prof.addresses[0].neighborhood || prof.addresses[0].neigh || '',
+                  reference: prof.addresses[0].reference || prof.addresses[0].ref || '',
+                  observation: prof.addresses[0].observation || prof.addresses[0].observacao || '',
+                  latitude: prof.addresses[0].latitude || prof.addresses[0].lat || null,
+                  longitude: prof.addresses[0].longitude || prof.addresses[0].lon || prof.addresses[0].lng || null,
+                  fullDisplay: prof.addresses[0].fullDisplay || prof.addresses[0].display_name || ''
+                } : (customer.value && customer.value.address) ? { ...customer.value.address } : { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' }
+              }
+            }catch(e){}
+          }
+          try{
+            // refresh profile/addresses in this component immediately so UI updates without reload
+            try{ await fetchProfileAndAddresses() }catch(e){}
+            window.dispatchEvent(new CustomEvent('app:user-logged-in'))
+          }catch(e){}
+        }
+      }catch(err){
+        clientError.value = err?.response?.data?.message || 'Falha ao autenticar. Verifique credenciais.'
+        return
+      }
+    } else {
+      // when no password required ensure name is present
+      if(!customer.value.name){ clientError.value = 'Preencha nome e WhatsApp'; return }
+    }
   }catch(e){ /* ignore */ }
+
   saveCustomerToLocal()
   checkoutStep.value = 'delivery'
 }
@@ -3521,6 +3622,12 @@ try{
 </script>
 
 <style scoped>
+ #mainMenu{padding-bottom:140px;}
+ .h5, h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+}
  .public-hero { background: #222; color: #fff; height: 220px; overflow: hidden; }
 .public-hero h3 { font-weight:700; color:#fff }
 .top-public-nav .nav-actions a, .top-public-nav .nav-actions button { color: #fff; opacity: .95 }
@@ -3556,15 +3663,17 @@ li.list-group-item.selected, .payment-method.selected {
 .hero-image { transition: transform .35s ease }
 .public-hero:hover .hero-image { transform: scale(1.02) }
 
-.product-card { background: #fff; border-radius: 18px; position: relative; padding:16px 0px 16px 16px !important;}
+.product-card { background: #fff; border-radius: 18px; position: relative; padding:12px !important;}
 .product-card-body { flex: 1 1 auto; padding-right: 1rem; min-height:100px; }
 .product-title { font-size: 1.05rem; font-weight: 600; }
 .product-desc { color: #666; font-size:12px; line-height:135%; max-height: 3em; overflow: hidden; text-overflow: ellipsis; }
 .product-price {
+  line-height: 100%;
   font-size: .9rem;
   font-weight: 600;
   color: var(--brand-dark);
 }
+.product-price small{font-size: 0.6rem; line-height: 95%;}
 .product-card-media { width: 110px; flex: 0 0 110px; }
 .product-image { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; }
 .product-image-placeholder { width: 96px; height: 96px; border-radius: 8px; }
@@ -3594,8 +3703,8 @@ li.list-group-item.selected, .payment-method.selected {
 
 @media (max-width: 991px){
   .product-card { border-radius: 8px; }
-  .product-card-media { width: 72px; flex: 0 0 72px; }
-  .product-image { width: 64px; height: 64px; }
+  .product-card-media { width: 110px; flex: 0 0 110px; }
+  .product-image { width: 110px; height: 110px; }
 }
 
 /* Desktop sticky cart bar */
@@ -3964,7 +4073,7 @@ li.list-group-item.selected, .payment-method.selected {
 body { padding-bottom: 110px; }
 
 /* Header / hero customizations */
-.company-logo-wrapper { width:96px; height:96px; background: #fff; border-radius:50%; overflow:hidden; box-shadow: 0 6px 18px rgba(0,0,0,0.14); flex: 0 0 96px }
+.company-logo-wrapper { width:96px; height:96px; background: #fff; border-radius:12px; overflow:hidden; box-shadow: 0 6px 18px rgba(0,0,0,0.14); flex: 0 0 96px }
 .company-logo { width:100%; height:100%; object-fit:cover }
 .company-name { font-size:1.8rem; margin-bottom:0; font-weight:800 }
 .company-address { color: rgba(255,255,255,0.9); margin-bottom:4px }
@@ -3981,7 +4090,7 @@ body { padding-bottom: 110px; }
 @media (max-width: 767px){
   .hero-panel { margin-top: -56px; padding: 14px }
   .hero-panel .company-logo-wrapper { display:flex; width:72px; height:72px; flex: 0 0 72px }
-  .hero-panel .company-name { font-size: 1.4rem }
+  .hero-panel .company-name { font-size: 1.1rem }
   .nav-pills .nav-link { color:#000; font-size:14px; padding-bottom: 14px; position: relative }
   /* animated underline using pseudo-element */
   .nav-pills .nav-link::after { content: ''; position: absolute; left: 12%; right: 12%; height: 3px; bottom: 4px; background: #111; transform: scaleX(0); transform-origin: left center; transition: transform .18s ease; border-radius: 3px }
