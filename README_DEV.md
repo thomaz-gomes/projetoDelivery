@@ -86,3 +86,18 @@ What it does:
 - Starts backend, frontend and the print agent in separate PowerShell windows, exporting `PRINT_AGENT_TOKEN` into each process so they can authenticate automatically.
 
 Important: this is a developer convenience only. For production use a proper secret store and register agent tokens from the backend admin UI.
+
+
+migration
+create env.migration
+
+DATABASE_URL="postgresql://tomgomes:03t01F007TF@72.60.7.28:5432/tomgomes"
+
+
+execute this to clean up all the database
+set -a && . ./.env.migration && set +a && npx prisma migrate reset --schema=prisma/schema.postgres.prisma --force --skip-seed
+
+primeiro migration
+
+set -a && . ./.env.migration && set +a
+npx prisma migrate dev --schema=prisma/schema.postgres.prisma --name preview_from_schema --create-only
