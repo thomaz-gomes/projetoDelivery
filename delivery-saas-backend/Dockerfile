@@ -29,5 +29,7 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-# Keep container stateless: run migrations outside the image or via a one-shot job.
-CMD ["sh", "-lc", "npx prisma migrate deploy --schema=prisma/schema.postgres.prisma 2>/dev/null || true; node src/server.js"]
+# Keep container stateless: by default do not run migrations inside the runtime container.
+# Set RUN_MIGRATIONS=1 (for dev only) to run migrations at container start.
+ENV RUN_MIGRATIONS=0
+CMD ["sh", "-lc", "if [ \"$RUN_MIGRATIONS\" = \"1\" ]; then npx prisma migrate deploy --schema=prisma/schema.postgres.prisma 2>/dev/null || true; fi; node src/server.js"]
