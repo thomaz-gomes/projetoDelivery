@@ -70,11 +70,18 @@ async function waitForDb(retries = 120, delay = 3000) {
       }
     }
 
-    console.log('Running prisma generate...')
-    execSync('npx prisma generate', { stdio: 'inherit' })
+  // Choose Prisma schema file depending on database type.
+  // Use `prisma/schema.postgres.prisma` when running against Postgres (DB_* envs present
+  // or DATABASE_URL starts with postgres), otherwise default to schema.prisma (sqlite).
+  const dbUrl = process.env.DATABASE_URL || ''
+  const isPostgres = dbUrl.startsWith('postgres:') || dbUrl.startsWith('postgresql:') || !!(process.env.DB_HOST || process.env.POSTGRES_HOST || process.env.PGHOST)
+  const schemaArg = isPostgres ? '--schema=prisma/schema.postgres.prisma' : ''
 
-    console.log('Running prisma migrate deploy...')
-    execSync('npx prisma migrate deploy', { stdio: 'inherit' })
+  console.log('Running prisma generate...', schemaArg)
+  execSync((`npx prisma generate ${schemaArg}`).trim(), { stdio: 'inherit' })
+
+  console.log('Running prisma migrate deploy...', schemaArg)
+  execSync((`npx prisma migrate deploy ${schemaArg}`).trim(), { stdio: 'inherit' })
 
     console.log('Migrations applied successfully')
     await prisma.$disconnect()
