@@ -65,7 +65,8 @@
 /* Category/option rows used on MenuOptions */
 .category-box-row { background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 12px; margin-bottom: 8px; display:flex; align-items:center }
 .option-row { background: #fff;  padding: 12px; margin-bottom: 8px; }
-.option-row .btn { margin-left: 8px }
+.option-row .btn { margin-left: 8px; font-size:20px; 
+    padding: 0px 10px; }
 
 /* smaller adjustments for mobile */
 @media (max-width: 575.98px) {

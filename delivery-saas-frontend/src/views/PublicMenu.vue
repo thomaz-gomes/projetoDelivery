@@ -48,17 +48,20 @@
             <img :src="assetUrl(menu?.logo || company?.logo || 'default-logo.svg')" alt="logo" class="company-logo" />
           </div>
           <div>
-            <h3 class="mb-1 company-name">{{ company?.store?.name || company?.name || 'Cardápio' }}</h3>
-            <div class="small company-address text-muted">{{ company?.pickupInfo || company?.address || '' }}</div>
-            <div class="small"><a href="#" class="text-muted" @click.prevent="openInfoModal">Mais informações</a></div>
-            <div class="d-flex align-items-start gap-2">
+            <h3 class="company-name">{{ displayName }}</h3>
+            <div class="small company-address text-muted">{{ displayPickup || '' }}</div>
+            <div class="small"><a href="#" class="text-muted more-information" @click.prevent="openInfoModal">Mais informações</a></div>
+              <div class="d-flex align-items-center gap-2">
 
-            <div class="store-closed-panel">
-              <span v-if="isOpen" class="badge bg-primary">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</span>
-              <span v-else class="badge bg-secondary">Fechado no momento{{ nextOpenText ? (', ' + nextOpenText) : '' }}</span>
-            </div>
+                <div class="store-closed-panel">
+                  <span v-if="isOpen" class="badge bg-primary">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</span>
+                  <span v-else class="badge bg-secondary">Fechado no momento{{ nextOpenText ? (', ' + nextOpenText) : '' }}</span>
+                </div>
             
-          <span class="badge bg-secondary">Entrega e Retirada</span>
+          <div>
+            <span v-if="(menu?.allowDelivery ?? true)" class="badge bg-secondary me-1">Entrega</span>
+            <span v-if="(menu?.allowPickup ?? true)" class="badge bg-secondary">Retirada</span>
+          </div>
 
         </div>
           </div>
@@ -110,8 +113,8 @@
 
       <div v-else>
       <!-- unified category pills (mobile + desktop) -->
-      <div v-if="categories.length" class="mt-3">
-        <ul ref="navRef" class="nav nav-pills overflow-auto" :class="{ stuck: isNavSticky }" style="gap:8px">
+      <div v-if="categories.length" class="mb-3">
+        <ul ref="navRef" class="nav nav-pills overflow-auto" :class="{ stuck: isNavSticky }" style="gap:2px">
           <li class="nav-item" v-for="(cat, idx) in categories" :key="cat.id">
             <a :href="`#cat-${cat.id}`" class="nav-link" :class="{ active: activeCategoryId === (cat.id) }" @click.prevent="selectCategory(cat.id)">{{ cat.name }}</a>
           </li>
@@ -146,6 +149,7 @@
                       </div>
                     </div>
                     <div class="product-card-media text-end">
+                      <div class="add-to-card-plus"><i class="bi bi-cart-plus"></i></div>
                       <div>
                         <img v-if="p.image" :src="assetUrl(p.image)" class="product-image" />
                         <div v-else class="bg-light product-image-placeholder"></div>
@@ -184,7 +188,7 @@
         <!-- Product options modal -->
         <div v-if="modalOpen" class="product-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:11000">
           <div class="modal-content bg-white rounded shadow p-0">
-            <div class="modal-body p-4" ref="modalContentRef" @pointerdown="onPointerDown" style="overflow:auto;max-height:100vh;">
+            <div class="modal-body p-4" ref="modalContentRef" @pointerdown="onPointerDown" style="overflow:auto;max-height:100vh;padding-bottom:90px !important;">
           <div class="row">
               <!-- product image hero inside modal -->
               <div class="col-12 col-sm-6">
@@ -284,11 +288,11 @@
               <div class="d-flex justify-content-between align-items-center modal-actions-footer gap-4 w-100">
                 <div class="d-flex align-items-center gap-2 qty-control">
                   <button class="btn btn-outline-secondary btn-qty" @pointerdown.prevent="startModalAutoChange(-1, $event)" @pointerup.prevent="stopModalAutoChange($event)" @pointerleave.prevent="stopModalAutoChange($event)">-</button>
-                  <input type="number" v-model.number="modalQty" class="form-control text-center qty-input" style="width:80px" min="1" @blur="modalQty = Math.max(1, Math.floor(Number(modalQty) || 1))" />
+                  <input type="number" v-model.number="modalQty" class="form-control text-center qty-input" style="width:60px" min="1" @blur="modalQty = Math.max(1, Math.floor(Number(modalQty) || 1))" />
                   <button class="btn btn-outline-secondary btn-qty" @pointerdown.prevent="startModalAutoChange(1, $event)" @pointerup.prevent="stopModalAutoChange($event)" @pointerleave.prevent="stopModalAutoChange($event)">+</button>
                 </div>
-                <div>
-                  <button class="add-btn btn-primary" @click="confirmAddFromModal" :style="{ '--accent': company?.primaryColor || '#0d6efd' }" aria-label="Adicionar ao carrinho">
+                <div class="w-100">
+                  <button class="add-btn btn-primary w-100" @click="confirmAddFromModal" :style="{ '--accent': company?.primaryColor || '#0d6efd' }" aria-label="Adicionar ao carrinho">
                     <span class="add-label">Adicionar</span>
                     <span class="add-price">{{ formatCurrency(modalTotal) }}</span>
                   </button>
@@ -925,10 +929,16 @@ const displayName = computed(() => {
 });
 
 const displayPickup = computed(() => {
-  // Prefer the store-level address from settings/stores. Fallback to company.address if missing.
-  const storeAddr = (company.value?.store?.address || '').toString().trim();
-  const companyAddr = (company.value?.address || '').toString().trim();
-  return storeAddr || companyAddr || '';
+  // Prefer menu-level contact/address when available, then store-level, then company-level.
+  try{
+    const menuAddr = (menu.value && (menu.value.address || menu.value.phone || menu.value.whatsapp)) ? ((menu.value.address || '') + (menu.value.phone ? (' — ' + menu.value.phone) : '') + (menu.value.whatsapp ? (' — ' + menu.value.whatsapp) : '')) : ''
+    if(menuAddr && String(menuAddr).trim()) return String(menuAddr).trim()
+    const storeAddr = (company.value?.store?.address || '').toString().trim();
+    const companyAddr = (company.value?.address || '').toString().trim();
+    // prefer pickupInfo from printer settings if available
+    const pickup = (company.value && company.value.pickupInfo) ? String(company.value.pickupInfo).trim() : ''
+    return storeAddr || pickup || companyAddr || ''
+  }catch(e){ return '' }
 });
 
 // Helper: produce an effective settings object that prefers menu-level meta
@@ -3135,6 +3145,12 @@ onMounted(async ()=>{
   if(activeCategoryId.value && !categories.value.find(c => c.id === activeCategoryId.value)) activeCategoryId.value = null
   company.value = data.company || null
   menu.value = data.menu || null
+    try{
+      if(menu.value){
+        if(menu.value.allowDelivery === false && menu.value.allowPickup === true) orderType.value = 'PICKUP'
+        else if(menu.value.allowDelivery === true && menu.value.allowPickup === false) orderType.value = 'DELIVERY'
+      }
+    }catch(e){}
     // set page title and social meta tags, prefer store name when available
     try{
       // Prefer the selected menu's name as the document title, then store name, then company name
@@ -3641,6 +3657,7 @@ try{
 .hero-panel { background: transparent; margin-top: -90px; padding: 18px; border-radius: 12px; max-width: 980px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); background: #fff; position: relative; z-index: 1046 }
 .hero-panel .company-name { color: #111; }
 .hero-panel .company-address { color: #666 }
+.hero-panel .more-information{ color: var(--brand-dark) !important;}
 .store-closed-panel { color: #d23a3a; }
 .delivery-pickup-btn { background: #f1fbfd; color: #0d6efd; border: 1px solid rgba(13,110,253,0.12); border-radius: 10px; padding: 8px 12px; font-weight:600 }
 .calc-delivery { background: #f8fafb; border: 1px solid #eef4f6; }
@@ -3674,7 +3691,7 @@ li.list-group-item.selected, .payment-method.selected {
   color: var(--brand-dark);
 }
 .product-price small{font-size: 0.6rem; line-height: 95%;}
-.product-card-media { width: 110px; flex: 0 0 110px; }
+.product-card-media { width: 110px; flex: 0 0 110px; position:relative}
 .product-image { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; }
 .product-image-placeholder { width: 96px; height: 96px; border-radius: 8px; }
 .badge.bg-success[data-v-85b00978] {
@@ -3907,7 +3924,7 @@ li.list-group-item.selected, .payment-method.selected {
   .product-modal .modal-footer { position: fixed;}
 }
 /* numeric input matching qty visuals */
-.qty-input { width:80px; border-radius:8px; padding:6px 10px; font-weight:600; text-align:center; }
+.qty-input { width:60px; border-radius:8px; padding:6px 10px; font-weight:600; text-align:center; }
 /* hide native number spinners */
 .qty-input::-webkit-outer-spin-button, .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0 }
 .qty-input { -moz-appearance: textfield; appearance: textfield }
@@ -4075,8 +4092,8 @@ body { padding-bottom: 110px; }
 /* Header / hero customizations */
 .company-logo-wrapper { width:96px; height:96px; background: #fff; border-radius:12px; overflow:hidden; box-shadow: 0 6px 18px rgba(0,0,0,0.14); flex: 0 0 96px }
 .company-logo { width:100%; height:100%; object-fit:cover }
-.company-name { font-size:1.8rem; margin-bottom:0; font-weight:800 }
-.company-address { color: rgba(255,255,255,0.9); margin-bottom:4px }
+.company-name { font-size:1.6rem; margin-bottom:0; font-weight:800 }
+.company-address { color: rgba(255,255,255,0.9);}
 .btn-light-outline { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.12); }
 .store-closed { background: rgba(255,255,255,0.06); }
 .store-closed .text-danger { color: #ff4d4f !important }
@@ -4091,9 +4108,18 @@ body { padding-bottom: 110px; }
   .hero-panel { margin-top: -56px; padding: 14px }
   .hero-panel .company-logo-wrapper { display:flex; width:72px; height:72px; flex: 0 0 72px }
   .hero-panel .company-name { font-size: 1.1rem }
-  .nav-pills .nav-link { color:#000; font-size:14px; padding-bottom: 14px; position: relative }
+  .nav-pills .nav-link { color:#000; font-size:12px; padding-bottom: 8px; position: relative }
   /* animated underline using pseudo-element */
-  .nav-pills .nav-link::after { content: ''; position: absolute; left: 12%; right: 12%; height: 3px; bottom: 4px; background: #111; transform: scaleX(0); transform-origin: left center; transition: transform .18s ease; border-radius: 3px }
+  .nav-pills .nav-link::after { content: '';
+    position: absolute;
+    left: 15px;
+    right: 20%;
+    height: 3px;
+    bottom: -2px;
+    background: #42721a;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform .18s ease; }
   .nav-pills .nav-link.active { background: transparent; color: #111; font-weight:700; border-radius:0 }
   .nav-pills .nav-link.active::after { transform: scaleX(1) }
 }
@@ -4109,7 +4135,10 @@ body { padding-bottom: 110px; }
 /* Desktop/mobile animated underline and active styles handled by pseudo-element */
 .nav-pills { --nav-underline-offset: 12%; display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; scroll-padding-left: 12px }
 .nav-pills .nav-item { flex: 0 0 auto; scroll-snap-align: start }
-.nav-pills .nav-link { position: relative; white-space: nowrap }
+.nav-pills .nav-link { position: relative; white-space: nowrap; 
+    color: #000 !important;
+    font-size: 14px;
+    font-weight: 600; }
 .nav-pills .nav-link::after { content: ''; position: absolute; left: 12%; right: 12%; height: 3px; bottom: -2px; background: #111; transform: scaleX(0); transform-origin: left center; transition: transform .18s ease; border-radius: 3px }
 .nav-pills .nav-link.active { background: transparent; color: #111; font-weight:700; border-radius:0 }
 .nav-pills .nav-link.active::after { transform: scaleX(1) }
@@ -4140,7 +4169,10 @@ body { padding-bottom: 110px; }
   height: 1.4em !important;
   border: 2px solid #CCC !important;
 }
-
+.form-check-input:checked {
+    background-color: var(--brand) !important;
+    border-color: var(--brand) !important;
+}
 /* migration toast (small unobtrusive notice) */
 .migration-toast {
   position: fixed;
@@ -4270,5 +4302,41 @@ body { padding-bottom: 110px; }
     font-size: 1.1rem;
     border-radius: 12px;
   }
+  .add-to-card-plus {
+    background-color: var(--brand);
+    color: #FFF;
+    display: flex;
+    text-align: center;
+    width: 0px;
+    height: 0px;
+    justify-content: center;
+    align-items: center;
+    border-radius: 150px;
+    position: absolute;
+    left: 23px;
+    transition: all 0.3s ease-in-out;
+    opacity: 0;
+}
+.product-card:hover{
+    cursor:pointer;
+  }
+.product-card:hover .add-to-card-plus {
+    animation: bounce 2s infinite;
+    opacity: .9;    
+    width: 50px;
+    height: 50px;
+  }
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-15px);
+  }
+  60% {
+    transform: translateY(-8px);
+  }
+}
+
 </style>
 

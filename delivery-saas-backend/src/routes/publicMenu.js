@@ -362,9 +362,10 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
     }))
     // If a specific menuId was requested, try to load menu metadata (logo/banner) from DB and optional settings file
     try {
+      let m = null
       if (menuId) {
-        const m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, name: true, description: true, logoUrl: true } })
-        if (m) menuObj = { id: m.id, name: m.name, description: m.description, logo: m.logoUrl || null }
+        m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, name: true, description: true, logoUrl: true, address: true, phone: true, whatsapp: true, timezone: true, weeklySchedule: true, open24Hours: true, allowDelivery: true, allowPickup: true } })
+        if (m) menuObj = { id: m.id, name: m.name, description: m.description, logo: m.logoUrl || null, address: m.address || null, phone: m.phone || null, whatsapp: m.whatsapp || null, timezone: m.timezone || null, weeklySchedule: m.weeklySchedule || null, open24Hours: !!m.open24Hours, allowDelivery: m.allowDelivery !== undefined ? !!m.allowDelivery : true, allowPickup: m.allowPickup !== undefined ? !!m.allowPickup : true }
       }
       // load menu-level settings from the store's settings file (settings/stores/<storeId>/settings.json)
       if (menuObj && menuObj.id) {
@@ -401,6 +402,19 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
               break
             }
           }
+          // prefer DB-stored menu fields when present (DB should take precedence over settings file)
+          try{
+            if (m) {
+              if (m.address) menuObj.address = m.address
+              if (m.phone) menuObj.phone = m.phone
+              if (m.whatsapp) menuObj.whatsapp = m.whatsapp
+              if (m.timezone) company.timezone = m.timezone
+              if (m.weeklySchedule) company.weeklySchedule = m.weeklySchedule
+              if (typeof m.open24Hours !== 'undefined') company.alwaysOpen = !!m.open24Hours
+              if (typeof m.allowDelivery !== 'undefined') menuObj.allowDelivery = !!m.allowDelivery
+              if (typeof m.allowPickup !== 'undefined') menuObj.allowPickup = !!m.allowPickup
+            }
+          }catch(e){}
         } catch (e) { /* ignore */ }
       }
     } catch (e) {

@@ -261,7 +261,14 @@ body {
 .address-edit-icon i {
   font-size: 1.05rem;
 }
-
+.bg-primary {
+  background-color: var(--brand) !important;
+}
+.btn-qty:hover{
+  background-color: var(--brand-lightest) !important;
+  border-color: var(--brand-dark) !important;
+  color: var(--brand-dark) !important;
+}
 /*BUTTONS*/
 .btn-primary {
   background-color: var(--brand) !important;
@@ -285,4 +292,19 @@ body {
 .btn-outline-secondary {
   color: var(--brand-dark) !important;
   border-color: var(--brand-dark) !important;
+}
+.btn:hover .btn-outline-secondary{
+  background-color: var(--brand-lightest) !important;
+  border-color: var(--brand-dark) !important;
+  color: var(--brand-dark) !important;
+}
+.btn-check:checked+.btn, .btn.active, .btn.show, .btn:first-child:active, :not(.btn-check)+.btn:active{
+  background-color: var(--brand-dark) !important;
+  border-color: var(--brand-dark) !important;
+  color: #fff !important; 
+}
+.btn:focus-visible {
+    background-color: var(--brand-dark) !important;
+  border-color: var(--brand-dark) !important;
+  color: #fff !important; 
 }

@@ -23,7 +23,7 @@ router.get('/menus', async (req, res) => {
 // POST /menu/menus - create a new menu (optionally link to a store)
 router.post('/menus', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
-  const { name, description = null, storeId = null, logoUrl = null, position = 0, isActive = true, slug = null } = req.body || {}
+  const { name, description = null, storeId = null, logoUrl = null, position = 0, isActive = true, slug = null, address = null, phone = null, whatsapp = null, timezone = null, weeklySchedule = null, open24Hours = false, allowDelivery = true, allowPickup = true } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
   // if storeId is provided, ensure it belongs to the same company
   if (storeId) {
@@ -46,7 +46,7 @@ router.post('/menus', requireRole('ADMIN'), async (req, res) => {
     return res.status(status).json({ message: e?.message || 'Limite de cardápios atingido para seu plano' })
   }
 
-  const created = await prisma.menu.create({ data: { name, description, storeId, logoUrl, position: Number(position || 0), isActive: Boolean(isActive), slug: normalized } })
+  const created = await prisma.menu.create({ data: { name, description, storeId, logoUrl, position: Number(position || 0), isActive: Boolean(isActive), slug: normalized, address: address || null, phone: phone || null, whatsapp: whatsapp || null, timezone: timezone || null, weeklySchedule: weeklySchedule || null, open24Hours: !!open24Hours, allowDelivery: !!allowDelivery, allowPickup: !!allowPickup } })
   res.status(201).json(created)
 })
 
@@ -69,7 +69,7 @@ router.patch('/menus/:id', requireRole('ADMIN'), async (req, res) => {
   const existing = await prisma.menu.findUnique({ where: { id }, include: { store: true } })
   if (!existing) return res.status(404).json({ message: 'Menu não encontrado' })
   if (existing.store && existing.store.companyId !== companyId) return res.status(404).json({ message: 'Menu não encontrado' })
-  const { name, description, storeId, logoUrl, isActive, position, slug = undefined } = req.body || {}
+  const { name, description, storeId, logoUrl, isActive, position, slug = undefined, address, phone, whatsapp, timezone, weeklySchedule, open24Hours, allowDelivery, allowPickup } = req.body || {}
   if (storeId) {
     const st = await prisma.store.findUnique({ where: { id: storeId } })
     if (!st || st.companyId !== companyId) return res.status(400).json({ message: 'Loja inválida' })
@@ -88,7 +88,7 @@ router.patch('/menus/:id', requireRole('ADMIN'), async (req, res) => {
     }
   }
 
-  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue } })
+  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule, open24Hours: open24Hours !== undefined ? !!open24Hours : existing.open24Hours, allowDelivery: allowDelivery !== undefined ? !!allowDelivery : existing.allowDelivery, allowPickup: allowPickup !== undefined ? !!allowPickup : existing.allowPickup } })
   res.json(updated)
 })
 

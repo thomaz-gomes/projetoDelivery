@@ -1259,5 +1259,192 @@
     "printerType": "EPSON",
     "paperWidth": 48,
     "includeFullOrder": true
+  },
+  {
+    "id": "1768220336071-997846",
+    "createdAt": 1768220336071,
+    "order": {
+      "id": "a0961553-9434-4a7d-9635-8cf7f2506614",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": "Av tordesilha, teste comp, Bairro Demo, ref: teste ref, obs: teste bos",
+      "latitude": null,
+      "longitude": null,
+      "total": "197.5",
+      "deliveryNeighborhood": "Bairro Demo",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "6.5",
+      "payload": {
+        "publicOrder": true,
+        "payment": {
+          "methodCode": "Crédito",
+          "method": "Crédito",
+          "amount": 197.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "payment": {
+            "methodCode": "Crédito",
+            "method": "Crédito",
+            "amount": 197.5,
+            "changeFor": null,
+            "raw": null
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Bairro Demo",
+          "items": [
+            {
+              "productId": "e23836da-5300-4680-ba4b-2ecc2124b2fa",
+              "name": "Item 2",
+              "quantity": 1,
+              "price": 25,
+              "notes": null,
+              "options": []
+            },
+            {
+              "productId": "36ab13de-7019-4d54-83ec-3c29dfdbb473",
+              "name": "Item 6",
+              "quantity": 2,
+              "price": 50,
+              "notes": null,
+              "options": []
+            },
+            {
+              "productId": "6cb8ed82-1bad-4556-ba41-f8581167f128",
+              "name": "Item 10",
+              "quantity": 3,
+              "price": 0,
+              "notes": null,
+              "options": []
+            },
+            {
+              "productId": "8ebdf212-086a-458e-82d3-d8d6552fc88f",
+              "name": "Item 3",
+              "quantity": 1,
+              "price": 44,
+              "notes": null,
+              "options": []
+            },
+            {
+              "productId": "77de1c6f-5468-46b3-aa80-20ae711b413b",
+              "name": "Teste 4",
+              "quantity": 1,
+              "price": 22,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "address": {
+            "formattedAddress": "Av tordesilha",
+            "streetName": null,
+            "streetNumber": "243",
+            "complement": "teste comp",
+            "neighborhood": "Bairro Demo",
+            "reference": "teste ref",
+            "observation": "teste bos",
+            "postalCode": null,
+            "city": null,
+            "state": null,
+            "coordinates": null
+          },
+          "store": {
+            "id": "8433873c-5512-47aa-8847-c2f7282d9788",
+            "name": "Minha Loja de Testes - Loja 1",
+            "slug": "minha-loja-de-testes-store"
+          }
+        },
+        "computedTotal": 197.5,
+        "total": 197.5,
+        "appliedCashback": 0,
+        "delivery": {
+          "deliveryAddress": {
+            "formattedAddress": "Av tordesilha",
+            "streetName": null,
+            "streetNumber": "243",
+            "complement": "teste comp",
+            "neighborhood": "Bairro Demo",
+            "reference": "teste ref",
+            "observation": "teste bos",
+            "city": null,
+            "state": null,
+            "postalCode": null,
+            "country": "BR",
+            "latitude": null,
+            "longitude": null
+          }
+        }
+      },
+      "createdAt": "2026-01-12T12:18:55.623Z",
+      "updatedAt": "2026-01-12T12:18:55.623Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "81456b7c-03bc-455b-86d2-5bfcd7604015",
+          "orderId": "a0961553-9434-4a7d-9635-8cf7f2506614",
+          "name": "Item 2",
+          "quantity": 1,
+          "price": "25",
+          "notes": null,
+          "options": []
+        },
+        {
+          "id": "b6c264cf-dc25-4f6e-8a98-f66fe6dabf66",
+          "orderId": "a0961553-9434-4a7d-9635-8cf7f2506614",
+          "name": "Item 6",
+          "quantity": 2,
+          "price": "50",
+          "notes": null,
+          "options": []
+        },
+        {
+          "id": "176dcca3-2338-45ba-b6e4-93780bb62792",
+          "orderId": "a0961553-9434-4a7d-9635-8cf7f2506614",
+          "name": "Item 10",
+          "quantity": 3,
+          "price": "0",
+          "notes": null,
+          "options": []
+        },
+        {
+          "id": "a4692e5a-2813-4579-a80a-85c21eddcf5f",
+          "orderId": "a0961553-9434-4a7d-9635-8cf7f2506614",
+          "name": "Item 3",
+          "quantity": 1,
+          "price": "44",
+          "notes": null,
+          "options": []
+        },
+        {
+          "id": "20125da2-1f15-42cb-99f5-85fd131784ec",
+          "orderId": "a0961553-9434-4a7d-9635-8cf7f2506614",
+          "name": "Teste 4",
+          "quantity": 1,
+          "price": "22",
+          "notes": null,
+          "options": []
+        }
+      ]
+    },
+    "text": "#PEDIDO - Cliente: Thomaz\nEndereço: Av tordesilha, teste comp, Bairro Demo, ref: teste ref, obs: teste bos\nTelefone: 73991429676\n------------------------------\n 1x Item 2                    R$ 25.00\\n 2x Item 6                    R$ 50.00\\n 3x Item 10                   R$  0.00\\n 1x Item 3                    R$ 44.00\\n 1x Teste 4                   R$ 22.00\n------------------------------\nSub-total = R$ 191.00\n\nTOTAL a cobrar: R$ 197.50\nPagamento: Crédito\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48,
+    "includeFullOrder": true
   }
 ]
