@@ -6,18 +6,17 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon --ignore prisma/dev.db --ignore tmp --ignore logs --ignore dev-print-endpoint --ignore .print-agent-token --ignore .print-agent-company src/server.js",
-    "dev:local": "node scripts/run-dev-local.mjs",
+    "dev:local": "npx prisma generate && npx prisma db push && npm run dev",
     "prisma:generate:postgres": "prisma generate --schema=prisma/schema.postgres.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.postgres.prisma",
     "start": "node src/server.js",
-    "start:prod": "prisma generate --schema=prisma/schema.postgres.prisma && prisma migrate deploy --schema=prisma/schema.postgres.prisma && node src/server.js",
+    "start:prod": "npx prisma generate --schema=prisma/schema.postgres.prisma && npx prisma migrate deploy --schema=prisma/schema.postgres.prisma && node src/server.js",
     "prisma:generate": "prisma generate",
     "migrate": "prisma migrate dev --name init",
     "db:seed": "node src/seed.js",
     "seed:manual": "node src/seed.js",
-    "db:seed:custom": "node src/seed-custom.js",
     "db:seed:large": "node src/seed-large.js",
-    "db:seed:full": "prisma generate && prisma db push && node src/seed.js && node src/seed-large.js",
+    "db:seed:full": "npx prisma generate && npx prisma db push && node src/seed.js && node src/seed-large.js",
     "migrate:sqlite-to-postgres": "bash scripts/migrate_sqlite_to_postgres.sh",
     "worker:ifood": "node src/workers/ifoodPoller.js",
     "test:unit": "node --test tests/affiliates.helpers.test.mjs"
@@ -45,16 +44,13 @@
     "node-thermal-printer": "^4.5.0",
     "pdfkit": "^0.13.0",
     "qrcode": "^1.5.4",
-    "selfsigned": "^5.4.0",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.1",
     "xlsx": "^0.18.5",
     "zod": "^4.1.12"
   },
   "dependenciesMeta": {
-    "uuid": {
-      "optional": true
-    }
+    "uuid": { "optional": true }
   },
   "optionalDependencies": {
     "uuid": "^9.0.0"
@@ -62,6 +58,6 @@
   "devDependencies": {
     "ngrok": "^5.0.0-beta.2",
     "nodemon": "^3.1.10",
-    "prisma": "^6.19.0"
+      "prisma": "^6.19.0"
   }
 }
