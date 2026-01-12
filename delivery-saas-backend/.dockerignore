@@ -1,0 +1,10 @@
+# Ignore local env files and sensitive items from image builds
+.env
+.env.*
+node_modules
+npm-debug.log
+.DS_Store
+coverage
+dist
+.vscode
+.idea

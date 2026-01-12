@@ -23,11 +23,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/projetodelivery
+  - DATABASE_URL=postgres://postgres:postgres@db:5432/projetodelivery
       - JWT_SECRET=dev-jwt-secret
       - DISABLE_SSL=1
       - FRONTEND_ORIGIN=http://localhost:5173
       - NODE_ENV=development
+  # enable running migrations inside the dev container at startup
+  - RUN_MIGRATIONS=1
     depends_on:
       - db
 
