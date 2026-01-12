@@ -7,6 +7,10 @@ RUN npm ci --silent
 
 # Copy source and generate Prisma client (for both sqlite and postgres schemas if present)
 COPY . .
+# Ensure migrations are copied explicitly (avoid cases where changes were added after a previous build)
+# This guarantees `/app/prisma/migrations` exists in the image even if .dockerignore or build context
+# behaved unexpectedly. The build context already includes the repo root, so this is idempotent.
+COPY prisma/migrations ./prisma/migrations
 # Generate client for default schema (sqlite) if present
 RUN if [ -f prisma/schema.prisma ]; then npx prisma generate --schema=prisma/schema.prisma; fi
 # Also generate client for Postgres schema (used in production) if present
