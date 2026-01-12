@@ -56,7 +56,13 @@ async function waitForDb(retries = 120, delay = 3000) {
         const lock = fs.readFileSync(lockFile, 'utf8')
         const providerMatch = lock.match(/provider\s*=\s*"([^"]+)"/)
         if (providerMatch && providerMatch[1] !== 'postgresql') {
-          console.log(`Detected migration_lock provider=${providerMatch[1]} != postgresql. Removing old migrations and lock file for fresh migration.`)
+          // Be conservative in production: do not auto-remove migrations there.
+          if ((process.env.NODE_ENV || '').toLowerCase() === 'production') {
+            console.error(`Detected migration_lock provider=${providerMatch[1]} != postgresql while in production. Aborting automated cleanup to avoid data loss. Please inspect prisma/migration_lock and migrations directory manually.`)
+            process.exit(1)
+          }
+
+          console.log(`Detected migration_lock provider=${providerMatch[1]} != postgresql. Removing old migrations and lock file for fresh migration (non-production).`)
           const migrationsDir = path.join(process.cwd(), 'prisma', 'migrations')
           if (fs.existsSync(migrationsDir)) {
             fs.rmSync(migrationsDir, { recursive: true, force: true })
