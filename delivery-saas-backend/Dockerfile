@@ -30,6 +30,10 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Keep container stateless: by default do not run migrations inside the runtime container.
-# Set RUN_MIGRATIONS=1 (for dev only) to run migrations at container start.
-ENV RUN_MIGRATIONS=0
-CMD ["sh", "-lc", "if [ \"$RUN_MIGRATIONS\" = \"1\" ]; then npx prisma migrate deploy --schema=prisma/schema.postgres.prisma 2>/dev/null || true; fi; node src/server.js"]
+# Set RUN_MIGRATIONS=1 to run the included wait-and-migrate script at container start.
+ENV RUN_MIGRATIONS=1
+# When RUN_MIGRATIONS=1 use the `wait-for-db-and-migrate.js` script which waits for the
+# database to become ready and then runs `prisma migrate deploy` (handles provider changes
+# and migration locks). This avoids race conditions where Prisma tries to deploy while
+# Postgres is still initializing.
+CMD ["sh", "-lc", "if [ \"$RUN_MIGRATIONS\" = \"1\" ]; then node scripts/wait-for-db-and-migrate.js; fi; node src/server.js"]
