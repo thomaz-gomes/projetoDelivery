@@ -96,6 +96,17 @@ command run project
 Aqui está o passo a passo de como você deve fazer:
 
 1. Alterar o Schema
+
+precisa ter um arquivo .env.migration
+
+
+DATABASE_URL="postgresql://tomgomes:03t01F007TF@72.60.7.28:5432/tomgomes"
+DB_HOST=delivery_db
+DB_USER=tomgomes
+DB_NAME=tomgomes
+DB_PORT=5432
+ 
+ 
 Abra o arquivo prisma/schema.postgres.prisma e adicione o novo campo ao modelo desejado.
 
 Code snippet
