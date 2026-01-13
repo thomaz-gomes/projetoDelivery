@@ -12,7 +12,7 @@
     "start": "node src/server.js",
     "start:prod": "npx prisma generate --schema=prisma/schema.postgres.prisma && npx prisma migrate deploy --schema=prisma/schema.postgres.prisma && node src/server.js",
     "prisma:generate": "sh -c \"set -a && [ -f ./.env.migration ] && . ./.env.migration || true && set +a && prisma generate --schema=prisma/schema.postgres.prisma\"",
-    "migrate": "prisma migrate dev --name init",
+    "migrate": "dotenv -e .env.migration -- prisma migrate dev --name init --schema=prisma/schema.postgres.prisma",
     "db:seed": "sh -c \"set -a && [ -f ./.env.migration ] && . ./.env.migration || true && set +a && node src/seed.js\"",
     "seed:manual": "node src/seed.js",
     "db:seed:large": "sh -c \"set -a && [ -f ./.env.migration ] && . ./.env.migration || true && set +a && node src/seed-large.js\"",
@@ -50,14 +50,17 @@
     "zod": "^4.1.12"
   },
   "dependenciesMeta": {
-    "uuid": { "optional": true }
+    "uuid": {
+      "optional": true
+    }
   },
   "optionalDependencies": {
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "ngrok": "^5.0.0-beta.2",
     "nodemon": "^3.1.10",
-      "prisma": "^6.19.0"
+    "prisma": "^6.19.0"
   }
 }
