@@ -8344,3 +8344,13 @@ Require stack:
 - D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
 [2026-02-07T12:01:38.347Z] Printed via system fallback (win32)
 [2026-02-07T12:01:38.349Z] Skipping duplicate print for order 6ada18fb-c8e3-4bad-8ff4-0041d5200728
+[2026-02-07T15:34:11.885Z] Printing order 74f7f0f4-3d3c-49fe-8349-d6bbc3350a53 - 1 copies - text length 745
+[2026-02-07T15:34:11.887Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T15:34:13.012Z] Printed via system fallback (win32)

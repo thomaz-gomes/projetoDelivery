@@ -1,0 +1,90 @@
+# Docker Compose - Produção VPS
+# Uso: docker compose -f deploy/docker-compose.production.yml up -d
+# Requer: arquivo .env na pasta deploy/ (copie de .env.example)
+
+services:
+  delivery_db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    # Sem porta exposta - acessível apenas pela rede interna Docker
+
+  migrate:
+    build:
+      context: ../delivery-saas-backend
+      dockerfile: Dockerfile
+    command: >
+      sh -c "npx prisma migrate deploy --schema=prisma/schema.postgres.prisma"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@delivery_db:5432/${POSTGRES_DB}
+    depends_on:
+      delivery_db:
+        condition: service_started
+    restart: "no"
+
+  backend:
+    build:
+      context: ../delivery-saas-backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@delivery_db:5432/${POSTGRES_DB}
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET}
+      PUBLIC_FRONTEND_URL: ${PUBLIC_FRONTEND_URL}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGIN}
+      DISABLE_SSL: "1"
+      # iFood
+      IFOOD_CLIENT_ID: ${IFOOD_CLIENT_ID:-}
+      IFOOD_CLIENT_SECRET: ${IFOOD_CLIENT_SECRET:-}
+      IFOOD_MERCHANT_ID: ${IFOOD_MERCHANT_ID:-}
+      IFOOD_WEBHOOK_SECRET: ${IFOOD_WEBHOOK_SECRET:-}
+      IFOOD_BASE_URL: ${IFOOD_BASE_URL:-https://merchant-api.ifood.com.br}
+      IFOOD_AUTH_BASE: ${IFOOD_AUTH_BASE:-https://merchant-api.ifood.com.br/authentication/v1.0}
+      IFOOD_POLL_INTERVAL_MS: ${IFOOD_POLL_INTERVAL_MS:-30000}
+      IFOOD_POLL_MAX_CONCURRENCY: ${IFOOD_POLL_MAX_CONCURRENCY:-3}
+      # WhatsApp / Evolution API
+      EVOLUTION_API_BASE_URL: ${EVOLUTION_API_BASE_URL:-}
+      EVOLUTION_API_API_KEY: ${EVOLUTION_API_API_KEY:-}
+      # AI Parser
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      USE_AI_PARSER: ${USE_AI_PARSER:-false}
+    volumes:
+      - backend_uploads:/app/public/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ../delivery-saas-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db_data:
+    driver: local
+  backend_uploads:
+    driver: local
