@@ -2,6 +2,7 @@ import express from 'express'
 import path from 'path'
 import fs from 'fs'
 import { prisma } from '../prisma.js'
+import { enrichOrderForAgent } from '../enrichOrderForAgent.js'
 
 const router = express.Router()
 
@@ -185,6 +186,14 @@ router.post('/', async (req, res) => {
     const explicitStoreId = payload.storeId || (payload.order && payload.order.storeId) || null;
     const explicitStoreIds = Array.isArray(payload.storeIds) && payload.storeIds.length ? payload.storeIds : (Array.isArray(payload.order && payload.order.storeIds) ? payload.order.storeIds : null);
     const storeIdsForPrint = explicitStoreIds || (explicitStoreId ? [explicitStoreId] : null);
+
+    // Enrich payload with printer settings (template, copies, printerName, etc.)
+    try {
+      const orderToEnrich = payload.order || payload
+      await enrichOrderForAgent(orderToEnrich)
+      if (payload.order) payload.order = orderToEnrich
+      else Object.assign(payload, orderToEnrich)
+    } catch (e) { /* non-fatal */ }
 
     if (io && storeIdsForPrint && storeIdsForPrint.length) {
       try {

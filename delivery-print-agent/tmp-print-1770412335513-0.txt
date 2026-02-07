@@ -1,0 +1,41 @@
+================================
+Minha Loja
+
+================================
+
+*** PEDIDO #03 ***
+Data: 31/12/2025  Hora: 17:19
+
+
+--------------------------------
+CLIENTE: BALCÃO
+Telefone: 
+Endereco: -
+--------------------------------
+
+QT  Descricao              Valor
+
+1x  coxinha  R$ 5.00
+{{#each item_options}}
+  -- x   R$ 
+
+
+{{/each}}
+
+--------------------------------
+Qtd itens: 1
+Subtotal:      R$ 5.00
+
+
+TOTAL:         R$ 5.00
+--------------------------------
+
+FORMAS DE PAGAMENTO
+
+DINHEIRO   R$ 5.00
+
+
+
+================================
+Obrigado e bom apetite!
+================================

@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { enrichOrderForAgent } from './enrichOrderForAgent.js'
 
 const QUEUE_FILE = path.join(process.cwd(), 'tmp', 'print-queue.json')
 
@@ -76,13 +77,16 @@ async function processForStores(io, storeIds = []) {
           } catch (e) {}
         for (const s of sockets) {
           try {
+            // Enrich order with printer settings before sending to agent
+            let orderPayload = job.order || job
+            try { orderPayload = await enrichOrderForAgent(orderPayload) } catch (e) { /* non-fatal */ }
             // emit 'novo-pedido' and wait for ack if possible
             await new Promise((resolve) => {
               try {
-                s.timeout(10000).emit('novo-pedido', job.order || job, (...args) => { resolve(true) })
+                s.timeout(10000).emit('novo-pedido', orderPayload, (...args) => { resolve(true) })
               } catch (e) {
                 // best-effort emit
-                try { s.emit('novo-pedido', job.order || job); } catch(_){}
+                try { s.emit('novo-pedido', orderPayload); } catch(_){}
                 resolve(false)
               }
             })

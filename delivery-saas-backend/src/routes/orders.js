@@ -27,7 +27,7 @@ ordersRouter.get('/', async (req, res) => {
   const orders = await prisma.order.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: { items: true, rider: true, histories: true, store: true, company: true }
+    include: { items: true, rider: true, histories: true, store: true, company: true, customer: { include: { addresses: true } } }
   });
 
   // compute a daily sequential visual id (displaySimple) per order date
@@ -237,6 +237,65 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
     console.error('Failed to mark order complete', e);
     return res.status(500).json({ message: 'Falha ao marcar pedido como entregue' });
   }
+});
+
+// Admin: edit order details (customer, address, items, payment, notes)
+ordersRouter.patch('/:id', requireRole('ADMIN', 'STORE'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+
+  const order = await prisma.order.findFirst({ where: { id, companyId }, include: { items: true } });
+  if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+
+  const { customerName, customerPhone, notes, address, items, payment } = req.body || {};
+  const data = {};
+  if (customerName !== undefined) data.customerName = customerName;
+  if (customerPhone !== undefined) data.customerPhone = customerPhone;
+  if (address !== undefined) data.address = address;
+
+  // Build payload updates
+  const payload = (order.payload && typeof order.payload === 'object') ? { ...order.payload } : {};
+  let payloadChanged = false;
+  if (notes !== undefined) { payload.notes = notes; payloadChanged = true; }
+  if (payment !== undefined) { payload.payment = { ...(payload.payment || {}), ...payment }; payloadChanged = true; }
+  if (payloadChanged) data.payload = payload;
+
+  // Update items: delete existing and recreate
+  if (Array.isArray(items)) {
+    await prisma.orderItem.deleteMany({ where: { orderId: id } });
+    if (items.length > 0) {
+      await prisma.orderItem.createMany({
+        data: items.map(it => ({
+          orderId: id,
+          name: it.name || '',
+          quantity: Number(it.quantity) || 1,
+          price: Number(it.price) || 0,
+          notes: it.notes || null,
+          options: it.options || null,
+        }))
+      });
+    }
+    // Recalculate total from items
+    let total = items.reduce((s, it) => {
+      const qty = Number(it.quantity) || 1;
+      const price = Number(it.price) || 0;
+      let optsSum = 0;
+      if (Array.isArray(it.options)) {
+        for (const o of it.options) optsSum += (Number(o.price) || 0) * (Number(o.quantity) || 1);
+      }
+      return s + (price * qty) + (optsSum * qty);
+    }, 0);
+    data.total = total;
+  }
+
+  const updated = await prisma.order.update({
+    where: { id },
+    data,
+    include: { items: true, rider: true, histories: true, store: true, company: true, customer: { include: { addresses: true } } }
+  });
+
+  return res.json(updated);
 });
 
 // Admin: patch order status (manual change)

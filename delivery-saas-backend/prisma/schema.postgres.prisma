@@ -350,6 +350,10 @@ model WebhookEvent {
     // Agent token (hashed) used by delivery-print-agent for authentication
     agentTokenHash String?
     agentTokenCreatedAt DateTime?
+    // Receipt customization
+    receiptTemplate String?   // Custom receipt template with {{placeholders}}. Null = use default.
+    copies          Int       @default(1) // Number of copies to print per order
+    printerName     String?   // Actual system printer name (e.g., "EPSON TM-T20II Receipt")
     createdAt  DateTime @default(now())
     updatedAt  DateTime @updatedAt
   }

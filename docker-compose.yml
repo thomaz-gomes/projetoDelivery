@@ -27,11 +27,6 @@ services:
       FRONTEND_ORIGINS: https://deliverywl.com.br
       NODE_ENV: production
       PORT: 3000
-      # QZ Tray signing certs mounted into the container (read-only)
-      QZ_CERT_FILE: /app/secure/qz-cert.pem
-      QZ_PRIVATE_KEY_FILE: /app/secure/qz-private.key
-    volumes:
-      - ./delivery-saas-backend/secure:/app/secure:ro
     depends_on:
       - migrate
     ports:
@@ -45,7 +40,6 @@ services:
       # Allow build-time override of VITE_API_URL via build-arg in CI / deploy
       args:
         - VITE_API_URL
-        - VITE_ENABLE_QZ
     # When running the frontend container locally via docker compose you can
     # provide runtime env values by creating a `.env.production` file and
     # referencing it here. The file should NOT be committed with secrets.

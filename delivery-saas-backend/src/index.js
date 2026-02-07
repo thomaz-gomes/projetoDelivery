@@ -39,7 +39,6 @@ import technicalSheetsRouter from './routes/technicalSheets.js'
 import stockMovementsRouter from './routes/stockMovements.js'
 import agentSetupRouter from './routes/agentSetup.js'
 import agentPrintRouter from './routes/agentPrint.js'
-import qzPrintRouter from './routes/qzPrint.js'
 import qrActionRouter from './routes/qrAction.js'
 import rasterizeRouter from './routes/rasterize.js'
 import printerSettingRouter from './routes/printerSetting.js'
@@ -55,7 +54,6 @@ import { rotateAgentToken } from './agentTokenManager.js'
 import path from 'path';
 import startReportsCleanup from './cleanupReports.js';
 import startForceOpenCleanup from './cleanupForceOpen.js';
-import qzSecurityRouter from './routes/qzSecurity.js'
 import saasRouter from './routes/saas.js'
 import { requireModule } from './modules.js'
 
@@ -189,9 +187,6 @@ app.use('/stock-movements', stockMovementsRouter);
 // Agent setup endpoint: returns socket URL and store IDs for the authenticated user's company
 app.use('/agent-setup', agentSetupRouter);
 app.use('/agent-print', requireModule('printing'), agentPrintRouter);
-app.use('/qz-print', requireModule('printing'), qzPrintRouter);
-// QZ Tray security endpoints: certificate and signing
-app.use('/qz', qzSecurityRouter);
 // SaaS management (plans, modules, subscriptions, invoices)
 app.use('/saas', saasRouter);
 // Simple admin endpoint to view/update printer settings for a company or store

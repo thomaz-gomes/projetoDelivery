@@ -67,8 +67,8 @@ affiliatesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
   const { name, email, whatsapp, commissionRate, couponCode, password } = req.body;
 
-  if (!name || !couponCode) {
-    return res.status(400).json({ message: 'Nome e código do cupom são obrigatórios' });
+  if (!name) {
+    return res.status(400).json({ message: 'Nome é obrigatório' });
   }
 
   if (commissionRate && (commissionRate < 0 || commissionRate > 1)) {
@@ -85,27 +85,29 @@ affiliatesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         passHash = await bcrypt.hash(String(password), 10);
       }
 
-      const affiliate = await tx.affiliate.create({
-        data: {
-          companyId,
-          name,
-          email: email || null,
-          password: passHash,
-          whatsapp: whatsapp || null,
-          commissionRate: commissionRate || 0,
-          couponCode,
-          currentBalance: 0,
-          isActive: true
-        }
-      });
+      // ensure affiliate always has a couponCode in DB (schema requires it)
+      const makeCode = () => `AF${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}`
+      const finalCouponCode = couponCode || makeCode()
 
-      // Create a default coupon associated with this affiliate. Use the affiliate's commissionRate
-      // as the default discount percentage (so a 0.1 commission -> 10% off for customers). This
-      // can be adjusted later via the coupon admin UI.
+      const affiliateData = {
+        companyId,
+        name,
+        email: email || null,
+        password: passHash,
+        whatsapp: whatsapp || null,
+        commissionRate: commissionRate || 0,
+        couponCode: finalCouponCode,
+        currentBalance: 0,
+        isActive: true
+      };
+
+      const affiliate = await tx.affiliate.create({ data: affiliateData });
+
+      // Create the default coupon associated with this affiliate.
       await tx.coupon.create({
         data: {
           companyId,
-          code: couponCode,
+          code: finalCouponCode,
           description: `Cupom do afiliado ${name}`,
           isPercentage: true,
           value: commissionRate || 0,

@@ -6,6 +6,7 @@ import { prisma } from "../prisma.js";
 import { upsertCustomerFromIfood, normalizeDeliveryAddressFromPayload } from "../services/customers.js";
 import { emitirNovoPedido } from "../index.js"; // envia o pedido ao front via Socket.IO
 import printQueue from '../printQueue.js'
+import { enrichOrderForAgent } from '../enrichOrderForAgent.js'
 
 // Helper: try to process the print queue for the provided storeIds with a
 // small retry/backoff strategy. Returns the final result from processForStores.
@@ -527,6 +528,8 @@ webhooksRouter.post("/ifood", async (req, res) => {
             });
 
             const ACK_TIMEOUT_MS = process.env.PRINT_ACK_TIMEOUT_MS ? Number(process.env.PRINT_ACK_TIMEOUT_MS) : 10000;
+            // Enrich order with printer settings before sending to agent
+            try { await enrichOrderForAgent(saved); } catch (e) { /* non-fatal */ }
             let delivered = false;
             let deliveredInfo = null;
             for (const s of sorted) {

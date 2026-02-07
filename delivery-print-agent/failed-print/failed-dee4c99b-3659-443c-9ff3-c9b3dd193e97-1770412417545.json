@@ -1,0 +1,127 @@
+{
+  "order": {
+    "id": "dee4c99b-3659-443c-9ff3-c9b3dd193e97",
+    "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+    "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+    "externalId": null,
+    "displayId": null,
+    "displaySimple": null,
+    "orderType": "DELIVERY",
+    "status": "EM_PREPARO",
+    "customerName": "Thomaz",
+    "customerPhone": "73991429676",
+    "customerSource": "PUBLIC",
+    "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+    "address": "Av tordesilha",
+    "latitude": null,
+    "longitude": null,
+    "total": "20",
+    "deliveryNeighborhood": "Bairro Demo",
+    "couponCode": null,
+    "couponDiscount": "0",
+    "deliveryFee": "6.5",
+    "payload": {
+      "publicOrder": true,
+      "payment": {
+        "methodCode": "Dinheiro",
+        "method": "Dinheiro",
+        "amount": 20,
+        "changeFor": null,
+        "raw": null
+      },
+      "orderType": "DELIVERY",
+      "rawPayload": {
+        "customer": {
+          "name": "Thomaz",
+          "contact": "73991429676"
+        },
+        "payment": {
+          "methodCode": "Dinheiro",
+          "method": "Dinheiro",
+          "amount": 20,
+          "changeFor": null,
+          "raw": null
+        },
+        "orderType": "DELIVERY",
+        "neighborhood": "Bairro Demo",
+        "items": [
+          {
+            "productId": "3a9a683b-ea5d-4829-84ab-af51694877a7",
+            "name": "Suco Natural 500ml",
+            "quantity": 1,
+            "price": 13.5,
+            "notes": null,
+            "options": [
+              {
+                "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                "name": "Médio",
+                "price": 6
+              }
+            ]
+          }
+        ],
+        "store": {
+          "id": "8433873c-5512-47aa-8847-c2f7282d9788",
+          "name": "Minha Loja de Testes - Loja 1",
+          "slug": "minha-loja-de-testes-store"
+        }
+      },
+      "computedTotal": 20,
+      "total": 20,
+      "appliedCashback": 0,
+      "delivery": {
+        "deliveryAddress": {
+          "formattedAddress": "Av tordesilha",
+          "streetName": null,
+          "streetNumber": "243",
+          "complement": "teste comp",
+          "neighborhood": "Bairro Demo",
+          "reference": "teste ref",
+          "observation": "teste bos",
+          "city": null,
+          "state": null,
+          "postalCode": null,
+          "country": "BR",
+          "latitude": null,
+          "longitude": null
+        }
+      }
+    },
+    "createdAt": "2026-01-08T03:07:17.491Z",
+    "updatedAt": "2026-01-08T03:07:17.491Z",
+    "riderId": null,
+    "items": [
+      {
+        "id": "47fd10c4-0e98-4c7b-bd0e-5ff6c15fba18",
+        "orderId": "dee4c99b-3659-443c-9ff3-c9b3dd193e97",
+        "name": "Suco Natural 500ml",
+        "quantity": 1,
+        "price": "13.5",
+        "notes": null,
+        "options": [
+          {
+            "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+            "name": "Médio",
+            "price": 6
+          }
+        ]
+      }
+    ],
+    "receiptTemplate": null,
+    "copies": 1,
+    "printerName": null,
+    "headerName": "Minha Loja de Testes",
+    "headerCity": "São Paulo",
+    "printerInterface": "printer:EPSON",
+    "printerType": "EPSON",
+    "paperWidth": 48
+  },
+  "opts": {
+    "printerType": "EPSON",
+    "width": 48,
+    "copies": 1,
+    "headerName": "Minha Loja de Testes",
+    "headerCity": "São Paulo"
+  },
+  "error": "all-methods-failed"
+}
