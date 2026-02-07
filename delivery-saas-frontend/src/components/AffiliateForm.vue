@@ -1,6 +1,8 @@
 <template>
-  <div class="affiliate-form">
-    <form @submit.prevent="handleSubmit">
+  <div class="affiliate-form container py-4">
+    <div class="card mx-auto" style="max-width:520px">
+      <div class="card-body">
+        <form @submit.prevent="handleSubmit">
       <div class="form-group">
         <label for="name">Nome do Afiliado *</label>
         <TextInput v-model="form.name" id="name" placeholder="Nome completo do afiliado" required />
@@ -61,15 +63,17 @@
       </div>
 
       <div class="form-actions">
-        <button type="button" @click="$emit('cancel')" class="btn-secondary">
+        <button type="button" @click="$emit('cancel')" class="btn btn-outline-secondary">
           Cancelar
         </button>
-        <button type="submit" :disabled="loading" class="btn-primary">
+        <button type="submit" :disabled="loading" class="btn btn-success">
           <i v-if="loading" class="fas fa-spinner fa-spin"></i>
           {{ loading ? 'Salvando...' : (isEditing ? 'Atualizar' : 'Criar Afiliado') }}
         </button>
       </div>
-    </form>
+      </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -102,8 +106,10 @@ export default {
 
     const isEditing = computed(() => !!props.affiliate)
 
-    const formatPhone = (event) => {
-      form.value.whatsapp = applyPhoneMask(event.target.value)
+    const formatPhone = (val) => {
+      // TextInput emits the new value (string), not the DOM event.
+      const raw = val && val.target ? val.target.value : val
+      form.value.whatsapp = applyPhoneMask(raw)
     }
 
     const validateForm = () => {
@@ -202,13 +208,9 @@ export default {
 </script>
 
 <style scoped>
-.affiliate-form {
-  padding: 20px;
-}
+  .affiliate-form { padding: 20px }
 
-.form-group {
-  margin-bottom: 20px;
-}
+  .form-group { margin-bottom: 12px }
 
 .form-group label {
   display: block;
@@ -217,24 +219,24 @@ export default {
   color: #333;
 }
 
-.form-group input[type="text"],
-.form-group input[type="email"],
-.form-group input[type="tel"],
-.form-group input[type="number"],
-.form-group input[type="password"] {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-  transition: border-color 0.2s;
-}
+  .form-group input[type="text"],
+  .form-group input[type="email"],
+  .form-group input[type="tel"],
+  .form-group input[type="number"],
+  .form-group input[type="password"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e6e6e6;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.15s;
+  }
 
-.form-group input:focus {
-  outline: none;
-  border-color: #3498db;
-  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-}
+  .form-group input:focus {
+    outline: none;
+    border-color: #bcd; /* subtle focus color */
+    box-shadow: none;
+  }
 
 .form-group input[type="checkbox"] {
   margin-right: 8px;
@@ -259,51 +261,10 @@ export default {
   gap: 8px;
 }
 
-.form-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  padding-top: 20px;
-  border-top: 1px solid #eee;
-}
+.form-actions { margin-top: 16px; display:flex; gap:12px; justify-content:flex-end }
 
-.btn-primary,
-.btn-secondary {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-primary {
-  background: #3498db;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #2980b9;
-}
-
-.btn-primary:disabled {
-  background: #bdc3c7;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: #f8f9fa;
-  color: #666;
-  border: 1px solid #ddd;
-}
-
-.btn-secondary:hover {
-  background: #e9ecef;
-  color: #333;
-}
+  /* Let project/global button styles (bootstrap) apply. Keep minimal spacing rules only. */
+  .form-actions .btn { padding: 10px 18px }
 
 /* Responsive */
 @media (max-width: 480px) {

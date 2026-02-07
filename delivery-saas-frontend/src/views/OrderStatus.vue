@@ -284,6 +284,8 @@ async function logoutPublic(){
   needsPhone.value = true
   order.value = null
   phoneInput.value = ''
+  // redirect to public menu main page
+  try { goBack() } catch(e) { /* ignore navigation errors */ }
 }
 </script>
 

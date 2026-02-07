@@ -22,7 +22,6 @@
               <option v-for="p in printers" :key="p" :value="p">{{ p }}</option>
             </SelectInput>
             <div class="mt-2 small text-muted">Se a lista estiver vazia, verifique se o agente de impressão está executando na loja.</div>
-            <div v-if="ENABLE_QZ" class="mt-2 small text-success">Impressão por QZ Tray ativada — não é necessário agente local.</div>
             <div class="mt-2">
               <div v-if="discovering" class="small text-muted">Procurando impressoras... ⏳</div>
               <div v-else-if="discoverError" class="small text-danger">{{ discoverError }}</div>
@@ -31,11 +30,10 @@
                 <div class="small text-muted mb-1">Logs:</div>
                 <div class="log-line" v-for="(l, idx) in logs" :key="idx">{{ l }}</div>
               </div>
-                  <div class="mt-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
-                    <button v-if="ENABLE_QZ" type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrintersQZ">Descobrir via QZ</button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar token de agente</button>
-                  </div>
+              <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar token de agente</button>
+              </div>
             </div>
           </div>
 
@@ -62,56 +60,58 @@
           </div>
 
           <hr />
-          <h6 class="small">Opções avançadas (QZ / Pixel)</h6>
+          <h6 class="small">Numero de copias</h6>
           <div class="row g-2">
-            <div class="col-md-2 mb-2">
-              <label class="form-label">Unidades</label>
-              <SelectInput v-model="units" class="form-select form-select-sm">
-                <option value="in">in</option>
-                <option value="mm">mm</option>
-              </SelectInput>
-            </div>
-            <div class="col-md-2 mb-2">
-              <label class="form-label">scaleContent</label>
-              <SelectInput v-model="scaleContent" class="form-select form-select-sm">
-                <option :value="undefined">auto</option>
-                <option :value="true">false (no scale)</option>
-                <option :value="false">true (scale)</option>
-              </SelectInput>
-            </div>
             <div class="col-md-3 mb-2">
-              <TextInput v-model="pageWidth" label="pageWidth" labelClass="form-label" inputClass="form-control form-control-sm" placeholder="ex: 8.5" />
+              <label class="form-label">Copias por pedido</label>
+              <input v-model.number="copies" type="number" min="1" max="10" class="form-control form-control-sm" />
             </div>
-            <div class="col-md-3 mb-2">
-              <TextInput v-model="pageHeight" label="pageHeight" labelClass="form-label" inputClass="form-control form-control-sm" placeholder="ex: 11" />
-            </div>
-            
-                      <div class="col-md-2 mb-2">
-                        <TextInput v-model="density" label="density" labelClass="form-label" inputClass="form-control form-control-sm" placeholder="ex: 300" />
-                      </div>
           </div>
 
-          <div class="row g-2 mt-2">
-            <div class="col-md-2 mb-2">
-              <label class="form-label">copies</label>
-              <input v-model.number="copies" type="number" min="1" class="form-control form-control-sm" />
+          <hr />
+          <h6 class="small">Template do Recibo</h6>
+          <div class="mb-3">
+            <label class="form-label">Template personalizado (deixe vazio para usar o padrao)</label>
+            <textarea v-model="receiptTemplate" class="form-control form-control-sm font-monospace" rows="10"
+              placeholder="Deixe vazio para usar o template padrao"></textarea>
+            <div class="mt-1">
+              <a href="#" class="small text-muted" @click.prevent="showPlaceholderHelp = !showPlaceholderHelp">
+                {{ showPlaceholderHelp ? 'Ocultar' : 'Ver' }} placeholders disponiveis
+              </a>
             </div>
-            <div class="col-md-3 mb-2">
-              <label class="form-label">colorType</label>
-              <SelectInput v-model="colorType" class="form-select form-select-sm">
-                <option value="color">color</option>
-                <option value="grayscale">grayscale</option>
-                <option value="blackwhite">blackwhite</option>
-                <option value="default">default</option>
-              </SelectInput>
-            </div>
-            <div class="col-md-7 mb-2">
-              <label class="form-label">margins (top,right,bottom,left)</label>
-              <div class="d-flex gap-1">
-                <input v-model.number="margins.top" type="number" step="0.1" class="form-control form-control-sm" placeholder="top" />
-                <input v-model.number="margins.right" type="number" step="0.1" class="form-control form-control-sm" placeholder="right" />
-                <input v-model.number="margins.bottom" type="number" step="0.1" class="form-control form-control-sm" placeholder="bottom" />
-                <input v-model.number="margins.left" type="number" step="0.1" class="form-control form-control-sm" placeholder="left" />
+            <div v-if="showPlaceholderHelp" class="mt-2 small bg-light p-2 rounded font-monospace" style="max-height:200px;overflow:auto">
+              <div v-pre>
+                <div><strong>Simples:</strong></div>
+                <div>{{header_name}} - Nome do estabelecimento</div>
+                <div>{{header_city}} - Cidade</div>
+                <div>{{display_id}} - Numero do pedido</div>
+                <div>{{data_pedido}} - Data</div>
+                <div>{{hora_pedido}} - Hora</div>
+                <div>{{nome_cliente}} - Nome do cliente</div>
+                <div>{{telefone_cliente}} - Telefone</div>
+                <div>{{endereco_cliente}} - Endereco</div>
+                <div>{{tipo_pedido}} - DELIVERY ou PICKUP</div>
+                <div>{{total_itens_count}} - Qtd total de itens</div>
+                <div>{{subtotal}} - Subtotal</div>
+                <div>{{taxa_entrega}} - Taxa de entrega</div>
+                <div>{{desconto}} - Desconto</div>
+                <div>{{total}} - Total</div>
+                <div>{{observacoes}} - Observacoes</div>
+                <div>{{qr_url}} - URL do QR code (despacho)</div>
+                <div class="mt-2"><strong>Blocos iteraveis:</strong></div>
+                <div>{{#each items}} ... {{/each}}</div>
+                <div class="ps-3">{{item_qty}}, {{item_name}}, {{item_price}}, {{notes}}</div>
+                <div class="ps-3">{{#each item_options}} ... {{/each}}</div>
+                <div class="ps-4">{{option_qty}}, {{option_name}}, {{option_price}}</div>
+                <div>{{#each pagamentos}} ... {{/each}}</div>
+                <div class="ps-3">{{payment_method}}, {{payment_value}}</div>
+                <div class="mt-2"><strong>Condicionais:</strong></div>
+                <div>{{#if taxa_entrega}} ... {{/if}}</div>
+                <div>{{#if desconto}} ... {{/if}}</div>
+                <div>{{#if observacoes}} ... {{/if}}</div>
+                <div>{{#if qr_url}} ... {{/if}}</div>
+                <div class="mt-2"><strong>QR Code (impressora termica):</strong></div>
+                <div>[QR:{{qr_url}}] - imprime QR code ESC/POS</div>
               </div>
             </div>
           </div>
@@ -133,13 +133,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import printService from '../services/printService.js';
 import api from '../api';
-import { API_URL } from '../config';
-
-const ENABLE_QZ = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ENABLE_QZ)
-  ? String(import.meta.env.VITE_ENABLE_QZ) === '1' || String(import.meta.env.VITE_ENABLE_QZ) === 'true'
-  : false;
 
 const props = defineProps({ visible: Boolean });
 const emit = defineEmits(['update:visible','saved']);
@@ -151,38 +145,13 @@ const alias = ref('');
 const printType = ref('thermal');
 const paperWidth = ref('80');
 const includeItemDescription = ref(false);
-const pageWidth = ref('');
-const pageHeight = ref('');
-const units = ref('in');
-const scaleContent = ref(undefined);
-const margins = ref({ top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 });
-const density = ref('');
 const copies = ref(1);
-const colorType = ref('default');
+const receiptTemplate = ref('');
+const showPlaceholderHelp = ref(false);
 const discovering = ref(false);
 const discoverError = ref('');
-const qzAvailable = ref(false);
 const generatedToken = ref('');
 const logs = ref([]);
-
-// Normalize various shapes returned by QZ into an array of unique printer names
-function normalizePrinters(raw) {
-  let v = raw;
-  try {
-    if (typeof v === 'string') {
-      // Some QZ clients may return a JSON string
-      const parsed = JSON.parse(v);
-      v = parsed;
-    }
-  } catch (e) {
-    // keep original
-  }
-  // Flatten one-level nested arrays
-  if (Array.isArray(v) && v.length === 1 && Array.isArray(v[0])) v = v[0];
-  if (!Array.isArray(v)) return [];
-  const flat = v.map(i => (typeof i === 'string' ? i : JSON.stringify(i))).filter(Boolean);
-  return Array.from(new Set(flat));
-}
 
 function pushLog(msg){
   try{
@@ -216,14 +185,8 @@ function loadSaved(){
       printType.value = cfg.printType || 'thermal';
       paperWidth.value = cfg.paperWidth || '80';
       includeItemDescription.value = !!cfg.includeItemDescription;
-      pageWidth.value = cfg.pageWidth || '';
-      pageHeight.value = cfg.pageHeight || '';
-      units.value = cfg.units || 'in';
-      scaleContent.value = typeof cfg.scaleContent === 'undefined' ? undefined : cfg.scaleContent;
-      if (cfg.margins) margins.value = Object.assign({}, margins.value, cfg.margins);
-      density.value = cfg.density || '';
       copies.value = typeof cfg.copies !== 'undefined' ? cfg.copies : 1;
-      colorType.value = cfg.colorType || 'default';
+      receiptTemplate.value = cfg.receiptTemplate || '';
     }
   }catch(e){ console.warn('Failed to load saved printer config', e); }
 }
@@ -232,152 +195,42 @@ async function discoverPrinters(){
   printers.value = [];
   discoverError.value = '';
   discovering.value = true;
-  if (ENABLE_QZ) {
-    // When QZ Tray is enabled, query the real QZ API for printers.
-    pushLog('QZ Tray enabled; attempting real QZ printer discovery');
-    try {
-      if (typeof window !== 'undefined' && window.qz) {
-        // Ensure QZ is connected and use findAll for a full list
-        const { initQZ } = await import('../plugins/qz.js');
-        await initQZ();
-        if (window.qz && window.qz.printers) {
-          const listFn = window.qz.printers.findAll || window.qz.printers.getAll;
-            if (typeof listFn === 'function') {
-            const result = await listFn();
-            // TEMP LOG: show raw result from QZ before normalization
-            console.debug('QZ raw result (discoverPrinters):', result);
-            pushLog('Raw QZ result logged to console');
-              // Normalize result: QZ client may return an array, or a JSON string
-              // containing an array. Also handle nested arrays.
-              let normalized = result;
-              try {
-                if (typeof normalized === 'string') {
-                  const parsed = JSON.parse(normalized);
-                  normalized = parsed;
-                }
-              } catch (e) { /* keep original */ }
-
-              // If nested array like [["p1","p2"]], flatten once
-              if (Array.isArray(normalized) && normalized.length === 1 && Array.isArray(normalized[0])) {
-                normalized = normalized[0];
-              }
-
-              if (Array.isArray(normalized) && normalized.length) {
-                // Ensure all items are strings and unique
-                const flat = normalized.map(i => (typeof i === 'string' ? i : JSON.stringify(i))).filter(Boolean);
-                const unique = Array.from(new Set(flat));
-                printers.value = unique;
-                if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
-                pushLog('QZ returned ' + printers.value.length + ' printers');
-                discovering.value = false;
-                return;
-              } else {
-                pushLog('QZ returned empty printer list');
-              }
-          } else if (typeof window.qz.printers.find === 'function') {
-            // As a last resort, try getting default printer name or an alternate
-            try {
-              const def = await window.qz.printers.find();
-              const arr = normalizePrinters(def);
-              if (arr.length) {
-                printers.value = arr;
-                if (!printerName.value) printerName.value = arr[0];
-                pushLog('QZ returned default printer(s): ' + arr.length);
-                discovering.value = false;
-                return;
-              }
-            } catch(e) {
-              pushLog('qz.printers.find (default) failed: ' + String(e?.message || e));
-            }
-          }
-        }
-      }
-
-      discoverError.value = 'QZ Tray não respondeu com lista de impressoras.';
-    } catch (e) {
-      discoverError.value = 'Erro consultando QZ: ' + String(e?.message || e);
-      pushLog('QZ discovery error: ' + String(e?.message || e));
-    } finally {
-      discovering.value = false;
-    }
-    return;
-  }
-  // Legacy agent-based discovery has been removed. Inform the user and
-  // allow manual configuration or QZ-based discovery instead.
-  pushLog('agent-print discovery removed; use QZ Tray or enter printer name manually');
-  discoverError.value = 'A descoberta via agentes foi removida — insira o nome da impressora manualmente ou use QZ Tray.';
-  discovering.value = false;
-}
-
-// Force discovery via browser QZ API and show detailed errors
-async function discoverPrintersQZ(){
-  printers.value = [];
-  discoverError.value = '';
-  discovering.value = true;
   try {
-    if (typeof window !== 'undefined' && window.qz && window.qz.printers) {
-      const { initQZ } = await import('../plugins/qz.js');
-      await initQZ();
-      const listFn = window.qz.printers.findAll || window.qz.printers.getAll;
-      if (typeof listFn === 'function') {
-        const result = await listFn();
-        // TEMP LOG: show raw result from QZ before normalization
-        console.debug('QZ raw result (discoverPrintersQZ):', result);
-        pushLog('Raw QZ result logged to console');
-        // Normalize similar to discoverPrinters
-        let normalized = result;
-        try { if (typeof normalized === 'string') normalized = JSON.parse(normalized); } catch(e){}
-        if (Array.isArray(normalized) && normalized.length === 1 && Array.isArray(normalized[0])) normalized = normalized[0];
-        if (Array.isArray(normalized) && normalized.length) {
-          const flat = normalized.map(i => (typeof i === 'string' ? i : JSON.stringify(i))).filter(Boolean);
-          const unique = Array.from(new Set(flat));
-          printers.value = unique;
-          if (printers.value.length && !printerName.value) printerName.value = printers.value[0];
-          pushLog('QZ returned ' + printers.value.length + ' printers');
-        } else {
-          discoverError.value = 'QZ retornou lista vazia.';
-          pushLog('QZ returned empty');
-        }
-      } else {
-        // Fall back to default printer or alternate shapes
-        const def = await window.qz.printers.find();
-        const arr = normalizePrinters(def);
-        if (arr.length) {
-          printers.value = arr;
-          if (!printerName.value) printerName.value = arr[0];
-          pushLog('QZ returned default printer(s): ' + arr.length);
-        } else {
-          discoverError.value = 'QZ não retornou impressoras.';
-        }
-      }
+    pushLog('Consultando agente de impressao via backend...');
+    const { data } = await api.get('/agent-print/printers');
+    if (data && data.ok && Array.isArray(data.printers) && data.printers.length) {
+      printers.value = data.printers;
+      if (!printerName.value) printerName.value = printers.value[0];
+      pushLog('Agente retornou ' + printers.value.length + ' impressora(s)');
     } else {
-      discoverError.value = 'QZ não disponível no navegador.';
-      pushLog('qz object not found in window');
+      discoverError.value = 'Nenhuma impressora encontrada. Verifique se o agente esta conectado.';
+      pushLog('Agente nao retornou impressoras');
     }
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || String(e);
+    discoverError.value = 'Erro ao buscar impressoras: ' + msg;
+    pushLog('Erro discovery: ' + msg);
   } finally {
     discovering.value = false;
   }
 }
 
 async function generateToken(){
-  try{
-  const res = await api.post('/agent-setup/token');
-    if (!res.ok) {
-      const txt = await res.text().catch(()=>'');
-      pushLog('generateToken failed: ' + txt);
-      discoverError.value = 'Falha ao gerar token: ' + (txt || res.status);
-      return;
+  try {
+    const { data } = await api.post('/agent-setup/token');
+    if (data && data.token) {
+      generatedToken.value = data.token;
+      try { await navigator.clipboard.writeText(data.token); pushLog('Token copiado para clipboard'); } catch(e){}
+      try { localStorage.setItem('agentToken', data.token); } catch(e){}
+      pushLog('Token gerado com sucesso');
+    } else {
+      pushLog('generateToken: resposta inesperada');
+      discoverError.value = 'Falha ao gerar token';
     }
-    const body = await res.json();
-    if (body && body.token) {
-      generatedToken.value = body.token;
-      try { await navigator.clipboard.writeText(body.token); pushLog('Token copiado para clipboard'); } catch(e){}
-      // store in localStorage for frontend convenience
-      try { localStorage.setItem('agentToken', body.token); } catch(e){}
-    }
-  }catch(e){
-    pushLog('generateToken error: ' + String(e?.message || e));
-    discoverError.value = String(e?.message || e);
+  } catch(e) {
+    const msg = e?.response?.data?.message || e?.message || String(e);
+    pushLog('generateToken error: ' + msg);
+    discoverError.value = 'Erro ao gerar token: ' + msg;
   }
 }
 
@@ -388,14 +241,8 @@ function save(){
     printType: printType.value,
     paperWidth: paperWidth.value,
     includeItemDescription: includeItemDescription.value,
-    pageWidth: pageWidth.value,
-    pageHeight: pageHeight.value,
-    units: units.value,
-    scaleContent: scaleContent.value,
-    margins: margins.value,
-    density: density.value,
     copies: copies.value,
-    colorType: colorType.value,
+    receiptTemplate: receiptTemplate.value,
   };
   try{ localStorage.setItem('printerConfig', JSON.stringify(cfg)); } catch(e){ console.warn('Failed to save printer config', e); }
 
@@ -404,7 +251,15 @@ function save(){
   (async () => {
     try {
       const iface = printerName.value ? `printer:${printerName.value}` : undefined;
-      const body = { interface: iface, type: printType.value === 'thermal' ? 'EPSON' : 'GENERIC', width: Number(paperWidth.value) || 80, headerName: alias.value || undefined };
+      const body = {
+        interface: iface,
+        type: printType.value === 'thermal' ? 'EPSON' : 'GENERIC',
+        width: Number(paperWidth.value) || 80,
+        headerName: alias.value || undefined,
+        copies: copies.value || 1,
+        printerName: printerName.value || null,
+        receiptTemplate: receiptTemplate.value || null,
+      };
       try {
         const { data } = await api.post('/agent-setup/settings', body);
         if (data && data.ok) pushLog('Saved printer settings to backend');

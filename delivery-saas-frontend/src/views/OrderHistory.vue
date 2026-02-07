@@ -26,7 +26,18 @@
             </div>
             <span class="badge rounded-pill px-3 py-2" :class="statusClass(o.status)">{{ statusLabel(o.status) }}</span>
           </div>
-            <div class="mt-2 d-flex justify-content-between align-items-center">
+          <div class="mt-2">
+            <div v-if="o.customerName" class="small text-muted">
+              <i class="bi bi-person me-1"></i>{{ o.customerName }}
+            </div>
+            <div v-if="getOrderAddress(o)" class="small text-muted mt-1">
+              <i class="bi bi-geo-alt me-1"></i>{{ getOrderAddress(o) }}
+            </div>
+            <div v-if="getPaymentMethod(o)" class="small text-muted mt-1">
+              <i class="bi bi-credit-card me-1"></i>{{ getPaymentMethod(o) }}
+            </div>
+          </div>
+          <div class="mt-2 d-flex justify-content-between align-items-center">
             <div class="small text-muted">Itens: {{ (o.items||[]).reduce((s,i)=> s+Number(i.quantity||1),0) }}</div>
             <div class="fw-semibold">{{ formatCurrency(Number(o.total||0)) }}</div>
           </div>
@@ -142,6 +153,8 @@ async function logoutPublic(){
   orders.value = []
   phone.value = ''
   needsPhone.value = true
+  // redirect to public menu main page
+  try { goMenu() } catch(e) { /* ignore navigation errors */ }
 }
 function openOrder(o){ router.push({ path: `/public/${companyId}/order/${o.id}`, query: { storeId: storeId.value || undefined, menuId: menuId.value || undefined } }) }
 
@@ -166,6 +179,46 @@ function goMenu(){ _publicNavigate('/menu') }
 
 function navActive(suffix){
   try{ const p = route.path || ''; return p.endsWith(suffix) }catch(e){ return false }
+}
+
+function getOrderAddress(o){
+  if (!o) return ''
+  // Try direct address field first
+  if (o.address) return o.address
+  // Try payload.rawPayload.address
+  try {
+    const addr = o.payload?.rawPayload?.address
+    if (addr) {
+      if (addr.formattedAddress || addr.formatted) return addr.formattedAddress || addr.formatted
+      // Build from parts
+      const parts = []
+      if (addr.streetName || addr.street) parts.push(addr.streetName || addr.street)
+      if (addr.streetNumber || addr.number) parts.push(addr.streetNumber || addr.number)
+      if (addr.neighborhood || addr.neigh) parts.push(addr.neighborhood || addr.neigh)
+      return parts.filter(Boolean).join(', ')
+    }
+  } catch (e) { /* ignore */ }
+  return ''
+}
+
+function getPaymentMethod(o){
+  if (!o) return ''
+  try {
+    const payment = o.payload?.rawPayload?.payment || o.payload?.payment
+    if (!payment) return ''
+    const method = payment.method || payment.methodCode || ''
+    const methodLabels = {
+      'PIX': 'PIX',
+      'CREDIT_CARD': 'Cartão de Crédito',
+      'DEBIT_CARD': 'Cartão de Débito',
+      'CASH': 'Dinheiro',
+      'MONEY': 'Dinheiro',
+      'VOUCHER': 'Vale',
+      'ONLINE': 'Online'
+    }
+    return methodLabels[method] || method || ''
+  } catch (e) { /* ignore */ }
+  return ''
 }
 </script>
 
