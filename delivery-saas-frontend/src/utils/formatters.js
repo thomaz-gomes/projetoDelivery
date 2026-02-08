@@ -13,3 +13,12 @@ export function formatAmount(v) {
     return String(Number(v || 0).toFixed(2)).replace('.', ',');
   }
 }
+
+export function formatDate(v) {
+  if (!v) return '—';
+  try {
+    return new Date(v).toLocaleDateString('pt-BR');
+  } catch (e) {
+    return '—';
+  }
+}

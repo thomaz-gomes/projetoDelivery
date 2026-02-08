@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useCustomersStore } from '../stores/customers';
 import { useRouter } from 'vue-router';
+import { formatCurrency, formatDate } from '../utils/formatters.js';
 import BaseButton from '../components/BaseButton.vue';
 import ListCard from '../components/ListCard.vue';
 import Swal from 'sweetalert2'
@@ -17,8 +18,6 @@ const limit = ref(20)
 const offset = ref(0)
 const total = ref(0)
 
-const isAdmin = true
-
 const load = async () => {
   loading.value = true
   error.value = ''
@@ -26,7 +25,6 @@ const load = async () => {
     const token = localStorage.getItem('token')
     if(!token){ router.push({ path: '/login', query: { redirect: '/customers' } }); return }
     await store.fetch()
-    // compute total after optional client filtering
     let list = store.list || []
     if(q.value) list = list.filter(c => (c.fullName||'').toLowerCase().includes(q.value.toLowerCase()) || (c.whatsapp||'').includes(q.value) || (c.cpf||'').includes(q.value))
     total.value = list.length
@@ -36,7 +34,6 @@ const load = async () => {
 
 onMounted(()=> load())
 
-function search(){ load() }
 function goNew(){ router.push('/customers/new') }
 function goProfile(id){ router.push(`/customers/${id}`) }
 
@@ -66,60 +63,105 @@ const displayed = computed(()=>{
 
 function editCustomer(id){ router.push(`/customers/${id}/edit`) }
 
+const tierColors = {
+  em_risco: '#dc3545',
+  regular: '#ffc107',
+  fiel: '#0d6efd',
+  vip: '#198754',
+}
+
+const tierBgColors = {
+  em_risco: 'rgba(220,53,69,0.1)',
+  regular: 'rgba(255,193,7,0.1)',
+  fiel: 'rgba(13,110,253,0.1)',
+  vip: 'rgba(25,135,84,0.1)',
+}
+
+function starsHtml(stars) {
+  return '★'.repeat(stars) + '☆'.repeat(4 - stars)
+}
 </script>
 
 <template>
-  <ListCard :title="`Clientes (${total || store.list.length})`" icon="bi bi-people" :subtitle="total ? `${total} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome, CPF, WhatsApp" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
+  <ListCard :title="`Clientes (${total || store.list.length})`" icon="bi bi-people" :subtitle="total ? `${total} clientes cadastrados` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome, CPF, WhatsApp" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
     <template #actions>
       <div class="d-flex align-items-center gap-2">
         <label class="btn btn-outline-secondary btn-sm mb-0">
-          Importar
+          <i class="bi bi-upload me-1"></i> Importar
           <input type="file" accept=".csv,.xlsx,.xls" class="d-none" @change="onImport" />
         </label>
-
-        <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Novo</button>
+        <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Novo cliente</button>
       </div>
     </template>
 
-    
-
     <template #default>
-      <div v-if="loading" class="text-center py-4">Carregando...</div>
+      <div v-if="loading" class="text-center py-4">
+        <div class="spinner-border spinner-border-sm text-secondary me-2"></div>
+        Carregando...
+      </div>
       <div v-else-if="error" class="alert alert-danger">{{ error }}</div>
       <div v-else>
         <div class="table-responsive">
-          <table class="table table-striped align-middle">
+          <table class="table table-hover align-middle mb-0 customers-table">
             <thead>
               <tr>
-                <th>Nome</th>
-                <th>CPF</th>
+                <th>Cliente</th>
                 <th>WhatsApp</th>
-                <th>Endereço</th>
-                <th>Pedidos</th>
-                <th style="width:140px">Ações</th>
+                <th class="text-center">Pedidos</th>
+                <th class="text-end">Total gasto</th>
+                <th class="text-center">Classificação</th>
+                <th style="width:120px">Ações</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="c in displayed" :key="c.id">
+              <tr v-for="c in displayed" :key="c.id" class="customer-row" @click="goProfile(c.id)">
                 <td>
-                  <div><strong>{{ c.fullName }}</strong></div>
-                  <div class="desc small text-muted">{{ c.email || '' }}</div>
-                </td>
-                <td>{{ c.cpf || '—' }}</td>
-                <td>{{ c.whatsapp || c.phone || '—' }}</td>
-                <td>
-                  <div class="small text-dark">
-                    <div v-if="c.addresses && c.addresses.length">
-                      <div v-for="a in c.addresses" :key="a.id">{{ a.formatted || [a.street, a.number].filter(Boolean).join(', ') }}</div>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="customer-avatar" :style="{ background: tierBgColors[c.stats?.tier] || '#f0f0f0', color: tierColors[c.stats?.tier] || '#666' }">
+                      {{ (c.fullName || '?')[0].toUpperCase() }}
                     </div>
-                    <div v-else>—</div>
+                    <div>
+                      <div class="fw-semibold">{{ c.fullName }}</div>
+                      <div class="text-muted small">{{ c.cpf || '' }}</div>
+                    </div>
                   </div>
                 </td>
-                <td>{{ c.orders?.length || 0 }}</td>
                 <td>
-                  <div class="d-flex">
-                    <button class="btn btn-sm btn-light me-2" @click="goProfile(c.id)">Perfil</button>
-                    <button class="btn btn-sm btn-outline-secondary me-2" @click="editCustomer(c.id)"><i class="bi bi-pencil-square"></i></button>
+                  <span v-if="c.whatsapp || c.phone" class="text-nowrap">
+                    {{ c.whatsapp || c.phone }}
+                  </span>
+                  <span v-else class="text-muted">—</span>
+                </td>
+                <td class="text-center">
+                  <span class="badge bg-light text-dark">{{ c.stats?.totalOrders || 0 }}</span>
+                </td>
+                <td class="text-end">
+                  <span class="fw-medium">{{ formatCurrency(c.stats?.totalSpent || 0) }}</span>
+                  <div v-if="c.stats?.lastOrderDate" class="text-muted small">
+                    Último: {{ formatDate(c.stats.lastOrderDate) }}
+                  </div>
+                </td>
+                <td class="text-center">
+                  <div v-if="c.stats?.tier">
+                    <span class="tier-stars" :style="{ color: tierColors[c.stats.tier] }">
+                      {{ starsHtml(c.stats.stars) }}
+                    </span>
+                    <div>
+                      <span class="badge tier-badge" :style="{ background: tierBgColors[c.stats.tier], color: tierColors[c.stats.tier] }">
+                        {{ c.stats.label }}
+                      </span>
+                    </div>
+                  </div>
+                  <span v-else class="text-muted">—</span>
+                </td>
+                <td @click.stop>
+                  <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-primary" title="Ver perfil" @click="goProfile(c.id)">
+                      <i class="bi bi-person"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" title="Editar" @click="editCustomer(c.id)">
+                      <i class="bi bi-pencil"></i>
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -130,16 +172,63 @@ function editCustomer(id){ router.push(`/customers/${id}/edit`) }
           </table>
         </div>
 
-        <div class="d-flex align-items-center justify-content-between mt-3">
-          <div>
-            <small>Mostrando {{ offset + 1 }} - {{ Math.min(offset + limit, total) }} de {{ total }}</small>
-          </div>
-          <div>
-            <button class="btn btn-sm btn-outline-secondary me-2" @click="prevPage" :disabled="offset===0">Anterior</button>
-            <button class="btn btn-sm btn-secondary" @click="nextPage" :disabled="offset+limit >= total">Próxima</button>
+        <div class="d-flex align-items-center justify-content-between mt-3 px-1">
+          <small class="text-muted">Mostrando {{ offset + 1 }} - {{ Math.min(offset + limit, total) }} de {{ total }}</small>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" @click="prevPage" :disabled="offset===0">
+              <i class="bi bi-chevron-left"></i> Anterior
+            </button>
+            <button class="btn btn-sm btn-secondary" @click="nextPage" :disabled="offset+limit >= total">
+              Próxima <i class="bi bi-chevron-right"></i>
+            </button>
           </div>
         </div>
       </div>
     </template>
   </ListCard>
 </template>
+
+<style scoped>
+.customers-table thead th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6c757d;
+  border-bottom: 2px solid #e9ecef;
+  padding: 0.6rem 0.75rem;
+}
+.customers-table tbody td {
+  padding: 0.7rem 0.75rem;
+  vertical-align: middle;
+}
+.customer-row {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.customer-row:hover {
+  background-color: #f8f9ff !important;
+}
+.customer-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+.tier-stars {
+  font-size: 1rem;
+  letter-spacing: 1px;
+}
+.tier-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-top: 2px;
+  display: inline-block;
+}
+</style>

@@ -8,6 +8,46 @@ import { normalizePhone, findOrCreateCustomer } from '../services/customers.js';
 export const customersRouter = express.Router();
 customersRouter.use(authMiddleware);
 
+// Helper: calcula tier de fidelidade baseado nos pedidos concluídos
+function computeCustomerTier(orders) {
+  const now = Date.now();
+  const d30 = now - 30 * 24 * 60 * 60 * 1000;
+  const completed = (orders || []).filter(o => o.status === 'CONCLUIDO');
+  if (!completed.length) return { tier: 'em_risco', stars: 1, label: 'Em Risco' };
+
+  const last = new Date(completed[0].createdAt).getTime(); // orders are desc
+  if (last < d30) return { tier: 'em_risco', stars: 1, label: 'Em Risco' };
+
+  const orders30d = completed.filter(o => new Date(o.createdAt).getTime() >= d30).length;
+  if (orders30d >= 8) return { tier: 'vip', stars: 4, label: 'VIP' };
+  if (orders30d >= 4) return { tier: 'fiel', stars: 3, label: 'Fiel' };
+  return { tier: 'regular', stars: 2, label: 'Regular' };
+}
+
+// Helper: calcula stats completos do cliente
+function computeCustomerStats(orders) {
+  const completed = (orders || []).filter(o => o.status === 'CONCLUIDO');
+  const totalSpent = completed.reduce((sum, o) => sum + Number(o.total || 0), 0);
+  const totalOrders = completed.length;
+  const lastOrderDate = orders?.length ? orders[0].createdAt : null;
+
+  // Item favorito: agrupa por nome e soma quantidades
+  const itemCounts = {};
+  for (const o of completed) {
+    for (const item of (o.items || [])) {
+      itemCounts[item.name] = (itemCounts[item.name] || 0) + item.quantity;
+    }
+  }
+  let favoriteItem = null;
+  let maxQty = 0;
+  for (const [name, qty] of Object.entries(itemCounts)) {
+    if (qty > maxQty) { maxQty = qty; favoriteItem = name; }
+  }
+
+  const tierInfo = computeCustomerTier(orders);
+  return { totalSpent, totalOrders, lastOrderDate, favoriteItem, ...tierInfo };
+}
+
 // Listagem com paginação simples
 customersRouter.get('/', async (req, res) => {
   const companyId = req.user.companyId;
@@ -41,12 +81,27 @@ customersRouter.get('/', async (req, res) => {
       orderBy: { createdAt: 'desc' },
       take,
       skip,
-      include: { addresses: true, orders: { select: { id: true } } },
+      include: {
+        addresses: true,
+        orders: {
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, createdAt: true, status: true, total: true },
+        },
+      },
     }),
     prisma.customer.count({ where }),
   ]);
 
-  res.json({ total, rows });
+  // Enriquece cada customer com tier e stats resumidos
+  const enriched = rows.map(c => {
+    const completed = (c.orders || []).filter(o => o.status === 'CONCLUIDO');
+    const totalSpent = completed.reduce((sum, o) => sum + Number(o.total || 0), 0);
+    const lastOrderDate = c.orders?.length ? c.orders[0].createdAt : null;
+    const tierInfo = computeCustomerTier(c.orders);
+    return { ...c, stats: { totalSpent, lastOrderDate, totalOrders: completed.length, ...tierInfo } };
+  });
+
+  res.json({ total, rows: enriched });
 });
 
 // Perfil
@@ -57,11 +112,18 @@ customersRouter.get('/:id', async (req, res) => {
     where: { id, companyId },
     include: {
       addresses: { orderBy: { isDefault: 'desc' } },
-      orders: { orderBy: { createdAt: 'desc' }, select: { id: true, displayId: true, status: true, createdAt: true, total: true } },
+      orders: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, displayId: true, displaySimple: true,
+          status: true, createdAt: true, total: true,
+          items: { select: { name: true, quantity: true, price: true } },
+        },
+      },
     },
   });
   if (!c) return res.status(404).json({ message: 'Cliente não encontrado' });
-  res.json(c);
+  res.json({ ...c, stats: computeCustomerStats(c.orders) });
 });
 
 // Cadastro/edição
