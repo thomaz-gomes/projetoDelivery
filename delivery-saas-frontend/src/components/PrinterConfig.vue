@@ -39,7 +39,21 @@
                 </div>
                 <div class="mt-2">
                   <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
-                  <button type="button" class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar token de agente</button>
+                  <button type="button" class="btn btn-sm btn-outline-primary" @click="generatePairingCode" :disabled="pairingLoading">
+                    {{ pairingLoading ? 'Gerando...' : 'Gerar codigo de pareamento' }}
+                  </button>
+                </div>
+                <div v-if="pairingCode" class="pairing-code-box mt-3">
+                  <div class="small fw-bold mb-2">Como conectar o agente de impressao:</div>
+                  <ol class="pairing-steps small text-muted">
+                    <li>Execute o <strong>agente de impressao</strong> no computador da loja</li>
+                    <li>Quando pedir a <strong>URL do servidor</strong>, informe o endereco do sistema</li>
+                    <li>Quando pedir o <strong>codigo de pareamento</strong>, digite:</li>
+                  </ol>
+                  <div class="pairing-code">{{ pairingCode }}</div>
+                  <div class="small mt-1" :class="pairingCountdown <= 60 ? 'text-danger' : 'text-muted'">
+                    Expira em {{ formatCountdown(pairingCountdown) }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -79,8 +93,8 @@
         </div>
         <div class="modal-footer">
           <div class="me-auto text-start">
-            <div v-if="generatedToken" class="small text-success">Token gerado e copiado: <code>{{ generatedToken }}</code></div>
-            <div v-else class="small text-muted">Clique em "Gerar token de agente" para criar um token para o agente.</div>
+            <div v-if="pairingCode" class="small text-success">Codigo de pareamento ativo — informe no agente de impressao.</div>
+            <div v-else class="small text-muted">Clique em "Gerar codigo de pareamento" para conectar o agente.</div>
           </div>
           <button class="btn btn-secondary" @click="close">Cancelar</button>
           <button class="btn btn-primary" @click="save" :disabled="!printerName">Salvar e usar</button>
@@ -92,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import api from '../api';
 import ReceiptTemplateEditor from './ReceiptTemplateEditor.vue';
 
@@ -109,7 +123,10 @@ const copies = ref(1);
 const receiptTemplate = ref('');
 const discovering = ref(false);
 const discoverError = ref('');
-const generatedToken = ref('');
+const pairingCode = ref('');
+const pairingCountdown = ref(0);
+const pairingLoading = ref(false);
+let pairingTimer = null;
 const logs = ref([]);
 
 function pushLog(msg){
@@ -121,10 +138,12 @@ function pushLog(msg){
 
 onMounted(() => {
   visible.value = props.visible;
-  // this modal uses backend/agent endpoints for discovery and token generation
-  // printers list will be fetched from backend/agents
   loadSaved();
   if (visible.value) discoverPrinters();
+});
+
+onUnmounted(() => {
+  if (pairingTimer) { clearInterval(pairingTimer); pairingTimer = null; }
 });
 
 // watch prop changes
@@ -172,22 +191,46 @@ async function discoverPrinters(){
   }
 }
 
-async function generateToken(){
+function formatCountdown(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function startPairingTimer(expiresAt) {
+  if (pairingTimer) clearInterval(pairingTimer);
+  const update = () => {
+    const remaining = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+    pairingCountdown.value = remaining;
+    if (remaining <= 0) {
+      clearInterval(pairingTimer);
+      pairingTimer = null;
+      pairingCode.value = '';
+      pushLog('Codigo de pareamento expirou');
+    }
+  };
+  update();
+  pairingTimer = setInterval(update, 1000);
+}
+
+async function generatePairingCode(){
+  pairingLoading.value = true;
   try {
-    const { data } = await api.post('/agent-setup/token');
-    if (data && data.token) {
-      generatedToken.value = data.token;
-      try { await navigator.clipboard.writeText(data.token); pushLog('Token copiado para clipboard'); } catch(e){}
-      try { localStorage.setItem('agentToken', data.token); } catch(e){}
-      pushLog('Token gerado com sucesso');
+    const { data } = await api.post('/agent-setup/generate-code');
+    if (data && data.code) {
+      pairingCode.value = data.code;
+      startPairingTimer(data.expiresAt);
+      pushLog('Codigo de pareamento gerado: ' + data.code);
     } else {
-      pushLog('generateToken: resposta inesperada');
-      discoverError.value = 'Falha ao gerar token';
+      pushLog('generatePairingCode: resposta inesperada');
+      discoverError.value = 'Falha ao gerar codigo de pareamento';
     }
   } catch(e) {
     const msg = e?.response?.data?.message || e?.message || String(e);
-    pushLog('generateToken error: ' + msg);
-    discoverError.value = 'Erro ao gerar token: ' + msg;
+    pushLog('Erro ao gerar codigo: ' + msg);
+    discoverError.value = 'Erro ao gerar codigo: ' + msg;
+  } finally {
+    pairingLoading.value = false;
   }
 }
 
@@ -255,4 +298,7 @@ function save(){
 .modal-content{ border-radius:8px; max-height:80vh; overflow:auto; background:#fff; box-shadow:0 8px 30px rgba(0,0,0,0.18); }
 .logs{ background:#f8f9fa; border:1px solid #e9ecef; padding:8px; border-radius:6px; max-height:120px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace; }
 .log-line{ font-size:12px; color:#333; white-space:pre-wrap; }
+.pairing-code-box{ background:#f0f7ff; border:1px solid #b3d4fc; border-radius:8px; padding:12px 16px; }
+.pairing-steps{ margin:0 0 8px 0; padding-left:20px; line-height:1.7; }
+.pairing-code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size:32px; font-weight:700; letter-spacing:6px; color:#1a56db; user-select:all; text-align:center; }
 </style>

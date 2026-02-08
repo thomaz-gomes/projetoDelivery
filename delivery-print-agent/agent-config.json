@@ -1,0 +1,12 @@
+{
+  "backendUrl": "http://localhost:3000",
+  "socketUrl": "http://localhost:3000",
+  "token": "oNz42q51huEZe-q6lN5gmDXQfcdqSO70",
+  "storeIds": [
+    "8433873c-5512-47aa-8847-c2f7282d9788",
+    "dbb30ac7-f2cd-4c8d-b9be-cc04e50d6ce7",
+    "d02ebbe9-0838-468d-9e15-01d52adc3581"
+  ],
+  "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+  "pairedAt": "2026-02-08T22:10:33.162Z"
+}

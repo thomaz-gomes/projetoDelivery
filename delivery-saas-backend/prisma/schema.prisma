@@ -469,6 +469,9 @@ model PrinterSetting {
   // Agent token (hashed) used by delivery-print-agent for authentication
   agentTokenHash      String?
   agentTokenCreatedAt DateTime?
+  // Pairing code for simplified agent setup (short-lived, single-use)
+  pairingCode          String?
+  pairingCodeExpiresAt DateTime?
   // Receipt customization
   receiptTemplate     String?   // Custom receipt template with {{placeholders}}. Null = use default.
   copies              Int       @default(1) // Number of copies to print per order

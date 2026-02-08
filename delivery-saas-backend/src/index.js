@@ -37,7 +37,7 @@ import ingredientGroupsRouter from './routes/ingredientGroups.js'
 import ingredientsRouter from './routes/ingredients.js'
 import technicalSheetsRouter from './routes/technicalSheets.js'
 import stockMovementsRouter from './routes/stockMovements.js'
-import agentSetupRouter from './routes/agentSetup.js'
+import agentSetupRouter, { agentPairRouter } from './routes/agentSetup.js'
 import agentPrintRouter from './routes/agentPrint.js'
 import qrActionRouter from './routes/qrAction.js'
 import rasterizeRouter from './routes/rasterize.js'
@@ -184,6 +184,8 @@ app.use('/ingredient-groups', ingredientGroupsRouter);
 app.use('/ingredients', ingredientsRouter);
 app.use('/technical-sheets', technicalSheetsRouter);
 app.use('/stock-movements', stockMovementsRouter);
+// Agent pairing endpoint (unauthenticated - agent has no token yet)
+app.use('/agent-setup', agentPairRouter);
 // Agent setup endpoint: returns socket URL and store IDs for the authenticated user's company
 app.use('/agent-setup', agentSetupRouter);
 app.use('/agent-print', requireModule('printing'), agentPrintRouter);

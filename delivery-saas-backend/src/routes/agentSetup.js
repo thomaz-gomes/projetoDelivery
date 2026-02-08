@@ -1,4 +1,5 @@
 import express from 'express'
+import crypto from 'crypto'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { randomToken, sha256 } from '../utils.js'
@@ -6,6 +7,111 @@ import { rotateAgentToken } from '../agentTokenManager.js'
 import fs from 'fs';
 import path from 'path';
 
+// --- Pairing code helper ---
+function generatePairingCode(length = 6) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // sem I,O,0,1
+  let code = ''
+  const bytes = crypto.randomBytes(length)
+  for (let i = 0; i < length; i++) {
+    code += chars[bytes[i] % chars.length]
+  }
+  return code
+}
+
+// --- Unauthenticated router for agent pairing ---
+export const agentPairRouter = express.Router()
+
+// Simple in-memory rate limiter for pair endpoint
+const pairAttempts = new Map()
+const PAIR_MAX_ATTEMPTS = 5
+const PAIR_WINDOW_MS = 15 * 60 * 1000
+
+agentPairRouter.post('/pair', async (req, res) => {
+  try {
+    // Rate limit
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown'
+    const now = Date.now()
+    const record = pairAttempts.get(ip) || { count: 0, firstAt: now }
+    if (now - record.firstAt > PAIR_WINDOW_MS) {
+      record.count = 0
+      record.firstAt = now
+    }
+    record.count++
+    pairAttempts.set(ip, record)
+    if (record.count > PAIR_MAX_ATTEMPTS) {
+      return res.status(429).json({ message: 'Muitas tentativas. Aguarde 15 minutos.' })
+    }
+
+    const { code } = req.body || {}
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ message: 'Codigo de pareamento e obrigatorio' })
+    }
+
+    const normalizedCode = code.trim().toUpperCase()
+
+    const setting = await prisma.printerSetting.findFirst({
+      where: { pairingCode: normalizedCode }
+    })
+
+    if (!setting) {
+      return res.status(404).json({ message: 'Codigo de pareamento invalido' })
+    }
+
+    if (!setting.pairingCodeExpiresAt || new Date() > setting.pairingCodeExpiresAt) {
+      await prisma.printerSetting.update({
+        where: { id: setting.id },
+        data: { pairingCode: null, pairingCodeExpiresAt: null }
+      })
+      return res.status(410).json({ message: 'Codigo de pareamento expirado' })
+    }
+
+    // Valid code - generate agent token
+    const companyId = setting.companyId
+    const token = randomToken(24)
+    const tokenHash = sha256(token)
+
+    const stores = await prisma.store.findMany({ where: { companyId }, select: { id: true } })
+    const storeIds = stores.map(s => s.id)
+    if (!storeIds.length) storeIds.push(companyId)
+
+    // Save token hash, clear pairing code (single-use)
+    await prisma.printerSetting.update({
+      where: { id: setting.id },
+      data: {
+        agentTokenHash: tokenHash,
+        agentTokenCreatedAt: new Date(),
+        pairingCode: null,
+        pairingCodeExpiresAt: null,
+      }
+    })
+
+    const socketUrl = process.env.SOCKET_URL || `${req.protocol}://${req.get('host')}`
+
+    // Reset rate limit on success
+    pairAttempts.delete(ip)
+
+    return res.json({
+      token,
+      storeIds,
+      companyId,
+      socketUrl,
+      settings: {
+        printerName: setting.printerName,
+        printerType: setting.type,
+        paperWidth: setting.width,
+        copies: setting.copies,
+        headerName: setting.headerName,
+        headerCity: setting.headerCity,
+        receiptTemplate: setting.receiptTemplate,
+      }
+    })
+  } catch (e) {
+    console.error('POST /agent-setup/pair failed', e)
+    res.status(500).json({ message: 'Falha ao parear agente', error: e?.message || String(e) })
+  }
+})
+
+// --- Authenticated router ---
 const agentSetupRouter = express.Router()
 agentSetupRouter.use(authMiddleware)
 
@@ -91,6 +197,34 @@ agentSetupRouter.post('/token', requireRole('ADMIN'), async (req, res) => {
   } catch (e) {
     console.error('POST /agent-setup/token failed', e)
     res.status(500).json({ message: 'Falha ao gerar token do agente', error: e?.message || String(e) })
+  }
+})
+
+// POST /agent-setup/generate-code - generate a short-lived pairing code (ADMIN only)
+agentSetupRouter.post('/generate-code', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user && req.user.companyId
+    if (!companyId) return res.status(400).json({ message: 'companyId ausente no token' })
+
+    const code = generatePairingCode(6)
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutos
+
+    const existing = await prisma.printerSetting.findUnique({ where: { companyId } })
+    if (existing) {
+      await prisma.printerSetting.update({
+        where: { companyId },
+        data: { pairingCode: code, pairingCodeExpiresAt: expiresAt }
+      })
+    } else {
+      await prisma.printerSetting.create({
+        data: { companyId, pairingCode: code, pairingCodeExpiresAt: expiresAt }
+      })
+    }
+
+    return res.json({ code, expiresAt: expiresAt.toISOString() })
+  } catch (e) {
+    console.error('POST /agent-setup/generate-code failed', e)
+    res.status(500).json({ message: 'Falha ao gerar codigo de pareamento', error: e?.message || String(e) })
   }
 })
 
