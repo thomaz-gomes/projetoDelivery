@@ -8,6 +8,10 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import * as bootstrap from 'bootstrap';
 
+const props = defineProps({
+  embedded: { type: Boolean, default: false }
+});
+
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
@@ -553,7 +557,7 @@ function logout() {
 }
 </script>
 <template>
-  <aside ref="asideEl" v-if="showSidebar" :class="['d-none d-md-flex flex-column border-end', { 'sidebar-mini': mini }]" :style="mini ? { width: '72px', minHeight: '100vh' } : { width: '240px', minHeight: '100vh' }">
+  <aside ref="asideEl" v-if="showSidebar" :class="[embedded ? 'd-flex flex-column' : 'd-none d-md-flex flex-column border-end', { 'sidebar-mini': mini && !embedded }]" :style="embedded ? {} : (mini ? { width: '72px', minHeight: '100vh' } : { width: '240px', minHeight: '100vh' })">
     <!-- Header -->
     <div class="border-bottom p-3 header-wrap">
       <div class="d-flex align-items-center">
@@ -725,7 +729,7 @@ function logout() {
 
     <!-- Floating submenu for mini mode -->
     <div v-if="mini && openSub" id="sidebar-mini-popup" :style="{ position: 'absolute', top: subMenuPos.top + 'px', left: subMenuPos.left + 'px', zIndex: 1050 }">
-      <div style="background:#0d6efd; border:1px solid rgba(255,255,255,0.06); padding:8px; border-radius:6px; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,0.12)">
+      <div style="background:#1e293b; border:1px solid rgba(255,255,255,0.08); padding:8px; border-radius:6px; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,0.18)">
         <ul class="nav flex-column">
           <li v-for="p in visibleNav.filter(n=>n.to===openSub)" :key="p.to">
             <template v-for="child in (p.children||[])">
@@ -752,18 +756,18 @@ function logout() {
 }
 .nav-link i { color: #fff; }
 .nav-link:hover, .nav-link:focus {
-  background-color: rgba(255,255,255,0.08);
+  background-color: rgba(255,255,255,0.06);
   color: #fff;
 }
 .parent-link { cursor: pointer; }
 .child-link { font-size: .95rem; }
 .child-link i { font-size: 1rem }
 
-/* diagonal gradient background: primary -> slightly darker blue; fallback color included */
-aside { background-color: #0d6efd; background-image: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); }
+/* diagonal gradient background: dark slate that harmonises with the green brand */
+aside { background-color: #1e293b; background-image: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); }
 
-/* active state: subtly highlighted */
-.nav-link.active { background-color: rgba(255,255,255,0.14); font-weight:600 }
+/* active state: green brand accent */
+.nav-link.active { background-color: rgba(139,191,98,0.18); font-weight:600; border-left: 3px solid #8bbf62; }
 
 /* chevron rotate on toggle */
 .chevron { transition: transform 180ms ease; transform-origin: 50% 50%; }
@@ -785,13 +789,13 @@ aside { background-color: #0d6efd; background-image: linear-gradient(135deg, #0d
   z-index: 1400;
 }
 .menus-dropdown-mobile {
-  background: linear-gradient(180deg, #2f7ff8 0%, #0d6efd 100%);
+  background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
   color: #fff;
   border-radius: 10px;
   min-width: 170px;
   max-width: 260px;
-  box-shadow: 0 10px 30px rgba(13,110,253,0.18);
-  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+  border: 1px solid rgba(255,255,255,0.08);
 }
 .menus-dropdown-mobile .nav-link { color: #fff; padding: 10px 12px; border-radius:6px }
 .menus-dropdown-mobile .nav-link:hover, .menus-dropdown-mobile .nav-link:focus { background: rgba(255,255,255,0.06); color: #fff }
@@ -840,9 +844,9 @@ aside { background-color: #0d6efd; background-image: linear-gradient(135deg, #0d
 .sidebar-mini .logo-compact { width: 28px; height: 28px; object-fit: contain }
 .logo-compact-icon { font-size: 20px; color: #fff; }
 aside { transition: width 220ms ease; }
-.btn-toggle-mini { border-color: rgba(255,255,255,0.2); color: #fff;  margin-right: -35px;
-  background-color: #0d4cab;}
-.btn-toggle-mini:hover { background-color: #2f7ff8; border-color: #2f7ff8; color: #fff; }
+.btn-toggle-mini { border-color: rgba(255,255,255,0.15); color: #fff;  margin-right: -35px;
+  background-color: #334155;}
+.btn-toggle-mini:hover { background-color: #475569; border-color: #475569; color: #fff; }
 .btn-toggle-mini i { font-size: 0.92rem }
 
 /* Stores widget styles */

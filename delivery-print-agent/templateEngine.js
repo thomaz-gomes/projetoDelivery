@@ -264,4 +264,14 @@ function buildContext(order, settings = {}) {
   };
 }
 
-module.exports = { renderTemplate, buildContext };
+/**
+ * Renderiza o conteúdo de um bloco individual substituindo placeholders.
+ */
+function renderBlockContent(contentStr, ctx) {
+  if (!contentStr || !ctx) return contentStr || '';
+  let result = processIfBlocks(contentStr, ctx);
+  result = replacePlaceholders(result, ctx);
+  return result;
+}
+
+module.exports = { renderTemplate, buildContext, renderBlockContent, replacePlaceholders };

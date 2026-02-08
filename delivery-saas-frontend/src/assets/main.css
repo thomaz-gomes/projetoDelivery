@@ -307,5 +307,39 @@ body {
 .btn:focus-visible {
     background-color: var(--brand-dark) !important;
   border-color: var(--brand-dark) !important;
-  color: #fff !important; 
+  color: #fff !important;
+}
+
+/* ===== Mobile responsiveness improvements ===== */
+
+@media (max-width: 767.98px) {
+  /* Tables: better readability on mobile */
+  .table { font-size: 0.85rem; }
+  .table th, .table td { padding: 0.5rem 0.4rem; white-space: nowrap; }
+
+  /* Hide columns marked as non-essential on mobile */
+  .d-mobile-none { display: none !important; }
+
+  /* List card header: wrap actions */
+  .list-card .card-body > .d-flex.justify-content-between {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* Smaller page titles */
+  .list-card h4 { font-size: 1.1rem; }
+}
+
+@media (max-width: 575.98px) {
+  /* Stack filter columns vertically */
+  .filters .col-md-1,
+  .filters .col-md-2,
+  .filters .col-md-3,
+  .filters .col-md-4 {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+
+  /* Full-width action buttons */
+  .filters .btn { width: 100%; }
 }

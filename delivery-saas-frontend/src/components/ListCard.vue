@@ -1,8 +1,8 @@
 <template>
-  <div :class="['list-card container py-4', variant ? 'list-card--' + variant : '']">
+  <div :class="['list-card container py-2 py-md-4', variant ? 'list-card--' + variant : '']">
     <div class="card">
       <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="list-card-header d-flex align-items-center justify-content-between mb-3">
           <div>
             <h4 class="mb-0">
               <i v-if="icon" :class="icon + ' me-2'"></i>
@@ -10,7 +10,7 @@
             </h4>
             <div v-if="subtitle" class="small text-muted">{{ subtitle }}</div>
           </div>
-          <div>
+          <div class="list-card-actions">
             <slot name="actions"></slot>
           </div>
         </div>
@@ -91,4 +91,21 @@ onBeforeUnmount(() => clearTimeout(debounceTimer))
 
 /* No-padding variant: card body has no inner padding (useful for embedded lists) */
 .list-card--no-padding .card-body { padding: 0; }
+
+/* Mobile: header wraps, actions go below title */
+@media (max-width: 575.98px) {
+  .list-card-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .list-card-actions {
+    width: 100%;
+  }
+  .list-card-actions .btn {
+    width: 100%;
+  }
+  .list-card .card-body { padding: 12px; }
+  .list-card h4 { font-size: 1.1rem; }
+  .list-card { padding-top: 8px; }
+}
 </style>

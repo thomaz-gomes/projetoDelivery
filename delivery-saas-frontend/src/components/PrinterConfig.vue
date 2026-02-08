@@ -8,107 +8,72 @@
           <button type="button" class="btn-close" @click="close"></button>
         </div>
         <div class="modal-body">
-          <p class="text-muted small">qual tipo de impressão vamos usar, hein?</p>
+          <!-- Tabs -->
+          <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+              <a class="nav-link" :class="{ active: activeTab === 'config' }" href="#" @click.prevent="activeTab = 'config'">Configuracao</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" :class="{ active: activeTab === 'template' }" href="#" @click.prevent="activeTab = 'template'">Template da Comanda</a>
+            </li>
+          </ul>
 
-          <div class="mb-3">
-            <label class="form-label">Impressora</label>
-            <SelectInput   v-model="printerName"  class="form-select">
-              <option value="">Selecione uma impressora</option>
-              <option v-for="p in printers" :key="p" :value="p">{{ p }}</option>
-            </SelectInput>
-            <div class="mt-2 small text-muted">Se a lista estiver vazia, verifique se o agente de impressão está executando na loja.</div>
-            <div class="mt-2">
-              <div v-if="discovering" class="small text-muted">Procurando impressoras... ⏳</div>
-              <div v-else-if="discoverError" class="small text-danger">{{ discoverError }}</div>
-              <div class="mt-2 small text-muted">Agente de impressão detectado: <strong>{{ printers.length ? 'sim' : 'não' }}</strong></div>
-              <div class="mt-2 small logs" v-if="logs.length">
-                <div class="small text-muted mb-1">Logs:</div>
-                <div class="log-line" v-for="(l, idx) in logs" :key="idx">{{ l }}</div>
-              </div>
+          <!-- Tab: Configuracao -->
+          <div v-show="activeTab === 'config'">
+            <p class="text-muted small">qual tipo de impressao vamos usar, hein?</p>
+
+            <div class="mb-3">
+              <label class="form-label">Impressora</label>
+              <SelectInput v-model="printerName" class="form-select">
+                <option value="">Selecione uma impressora</option>
+                <option v-for="p in printers" :key="p" :value="p">{{ p }}</option>
+              </SelectInput>
+              <div class="mt-2 small text-muted">Se a lista estiver vazia, verifique se o agente de impressao esta executando na loja.</div>
               <div class="mt-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar token de agente</button>
+                <div v-if="discovering" class="small text-muted">Procurando impressoras...</div>
+                <div v-else-if="discoverError" class="small text-danger">{{ discoverError }}</div>
+                <div class="mt-2 small text-muted">Agente de impressao detectado: <strong>{{ printers.length ? 'sim' : 'nao' }}</strong></div>
+                <div class="mt-2 small logs" v-if="logs.length">
+                  <div class="small text-muted mb-1">Logs:</div>
+                  <div class="log-line" v-for="(l, idx) in logs" :key="idx">{{ l }}</div>
+                </div>
+                <div class="mt-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
+                  <button type="button" class="btn btn-sm btn-outline-primary" @click="generateToken">Gerar token de agente</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Tipo de impressao</label>
+                <SelectInput v-model="printType" class="form-select">
+                  <option value="thermal">impressao termica</option>
+                  <option value="generic">impressao generica (navegador)</option>
+                </SelectInput>
+              </div>
+              <div class="col-md-3 mb-3">
+                <label class="form-label">Largura de papel</label>
+                <SelectInput v-model="paperWidth" class="form-select">
+                  <option value="80">80 mm</option>
+                  <option value="58">58 mm</option>
+                </SelectInput>
+              </div>
+            </div>
+
+            <hr />
+            <h6 class="small">Numero de copias</h6>
+            <div class="row g-2">
+              <div class="col-md-3 mb-2">
+                <label class="form-label">Copias por pedido</label>
+                <input v-model.number="copies" type="number" min="1" max="10" class="form-control form-control-sm" />
               </div>
             </div>
           </div>
 
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Tipo de impressão</label>
-              <SelectInput   v-model="printType"  class="form-select">
-                <option value="thermal">impressão térmica</option>
-                <option value="generic">impressão genérica (navegador)</option>
-              </SelectInput>
-            </div>
-            <div class="col-md-3 mb-3">
-              <label class="form-label">Largura de papel</label>
-              <SelectInput   v-model="paperWidth"  class="form-select">
-                <option value="80">80 mm</option>
-                <option value="58">58 mm</option>
-              </SelectInput>
-            </div>
-          </div>
-
-          <div class="form-check mt-2">
-            <input class="form-check-input" type="checkbox" v-model="includeItemDescription" id="includeDesc" />
-            <label class="form-check-label" for="includeDesc">incluir descrição de itens na impressão</label>
-          </div>
-
-          <hr />
-          <h6 class="small">Numero de copias</h6>
-          <div class="row g-2">
-            <div class="col-md-3 mb-2">
-              <label class="form-label">Copias por pedido</label>
-              <input v-model.number="copies" type="number" min="1" max="10" class="form-control form-control-sm" />
-            </div>
-          </div>
-
-          <hr />
-          <h6 class="small">Template do Recibo</h6>
-          <div class="mb-3">
-            <label class="form-label">Template personalizado (deixe vazio para usar o padrao)</label>
-            <textarea v-model="receiptTemplate" class="form-control form-control-sm font-monospace" rows="10"
-              placeholder="Deixe vazio para usar o template padrao"></textarea>
-            <div class="mt-1">
-              <a href="#" class="small text-muted" @click.prevent="showPlaceholderHelp = !showPlaceholderHelp">
-                {{ showPlaceholderHelp ? 'Ocultar' : 'Ver' }} placeholders disponiveis
-              </a>
-            </div>
-            <div v-if="showPlaceholderHelp" class="mt-2 small bg-light p-2 rounded font-monospace" style="max-height:200px;overflow:auto">
-              <div v-pre>
-                <div><strong>Simples:</strong></div>
-                <div>{{header_name}} - Nome do estabelecimento</div>
-                <div>{{header_city}} - Cidade</div>
-                <div>{{display_id}} - Numero do pedido</div>
-                <div>{{data_pedido}} - Data</div>
-                <div>{{hora_pedido}} - Hora</div>
-                <div>{{nome_cliente}} - Nome do cliente</div>
-                <div>{{telefone_cliente}} - Telefone</div>
-                <div>{{endereco_cliente}} - Endereco</div>
-                <div>{{tipo_pedido}} - DELIVERY ou PICKUP</div>
-                <div>{{total_itens_count}} - Qtd total de itens</div>
-                <div>{{subtotal}} - Subtotal</div>
-                <div>{{taxa_entrega}} - Taxa de entrega</div>
-                <div>{{desconto}} - Desconto</div>
-                <div>{{total}} - Total</div>
-                <div>{{observacoes}} - Observacoes</div>
-                <div>{{qr_url}} - URL do QR code (despacho)</div>
-                <div class="mt-2"><strong>Blocos iteraveis:</strong></div>
-                <div>{{#each items}} ... {{/each}}</div>
-                <div class="ps-3">{{item_qty}}, {{item_name}}, {{item_price}}, {{notes}}</div>
-                <div class="ps-3">{{#each item_options}} ... {{/each}}</div>
-                <div class="ps-4">{{option_qty}}, {{option_name}}, {{option_price}}</div>
-                <div>{{#each pagamentos}} ... {{/each}}</div>
-                <div class="ps-3">{{payment_method}}, {{payment_value}}</div>
-                <div class="mt-2"><strong>Condicionais:</strong></div>
-                <div>{{#if taxa_entrega}} ... {{/if}}</div>
-                <div>{{#if desconto}} ... {{/if}}</div>
-                <div>{{#if observacoes}} ... {{/if}}</div>
-                <div>{{#if qr_url}} ... {{/if}}</div>
-                <div class="mt-2"><strong>QR Code (impressora termica):</strong></div>
-                <div>[QR:{{qr_url}}] - imprime QR code ESC/POS</div>
-              </div>
-            </div>
+          <!-- Tab: Template -->
+          <div v-show="activeTab === 'template'">
+            <ReceiptTemplateEditor v-model="receiptTemplate" @test-print="testPrint" />
           </div>
 
         </div>
@@ -129,19 +94,19 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import api from '../api';
+import ReceiptTemplateEditor from './ReceiptTemplateEditor.vue';
 
 const props = defineProps({ visible: Boolean });
 const emit = defineEmits(['update:visible','saved']);
 
 const visible = ref(false);
+const activeTab = ref('config');
 const printers = ref([]);
 const printerName = ref('');
 const printType = ref('thermal');
 const paperWidth = ref('80');
-const includeItemDescription = ref(false);
 const copies = ref(1);
 const receiptTemplate = ref('');
-const showPlaceholderHelp = ref(false);
 const discovering = ref(false);
 const discoverError = ref('');
 const generatedToken = ref('');
@@ -177,7 +142,6 @@ function loadSaved(){
       printerName.value = cfg.printerName || '';
       printType.value = cfg.printType || 'thermal';
       paperWidth.value = cfg.paperWidth || '80';
-      includeItemDescription.value = !!cfg.includeItemDescription;
       copies.value = typeof cfg.copies !== 'undefined' ? cfg.copies : 1;
       receiptTemplate.value = cfg.receiptTemplate || '';
     }
@@ -227,12 +191,27 @@ async function generateToken(){
   }
 }
 
+async function testPrint(){
+  try {
+    pushLog('Enviando impressao de teste...');
+    const { data } = await api.post('/agent-setup/print-test', {
+      printerName: printerName.value || undefined,
+      receiptTemplate: receiptTemplate.value || undefined,
+      copies: 1,
+    });
+    if (data && data.ok) pushLog('Impressao de teste enviada com sucesso');
+    else pushLog('Falha ao enviar teste: ' + JSON.stringify(data));
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || String(e);
+    pushLog('Erro ao imprimir teste: ' + msg);
+  }
+}
+
 function save(){
   const cfg = {
     printerName: printerName.value,
     printType: printType.value,
     paperWidth: paperWidth.value,
-    includeItemDescription: includeItemDescription.value,
     copies: copies.value,
     receiptTemplate: receiptTemplate.value,
   };

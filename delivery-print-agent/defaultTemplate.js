@@ -94,4 +94,38 @@ OBS: {{observacoes}}
 Obrigado e bom apetite!
 ================================================`;
 
+const DEFAULT_TEMPLATE_V2 = {
+  v: 2,
+  blocks: [
+    { t: 'sep' },
+    { t: 'text', c: '{{header_name}}', a: 'center', b: true, s: 'lg' },
+    { t: 'text', c: '{{header_city}}', a: 'center' },
+    { t: 'sep' },
+    { t: 'text', c: 'PEDIDO #{{display_id}}', a: 'center', b: true, s: 'xl' },
+    { t: 'text', c: 'Data: {{data_pedido}}  Hora: {{hora_pedido}}' },
+    { t: 'cond', key: 'tipo_pedido', c: 'Tipo: {{tipo_pedido}}' },
+    { t: 'sep' },
+    { t: 'text', c: 'CLIENTE: {{nome_cliente}}', b: true },
+    { t: 'text', c: 'Telefone: {{telefone_cliente}}' },
+    { t: 'text', c: 'Endereco: {{endereco_cliente}}' },
+    { t: 'sep' },
+    { t: 'items', itemBold: true, itemSize: 'normal' },
+    { t: 'sep' },
+    { t: 'text', c: 'Qtd itens: {{total_itens_count}}' },
+    { t: 'text', c: 'Subtotal: R$ {{subtotal}}' },
+    { t: 'cond', key: 'taxa_entrega', c: 'Taxa entrega: R$ {{taxa_entrega}}' },
+    { t: 'cond', key: 'desconto', c: 'Desconto: R$ {{desconto}}' },
+    { t: 'text', c: 'TOTAL: R$ {{total}}', b: true, s: 'lg' },
+    { t: 'sep' },
+    { t: 'text', c: 'FORMAS DE PAGAMENTO', b: true },
+    { t: 'payments' },
+    { t: 'cond', key: 'observacoes', c: 'OBS: {{observacoes}}' },
+    { t: 'qr' },
+    { t: 'sep' },
+    { t: 'text', c: 'Obrigado e bom apetite!', a: 'center' },
+    { t: 'sep' }
+  ]
+};
+
 module.exports = DEFAULT_TEMPLATE;
+module.exports.DEFAULT_TEMPLATE_V2 = DEFAULT_TEMPLATE_V2;

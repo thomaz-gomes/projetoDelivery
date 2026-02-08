@@ -6,14 +6,19 @@
  *   2. Caminho primário: node-thermal-printer (ESC/POS)
  *   3. Fallback: PowerShell Out-Printer (Windows) ou lp (Linux)
  *   4. Salva em disco se tudo falhar
+ *
+ * Suporta dois formatos de template:
+ *   - Texto plano (v1): {{placeholders}} + [QR:url]
+ *   - JSON (v2): blocos com formatação (negrito, tamanho, alinhamento)
  */
 
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const mkdirp = require('mkdirp');
-const { renderTemplate, buildContext } = require('./templateEngine');
+const { renderTemplate, buildContext, renderBlockContent, replacePlaceholders } = require('./templateEngine');
 const DEFAULT_TEMPLATE = require('./defaultTemplate');
+const { DEFAULT_TEMPLATE_V2 } = require('./defaultTemplate');
 
 // --- Configuração ---
 const LOG_DIR = path.resolve(process.env.LOG_DIR || path.join(__dirname, 'logs'));
@@ -65,7 +70,6 @@ function clearRecentPrint(orderId) {
 }
 
 // --- Inicialização da impressora (lazy) ---
-// node-thermal-printer v3 uses a functional API: init(config), println(), cut(), execute()
 const ntp = require('node-thermal-printer');
 
 function initPrinter(opts = {}) {
@@ -81,6 +85,138 @@ function initPrinter(opts = {}) {
     removeSpecialCharacters: false,
     options: { timeout: 5000 }
   });
+}
+
+// --- Formatação ESC/POS para blocos JSON ---
+function applyBlockFormat(block) {
+  // Alinhamento
+  if (block.a === 'center') ntp.alignCenter();
+  else if (block.a === 'right') ntp.alignRight();
+  else ntp.alignLeft();
+
+  // Negrito
+  if (block.b) ntp.bold(true);
+
+  // Tamanho
+  if (block.s === 'sm') {
+    try { ntp.setTypeFontB(); } catch (e) { /* some printers dont support font B */ }
+  } else if (block.s === 'lg') {
+    ntp.setTextDoubleHeight();
+  } else if (block.s === 'xl') {
+    ntp.setTextQuadArea();
+  }
+}
+
+function resetBlockFormat() {
+  ntp.setTextNormal();
+  ntp.bold(false);
+  ntp.alignLeft();
+}
+
+/**
+ * Renderiza blocos JSON v2 diretamente na impressora com formatação ESC/POS.
+ */
+function renderJsonBlocks(blocks, context) {
+  for (const block of blocks) {
+    try {
+      switch (block.t) {
+        case 'sep':
+          ntp.drawLine();
+          break;
+
+        case 'text': {
+          const text = renderBlockContent(block.c || '', context);
+          if (!text.trim() && !block.c) break;
+          applyBlockFormat(block);
+          ntp.println(text);
+          resetBlockFormat();
+          break;
+        }
+
+        case 'cond': {
+          const val = context[block.key];
+          if (!val || val === '0' || val === '0.00') break;
+          const text = renderBlockContent(block.c || '', context);
+          applyBlockFormat(block);
+          ntp.println(text);
+          resetBlockFormat();
+          break;
+        }
+
+        case 'items': {
+          const items = context.items;
+          if (!Array.isArray(items) || items.length === 0) break;
+          for (const item of items) {
+            const merged = Object.assign({}, context, item);
+            // Linha do item
+            if (block.itemBold) ntp.bold(true);
+            if (block.itemSize === 'lg') ntp.setTextDoubleHeight();
+            else if (block.itemSize === 'xl') ntp.setTextQuadArea();
+            ntp.println(replacePlaceholders('{{item_qty}}x  {{item_name}}  R$ {{item_price}}', merged));
+            ntp.setTextNormal();
+            ntp.bold(false);
+            // Opções
+            if (Array.isArray(item.item_options)) {
+              for (const opt of item.item_options) {
+                const optMerged = Object.assign({}, merged, opt);
+                ntp.println(replacePlaceholders('  -- {{option_qty}}x {{option_name}}  R$ {{option_price}}', optMerged));
+              }
+            }
+            // Observação do item
+            if (item.notes) {
+              ntp.println('  OBS: ' + item.notes);
+            }
+          }
+          break;
+        }
+
+        case 'payments': {
+          const pags = context.pagamentos;
+          if (!Array.isArray(pags) || pags.length === 0) break;
+          for (const p of pags) {
+            const merged = Object.assign({}, context, p);
+            applyBlockFormat(block);
+            ntp.println(replacePlaceholders('{{payment_method}}   R$ {{payment_value}}', merged));
+            resetBlockFormat();
+          }
+          break;
+        }
+
+        case 'qr': {
+          const qrUrl = context.qr_url;
+          if (!qrUrl) break;
+          try {
+            ntp.alignCenter();
+            ntp.printQR(qrUrl, { cellSize: 6, correction: 'M', model: 2 });
+            ntp.println('Escaneie para despachar');
+            ntp.alignLeft();
+          } catch (qrErr) {
+            ntp.println('[QR:' + qrUrl + ']');
+          }
+          break;
+        }
+
+        default:
+          break;
+      }
+    } catch (blockErr) {
+      logFile(`Error rendering block ${block.t}: ${blockErr.message}`);
+    }
+  }
+}
+
+/**
+ * Tenta parsear o template como JSON v2. Retorna os blocks ou null.
+ */
+function parseJsonTemplate(template) {
+  if (!template || typeof template !== 'string') return null;
+  try {
+    const parsed = JSON.parse(template);
+    if (parsed && parsed.v === 2 && Array.isArray(parsed.blocks)) {
+      return parsed.blocks;
+    }
+  } catch (e) { /* not JSON */ }
+  return null;
 }
 
 // --- Impressão via sistema (fallback) ---
@@ -105,7 +241,6 @@ async function printViaSystem(text, opts = {}, copies = 1) {
         try { fs.unlinkSync(tmpFile); } catch (e) { /* ignore */ }
       }
     } else {
-      // Linux/Mac: lp command
       const args = printerName ? ['-d', printerName] : [];
       const result = spawnSync('lp', args, { input: text, timeout: SPAWN_TIMEOUT_MS });
       if (result.status !== 0) {
@@ -131,18 +266,26 @@ async function printOrder(order, opts = {}) {
   }
   markPrintingStart(orderId);
 
-  // 2. Renderizar template
+  // 2. Preparar contexto e template
   const template = opts.receiptTemplate || DEFAULT_TEMPLATE;
   const printerSetting = {
     headerName: opts.headerName || process.env.HEADER_NAME || 'Minha Loja',
     headerCity: opts.headerCity || process.env.HEADER_CITY || ''
   };
   const context = buildContext(order, printerSetting);
-  const renderedText = renderTemplate(template, context);
   const copies = Math.max(1, Math.min(10, Number(opts.copies || DEFAULT_COPIES)));
 
-  logFile(`Printing order ${orderId} - ${copies} copies - text length ${renderedText.length}`);
-  console.log(`Printing order ${orderId} - ${copies} copies`);
+  // Detectar se é template JSON v2
+  const jsonBlocks = parseJsonTemplate(template);
+  const isJsonTemplate = !!jsonBlocks;
+
+  // Para fallback e dry-run, renderizar sempre como texto plano
+  const renderedText = isJsonTemplate
+    ? renderTemplate(DEFAULT_TEMPLATE, context)
+    : renderTemplate(template, context);
+
+  logFile(`Printing order ${orderId} - ${copies} copies - format ${isJsonTemplate ? 'json-v2' : 'plain'}`);
+  console.log(`Printing order ${orderId} - ${copies} copies - format ${isJsonTemplate ? 'json-v2' : 'plain'}`);
 
   // 3. DRY_RUN
   const effectiveDryRun = (typeof opts.dryRun === 'boolean') ? opts.dryRun : DRY_RUN;
@@ -156,26 +299,34 @@ async function printOrder(order, opts = {}) {
   // 4. Caminho primário: node-thermal-printer
   try {
     initPrinter(opts);
-    const QR_PATTERN = /^\[QR:(.+)\]$/;
+
     for (let copy = 0; copy < copies; copy++) {
-      const lines = renderedText.split('\n');
-      for (const line of lines) {
-        const qrMatch = line.trim().match(QR_PATTERN);
-        if (qrMatch && qrMatch[1]) {
-          try {
-            ntp.alignCenter();
-            ntp.printQR(qrMatch[1], { cellSize: 6, correction: 'M', model: 2 });
-            ntp.println('Escaneie para despachar');
-            ntp.alignLeft();
-          } catch (qrErr) {
+      if (isJsonTemplate) {
+        // --- Template JSON v2: blocos com formatação ESC/POS ---
+        renderJsonBlocks(jsonBlocks, context);
+      } else {
+        // --- Template texto plano v1: linha por linha ---
+        const QR_PATTERN = /^\[QR:(.+)\]$/;
+        const lines = renderedText.split('\n');
+        for (const line of lines) {
+          const qrMatch = line.trim().match(QR_PATTERN);
+          if (qrMatch && qrMatch[1]) {
+            try {
+              ntp.alignCenter();
+              ntp.printQR(qrMatch[1], { cellSize: 6, correction: 'M', model: 2 });
+              ntp.println('Escaneie para despachar');
+              ntp.alignLeft();
+            } catch (qrErr) {
+              ntp.println(line);
+            }
+          } else {
             ntp.println(line);
           }
-        } else {
-          ntp.println(line);
         }
       }
       ntp.cut();
     }
+
     const result = await ntp.execute();
     logFile(`Printed via node-thermal-printer, result: ${result}`);
     console.log('Printed via node-thermal-printer to', opts.printerName || PRINTER_NAME || 'default');
@@ -186,7 +337,7 @@ async function printOrder(order, opts = {}) {
     console.warn('node-thermal-printer failed:', err.message, '- trying system fallback');
   }
 
-  // 5. Fallback: PowerShell/lp
+  // 5. Fallback: PowerShell/lp (usa texto plano sempre)
   try {
     await printViaSystem(renderedText, opts, copies);
     logFile(`Printed via system fallback (${process.platform})`);
@@ -207,7 +358,6 @@ async function printOrder(order, opts = {}) {
     console.log('Saved failed print to', failPath);
   } catch (e) { /* ignore */ }
 
-  // Salvar payload JSON para debug
   try {
     const jsonPath = path.join(__dirname, 'failed-print', `failed-${orderId}-${Date.now()}.json`);
     fs.writeFileSync(jsonPath, JSON.stringify({ order, opts, error: 'all-methods-failed' }, null, 2));
