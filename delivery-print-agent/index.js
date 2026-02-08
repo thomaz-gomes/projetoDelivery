@@ -19,6 +19,14 @@ const STORE_IDS = (process.env.STORE_IDS || process.env.STORE_ID || process.env.
 const DRY_RUN = String(process.env.DRY_RUN || 'false').toLowerCase() === 'true';
 const LOG_DIR = path.resolve(process.env.LOG_DIR || path.join(__dirname, 'logs'));
 
+// Converte largura do papel em mm para colunas ESC/POS
+function mmToColumns(mm) {
+  const v = Number(mm);
+  if (v >= 70) return 48;  // 80mm -> 48 colunas
+  if (v >= 50) return 32;  // 58mm -> 32 colunas
+  return 48; // default
+}
+
 mkdirp.sync(LOG_DIR);
 
 // --- Token ---
@@ -145,7 +153,7 @@ function connect(forceAnonymous = false) {
       const opts = {
         printerName: incoming.printerName || undefined,
         printerType: incoming.printerType || undefined,
-        width: incoming.paperWidth || undefined,
+        width: incoming.paperWidth ? mmToColumns(incoming.paperWidth) : undefined,
         receiptTemplate: incoming.receiptTemplate || undefined,
         copies: incoming.copies || undefined,
         headerName: incoming.headerName || undefined,

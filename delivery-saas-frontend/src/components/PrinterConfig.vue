@@ -11,11 +11,6 @@
           <p class="text-muted small">qual tipo de impressão vamos usar, hein?</p>
 
           <div class="mb-3">
-            <label class="form-label">Apelido</label>
-            <TextInput v-model="alias" placeholder="Apelido para esta impressora" inputClass="form-control" />
-          </div>
-
-          <div class="mb-3">
             <label class="form-label">Impressora</label>
             <SelectInput   v-model="printerName"  class="form-select">
               <option value="">Selecione uma impressora</option>
@@ -141,7 +136,6 @@ const emit = defineEmits(['update:visible','saved']);
 const visible = ref(false);
 const printers = ref([]);
 const printerName = ref('');
-const alias = ref('');
 const printType = ref('thermal');
 const paperWidth = ref('80');
 const includeItemDescription = ref(false);
@@ -181,7 +175,6 @@ function loadSaved(){
     if (s){
       const cfg = JSON.parse(s);
       printerName.value = cfg.printerName || '';
-      alias.value = cfg.alias || '';
       printType.value = cfg.printType || 'thermal';
       paperWidth.value = cfg.paperWidth || '80';
       includeItemDescription.value = !!cfg.includeItemDescription;
@@ -236,7 +229,6 @@ async function generateToken(){
 
 function save(){
   const cfg = {
-    alias: alias.value,
     printerName: printerName.value,
     printType: printType.value,
     paperWidth: paperWidth.value,
@@ -255,7 +247,7 @@ function save(){
         interface: iface,
         type: printType.value === 'thermal' ? 'EPSON' : 'GENERIC',
         width: Number(paperWidth.value) || 80,
-        headerName: alias.value || undefined,
+        headerName: undefined,
         copies: copies.value || 1,
         printerName: printerName.value || null,
         receiptTemplate: receiptTemplate.value || null,

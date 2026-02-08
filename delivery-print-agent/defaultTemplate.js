@@ -39,10 +39,10 @@
  *     {{payment_value}}  - Valor do pagamento
  */
 
-const DEFAULT_TEMPLATE = `================================
+const DEFAULT_TEMPLATE = `================================================
 {{header_name}}
 {{header_city}}
-================================
+================================================
 
 *** PEDIDO #{{display_id}} ***
 Data: {{data_pedido}}  Hora: {{hora_pedido}}
@@ -50,13 +50,13 @@ Data: {{data_pedido}}  Hora: {{hora_pedido}}
 Tipo: {{tipo_pedido}}
 {{/if}}
 
---------------------------------
+------------------------------------------------
 CLIENTE: {{nome_cliente}}
 Telefone: {{telefone_cliente}}
 Endereco: {{endereco_cliente}}
---------------------------------
+------------------------------------------------
 
-QT  Descricao              Valor
+QT  Descricao                        Valor
 {{#each items}}
 {{item_qty}}x  {{item_name}}  R$ {{item_price}}
 {{#each item_options}}
@@ -67,17 +67,17 @@ QT  Descricao              Valor
 {{/if}}
 {{/each}}
 
---------------------------------
+------------------------------------------------
 Qtd itens: {{total_itens_count}}
-Subtotal:      R$ {{subtotal}}
+Subtotal:              R$ {{subtotal}}
 {{#if taxa_entrega}}
-Taxa entrega:  R$ {{taxa_entrega}}
+Taxa entrega:          R$ {{taxa_entrega}}
 {{/if}}
 {{#if desconto}}
-Desconto:      R$ {{desconto}}
+Desconto:              R$ {{desconto}}
 {{/if}}
-TOTAL:         R$ {{total}}
---------------------------------
+TOTAL:                 R$ {{total}}
+------------------------------------------------
 
 FORMAS DE PAGAMENTO
 {{#each pagamentos}}
@@ -90,8 +90,8 @@ OBS: {{observacoes}}
 {{#if qr_url}}
 [QR:{{qr_url}}]
 {{/if}}
-================================
+================================================
 Obrigado e bom apetite!
-================================`;
+================================================`;
 
 module.exports = DEFAULT_TEMPLATE;

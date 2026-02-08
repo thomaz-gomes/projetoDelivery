@@ -62,6 +62,15 @@ export async function enrichOrderForAgent(order) {
       order.qrText = p.qrText || p.qr_text || null
     }
 
+    // 3b. Fallback: gerar qrText se ainda vazio e pedido for DELIVERY
+    if (!order.qrText && order.id) {
+      const orderType = String(order.orderType || (order.payload && (order.payload.orderType || order.payload.order_type)) || '').toUpperCase()
+      if (orderType === 'DELIVERY' || (order.payload && (order.payload.delivery || order.payload.deliveryAddress))) {
+        const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')
+        order.qrText = `${frontend}/orders/${order.id}`
+      }
+    }
+
     // 4. Resolver address se ausente - buscar de payload.delivery.deliveryAddress
     if (!order.address || order.address === '-') {
       try {
