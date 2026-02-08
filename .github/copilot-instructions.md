@@ -55,7 +55,7 @@ These guidelines capture project-specific practices so an AI agent can be immedi
 
 ## Modules & SaaS
 - Routers gated by modules when `ENFORCE_MODULES=1`:
-  - Printing: [delivery-saas-backend/src/index.js](delivery-saas-backend/src/index.js#L160-L190) gates `/agent-print` and `/qz-print` via `requireModule('printing')`.
+  - Printing: [delivery-saas-backend/src/index.js](delivery-saas-backend/src/index.js#L160-L190) gates `/agent-print` via `requireModule('printing')`.
   - NFE: `/nfe` via `requireModule('nfe')`.
   - iFood: `/ifood` via `requireModule('ifood')`.
 - Middleware: [delivery-saas-backend/src/modules.js](delivery-saas-backend/src/modules.js) provides `requireModule()` and a cache; disabled unless `ENFORCE_MODULES` is true.
@@ -85,7 +85,7 @@ These guidelines capture project-specific practices so an AI agent can be immedi
 
 ## Useful Examples
 - Smoke test a public order: [scripts/smoke_post_public_order.mjs](scripts/smoke_post_public_order.mjs).
-- Print mock (HTTP receiver for dev): [delivery-saas-frontend/dev-tools/print-mock/README.md](delivery-saas-frontend/dev-tools/print-mock/README.md).
+- Print Agent: [delivery-print-agent/README.md](delivery-print-agent/README.md).
 
 ## When modifying code
 - For backend routes, mount under existing prefixes (`/orders`, `/agent-setup`, etc.) and reflect changes in the frontend proxies.

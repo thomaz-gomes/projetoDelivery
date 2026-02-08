@@ -1,0 +1,45 @@
+================================
+Minha Loja de Testes
+São Paulo
+================================
+
+*** PEDIDO #12d1ab ***
+Data: 08/01/2026  Hora: 00:22
+
+Tipo: DELIVERY
+
+
+--------------------------------
+CLIENTE: TESTE PÚBLICO
+Telefone: 559900112233
+Endereco: Rua de Teste, 123, Centro
+--------------------------------
+
+QT  Descricao              Valor
+
+1x  Producto de Teste  R$ 10.00
+{{#each item_options}}
+  -- x   R$ 
+
+
+{{/each}}
+
+--------------------------------
+Qtd itens: 1
+Subtotal:      R$ 10.00
+
+Taxa entrega:  R$ 5.00
+
+
+TOTAL:         R$ 10.00
+--------------------------------
+
+FORMAS DE PAGAMENTO
+
+DINHEIRO   R$ 10.00
+
+
+
+================================
+Obrigado e bom apetite!
+================================

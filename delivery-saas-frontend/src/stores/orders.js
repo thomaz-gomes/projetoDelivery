@@ -53,6 +53,13 @@ export const useOrdersStore = defineStore('orders', {
       return (flow[current] || []).includes(to);
     },
 
+    async updateOrder(id, fields = {}) {
+      const { data } = await api.patch(`/orders/${id}`, fields);
+      const idx = this.orders.findIndex(o => o.id === id);
+      if (idx >= 0) this.orders[idx] = data;
+      return data;
+    },
+
     async updateStatus(id, status, extra = {}) {
       const { data } = await api.patch(`/orders/${id}/status`, { status, ...extra });
       const idx = this.orders.findIndex(o => o.id === id);

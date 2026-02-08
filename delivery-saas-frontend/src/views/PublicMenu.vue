@@ -5,7 +5,7 @@
     <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
     <!-- Top navigation overlay (desktop + mobile) -->
     <header class="top-public-nav position-absolute w-100" style="top:0;left:0;z-index:1015">
-      <div class="container d-flex justify-content-end align-items-center py-2">
+      <div class="container d-flex justify-content-end align-items-center p-4">
         <div class="row">
           <div class="col-12">
 
@@ -18,13 +18,6 @@
                 </button>
                 <button class="btn btn-link text-white p-0 d-lg-none" @click.prevent="toggleMobileMenu" aria-label="Menu"><i class="bi bi-list"></i></button>
               </div>
-              <div v-if="mobileMenuOpen" class="mobile-top-menu d-lg-none bg-dark py-2">
-              <div class="container d-flex flex-column gap-2">
-                <a href="#" class="text-white" @click.prevent="goProfile">Perfil</a>
-                <a href="#" class="text-white" @click.prevent="goOrders">Histórico</a>
-                <a href="#" class="text-white" @click.prevent="openRegister">Entrar / Cadastrar</a>
-              </div>
-            </div>
 
 
           </div>
@@ -34,6 +27,29 @@
       
     </header>
     </div>
+
+    <!-- Mobile Offcanvas Menu -->
+    <div class="offcanvas-backdrop" :class="{ show: mobileMenuOpen }" @click="toggleMobileMenu"></div>
+    <div class="offcanvas offcanvas-end" :class="{ show: mobileMenuOpen }" tabindex="-1" aria-labelledby="mobileMenuLabel">
+      <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="mobileMenuLabel">Menu</h5>
+        <button type="button" class="btn-close" @click="toggleMobileMenu" aria-label="Fechar"></button>
+      </div>
+      <div class="offcanvas-body">
+        <nav class="d-flex flex-column gap-3">
+          <a href="#" class="offcanvas-link" @click.prevent="goProfile(); toggleMobileMenu()">
+            <i class="bi bi-person me-2"></i> Perfil
+          </a>
+          <a href="#" class="offcanvas-link" @click.prevent="goOrders(); toggleMobileMenu()">
+            <i class="bi bi-journal-text me-2"></i> Histórico
+          </a>
+          <a href="#" class="offcanvas-link" @click.prevent="openRegister(); toggleMobileMenu()">
+            <i class="bi bi-box-arrow-in-right me-2"></i> Entrar / Cadastrar
+          </a>
+        </nav>
+      </div>
+    </div>
+
     <!-- migration toast: shown when persisted cart was reconciled and items/options were removed -->
     <div v-if="showCartMigration" class="migration-toast" role="status" aria-live="polite">
       <strong>Atualização do carrinho:</strong>
@@ -51,19 +67,23 @@
             <h3 class="company-name">{{ displayName }}</h3>
             <div class="small company-address text-muted">{{ displayPickup || '' }}</div>
             <div class="small"><a href="#" class="text-muted more-information" @click.prevent="openInfoModal">Mais informações</a></div>
-              <div class="d-flex align-items-center gap-2">
-
-                <div class="store-closed-panel">
-                  <span v-if="isOpen" class="badge bg-primary">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</span>
-                  <span v-else class="badge bg-secondary">Fechado no momento{{ nextOpenText ? (', ' + nextOpenText) : '' }}</span>
-                </div>
-            
-          <div>
-            <span v-if="(menu?.allowDelivery ?? true)" class="badge bg-secondary me-1">Entrega</span>
-            <span v-if="(menu?.allowPickup ?? true)" class="badge bg-secondary">Retirada</span>
+              <div class="d-flex align-items-center gap-2 mb-1">
+                      <div class="store-closed-panel d-flex align-items-center">
+                        <span v-if="isOpen" class="badge bg-primary">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</span>
+                        <span v-else class="badge bg-secondary bg-danger">Fechado no momento{{ nextOpenText ? (', ' + nextOpenText) : '' }}</span>
+                    
+                      </div>
+              <div>
+           
           </div>
 
         </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <span v-if="(menu?.allowDelivery ?? true)" class="badge bg-secondary me-1">Entrega</span>
+            <span v-if="(menu?.allowPickup ?? true)" class="badge bg-secondary">Retirada</span>
+            </div>
+
           </div>
         </div>
         
@@ -105,29 +125,76 @@
       </button>
     </nav>
 
-    <div class="hero-panel mt-4 container py-4">
+    <div class="hero-panel mt-3 container py-3">
 
       <div v-if="loading" class="text-center py-5">
         <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
       </div>
 
       <div v-else>
-      <!-- unified category pills (mobile + desktop) -->
-      <div v-if="categories.length" class="mb-3">
-        <ul ref="navRef" class="nav nav-pills overflow-auto" :class="{ stuck: isNavSticky }" style="gap:2px">
-          <li class="nav-item" v-for="(cat, idx) in categories" :key="cat.id">
-            <a :href="`#cat-${cat.id}`" class="nav-link" :class="{ active: activeCategoryId === (cat.id) }" @click.prevent="selectCategory(cat.id)">{{ cat.name }}</a>
-          </li>
-          <li class="nav-item">
-            <a href="#products-start" class="nav-link" :class="{ active: activeCategoryId === null }" @click.prevent="selectCategory(null)">Todos</a>
-          </li>
-        </ul>
+      <!-- Campo de busca -->
+      <div class="search-categories-container mb-3">
+        <!-- unified category pills (mobile + desktop) -->
+        <div v-if="categories.length" class="categories-pills" :class="{ 'search-active': searchExpanded }">
+          <ul ref="navRef" class="nav nav-pills overflow-auto" :class="{ stuck: isNavSticky }" style="gap:2px;">
+            <li class="nav-item" v-for="(cat, idx) in categories" :key="cat.id">
+              <a :href="`#cat-${cat.id}`" class="nav-link" :class="{ active: activeCategoryId === (cat.id) }" @click.prevent="selectCategory(cat.id)">{{ cat.name }}</a>
+            </li>
+            <li class="nav-item">
+              <a href="#products-start" class="nav-link" :class="{ active: activeCategoryId === null }" @click.prevent="selectCategory(null)">Todos</a>
+            </li>
+          </ul>
+        </div>
+        
+        <!-- Search box -->
+        <div class="search-box" :class="{ expanded: searchExpanded }">
+          <!-- Ícone de busca clicável em mobile -->
+          <button 
+            class="search-toggle-btn d-lg-none"
+            :class="{ hidden: searchExpanded }"
+            @click="toggleSearch"
+            aria-label="Abrir busca"
+          >
+            <i class="bi bi-search"></i>
+          </button>
+          
+          <!-- Container do input (sempre visível em desktop, expansível em mobile) -->
+          <div class="search-input-container" :class="{ show: searchExpanded }">
+            <i class="bi bi-search search-icon d-none d-lg-inline"></i>
+            <input 
+              ref="searchInputRef"
+              v-model="productSearchTerm" 
+              type="text" 
+              class="form-control search-input" 
+              placeholder="Buscar produtos..." 
+              @input="handleProductSearch"
+            />
+            <!-- Botão X para fechar em mobile ou limpar em desktop -->
+            <button 
+              v-if="searchExpanded || productSearchTerm"
+              class="btn btn-link search-clear" 
+              @click="searchExpanded ? closeSearch() : clearProductSearch()"
+              :aria-label="searchExpanded ? 'Fechar busca' : 'Limpar busca'"
+            >
+              <i class="bi bi-x-circle"></i>
+            </button>
+          </div>
+        </div>
       </div>
+      
         <div class="row">
         
           <div :class="cart.length > 0 ? 'col-12' : 'col-sm-12'">
             <!-- products list: category sections -->
             <div id="products-start"></div>
+            
+            <!-- Mensagem quando nenhum produto é encontrado -->
+            <div v-if="productSearchTerm && visibleCategories.length === 0" class="text-center py-5">
+              <i class="bi bi-search" style="font-size: 3rem; color: #dee2e6;"></i>
+              <p class="text-muted mt-3">Nenhum produto encontrado para "{{ productSearchTerm }}"</p>
+              <button class="btn btn-outline-primary btn-sm" @click="clearProductSearch">Limpar busca</button>
+            </div>
+            
             <div v-for="cat in visibleCategories" :key="cat.id" :id="`cat-${cat.id}`" class="mb-4">
               <h5 class="mb-3">{{ cat.name }}</h5>
               <div class="row gx-3 gy-3">
@@ -353,7 +420,7 @@
                 </div>
 
                 <div class="mb-2">
-                  <TextInput label="WhatsApp / Telefone" labelClass="form-label" :value="customer.contact" inputClass="form-control" placeholder="(00) 9 0000-0000" maxlength="16" @input="handleContactInput" />
+                  <TextInput label="WhatsApp / Telefone" labelClass="form-label" v-model="customer.contact" inputClass="form-control" placeholder="(00) 9 0000-0000" maxlength="16" @input="handleContactInput" />
                   <div class="small mt-1" :class="customerPhoneValid ? 'text-success' : 'text-danger'">
                     <template v-if="customer.contact && customer.contact.length">
                       <span v-if="customerPhoneValid">Número válido</span>
@@ -915,6 +982,9 @@ const paymentMethods = ref([]);
 const company = ref(null)
 const menu = ref(null)
 const orderType = ref('DELIVERY') // 'DELIVERY' or 'PICKUP'
+const productSearchTerm = ref('')
+const searchExpanded = ref(false)
+const searchInputRef = ref(null)
 
 // Derived display values: prefer the menu name (cardápio title), then fall back
 // to store name or company name. This ensures the page heading shows the
@@ -1611,9 +1681,67 @@ function publicPath(path){
 }
 
 const visibleCategories = computed(() => {
-  // show all categories — navigation is handled via anchors now
-  return categories.value || []
+  // Se não há busca, mostra todas as categorias
+  if (!productSearchTerm.value || !productSearchTerm.value.trim()) {
+    return categories.value || []
+  }
+  
+  // Filtra produtos baseado no termo de busca
+  const searchLower = productSearchTerm.value.toLowerCase().trim()
+  const filtered = []
+  
+  for (const cat of (categories.value || [])) {
+    const matchingProducts = (cat.products || []).filter(product => {
+      const nameMatch = (product.name || '').toLowerCase().includes(searchLower)
+      const descMatch = (product.description || '').toLowerCase().includes(searchLower)
+      return nameMatch || descMatch
+    })
+    
+    // Só inclui categoria se tiver produtos que correspondem à busca
+    if (matchingProducts.length > 0) {
+      filtered.push({
+        ...cat,
+        products: matchingProducts
+      })
+    }
+  }
+  
+  return filtered
 })
+
+// Handlers para busca de produtos
+function handleProductSearch() {
+  // Scroll para o início dos produtos quando começar a buscar
+  if (productSearchTerm.value && productSearchTerm.value.trim()) {
+    try {
+      const productsStart = document.getElementById('products-start')
+      if (productsStart) {
+        productsStart.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    } catch (e) {}
+  }
+}
+
+function clearProductSearch() {
+  productSearchTerm.value = ''
+}
+
+function toggleSearch() {
+  searchExpanded.value = !searchExpanded.value
+  if (searchExpanded.value) {
+    // Focus no input após expansão
+    nextTick(() => {
+      if (searchInputRef.value) {
+        searchInputRef.value.focus()
+      }
+    })
+  }
+}
+
+function closeSearch() {
+  searchExpanded.value = false
+  productSearchTerm.value = ''
+}
 
 // map productId -> cashback percent (when provided on product object)
 const productCashbackMap = computed(() => {
@@ -1779,6 +1907,16 @@ const nextOpenText = computed(() => {
   // Prefer weeklySchedule when present
 
   const padTime = (s) => s || '--:--'
+  const formatBadgeTime = (s) => {
+    try{
+      if(!s) return '--:--'
+      const parts = String(s).split(':')
+      const hh = parts[0] || '0'
+      const mm = (parts[1] || '00')
+      const h = String(Number(hh))
+      return mm === '00' ? `${h}h` : `${h}h${mm}`
+    }catch(e){ return s }
+  }
 
   // If weeklySchedule present, find the next enabled day
   try{
@@ -1790,10 +1928,37 @@ const nextOpenText = computed(() => {
       const tzDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
       const weekDay = tzDate.getUTCDay()
       const schedule = c.weeklySchedule
-      // check today first
+      // check today first, but only if 'from' is still in the future
       const today = schedule.find(d => Number(d?.day) === Number(weekDay))
       if(today && today.enabled){
-        return `abre hoje às ${padTime(today.from)}`
+        try{
+          const parseHM = (s) => {
+            if(!s) return null
+            const parts = String(s).split(':').map(x=>Number(x))
+            if(parts.length < 2) return null
+            const [hh, mm] = parts
+            if(Number.isNaN(hh) || Number.isNaN(mm)) return null
+            return { hh, mm }
+          }
+          const from = parseHM(today.from)
+          if(from){
+            // compute now in store timezone
+            const fmtNow = new Intl.DateTimeFormat(undefined, { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' })
+            let nowParts
+            if(fmtNow.formatToParts){
+              const p = fmtNow.formatToParts(new Date())
+              nowParts = { hh: Number(p.find(x=>x.type==='hour')?.value), mm: Number(p.find(x=>x.type==='minute')?.value) }
+            } else {
+              const s = fmtNow.format(new Date())
+              const [hh, mm] = s.split(':').map(x=>Number(x))
+              nowParts = { hh, mm }
+            }
+            const toMinutes = (p) => p.hh*60 + p.mm
+            if(toMinutes(nowParts) < toMinutes(from)){
+              return `abre hoje as ${formatBadgeTime(today.from)}`
+            }
+          }
+        }catch(e){ /* ignore and continue to search next enabled day */ }
       }
       // search next enabled day
       const names = ['domingo','segunda','terça','quarta','quinta','sexta','sábado']
@@ -1801,8 +1966,8 @@ const nextOpenText = computed(() => {
         const idx = (weekDay + i) % 7
         const d = schedule.find(sch => Number(sch?.day) === Number(idx))
         if(d && d.enabled){
-          if(i === 1) return `amanhã às ${padTime(d.from)}`
-          return `abre ${names[idx]} às ${padTime(d.from)}`
+          if(i === 1) return `abre amanhã as ${formatBadgeTime(d.from)}`
+          return `abre ${names[idx]} as ${formatBadgeTime(d.from)}`
         }
       }
     }
@@ -1811,9 +1976,11 @@ const nextOpenText = computed(() => {
     // fallback: when always open, don't show nextOpen text
     if(isAlwaysOpenFlag(c)) return ''
     // fallback: use openFrom if present
-    if(c.openFrom) return `abre às ${c.openFrom}`
+    if(c.openFrom) return `abre as ${formatBadgeTime(c.openFrom)}`
     return ''
 })
+
+// debug timestamp removed
 
   const openUntilText = computed(() => {
     // when store is open, return a friendly 'Aberto até as HH:MM' when possible
@@ -3349,6 +3516,41 @@ onMounted(() => {
 })
 onBeforeUnmount(() => { try{ _publicMenuSocket && _publicMenuSocket.disconnect() }catch(e){} })
 
+// Update favicon dynamically when logo changes
+function updateFavicon(logoUrl) {
+  try {
+    if (!logoUrl) return;
+    
+    const url = assetUrl(logoUrl);
+    
+    // Remove existing favicon links
+    const existingLinks = document.querySelectorAll("link[rel*='icon']");
+    existingLinks.forEach(link => link.remove());
+    
+    // Create and append new favicon link
+    const link = document.createElement('link');
+    link.rel = 'icon';
+    link.type = 'image/x-icon';
+    link.href = url;
+    document.head.appendChild(link);
+    
+    // Also add apple-touch-icon for iOS devices
+    const appleTouchIcon = document.createElement('link');
+    appleTouchIcon.rel = 'apple-touch-icon';
+    appleTouchIcon.href = url;
+    document.head.appendChild(appleTouchIcon);
+  } catch (e) {
+    console.warn('[PublicMenu] Failed to update favicon', e);
+  }
+}
+
+// Watch for logo changes and update favicon
+watch(() => menu.value?.logo || company.value?.logo, (newLogo) => {
+  if (newLogo) {
+    updateFavicon(newLogo);
+  }
+}, { immediate: true });
+
 // fetch cashback settings for company and (if logged) the customer's wallet
 async function fetchCashbackSettingsAndWallet(){
   try{
@@ -3620,8 +3822,9 @@ try{
   cart.value = [];
   // persist customer contact so user can view history/status later
   saveCustomerToLocal()
-  // redirect to public order status page (include phone for verification)
-  const phone = encodeURIComponent(String(customer.value.contact || ''))
+  // redirect to public order status page (include digits-only phone for verification)
+  // Use removePhoneMask to ensure formatting differences don't prevent server-side matching
+  const phone = removePhoneMask(String(customer.value.contact || ''))
   const oid = encodeURIComponent(String(res.data.id || ''))
   try { _publicNavigate(`/order/${oid}`, { phone, storeId: storeId.value || undefined, menuId: menuId.value || undefined }) } catch(e) { console.warn('Redirect failed', e) }
   }catch(err){
@@ -3649,14 +3852,93 @@ try{
 .top-public-nav .nav-actions a, .top-public-nav .nav-actions button { color: #fff; opacity: .95 }
 .top-public-nav .nav-actions a:hover, .top-public-nav .nav-actions button:hover { opacity: 1 }
 .cart-badge-top { font-size: 11px; position: absolute; top: -6px; right: -8px; padding: 3px 6px; }
-.mobile-top-menu a { text-decoration: none }
+
+/* Offcanvas Mobile Menu */
+.offcanvas-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1049;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+.offcanvas-backdrop.show {
+  opacity: 1;
+  visibility: visible;
+}
+.offcanvas {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 280px;
+  max-width: 85vw;
+  background: #fff;
+  z-index: 1050;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+  overflow-y: auto;
+}
+.offcanvas.show {
+  transform: translateX(0);
+}
+.offcanvas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+.offcanvas-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.offcanvas-body {
+  padding: 1.5rem;
+}
+.offcanvas-link {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  color: #212529;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+  font-size: 1rem;
+}
+.offcanvas-link:hover {
+  background-color: #f8f9fa;
+  color: #0d6efd;
+}
+.offcanvas-link i {
+  font-size: 1.25rem;
+}
+.btn-close {
+  background: transparent url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23000'%3e%3cpath d='M.293.293a1 1 0 011.414 0L8 6.586 14.293.293a1 1 0 111.414 1.414L9.414 8l6.293 6.293a1 1 0 01-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 01-1.414-1.414L6.586 8 .293 1.707a1 1 0 010-1.414z'/%3e%3c/svg%3e") center/1em auto no-repeat;
+  border: 0;
+  width: 1em;
+  height: 1em;
+  padding: 0.25em;
+  opacity: 0.5;
+  cursor: pointer;
+}
+.btn-close:hover {
+  opacity: 0.75;
+}
+
 .nav-pills { position: sticky; top: 0; z-index: 5; padding-bottom: 8px; background: transparent; }
 .nav-pills.stuck { background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.06); padding-top: 8px; padding-bottom: 8px; z-index: 1040; }
 
 /* hero overlapping white panel */
 .hero-panel { background: transparent; margin-top: -90px; padding: 18px; border-radius: 12px; max-width: 980px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); background: #fff; position: relative; z-index: 1046 }
 .hero-panel .company-name { color: #111; }
-.hero-panel .company-address { color: #666 }
+.hero-panel .company-address { color: #666; font-size:0.8rem; font-style: italic; }
 .hero-panel .more-information{ color: var(--brand-dark) !important;}
 .store-closed-panel { color: #d23a3a; }
 .delivery-pickup-btn { background: #f1fbfd; color: #0d6efd; border: 1px solid rgba(13,110,253,0.12); border-radius: 10px; padding: 8px 12px; font-weight:600 }
@@ -4195,7 +4477,7 @@ body { padding-bottom: 110px; }
 .product-modal .option-summary { font-size:0.82rem; color:#6c757d; margin-top:4px; line-height:1.3; white-space:normal }
 .product-modal .cart-item-price { width:110px; font-weight:700; font-size:1rem }
 .product-modal .cart-item-actions { min-width:64px }
-.product-modal .cart-item-actions .btn { padding:0; margin:0; text-decoration:none }
+/*.product-modal .cart-item-actions .btn { padding:0; margin:0; text-decoration:none }*/
 /*.product-modal img, .product-modal .cart-thumb { display:none !important }*/
 .product-modal .list-group-item { padding: 12px; border-radius: 10px }
 
@@ -4279,6 +4561,175 @@ body { padding-bottom: 110px; }
     border-radius: 8px;
     margin-right: 8px;
 }
+/* Search box styles */
+.search-categories-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.categories-pills {
+  flex: 1;
+  min-width: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Desktop: busca sempre visível */
+@media (min-width: 992px) {
+  .search-input-container {
+    display: flex;
+    align-items: center;
+    position: relative;
+    width: 280px;
+  }
+  
+  .search-box .search-icon {
+    position: absolute;
+    left: 12px;
+    color: #6c757d;
+    pointer-events: none;
+    z-index: 1;
+  }
+  
+  .search-box .search-input {
+    width: 100%;
+    padding-left: 40px;
+    padding-right: 40px;
+    border-radius: 12px;
+    border: 2px solid #e9ecef;
+    transition: all 0.2s ease;
+  }
+  
+  .search-toggle-btn {
+    display: none !important;
+  }
+}
+
+/* Mobile: busca com expansão */
+@media (max-width: 991px) {
+  .search-categories-container {
+    flex-wrap: nowrap;
+  }
+  
+  .categories-pills {
+    max-width: calc(100% - 50px);
+    position:relative;
+  }
+  .categories-pills::after {
+    content: '';
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 1) 100%) !important;
+    position: absolute;
+    height: 38px;
+    width: 63px;
+    right: 0px;
+    top: 0;
+    z-index: 73;
+}
+  
+  .categories-pills.search-active {
+    opacity: 0;
+    transform: translateX(-20px);
+    pointer-events: none;
+  }
+  
+  .search-box {
+    position: relative;
+  }
+  
+  .search-toggle-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    border: 2px solid #e9ecef;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+  }
+  
+  .search-toggle-btn:hover {
+    border-color: #0d6efd;
+    background: #f8f9fa;
+  }
+  
+  .search-toggle-btn i {
+    font-size: 1.2rem;
+    color: #6c757d;
+  }
+  
+  .search-toggle-btn.hidden {
+    display: none;
+  }
+  
+  .search-input-container {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+  }
+  
+  .search-input-container.show {
+    width: calc(100vw - 48px);
+    max-width: 500px;
+    opacity: 1;
+  }
+  
+  .search-box.expanded .search-input-container {
+    position: relative;
+  }
+  
+  .search-input-container .search-input {
+    width: 100%;
+    padding-left: 16px;
+    padding-right: 40px;
+    border-radius: 12px;
+    border: 2px solid #e9ecef;
+    transition: all 0.2s ease;
+  }
+}
+
+/* Estilos comuns */
+.search-box .search-input:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+  outline: none;
+}
+
+.search-box .search-clear {
+  position: absolute;
+  right: 8px;
+  padding: 4px 8px;
+  color: #6c757d;
+  text-decoration: none;
+  z-index: 2;
+}
+
+.search-box .search-clear:hover {
+  color: #495057;
+}
+
+.search-box .search-clear i {
+  font-size: 1.1rem;
+}
+    
+
   .summary-icon i{
     color: #42721a !important;
     }
@@ -4339,4 +4790,3 @@ body { padding-bottom: 110px; }
 }
 
 </style>
-

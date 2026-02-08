@@ -33,7 +33,8 @@ router.get('/', async (req, res) => {
 // Note: keep POST restricted to ADMIN role
 router.post('/', requireRole('ADMIN'), async (req, res) => {
   try {
-    let { companyId, storeId, interface: iface, type, width } = req.body || {}
+    let { companyId, storeId, interface: iface, type, width,
+          receiptTemplate, copies, printerName } = req.body || {}
     if (!companyId && storeId) {
       const store = await prisma.store.findUnique({ where: { id: storeId }, select: { companyId: true } })
       if (!store) return res.status(404).json({ ok: false, message: 'store not found' })
@@ -44,13 +45,20 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
     // sanitize interface: strip prefix 'printer:' if present
     const sanitizedInterface = iface ? String(iface).replace(/^\s*printer:\s*/i, '').trim() : null
 
+    const data = { interface: sanitizedInterface || null, type: type || null, width: width ?? null }
+    if (receiptTemplate !== undefined) data.receiptTemplate = receiptTemplate === null ? null : String(receiptTemplate)
+    if (copies !== undefined) data.copies = Math.max(1, Math.min(10, Number(copies) || 1))
+    if (printerName !== undefined) data.printerName = printerName === null ? null : String(printerName)
+
     const existing = await prisma.printerSetting.findUnique({ where: { companyId } })
     if (existing) {
-      const updated = await prisma.printerSetting.update({ where: { companyId }, data: { interface: sanitizedInterface || null, type: type || existing.type || null, width: width ?? existing.width ?? null } })
+      if (!data.type) data.type = existing.type
+      if (data.width == null) data.width = existing.width
+      const updated = await prisma.printerSetting.update({ where: { companyId }, data })
       return res.json({ ok: true, updated })
     }
 
-    const created = await prisma.printerSetting.create({ data: { companyId, interface: sanitizedInterface || null, type: type || null, width: width ?? null } })
+    const created = await prisma.printerSetting.create({ data: Object.assign({ companyId }, data) })
     return res.json({ ok: true, created })
   } catch (e) {
     console.error('POST /settings/printer-setting failed', e)

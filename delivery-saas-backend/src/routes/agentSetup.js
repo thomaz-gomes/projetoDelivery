@@ -33,6 +33,9 @@ agentSetupRouter.get('/', async (req, res) => {
       width: setting.width,
       headerName: setting.headerName,
       headerCity: setting.headerCity,
+      receiptTemplate: setting.receiptTemplate,
+      copies: setting.copies,
+      printerName: setting.printerName,
       agentTokenCreatedAt: setting.agentTokenCreatedAt
     } : null
 
@@ -98,7 +101,8 @@ agentSetupRouter.post('/settings', requireRole('ADMIN'), async (req, res) => {
     if (!companyId) return res.status(400).json({ message: 'companyId ausente no token' })
 
     // defensive parsing and logging to help diagnose 500s reported by frontend
-    const { interface: iface, type, width, headerName, headerCity } = req.body || {}
+    const { interface: iface, type, width, headerName, headerCity,
+            receiptTemplate, copies, printerName } = req.body || {}
     const data = {}
     if (iface !== undefined) data.interface = String(iface)
     if (type !== undefined) data.type = String(type)
@@ -109,6 +113,9 @@ agentSetupRouter.post('/settings', requireRole('ADMIN'), async (req, res) => {
     }
     if (headerName !== undefined) data.headerName = headerName === null ? null : String(headerName)
     if (headerCity !== undefined) data.headerCity = headerCity === null ? null : String(headerCity)
+    if (receiptTemplate !== undefined) data.receiptTemplate = receiptTemplate === null ? null : String(receiptTemplate)
+    if (copies !== undefined) data.copies = Math.max(1, Math.min(10, Number(copies) || 1))
+    if (printerName !== undefined) data.printerName = printerName === null ? null : String(printerName)
 
     try {
       const existing = await prisma.printerSetting.findUnique({ where: { companyId } })
@@ -125,6 +132,9 @@ agentSetupRouter.post('/settings', requireRole('ADMIN'), async (req, res) => {
         width: updated.width,
         headerName: updated.headerName,
         headerCity: updated.headerCity,
+        receiptTemplate: updated.receiptTemplate,
+        copies: updated.copies,
+        printerName: updated.printerName,
         agentTokenCreatedAt: updated.agentTokenCreatedAt
       }})
     } catch (dbErr) {

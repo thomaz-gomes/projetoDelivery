@@ -1,0 +1,45 @@
+================================
+Minha Loja de Testes
+São Paulo
+================================
+
+*** PEDIDO #dee4c9 ***
+Data: 08/01/2026  Hora: 00:07
+
+Tipo: DELIVERY
+
+
+--------------------------------
+CLIENTE: THOMAZ
+Telefone: 73991429676
+Endereco: Av tordesilha
+--------------------------------
+
+QT  Descricao              Valor
+
+1x  Suco Natural 500ml  R$ 13.50
+{{#each item_options}}
+  -- x   R$ 
+
+
+{{/each}}
+
+--------------------------------
+Qtd itens: 1
+Subtotal:      R$ 19.50
+
+Taxa entrega:  R$ 6.50
+
+
+TOTAL:         R$ 20.00
+--------------------------------
+
+FORMAS DE PAGAMENTO
+
+DINHEIRO   R$ 20.00
+
+
+
+================================
+Obrigado e bom apetite!
+================================

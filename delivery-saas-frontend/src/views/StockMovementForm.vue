@@ -1,9 +1,11 @@
 <template>
+  <div class="container">
   <div class="p-4">
-    <h2 class="h4 mb-3">{{ id ? 'Editar Lançamento' : 'Novo Lançamento' }}</h2>
-    <div class="card mb-3">
+    <div class="card ">
       <div class="card-body">
         <form @submit.prevent="save" class="row g-2">
+          <div class="col-12">
+    <h2 class="h4 mb-3">{{ id ? 'Editar Lançamento' : 'Novo Lançamento' }}</h2></div>
           <div class="col-md-3">
             <select v-model="form.type" class="form-select">
               <option value="IN">Entrada</option>
@@ -14,6 +16,7 @@
           <div class="col-md-5 text-end"><button class="btn btn-primary" :disabled="saving">Salvar</button></div>
         </form>
       </div>
+    </div>
     </div>
 
     <ListCard title="Itens" icon="bi bi-list-ul" :subtitle="form.items.length ? `${form.items.length} itens` : ''">
@@ -52,6 +55,7 @@ import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import ListCard from '../components/ListCard.vue';
+import Swal from 'sweetalert2';
 
 const route = useRoute();
 const router = useRouter();
@@ -78,7 +82,7 @@ async function save(){ saving.value = true; try{
     const payload = { companyId: companyId, type: form.value.type, reason: form.value.reason, items: form.value.items.map(i => ({ ingredientId: i.ingredientId, quantity: i.quantity, unitCost: i.unitCost })) };
     await api.post('/stock-movements', payload);
     router.push('/stock-movements');
-  }catch(e){ alert(e?.response?.data?.message || 'Erro ao salvar') } finally{ saving.value = false } }
+  }catch(e){ Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Erro ao salvar' }) } finally{ saving.value = false } }
 
 onMounted(()=>{ fetchIngredients(); });
 </script>

@@ -70,4 +70,13 @@ ingredientGroupsRouter.delete('/:id', requireRole('ADMIN'), async (req, res) => 
   res.json({ ok: true });
 });
 
+// get single
+ingredientGroupsRouter.get('/:id', async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const row = await prisma.ingredientGroup.findFirst({ where: { id, companyId } });
+  if (!row) return res.status(404).json({ message: 'Grupo não encontrado' });
+  res.json(row);
+});
+
 export default ingredientGroupsRouter;

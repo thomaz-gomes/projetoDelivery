@@ -7937,3 +7937,420 @@ No linha:1 caractere:59
  
 
 [2025-12-30T19:30:49.459Z] Shim2 execute result: false
+[2026-02-06T21:12:07.576Z] Printing order e9b77373-3b63-494c-83ae-38483c7776e4 - 1 copies - text length 609
+[2026-02-06T21:12:08.285Z] node-thermal-printer failed: ThermalPrinter is not a constructor
+[2026-02-06T21:12:15.498Z] System fallback failed: PowerShell Out-Printer exit 143: 
+[2026-02-06T21:12:15.499Z] Saved failed print to D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\failed-print\failed-e9b77373-3b63-494c-83ae-38483c7776e4-1770412335499.txt
+[2026-02-06T21:12:15.512Z] Printing order dbedc271-082f-4048-a5b6-9dc6e0f4b7e7 - 1 copies - text length 600
+[2026-02-06T21:12:15.513Z] node-thermal-printer failed: ThermalPrinter is not a constructor
+[2026-02-06T21:13:27.986Z] Printing order 6e03bff6-4bf0-42dc-8eec-cc51785ebe4c - 1 copies - text length 684
+[2026-02-06T21:13:28.103Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-06T21:13:31.303Z] Printed via system fallback (win32)
+[2026-02-06T21:13:31.306Z] Printing order 2859687c-d03c-4889-94aa-591ad2a13f71 - 1 copies - text length 700
+[2026-02-06T21:13:31.307Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-06T21:13:32.099Z] Printed via system fallback (win32)
+[2026-02-06T21:13:32.103Z] Printing order c9a98128-f12c-4f6b-9d64-4262e4857437 - 1 copies - text length 769
+[2026-02-06T21:13:32.104Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-06T21:13:32.997Z] Printed via system fallback (win32)
+[2026-02-06T21:13:32.999Z] Printing order f7da9e8d-7e84-44aa-ac41-9c7733e30a62 - 1 copies - text length 766
+[2026-02-06T21:13:33.000Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-06T21:13:34.493Z] Printed via system fallback (win32)
+[2026-02-06T21:13:34.496Z] Printing order fc83cf7d-4b41-4354-a5f1-5fc14195cbc6 - 1 copies - text length 696
+[2026-02-06T21:13:34.496Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-06T21:13:36.400Z] Printed via system fallback (win32)
+[2026-02-06T21:13:36.408Z] Printing order dee4c99b-3659-443c-9ff3-c9b3dd193e97 - 1 copies - text length 701
+[2026-02-06T21:13:36.409Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-06T21:13:37.545Z] System fallback failed: PowerShell Out-Printer exit 143: 
+[2026-02-06T21:13:37.545Z] Saved failed print to D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\failed-print\failed-dee4c99b-3659-443c-9ff3-c9b3dd193e97-1770412417545.txt
+[2026-02-06T21:13:37.554Z] Printing order 12d1ab35-c8ad-4025-a28f-5520d320ad74 - 1 copies - text length 720
+[2026-02-06T21:13:37.555Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:30.240Z] Printing order e625b9be-ff8f-4c95-9106-a3fec409123d - 1 copies - text length 675
+[2026-02-07T02:55:30.243Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:31.609Z] Printed via system fallback (win32)
+[2026-02-07T02:55:31.615Z] Printing order 84194ac0-23b6-4cb0-89ba-e835b3634a1b - 1 copies - text length 797
+[2026-02-07T02:55:31.617Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:36.092Z] Printed via system fallback (win32)
+[2026-02-07T02:55:36.096Z] Printing order a0961553-9434-4a7d-9635-8cf7f2506614 - 1 copies - text length 801
+[2026-02-07T02:55:36.097Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:39.166Z] Printed via system fallback (win32)
+[2026-02-07T02:55:39.173Z] Printing order 9a592d61-8071-48db-82bb-4d060ef52b1d - 1 copies - text length 793
+[2026-02-07T02:55:39.174Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:42.194Z] Printed via system fallback (win32)
+[2026-02-07T02:55:42.198Z] Printing order 03c93d81-6646-452a-97af-6e527db971da - 1 copies - text length 711
+[2026-02-07T02:55:42.199Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:42.958Z] Printed via system fallback (win32)
+[2026-02-07T02:55:42.972Z] Printing order bac8b959-06d7-47b6-9d02-18de447333fa - 1 copies - text length 676
+[2026-02-07T02:55:42.973Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:43.709Z] Printed via system fallback (win32)
+[2026-02-07T02:55:43.712Z] Printing order 3049404e-2d11-4362-a878-2063906aa996 - 1 copies - text length 723
+[2026-02-07T02:55:43.713Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:46.815Z] Printed via system fallback (win32)
+[2026-02-07T02:55:46.818Z] Printing order 2fe3eff0-1d11-4052-8dbd-338d70ceb014 - 1 copies - text length 707
+[2026-02-07T02:55:46.819Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:47.538Z] Printed via system fallback (win32)
+[2026-02-07T02:55:49.787Z] Printing order 5a8a0fe3-6f16-4083-b1db-f7070113ab19 - 1 copies - text length 666
+[2026-02-07T02:55:49.788Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:50.565Z] Printed via system fallback (win32)
+[2026-02-07T02:55:50.569Z] Skipping duplicate print for order 5a8a0fe3-6f16-4083-b1db-f7070113ab19
+[2026-02-07T02:55:50.571Z] Skipping duplicate print for order 5a8a0fe3-6f16-4083-b1db-f7070113ab19
+[2026-02-07T02:55:50.575Z] Printing order 20f36216-36ab-4ab1-89ee-114cd65e09aa - 1 copies - text length 658
+[2026-02-07T02:55:50.575Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:55:53.596Z] Printed via system fallback (win32)
+[2026-02-07T02:58:27.039Z] Printing order 20f36216-36ab-4ab1-89ee-114cd65e09aa - 1 copies - text length 654
+[2026-02-07T02:58:27.040Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:58:28.755Z] Printed via system fallback (win32)
+[2026-02-07T02:59:34.400Z] Printing order 04b52ae4-2fa6-44db-8c85-bbfbcd21d4a1 - 1 copies - text length 686
+[2026-02-07T02:59:34.402Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T02:59:36.461Z] Printed via system fallback (win32)
+[2026-02-07T02:59:36.463Z] Skipping duplicate print for order 04b52ae4-2fa6-44db-8c85-bbfbcd21d4a1
+[2026-02-07T03:00:05.539Z] Printing order 04b52ae4-2fa6-44db-8c85-bbfbcd21d4a1 - 1 copies - text length 711
+[2026-02-07T03:00:05.540Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T03:00:06.336Z] Printed via system fallback (win32)
+[2026-02-07T03:15:28.617Z] Printing order TEST-1770434128598 - 1 copies - text length 753
+[2026-02-07T03:15:28.619Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\print-test.js
+[2026-02-07T03:15:29.390Z] Printed via system fallback (win32)
+[2026-02-07T03:22:09.590Z] Printing order TEST - 1 copies - text length 742
+[2026-02-07T03:22:09.591Z] [DRY_RUN] ================================
+Minha Loja
+
+================================
+
+*** PEDIDO #03 ***
+Data: 07/02/2026  Hora: 00:22
+
+Tipo: DELIVERY
+
+
+--------------------------------
+CLIENTE: THOMAZ
+Telefone: 73991429676
+Endereco: Rua das Flores, 456, Apt 12, Centro, Ilheus
+--------------------------------
+
+QT  Descricao              Valor
+
+1x  Pizza Margherita  R$ 29.90
+
+  -- 1x Borda recheada  R$ 6.00
+
+
+
+1x  Coca-Cola 350ml  R$ 6.50
+
+
+
+
+--------------------------------
+Qtd itens: 2
+Subtotal:      
+[2026-02-07T03:26:20.530Z] Printing order 5f7de5d9-c8aa-4897-82a7-3dc47d66c056 - 1 copies - text length 619
+[2026-02-07T03:26:20.531Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T03:26:21.739Z] Printed via system fallback (win32)
+[2026-02-07T03:26:21.740Z] Skipping duplicate print for order 5f7de5d9-c8aa-4897-82a7-3dc47d66c056
+[2026-02-07T03:31:06.289Z] Printing order 5f7de5d9-c8aa-4897-82a7-3dc47d66c056 - 1 copies - text length 644
+[2026-02-07T03:31:06.290Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T03:31:07.226Z] Printed via system fallback (win32)
+[2026-02-07T03:35:42.370Z] Printing order 5f7de5d9-c8aa-4897-82a7-3dc47d66c056 - 1 copies - text length 644
+[2026-02-07T03:35:42.371Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T03:35:43.033Z] Printed via system fallback (win32)
+[2026-02-07T09:12:46.949Z] Printing order TEST-1770455566931 - 1 copies - text length 742
+[2026-02-07T09:12:46.950Z] [DRY_RUN] ================================
+Minha Loja
+
+================================
+
+*** PEDIDO #03 ***
+Data: 07/02/2026  Hora: 06:12
+
+Tipo: DELIVERY
+
+
+--------------------------------
+CLIENTE: THOMAZ
+Telefone: 73991429676
+Endereco: Rua das Flores, 456, Apt 12, Centro, Ilheus
+--------------------------------
+
+QT  Descricao              Valor
+
+1x  Pizza Margherita  R$ 29.90
+
+  -- 1x Borda recheada  R$ 6.00
+
+
+
+1x  Coca-Cola 350ml  R$ 6.50
+
+
+
+
+--------------------------------
+Qtd itens: 2
+Subtotal:      
+[2026-02-07T09:12:46.950Z] Printing order TEST2-1770455566950 - 1 copies - text length 670
+[2026-02-07T09:12:46.951Z] [DRY_RUN] ================================
+Minha Loja
+
+================================
+
+*** PEDIDO #04 ***
+Data: 07/02/2026  Hora: 06:12
+
+Tipo: DELIVERY
+
+
+--------------------------------
+CLIENTE: MARIA
+Telefone: 73988887777
+Endereco: Av. Brasil, 100, Casa 2, Pontal, Ilheus
+--------------------------------
+
+QT  Descricao              Valor
+
+2x  X-Burger  R$ 25.00
+
+
+
+
+--------------------------------
+Qtd itens: 2
+Subtotal:      R$ 25.00
+
+
+TOTAL:         R$ 25.00
+--------------------------------
+
+FORMAS DE
+[2026-02-07T09:25:01.732Z] Printing order 5f7de5d9-c8aa-4897-82a7-3dc47d66c056 - 1 copies - text length 644
+[2026-02-07T09:25:01.733Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T09:25:02.424Z] Printed via system fallback (win32)
+[2026-02-07T09:25:15.410Z] Skipping duplicate print for order 5f7de5d9-c8aa-4897-82a7-3dc47d66c056
+[2026-02-07T11:02:20.605Z] Printing order 85aaf745-41ab-4565-9017-659abeb38338 - 1 copies - text length 636
+[2026-02-07T11:02:20.607Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T11:02:21.435Z] Printed via system fallback (win32)
+[2026-02-07T11:02:21.436Z] Skipping duplicate print for order 85aaf745-41ab-4565-9017-659abeb38338
+[2026-02-07T11:02:41.013Z] Printing order 33b76c20-08f3-4ede-8776-c6d6b1060733 - 1 copies - text length 636
+[2026-02-07T11:02:41.016Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T11:02:41.833Z] Printed via system fallback (win32)
+[2026-02-07T11:02:41.834Z] Skipping duplicate print for order 33b76c20-08f3-4ede-8776-c6d6b1060733
+[2026-02-07T12:00:33.264Z] Printing order 74f7f0f4-3d3c-49fe-8349-d6bbc3350a53 - 1 copies - text length 653
+[2026-02-07T12:00:33.266Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T12:00:34.081Z] Printed via system fallback (win32)
+[2026-02-07T12:00:34.082Z] Skipping duplicate print for order 74f7f0f4-3d3c-49fe-8349-d6bbc3350a53
+[2026-02-07T12:01:37.545Z] Printing order 6ada18fb-c8e3-4bad-8ff4-0041d5200728 - 1 copies - text length 665
+[2026-02-07T12:01:37.547Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T12:01:38.347Z] Printed via system fallback (win32)
+[2026-02-07T12:01:38.349Z] Skipping duplicate print for order 6ada18fb-c8e3-4bad-8ff4-0041d5200728
+[2026-02-07T15:34:11.885Z] Printing order 74f7f0f4-3d3c-49fe-8349-d6bbc3350a53 - 1 copies - text length 745
+[2026-02-07T15:34:11.887Z] node-thermal-printer failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
+[2026-02-07T15:34:13.012Z] Printed via system fallback (win32)

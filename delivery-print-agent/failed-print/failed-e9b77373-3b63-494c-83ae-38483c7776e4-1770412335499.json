@@ -1,0 +1,103 @@
+{
+  "order": {
+    "id": "e9b77373-3b63-494c-83ae-38483c7776e4",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "storeId": "dab7bb9d-52ab-40cc-bba7-37348af2caf2",
+    "externalId": null,
+    "displayId": null,
+    "displaySimple": "02",
+    "orderType": null,
+    "status": "EM_PREPARO",
+    "customerName": "Thomaz",
+    "customerPhone": "73991429676",
+    "customerSource": "MANUAL",
+    "customerId": "00f84118-fb7f-4f81-81f7-07484bab0a0c",
+    "address": null,
+    "latitude": null,
+    "longitude": null,
+    "total": "5",
+    "couponCode": null,
+    "couponDiscount": "0",
+    "deliveryFee": "0",
+    "payload": {
+      "payment": {
+        "method": "Cartão",
+        "methodCode": "Cartão",
+        "amount": 5,
+        "changeFor": null,
+        "raw": null
+      },
+      "rawPayload": {
+        "source": "PDV",
+        "items": [
+          {
+            "name": "coxinha",
+            "quantity": 1,
+            "price": 5,
+            "notes": null,
+            "options": []
+          }
+        ],
+        "customer": {
+          "name": "Thomaz",
+          "contact": "73991429676"
+        },
+        "address": null
+      }
+    },
+    "createdAt": "2025-12-31T04:04:44.100Z",
+    "updatedAt": "2025-12-31T04:04:44.100Z",
+    "riderId": null,
+    "items": [
+      {
+        "id": "301613cc-f3a0-4adb-b237-cb6c3003ca89",
+        "orderId": "e9b77373-3b63-494c-83ae-38483c7776e4",
+        "name": "coxinha",
+        "quantity": 1,
+        "price": "5",
+        "notes": null,
+        "options": []
+      }
+    ],
+    "rider": null,
+    "histories": [
+      {
+        "id": "90d87154-f255-4d92-b5a6-c9630b5f0d0d",
+        "orderId": "e9b77373-3b63-494c-83ae-38483c7776e4",
+        "from": null,
+        "to": "EM_PREPARO",
+        "byUserId": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+        "byRiderId": null,
+        "reason": "Criação PDV",
+        "createdAt": "2025-12-31T04:04:44.100Z"
+      }
+    ],
+    "store": {
+      "id": "dab7bb9d-52ab-40cc-bba7-37348af2caf2",
+      "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+      "name": "Matriz",
+      "slug": null,
+      "cnpj": null,
+      "logoUrl": null,
+      "bannerUrl": null,
+      "timezone": null,
+      "open24Hours": false,
+      "weeklySchedule": null,
+      "address": null,
+      "isActive": true,
+      "createdAt": "2025-12-25T23:08:08.750Z",
+      "updatedAt": "2025-12-25T23:08:08.750Z"
+    },
+    "company": {
+      "id": "a114f704-6c82-4fcb-9021-271ef756846e",
+      "name": "Demo Lanchonete",
+      "slug": "demo-lanchonete",
+      "createdAt": "2025-12-25T23:08:08.543Z",
+      "alwaysOpen": true,
+      "timezone": "America/Sao_Paulo",
+      "weeklySchedule": null
+    }
+  },
+  "opts": {},
+  "error": "all-methods-failed"
+}

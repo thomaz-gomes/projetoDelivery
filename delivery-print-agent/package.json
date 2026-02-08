@@ -1,27 +1,32 @@
 {
   "name": "delivery-print-agent",
-  "version": "0.1.0",
-  "description": "Local print agent for delivery SaaS - listens to backend via WebSocket and prints orders\n",
+  "version": "1.0.0",
+  "description": "Local print agent for delivery SaaS - listens to backend via WebSocket and prints orders",
   "main": "index.js",
   "type": "commonjs",
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
-    "print-test": "node print-test.js",
-    "detect-printer": "node detect-printer.js"
+    "detect-printer": "node detect-printer.js",
+    "build": "pkg . --targets node18-win-x64 --output dist/delivery-print-agent.exe"
   },
   "dependencies": {
-    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "express": "^5.1.0",
-    "iconv-lite": "^0.6.3",
-    "jsqr": "^1.4.0",
     "mkdirp": "^1.0.4",
     "node-thermal-printer": "^3.0.0",
-    "pngjs": "^7.0.0",
-    "puppeteer": "^24.31.0",
-    "qrcode": "^1.5.4",
     "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [
+      "defaultTemplate.js",
+      "templateEngine.js"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ]
   },
   "engines": {
     "node": ">=18.0.0"

@@ -1054,6 +1054,16 @@ const nextOpenText = computed(() => {
   if(c.alwaysOpen) return ''
 
   const padTime = (s) => s || '--:--'
+  const formatBadgeTime = (s) => {
+    try{
+      if(!s) return '--:--'
+      const parts = String(s).split(':')
+      const hh = parts[0] || '0'
+      const mm = (parts[1] || '00')
+      const h = String(Number(hh))
+      return mm === '00' ? `${h}h` : `${h}h${mm}`
+    }catch(e){ return s }
+  }
 
   // If weeklySchedule present, find the next enabled day
   try{
@@ -1068,7 +1078,7 @@ const nextOpenText = computed(() => {
       // check today first
       const today = schedule.find(d => Number(d?.day) === Number(weekDay))
       if(today && today.enabled){
-        return `abre hoje às ${padTime(today.from)}`
+        return `abre hoje as ${formatBadgeTime(today.from)}`
       }
       // search next enabled day
       const names = ['domingo','segunda','terça','quarta','quinta','sexta','sábado']
@@ -1076,15 +1086,15 @@ const nextOpenText = computed(() => {
         const idx = (weekDay + i) % 7
         const d = schedule.find(sch => Number(sch?.day) === Number(idx))
         if(d && d.enabled){
-          if(i === 1) return `amanhã às ${padTime(d.from)}`
-          return `abre ${names[idx]} às ${padTime(d.from)}`
+          if(i === 1) return `abre amanhã as ${formatBadgeTime(d.from)}`
+          return `abre ${names[idx]} as ${formatBadgeTime(d.from)}`
         }
       }
     }
   }catch(e){ /* ignore */ }
 
   // fallback: use openFrom if present
-  if(c.openFrom) return `abre às ${c.openFrom}`
+  if(c.openFrom) return `abre as ${formatBadgeTime(c.openFrom)}`
   return ''
 })
 

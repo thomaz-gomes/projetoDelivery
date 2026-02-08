@@ -1,20 +1,16 @@
 // src/services/printService.js
 
-// Minimal HTTP-based print service that replaces QZ Tray integration.
+// Minimal HTTP-based print service.
 // - Sends print requests to `/agent-print`.
 // - Keeps a small retry queue when network/backend is unavailable.
 // - Provides connectivity checks used by UI components.
+
 // Determine backend base URL: prefer VITE_API_URL, otherwise default to localhost:3000
 const BACKEND_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
   ? String(import.meta.env.VITE_API_URL).replace(/\/$/, '')
   : 'http://localhost:3000';
 
-// If running dev with QZ Tray enabled, don't poll the legacy `agent-print` service.
-const ENABLE_QZ = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ENABLE_QZ)
-  ? String(import.meta.env.VITE_ENABLE_QZ) === '1' || String(import.meta.env.VITE_ENABLE_QZ) === 'true'
-  : false;
-
-let connected = true; // optimistic default
+let connected = false;
 let defaultPrinter = null;
 const queue = [];
 let isPrinting = false;
@@ -134,23 +130,7 @@ export { formatOrderText };
 // ================================
 export async function enqueuePrint(order) {
   if (!order) return;
-  // If frontend was built with QZ enabled, prefer the QZ flow and avoid
-  // posting to the legacy `/agent-print` endpoint. This prevents accidental
-  // delivery to print agents when the operator expects QZ Tray to handle
-  // printing locally.
   try {
-    if (ENABLE_QZ) {
-      try {
-        const { printComanda } = await import('../plugins/qz.js');
-        // provide formatted text as well so QZ plugin can print same layout
-        const text = formatOrderText(order);
-        const ok = await printComanda(order, text);
-        if (ok) return true;
-      } catch (e) {
-        console.warn('printService: QZ print failed, falling back to /agent-print', e && e.message);
-      }
-    }
-
     const res = await fetch(`${BACKEND_BASE}/agent-print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -161,7 +141,6 @@ export async function enqueuePrint(order) {
   } catch (e) {
     console.warn('printService: failed to send order, queuing for retry', e && e.message ? e.message : e);
     queue.push(order);
-    // schedule a retry
     setTimeout(processQueue, 5000);
     return false;
   }
@@ -197,43 +176,29 @@ export function isConnecting() {
 // perform an async connectivity check against the agent-print endpoint
 export async function checkConnectivity() {
   if (connectingPromise) return connectingPromise;
-  // If QZ Tray is enabled we try to detect a real QZ client in-browser
-  // (the frontend will try QZ first). If none is present, fall back to
-  // probing the legacy `agent-print/printers` endpoint so local dev can
-  // exercise printing flows without a native QZ Tray installation.
-  if (ENABLE_QZ) {
-    connectingPromise = (async () => {
-      try {
-        if (typeof window !== 'undefined' && window.qz) {
-          connected = true;
-          return connected;
-        }
-        // If QZ is enabled but not available in-window, consider not connected.
-        // Legacy `/agent-print/printers` endpoint was removed; avoid probing it.
+  connectingPromise = (async () => {
+    try {
+      const res = await fetch(`${BACKEND_BASE}/agent-print/printers`, { method: 'GET' });
+      if (res.ok) {
+        const data = await res.json();
+        connected = !!(data && data.ok && Array.isArray(data.printers) && data.printers.length);
+      } else {
         connected = false;
-      } finally {
-        connectingPromise = null;
       }
-      return connected;
-    })();
-    return connectingPromise;
-  }
-  // For non-QZ builds, the legacy agent discovery endpoint was removed.
-  // Mark connectivity as false by default and avoid network probes.
-  connectingPromise = Promise.resolve(false).then(() => {
-    connected = false;
-    connectingPromise = null;
+    } catch (e) {
+      connected = false;
+    } finally {
+      connectingPromise = null;
+    }
     return connected;
-  });
+  })();
   return connectingPromise;
 }
 
 // kick off a background connectivity check
 try {
   checkConnectivity();
-  if (!ENABLE_QZ) {
-    setInterval(() => { checkConnectivity().catch(()=>{}); }, 30000);
-  }
+  setInterval(() => { checkConnectivity().catch(()=>{}); }, 30000);
 } catch(e){}
 
 // ================================
@@ -271,6 +236,5 @@ export default {
   formatOrderText,
   getPrinterConfig,
   setPrinterConfig,
-  // Expose a simple route hint so UI can decide when to auto-print
-  getPrintRoute: () => (ENABLE_QZ ? 'qz' : 'agent'),
+  getPrintRoute: () => 'agent',
 };

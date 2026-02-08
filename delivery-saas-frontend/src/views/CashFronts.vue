@@ -1,9 +1,6 @@
 <template>
   <div class="p-3">
-    <div class="d-flex align-items-center mb-3">
-      <h4 class="me-3">Frentes de Caixa</h4>
-    </div>
-
+    
     <div v-if="loading" class="text-center py-4">Carregando...</div>
     <div v-else>
       <div v-if="!sessions.length" class="text-muted">Nenhuma sessão encontrada.</div>

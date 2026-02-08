@@ -1,10 +1,11 @@
 <template>
   <div class="container py-3">
-    <h1 class="mb-3">Histórico de Vendas</h1>
-
+    
     <div class="card mb-3">
       <div class="card-body">
         <div class="row g-2 align-items-end">
+          <div class="col-12"><h3>Histórico de Vendas</h3>
+</div>
           <div class="col-md-3">
             <label class="form-label">Data início</label>
             <DateInput v-model="filters.from" inputClass="form-control" />
@@ -41,13 +42,13 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="o in displayed" :key="o.id">
+              <tr v-for="o in paginatedOrders" :key="o.id">
                 <td>{{ formatOrderNumber(o) }}</td>
                 <td>{{ formatAddress(o) }}</td>
-                <td>{{ o.customer?.fullName || o.customer?.name || o.customer?.contact || '-' }}</td>
+                <td>{{ o.customerName || o.customer?.fullName || o.customer?.name || o.customer?.contact || '-' }}</td>
                 <td>{{ formatDate(o.createdAt) }}</td>
                 <td>{{ o.rider?.name || '-' }}</td>
-                <td>{{ o.paymentMethod || o.payment?.method || '-' }}</td>
+                <td>{{ getPaymentMethod(o) || '-' }}</td>
                 <td class="text-end">
                   <button class="btn btn-sm btn-outline-primary" @click="viewDetails(o)">Ver</button>
                 </td>
@@ -57,6 +58,37 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Paginação -->
+        <div v-if="totalPages > 1" class="d-flex justify-content-between align-items-center p-3 border-top">
+          <div class="text-muted">
+            Mostrando {{ (currentPage - 1) * itemsPerPage + 1 }} até {{ Math.min(currentPage * itemsPerPage, displayed.length) }} de {{ displayed.length }} pedidos
+          </div>
+          <nav>
+            <ul class="pagination mb-0">
+              <li class="page-item" :class="{ disabled: currentPage === 1 }">
+                <button class="page-link" @click="currentPage = 1" :disabled="currentPage === 1">Primeira</button>
+              </li>
+              <li class="page-item" :class="{ disabled: currentPage === 1 }">
+                <button class="page-link" @click="currentPage--" :disabled="currentPage === 1">Anterior</button>
+              </li>
+              <li 
+                v-for="page in visiblePages" 
+                :key="page" 
+                class="page-item" 
+                :class="{ active: currentPage === page }"
+              >
+                <button class="page-link" @click="currentPage = page">{{ page }}</button>
+              </li>
+              <li class="page-item" :class="{ disabled: currentPage === totalPages }">
+                <button class="page-link" @click="currentPage++" :disabled="currentPage === totalPages">Próxima</button>
+              </li>
+              <li class="page-item" :class="{ disabled: currentPage === totalPages }">
+                <button class="page-link" @click="currentPage = totalPages" :disabled="currentPage === totalPages">Última</button>
+              </li>
+            </ul>
+          </nav>
         </div>
       </template>
     </ListCard>
@@ -70,21 +102,35 @@ import api from '../api';
 import SelectInput from '../components/form/select/SelectInput.vue';
 import { formatDate } from '../utils/dates.js';
 import DateInput from '../components/form/date/DateInput.vue';
+import ListCard from '../components/ListCard.vue';
 
 const router = useRouter();
 const orders = ref([]);
-const q = ref('')
+const q = ref('');
+const currentPage = ref(1);
+const itemsPerPage = ref(20);
 
 const displayed = computed(() => {
   if(!q.value) return orders.value || []
   const term = q.value.toLowerCase()
   return (orders.value || []).filter(o => {
     const addr = formatAddress(o) || ''
-    const customer = (o.customer && (o.customer.fullName || o.customer.name || o.customer.contact)) || ''
+    const customer = o.customerName || (o.customer && (o.customer.fullName || o.customer.name || o.customer.contact)) || ''
     const num = formatOrderNumber(o) || ''
     return (addr + ' ' + customer + ' ' + num).toLowerCase().includes(term)
   })
 })
+
+const totalPages = computed(() => {
+  return Math.ceil(displayed.value.length / itemsPerPage.value);
+});
+
+const paginatedOrders = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value;
+  const end = start + itemsPerPage.value;
+  return displayed.value.slice(start, end);
+});
+
 const riders = ref([]);
 
 // default date filter: today in YYYY-MM-DD (local) format
@@ -124,6 +170,7 @@ function formatAddress(o){
   if(!o) return '-';
   const a = o.address || o.deliveryAddress || o.customerAddress || o.payload?.delivery?.deliveryAddress;
   if(!a) return o.addressText || '-';
+  if (typeof a === 'string') return a || o.addressText || '-'
   const main = a.formatted || a.formattedAddress || [a.street || a.streetName, a.number || a.streetNumber].filter(Boolean).join(', ');
   const tail = []
   if(a.neighborhood) tail.push(a.neighborhood)
@@ -132,6 +179,17 @@ function formatAddress(o){
   if(a.observation) tail.push('Obs: ' + a.observation)
   if(a.city && !tail.includes(a.city)) tail.push(a.city)
   return [main, tail.filter(Boolean).join(' — ')].filter(Boolean).join(' | ')
+}
+
+function getPaymentMethod(o){
+  if(!o) return ''
+  try{
+    const payment = o.payment || o.paymentMethod || o.payload?.payment || o.payload?.rawPayload?.payment
+    if(!payment) return ''
+    const method = (payment.method || payment.methodCode || payment.name || payment.type || '').toString()
+    const labels = { 'PIX':'PIX', 'CREDIT_CARD':'Cartão de Crédito', 'DEBIT_CARD':'Cartão de Débito', 'CASH':'Dinheiro', 'MONEY':'Dinheiro', 'VOUCHER':'Vale', 'ONLINE':'Online', 'Dinheiro':'Dinheiro', 'Crédito':'Crédito' }
+    return labels[method] || method || ''
+  }catch(e){ return '' }
 }
 
 async function load(){
@@ -158,16 +216,57 @@ async function loadRiders(){
   }
 }
 
-function reset(){ filters.value = { from: today, to: today, riderId: '' }; orders.value = []; }
+function reset(){ 
+  filters.value = { from: today, to: today, riderId: '' }; 
+  orders.value = []; 
+  currentPage.value = 1;
+}
 
 function viewDetails(o){
   router.push({ path: `/sales/${o.id}` });
 }
 
+const visiblePages = computed(() => {
+  const pages = [];
+  const total = totalPages.value;
+  const current = currentPage.value;
+  
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) {
+      pages.push(i);
+    }
+  } else {
+    if (current <= 4) {
+      for (let i = 1; i <= 5; i++) pages.push(i);
+      pages.push('...');
+      pages.push(total);
+    } else if (current >= total - 3) {
+      pages.push(1);
+      pages.push('...');
+      for (let i = total - 4; i <= total; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      pages.push('...');
+      for (let i = current - 1; i <= current + 1; i++) pages.push(i);
+      pages.push('...');
+      pages.push(total);
+    }
+  }
+  
+  return pages.filter(p => p !== '...' || pages.indexOf(p) === pages.lastIndexOf(p));
+});
+
 onMounted(()=>{ loadRiders(); load(); });
 
-function onQuickSearch(val){ q.value = val }
-function onQuickClear(){ q.value = '' }
+function onQuickSearch(val){ 
+  q.value = val;
+  currentPage.value = 1;
+}
+
+function onQuickClear(){ 
+  q.value = '';
+  currentPage.value = 1;
+}
 </script>
 
 <style scoped>

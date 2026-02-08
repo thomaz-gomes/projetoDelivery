@@ -790,6 +790,16 @@ const nextOpenText = computed(() => {
   // Prefer weeklySchedule when present
 
   const padTime = (s) => s || '--:--'
+  const formatBadgeTime = (s) => {
+    try{
+      if(!s) return '--:--'
+      const parts = String(s).split(':')
+      const hh = parts[0] || '0'
+      const mm = (parts[1] || '00')
+      const h = String(Number(hh))
+      return mm === '00' ? `${h}h` : `${h}h${mm}`
+    }catch(e){ return s }
+  }
 
   // If weeklySchedule present, find the next enabled day
   try{
@@ -801,10 +811,36 @@ const nextOpenText = computed(() => {
       const tzDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
       const weekDay = tzDate.getUTCDay()
       const schedule = c.weeklySchedule
-      // check today first
+      // check today first, but only if 'from' is still in the future
       const today = schedule.find(d => Number(d?.day) === Number(weekDay))
       if(today && today.enabled){
-        return `abre hoje às ${padTime(today.from)}`
+        try{
+          const parseHM = (s) => {
+            if(!s) return null
+            const parts = String(s).split(':').map(x=>Number(x))
+            if(parts.length < 2) return null
+            const [hh, mm] = parts
+            if(Number.isNaN(hh) || Number.isNaN(mm)) return null
+            return { hh, mm }
+          }
+          const from = parseHM(today.from)
+          if(from){
+            const fmtNow = new Intl.DateTimeFormat(undefined, { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' })
+            let nowParts
+            if(fmtNow.formatToParts){
+              const p = fmtNow.formatToParts(new Date())
+              nowParts = { hh: Number(p.find(x=>x.type==='hour')?.value), mm: Number(p.find(x=>x.type==='minute')?.value) }
+            } else {
+              const s = fmtNow.format(new Date())
+              const [hh, mm] = s.split(':').map(x=>Number(x))
+              nowParts = { hh, mm }
+            }
+            const toMinutes = (p) => p.hh*60 + p.mm
+            if(toMinutes(nowParts) < toMinutes(from)){
+              return `abre hoje as ${formatBadgeTime(today.from)}`
+            }
+          }
+        }catch(e){ }
       }
       // search next enabled day
       const names = ['domingo','segunda','terça','quarta','quinta','sexta','sábado']
@@ -812,8 +848,8 @@ const nextOpenText = computed(() => {
         const idx = (weekDay + i) % 7
         const d = schedule.find(sch => Number(sch?.day) === Number(idx))
         if(d && d.enabled){
-          if(i === 1) return `amanhã às ${padTime(d.from)}`
-          return `abre ${names[idx]} às ${padTime(d.from)}`
+          if(i === 1) return `abre amanhã as ${formatBadgeTime(d.from)}`
+          return `abre ${names[idx]} as ${formatBadgeTime(d.from)}`
         }
       }
     }
@@ -822,7 +858,7 @@ const nextOpenText = computed(() => {
     // fallback: when always open, don't show nextOpen text
     if(isAlwaysOpenFlag(c)) return ''
     // fallback: use openFrom if present
-    if(c.openFrom) return `abre às ${c.openFrom}`
+    if(c.openFrom) return `abre as ${formatBadgeTime(c.openFrom)}`
     return ''
 })
 

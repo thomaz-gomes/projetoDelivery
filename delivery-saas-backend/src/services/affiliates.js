@@ -22,8 +22,17 @@ export async function trackAffiliateSale(order, companyId) {
     const codeUpper = couponCode.toUpperCase()
     let affiliate = null
 
-    // Find coupon using case-insensitive match so tracking works regardless of stored case
-    const coupon = await prisma.coupon.findFirst({ where: { companyId, isActive: true, code: { equals: couponCode, mode: 'insensitive' } }, include: { affiliate: true } })
+    // Find coupon using a case-insensitive strategy compatible with SQLite/dev setups.
+    // Prisma on SQLite doesn't support `mode`/`insensitive`, so try common case variants.
+    const codeVariants = Array.from(new Set([couponCode, couponCode.toLowerCase(), couponCode.toUpperCase()]));
+    const coupon = await prisma.coupon.findFirst({
+      where: {
+        companyId,
+        isActive: true,
+        OR: codeVariants.map(c => ({ code: c }))
+      },
+      include: { affiliate: true }
+    })
     if (coupon) console.log('[affiliates] found coupon row', { id: coupon.id, code: coupon.code, affiliateId: coupon.affiliateId })
     if (coupon && coupon.affiliateId && coupon.affiliate) {
       affiliate = coupon.affiliate
@@ -31,11 +40,13 @@ export async function trackAffiliateSale(order, companyId) {
     } else {
       // legacy fallback: affiliate table having couponCode field
       console.log('[affiliates] coupon did not link to an affiliate, trying legacy affiliate.couponCode lookup (case-insensitive) for code', couponCode)
+      // Legacy affiliate table lookup; try matching common case variants when DB doesn't support case-insensitive filters
+      const affCodeVariants = Array.from(new Set([couponCode, couponCode.toLowerCase(), couponCode.toUpperCase()]));
       affiliate = await prisma.affiliate.findFirst({
         where: {
           companyId,
-          couponCode: { equals: couponCode, mode: 'insensitive' },
-          isActive: true
+          isActive: true,
+          OR: affCodeVariants.map(c => ({ couponCode: c }))
         }
       })
       if (affiliate) console.log('[affiliates] found legacy affiliate by couponCode', { id: affiliate.id, name: affiliate.name })

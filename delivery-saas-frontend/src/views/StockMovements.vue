@@ -1,6 +1,6 @@
 <template>
-  <div class="p-4">
-    <h2 class="h4 mb-3">Movimentações de Estoque</h2>
+  <div class="container">
+    <div class="row">
     <div class="card mb-3">
       <div class="card-body">
         <div class="row g-2 align-items-end">
@@ -21,6 +21,7 @@
           </div>
         </div>
       </div>
+    </div>
     </div>
 
     <ListCard title="Movimentações de Estoque" icon="bi bi-arrow-repeat" :subtitle="filtered.length ? `${filtered.length} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por ingrediente, descrição" @quick-search="onQuickSearch" @quick-clear="onQuickClear">

@@ -708,8 +708,7 @@ function normalizeOrder(o){
     // helper to format address objects consistently
     const formatAddrObj = (addr) => {
       if (!addr) return '';
-      const formatted = addr.formatted || addr.formattedAddress || addr.formatted_address;
-      if (formatted) return String(formatted);
+      const formatted = addr.formatted || addr.formattedAddress || addr.formatted_address || '';
       const street = addr.street || addr.streetName || '';
       const number = addr.number || addr.streetNumber || '';
       const complement = addr.complement || addr.complemento || '';
@@ -719,7 +718,10 @@ function normalizeOrder(o){
       const postalCode = addr.postalCode || addr.zip || addr.postal_code || '';
       const reference = addr.reference || addr.ref || '';
       const observation = addr.observation || addr.observacao || '';
-      const base = [street, number].filter(Boolean).join(', ');
+      // Build from components when available (formatted may be just the street name)
+      const baseParts = street || formatted;
+      const base = [baseParts, number].filter(Boolean).join(', ');
+      if (!base) return '';
       const tailParts = [neighborhood, city, state].filter(Boolean);
       if (postalCode) tailParts.push(postalCode);
       if (complement) tailParts.push('Comp: ' + complement);
@@ -965,6 +967,154 @@ const assignModalRiders = ref([]);
 const assignSelectedRider = ref(null);
 const assignOrderId = computed(() => (assignModalOrder && assignModalOrder.value && assignModalOrder.value.id) || null);
 
+// Bulk assign state: when set, the assign modal operates on multiple orders
+const bulkAssignOrders = ref([]);
+const isBulkAssign = computed(() => bulkAssignOrders.value.length > 0);
+
+// =============================
+// Multi-select / bulk actions
+// =============================
+const selectedOrderIds = ref(new Set());
+
+function getOrderType(o) {
+  const raw = (o.orderType || o.payload?.orderType || '').toUpperCase();
+  if (raw === 'RETIRADA') return 'RETIRADA';
+  if (raw === 'DELIVERY') return 'DELIVERY';
+  // Fallback: detect by customer name pattern for PDV "balcão" orders
+  const name = (o.customerName || '').toLowerCase();
+  if (name.includes('balcão') || name.includes('balcao')) return 'RETIRADA';
+  return 'DELIVERY';
+}
+
+const selectedOrdersList = computed(() => {
+  return store.orders.filter(o => selectedOrderIds.value.has(o.id));
+});
+
+const selectionOrderType = computed(() => {
+  const first = selectedOrdersList.value[0];
+  return first ? getOrderType(first) : null;
+});
+
+const selectionStatus = computed(() => {
+  const first = selectedOrdersList.value[0];
+  return first ? first.status : null;
+});
+
+const allSameStatus = computed(() => {
+  if (selectedOrdersList.value.length === 0) return true;
+  return selectedOrdersList.value.every(o => o.status === selectionStatus.value);
+});
+
+function toggleOrderSelection(order) {
+  const set = new Set(selectedOrderIds.value);
+
+  if (set.has(order.id)) {
+    set.delete(order.id);
+    selectedOrderIds.value = set;
+    return;
+  }
+
+  // Rule: CONFIRMACAO_PAGAMENTO cannot have >1 selected
+  if (order.status === 'CONFIRMACAO_PAGAMENTO' && set.size > 0) {
+    Swal.fire({ icon:'warning', title:'Seleção não permitida',
+      text:'Pedidos em confirmação de pagamento não podem ser selecionados em massa.',
+      timer:3000, toast:true, position:'top-end', showConfirmButton:false });
+    return;
+  }
+  if (selectionStatus.value === 'CONFIRMACAO_PAGAMENTO' && set.size > 0) {
+    Swal.fire({ icon:'warning', title:'Seleção não permitida',
+      text:'Pedidos em confirmação de pagamento não podem ser selecionados em massa.',
+      timer:3000, toast:true, position:'top-end', showConfirmButton:false });
+    return;
+  }
+
+  // Rule: Cannot mix DELIVERY and RETIRADA
+  const thisType = getOrderType(order);
+  if (set.size > 0 && thisType !== selectionOrderType.value) {
+    Swal.fire({ icon:'warning', title:'Tipos diferentes',
+      text:'Não é possível selecionar pedidos de entrega e retirada juntos.',
+      timer:3000, toast:true, position:'top-end', showConfirmButton:false });
+    return;
+  }
+
+  set.add(order.id);
+  selectedOrderIds.value = set;
+}
+
+function clearSelection() {
+  selectedOrderIds.value = new Set();
+}
+
+function isOrderSelected(order) {
+  return selectedOrderIds.value.has(order.id);
+}
+
+async function bulkAdvanceStatus() {
+  if (!allSameStatus.value || selectedOrdersList.value.length === 0) return;
+  const next = getNextStatus(selectionStatus.value);
+  if (!next) return;
+
+  // SAIU_PARA_ENTREGA with riders enabled and DELIVERY orders: open rider assignment modal
+  if (next === 'SAIU_PARA_ENTREGA' && ridersEnabled.value && selectionOrderType.value !== 'RETIRADA') {
+    const riders = (await store.fetchRiders()) || [];
+    assignModalRiders.value = riders.map(r => ({ id: r.id, name: r.name, description: r.whatsapp || 'sem WhatsApp', whatsapp: r.whatsapp || '' }));
+    assignSelectedRider.value = null;
+    bulkAssignOrders.value = [...selectedOrdersList.value];
+    assignModalOrder.value = null;
+    try { Swal.close(); } catch(e) {}
+    await nextTick();
+    assignModalVisible.value = true;
+    return;
+  }
+
+  const conf = await Swal.fire({
+    title: `Avançar ${selectedOrdersList.value.length} pedidos?`,
+    text: `Mover para: ${STATUS_LABEL[next] || next}`,
+    icon: 'question', showCancelButton: true,
+    confirmButtonText: 'Sim, avançar', cancelButtonText: 'Cancelar'
+  });
+  if (!conf.isConfirmed) return;
+
+  loading.value = true;
+  let success = 0, fail = 0;
+  for (const order of selectedOrdersList.value) {
+    try {
+      await store.updateStatus(order.id, next);
+      success++;
+    } catch (e) {
+      console.error(`Falha ao avançar pedido ${order.id}`, e);
+      fail++;
+    }
+  }
+  await store.fetch();
+  loading.value = false;
+  clearSelection();
+
+  Swal.fire({
+    icon: fail ? 'warning' : 'success',
+    title: `${success} pedido(s) avançado(s)` + (fail ? `, ${fail} falha(s)` : ''),
+    timer: 3000, toast: true, position: 'top-end', showConfirmButton: false
+  });
+}
+
+async function bulkPrint() {
+  if (selectedOrdersList.value.length === 0) return;
+  for (const order of selectedOrdersList.value) {
+    await printReceipt(order);
+  }
+  Swal.fire({
+    icon: 'success', title: `${selectedOrdersList.value.length} comanda(s) enviada(s) para impressão`,
+    timer: 3000, toast: true, position: 'top-end', showConfirmButton: false
+  });
+  clearSelection();
+}
+
+// Clean stale selections when orders list changes
+watch(() => store.orders.length, () => {
+  const valid = new Set([...selectedOrderIds.value].filter(id => store.orders.some(o => o.id === id)));
+  if (valid.size !== selectedOrderIds.value.size) selectedOrderIds.value = valid;
+});
+
 function openDetails(o) {
   selectedOrder.value = o;
   detailsTab.value = 'customer';
@@ -974,6 +1124,797 @@ function openDetails(o) {
 function closeDetails() {
   detailsModalVisible.value = false;
   selectedOrder.value = null;
+}
+
+const orderEditable = computed(() => {
+  if (!selectedOrder.value) return false;
+  const s = selectedOrder.value.status;
+  return s !== 'CONCLUIDO' && s !== 'CANCELADO';
+});
+
+async function saveOrderEdit(fields) {
+  const o = selectedOrder.value;
+  if (!o) return;
+  try {
+    loading.value = true;
+    const updated = await store.updateOrder(o.id, fields);
+    selectedOrder.value = updated;
+    await store.fetch();
+    Swal.fire({ icon: 'success', title: 'Pedido atualizado', timer: 2000, toast: true, position: 'top-end', showConfirmButton: false });
+  } catch (e) {
+    console.error(e);
+    Swal.fire('Erro', 'Falha ao atualizar pedido.', 'error');
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function editCustomer() {
+  const o = selectedOrder.value;
+  if (!o) return;
+  const currentNotes = getOrderNotes(o);
+  const { value: form } = await Swal.fire({
+    title: 'Editar cliente',
+    html:
+      `<div style="text-align:left">` +
+      `<label class="form-label small fw-semibold">Nome</label>` +
+      `<input id="swal-ec-name" class="form-control mb-2" value="${(o.customerName || '').replace(/"/g, '&quot;')}" />` +
+      `<label class="form-label small fw-semibold">Telefone</label>` +
+      `<input id="swal-ec-phone" class="form-control mb-2" value="${(o.customerPhone || '').replace(/"/g, '&quot;')}" />` +
+      `<label class="form-label small fw-semibold">Observações</label>` +
+      `<textarea id="swal-ec-notes" class="form-control" rows="2">${currentNotes.replace(/</g, '&lt;')}</textarea>` +
+      `</div>`,
+    showCancelButton: true, confirmButtonText: 'Salvar', cancelButtonText: 'Cancelar', focusConfirm: false,
+    preConfirm: () => ({
+      customerName: document.getElementById('swal-ec-name').value.trim(),
+      customerPhone: document.getElementById('swal-ec-phone').value.trim(),
+      notes: document.getElementById('swal-ec-notes').value.trim(),
+    })
+  });
+  if (form) await saveOrderEdit(form);
+}
+
+async function editAddress() {
+  const o = selectedOrder.value;
+  if (!o) return;
+
+  // Load saved addresses from customer relation (already included by backend)
+  const customerAddresses = (o.customer && Array.isArray(o.customer.addresses)) ? o.customer.addresses : [];
+  const customerId = o.customerId || (o.customer && o.customer.id) || null;
+
+  // Load neighborhoods for the select dropdown
+  let neighborhoodsList = [];
+  try {
+    const { data } = await api.get('/neighborhoods');
+    neighborhoodsList = Array.isArray(data) ? data : [];
+  } catch (e) { console.warn('Falha ao carregar bairros', e); }
+
+  let vueApp = null;
+  let mountedApp = null;
+
+  const result = await Swal.fire({
+    title: 'Endereço de entrega',
+    html: '<div id="swal-addr-vue"></div>',
+    width: 550,
+    showCancelButton: true, confirmButtonText: 'Salvar', cancelButtonText: 'Cancelar', focusConfirm: false,
+    didOpen: () => {
+      const App = {
+        data() {
+          return {
+            addresses: JSON.parse(JSON.stringify(customerAddresses)),
+            selectedAddressId: null,
+            showNewForm: customerAddresses.length === 0,
+            neighborhoods: neighborhoodsList,
+            form: { street: '', number: '', neighborhood: '', complement: '', reference: '', observation: '' },
+          };
+        },
+        methods: {
+          selectAddress(id) {
+            this.selectedAddressId = id;
+            this.showNewForm = false;
+          },
+          editAddress(id) {
+            const a = this.addresses.find(x => x.id === id);
+            if (!a) return;
+            this.form = {
+              street: a.street || a.formatted || '',
+              number: a.number || '',
+              neighborhood: a.neighborhood || '',
+              complement: a.complement || '',
+              reference: a.reference || '',
+              observation: a.observation || '',
+            };
+            this.selectedAddressId = id;
+            this.showNewForm = true;
+          },
+          toggleNewForm() {
+            this.showNewForm = !this.showNewForm;
+            if (this.showNewForm) {
+              this.selectedAddressId = null;
+              this.form = { street: '', number: '', neighborhood: '', complement: '', reference: '', observation: '' };
+            }
+          },
+          getResult() {
+            // If a saved address is selected (and form is hidden), return that address
+            if (this.selectedAddressId && !this.showNewForm) {
+              const addr = this.addresses.find(x => x.id === this.selectedAddressId);
+              if (addr) return { source: 'saved', addressId: addr.id, addr };
+            }
+            // Otherwise return the form data
+            if (!this.form.street) return null;
+            return { source: 'form', form: { ...this.form } };
+          }
+        },
+        render() {
+          const vm = this;
+          const children = [];
+
+          // Saved addresses list
+          if (vm.addresses.length > 0) {
+            children.push(h('label', { class: 'form-label small fw-semibold' }, 'Endereços salvos'));
+            children.push(h(ListGroup, {
+              items: vm.addresses,
+              itemKey: 'id',
+              selectedId: vm.selectedAddressId,
+              showActions: true,
+              onSelect: (id) => vm.selectAddress(id),
+              onEdit: (id) => vm.editAddress(id),
+              onRemove: (id) => {
+                vm.addresses = vm.addresses.filter(x => x.id !== id);
+                if (vm.selectedAddressId === id) vm.selectedAddressId = null;
+              },
+            }));
+          }
+
+          // Toggle link
+          children.push(h('div', { class: 'small mb-2' }, [
+            h('a', {
+              href: '#', style: 'text-decoration:none',
+              onClick: (e) => { e.preventDefault(); vm.toggleNewForm(); }
+            }, vm.showNewForm ? 'Ocultar formulário' : (vm.addresses.length > 0 ? '+ Cadastrar novo endereço' : ''))
+          ]));
+
+          // New/edit address form
+          if (vm.showNewForm || vm.addresses.length === 0) {
+            const formFields = [];
+            // Street + Number row
+            formFields.push(h('div', { style: 'display:flex;gap:8px;margin-bottom:8px' }, [
+              h('div', { style: 'flex:2' }, [
+                h('label', { class: 'form-label small mb-1' }, 'Rua'),
+                h('input', { class: 'form-control form-control-sm', value: vm.form.street,
+                  onInput: (e) => { vm.form.street = e.target.value; } })
+              ]),
+              h('div', { style: 'flex:0 0 80px' }, [
+                h('label', { class: 'form-label small mb-1' }, 'Número'),
+                h('input', { class: 'form-control form-control-sm', value: vm.form.number,
+                  onInput: (e) => { vm.form.number = e.target.value; } })
+              ])
+            ]));
+            // Neighborhood select
+            formFields.push(h('div', { style: 'margin-bottom:8px' }, [
+              h('label', { class: 'form-label small mb-1' }, 'Bairro'),
+              h('select', { class: 'form-select form-select-sm', value: vm.form.neighborhood,
+                onChange: (e) => { vm.form.neighborhood = e.target.value; }
+              }, [
+                h('option', { value: '' }, 'Selecione o bairro'),
+                ...vm.neighborhoods.map(n =>
+                  h('option', { key: n.id, value: n.name, selected: vm.form.neighborhood === n.name }, n.name)
+                )
+              ])
+            ]));
+            // Complement
+            formFields.push(h('div', { style: 'margin-bottom:8px' }, [
+              h('label', { class: 'form-label small mb-1' }, 'Complemento'),
+              h('input', { class: 'form-control form-control-sm', value: vm.form.complement,
+                onInput: (e) => { vm.form.complement = e.target.value; } })
+            ]));
+            // Reference
+            formFields.push(h('div', { style: 'margin-bottom:8px' }, [
+              h('label', { class: 'form-label small mb-1' }, 'Referência'),
+              h('input', { class: 'form-control form-control-sm', value: vm.form.reference,
+                onInput: (e) => { vm.form.reference = e.target.value; } })
+            ]));
+            // Observation
+            formFields.push(h('div', { style: 'margin-bottom:4px' }, [
+              h('label', { class: 'form-label small mb-1' }, 'Observação'),
+              h('input', { class: 'form-control form-control-sm', value: vm.form.observation,
+                onInput: (e) => { vm.form.observation = e.target.value; } })
+            ]));
+
+            children.push(h('div', {
+              style: 'text-align:left;padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:8px'
+            }, formFields));
+          }
+
+          return h('div', { style: 'text-align:left;max-height:450px;overflow:auto' }, children);
+        }
+      };
+      try {
+        mountedApp = createApp(App);
+        vueApp = mountedApp.mount('#swal-addr-vue');
+      } catch (e) { console.error('Failed to mount address editor', e); }
+    },
+    preConfirm: () => {
+      if (!vueApp) return false;
+      const result = vueApp.getResult();
+      if (!result) { Swal.showValidationMessage('Selecione ou preencha um endereço'); return false; }
+      return result;
+    },
+    willClose: () => {
+      if (mountedApp) { try { mountedApp.unmount(); } catch(e){} }
+    }
+  });
+
+  if (!result.isConfirmed || !result.value) return;
+  const res = result.value;
+
+  // Build formatted address string for the order
+  let addressStr = '';
+  let addrData = null;
+  if (res.source === 'saved') {
+    const a = res.addr;
+    const parts = [a.street || a.formatted, a.number].filter(Boolean).join(', ');
+    const tail = [a.neighborhood, a.complement ? 'Comp: ' + a.complement : '', a.reference ? 'Ref: ' + a.reference : ''].filter(Boolean).join(' - ');
+    addressStr = [parts, tail].filter(Boolean).join(' | ');
+  } else {
+    const f = res.form;
+    const parts = [f.street, f.number].filter(Boolean).join(', ');
+    const tail = [f.neighborhood, f.complement ? 'Comp: ' + f.complement : '', f.reference ? 'Ref: ' + f.reference : ''].filter(Boolean).join(' - ');
+    addressStr = [parts, tail].filter(Boolean).join(' | ');
+    addrData = f;
+  }
+
+  // Save address to order
+  await saveOrderEdit({ address: addressStr });
+
+  // Persist new address to customer if it's a new form entry and we have a customerId
+  if (res.source === 'form' && customerId && addrData && addrData.street) {
+    try {
+      await api.post(`/customers/${customerId}/addresses`, {
+        street: addrData.street,
+        number: addrData.number || null,
+        neighborhood: addrData.neighborhood || null,
+        complement: addrData.complement || null,
+        reference: addrData.reference || null,
+        observation: addrData.observation || null,
+        formatted: addrData.street + (addrData.number ? ', ' + addrData.number : ''),
+      });
+    } catch (e) { console.warn('Falha ao salvar endereço no cadastro do cliente', e); }
+  }
+}
+
+async function editItems() {
+  const o = selectedOrder.value;
+  if (!o) return;
+  const currentItems = normalizeOrderItems(o).map(it => ({
+    name: it.name || '',
+    quantity: Number(it.quantity) || 1,
+    price: Number(it.unitPrice || it.price) || 0,
+    productId: it.id || null,
+    notes: it.notes || null,
+    options: (it.options || (Array.isArray(it.addons) ? it.addons : [])).map(op => ({
+      id: op.id || null, name: op.name || '', price: Number(op.price || 0), quantity: Number(op.quantity || op.qty || 1) || 1
+    })),
+  }));
+
+  // Load menu for product catalog and option groups
+  let menuCategories = [];
+  try {
+    const companyId = auth?.user?.companyId || null;
+    if (companyId) {
+      const params = o.storeId ? { storeId: o.storeId } : {};
+      const resp = await api.get(`/public/${companyId}/menu`, { params });
+      const data = resp.data || {};
+      const rawCats = data.categories || [];
+      const catsFiltered = rawCats.map(c => ({ ...c, products: (c.products || []).filter(p => p.isActive !== false) })).filter(c => c.isActive !== false);
+      const uncategorizedFiltered = (data.uncategorized || []).filter(p => p.isActive !== false);
+      menuCategories = [...catsFiltered, ...(uncategorizedFiltered.length ? [{ id: 'uncat', name: 'Outros', products: uncategorizedFiltered }] : [])];
+      menuCategories.forEach(c => c.products.forEach(p => { if (p.price == null) p.price = Number(p.basePrice || 0); }));
+    }
+  } catch (e) { console.warn('Falha ao carregar menu para edição de itens', e); }
+
+  let vueApp = null;
+  let mountedApp = null;
+
+  const result = await Swal.fire({
+    title: ' ',
+    html: '<div id="swal-items-vue"></div>',
+    width: 700,
+    showCancelButton: true, confirmButtonText: 'Salvar pedido', cancelButtonText: 'Cancelar', focusConfirm: false,
+    customClass: { popup: 'swal-items-editor-popup' },
+    didOpen: () => {
+      const App = {
+        data() {
+          return {
+            items: JSON.parse(JSON.stringify(currentItems)),
+            categories: menuCategories,
+            screen: 'cart', // 'cart' | 'catalog' | 'options'
+            activeProduct: null,
+            chosenOptions: [],
+            optionQty: 1,
+            editingIndex: null,
+            requiredWarnings: {},
+          };
+        },
+        computed: {
+          subtotal() {
+            return this.items.reduce((s, it) => {
+              const optsPerUnit = (it.options || []).reduce((so, op) => so + (Number(op.price || 0) * (Number(op.quantity || 1) || 1)), 0);
+              return s + (Number(it.price || 0) + optsPerUnit) * (Number(it.quantity || 1) || 1);
+            }, 0);
+          },
+          optionsTotal() {
+            const base = Number(this.activeProduct?.price || 0) || 0;
+            const optsSum = this.chosenOptions.reduce((s, o) => s + (Number(o.price || 0) * (Number(o.quantity || 1) || 1)), 0);
+            return (base + optsSum) * (Number(this.optionQty) || 1);
+          },
+          flatMenuOptions() {
+            if (!this.activeProduct || !this.activeProduct.optionGroups) return [];
+            return this.activeProduct.optionGroups.reduce((acc, g) => acc.concat(g.options || []), []);
+          }
+        },
+        methods: {
+          fmt(v) { return formatCurrency(v); },
+          // --- Cart methods ---
+          removeItem(i) { this.items.splice(i, 1); },
+          incQty(i) { this.items[i].quantity++; },
+          decQty(i) { if (this.items[i].quantity > 1) this.items[i].quantity--; },
+          openCatalog() { this.screen = 'catalog'; },
+          // --- Catalog methods ---
+          selectProduct(p) {
+            this.activeProduct = JSON.parse(JSON.stringify(p));
+            this.chosenOptions = [];
+            this.optionQty = 1;
+            this.editingIndex = null;
+            this.requiredWarnings = {};
+            this.screen = 'options';
+          },
+          backToCatalog() { this.screen = 'catalog'; this.activeProduct = null; },
+          backToCart() { this.screen = 'cart'; this.activeProduct = null; },
+          // --- Edit existing item ---
+          editItem(idx) {
+            const it = this.items[idx];
+            if (!it) return;
+            this.editingIndex = idx;
+            this.optionQty = Number(it.quantity || 1);
+            // find product in menu by productId or name
+            let found = null;
+            for (const c of this.categories) {
+              if (it.productId) found = (c.products || []).find(p => String(p.id) === String(it.productId));
+              if (!found) found = (c.products || []).find(p => String(p.name) === String(it.name));
+              if (found) break;
+            }
+            if (found) {
+              this.activeProduct = JSON.parse(JSON.stringify(found));
+              // reconstruct chosen options from item's saved options
+              const flatOpts = (found.optionGroups || []).reduce((acc, g) => acc.concat(g.options || []), []);
+              this.chosenOptions = (it.options || []).map(o => {
+                const qty = Number(o.quantity || 1) || 1;
+                const match = flatOpts.find(po => (po.id && String(po.id) === String(o.id)) || String(po.name) === String(o.name));
+                return match ? { ...match, quantity: qty } : { id: o.id, name: o.name, price: Number(o.price || 0), quantity: qty };
+              });
+            } else {
+              // product not in menu - show with minimal data
+              this.activeProduct = { name: it.name, price: it.price, optionGroups: [] };
+              this.chosenOptions = (it.options || []).map(o => ({ ...o }));
+            }
+            this.requiredWarnings = {};
+            this.screen = 'options';
+          },
+          // --- Options methods ---
+          isOptionSelected(opt) {
+            if (!opt) return false;
+            const key = opt.id != null ? String(opt.id) : null;
+            return this.chosenOptions.some(co => (key && co.id != null) ? String(co.id) === key : String(co.name) === String(opt.name));
+          },
+          qtyFor(groupId, optId) {
+            const key = optId != null ? String(optId) : null;
+            const found = this.chosenOptions.find(co => (key && co.id != null) ? String(co.id) === key : String(co.name) === String(optId));
+            return found ? (Number(found.quantity) || 0) : 0;
+          },
+          selectRadio(group, opt) {
+            const ids = (group.options || []).map(o => o.id != null ? String(o.id) : null);
+            this.chosenOptions = this.chosenOptions.filter(co => {
+              if (co.id != null && ids.includes(String(co.id))) return false;
+              if ((group.options || []).some(o => String(o.name) === String(co.name))) return false;
+              return true;
+            });
+            this.chosenOptions.push({ id: opt.id, name: opt.name, price: Number(opt.price || 0), quantity: 1 });
+            this.requiredWarnings = {};
+          },
+          changeOptionQty(group, opt, delta) {
+            const keyId = opt.id != null ? String(opt.id) : null;
+            const idx = this.chosenOptions.findIndex(co => (keyId && co.id != null) ? String(co.id) === keyId : String(co.name) === String(opt.name));
+            if (idx === -1) {
+              if (delta > 0) this.chosenOptions.push({ id: opt.id, name: opt.name, price: Number(opt.price || 0), quantity: Math.max(1, delta) });
+              return;
+            }
+            const next = (Number(this.chosenOptions[idx].quantity || 0)) + delta;
+            if (next <= 0) this.chosenOptions.splice(idx, 1);
+            else this.chosenOptions.splice(idx, 1, { ...this.chosenOptions[idx], quantity: next });
+            this.requiredWarnings = {};
+          },
+          selectedCountForGroup(g) {
+            const ids = (g.options || []).map(o => o.id != null ? String(o.id) : null);
+            let cnt = 0;
+            for (const co of this.chosenOptions) {
+              if (co.id != null && ids.includes(String(co.id))) cnt += Number(co.quantity || 1) || 1;
+              else if ((g.options || []).some(o => String(o.name) === String(co.name))) cnt += Number(co.quantity || 1) || 1;
+            }
+            return cnt;
+          },
+          validateOptionGroups() {
+            this.requiredWarnings = {};
+            const groups = this.activeProduct?.optionGroups || [];
+            let ok = true;
+            for (const g of groups) {
+              const min = Number(g.min || 0) || 0;
+              if (min > 0 && this.selectedCountForGroup(g) < min) {
+                this.requiredWarnings[g.id] = true;
+                ok = false;
+              }
+            }
+            return ok;
+          },
+          confirmOptions() {
+            if (!this.activeProduct) return;
+            if (!this.validateOptionGroups()) return;
+            const payload = {
+              name: this.activeProduct.name,
+              quantity: this.optionQty,
+              price: Number(this.activeProduct.price || 0),
+              productId: this.activeProduct.id || null,
+              options: this.chosenOptions.map(o => ({ id: o.id, name: o.name, price: Number(o.price || 0), quantity: Number(o.quantity || 1) })),
+            };
+            if (this.editingIndex !== null) {
+              this.items.splice(this.editingIndex, 1, payload);
+            } else {
+              this.items.push(payload);
+            }
+            this.editingIndex = null;
+            this.activeProduct = null;
+            this.chosenOptions = [];
+            this.screen = 'cart';
+          },
+          removeChosenOption(i) { this.chosenOptions.splice(i, 1); },
+        },
+        render() {
+          const vm = this;
+
+          // ===== OPTIONS SCREEN =====
+          if (vm.screen === 'options' && vm.activeProduct) {
+            const groups = vm.activeProduct.optionGroups || [];
+            const children = [];
+
+            // Header
+            children.push(h('div', { style: 'display:flex;justify-content:space-between;align-items:start;margin-bottom:12px' }, [
+              h('div', [
+                h('h6', { style: 'margin:0;font-weight:600' }, [
+                  vm.activeProduct.name, ' ',
+                  h('span', { class: 'text-muted small' }, vm.fmt(vm.activeProduct.price))
+                ]),
+                vm.activeProduct.description ? h('div', { class: 'small text-muted' }, vm.activeProduct.description) : null,
+              ]),
+            ]));
+
+            // Quantity
+            children.push(h('div', { style: 'margin-bottom:12px;display:flex;align-items:center;gap:8px' }, [
+              h('label', { class: 'form-label small mb-0' }, 'Quantidade:'),
+              h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+                h('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary', onClick: (e) => { e.preventDefault(); if (vm.optionQty > 1) vm.optionQty--; } }, '-'),
+                h('span', { class: 'fw-bold', style: 'min-width:24px;text-align:center' }, String(vm.optionQty)),
+                h('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary', onClick: (e) => { e.preventDefault(); vm.optionQty++; } }, '+'),
+              ])
+            ]));
+
+            // Option groups
+            if (groups.length > 0) {
+              children.push(h('div', { class: 'small fw-semibold mb-2' }, 'Opcionais'));
+              children.push(h('div', { style: 'max-height:280px;overflow:auto' }, groups.map(g => {
+                const isRadio = g.max === 1;
+                const gChildren = [];
+                // Group header
+                gChildren.push(h('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px' }, [
+                  h('div', { class: 'small text-muted' }, g.name),
+                  vm.requiredWarnings[g.id] ? h('span', { class: 'badge bg-danger ms-2' }, 'OBRIGATÓRIO') : null,
+                ]));
+                // Options
+                (g.options || []).forEach(opt => {
+                  if (isRadio) {
+                    gChildren.push(h('div', { style: 'display:flex;justify-content:space-between;align-items:center;padding:4px 0' }, [
+                      h('div', [
+                        h('span', { class: 'small' }, opt.name),
+                        h('span', { class: 'small text-muted ms-1' }, Number(opt.price) > 0 ? vm.fmt(opt.price) : 'Grátis'),
+                      ]),
+                      h('input', { type: 'radio', name: 'grp-' + g.id, class: 'form-check-input', checked: vm.isOptionSelected(opt),
+                        onChange: () => vm.selectRadio(g, opt) })
+                    ]));
+                  } else {
+                    const qty = vm.qtyFor(g.id, opt.id);
+                    gChildren.push(h('div', { style: 'display:flex;justify-content:space-between;align-items:center;padding:4px 0' }, [
+                      h('div', [
+                        h('span', { class: 'small' }, opt.name),
+                        h('span', { class: 'small text-muted ms-1' }, Number(opt.price) > 0 ? vm.fmt(opt.price) : 'Grátis'),
+                      ]),
+                      qty === 0
+                        ? h('button', { type: 'button', class: 'btn btn-sm btn-primary', onClick: (e) => { e.preventDefault(); vm.changeOptionQty(g, opt, 1); } }, '+')
+                        : h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+                            h('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary', onClick: (e) => { e.preventDefault(); vm.changeOptionQty(g, opt, -1); } }, '-'),
+                            h('span', { class: 'fw-bold' }, String(qty)),
+                            h('button', { type: 'button', class: 'btn btn-sm btn-primary', onClick: (e) => { e.preventDefault(); vm.changeOptionQty(g, opt, 1); } }, '+'),
+                          ])
+                    ]));
+                  }
+                });
+                return h('div', { style: 'margin-bottom:12px;padding:8px;background:#f8f9fa;border-radius:8px' }, gChildren);
+              })));
+            }
+
+            // Chosen options summary for items without groups in menu
+            if (!groups.length && vm.chosenOptions.length > 0) {
+              children.push(h('div', { class: 'small fw-semibold mb-2' }, 'Opcionais do item'));
+              children.push(h('div', { style: 'margin-bottom:8px' }, vm.chosenOptions.map((opt, oi) =>
+                h('div', { key: oi, style: 'display:flex;justify-content:space-between;align-items:center;padding:4px 0' }, [
+                  h('span', { class: 'small' }, [(opt.quantity > 1 ? opt.quantity + 'x ' : ''), opt.name, ' ', h('span', { class: 'text-muted' }, '(' + vm.fmt(opt.price) + ')')]),
+                  h('button', { type: 'button', class: 'btn btn-sm btn-outline-danger', onClick: (e) => { e.preventDefault(); vm.removeChosenOption(oi); } }, '×')
+                ])
+              )));
+            }
+
+            // Footer
+            children.push(h('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid #dee2e6' }, [
+              h('div', { class: 'fw-semibold' }, 'Total: ' + vm.fmt(vm.optionsTotal)),
+              h('div', { style: 'display:flex;gap:8px' }, [
+                h('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary',
+                  onClick: (e) => { e.preventDefault(); vm.editingIndex = null; vm.screen = vm.categories.length ? 'catalog' : 'cart'; } }, 'Voltar'),
+                h('button', { type: 'button', class: 'btn btn-sm btn-success',
+                  onClick: (e) => { e.preventDefault(); vm.confirmOptions(); } }, vm.editingIndex !== null ? 'Atualizar' : 'Adicionar'),
+              ])
+            ]));
+
+            return h('div', { style: 'text-align:left' }, children);
+          }
+
+          // ===== CATALOG SCREEN =====
+          if (vm.screen === 'catalog') {
+            const catChildren = [];
+            catChildren.push(h('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' }, [
+              h('h6', { style: 'margin:0;font-weight:600' }, 'Adicionar produto'),
+              h('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary', onClick: (e) => { e.preventDefault(); vm.backToCart(); } }, 'Voltar'),
+            ]));
+            if (vm.categories.length === 0) {
+              catChildren.push(h('div', { class: 'text-muted small' }, 'Menu não disponível. Adicione itens manualmente no carrinho.'));
+            } else {
+              catChildren.push(h('div', { style: 'max-height:380px;overflow:auto' }, vm.categories.map(cat =>
+                h('div', { key: cat.id, style: 'margin-bottom:12px' }, [
+                  h('div', { class: 'fw-semibold small mb-1' }, cat.name),
+                  h('div', { style: 'display:flex;flex-direction:column;gap:4px' },
+                    (cat.products || []).map(p =>
+                      h('button', { type: 'button', class: 'btn btn-light btn-sm text-start', key: p.id,
+                        style: 'display:flex;justify-content:space-between',
+                        onClick: (e) => { e.preventDefault(); vm.selectProduct(p); }
+                      }, [
+                        h('span', p.name),
+                        h('span', { class: 'text-muted' }, vm.fmt(p.price))
+                      ])
+                    )
+                  )
+                ])
+              )));
+            }
+            return h('div', { style: 'text-align:left' }, catChildren);
+          }
+
+          // ===== CART SCREEN (default) =====
+          const cartChildren = [];
+          cartChildren.push(h('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' }, [
+            h('h6', { style: 'margin:0;font-weight:600' }, 'Itens do pedido'),
+            h('span', { class: 'small text-muted' }, 'Subtotal: ' + vm.fmt(vm.subtotal)),
+          ]));
+
+          if (vm.items.length === 0) {
+            cartChildren.push(h('div', { class: 'text-muted small mb-3' }, 'Nenhum item no pedido.'));
+          } else {
+            cartChildren.push(h('div', { style: 'max-height:340px;overflow:auto;margin-bottom:8px' }, vm.items.map((it, idx) => {
+              const optsPerUnit = (it.options || []).reduce((s, op) => s + (Number(op.price || 0) * (Number(op.quantity || 1) || 1)), 0);
+              const itemTotal = (Number(it.price || 0) + optsPerUnit) * Number(it.quantity || 1);
+              return h('div', { key: idx, style: 'padding:10px;background:#f8f9fa;border-radius:8px;margin-bottom:8px' }, [
+                // Name + total
+                h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, [
+                  h('div', [h('strong', it.quantity + 'x'), ' ', it.name]),
+                  h('div', { class: 'fw-semibold' }, vm.fmt(itemTotal))
+                ]),
+                // Options list
+                (it.options && it.options.length) ? h('div', { class: 'small text-muted ms-3 mt-1' },
+                  it.options.map((op, oi) => h('div', { key: oi }, '- ' + (Number(op.quantity || 1) > 1 ? op.quantity + 'x ' : '') + op.name + (Number(op.price) > 0 ? ' (' + vm.fmt(op.price) + ')' : '')))
+                ) : null,
+                // Action buttons
+                h('div', { style: 'display:flex;gap:6px;margin-top:6px' }, [
+                  h('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary', onClick: (e) => { e.preventDefault(); vm.incQty(idx); } }, '+1'),
+                  h('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary', onClick: (e) => { e.preventDefault(); vm.decQty(idx); } }, '-1'),
+                  h('button', { type: 'button', class: 'btn btn-sm btn-outline-primary', onClick: (e) => { e.preventDefault(); vm.editItem(idx); } }, 'Editar'),
+                  h('button', { type: 'button', class: 'btn btn-sm btn-outline-danger', onClick: (e) => { e.preventDefault(); vm.removeItem(idx); } }, 'Remover'),
+                ])
+              ]);
+            })));
+          }
+
+          // Add item buttons
+          cartChildren.push(h('div', { style: 'display:flex;gap:8px' }, [
+            vm.categories.length > 0
+              ? h('button', { type: 'button', class: 'btn btn-sm btn-outline-primary',
+                  onClick: (e) => { e.preventDefault(); vm.openCatalog(); } }, '+ Adicionar do cardápio')
+              : null,
+            h('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary',
+              onClick: (e) => { e.preventDefault(); vm.items.push({ name: '', quantity: 1, price: 0, productId: null, options: [] }); } }, '+ Item manual'),
+          ].filter(Boolean)));
+
+          // Manual item edit (for items without productId - inline row)
+          const lastItem = vm.items[vm.items.length - 1];
+          if (lastItem && !lastItem.name && !lastItem.productId) {
+            const li = vm.items.length - 1;
+            cartChildren.push(h('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:8px;padding:8px;background:#fff3cd;border-radius:8px' }, [
+              h('input', { type: 'number', class: 'form-control form-control-sm', style: 'width:50px;flex-shrink:0', value: lastItem.quantity, min: 1,
+                onInput: (e) => { vm.items[li].quantity = Number(e.target.value) || 1; } }),
+              h('input', { class: 'form-control form-control-sm', style: 'flex:1', placeholder: 'Nome do item', value: lastItem.name,
+                onInput: (e) => { vm.items[li].name = e.target.value; } }),
+              h('input', { type: 'number', class: 'form-control form-control-sm', style: 'width:80px;flex-shrink:0', placeholder: 'Preço', value: lastItem.price, step: '0.01', min: 0,
+                onInput: (e) => { vm.items[li].price = Number(e.target.value) || 0; } }),
+            ]));
+          }
+
+          return h('div', { style: 'text-align:left' }, cartChildren);
+        }
+      };
+      try {
+        mountedApp = createApp(App);
+        vueApp = mountedApp.mount('#swal-items-vue');
+      } catch (e) { console.error('Failed to mount items editor', e); }
+    },
+    preConfirm: () => {
+      if (!vueApp || !vueApp.items) return false;
+      // Ensure we're on cart screen
+      if (vueApp.screen !== 'cart') {
+        Swal.showValidationMessage('Finalize a edição do item antes de salvar');
+        return false;
+      }
+      const items = vueApp.items.filter(it => it.name && it.name.trim());
+      if (items.length === 0) { Swal.showValidationMessage('Adicione ao menos um item'); return false; }
+      return { items };
+    },
+    willClose: () => {
+      if (mountedApp) { try { mountedApp.unmount(); } catch(e){} }
+    }
+  });
+
+  if (result.isConfirmed && result.value) await saveOrderEdit(result.value);
+}
+
+async function editPayment() {
+  const o = selectedOrder.value;
+  if (!o) return;
+  const n = normalizeOrder(o);
+  const methods = (companyPaymentMethods.value && companyPaymentMethods.value.length) ? companyPaymentMethods.value : [{ code: 'CASH', name: 'Dinheiro' }];
+  const currentMethod = n.paymentMethod || '';
+  const currentChange = Number(n.paymentChange || 0);
+
+  // Find initial method code matching currentMethod
+  const initialCode = (() => {
+    const match = methods.find(m => (m.code || m.name) === currentMethod || m.name === currentMethod);
+    return match ? (match.code || match.name) : (methods[0] ? (methods[0].code || methods[0].name) : '');
+  })();
+
+  let vueApp = null;
+  let mountedApp = null;
+
+  const result = await Swal.fire({
+    title: 'Editar pagamento',
+    html: '<div id="swal-payment-vue"></div>',
+    width: 450,
+    showCancelButton: true, confirmButtonText: 'Salvar', cancelButtonText: 'Cancelar', focusConfirm: false,
+    didOpen: () => {
+      const App = {
+        data() {
+          return {
+            methods,
+            selectedMethod: initialCode,
+            changeFor: currentChange,
+          };
+        },
+        computed: {
+          isCash() {
+            const v = (this.selectedMethod || '').toUpperCase();
+            return v === 'CASH' || v === 'DINHEIRO';
+          }
+        },
+        methods: {
+          getResult() {
+            return {
+              payment: {
+                method: this.selectedMethod,
+                methodCode: this.selectedMethod,
+                changeFor: this.isCash ? (Number(this.changeFor) || null) : null,
+              }
+            };
+          }
+        },
+        render() {
+          const vm = this;
+          const children = [];
+
+          // Payment method select
+          children.push(h('div', { style: 'margin-bottom:12px' }, [
+            h('label', { class: 'form-label small fw-semibold mb-1' }, 'Forma de pagamento'),
+            h('select', {
+              class: 'form-select',
+              value: vm.selectedMethod,
+              onChange: (e) => { vm.selectedMethod = e.target.value; }
+            }, vm.methods.map(m =>
+              h('option', { key: m.code || m.name, value: m.code || m.name, selected: vm.selectedMethod === (m.code || m.name) }, m.name || m.code)
+            ))
+          ]));
+
+          // Change (troco) - only for cash
+          if (vm.isCash) {
+            children.push(h('div', { style: 'margin-bottom:8px' }, [
+              h('label', { class: 'form-label small fw-semibold mb-1' }, 'Troco para (R$)'),
+              h('input', {
+                type: 'number', step: '0.01', min: '0',
+                class: 'form-control',
+                value: vm.changeFor,
+                onInput: (e) => { vm.changeFor = Number(e.target.value) || 0; }
+              })
+            ]));
+          }
+
+          return h('div', { style: 'text-align:left' }, children);
+        }
+      };
+      try {
+        mountedApp = createApp(App);
+        vueApp = mountedApp.mount('#swal-payment-vue');
+      } catch (e) { console.error('Failed to mount payment editor', e); }
+    },
+    preConfirm: () => {
+      if (!vueApp) return false;
+      return vueApp.getResult();
+    },
+    willClose: () => {
+      if (mountedApp) { try { mountedApp.unmount(); } catch(e){} }
+    }
+  });
+
+  if (result.isConfirmed && result.value) await saveOrderEdit(result.value);
+}
+
+async function cancelOrderFromDetails() {
+  if (!selectedOrder.value) return;
+  const o = selectedOrder.value;
+  if (o.status === 'CONCLUIDO' || o.status === 'CANCELADO') return;
+
+  const conf = await Swal.fire({
+    title: 'Cancelar pedido?',
+    text: `Tem certeza que deseja cancelar o pedido #${formatDisplay(o)}?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Sim, cancelar',
+    cancelButtonText: 'Manter',
+    confirmButtonColor: '#dc3545'
+  });
+  if (!conf.isConfirmed) return;
+
+  try {
+    loading.value = true;
+    await store.updateStatus(o.id, 'CANCELADO');
+    await store.fetch();
+    closeDetails();
+    Swal.fire({ icon: 'success', title: 'Pedido cancelado', timer: 2000, toast: true, position: 'top-end', showConfirmButton: false });
+  } catch (e) {
+    console.error(e);
+    Swal.fire('Erro', 'Falha ao cancelar pedido.', 'error');
+  } finally {
+    loading.value = false;
+  }
 }
 
 const STATUS_LABEL = {
@@ -1232,6 +2173,8 @@ async function openAssignModal(order) {
   const riders = (await store.fetchRiders()) || [];
   assignModalRiders.value = riders.map(r => ({ id: r.id, name: r.name, description: r.whatsapp || 'sem WhatsApp', whatsapp: r.whatsapp || '' }));
   assignSelectedRider.value = null;
+  // Clear bulk state when opening for single order
+  bulkAssignOrders.value = [];
   // store only the id to avoid references being lost; handlers only need the id
   assignModalOrder.value = order ? { id: order.id } : null;
   // Close any open SweetAlert modal to avoid overlays stacking
@@ -1701,59 +2644,42 @@ function pulseButton() {
             <div><span class="badge bg-secondary">{{ columnOrders(col.key).length }}</span></div>
           </div>
           <div class="list mt-2  p-2" style="min-height:120px">
-            <div v-for="o in columnOrders(col.key)" :key="o.id" class="card mb-2 order-card" :class="{ 'fade-in': o._isNew }" :data-order-id="o.id">
-              <div class="card-body p-2 d-flex align-items-start gap-2">
-                <div class="flex-grow-1">
-                  <div class="d-flex align-items-center justify-content-between">
-                    <div class="w-100">
-                          <div class="topOrder w-100 d-flex   align-items-center justify-content-between">
-                            <div class="fw-semibold">#{{ formatDisplay(o) }} — {{ o.customerName || 'Cliente' }}</div>
-                            <div class="storeName">
-                               <div class="small text-muted">
-                  {{ normalizeOrder(o).storeName ? (normalizeOrder(o).storeName + (normalizeOrder(o).channelLabel ? ' | ' + normalizeOrder(o).channelLabel : '')) : (normalizeOrder(o).channelLabel ? normalizeOrder(o).channelLabel : '—') }}
+            <div v-for="o in columnOrders(col.key)" :key="o.id" class="card mb-2 order-card" :class="{ 'fade-in': o._isNew, 'selected': isOrderSelected(o) }" :data-order-id="o.id">
+              <div class="card-body p-2">
+                <!-- Row 1: checkbox + name + channel badge -->
+                <div class="oc-header">
+                  <label class="order-checkbox" @click.stop>
+                    <input type="checkbox" :checked="isOrderSelected(o)" @change="toggleOrderSelection(o)" />
+                    <span class="order-checkbox-mark"></span>
+                  </label>
+                  <span class="oc-title">#{{ formatDisplay(o) }} - {{ o.customerName || 'Cliente' }}</span>
+                  <span class="oc-channel">{{ normalizeOrder(o).storeName ? (normalizeOrder(o).storeName + (normalizeOrder(o).channelLabel ? ' | ' + normalizeOrder(o).channelLabel : '')) : (normalizeOrder(o).channelLabel || '—') }}</span>
                 </div>
-                            </div>
-                          </div>
-                          <div class="text-muted small">{{ o.customerPhone || '' }}</div>
-                          <div class="small text-muted mt-1 d-flex align-items-center">
-                            <i class="bi bi-credit-card me-1"></i>
-                            <span>
-                              {{ normalizeOrder(o).paymentMethod }}
-                              <span v-if="normalizeOrder(o).paymentChange" class="ms-2 text-muted">• Troco: {{ formatCurrency(normalizeOrder(o).paymentChange) }}</span>
-                            </span>
-                          </div>
-                          <template v-if="ridersEnabled">
-                          <div class="mt-1 small text-muted d-flex align-items-center">
-                            <i class="bi bi-person-badge me-1"></i>
-                            <span v-if="o.rider">{{ o.rider.name }}</span>
-                            <span v-else class="text-muted">—</span>
-                            <button v-if="o.rider" class="btn btn-sm btn-link p-0 ms-2" @click.stop="openWhatsAppToRider(o)" title="WhatsApp do entregador">
-                              <i class="bi bi-whatsapp text-success"></i>
-                            </button>
-                          </div>
-                          </template>
-                    </div>
-                    <!-- status badge removed from card; column header indicates status -->
+                <!-- Row 2: info chips -->
+                <div class="oc-info">
+                  <span v-if="o.customerPhone" class="oc-chip"><i class="bi bi-telephone"></i> {{ o.customerPhone }}</span>
+                  <span class="oc-chip"><i class="bi bi-credit-card"></i> {{ normalizeOrder(o).paymentMethod }}<template v-if="normalizeOrder(o).paymentChange"> · Troco: {{ formatCurrency(normalizeOrder(o).paymentChange) }}</template></span>
+                  <template v-if="ridersEnabled">
+                    <span class="oc-chip">
+                      <i class="bi bi-person-badge"></i> {{ o.rider ? o.rider.name : '—' }}
+                      <button v-if="o.rider" class="btn btn-link p-0 ms-1 oc-wa-btn" @click.stop="openWhatsAppToRider(o)" title="WhatsApp"><i class="bi bi-whatsapp text-success"></i></button>
+                    </span>
+                  </template>
+                </div>
+                <!-- Row 3: address (truncated) -->
+                <div class="oc-address" :title="normalizeOrder(o).address || '-'">{{ normalizeOrder(o).address || '-' }}</div>
+                <!-- Row 4: time + total + actions -->
+                <div class="oc-footer">
+                  <span class="oc-time">{{ getCreatedDurationDisplay(o) }}</span>
+                  <span class="oc-total">{{ formatCurrency(computeDisplayedTotal(o)) }}</span>
+                  <div class="oc-actions">
+                    <button class="btn btn-sm btn-outline-secondary" @click.stop="openDetails(o)" title="Detalhes"><i class="bi bi-list-ul"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="viewReceipt(o)" title="Visualizar comanda"><i class="bi bi-eye"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="printReceipt(o)" title="Imprimir comanda"><i class="bi bi-printer"></i></button>
+                    <button class="btn btn-sm btn-primary advance" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status) || !store.canTransition(o.status, getNextStatus(o.status)) || loading" title="Avançar status">
+                      Avançar <i class="bi bi-arrow-right"></i>
+                    </button>
                   </div>
-                  <div class="small text-muted mt-1">{{ normalizeOrder(o).address || '-' }}</div>
-                  <div class="d-flex justify-content-between align-items-center mt-2">
-                    <div class="small text-muted">{{ getCreatedDurationDisplay(o) }}</div>
-                    <div class="fw-semibold text-success">{{ formatCurrency(computeDisplayedTotal(o)) }}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="card-footer bg-transparent p-1 d-flex justify-content-between align-items-center">
-                <div>
-                  <button class="btn btn-sm btn-outline-secondary" @click.stop="openDetails(o)">Detalhes</button>
-                </div>
-               
-                <div>
-                  <button class="btn btn-sm btn-outline-secondary me-1" @click="viewReceipt(o)" title="Visualizar comanda"><i class="bi bi-eye"></i></button>
-                  <button class="btn btn-sm btn-light me-1" @click="printReceipt(o)" title="Imprimir comanda"><i class="bi bi-printer"></i></button>
-                  <button class="btn btn-sm btn-primary me-1" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status) || !store.canTransition(o.status, getNextStatus(o.status)) || loading" title="Avançar status">
-                    <i class="bi bi-arrow-right"></i>
-                  </button>
-                  
                 </div>
               </div>
               <div v-if="openTimeline[o.id]" class="p-2 bg-light small border-top">
@@ -1786,74 +2712,182 @@ function pulseButton() {
       <i class="bi bi-bag-x fs-1 d-block mb-2"></i>
       <p class="mb-0">Nenhum pedido encontrado.</p>
     </div>
+
+    <!-- Bulk actions bar -->
+    <div v-if="selectedOrderIds.size > 0" class="bulk-actions-bar">
+      <div class="d-flex align-items-center justify-content-between w-100">
+        <div class="d-flex align-items-center gap-2">
+          <span class="fw-semibold">{{ selectedOrderIds.size }} pedido(s) selecionado(s)</span>
+          <button class="btn btn-sm btn-outline-light" @click="clearSelection">
+            <i class="bi bi-x-lg"></i> Limpar
+          </button>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-light" @click="bulkPrint" title="Imprimir selecionados">
+            <i class="bi bi-printer"></i> Imprimir
+          </button>
+          <button class="btn btn-sm btn-primary"
+            @click="bulkAdvanceStatus"
+            :disabled="!allSameStatus || !getNextStatus(selectionStatus)"
+            title="Avançar status dos pedidos selecionados">
+            Avançar <i class="bi bi-arrow-right"></i>
+          </button>
+        </div>
+      </div>
     </div>
-    <!-- Detalhes do pedido (modal com tabs) -->
+
+    </div>
+    <!-- Detalhes do pedido (modal redesenhado) -->
   <div v-if="detailsModalVisible" class="modal fade show" style="display:block; background: rgba(0,0,0,0.45);" @click.self="closeDetails">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Detalhes do pedido {{ selectedNormalized ? (' — ' + (selectedNormalized.display || selectedOrder?.displaySimple || (selectedOrder && selectedOrder.id?.slice?.(0,6)))) : '' }}</h5>
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content od-modal">
+        <!-- Header -->
+        <div class="od-modal-header">
+          <div class="d-flex align-items-center gap-3">
+            <div class="od-order-badge">#{{ selectedNormalized ? (selectedNormalized.display || selectedOrder?.displaySimple || selectedOrder?.id?.slice?.(0,6)) : '' }}</div>
+            <div>
+              <div class="od-customer-name">{{ selectedNormalized ? selectedNormalized.customerName : (selectedOrder && (selectedOrder.customerName || selectedOrder.name)) || '—' }}</div>
+              <div class="od-customer-phone">{{ selectedNormalized ? (selectedNormalized.customerPhone || '') : (selectedOrder && (selectedOrder.customerPhone || selectedOrder.contact)) || '' }}</div>
+            </div>
+            <button v-if="orderEditable" class="btn btn-sm btn-outline-secondary od-edit-btn" @click="editCustomer" title="Editar cliente">
+              <i class="bi bi-pencil"></i>
+            </button>
+          </div>
           <button type="button" class="btn-close" aria-label="Fechar" @click="closeDetails"></button>
         </div>
-        <div class="modal-body">
-          <ul class="nav nav-tabs">
-            <li class="nav-item"><a href="#" class="nav-link" :class="{active: detailsTab==='customer'}" @click.prevent="detailsTab='customer'">Dados do cliente</a></li>
-            <li class="nav-item"><a href="#" class="nav-link" :class="{active: detailsTab==='order'}" @click.prevent="detailsTab='order'">Dados do pedido</a></li>
-            <li class="nav-item"><a href="#" class="nav-link" :class="{active: detailsTab==='payment'}" @click.prevent="detailsTab='payment'">Dados de pagamento</a></li>
-          </ul>
 
-          <div class="tab-content mt-3">
-            <div v-show="detailsTab==='customer'">
-              <div class="mb-2"><strong>Nome:</strong> {{ selectedNormalized ? selectedNormalized.customerName : (selectedOrder && (selectedOrder.customerName || selectedOrder.name)) || '—' }}</div>
-              <div class="mb-2"><strong>Telefone:</strong> {{ selectedNormalized ? (selectedNormalized.customerPhone || '—') : (selectedOrder && (selectedOrder.customerPhone || selectedOrder.contact)) || '—' }}</div>
-              <div class="mb-2"><strong>Endereço:</strong> {{ selectedNormalized ? (selectedNormalized.address || '—') : (selectedOrder ? normalizeOrder(selectedOrder).address : '—') }}</div>
-              <div class="mb-2"><strong>Loja:</strong> {{ selectedNormalized ? (selectedNormalized.storeName || '—') : (selectedOrder && selectedOrder.store && selectedOrder.store.name) || '—' }}</div>
-              <div class="mb-2"><strong>Canal:</strong> {{ selectedNormalized ? (selectedNormalized.channelLabel || '—') : (selectedOrder && (selectedOrder.channelLabel || '-')) }}</div>
+        <div class="modal-body p-0">
+          <!-- Info bar -->
+          <div class="od-info-bar">
+            <div class="od-info-item">
+              <i class="bi bi-shop"></i>
+              <span>{{ selectedNormalized ? (selectedNormalized.storeName || '—') : (selectedOrder?.store?.name) || '—' }}</span>
             </div>
-
-            <div v-show="detailsTab==='order'">
-              <div class="fw-semibold mb-2">Itens</div>
-              <ul class="list-group mb-2">
-                <li v-for="(it, idx) in (selectedNormalized && selectedNormalized.items) ? selectedNormalized.items : normalizeOrderItems(selectedOrder || {})" :key="(it.id||idx)+''" class="list-group-item">
-                  <div class="d-flex justify-content-between">
-                    <div>{{ it.quantity || 1 }}x {{ it.name }}</div>
-                    <div class="text-success">{{ formatCurrency(it.unitPrice || it.price || 0) }}</div>
-                  </div>
-                  <div v-if="extractItemOptions(it).length" class="small text-muted ms-2 mt-1">
-                    <div v-for="(opt, i) in extractItemOptions(it)" :key="(opt.name||i)+'opt'"> 
-                      <span v-if="opt.quantity">{{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
-                    </div>
-                  </div>
-                </li>
-              </ul>
-              <div v-if="getOrderNotes(selectedOrder)" class="mb-2"><strong>Observações:</strong> {{ getOrderNotes(selectedOrder) }}</div>
+            <div class="od-info-item">
+              <i class="bi bi-broadcast"></i>
+              <span>{{ selectedNormalized ? (selectedNormalized.channelLabel || '—') : '—' }}</span>
             </div>
-
-            <div v-show="detailsTab==='payment'">
-              <div class="mb-2"><strong>Forma de pagamento:</strong> {{ selectedNormalized ? (selectedNormalized.paymentMethod || '—') : normalizeOrder(selectedOrder).paymentMethod }}</div>
-              <div v-if="selectedNormalized && selectedNormalized.couponCode" class="mb-2"><strong>Cupom:</strong> {{ selectedNormalized.couponCode }}</div>
-              <div v-if="selectedNormalized && selectedNormalized.couponDiscount" class="mb-2"><strong>Desconto:</strong> -{{ formatCurrency(selectedNormalized.couponDiscount) }}</div>
-              <div v-if="selectedNormalized && selectedNormalized.paymentChange" class="mb-2"><strong>Troco:</strong> {{ formatCurrency(selectedNormalized.paymentChange) }}</div>
-              <div class="mb-2"><strong>Total exibido:</strong> {{ formatCurrency(computeDisplayedTotal(selectedOrder || {})) }}</div>
+            <div class="od-info-item">
+              <i class="bi bi-clock"></i>
+              <span>{{ selectedOrder ? getCreatedDurationDisplay(selectedOrder) : '—' }}</span>
+            </div>
+            <div class="od-info-item" v-if="selectedOrder?.status">
+              <span class="badge" :class="{
+                'bg-warning text-dark': selectedOrder.status === 'EM_PREPARO',
+                'bg-primary': selectedOrder.status === 'SAIU_PARA_ENTREGA',
+                'bg-info': selectedOrder.status === 'CONFIRMACAO_PAGAMENTO',
+                'bg-success': selectedOrder.status === 'CONCLUIDO',
+                'bg-danger': selectedOrder.status === 'CANCELADO'
+              }">{{ STATUS_LABEL[selectedOrder.status] || selectedOrder.status }}</span>
             </div>
           </div>
+
+          <!-- Address section -->
+          <div class="od-section">
+            <div class="od-section-header">
+              <div class="od-section-title"><i class="bi bi-geo-alt"></i> Endereço</div>
+              <button v-if="orderEditable" class="btn btn-sm btn-outline-secondary od-edit-btn" @click="editAddress" title="Editar endereço"><i class="bi bi-pencil"></i></button>
+            </div>
+            <div class="od-address-text">{{ selectedNormalized ? (selectedNormalized.address || '—') : (selectedOrder ? normalizeOrder(selectedOrder).address : '—') || '—' }}</div>
+          </div>
+
+          <!-- Items section -->
+          <div class="od-section">
+            <div class="od-section-header">
+              <div class="od-section-title"><i class="bi bi-bag"></i> Itens do pedido</div>
+              <button v-if="orderEditable" class="btn btn-sm btn-outline-secondary od-edit-btn" @click="editItems" title="Editar itens"><i class="bi bi-pencil"></i></button>
+            </div>
+            <div class="od-items-list">
+              <div v-for="(it, idx) in (selectedNormalized?.items) || normalizeOrderItems(selectedOrder || {})" :key="(it.id||idx)+''" class="od-item">
+                <div class="od-item-main">
+                  <span class="od-item-qty">{{ it.quantity || 1 }}x</span>
+                  <span class="od-item-name">{{ it.name }}</span>
+                  <span class="od-item-price">{{ formatCurrency(it.unitPrice || it.price || 0) }}</span>
+                </div>
+                <div v-if="extractItemOptions(it).length" class="od-item-options">
+                  <div v-for="(opt, i) in extractItemOptions(it)" :key="(opt.name||i)+'opt'" class="od-item-option">
+                    <span v-if="opt.quantity">{{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }}x </span>{{ opt.name }}<span v-if="opt.price" class="od-opt-price"> {{ formatCurrency(opt.price) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="getOrderNotes(selectedOrder)" class="od-notes">
+              <i class="bi bi-chat-left-text"></i> {{ getOrderNotes(selectedOrder) }}
+            </div>
+          </div>
+
+          <!-- Payment section -->
+          <div class="od-section">
+            <div class="od-section-header">
+              <div class="od-section-title"><i class="bi bi-credit-card"></i> Pagamento</div>
+              <button v-if="orderEditable" class="btn btn-sm btn-outline-secondary od-edit-btn" @click="editPayment" title="Editar pagamento"><i class="bi bi-pencil"></i></button>
+            </div>
+            <div class="od-payment-grid">
+              <div class="od-pay-row">
+                <span class="od-pay-label">Forma</span>
+                <span class="od-pay-value">{{ selectedNormalized ? (selectedNormalized.paymentMethod || '—') : normalizeOrder(selectedOrder).paymentMethod }}</span>
+              </div>
+              <div class="od-pay-row" v-if="selectedNormalized?.couponCode">
+                <span class="od-pay-label">Cupom</span>
+                <span class="od-pay-value">{{ selectedNormalized.couponCode }}</span>
+              </div>
+              <div class="od-pay-row" v-if="selectedNormalized?.couponDiscount">
+                <span class="od-pay-label">Desconto</span>
+                <span class="od-pay-value text-danger">-{{ formatCurrency(selectedNormalized.couponDiscount) }}</span>
+              </div>
+              <div class="od-pay-row" v-if="selectedNormalized?.paymentChange">
+                <span class="od-pay-label">Troco</span>
+                <span class="od-pay-value">{{ formatCurrency(selectedNormalized.paymentChange) }}</span>
+              </div>
+              <div class="od-pay-row od-pay-total">
+                <span class="od-pay-label">Total</span>
+                <span class="od-pay-value">{{ formatCurrency(computeDisplayedTotal(selectedOrder || {})) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rider section -->
+          <div class="od-section" v-if="ridersEnabled && selectedOrder">
+            <div class="od-section-title"><i class="bi bi-person-badge"></i> Entregador</div>
+            <div v-if="selectedOrder.rider" class="d-flex align-items-center gap-2">
+              <span>{{ selectedOrder.rider.name }}</span>
+              <button v-if="selectedOrder.rider" class="btn btn-sm btn-outline-success" @click.stop="openWhatsAppToRider(selectedOrder)">
+                <i class="bi bi-whatsapp"></i> WhatsApp
+              </button>
+            </div>
+            <div v-else class="text-muted">Nenhum entregador atribuído</div>
+          </div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="closeDetails">Fechar</button>
+
+        <div class="od-modal-footer">
+          <button type="button" class="btn btn-outline-danger" @click="cancelOrderFromDetails"
+            :disabled="!orderEditable"
+            title="Cancelar pedido">
+            <i class="bi bi-x-circle"></i> Cancelar pedido
+          </button>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary" @click="printReceipt(selectedOrder)" title="Imprimir">
+              <i class="bi bi-printer"></i> Imprimir
+            </button>
+            <button type="button" class="btn btn-secondary" @click="closeDetails">Fechar</button>
+          </div>
         </div>
       </div>
     </div>
   </div>
   
   <!-- Atribuir entregador (modal custom usando ListGroup) -->
-  <div v-if="assignModalVisible" class="modal fade show" style="display:block; background: rgba(0,0,0,0.45); z-index:20000;" @click.self="(assignModalVisible=false)">
+  <div v-if="assignModalVisible" class="modal fade show" style="display:block; background: rgba(0,0,0,0.45); z-index:20000;" @click.self="(assignModalVisible=false, bulkAssignOrders=[])">
     <div class="modal-dialog modal-md modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Escolher entregador</h5>
-          <button type="button" class="btn-close" aria-label="Fechar" @click="assignModalVisible=false"></button>
+          <h5 class="modal-title">{{ isBulkAssign ? `Escolher entregador (${bulkAssignOrders.length} pedidos)` : 'Escolher entregador' }}</h5>
+          <button type="button" class="btn-close" aria-label="Fechar" @click="assignModalVisible=false; bulkAssignOrders=[]"></button>
         </div>
         <div class="modal-body">
+          <div v-if="isBulkAssign" class="alert alert-info small mb-3">
+            Pedidos selecionados: <strong>{{ bulkAssignOrders.map(o => '#' + formatDisplay(o)).join(', ') }}</strong>
+          </div>
           <div v-if="assignModalRiders && assignModalRiders.length">
             <ListGroup :items="assignModalRiders" itemKey="id" :selectedId="assignSelectedRider" :showActions="false" @select="assignSelectedRider = $event">
               <template #primary="{ item }">
@@ -1866,11 +2900,17 @@ function pulseButton() {
         </div>
         <div class="modal-footer d-flex justify-content-between">
           <div>
-            <button class="btn btn-outline-secondary" type="button" @click="assignModalVisible=false">Cancelar</button>
-            <button class="btn btn-outline-danger ms-2" type="button" :disabled="!assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } assignModalVisible=false; await store.updateStatus(id, 'SAIU_PARA_ENTREGA'); await store.fetch(); Swal.fire('OK','Pedido despachado sem entregador.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao despachar pedido.','error') } })()">Despachar sem entregador</button>
+            <button class="btn btn-outline-secondary" type="button" @click="assignModalVisible=false; bulkAssignOrders=[]">Cancelar</button>
+            <!-- Single order: dispatch without rider -->
+            <button v-if="!isBulkAssign" class="btn btn-outline-danger ms-2" type="button" :disabled="!assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } assignModalVisible=false; await store.updateStatus(id, 'SAIU_PARA_ENTREGA'); await store.fetch(); Swal.fire('OK','Pedido despachado sem entregador.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao despachar pedido.','error') } })()">Despachar sem entregador</button>
+            <!-- Bulk: dispatch all without rider -->
+            <button v-if="isBulkAssign" class="btn btn-outline-danger ms-2" type="button" @click="(async ()=>{ try{ assignModalVisible=false; loading=true; let ok=0,fail=0; for(const o of bulkAssignOrders){ try{ await store.updateStatus(o.id,'SAIU_PARA_ENTREGA'); ok++ }catch(e){ console.error(e); fail++ } } await store.fetch(); loading=false; clearSelection(); bulkAssignOrders=[]; Swal.fire({icon:fail?'warning':'success',title:`${ok} pedido(s) despachado(s) sem entregador`+(fail?`, ${fail} falha(s)`:''),timer:3000,toast:true,position:'top-end',showConfirmButton:false}) }catch(e){ console.error(e); loading=false; Swal.fire('Erro','Falha ao despachar pedidos.','error') } })()">Despachar sem entregador</button>
           </div>
           <div>
-            <button class="btn btn-secondary" type="button" :disabled="!assignSelectedRider || !assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } await store.assignOrder(id, { riderId: assignSelectedRider, alsoSetStatus: true }); await store.fetch(); assignModalVisible=false; Swal.fire('OK','Pedido atribuído e notificado via WhatsApp.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao atribuir entregador.','error') } })()">Atribuir</button>
+            <!-- Single order: assign rider -->
+            <button v-if="!isBulkAssign" class="btn btn-secondary" type="button" :disabled="!assignSelectedRider || !assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } await store.assignOrder(id, { riderId: assignSelectedRider, alsoSetStatus: true }); await store.fetch(); assignModalVisible=false; Swal.fire('OK','Pedido atribuído e notificado via WhatsApp.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao atribuir entregador.','error') } })()">Atribuir</button>
+            <!-- Bulk: assign same rider to all -->
+            <button v-if="isBulkAssign" class="btn btn-secondary" type="button" :disabled="!assignSelectedRider" @click="(async ()=>{ try{ assignModalVisible=false; loading=true; let ok=0,fail=0; for(const o of bulkAssignOrders){ try{ await store.assignOrder(o.id,{riderId:assignSelectedRider,alsoSetStatus:true}); ok++ }catch(e){ console.error(e); fail++ } } await store.fetch(); loading=false; clearSelection(); bulkAssignOrders=[]; Swal.fire({icon:fail?'warning':'success',title:`${ok} pedido(s) atribuído(s)`+(fail?`, ${fail} falha(s)`:''),timer:3000,toast:true,position:'top-end',showConfirmButton:false}) }catch(e){ console.error(e); loading=false; Swal.fire('Erro','Falha ao atribuir entregador.','error') } })()">Atribuir</button>
           </div>
         </div>
       </div>
@@ -1924,8 +2964,105 @@ function pulseButton() {
   border: none;
   border-radius: 24px 24px 0px 0px;
 }
-.order-card { border: none;}
-.orders-column .card-body { cursor: grab; }
+.order-card {
+  border: none;
+  background: #FAFFF5;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
+}
+.order-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.order-card .card-body { cursor: grab; padding: 10px 12px !important; }
+
+/* Header: checkbox + title + channel */
+.oc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.oc-title {
+  font-weight: 600;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.oc-channel {
+  font-size: 0.65rem;
+  color: #6c757d;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Info chips row */
+.oc-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-bottom: 4px;
+}
+.oc-chip {
+  font-size: 0.7rem;
+  color: #555;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.oc-chip i { font-size: 0.65rem; color: #888; }
+.oc-wa-btn { font-size: 0.7rem; line-height: 1; }
+
+/* Address */
+.oc-address {
+  font-size: 0.7rem;
+  color: #6c757d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 6px;
+}
+
+/* Footer: time + total + actions */
+.oc-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid #eef2e8;
+  padding-top: 6px;
+}
+.oc-time {
+  font-size: 0.7rem;
+  color: #888;
+  white-space: nowrap;
+}
+.oc-total {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #198754;
+  white-space: nowrap;
+}
+.oc-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.oc-actions .btn { padding: 2px 6px; font-size: 0.72rem; }
+
+button.btn.advance {
+  background-color: #B3EE7F !important;
+  border: none;
+  color: #000 !important;
+  font-weight: 500;
+}
 
 /* responsive: horizontal scroll on small screens */
 @media (max-width: 768px) {
@@ -1947,7 +3084,190 @@ function pulseButton() {
   color: #fff !important;
 }
 .wa-choose { text-align: left; }
-.order-card .card-body .small {
-  font-size: 0.65rem;
+
+/* Order details modal */
+.od-modal { border-radius: 16px; overflow: hidden; }
+.od-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8fdf4, #eaf7e0);
+  border-bottom: 1px solid #e2ecd6;
+}
+.od-order-badge {
+  background: #198754;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding: 6px 14px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.od-customer-name { font-weight: 600; font-size: 1rem; color: #212529; }
+.od-customer-phone { font-size: 0.82rem; color: #6c757d; }
+.od-info-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 10px 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #eee;
+}
+.od-info-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: #555;
+}
+.od-info-item i { color: #888; }
+.od-section {
+  padding: 14px 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.od-section:last-child { border-bottom: none; }
+.od-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.od-section-title {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #495057;
+  margin-bottom: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.od-section-title i { margin-right: 4px; color: #888; }
+.od-edit-btn {
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  border-radius: 6px;
+  color: #6c757d;
+  border-color: #dee2e6;
+}
+.od-edit-btn:hover { color: #0d6efd; border-color: #0d6efd; }
+.od-address-text { font-size: 0.88rem; color: #333; line-height: 1.4; }
+.od-items-list { display: flex; flex-direction: column; gap: 6px; }
+.od-item {
+  background: #fafbfc;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.od-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.od-item-qty {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #495057;
+  min-width: 28px;
+}
+.od-item-name { flex: 1; font-size: 0.88rem; color: #212529; }
+.od-item-price { font-weight: 600; font-size: 0.85rem; color: #198754; white-space: nowrap; }
+.od-item-options { margin-top: 4px; padding-left: 36px; }
+.od-item-option { font-size: 0.78rem; color: #6c757d; line-height: 1.5; }
+.od-opt-price { color: #198754; margin-left: 4px; }
+.od-notes {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #fff8e1;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #795548;
+}
+.od-notes i { margin-right: 6px; }
+.od-payment-grid { display: flex; flex-direction: column; gap: 4px; }
+.od-pay-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 0.88rem;
+}
+.od-pay-label { color: #6c757d; }
+.od-pay-value { font-weight: 500; color: #212529; }
+.od-pay-total {
+  border-top: 2px solid #e9ecef;
+  margin-top: 4px;
+  padding-top: 8px;
+}
+.od-pay-total .od-pay-label { font-weight: 600; color: #212529; font-size: 0.95rem; }
+.od-pay-total .od-pay-value { font-weight: 700; color: #198754; font-size: 1.1rem; }
+.od-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-top: 1px solid #eee;
+}
+
+/* Custom checkbox */
+.order-checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.order-checkbox input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.order-checkbox-mark {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ced4da;
+  border-radius: 6px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.order-checkbox input:checked + .order-checkbox-mark {
+  background: #0d6efd;
+  border-color: #0d6efd;
+}
+.order-checkbox input:checked + .order-checkbox-mark::after {
+  content: '';
+  width: 6px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+  margin-top: -2px;
+}
+.order-checkbox:hover .order-checkbox-mark {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12);
+}
+
+/* Bulk selection */
+.bulk-actions-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #343a40;
+  color: #fff;
+  padding: 12px 24px;
+  z-index: 1050;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+}
+.order-card.selected {
+  border: 2px solid #0d6efd !important;
+  background: #f0f7ff !important;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.18);
 }
 </style>
