@@ -1,0 +1,3 @@
+const fs=require('fs'); const p='d:/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-frontend/src/views/PublicMenu.vue'; const s=fs.readFileSync(p,'utf8'); const start=s.indexOf('<script'); const openClose=s.indexOf('>', start); const end = s.indexOf('</script>', openClose); const script = s.slice(openClose+1, end); const lines = script.split(/\r?\n/);
+let cumP=0; let firstLine=null; for(let i=0;i<lines.length;i++){ for(const ch of lines[i]){ if(ch==='(') cumP++; else if(ch===')') cumP--; } if(cumP>0 && firstLine===null) firstLine=i+1; }
+fs.writeFileSync('d:/Users/gomes/Documents/GitHub/projetoDelivery/tmp/first_paren_positive.txt', 'firstParensPositiveLine: '+firstLine+'\n','utf8'); console.log('wrote');

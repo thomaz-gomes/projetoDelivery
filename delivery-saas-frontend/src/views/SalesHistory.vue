@@ -6,11 +6,11 @@
       <div class="card-body">
         <div class="row g-2 align-items-end">
           <div class="col-md-3">
-            <label class="form-label">Data início <small class="text-muted">(padrão: hoje)</small></label>
+            <label class="form-label">Data início</label>
             <DateInput v-model="filters.from" inputClass="form-control" />
           </div>
           <div class="col-md-3">
-            <label class="form-label">Data fim <small class="text-muted">(padrão: hoje)</small></label>
+            <label class="form-label">Data fim</label>
             <DateInput v-model="filters.to" inputClass="form-control" />
           </div>
           <div class="col-md-3">
@@ -25,44 +25,46 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-body p-0">
-        <table class="table table-hover mb-0">
-          <thead class="table-light">
-            <tr>
-              <th>Nº Pedido</th>
-              <th>Endereço</th>
-              <th>Cliente</th>
-              <th>Data</th>
-              <th>Entregador</th>
-              <th>Pagamento</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="o in orders" :key="o.id">
-              <td>{{ formatOrderNumber(o) }}</td>
-              <td>{{ formatAddress(o) }}</td>
-              <td>{{ o.customer?.fullName || o.customer?.name || o.customer?.contact || '-' }}</td>
-              <td>{{ formatDate(o.createdAt) }}</td>
-              <td>{{ o.rider?.name || '-' }}</td>
-              <td>{{ o.paymentMethod || o.payment?.method || '-' }}</td>
-              <td class="text-end">
-                <button class="btn btn-sm btn-outline-primary" @click="viewDetails(o)">Ver</button>
-              </td>
-            </tr>
-            <tr v-if="orders.length === 0">
-              <td colspan="7" class="text-center py-4">Nenhum pedido encontrado para o período.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <ListCard :title="`Pedidos (${orders.length})`" :subtitle="orders.length ? `${orders.length} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por pedido, endereço ou cliente" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
+      <template #default>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Nº Pedido</th>
+                <th>Endereço</th>
+                <th>Cliente</th>
+                <th>Data</th>
+                <th>Entregador</th>
+                <th>Pagamento</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="o in displayed" :key="o.id">
+                <td>{{ formatOrderNumber(o) }}</td>
+                <td>{{ formatAddress(o) }}</td>
+                <td>{{ o.customer?.fullName || o.customer?.name || o.customer?.contact || '-' }}</td>
+                <td>{{ formatDate(o.createdAt) }}</td>
+                <td>{{ o.rider?.name || '-' }}</td>
+                <td>{{ o.paymentMethod || o.payment?.method || '-' }}</td>
+                <td class="text-end">
+                  <button class="btn btn-sm btn-outline-primary" @click="viewDetails(o)">Ver</button>
+                </td>
+              </tr>
+              <tr v-if="displayed.length === 0">
+                <td colspan="7" class="text-center py-4">Nenhum pedido encontrado para o período.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </ListCard>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api';
 import SelectInput from '../components/form/select/SelectInput.vue';
@@ -71,6 +73,18 @@ import DateInput from '../components/form/date/DateInput.vue';
 
 const router = useRouter();
 const orders = ref([]);
+const q = ref('')
+
+const displayed = computed(() => {
+  if(!q.value) return orders.value || []
+  const term = q.value.toLowerCase()
+  return (orders.value || []).filter(o => {
+    const addr = formatAddress(o) || ''
+    const customer = (o.customer && (o.customer.fullName || o.customer.name || o.customer.contact)) || ''
+    const num = formatOrderNumber(o) || ''
+    return (addr + ' ' + customer + ' ' + num).toLowerCase().includes(term)
+  })
+})
 const riders = ref([]);
 
 // default date filter: today in YYYY-MM-DD (local) format
@@ -108,9 +122,16 @@ function formatOrderNumber(o){
 
 function formatAddress(o){
   if(!o) return '-';
-  const a = o.address || o.deliveryAddress || o.customerAddress;
+  const a = o.address || o.deliveryAddress || o.customerAddress || o.payload?.delivery?.deliveryAddress;
   if(!a) return o.addressText || '-';
-  return [a.street, a.number, a.complement, a.city].filter(Boolean).join(', ');
+  const main = a.formatted || a.formattedAddress || [a.street || a.streetName, a.number || a.streetNumber].filter(Boolean).join(', ');
+  const tail = []
+  if(a.neighborhood) tail.push(a.neighborhood)
+  if(a.complement) tail.push('Comp: ' + a.complement)
+  if(a.reference) tail.push('Ref: ' + a.reference)
+  if(a.observation) tail.push('Obs: ' + a.observation)
+  if(a.city && !tail.includes(a.city)) tail.push(a.city)
+  return [main, tail.filter(Boolean).join(' — ')].filter(Boolean).join(' | ')
 }
 
 async function load(){
@@ -144,6 +165,9 @@ function viewDetails(o){
 }
 
 onMounted(()=>{ loadRiders(); load(); });
+
+function onQuickSearch(val){ q.value = val }
+function onQuickClear(){ q.value = '' }
 </script>
 
 <style scoped>

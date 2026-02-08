@@ -1,0 +1,28 @@
+[
+  {
+    "id": "cmjku0lwn0000mqrs1qnat6a9",
+    "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+    "interface": "printer:EPSON",
+    "type": "EPSON",
+    "width": 48,
+    "headerName": "Minha Loja",
+    "headerCity": "Cidade",
+    "agentTokenHash": "5731e5a5aa73bb0782345f065cc73216278628da0371a829aecbf0ffde006158",
+    "agentTokenCreatedAt": "2025-12-25T02:36:54.885Z",
+    "createdAt": "2025-12-25T02:36:54.887Z",
+    "updatedAt": "2025-12-25T02:36:54.887Z"
+  },
+  {
+    "id": "cmjm21r8p0000mqf8ofxl6ldn",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "interface": "printer:HP Smart Tank 510 series",
+    "type": "EPSON",
+    "width": 80,
+    "headerName": "teste",
+    "headerCity": "Cidade",
+    "agentTokenHash": "f93d7c33b26f23626118adb668db092df7f9ad3c160766a5af824ee02cda5728",
+    "agentTokenCreatedAt": "2025-12-26T01:57:05.316Z",
+    "createdAt": "2025-12-25T23:09:31.562Z",
+    "updatedAt": "2025-12-31T12:23:49.948Z"
+  }
+]

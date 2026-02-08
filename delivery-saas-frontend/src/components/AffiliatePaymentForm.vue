@@ -8,9 +8,8 @@
 
     <form @submit.prevent="submit">
       <div class="form-group">
-        <label for="amount">Valor do Pagamento (R$)</label>
         <div class="d-flex align-items-center">
-          <CurrencyInput id="amount" v-model="form.amount" :min="0.01" :max="affiliate?.currentBalance || null" placeholder="0,00" required />
+          <CurrencyInput label="Valor do Pagamento (R$)" id="amount" v-model="form.amount" :min="0.01" :max="affiliate?.currentBalance || null" placeholder="0,00" required />
           <button type="button" class="btn btn-sm btn-outline-secondary btn-max ms-2" @click.prevent="setMax">MAX</button>
         </div>
       </div>

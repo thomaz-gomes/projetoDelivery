@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "message": "Cannot use import statement outside a module",
+    "stack": "SyntaxError: Cannot use import statement outside a module\n    at new Function (<anonymous>)\n    at Object.<anonymous> (D:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery\\tools\\check_sfc_script_syntax.js:11:3)\n    at Module._compile (node:internal/modules/cjs/loader:1761:14)\n    at Object..js (node:internal/modules/cjs/loader:1893:10)\n    at Module.load (node:internal/modules/cjs/loader:1481:32)\n    at Module._load (node:internal/modules/cjs/loader:1300:12)\n    at TracingChannel.traceSync (node:diagnostics_channel:328:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47"
+  }
+}

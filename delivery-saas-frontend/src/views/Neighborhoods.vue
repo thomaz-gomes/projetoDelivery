@@ -1,10 +1,21 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick, computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
 import { formatCurrency } from '../utils/formatters.js';
+import ListCard from '../components/ListCard.vue';
 
 const list = ref([]);
+const q = ref('')
+
+const displayed = computed(() => {
+  if(!q.value) return list.value || []
+  const term = q.value.toLowerCase()
+  return (list.value || []).filter(n => {
+    const aliases = Array.isArray(n.aliases) ? n.aliases.join(' ') : (n.aliases || '')
+    return ((n.name || '') + ' ' + aliases).toLowerCase().includes(term)
+  })
+})
 const loading = ref(false);
 
 const form = ref({ id: null, name: '', aliases: '', deliveryFee: '0,00', riderFee: '0,00' });
@@ -30,6 +41,22 @@ async function fetchList() {
 
 function edit(n) {
   form.value = { id: n.id, name: n.name, aliases: Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '').toString(), deliveryFee: (n.deliveryFee || 0).toString(), riderFee: (n.riderFee || 0).toString() };
+  nextTick(() => {
+    const el = document.querySelector('input[placeholder="Nome do bairro"]');
+    if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  });
+}
+
+async function removeNeighborhood(n) {
+  if (!confirm(`Remover bairro "${n.name}"? Esta ação não pode ser desfeita.`)) return;
+  try {
+    await api.delete(`/neighborhoods/${n.id}`);
+    if (form.value.id === n.id) resetForm();
+    await fetchList();
+  } catch (e) {
+    console.error(e);
+    error.value = e?.response?.data?.message || 'Erro ao remover bairro';
+  }
 }
 
 function resetForm() {
@@ -65,6 +92,9 @@ async function save() {
 
 onMounted(fetchList);
 
+function onQuickSearch(val){ q.value = val }
+function onQuickClear(){ q.value = '' }
+
 async function testMatch() {
   if (!testText.value) return (matchResult.value = null);
   testing.value = true;
@@ -87,7 +117,7 @@ async function testMatch() {
       <h2 class="h4 m-0">Bairros</h2>
     </div>
 
-    <div class="card mb-3">
+    <div class="card mb-3" v-if="auth.user?.role === 'ADMIN'">
       <div class="card-body">
         <form @submit.prevent="save" class="row g-2">
           <div class="col-md-4">
@@ -97,10 +127,10 @@ async function testMatch() {
             <TextInput v-model="form.aliases" placeholder="Apelidos (vírgula separado)" inputClass="form-control" />
           </div>
           <div class="col-md-2">
-            <CurrencyInput v-model="form.deliveryFee" inputClass="form-control" placeholder="Taxa entrega" />
+            <CurrencyInput label="Taxa entrega" labelClass="form-label" v-model="form.deliveryFee" inputClass="form-control" placeholder="Taxa entrega" />
           </div>
           <div class="col-md-2">
-            <CurrencyInput v-model="form.riderFee" inputClass="form-control" placeholder="Taxa motoboy" />
+            <CurrencyInput label="Taxa motoboy" labelClass="form-label" v-model="form.riderFee" inputClass="form-control" placeholder="Taxa motoboy" />
           </div>
           <div class="col-12 mt-2">
             <div class="d-flex gap-2">
@@ -131,33 +161,41 @@ async function testMatch() {
       </div>
     </div>
 
-    <div class="card">
-      <div class="table-responsive">
-        <table class="table table-hover table-bordered align-middle mb-0">
-          <thead class="table-light">
-            <tr>
-              <th>Nome</th>
-              <th>Apelidos</th>
-              <th>Taxa entrega</th>
-              <th>Taxa motoboy</th>
-              <th style="width:1%">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="n in list" :key="n.id">
-              <td>{{ n.name }}</td>
-              <td>{{ Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '') }}</td>
-              <td>{{ formatCurrency(n.deliveryFee) }}</td>
-              <td>{{ formatCurrency(n.riderFee) }}</td>
-              <td><button class="btn btn-sm btn-outline-secondary" @click="edit(n)">Editar</button></td>
-            </tr>
-            <tr v-if="list.length === 0">
-              <td colspan="5" class="text-center text-muted py-4">Nenhum bairro cadastrado.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <ListCard title="Bairros" icon="bi bi-geo-alt" :subtitle="list.length ? `${list.length} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome ou apelido" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
+      <template #default>
+        <div class="table-responsive">
+          <table class="table table-hover table-bordered align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Nome</th>
+                <th>Apelidos</th>
+                <th>Taxa entrega</th>
+                <th>Taxa motoboy</th>
+                <th style="width:1%">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="n in displayed" :key="n.id">
+                <td>{{ n.name }}</td>
+                <td>{{ Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '') }}</td>
+                <td>{{ formatCurrency(n.deliveryFee) }}</td>
+                <td>{{ formatCurrency(n.riderFee) }}</td>
+                <td>
+                    <div v-if="auth.user?.role === 'ADMIN'" class="d-flex gap-1">
+                      <button class="btn btn-sm btn-outline-secondary" @click="edit(n)">Editar</button>
+                      <button class="btn btn-sm btn-outline-danger" @click="removeNeighborhood(n)">Remover</button>
+                    </div>
+                    <div v-else class="text-muted small">Sem permissão</div>
+                </td>
+              </tr>
+              <tr v-if="displayed.length === 0">
+                <td colspan="5" class="text-center text-muted py-4">Nenhum bairro cadastrado.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </ListCard>
   </div>
 </template>
 

@@ -15,7 +15,7 @@ const customer = ref({
   cpf: '',
   whatsapp: '',
   phone: '',
-  addresses: [{ street: '', number: '', city: '', state: '', zip: '' }]
+  addresses: [{ street: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', postalCode: '' }]
 });
 
 const loading = ref(false);
@@ -40,11 +40,34 @@ onMounted(async () => {
         neighborhood: a.neighborhood,
         city: a.city,
         state: a.state,
-        zip: a.postalCode,
+        postalCode: a.postalCode,
+        reference: a.reference || '',
+        observation: a.observation || '',
         isDefault: a.isDefault,
         formatted: a.formatted,
       }));
-      if (!customer.value.addresses.length) customer.value.addresses = [{ street: '', number: '', city: '', state: '', zip: '' }];
+      if (!customer.value.addresses.length) customer.value.addresses = [{ street: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', postalCode: '' }];
+      // support opening the edit page and immediately adding a new address
+      try {
+        if (route.query && route.query.addAddress === '1') {
+          customer.value.addresses.push({ street: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', postalCode: '' });
+          // remove the query param so subsequent navigation is clean
+          const q = { ...route.query };
+          delete q.addAddress;
+          window.history.replaceState({}, '', `${window.location.pathname}${Object.keys(q).length ? '?' + new URLSearchParams(q).toString() : ''}`);
+        }
+        if (route.query && route.query.editAddressIndex) {
+          // optional: focus/scroll to address index when provided (basic behavior)
+          const idx = Number(route.query.editAddressIndex);
+          if (!Number.isNaN(idx) && idx >= 0 && idx < customer.value.addresses.length) {
+            // brief timeout to ensure DOM rendered; then scroll
+            setTimeout(() => {
+              const els = document.querySelectorAll('.customer-address-block');
+              if (els && els[idx]) els[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 250);
+          }
+        }
+      } catch (e) { /* ignore query handling errors */ }
     } catch (e) {
       console.error(e);
       error.value = 'Falha ao carregar cliente';
@@ -72,7 +95,7 @@ async function save() {
 }
 
 function addAddress() {
-  customer.value.addresses.push({ street: '', number: '', city: '', state: '', zip: '' });
+  customer.value.addresses.push({ street: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', postalCode: '' });
 }
 
 function removeAddress(index) {
@@ -99,20 +122,16 @@ function handlePhoneInput(e) {
       <div class="card-body">
         <form @submit.prevent="save" class="row g-3">
           <div class="col-md-6">
-            <label class="form-label">Nome completo</label>
-            <TextInput v-model="customer.fullName" inputClass="form-control" required />
+            <TextInput label="Nome completo" labelClass="form-label" v-model="customer.fullName" inputClass="form-control" required />
           </div>
           <div class="col-md-3">
-            <label class="form-label">CPF</label>
-            <TextInput v-model="customer.cpf" placeholder="000.000.000-00" inputClass="form-control" />
+            <TextInput label="CPF" labelClass="form-label" v-model="customer.cpf" placeholder="000.000.000-00" inputClass="form-control" />
           </div>
           <div class="col-md-3">
-            <label class="form-label">WhatsApp</label>
-            <TextInput v-model="customer.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" />
+            <TextInput label="WhatsApp" labelClass="form-label" v-model="customer.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" />
           </div>
           <div class="col-md-3">
-            <label class="form-label">Telefone</label>
-            <TextInput v-model="customer.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" />
+            <TextInput label="Telefone" labelClass="form-label" v-model="customer.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" />
           </div>
 
           <div class="col-12 mt-3">
@@ -122,29 +141,48 @@ function handlePhoneInput(e) {
           <div
             v-for="(addr, i) in customer.addresses"
             :key="i"
-            class="border rounded p-3 mb-2 bg-light"
+            class="border rounded p-3 mb-2 bg-light customer-address-block"
           >
             <div class="row g-2">
               <div class="col-md-5">
-                <label class="form-label">Rua</label>
-                <TextInput v-model="addr.street" inputClass="form-control" />
+                <div v-if="addr.formatted && !addr.street">
+                  <TextInput label="Endereço (formatado)" labelClass="form-label" v-model="addr.formatted" inputClass="form-control" />
+                </div>
+                <div v-else>
+                  <TextInput label="Rua" labelClass="form-label" v-model="addr.street" inputClass="form-control" />
+                </div>
               </div>
               <div class="col-md-2">
-                <label class="form-label">Número</label>
-                <TextInput v-model="addr.number" inputClass="form-control" />
+                <TextInput label="Número" labelClass="form-label" v-model="addr.number" inputClass="form-control" />
               </div>
               <div class="col-md-3">
-                <label class="form-label">Cidade</label>
-                <TextInput v-model="addr.city" inputClass="form-control" />
+                <TextInput label="Cidade" labelClass="form-label" v-model="addr.city" inputClass="form-control" />
               </div>
               <div class="col-md-2">
-                <label class="form-label">UF</label>
-                <TextInput v-model="addr.state" maxlength="2" inputClass="form-control text-uppercase" />
+                <TextInput label="UF" labelClass="form-label" v-model="addr.state" maxlength="2" inputClass="form-control text-uppercase" />
+              </div>
+            </div>
+
+            <div class="row g-2 mt-2">
+              <div class="col-md-6">
+                <TextInput label="Complemento" labelClass="form-label" v-model="addr.complement" inputClass="form-control" />
+              </div>
+              <div class="col-md-4">
+                <TextInput label="Bairro" labelClass="form-label" v-model="addr.neighborhood" inputClass="form-control" />
+              </div>
+            </div>
+
+            <div class="row g-2 mt-2">
+              <div class="col-md-6">
+                <TextInput label="Referência" labelClass="form-label" v-model="addr.reference" inputClass="form-control" />
+              </div>
+              <div class="col-md-6">
+                <TextInput label="Observação" labelClass="form-label" v-model="addr.observation" inputClass="form-control" />
               </div>
             </div>
 
             <div class="mt-2 d-flex justify-content-between align-items-center">
-              <div class="text-muted small">CEP: <TextInput v-model="addr.zip" inputClass="form-control form-control-sm d-inline w-auto" /></div>
+              <div class="text-muted small">CEP: <TextInput label="" v-model="addr.postalCode" inputClass="form-control form-control-sm d-inline w-auto" /></div>
               <button type="button" class="btn btn-sm btn-outline-danger" @click="removeAddress(i)">Remover</button>
             </div>
           </div>

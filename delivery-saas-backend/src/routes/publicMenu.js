@@ -1,6 +1,10 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
-import { findOrCreateCustomer } from '../services/customers.js'
+import { signToken, authMiddleware } from '../auth.js'
+import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId } from '../services/customerAccounts.js'
+import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js'
+import jwt from 'jsonwebtoken'
+import { resolvePublicCustomerFromReq } from './publicHelpers.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -57,7 +61,12 @@ publicMenuRouter.get('/:storeSlug', async (req, res, next) => {
 // GET /public/:companyId/menu
 publicMenuRouter.get('/:companyId/menu', async (req, res) => {
   const { companyId } = req.params
-  const { storeId, menuId } = req.query || {}
+  const query = req.query || {}
+  let storeId = query.storeId
+  let menuId = query.menuId
+  // normalize query params: when a query param is repeated it becomes an array
+  if (Array.isArray(menuId)) menuId = menuId.length ? String(menuId[0]) : null
+  if (Array.isArray(storeId)) storeId = storeId.length ? String(storeId[0]) : null
   try {
     let categories
     if (menuId) {
@@ -213,8 +222,38 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
       }
     }
     // include publicly-visible payment methods (active) and pickup info (from printer settings as a lightweight store address)
-    const paymentMethods = await prisma.paymentMethod.findMany({ where: { companyId, isActive: true }, orderBy: { createdAt: 'asc' } })
+    // If a menuObj was selected (menuId present) and company-level schedule is empty,
+    // try to resolve the menu's store and merge store-level schedule/open24Hours
+    // into the `company` object so public consumers receive correct hours.
+    try {
+      if (menuObj && menuObj.id) {
+        try {
+          const menuDb = await prisma.menu.findUnique({ where: { id: menuObj.id }, select: { storeId: true } })
+          if (menuDb && menuDb.storeId) {
+            const storeForMenu = await prisma.store.findUnique({ where: { id: menuDb.storeId } })
+            if (storeForMenu && storeForMenu.companyId === companyId) {
+              company = company || { id: companyId }
+              if (storeForMenu.timezone) company.timezone = storeForMenu.timezone
+              if (storeForMenu.weeklySchedule) company.weeklySchedule = storeForMenu.weeklySchedule
+              company.alwaysOpen = !!storeForMenu.open24Hours
+              company.store = company.store || {}
+              company.store.id = storeForMenu.id
+              company.store.name = storeForMenu.name
+              company.store.logoUrl = storeForMenu.logoUrl || null
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to merge store schedule for menu', e?.message || e)
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+    let paymentMethods = await prisma.paymentMethod.findMany({ where: { companyId, isActive: true }, orderBy: { createdAt: 'asc' } })
     const printer = await prisma.printerSetting.findFirst({ where: { companyId } })
+    // If no payment methods are configured for the company, expose a default
+    // 'Dinheiro' (cash) option so public frontend can show a sensible default
+    if (!Array.isArray(paymentMethods) || paymentMethods.length === 0) {
+      paymentMethods = [{ id: 'default_cash', code: 'DINHEIRO', name: 'Dinheiro', isActive: true, isDefault: true }]
+    }
     if (company) company.paymentMethods = paymentMethods || []
     if (company) company.pickupInfo = printer ? `${printer.headerName || ''}${printer.headerCity ? ' - ' + printer.headerCity : ''}`.trim() : null
 
@@ -323,9 +362,10 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
     }))
     // If a specific menuId was requested, try to load menu metadata (logo/banner) from DB and optional settings file
     try {
+      let m = null
       if (menuId) {
-        const m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, name: true, description: true, logoUrl: true } })
-        if (m) menuObj = { id: m.id, name: m.name, description: m.description, logo: m.logoUrl || null }
+        m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, name: true, description: true, logoUrl: true, address: true, phone: true, whatsapp: true, timezone: true, weeklySchedule: true, open24Hours: true, allowDelivery: true, allowPickup: true } })
+        if (m) menuObj = { id: m.id, name: m.name, description: m.description, logo: m.logoUrl || null, address: m.address || null, phone: m.phone || null, whatsapp: m.whatsapp || null, timezone: m.timezone || null, weeklySchedule: m.weeklySchedule || null, open24Hours: !!m.open24Hours, allowDelivery: m.allowDelivery !== undefined ? !!m.allowDelivery : true, allowPickup: m.allowPickup !== undefined ? !!m.allowPickup : true }
       }
       // load menu-level settings from the store's settings file (settings/stores/<storeId>/settings.json)
       if (menuObj && menuObj.id) {
@@ -362,6 +402,19 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
               break
             }
           }
+          // prefer DB-stored menu fields when present (DB should take precedence over settings file)
+          try{
+            if (m) {
+              if (m.address) menuObj.address = m.address
+              if (m.phone) menuObj.phone = m.phone
+              if (m.whatsapp) menuObj.whatsapp = m.whatsapp
+              if (m.timezone) company.timezone = m.timezone
+              if (m.weeklySchedule) company.weeklySchedule = m.weeklySchedule
+              if (typeof m.open24Hours !== 'undefined') company.alwaysOpen = !!m.open24Hours
+              if (typeof m.allowDelivery !== 'undefined') menuObj.allowDelivery = !!m.allowDelivery
+              if (typeof m.allowPickup !== 'undefined') menuObj.allowPickup = !!m.allowPickup
+            }
+          }catch(e){}
         } catch (e) { /* ignore */ }
       }
     } catch (e) {
@@ -387,6 +440,178 @@ publicMenuRouter.get('/:companyId/neighborhoods', async (req, res) => {
   } catch (e) {
     console.error('Error loading public neighborhoods', e)
     return res.status(500).json({ message: 'Erro ao carregar bairros' })
+  }
+})
+
+// GET /public/:companyId/profile
+// Resolve a public customer from Authorization Bearer token or x-public-phone / cookie and
+// return a lightweight profile object suitable for the public UI. Returns 403 when
+// no public customer can be resolved.
+publicMenuRouter.get('/:companyId/profile', async (req, res) => {
+  const { companyId } = req.params
+  try {
+    const customer = await resolvePublicCustomerFromReq(req, companyId)
+    if (!customer) return res.status(403).json({ message: 'public-customer-not-resolved' })
+
+    // return minimal public-safe profile (include addresses when present)
+    const addresses = await prisma.customerAddress.findMany({ where: { customerId: customer.id } })
+    const prof = {
+      id: customer.id,
+      name: customer.fullName || customer.name || null,
+      contact: customer.whatsapp || customer.phone || null,
+      email: customer.email || null,
+      addresses: addresses || []
+    }
+    return res.json(prof)
+  } catch (e) {
+    console.error('Error resolving public profile', e)
+    return res.status(500).json({ message: 'Erro ao resolver perfil público' })
+  }
+})
+
+// GET /public/:companyId/account?phone=<phone>
+// Returns { exists: boolean, hasPassword: boolean }
+publicMenuRouter.get('/:companyId/account', async (req, res) => {
+  const { companyId } = req.params
+  const phoneRaw = req.query.phone || req.headers['x-public-phone'] || ''
+  if(!phoneRaw) return res.status(400).json({ message: 'phone é obrigatório' })
+  try{
+    const digits = String(phoneRaw).replace(/\D/g,'')
+    const phoneClean = normalizePhone(digits)
+    // try to locate the Customer by whatsapp using multiple heuristics
+    let customer = null
+    try {
+      customer = await prisma.customer.findFirst({
+        where: {
+          companyId,
+          OR: [
+            { whatsapp: phoneClean },
+            { whatsapp: '55' + phoneClean },
+            { whatsapp: { endsWith: phoneClean } },
+            { whatsapp: { contains: phoneClean } }
+          ]
+        }
+      })
+    } catch (e) { /* ignore */ }
+    if(!customer) return res.json({ exists: false, hasPassword: false })
+    const acct = await findAccountByCustomerId({ companyId, customerId: customer.id })
+    return res.json({ exists: true, hasPassword: !!acct })
+  }catch(e){
+    console.error('GET /public/:companyId/account failed', e)
+    return res.status(500).json({ message: 'Erro ao verificar conta' })
+  }
+})
+
+// GET /public/:companyId/addresses
+// Return addresses for resolved public customer (403 when not resolved)
+publicMenuRouter.get('/:companyId/addresses', async (req, res) => {
+  const { companyId } = req.params
+  try {
+    const customer = await resolvePublicCustomerFromReq(req, companyId)
+    if (!customer) return res.status(403).json({ message: 'public-customer-not-resolved' })
+    const addresses = await prisma.customerAddress.findMany({ where: { customerId: customer.id } })
+    return res.json(addresses || [])
+  } catch (e) {
+    console.error('Error resolving public addresses', e)
+    return res.status(500).json({ message: 'Erro ao resolver endereços públicos' })
+  }
+})
+
+// GET /public/:companyId/profile
+// If the request contains a valid Bearer token for a CUSTOMER, return the
+// customer's profile including saved addresses (ordered by isDefault).
+publicMenuRouter.get('/:companyId/profile', authMiddleware, async (req, res) => {
+  const { companyId } = req.params
+  try {
+    // Ensure token belongs to same company
+    if (!req.user || !req.user.customerId || String(req.user.companyId) !== String(companyId)) {
+      return res.status(403).json({ message: 'Forbidden' })
+    }
+    const custId = req.user.customerId || req.user.id
+    const customer = await prisma.customer.findFirst({ where: { id: custId, companyId }, include: { addresses: { orderBy: { isDefault: 'desc' } } } })
+    if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' })
+    return res.json(customer)
+  } catch (e) {
+    console.error('GET /public/:companyId/profile failed', e)
+    return res.status(500).json({ message: 'Erro ao carregar perfil' })
+  }
+})
+
+// GET /public/:companyId/addresses
+// Return saved addresses for the authenticated public customer (requires valid JWT issued by /public/:companyId/login)
+publicMenuRouter.get('/:companyId/addresses', authMiddleware, async (req, res) => {
+  const { companyId } = req.params
+  try {
+    if (!req.user || !req.user.customerId || String(req.user.companyId) !== String(companyId)) {
+      return res.status(403).json({ message: 'Forbidden' })
+    }
+    const custId = req.user.customerId || req.user.id
+    const cust = await prisma.customer.findFirst({ where: { id: custId, companyId }, include: { addresses: { orderBy: { isDefault: 'desc' } } } })
+    if (!cust) return res.status(404).json({ message: 'Cliente não encontrado' })
+    const out = (cust.addresses || []).map(a => ({ id: a.id, label: a.label || a.formatted || '', formattedAddress: a.formatted || a.formattedAddress || a.street || '', neighborhood: a.neighborhood || '', fullDisplay: a.formatted || a.street || '' }))
+    return res.json(out)
+  } catch (e) {
+    console.error('GET /public/:companyId/addresses failed', e)
+    return res.status(500).json({ message: 'Erro ao carregar endereços' })
+  }
+})
+
+// POST /public/:companyId/login
+// Authenticate a public customer by email or whatsapp + password and return a JWT
+publicMenuRouter.post('/:companyId/login', async (req, res) => {
+  const { companyId } = req.params
+  const { whatsapp, login, email, password } = req.body || {}
+  if (!password) return res.status(400).json({ message: 'Informe senha' })
+
+  try {
+    // Email-based auth (preferred when provided)
+    if (email) {
+      const acct = await findAccountByEmail({ companyId, email })
+      if (!acct) return res.status(401).json({ message: 'Credenciais inválidas' })
+      const ok = await verifyPassword(acct, password)
+      if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' })
+      const customer = await prisma.customer.findUnique({ where: { id: acct.customerId } })
+      const token = signToken({ id: customer.id, role: 'CUSTOMER', companyId: companyId, customerId: customer.id, name: customer.name })
+      return res.json({ token, customer })
+    }
+
+    // Whatsapp/login based auth
+    const raw = whatsapp || login || ''
+    if (!raw) return res.status(400).json({ message: 'Informe whatsapp/email e senha' })
+    const digits = String(raw).replace(/\D/g,'')
+    if (!digits) return res.status(400).json({ message: 'WhatsApp inválido' })
+
+    // Normalize incoming phone for DB matching (we store numbers without DDI)
+    const phoneClean = normalizePhone(digits);
+    // Try to locate the Customer by whatsapp using multiple heuristics to be compatible
+    // with existing records that may contain leading '55'.
+    let customer = null
+    try {
+      customer = await prisma.customer.findFirst({
+        where: {
+          companyId,
+          OR: [
+            { whatsapp: phoneClean },
+            { whatsapp: '55' + phoneClean },
+            { whatsapp: { endsWith: phoneClean } },
+            { whatsapp: { contains: phoneClean } }
+          ]
+        }
+      })
+    } catch (e) { /* ignore */ }
+
+    if (!customer) return res.status(401).json({ message: 'Credenciais inválidas' })
+
+    const acct = await findAccountByCustomerId({ companyId, customerId: customer.id })
+    if (!acct) return res.status(401).json({ message: 'Credenciais inválidas' })
+    const ok = await verifyPassword(acct, password)
+    if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' })
+
+    const token = signToken({ id: customer.id, role: 'CUSTOMER', companyId: companyId, customerId: customer.id, name: customer.name })
+    return res.json({ token, customer })
+  } catch (e) {
+    console.error('POST /public/:companyId/login', e)
+    return res.status(500).json({ message: 'Erro ao autenticar' })
   }
 })
 
@@ -559,6 +784,8 @@ publicMenuRouter.post('/:companyId/coupons/validate', async (req, res) => {
 publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   const { companyId } = req.params
   const payload = req.body || {}
+  try { console.log('POST /public/:companyId/orders - incoming rawBody snippet:', (req.rawBody || '').toString().slice(0,2000).replace(/\n/g,'\\n')) } catch(e){}
+  try { console.log('POST /public/:companyId/orders - parsed payload keys:', Object.keys(payload || {}).join(', ')) } catch(e){}
   try {
     // load company to check operating hours
   const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, alwaysOpen: true, timezone: true, weeklySchedule: true } })
@@ -641,6 +868,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   const raw = payload || {}
   const customer = (raw.customer && { name: String(raw.customer.name || ''), contact: String(raw.customer.contact || '') }) || { name: String(raw.customerName || ''), contact: String(raw.customerPhone || '') }
   const address = (raw.customer && raw.customer.address) || raw.address || {}
+  try { console.log('Parsed customer/contact/address shapes:', { customer: { name: customer.name, contact: customer.contact }, addressKeys: address ? Object.keys(address) : null }) } catch(e){}
   const items = Array.isArray(raw.items) ? raw.items.map(it => ({ productId: it.productId || null, name: String(it.name || it.productName || 'Item'), quantity: Number(it.quantity || 1), price: Number(it.price || 0), notes: it.notes || null, options: Array.isArray(it.options) ? it.options.map(o => ({ id: o.id, name: o.name, price: Number(o.price || 0) })) : null })) : []
   // normalize payment object: include changeFor (troco) and support both code/name incoming values
   const payment = raw.payment ? {
@@ -653,6 +881,8 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   } : null
   const neighborhoodFromPayload = String(raw.neighborhood || (address && (address.neighborhood || address.neigh)) || '')
 
+  try { console.log('Computed orderType/subtotal/neighborhoodFromPayload:', { orderType: (raw.orderType || 'DELIVERY'), subtotal, neighborhoodFromPayload }) } catch(e){}
+
   if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Itens são obrigatórios' })
 
     // enforce delivery address when orderType explicitly requests DELIVERY
@@ -660,6 +890,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
     if (orderType === 'DELIVERY') {
       const formatted = String((address && (address.formatted || address.formattedAddress)) || '')
       const neigh = String(neighborhoodFromPayload || '')
+      try { console.log('Delivery validation check - formatted:', formatted, 'neigh:', neigh) } catch(e){}
       if (!formatted || !neigh) return res.status(400).json({ message: 'Endereço completo e bairro são obrigatórios para entrega' })
     }
 
@@ -767,16 +998,31 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
     couponDiscount = 0
   }
 
-  const total = Math.max(0, subtotal - Number(couponDiscount || 0)) + Number(deliveryFee || 0)
+  const computedTotal = Math.max(0, subtotal - Number(couponDiscount || 0)) + Number(deliveryFee || 0)
+
+  // Prefer client-provided payment.amount when present and greater than 0.
+  // This ensures we persist the authoritative amount when frontends send it
+  // (avoids double-counting when item.price already included option prices).
+  const total = (payment && Number.isFinite(Number(payment.amount)) && Number(payment.amount) > 0) ? Number(payment.amount) : computedTotal
 
     // optional: validate payment method. Accept either code or name from incoming payload,
     // but store the canonical payment method NAME in the persisted payload (user requested)
     if (payment && payment.methodCode) {
       const pm = await prisma.paymentMethod.findFirst({ where: { companyId, isActive: true, OR: [{ code: payment.methodCode }, { name: payment.methodCode }] } })
-      if (!pm) return res.status(400).json({ message: 'Método de pagamento inválido' })
-      // prefer storing the user-friendly name in the payload (keeps display consistent)
-      payment.method = pm.name
-      payment.methodCode = pm.name
+      if (!pm) {
+        // Allow a sensible default for cash when no DB payment method matches.
+        // Accept common cash identifiers like 'dinheiro' (case-insensitive).
+        if (/dinheiro|cash|money/i.test(String(payment.methodCode || ''))) {
+          payment.method = 'Dinheiro'
+          payment.methodCode = 'Dinheiro'
+        } else {
+          return res.status(400).json({ message: 'Método de pagamento inválido' })
+        }
+      } else {
+        // prefer storing the user-friendly name in the payload (keeps display consistent)
+        payment.method = pm.name
+        payment.methodCode = pm.name
+      }
     }
 
     // Try to create/find a Customer when contact (whatsapp/phone) or name is provided from public menu.
@@ -802,12 +1048,19 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
               formattedAddress: getFormatted(address),
               streetName: address?.street || address?.streetName || null,
               streetNumber: address?.number || address?.streetNumber || null,
+              complement: address?.complement || address?.complemento || null,
               neighborhood: address?.neighborhood || address?.neigh || null,
-              postalCode: address?.postalCode || address?.zip || null
+              reference: address?.reference || address?.referencia || null,
+              observation: address?.observation || address?.observacao || address?.note || null,
+              postalCode: address?.postalCode || address?.zip || null,
+              city: address?.city || null,
+              state: address?.state || null,
+              country: address?.country || null,
+              coordinates: (address && (address.coordinates || (address.latitude && address.longitude ? { latitude: address.latitude, longitude: address.longitude } : null))) || null
             }
           }
         }
-        console.log('Public order addressPayload:', addressPayload)
+        console.log('Public order addressPayload:', JSON.stringify(addressPayload).slice(0,1000))
         persistedCustomer = await findOrCreateCustomer({ companyId, fullName: maybeName || null, cpf: null, whatsapp: maybeContact || null, phone: maybeContact || null, addressPayload })
         console.log('findOrCreateCustomer result:', persistedCustomer ? { id: persistedCustomer.id, whatsapp: persistedCustomer.whatsapp, fullName: persistedCustomer.fullName } : null)
       }
@@ -818,6 +1071,30 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
       // create order with nested items
       // build a sanitized payload to store in DB (avoid keeping the entire raw input with unknown fields)
       const safePayload = { customer, payment, orderType, neighborhood: neighborhoodFromPayload, items }
+
+      // Include explicit address parts in the rawPayload so admin UIs can easily
+      // display number, complement, reference and observation without parsing
+      // nested JSON. Prefer normalized fields when available, otherwise use
+      // the raw `address` object provided by the client (support many aliases).
+      try {
+        const addr = address || {}
+        const addrNormalized = {
+          formattedAddress: addr.formatted || addr.formattedAddress || null,
+          streetName: addr.street || addr.streetName || null,
+          streetNumber: addr.number || addr.streetNumber || null,
+          complement: addr.complement || addr.complemento || null,
+          neighborhood: addr.neighborhood || addr.neigh || null,
+          reference: addr.reference || addr.referencia || null,
+          observation: addr.observation || addr.observacao || addr.note || null,
+          postalCode: addr.postalCode || addr.zip || null,
+          city: addr.city || null,
+          state: addr.state || null,
+          coordinates: (addr.coordinates || (addr.latitude && addr.longitude ? { latitude: addr.latitude, longitude: addr.longitude } : null)) || null
+        }
+        safePayload.address = addrNormalized
+      } catch (e) {
+        console.warn('Failed to build safePayload.address for public order:', e?.message || e)
+      }
 
       // Attempt to resolve a store for public orders when provided via query/payload/menuId
       // so we can persist storeId on the order and include canonical store data in the payload.
@@ -955,6 +1232,21 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
             }
           }
 
+          // Final fallback: if still unresolved, pick the first active store for the company
+          if (!resolvedStore) {
+            try {
+              const firstActive = await prisma.store.findFirst({ where: { companyId, isActive: true }, orderBy: { createdAt: 'asc' } })
+              if (firstActive) {
+                resolvedStore = firstActive
+                console.log('Auto-resolved store via first-active fallback:', { id: firstActive.id, name: firstActive.name })
+              } else {
+                console.log('No active stores found for company; leaving store unresolved')
+              }
+            } catch (e) {
+              console.warn('First-active store fallback failed:', e?.message || e)
+            }
+          }
+
       // If we have resolved store, include a store hint in the safe payload and persist storeId on order
       if (resolvedStore) {
         safePayload.store = { id: resolvedStore.id, name: resolvedStore.name || null, slug: resolvedStore.slug || null }
@@ -964,8 +1256,31 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         publicOrder: true,
         payment: payment || null,
         orderType: orderType,
-        rawPayload: safePayload
+        rawPayload: safePayload,
+        // persist computed and chosen totals to make the source explicit
+        computedTotal: computedTotal,
+        total: total,
+        // include any applied cashback from the client payload for auditing
+        appliedCashback: (raw && (raw.appliedCashback || raw.payload?.appliedCashback)) ? Number(raw.appliedCashback || raw.payload?.appliedCashback || 0) : 0
       }
+
+      // Defensive normalization: ensure a canonical structured delivery address
+      // is present under payload.delivery.deliveryAddress so downstream code
+      // (admin UI, riders, integrations) can rely on the same shape regardless
+      // of client version. Use available `address` object when possible.
+      let normalizedDelivery = null
+      try {
+        normalizedDelivery = (orderType === 'DELIVERY' && address && Object.keys(address).length) ? normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: address } }) : null;
+        if (normalizedDelivery) {
+          payloadToPersist.delivery = { deliveryAddress: normalizedDelivery };
+        }
+      } catch (e) {
+        console.warn('Failed to normalize delivery address for public order persistence', e?.message || e)
+      }
+      try { console.log('Payload to persist (snippet):', JSON.stringify(payloadToPersist).slice(0,2000)) } catch(e){}
+
+      // compute denormalized neighborhood for quick queries/displays
+      const denormNeighborhood = (payloadToPersist.delivery && payloadToPersist.delivery.deliveryAddress && payloadToPersist.delivery.deliveryAddress.neighborhood) || neighborhoodFromPayload || (address && (address.neighborhood || address.neigh)) || null
 
       const created = await prisma.order.create({
         data: {
@@ -974,7 +1289,10 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
           customerSource: 'PUBLIC',
           customerName: customer.name || null,
           customerPhone: customer.contact || null,
-          address: ((address && (address.formatted || address.formattedAddress)) || [address.street, address.number].filter(Boolean).join(', ')) || null,
+          address: (buildConcatenatedAddress({ delivery: { deliveryAddress: address } }) || ((address && (address.formatted || address.formattedAddress)) || [address.street, address.number].filter(Boolean).join(', '))) || null,
+          latitude: (normalizedDelivery && (normalizedDelivery.latitude ?? null)) || (address && address.coordinates && (address.coordinates.latitude ?? null)) || null,
+          longitude: (normalizedDelivery && (normalizedDelivery.longitude ?? null)) || (address && address.coordinates && (address.coordinates.longitude ?? null)) || null,
+          deliveryNeighborhood: denormNeighborhood,
           // Persist the final total (after coupon discount + delivery fee)
           total: total,
           // persist coupon info if provided in payload (new columns)
@@ -999,14 +1317,51 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         include: { items: true }
       })
 
+    try { console.log('Order created:', { id: created.id, address: created.address, payloadDelivery: created.payload && created.payload.delivery ? created.payload.delivery : null }) } catch(e){}
+
     // emit socket to panel if available (dynamic import to avoid circular dependency)
     try {
       const idx = await import('../index.js')
       if (idx && typeof idx.emitirNovoPedido === 'function') {
-        try { idx.emitirNovoPedido(created) } catch (e) { console.warn('Emit novo pedido falhou:', e.message || e) }
+        try {
+          console.log('About to emitirNovoPedido for order', created.id)
+          idx.emitirNovoPedido(created)
+          console.log('emitirNovoPedido called for order', created.id)
+        } catch (e) { console.warn('Emit novo pedido falhou:', e.message || e) }
       }
     } catch (e) {
       console.warn('Emit novo pedido dynamic import failed:', e?.message || e)
+    }
+
+    // If the public order included an applied cashback amount, attempt to debit the
+    // customer's cashback wallet. This is best-effort: failures should not block order creation.
+    try {
+      const applied = (raw && (raw.appliedCashback || raw.payload?.appliedCashback)) ? Number(raw.appliedCashback || raw.payload?.appliedCashback || 0) : 0
+      if (applied > 0) {
+        // determine clientId: prefer persistedCustomer, else try to resolve by phone
+        let clientId = persistedCustomer ? persistedCustomer.id : null
+        if (!clientId) {
+          try {
+            const phone = (customer && (customer.contact || '')) ? String(customer.contact).replace(/\D/g, '') : null
+            if (phone) {
+              const cust = await prisma.customer.findFirst({ where: { companyId, OR: [{ whatsapp: phone }, { phone }] } })
+              if (cust) clientId = cust.id
+            }
+          } catch (e) { /* ignore */ }
+        }
+        if (clientId) {
+          try {
+            await cashbackSvc.debitWallet(companyId, clientId, applied, created.id, 'Uso de cashback no checkout (public)')
+            console.log('Applied public cashback debit', { orderId: created.id, clientId, amount: applied })
+          } catch (eDebit) {
+            console.warn('Failed to debit cashback for public order', created.id, eDebit?.message || eDebit)
+          }
+        } else {
+          console.log('No clientId found to debit applied cashback for public order', created.id)
+        }
+      }
+    } catch (e) {
+      console.warn('Error while attempting to apply cashback debit for public order', e?.message || e)
     }
 
     // Return the stored total (already includes deliveryFee) and deliveryFee separately
@@ -1014,6 +1369,69 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   } catch (e) {
     console.error('Error creating public order', e)
     res.status(500).json({ message: 'Erro ao criar pedido' })
+  }
+})
+
+// POST /public/:companyId/register
+// body: { name, whatsapp, email?, password }
+publicMenuRouter.post('/:companyId/register', async (req, res) => {
+  const { companyId } = req.params
+  const { name, whatsapp, email, password } = req.body || {}
+  if (!whatsapp || !password) return res.status(400).json({ message: 'whatsapp e password são obrigatórios' })
+  try {
+    // ensure company exists
+    const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true } })
+    if (!company) return res.status(404).json({ message: 'Empresa não encontrada' })
+
+    // create or find customer by whatsapp/name
+    const customer = await findOrCreateCustomer({ companyId, fullName: name || null, whatsapp: whatsapp || null })
+
+    // ensure there isn't already an account for this customer
+    const existingByCustomer = await findAccountByCustomerId({ companyId, customerId: customer.id })
+    if (existingByCustomer) return res.status(409).json({ message: 'Já existe conta para este número de WhatsApp' })
+
+    // if email provided, ensure unique per company
+    if (email) {
+      const existingEmail = await findAccountByEmail({ companyId, email })
+      if (existingEmail) return res.status(409).json({ message: 'Já existe conta com este email' })
+    }
+
+    const account = await createCustomerAccount({ companyId, customerId: customer.id, email, password })
+    const token = signToken({ accountId: account.id, customerId: account.customerId, companyId, type: 'customer' })
+    return res.status(201).json({ account: { id: account.id, email: account.email, customerId: account.customerId }, token, customer })
+  } catch (e) {
+    console.error('Erro register public account', e)
+    return res.status(500).json({ message: 'Erro ao criar conta' })
+  }
+})
+
+// POST /public/:companyId/login
+// Accepts { whatsapp, email?, password }
+publicMenuRouter.post('/:companyId/login', async (req, res) => {
+  const { companyId } = req.params
+  const { whatsapp, email, password } = req.body || {}
+  if ((!whatsapp && !email) || !password) return res.status(400).json({ message: 'whatsapp/email e password são obrigatórios' })
+  try {
+    let account = null
+    if (email) {
+      account = await findAccountByEmail({ companyId, email })
+    }
+    if (!account && whatsapp) {
+      // find customer by whatsapp then account by customerId
+      const cust = await prisma.customer.findFirst({ where: { companyId, whatsapp: String(whatsapp) } })
+      if (!cust) return res.status(404).json({ message: 'Conta não encontrada' })
+      account = await findAccountByCustomerId({ companyId, customerId: cust.id })
+    }
+    if (!account) return res.status(404).json({ message: 'Conta não encontrada' })
+    const ok = await verifyPassword(account, password)
+    if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' })
+    const token = signToken({ accountId: account.id, customerId: account.customerId, companyId, type: 'customer' })
+    // return customer profile as well
+    const customer = await prisma.customer.findUnique({ where: { id: account.customerId }, include: { addresses: true } })
+    return res.json({ token, account: { id: account.id, email: account.email, customerId: account.customerId }, customer })
+  } catch (e) {
+    console.error('Erro login public account', e)
+    return res.status(500).json({ message: 'Erro ao autenticar' })
   }
 })
 
@@ -1116,5 +1534,134 @@ publicMenuRouter.post('/:companyId/logout', async (req, res) => {
   return res.json({ ok: true })
 })
 
+// Public: GET /public/:companyId/addresses
+publicMenuRouter.get('/:companyId/addresses', async (req, res) => {
+  const { companyId } = req.params;
+  try {
+    const customer = await resolvePublicCustomer(req, companyId);
+    if (!customer) return res.status(404).json({ message: 'Cliente público não encontrado' });
+    // return addresses array
+    const addrs = Array.isArray(customer.addresses) ? customer.addresses : [];
+    return res.json(addrs);
+  } catch (e) {
+    console.error('GET /public/:companyId/addresses', e);
+    return res.status(500).json({ message: 'Erro ao buscar endereços' });
+  }
+});
+
+// Public: POST /public/:companyId/addresses
+// body: { formatted?, street?, number?, neighborhood?, postalCode?, complement? }
+publicMenuRouter.post('/:companyId/addresses', async (req, res) => {
+  const { companyId } = req.params;
+  const body = req.body || {};
+  try {
+    const customer = await resolvePublicCustomer(req, companyId);
+    if (!customer) return res.status(404).json({ message: 'Cliente público não encontrado; crie conta ou envie número' });
+
+    // unset previous default
+    try { await prisma.customerAddress.updateMany({ where: { customerId: customer.id, isDefault: true }, data: { isDefault: false } }); } catch(e){}
+
+    // avoid duplicates by formatted/postalCode/number+street
+    const whereOr = [];
+    if (body.formatted) whereOr.push({ formatted: body.formatted });
+    if (body.postalCode) whereOr.push({ postalCode: body.postalCode });
+    if (body.street && body.number) whereOr.push({ street: body.street, number: body.number });
+    if (whereOr.length) {
+      const exists = await prisma.customerAddress.findFirst({ where: { customerId: customer.id, OR: whereOr } });
+      if (exists) {
+        try { await prisma.customerAddress.update({ where: { id: exists.id }, data: { isDefault: true } }); } catch(_){}
+        return res.status(200).json(exists);
+      }
+    }
+
+    const created = await prisma.customerAddress.create({ data: {
+      customerId: customer.id,
+      label: body.label || null,
+      street: body.street || null,
+      number: body.number || null,
+      complement: body.complement || null,
+      neighborhood: body.neighborhood || null,
+      city: body.city || null,
+      state: body.state || null,
+      postalCode: body.postalCode || null,
+      formatted: body.formatted || null,
+      latitude: Number.isFinite(Number(body.latitude)) ? Number(body.latitude) : null,
+      longitude: Number.isFinite(Number(body.longitude)) ? Number(body.longitude) : null,
+      isDefault: true,
+    } });
+
+    return res.status(201).json(created);
+  } catch (e) {
+    console.error('POST /public/:companyId/addresses', e);
+    return res.status(500).json({ message: 'Erro ao criar endereço' });
+  }
+});
+
+// Public: DELETE /public/:companyId/addresses/:addressId
+publicMenuRouter.delete('/:companyId/addresses/:addressId', async (req, res) => {
+  const { companyId, addressId } = req.params;
+  try {
+    const customer = await resolvePublicCustomer(req, companyId);
+    if (!customer) return res.status(404).json({ message: 'Cliente público não encontrado' });
+    const addr = await prisma.customerAddress.findUnique({ where: { id: addressId } });
+    if (!addr || addr.customerId !== customer.id) return res.status(404).json({ message: 'Endereço não encontrado' });
+    await prisma.customerAddress.delete({ where: { id: addressId } });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /public/:companyId/addresses/:addressId', e);
+    return res.status(500).json({ message: 'Erro ao excluir endereço' });
+  }
+});
+
 export default publicMenuRouter
 // (mantido export default acima; colocar novas rotas antes dele)
+
+// Helper: try to resolve a customer for public endpoints using Authorization token or public_phone cookie
+async function resolvePublicCustomer(req, companyId) {
+  // 1) try Authorization Bearer token (customer account token)
+  try {
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (token && process.env.JWT_SECRET) {
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        if (payload && payload.customerId && String(payload.companyId) === String(companyId)) {
+          const cust = await prisma.customer.findUnique({ where: { id: payload.customerId }, include: { addresses: true } });
+          if (cust) return cust;
+        }
+      } catch (e) { /* invalid token */ }
+    }
+  } catch (e) { /* ignore */ }
+
+  // 2) try public_phone cookie
+  try {
+    let phone = String(req.query.phone || '').trim();
+    if (!phone) {
+      const rawCookie = req.headers.cookie || '';
+      const parts = rawCookie.split(/;\s*/);
+      for (const p of parts) {
+        const [k,v] = p.split('=');
+        if (k === 'public_phone') { phone = decodeURIComponent(v || '').trim(); break }
+      }
+    }
+    if (phone) {
+      const byPhone = await prisma.customer.findFirst({ where: { companyId, OR: [{ whatsapp: phone }, { phone: phone }] }, include: { addresses: true } });
+      if (byPhone) return byPhone;
+      // also try matching orders payload
+      const orders = await prisma.order.findMany({ where: { companyId }, orderBy: { createdAt: 'desc' }, take: 200 });
+      for (const o of (orders || [])) {
+        try {
+          const p = o.payload && o.payload.rawPayload && o.payload.rawPayload.customer && o.payload.rawPayload.customer.contact;
+          if (p && String(p).replace(/\D/g,'') === String(phone).replace(/\D/g,'')) {
+            if (o.customerId) {
+              const c = await prisma.customer.findUnique({ where: { id: o.customerId }, include: { addresses: true } });
+              if (c) return c;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  return null;
+}

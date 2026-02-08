@@ -25,6 +25,7 @@ import { waRouter } from "./routes/wa.js";
 import { affiliatesRouter } from "./routes/affiliates.js";
 import { couponsRouter } from "./routes/coupons.js";
 import publicMenuRouter from './routes/publicMenu.js'
+import publicCartRouter from './routes/publicCart.js'
 import menuAdminRouter from './routes/menu.js'
 import menuOptionsRouter from './routes/menuOptions.js'
 import { nfeRouter } from './routes/nfe.js'
@@ -32,12 +33,20 @@ import companiesRouter from './routes/companies.js'
 import storesRouter from './routes/stores.js'
 import usersRouter from './routes/users.js'
 import rolesRouter from './routes/rolePermissions.js'
+import ingredientGroupsRouter from './routes/ingredientGroups.js'
+import ingredientsRouter from './routes/ingredients.js'
+import technicalSheetsRouter from './routes/technicalSheets.js'
+import stockMovementsRouter from './routes/stockMovements.js'
 import agentSetupRouter from './routes/agentSetup.js'
 import agentPrintRouter from './routes/agentPrint.js'
+import qzPrintRouter from './routes/qzPrint.js'
 import qrActionRouter from './routes/qrAction.js'
 import rasterizeRouter from './routes/rasterize.js'
 import printerSettingRouter from './routes/printerSetting.js'
 import cashRouter from './routes/cash.js'
+import customerGroupsRouter from './routes/customerGroups.js'
+import cashbackRouter from './routes/cashback.js'
+import checkoutRouter from './routes/checkout.js'
 import events from './utils/events.js'
 import printQueue from './printQueue.js'
 import { prisma } from './prisma.js'
@@ -46,6 +55,9 @@ import { rotateAgentToken } from './agentTokenManager.js'
 import path from 'path';
 import startReportsCleanup from './cleanupReports.js';
 import startForceOpenCleanup from './cleanupForceOpen.js';
+import qzSecurityRouter from './routes/qzSecurity.js'
+import saasRouter from './routes/saas.js'
+import { requireModule } from './modules.js'
 
 const app = express();
 // When running behind a reverse proxy (EasyPanel / nginx / Cloudflare), enable
@@ -148,7 +160,7 @@ app.use("/orders", ordersRouter);
 app.use("/tickets", ticketsRouter);
 app.use("/integrations", integrationsRouter);
 app.use('/file-sources', fileSourcesRouter);
-app.use("/ifood", ifoodRouter);
+app.use("/ifood", requireModule('ifood'), ifoodRouter);
 app.use("/riders", ridersRouter);
 app.use("/customers", customersRouter);
 app.use("/neighborhoods", neighborhoodsRouter);
@@ -156,9 +168,11 @@ app.use("/wa", waRouter);
 app.use("/affiliates", affiliatesRouter);
 app.use('/coupons', couponsRouter);
 app.use('/public', publicMenuRouter);
+// Public cart endpoints (evaluations) for a given companyId
+app.use('/public/:companyId/cart', publicCartRouter);
 app.use('/menu', menuAdminRouter);
 app.use('/menu/options', menuOptionsRouter);
-app.use('/nfe', nfeRouter);
+app.use('/nfe', requireModule('nfe'), nfeRouter);
 app.use('/settings', companiesRouter);
 // Mount menu admin router also under /settings to provide backward-compatible
 // API paths such as /settings/payment-methods for external consumers that
@@ -168,13 +182,25 @@ app.use('/settings', menuAdminRouter);
 app.use('/stores', storesRouter);
 app.use('/users', usersRouter);
 app.use('/roles', rolesRouter);
+app.use('/ingredient-groups', ingredientGroupsRouter);
+app.use('/ingredients', ingredientsRouter);
+app.use('/technical-sheets', technicalSheetsRouter);
+app.use('/stock-movements', stockMovementsRouter);
 // Agent setup endpoint: returns socket URL and store IDs for the authenticated user's company
 app.use('/agent-setup', agentSetupRouter);
-app.use('/agent-print', agentPrintRouter);
+app.use('/agent-print', requireModule('printing'), agentPrintRouter);
+app.use('/qz-print', requireModule('printing'), qzPrintRouter);
+// QZ Tray security endpoints: certificate and signing
+app.use('/qz', qzSecurityRouter);
+// SaaS management (plans, modules, subscriptions, invoices)
+app.use('/saas', saasRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
+app.use('/customer-groups', customerGroupsRouter);
 app.use('/qr-action', qrActionRouter);
+app.use('/cashback', cashbackRouter);
+app.use('/checkout', checkoutRouter);
 // Server-side rasterization endpoint (returns PNG data URL)
 app.use('/rasterize', rasterizeRouter);
 // Dev-only debug agent print route (bypass auth for local development convenience)
@@ -192,6 +218,13 @@ if (process.env.NODE_ENV !== 'production') {
     console.log('Mounted /debug/emit-test-order (dev only)');
   } catch (e) {
     console.warn('Failed to mount debug emit route', e && e.message);
+  }
+  try {
+    const debugEmitStoreRouter = await import('./routes/debugEmitStoreUpdate.js');
+    app.use('/debug/emit-store-update', debugEmitStoreRouter.default || debugEmitStoreRouter);
+    console.log('Mounted /debug/emit-store-update (dev only)');
+  } catch (e) {
+    console.warn('Failed to mount debug emit-store-update route', e && e.message);
   }
 }
 
@@ -497,6 +530,26 @@ export function attachSocket(server) {
       // ignore
     }
 
+    // Join company-specific room when possible so we can emit scoped events.
+    try {
+      // 1) agent sockets carry companyId
+      if (socket.agent && socket.agent.companyId) {
+        try { socket.join(`company_${socket.agent.companyId}`); console.log('Socket joined company room', `company_${socket.agent.companyId}`) } catch (e) {}
+      }
+      // 2) identified users via 'identify' will have socket.user set by the 'identify' handler above
+      if (socket.user && socket.user.companyId) {
+        try { socket.join(`company_${socket.user.companyId}`); console.log('Socket joined company room', `company_${socket.user.companyId}`) } catch (e) {}
+      }
+      // 3) allow clients to request joining by providing companyId in handshake.auth
+      try {
+        const hsAuth = socket.handshake && socket.handshake.auth ? socket.handshake.auth : null
+        if (hsAuth && (hsAuth.companyId || hsAuth.company)) {
+          const cid = hsAuth.companyId || hsAuth.company
+          try { socket.join(`company_${cid}`); console.log('Socket joined company room from handshake', `company_${cid}`) } catch (e) {}
+        }
+      } catch (e) {}
+    } catch (e) { /* non-fatal */ }
+
     // Allow agents to explicitly signal readiness after connect (agent may emit this)
     socket.on('agent-ready', (payload) => {
       try {
@@ -533,6 +586,24 @@ export function emitirNovoPedido(pedido) {
     return;
   }
   try {
+    // Ensure payload carries a convenient `address` string to help frontends render immediately.
+    try {
+      if (pedido && !pedido.address) {
+        const p = pedido.payload || {};
+        const tryFormatted = (obj) => { try { if (!obj) return null; if (typeof obj === 'string') return obj; return obj.formatted || obj.formattedAddress || obj.formatted_address || null; } catch(e){return null} };
+        const candidates = [
+          pedido.address,
+          tryFormatted(p.rawPayload && p.rawPayload.address),
+          tryFormatted(p.delivery && p.delivery.deliveryAddress),
+          tryFormatted(p.deliveryAddress),
+          tryFormatted(p.order && p.order.delivery && p.order.delivery.address),
+          (p.rawPayload && p.rawPayload.neighborhood) || null,
+          (pedido.customer && pedido.customer.address && (typeof pedido.customer.address === 'string' ? pedido.customer.address : tryFormatted(pedido.customer.address))) || null,
+        ];
+        const addr = candidates.find(c => c && String(c).trim());
+        if (addr) pedido.address = String(addr).trim();
+      }
+    } catch(e) { /* ignore */ }
     // Avoid re-emitting the same order id repeatedly in a short window
     const oid = pedido && (pedido.id || pedido.orderId || pedido.externalId) ? (pedido.id || pedido.orderId || pedido.externalId) : null;
     if (oid && isRecentlyEmitted(oid)) {

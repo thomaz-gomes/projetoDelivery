@@ -1,0 +1,12 @@
+lastBracePositiveLine 2414 lastParenPositiveLine 2414
+2404 cumB:  3 cumP:  1 |     console.error(err);
+2405 cumB:  3 cumP:  1 |     // surface server response body and status to browser console for debugging
+2406 cumB:  3 cumP:  1 |     try { console.error('Order create response data:', err?.response?.data) } catch (e) {}
+2407 cumB:  3 cumP:  1 |     try { console.error('Order create response status:', err?.response?.status) } catch (e) {}
+2408 cumB:  3 cumP:  1 |     serverError.value = err?.response?.data?.message || err.message || 'Erro ao enviar pedido';
+2409 cumB:  2 cumP:  1 |   }finally{ submitting.value = false; }
+2410 cumB:  1 cumP:  1 | }
+2411 cumB:  1 cumP:  1 | 
+2412 cumB:  1 cumP:  1 | // Dev helper removed: sendDevTestOrder has been removed to avoid accidental test orders
+2413 cumB:  1 cumP:  1 | 
+2414 cumB:  1 cumP:  1 | 

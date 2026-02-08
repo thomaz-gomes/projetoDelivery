@@ -7,6 +7,14 @@ import WhatsAppConnect from './views/WhatsAppConnect.vue';
 import Riders from './views/Riders.vue';
 import RiderForm from './views/RiderForm.vue';
 import Neighborhoods from './views/Neighborhoods.vue';
+import IngredientGroups from './views/IngredientGroups.vue';
+import Ingredients from './views/Ingredients.vue';
+import IngredientGroupForm from './views/ingredients/IngredientGroupForm.vue';
+import IngredientForm from './views/ingredients/IngredientForm.vue';
+import TechnicalSheets from './views/TechnicalSheets.vue';
+import TechnicalSheetEdit from './views/TechnicalSheetEdit.vue';
+import StockMovements from './views/StockMovements.vue';
+import StockMovementForm from './views/StockMovementForm.vue';
 import RiderAccount from './views/RiderAccount.vue';
 import RiderAccountAdmin from './views/RiderAccountAdmin.vue';
 import api from './api';
@@ -15,6 +23,8 @@ import RiderAdjustments from './views/RiderAdjustments.vue';
 import CustomersList from './views/CustomersList.vue';
 import CustomerForm from './views/CustomerForm.vue';
 import CustomerProfile from './views/CustomerProfile.vue';
+import CustomerGroupsList from './views/CustomerGroupsList.vue';
+import CustomerGroupForm from './views/CustomerGroupForm.vue';
 import IFoodIntegration from './views/IFoodIntegration.vue';
 import Integrations from './views/Integrations.vue';
 import IntegrationForm from './views/IntegrationForm.vue';
@@ -24,7 +34,6 @@ import PrinterSetup from './components/PrinterSetup.vue';
 import AgentTokenAdmin from './views/AgentTokenAdmin.vue';
 import StoreForm from './views/StoreForm.vue';
 import FileSourceSettings from './views/FileSourceSettings.vue';
-import CompanySettings from './views/CompanySettings.vue';
 import FileSourcePreview from './views/FileSourcePreview.vue';
 import AffiliateListing from './views/AffiliateListing.vue';
 import AffiliateCreate from './views/AffiliateCreate.vue';
@@ -38,6 +47,12 @@ import CouponsList from './views/CouponsList.vue';
 import CouponForm from './views/CouponForm.vue';
 import PublicMenu from './views/PublicMenu.vue';
 import PublicSlugResolver from './views/PublicSlugResolver.vue';
+import PublicProfile from './views/PublicProfile.vue';
+import PublicTransactions from './views/PublicTransactions.vue';
+import PublicProfileEdit from './views/PublicProfileEdit.vue';
+import PublicProfilePassword from './views/PublicProfilePassword.vue';
+import PublicAddresses from './views/PublicAddresses.vue';
+import PublicOrderPrint from './views/PublicOrderPrint.vue';
 import OrderStatus from './views/OrderStatus.vue';
 import OrderHistory from './views/OrderHistory.vue';
 import MenuAdmin from './views/MenuAdmin.vue';
@@ -59,6 +74,14 @@ import RiderOrders from './views/rider/Orders.vue';
 import RiderQrCode from './views/rider/QrReader.vue';
 import RiderAccountSelf from './views/rider/Account.vue';
 import RiderDashboard from './views/rider/Dashboard.vue';
+import SaasPlans from './views/SaasPlans.vue';
+import SaasCompanies from './views/SaasCompanies.vue';
+import SaasCompanyNew from './views/SaasCompanyNew.vue';
+import SaasCompanyEdit from './views/SaasCompanyEdit.vue';
+import SaasBilling from './views/SaasBilling.vue';
+import SaasModules from './views/SaasModules.vue';
+import SaasAdmin from './views/SaasAdmin.vue';
+import CashbackSettings from './views/CashbackSettings.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -71,13 +94,26 @@ const router = createRouter({
   { path: '/customers/new', component: CustomerForm, meta: { requiresAuth: true } },
   { path: '/customers/:id/edit', component: CustomerForm, meta: { requiresAuth: true } },
   { path: '/customers/:id', component: CustomerProfile, meta: { requiresAuth: true } },
+  { path: '/customer-groups', component: CustomerGroupsList, meta: { requiresAuth: true } },
+  { path: '/customer-groups/new', component: CustomerGroupForm, meta: { requiresAuth: true } },
+  { path: '/customer-groups/:id', component: CustomerGroupForm, meta: { requiresAuth: true } },
   { path: '/riders', component: Riders, meta: { requiresAuth: true } },
   { path: '/riders/new', component: RiderForm, meta: { requiresAuth: true } },
   { path: '/riders/:id', component: RiderForm, meta: { requiresAuth: true } },
   { path: '/riders/:id/account', component: RiderAccountAdmin, meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/rider-adjustments', component: RiderAdjustments, meta: { requiresAuth: true } },
   { path: '/settings/neighborhoods', component: Neighborhoods, meta: { requiresAuth: true } },
-  { path: '/settings/company', component: CompanySettings, meta: { requiresAuth: true } },
+  { path: '/ingredient-groups', component: IngredientGroups, meta: { requiresAuth: true } },
+  { path: '/ingredient-groups/new', component: IngredientGroupForm, meta: { requiresAuth: true } },
+  { path: '/ingredient-groups/:id/edit', component: IngredientGroupForm, meta: { requiresAuth: true } },
+  { path: '/ingredients', component: Ingredients, meta: { requiresAuth: true } },
+  { path: '/ingredients/new', component: IngredientForm, meta: { requiresAuth: true } },
+  { path: '/ingredients/:id', component: IngredientForm, meta: { requiresAuth: true } },
+  { path: '/technical-sheets', component: TechnicalSheets, meta: { requiresAuth: true } },
+  { path: '/technical-sheets/:id/edit', component: TechnicalSheetEdit, meta: { requiresAuth: true } },
+  { path: '/stock-movements', component: StockMovements, meta: { requiresAuth: true } },
+  { path: '/stock-movements/new', component: StockMovementForm, meta: { requiresAuth: true } },
+  { path: '/stock-movements/:id', component: StockMovementForm, meta: { requiresAuth: true } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true } },
   { path: '/settings/ifood', component: IFoodIntegration }, // 👈 AQUI
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true } },
@@ -104,9 +140,18 @@ const router = createRouter({
    ,{ path: '/rider/claim/:token', component: () => import('./views/RiderClaim.vue'), meta: { requiresAuth: true, noSidebar: true } }
    ,{ path: '/public/:storeSlug', component: PublicSlugResolver }
    ,{ path: '/public/:companyId/menu', component: PublicMenu }
+  ,{ path: '/public/:companyId/profile', component: PublicProfile }
+  ,{ path: '/public/:companyId/profile/transactions', component: PublicTransactions }
+  ,{ path: '/public/:companyId/profile/edit', component: PublicProfileEdit }
+  ,{ path: '/public/:companyId/profile/password', component: PublicProfilePassword }
+  ,{ path: '/public/:companyId/addresses', component: PublicAddresses }
   ,{ path: '/public/:companyId/order/:orderId', component: OrderStatus }
+  ,{ path: '/public/:companyId/order/:orderId/print', component: PublicOrderPrint }
   ,{ path: '/public/:companyId/history', component: OrderHistory }
-  ,{ path: '/public/:companyId/orders', redirect: to => ({ path: `/public/${to.params.companyId}/history`, query: to.query }) }
+  ,{ path: '/public/:companyId/orders', redirect: (to) => {
+      if(!to || !to.params) return '/';
+      return { path: `/public/${to.params.companyId}/history`, query: to.query || {} };
+    } }
   ,{ path: '/menu/admin', component: MenuAdmin, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus', component: Menus, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus/new', component: MenuEdit, meta: { requiresAuth: true } }
@@ -135,6 +180,14 @@ const router = createRouter({
   ,{ path: '/sales', component: SalesHistory, meta: { requiresAuth: true } }
   ,{ path: '/sales/:id', component: SaleDetails, meta: { requiresAuth: true } }
   ,{ path: '/reports/cash-fronts', component: CashFronts, meta: { requiresAuth: true } }
+  ,{ path: '/saas/plans', component: SaasPlans, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/companies', component: SaasCompanies, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/companies/new', component: SaasCompanyNew, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/companies/:id/edit', component: SaasCompanyEdit, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/modules', component: SaasModules, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/billing', component: SaasBilling, meta: { requiresAuth: true, role: ['ADMIN','SUPER_ADMIN'] } }
+  ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
+    { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true } },
   ]
 });
 
@@ -157,9 +210,9 @@ router.beforeEach(async (to) => {
         console.warn('router.beforeEach: /auth/me failed', e?.message || e);
       }
     }
-    const roleNeeded = String(to.meta.role || '').toUpperCase();
+    const allowed = Array.isArray(to.meta.role) ? to.meta.role.map(r => String(r).toUpperCase()) : String(to.meta.role || '').split(/[,|]/).map(s => s.trim().toUpperCase()).filter(Boolean)
     const userRole = String(auth.user?.role || '').toUpperCase();
-    if (!auth.user || userRole !== roleNeeded) {
+    if (!auth.user || !allowed.includes(userRole)) {
       // if rider trying to access admin route, send them to rider self page
       if (userRole === 'RIDER') return { path: '/rider/account' };
       return { path: '/' };

@@ -4,11 +4,13 @@ import { prisma } from '../prisma.js';
 // When we need to emit socket events, use dynamic import inside async handlers:
 // const { emitirPedidoAtualizado } = await import('../index.js');
 import { authMiddleware, requireRole } from '../auth.js';
-import { upsertCustomerFromIfood, findOrCreateCustomer } from '../services/customers.js';
+import { upsertCustomerFromIfood, findOrCreateCustomer, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js';
 import { trackAffiliateSale } from '../services/affiliates.js';
+import * as cashbackSvc from '../services/cashback.js';
 import { canTransition } from '../stateMachine.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
 import riderAccountService from '../services/riderAccount.js';
+import { buildAndPersistStockMovementFromOrderItems } from '../services/stockFromOrder.js';
 
 export const ordersRouter = express.Router();
 
@@ -74,7 +76,8 @@ ordersRouter.get('/', async (req, res) => {
 });
 
 // POST atribuir entregador manualmente
-ordersRouter.post('/:id/assign', requireRole('ADMIN'), async (req, res) => {
+// allow ADMIN and store-level users to assign riders
+ordersRouter.post('/:id/assign', requireRole('ADMIN','STORE'), async (req, res) => {
   const { id } = req.params;
   const { riderId, riderPhone, alsoSetStatus } = req.body || {};
   if (!riderId && !riderPhone) return res.status(400).json({ message: 'Informe riderId ou riderPhone' });
@@ -237,7 +240,8 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
 });
 
 // Admin: patch order status (manual change)
-ordersRouter.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
+// allow ADMIN and store-level users to change status from the admin panel / PDV
+ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body || {};
   const companyId = req.user.companyId;
@@ -393,6 +397,39 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN'), async (req, res) => {
       }
     } catch (e) { console.error('Error while attempting affiliate tracking on order status change:', e?.message || e); }
 
+    // If order was completed, attempt to credit cashback to customer wallet
+    try {
+      if (status === 'CONCLUIDO') {
+        (async () => {
+          try {
+            let clientId = updated.customerId || null;
+            // try to derive clientId from order data (phone or payload) when customerId missing
+            if (!clientId) {
+              try {
+                const phone = updated.customerPhone || (updated.payload && (updated.payload.customer && (updated.payload.customer.contact || updated.payload.customer.phone))) || null;
+                if (phone) {
+                  const cust = await prisma.customer.findFirst({ where: { companyId: updated.companyId, OR: [{ whatsapp: phone }, { phone }] } });
+                  if (cust) clientId = cust.id;
+                }
+              } catch (eFind) { /* ignore */ }
+            }
+            if (clientId) {
+              try{
+                const res = await cashbackSvc.creditWalletForOrder(updated.companyId, clientId, updated, 'Cashback automático de compra')
+                if(res && res.amount){
+                  console.log('Cashback credited for order', updated.id, 'amount', res.amount)
+                } else {
+                  console.log('No cashback created for order (service returned null) for order', updated.id)
+                }
+              }catch(e){ console.error('Failed to credit cashback for order (service error)', updated.id, e?.message || e) }
+            } else {
+              console.log('No clientId found for order; skipping cashback credit for order', updated.id)
+            }
+          } catch (e) { console.error('Failed to credit cashback for order', updated.id, e?.message || e) }
+        })()
+      }
+    } catch (e) { console.error('Error while attempting to credit cashback on order status change:', e?.message || e); }
+
     return res.json(updated);
   } catch (e) {
     console.error('Failed to update order status', e);
@@ -473,7 +510,8 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       quantity: Number(it.quantity || 1),
       price: Number(it.price || 0),
       notes: it.notes ? String(it.notes) : null,
-      options: Array.isArray(it.options) ? it.options.map(o => ({ name: String(o.name || ''), price: Number(o.price || 0) })) : null
+      // preserve option quantity/id when provided so frontend displays totals correctly
+      options: Array.isArray(it.options) ? it.options.map(o => ({ id: o.id ?? null, name: String(o.name || ''), price: Number(o.price || 0), quantity: Number(o.quantity ?? o.qty ?? 1) })) : null
     }));
     const subtotal = cleanItems.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
 
@@ -514,7 +552,10 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       } catch (e) { couponDiscount = 0; }
     }
 
-    const total = Math.max(0, subtotal - couponDiscount) + Number(deliveryFee || 0);
+    const computedTotal = Math.max(0, subtotal - couponDiscount) + Number(deliveryFee || 0);
+
+    // Prefer payment amount when provided by PDV client as authoritative total
+    const total = (payment && Number.isFinite(Number(payment.amount)) && Number(payment.amount) > 0) ? Number(payment.amount) : computedTotal;
 
     // validate payment method if provided
     let paymentPayload = null;
@@ -531,16 +572,22 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       };
     }
 
-    // find or create customer (best-effort)
+    // find or create customer (best-effort). If client provided an explicit customerId, prefer it.
     let persistedCustomer = null;
     try {
-      const contact = String(customerPhone || '').trim();
-      const name = String(customerName || '').trim();
-      if (contact || name) {
-        const addressPayload = address && type === 'DELIVERY' ? {
-          delivery: { deliveryAddress: { formattedAddress: address.formatted || [address.street, address.number].filter(Boolean).join(', '), streetName: address.street || null, streetNumber: address.number || null, neighborhood: address.neighborhood || null } }
-        } : null;
-        persistedCustomer = await findOrCreateCustomer({ companyId, fullName: name || null, whatsapp: contact || null, phone: contact || null, addressPayload });
+      if (req.body && req.body.customerId) {
+        const c = await prisma.customer.findFirst({ where: { id: req.body.customerId, companyId } });
+        if (c) persistedCustomer = c;
+      }
+      if (!persistedCustomer) {
+        const contact = String(customerPhone || '').trim();
+        const name = String(customerName || '').trim();
+        if (contact || name) {
+          const addressPayload = address && type === 'DELIVERY' ? {
+            delivery: { deliveryAddress: { formattedAddress: address.formatted || [address.street, address.number].filter(Boolean).join(', '), streetName: address.street || null, streetNumber: address.number || null, neighborhood: address.neighborhood || null, city: address.city || null } }
+          } : null;
+          persistedCustomer = await findOrCreateCustomer({ companyId, fullName: name || null, whatsapp: contact || null, phone: contact || null, addressPayload });
+        }
       }
     } catch (e) { console.warn('PDV: falha ao criar/achar cliente', e?.message || e); }
 
@@ -565,6 +612,10 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       }
     } catch (e) { /* ignore */ }
 
+    // normalize delivery address into a consistent shape and persist it under payload.delivery.deliveryAddress
+    const normalizedDelivery = (type === 'DELIVERY' && address && Object.keys(address).length) ? normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: address } }) : null;
+    const pdvDenormNeighborhood = (normalizedDelivery && normalizedDelivery.neighborhood) || (address && (address.neighborhood || address.neigh)) || null;
+
     const created = await prisma.order.create({
       data: {
         companyId,
@@ -572,7 +623,8 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         customerId: persistedCustomer ? persistedCustomer.id : undefined,
         customerName: customerName || (persistedCustomer ? persistedCustomer.fullName : null),
         customerPhone: customerPhone || (persistedCustomer ? (persistedCustomer.whatsapp || persistedCustomer.phone) : null),
-        address: type === 'DELIVERY' ? (address.formatted || [address.street, address.number].filter(Boolean).join(', ')) : null,
+        address: type === 'DELIVERY' ? (buildConcatenatedAddress({ delivery: { deliveryAddress: address } }) || (normalizedDelivery && normalizedDelivery.formattedAddress) || (address.formatted || [address.street, address.number].filter(Boolean).join(', '))) : null,
+        deliveryNeighborhood: pdvDenormNeighborhood || (normalizedDelivery && normalizedDelivery.neighborhood) || null,
         total,
         couponCode,
         couponDiscount: Number(couponDiscount || 0),
@@ -583,7 +635,12 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         payload: {
           payment: paymentPayload,
           orderType: type,
-          rawPayload: { source: 'PDV', items: cleanItems, customer: { name: customerName || null, contact: customerPhone || null }, address }
+          rawPayload: { source: 'PDV', items: cleanItems, customer: { name: customerName || null, contact: customerPhone || null }, address },
+          // persist normalized delivery address for consistency across flows
+          delivery: normalizedDelivery ? { deliveryAddress: normalizedDelivery } : (address && Object.keys(address).length ? { deliveryAddress: normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: address } }) } : undefined),
+          // persist computed and chosen totals for clarity
+          computedTotal: computedTotal,
+          total: total
         },
         items: {
           create: cleanItems.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes, options: it.options || null }))
@@ -641,7 +698,11 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
           rasterDataUrl: created.rasterDataUrl || (created.payload && created.payload.rasterDataUrl) || null,
           qrText: created.qrText || (created.payload && created.payload.qrText) || null,
           payload: created.payload || null,
-          items: created.items || null
+          items: created.items || null,
+          // include address when available to help frontends render immediately
+          address: created.address || (created.payload && (created.payload.delivery && created.payload.delivery.deliveryAddress && created.payload.delivery.deliveryAddress.formattedAddress)) || (created.payload && (created.payload.rawPayload?.address || created.payload.deliveryAddress?.formattedAddress)) || null,
+          // include structured deliveryAddress so consumers always receive a normalized object when present
+          deliveryAddress: created.payload && created.payload.delivery ? created.payload.delivery.deliveryAddress : null
         };
         try { const idx = await import('../index.js'); idx.emitirNovoPedido(emitObj); } catch (e) { console.warn('emitirNovoPedido failed for created order', emitObj && emitObj.id, e && e.message); }
       } catch (eEmit) {
@@ -650,6 +711,16 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       }
     } catch (e) { console.warn('Emitir novo pedido falhou:', e && e.message); }
     try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(created); } catch (e) { /* ignore */ }
+
+    // attempt to decrement stock for items that reference technical sheets (best-effort)
+    (async () => {
+      try {
+        await buildAndPersistStockMovementFromOrderItems(prisma, created);
+      } catch (e) {
+        console.warn('[orders.create] failed to create stock movement for order', created && created.id, e && e.message);
+      }
+    })();
+
     return res.status(201).json(created);
   } catch (e) {
     console.error('Erro ao criar pedido PDV', e && (e.stack || e.message || e));

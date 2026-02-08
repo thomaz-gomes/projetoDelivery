@@ -8,20 +8,26 @@
         <div v-if="loading" class="text-center">Carregando...</div>
         <div v-else>
           <ul class="nav nav-tabs mb-3">
-            <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='geral'}" href="#" @click.prevent="setActiveTab('geral')">Geral</a></li>
-            <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='horario'}" href="#" @click.prevent="setActiveTab('horario')">Horário</a></li>
-            <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='fiscal'}" href="#" @click.prevent="setActiveTab('fiscal')">Fiscal</a></li>
-          </ul>
+                  <li class="nav-item"><a class="nav-link active" href="#">Geral</a></li>
+                  <li class="nav-item"><a class="nav-link" href="#" @click.prevent="setActiveTab('fiscal')">Fiscal</a></li>
+                </ul>
 
-          <div v-show="activeTab==='geral'">
-            <div class="mb-3"><label class="form-label">Nome</label><TextInput v-model="form.name" inputClass="form-control" /></div>
-              <div class="mb-3"><label class="form-label">Slug público (opcional)</label>
-                <TextInput v-model="form.slug" placeholder="ex: nomedaloja" inputClass="form-control" />
+                <div>
+            <div class="mb-3"><TextInput label="Nome" labelClass="form-label" v-model="form.name" inputClass="form-control" /></div>
+                <div class="mb-3 form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="store-active" :checked="form.isActive" @change.prevent="handleActiveToggle($event)" />
+                  <label class="form-check-label small" for="store-active">Loja ativa</label>
+                </div>
+                <div v-if="remainingPauseText" class="mt-2">
+                  <small class="text-muted">Pausa ativa: <strong>{{ remainingPauseText }}</strong></small>
+                  <button class="btn btn-sm btn-link" @click.prevent="clearPauseNow">Cancelar pausa</button>
+                </div>
+              <div class="mb-3"><TextInput label="Slug público (opcional)" labelClass="form-label" v-model="form.slug" placeholder="ex: nomedaloja" inputClass="form-control" />
                 <div class="form-text small">Se preenchido, a URL pública ficará em <code>/public/SEU_SLUG</code>. Caso vazio, o sistema gerará/resolve um slug automaticamente.</div>
               </div>
-            <div class="mb-3"><label class="form-label">Endereço</label><TextInput v-model="form.address" inputClass="form-control" /></div>
-            <div class="mb-3"><label class="form-label">Telefone</label><TextInput v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
-            <div class="mb-3"><label class="form-label">WhatsApp</label><TextInput v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
+            <div class="mb-3"><TextInput label="Endereço" labelClass="form-label" v-model="form.address" inputClass="form-control" /></div>
+            <div class="mb-3"><TextInput label="Telefone" labelClass="form-label" v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
+            <div class="mb-3"><TextInput label="WhatsApp" labelClass="form-label" v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
             <div class="row">
               <div class="col-md-6 mb-3">
                 <ImageUploader label="Banner" :initialUrl="form.bannerUrl" :aspect="1200/400" :targetWidth="1200" :targetHeight="400" :uploadUrl="!isNew ? `/stores/${id}/settings/upload` : null" uploadKey="bannerBase64" @cropped="onBannerCropped" @uploaded="onBannerUploaded" />
@@ -32,46 +38,17 @@
             </div>
           </div>
 
-          <div v-show="activeTab==='horario'">
-            <div class="card mt-3">
-              <div class="card-body">
-                <h5>Horário por dia</h5>
-                <div class="form-text mb-2">Defina dias e intervalos.</div>
-
-                <div class="form-check mb-2">
-                  <input class="form-check-input" type="checkbox" id="open24" v-model="form.open24Hours" />
-                  <label class="form-check-label" for="open24">Aberto 24 horas (ocultar horários)</label>
-                </div>
-
-                <div v-if="!form.open24Hours" class="table-responsive">
-                  <table class="table table-sm">
-                    <thead><tr><th>Dia</th><th>Ativo</th><th>De</th><th>Até</th><th></th></tr></thead>
-                    <tbody>
-                      <tr v-for="(day, idx) in weekDays" :key="day.value">
-                        <td>{{ day.label }}</td>
-                        <td><input type="checkbox" v-model="form.weeklySchedule[day.value].enabled" /></td>
-                        <td><input type="time" class="form-control form-control-sm" v-model="form.weeklySchedule[day.value].from" :disabled="!form.weeklySchedule[day.value].enabled" /></td>
-                        <td><input type="time" class="form-control form-control-sm" v-model="form.weeklySchedule[day.value].to" :disabled="!form.weeklySchedule[day.value].enabled" /></td>
-                        <td style="width:1%;white-space:nowrap">
-                          <button class="btn btn-sm btn-outline-secondary" type="button" :disabled="saving || day.value >= 6" @click.prevent="copyToNext(day.value)" title="Copiar para o próximo dia">
-                            <!-- simple copy icon -->
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M13 1H3a1 1 0 0 0-1 1v9h1V2h10V1z"/><path d="M11 4H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zm-1 9H5V6h5v7z"/></svg>
-                          </button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div v-else class="small text-muted">A loja está marcada como aberta 24 horas — os horários estão ocultos.</div>
-              </div>
-            </div>
-          </div>
+          <!-- Horário moved to menu configuration; store-level schedule removed -->
 
                   <div v-show="activeTab==='fiscal'">
-                    <div class="mb-2"><label class="form-label">CNPJ</label><TextInput v-model="form.cnpj" placeholder="Apenas dígitos" inputClass="form-control" /></div>
-                    <div class="mb-2"><label class="form-label">Inscrição Estadual</label><TextInput v-model="form.ie" inputClass="form-control" /></div>
-                    <div class="mb-2"><label class="form-label">Timezone (IANA)</label><TextInput v-model="form.timezone" inputClass="form-control" /></div>
+                    <div class="mb-2"><TextInput label="CNPJ" labelClass="form-label" v-model="form.cnpj" placeholder="Apenas dígitos" inputClass="form-control" /></div>
+                    <div class="mb-2"><TextInput label="Inscrição Estadual" labelClass="form-label" v-model="form.ie" inputClass="form-control" /></div>
+                    <div class="mb-2"><label class="form-label">Timezone (IANA)</label>
+                      <select class="form-select" v-model="form.timezone">
+                        <option v-for="tz in TIMEZONES" :key="tz" :value="tz">{{ tz }}</option>
+                      </select>
+                      <div class="form-text">Fuso horário IANA — exemplo: <strong>America/Sao_Paulo</strong>. Deixe vazio para usar o timezone do servidor.</div>
+                    </div>
 
                     <div class="card mt-3 p-3">
                       <h6 class="mb-2">Certificado NF-e (PFX)</h6>
@@ -97,10 +74,9 @@
                         </div>
                       </div>
 
-                      <div class="mb-2">
-                        <label class="form-label">Senha do PFX (opcional)</label>
-                        <TextInput v-model="form.certPassword" placeholder="Senha do certificado (deixe vazio para manter/limpar)" inputClass="form-control" />
-                      </div>
+                        <div class="mb-2">
+                          <TextInput label="Senha do PFX (opcional)" labelClass="form-label" v-model="form.certPassword" placeholder="Senha do certificado (deixe vazio para manter/limpar)" inputClass="form-control" />
+                        </div>
 
                       <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="clearCert" v-model="form.clearCert">
@@ -143,6 +119,7 @@
 <script setup>
 import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import api from '../api'
+import Swal from 'sweetalert2'
 import { assetUrl } from '../utils/assetUrl.js'
 import ImageUploader from '../components/ImageUploader.vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -159,13 +136,59 @@ const message = ref('')
 const messageClass = ref('')
 
 const DEFAULT_TZ = 'America/Sao_Paulo'
-const defaultWeek = Array.from({ length: 7 }).map((_, i) => ({ day: i, enabled: false, from: '', to: '' }))
-const form = ref({ name: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, weeklySchedule: defaultWeek, cnpj: '', ie: '', certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, open24Hours: false })
+// Common IANA timezone options for select
+const TIMEZONES = [
+  'America/Sao_Paulo', 'UTC', 'America/New_York', 'America/Los_Angeles', 'America/Chicago',
+  'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
+  'Asia/Shanghai', 'Australia/Sydney'
+]
+const form = ref({ name: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
+
 
 const activeTab = ref('geral')
 const weekDays = [ { value:0,label:'Domingo'},{value:1,label:'Segunda'},{value:2,label:'Terça'},{value:3,label:'Quarta'},{value:4,label:'Quinta'},{value:5,label:'Sexta'},{value:6,label:'Sábado'} ]
 
-// Note: banner/logo cropper is now handled by ImageUploader component
+const remainingPauseText = computed(() => {
+  try{
+    if(closedUntilNextShift.value) return 'Fechado até o próximo expediente'
+    if(!pauseUntil.value) return ''
+    const t = Date.parse(String(pauseUntil.value))
+    if(isNaN(t)) return ''
+    const diff = t - Date.now()
+    if(diff <= 0) return ''
+    const mins = Math.floor(diff / 60000)
+    const secs = Math.floor((diff % 60000) / 1000)
+    if(mins >= 60){ const h = Math.floor(mins / 60); const m = mins % 60; return `${h}h ${m}m` }
+    if(mins > 0) return `${mins}m ${secs}s`
+    return `${secs}s`
+  }catch(e){ return '' }
+})
+
+// pause / closed state used by UI (declared here to avoid ReferenceError)
+let _pauseTicker = null
+const pauseUntil = ref(null)
+const closedUntilNextShift = ref(false)
+
+async function clearPauseNow(){
+  // clear pause flags for existing stores, or reset local state for new stores
+  if (isNew) { pauseUntil.value = null; closedUntilNextShift.value = false; form.value.isActive = true; return }
+  try{
+    await api.post(`/stores/${id}/settings/upload`, { pauseUntil: null, pausedUntil: null, pause_until: null, closedUntilNextShift: false })
+    pauseUntil.value = null
+    closedUntilNextShift.value = false
+    form.value.isActive = true
+    await Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1200, icon:'success', title: 'Pausa cancelada' })
+  }catch(e){
+    console.warn('clearPauseNow failed', e)
+    await Swal.fire({ icon:'error', text: e?.response?.data?.message || 'Falha ao cancelar pausa' })
+  }
+}
+
+function _startPauseTicker(){
+  if(_pauseTicker) return
+  _pauseTicker = setInterval(()=>{ try{ /* trigger recompute */ pauseUntil.value = pauseUntil.value ? pauseUntil.value : pauseUntil.value }catch(e){} }, 1000)
+}
+function _clearPauseTicker(){ if(_pauseTicker){ clearInterval(_pauseTicker); _pauseTicker = null } }
 const certInput = ref(null)
 const showDeleteModal = ref(false)
 
@@ -184,14 +207,16 @@ async function load() {
   form.value.bannerUrl = s.bannerUrl ? assetUrl(s.bannerUrl) : ''
       form.value.cnpj = s.cnpj || ''
   form.value.timezone = s.timezone || DEFAULT_TZ
-    // weekly schedule (may be null)
-    form.value.weeklySchedule = s.weeklySchedule && Array.isArray(s.weeklySchedule) ? s.weeklySchedule : JSON.parse(JSON.stringify(defaultWeek))
-    // open24Hours flag
-  form.value.open24Hours = !!s.open24Hours
       // populate certificate state if present
       form.value.storedCertExists = !!s.certExists
       form.value.storedCertFilename = s.certFilename || null
       form.value.storedCertPasswordStored = !!s.certPasswordStored
+        // isActive and pause/closed flags from merged settings
+        form.value.isActive = s.isActive === undefined ? true : !!s.isActive
+        try{
+          pauseUntil.value = s.pauseUntil || s.pausedUntil || s.pause_until || null
+          closedUntilNextShift.value = !!(s.closedUntilNextShift || s.closed_until_next_shift)
+        }catch(_) { pauseUntil.value = null; closedUntilNextShift.value = false }
     }
   } catch (e) {
     console.error('Failed to load store', e)
@@ -233,6 +258,50 @@ function handleWhatsAppInput(e) {
   form.value.whatsapp = applyPhoneMask(e.target.value)
 }
 
+async function handleActiveToggle(e){
+  // guard: only for existing stores
+  if(!id){ e.target.checked = true; form.value.isActive = true; await Swal.fire({ icon:'warning', text: 'Salve a loja antes de alterar o status.' }); return }
+  const checked = !!e.target.checked
+  // opening the store: clear any pause flags and set active
+  if(checked){
+    try{
+      await api.put(`/stores/${id}`, { isActive: true })
+      // clear pause flags in settings (best-effort)
+      try{ await api.post(`/stores/${id}/settings/upload`, { pauseUntil: null, pausedUntil: null, pause_until: null, closedUntilNextShift: false }) }catch(_){ }
+      form.value.isActive = true
+      await Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1200, icon:'success', title: 'Loja aberta' })
+    }catch(err){ console.error('Failed to open store', err); e.target.checked = false; form.value.isActive = false; await Swal.fire({ icon:'error', text: err?.response?.data?.message || 'Falha ao abrir loja' }) }
+    return
+  }
+
+  // ask pause options when closing
+  try{
+    const inputOptions = { '15': '15 minutos', '30': '30 minutos', '60': '1 hora', '180': '3 horas', 'untilNext': 'Fechar até o próximo expediente' }
+    const res = await Swal.fire({ title: 'Fechar loja?', input: 'radio', inputOptions, inputValidator: (v) => v ? null : 'Escolha uma opção', showCancelButton: true, confirmButtonText: 'Confirmar', cancelButtonText: 'Cancelar' })
+    if(!res.isConfirmed){ e.target.checked = true; form.value.isActive = true; return }
+    const val = res.value
+    if(val === 'untilNext'){
+      // persist closedUntilNextShift flag in settings
+      try{ await api.post(`/stores/${id}/settings/upload`, { closedUntilNextShift: true }) }catch(e){ console.warn('failed to persist closedUntilNextShift', e) }
+      try{ await api.put(`/stores/${id}`, { isActive: false }) }catch(e){ console.warn('failed to set isActive false', e) }
+      form.value.isActive = false
+      await Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1500, icon:'success', title: 'Loja fechada até o próximo expediente' })
+      return
+    }
+    const mins = Number(val || 0)
+    if(mins > 0){
+      const pauseUntil = new Date(Date.now() + mins * 60000).toISOString()
+      try{ await api.post(`/stores/${id}/settings/upload`, { pauseUntil }) }catch(e){ console.warn('failed to persist pauseUntil', e) }
+      try{ await api.put(`/stores/${id}`, { isActive: false }) }catch(e){ console.warn('failed to set isActive false', e) }
+      form.value.isActive = false
+      await Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1500, icon:'success', title: `Loja pausada por ${mins} minutos` })
+      return
+    }
+    // fallback: revert
+    e.target.checked = true; form.value.isActive = true
+  }catch(err){ console.error('handleActiveToggle error', err); e.target.checked = true; form.value.isActive = true; await Swal.fire({ icon:'error', text: 'Operação cancelada' }) }
+}
+
 async function deleteCert(){
   try{
     if (isNew) return
@@ -254,20 +323,7 @@ async function deleteCert(){
   }
 }
 
-function copyToNext(dayIndex){
-  try{
-    const next = dayIndex + 1
-    if (next > 6) return
-    const src = form.value.weeklySchedule[dayIndex]
-    if (!src) return
-    // copy values to next day
-    form.value.weeklySchedule[next].enabled = !!src.enabled
-    form.value.weeklySchedule[next].from = src.from || ''
-    form.value.weeklySchedule[next].to = src.to || ''
-  } catch (e) {
-    console.warn('copyToNext failed', e)
-  }
-}
+// schedule management moved to menu-level settings
 
 // handlers used by ImageUploader
 // handlers used by ImageUploader
@@ -328,7 +384,8 @@ async function save(){
       address: form.value.address || undefined,
       timezone: form.value.timezone || undefined,
       cnpj: form.value.cnpj || undefined,
-      open24Hours: !!form.value.open24Hours,
+      isActive: form.value.isActive,
+      // schedule handled at menu level; do not send store-level schedule flags
       // prefer persisted settings-stored logo URL when available; fall back to existing logoUrl
       logoUrl: form.value.logoUrl || undefined,
       // include banner URL when present
@@ -384,8 +441,8 @@ async function save(){
 
 function cancel(){ router.push('/settings/stores') }
 
-onMounted(()=>{ load() })
-onBeforeUnmount(()=>{ /* nothing to clean here; ImageUploader handles object URLs */ })
+onMounted(()=>{ load(); _startPauseTicker() })
+onBeforeUnmount(()=>{ _clearPauseTicker(); /* ImageUploader handles object URLs */ })
 </script>
 
 <style scoped>

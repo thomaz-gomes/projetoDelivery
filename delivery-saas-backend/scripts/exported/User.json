@@ -1,0 +1,20 @@
+[
+  {
+    "id": "80e8cae4-be69-4915-abc0-32b1442d3915",
+    "companyId": null,
+    "role": "SUPER_ADMIN",
+    "name": "Super Admin",
+    "email": "superadmin@saas.local",
+    "password": "$2b$10$aKsDOLfPaEHOXrwmtf0QIO9odEur2/fOYS6sOEMSAjoBIS6J.upIq",
+    "createdAt": "2025-12-25T23:08:08.248Z"
+  },
+  {
+    "id": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "role": "ADMIN",
+    "name": "Admin Demo",
+    "email": "admin@demo.local",
+    "password": "$2b$10$yS2FQN6Nn0bUa1xm.tdla.5vIYNj.KPDwt7wqBbV8buBYavtB096e",
+    "createdAt": "2025-12-25T23:08:09.098Z"
+  }
+]

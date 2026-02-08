@@ -18,6 +18,17 @@ if (!fs.existsSync(OUTDIR)) fs.mkdirSync(OUTDIR, { recursive: true });
 
 const server = http.createServer(async (req, res) => {
   try {
+    // Allow cross-origin requests from the frontend dev server (Vite)
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    // Handle CORS preflight
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     if (req.method === 'GET' && req.url.startsWith('/printers')) {
       const printers = ['Mock Printer', 'Network POS Printer'];
       res.writeHead(200, { 'Content-Type': 'application/json' });

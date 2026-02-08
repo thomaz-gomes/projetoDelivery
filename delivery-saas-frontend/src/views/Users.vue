@@ -57,14 +57,13 @@
               <button type="button" class="btn-close" @click="closeForm"></button>
             </div>
             <div class="modal-body">
-              <div class="mb-2"><label class="form-label">Nome</label><TextInput v-model="form.name" inputClass="form-control" /></div>
-              <div class="mb-2">
-                <label class="form-label">Email</label>
-                <TextInput v-model="form.email" inputClass="form-control" />
-                <div v-if="emailError" class="form-text text-danger">{{ emailError }}</div>
-              </div>
-              <div class="mb-2"><label class="form-label">Whatsapp</label><TextInput v-model="form.whatsapp" inputClass="form-control" /></div>
-              <div class="mb-2"><label class="form-label">Role</label>
+              <div class="mb-2"><TextInput label="Nome" labelClass="form-label" v-model="form.name" inputClass="form-control" /></div>
+                <div class="mb-2">
+                  <TextInput label="Email" labelClass="form-label" v-model="form.email" inputClass="form-control" />
+                  <div v-if="emailError" class="form-text text-danger">{{ emailError }}</div>
+                </div>
+                <div class="mb-2"><TextInput label="Whatsapp" labelClass="form-label" v-model="form.whatsapp" inputClass="form-control" /></div>
+                <div class="mb-2"><label class="form-label">Role</label>
                 <SelectInput  class="form-select"  v-model="form.role" >
                   <option value="SUPER_ADMIN">Super Admin</option>
                   <option value="ADMIN">Admin</option>
@@ -73,7 +72,7 @@
                   <option value="AFFILIATE">Afiliado</option>
                 </SelectInput>
               </div>
-              <div class="mb-2" v-if="!editing"><label class="form-label">Senha (opcional)</label><TextInput v-model="form.password" inputClass="form-control" /></div>
+              <div class="mb-2" v-if="!editing"><TextInput label="Senha (opcional)" labelClass="form-label" v-model="form.password" inputClass="form-control" /></div>
             </div>
             <div class="modal-footer">
               <button class="btn btn-outline-secondary" @click="closeForm">Cancelar</button>

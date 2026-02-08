@@ -26,6 +26,91 @@ async function ensurePrintQueue() {
   }
 }
 
+// Server-side fallback formatter to ensure print jobs include a readable
+// ticket text when the client did not provide one. Mirrors the frontend
+// `OrderTicketPreview` / `printService.formatOrderText` layout so saved
+// payloads and agent jobs have the same information as the preview.
+function formatOrderTextServer(o) {
+  if (!o) return '';
+  const padNumber = (n) => (n == null || n === '') ? '' : String(n).padStart(2, '0');
+  const display = (o.displayId ?? o.displaySimple ?? o.display) != null ? padNumber(o.displayId ?? o.displaySimple ?? o.display) : (String(o.id || '').slice(0,6));
+  const customer = o.customer?.name || o.customerName || o.name || '-';
+  const addr = (() => {
+    try {
+      const maybe = o.address || o.addressFull || o.addressString || (o.payload && (o.payload.delivery && o.payload.delivery.deliveryAddress)) || null;
+      if (!maybe) return '-';
+      if (typeof maybe === 'string') return maybe;
+      if (maybe.formatted) return maybe.formatted;
+      const parts = [];
+      if (maybe.street || maybe.logradouro) parts.push(maybe.street || maybe.logradouro);
+      if (maybe.number || maybe.numero) parts.push(maybe.number || maybe.numero);
+      if (maybe.neighborhood || maybe.bairro) parts.push(maybe.neighborhood || maybe.bairro);
+      if (maybe.city) parts.push(maybe.city);
+      if (parts.length) return parts.join(' | ');
+      return JSON.stringify(maybe);
+    } catch (e) { return '-'; }
+  })();
+  const phone = o.customer?.phone || o.customerPhone || o.contact || o.phone || '-';
+
+  const lines = [];
+  lines.push(`#${display} - Cliente: ${customer}`);
+  lines.push(`Endereço: ${addr}`);
+  lines.push(`Telefone: ${phone}`);
+
+  const items = Array.isArray(o.items) ? o.items : (o.payload && Array.isArray(o.payload.items) ? o.payload.items : []);
+  lines.push('------------------------------');
+  lines.push('Itens do pedido');
+  lines.push('');
+  const nameCol = 30;
+  for (const it of items) {
+    const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
+    const name = `${qty}x ${it.name || it.title || it.productName || ''}`;
+    const unit = Number(it.price ?? it.unitPrice ?? it.unit_price ?? 0) || 0;
+    const price = (unit * qty).toFixed(2);
+    const left = name.padEnd(nameCol, ' ');
+    lines.push(`${left} R$ ${price}`);
+    const opts = it.options || it.selectedOptions || it.addons || [];
+    for (const op of (opts || [])) {
+      const oq = Number(op.quantity ?? op.qty ?? 1) || 1;
+      const optPrice = (Number(op.price ?? op.unitPrice ?? op.amount ?? 0) * oq).toFixed(2);
+      lines.push(`-   ${oq}x ${op.name || op.title || ''} — R$ ${optPrice}`);
+    }
+    lines.push('');
+  }
+
+  // totals
+  const subtotal = (() => {
+    try {
+      let s = 0;
+      for (const it of items) {
+        const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
+        const unit = Number(it.price ?? it.unitPrice ?? it.unit_price ?? 0) || 0;
+        let optsSum = 0;
+        const opts = it.options || it.selectedOptions || it.addons || [];
+        for (const op of (opts || [])) optsSum += (Number(op.price ?? op.unitPrice ?? op.amount ?? 0) || 0) * (Number(op.quantity ?? op.qty ?? 1) || 1);
+        s += (unit * qty) + (optsSum * qty);
+      }
+      return s;
+    } catch (e) { return 0; }
+  })();
+  const discount = Number(o.discount || o.discountAmount || 0) || 0;
+  const total = Number(o.total || o.amount || o.orderAmount || (subtotal - discount)) || subtotal - discount;
+
+  lines.push('------------------------------');
+  lines.push(`Sub-total = R$ ${subtotal.toFixed(2)}`);
+  if (discount && discount > 0) lines.push(`Desconto: R$ ${discount.toFixed(2)}`);
+  lines.push('');
+  lines.push(`TOTAL a cobrar: R$ ${total.toFixed(2)}`);
+  const pay = o.paymentMethod || o.payment || (o.payload && o.payload.payment && (o.payload.payment.method || o.payload.payment.type)) || '—';
+  lines.push(`Pagamento: ${pay}`);
+  lines.push('==============================');
+  const channel = o.payload && o.payload.integration && o.payload.integration.provider ? o.payload.integration.provider : (o.channel || o.source || 'Canal de venda');
+  lines.push(`${channel} - ${o.storeName || o.companyName || ''}`);
+  lines.push('Obrigado e bom apetite!');
+  lines.push('==============================');
+  return lines.join('\n');
+}
+
 router.post('/', async (req, res) => {
   try {
     const payload = req.body || {}
@@ -85,6 +170,13 @@ router.post('/', async (req, res) => {
     // This instructs the agent to append a sanitized JSON dump of the order.
     // Can be overridden by the client by setting payload.includeFullOrder = false.
     if (payload && typeof payload.includeFullOrder === 'undefined') payload.includeFullOrder = true;
+
+    // Ensure a printable text body is present so agents or saved payloads
+    // have the same visible content as the frontend preview. Clients may
+    // already send `payload.text`; only generate when absent.
+    try {
+      if (!payload.text) payload.text = formatOrderTextServer(payload.order || payload);
+    } catch (e) { /* non-fatal */ }
     // Attempt immediate delivery to connected agents for this storeId (if any)
     const io = req.app && req.app.locals && req.app.locals.io;
     const pq = await ensurePrintQueue()

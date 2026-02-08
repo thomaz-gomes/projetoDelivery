@@ -96,6 +96,45 @@
       "closedAt": null,
       "closedBy": null,
       "closingSummary": null
+    },
+    {
+      "id": "7197e297-422d-464b-a6e5-0fc838c2314d",
+      "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+      "openedAt": "2025-12-26T01:12:23.065Z",
+      "openedBy": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+      "openingAmount": 0.01,
+      "balance": 0.01,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
+    },
+    {
+      "id": "d3fc6be4-d725-4dcf-b6c9-94f2615601bc",
+      "companyId": "a968e497-f928-490f-854f-3d7cf9ef3dbc",
+      "openedAt": "2026-01-02T00:11:57.368Z",
+      "openedBy": "0e5e5338-ed98-40f8-b455-fc7cfc54250f",
+      "openingAmount": 100,
+      "balance": 100,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
+    },
+    {
+      "id": "8ac92523-b682-447e-a8fd-a49a2af3f648",
+      "companyId": "877421c2-fe39-4ac2-ad3e-98f22c4339cb",
+      "openedAt": "2026-01-04T21:46:05.822Z",
+      "openedBy": "d37d7d9e-e174-4380-8416-2d021ff6473b",
+      "openingAmount": 1,
+      "balance": 1,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
     }
   ]
 }

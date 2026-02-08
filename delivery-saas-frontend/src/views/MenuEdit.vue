@@ -51,7 +51,10 @@
             <div class="row gx-2">
               <div class="col mb-2">
                 <label class="form-label small">Fuso horário</label>
-                <TextInput v-model="form.timezone" placeholder="America/Sao_Paulo" inputClass="form-control" />
+                    <select class="form-select" v-model="form.timezone">
+                      <option value="">-- Usar padrão da loja --</option>
+                      <option v-for="tz in TIMEZONES" :key="tz" :value="tz">{{ tz }}</option>
+                    </select>
               </div>
             </div>
           <div class="mt-2">
@@ -90,6 +93,17 @@
         </div>
 
         <div class="row">
+          <div class="col-12 mb-3">
+            <label class="form-label">Tipos de entrega</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="allowDelivery" v-model="form.allowDelivery">
+              <label class="form-check-label" for="allowDelivery">Entrega (Delivery)</label>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="allowPickup" v-model="form.allowPickup">
+              <label class="form-check-label" for="allowPickup">Retirada (Pickup)</label>
+            </div>
+          </div>
           <div class="col-md-6 mb-3">
             <ImageUploader label="Banner" :initialUrl="form.bannerUrl" :aspect="1200/400" :targetWidth="1200" :targetHeight="400" uploadKey="bannerBase64" @cropped="onBannerCropped" />
           </div>
@@ -128,9 +142,16 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, open24Hours: false, timezone: '' })
+const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true })
 const dayNames = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado']
 const weeklySchedule = ref(Array.from({length:7}).map((_,i)=>({ day: i, enabled: false, from: '', to: '' })))
+
+// Common IANA timezone options for select
+const TIMEZONES = [
+  'America/Sao_Paulo', 'UTC', 'America/New_York', 'America/Los_Angeles', 'America/Chicago',
+  'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
+  'Asia/Shanghai', 'Australia/Sydney'
+]
 
 function copyFromPrev(idx){
   try{
@@ -154,7 +175,7 @@ async function load(){
     if(isEdit){
       const res = await api.get(`/menu/menus/${id}`)
       const d = res.data || {}
-      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: '', phone: '', whatsapp: '', bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null }
+      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: d.address || '', phone: d.phone || '', whatsapp: d.whatsapp || '', bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null, open24Hours: !!d.open24Hours, timezone: d.timezone || '', allowDelivery: typeof d.allowDelivery !== 'undefined' ? !!d.allowDelivery : true, allowPickup: typeof d.allowPickup !== 'undefined' ? !!d.allowPickup : true }
       // Try to fetch store settings to prefill menu-specific metadata (menus map)
       try {
         if (d.storeId) {
@@ -264,6 +285,8 @@ async function save(){
           }
         } catch (e) { /* ignore */ }
         if (form.value.timezone) meta.timezone = form.value.timezone
+        if (typeof form.value.allowDelivery !== 'undefined') meta.allowDelivery = !!form.value.allowDelivery
+        if (typeof form.value.allowPickup !== 'undefined') meta.allowPickup = !!form.value.allowPickup
         if (Object.keys(meta).length) toUpload.menuMeta = meta
         if (Object.keys(toUpload).length && form.value.storeId && targetId) {
           toUpload.menuId = targetId
@@ -274,6 +297,21 @@ async function save(){
             try{ await api.patch(`/menu/menus/${targetId}`, { logoUrl: saved.logo }) }catch(e){ /* non-fatal */ }
           }
         }
+        // Persist menu-level fields directly into the DB menu row as well
+        try{
+          const menuPayload = {}
+          if (form.value.address !== undefined) menuPayload.address = form.value.address || null
+          if (form.value.phone !== undefined) menuPayload.phone = form.value.phone || null
+          if (form.value.whatsapp !== undefined) menuPayload.whatsapp = form.value.whatsapp || null
+          if (form.value.timezone !== undefined) menuPayload.timezone = form.value.timezone || null
+          if (form.value.open24Hours !== undefined) menuPayload.open24Hours = !!form.value.open24Hours
+          if (Array.isArray(weeklySchedule.value) && weeklySchedule.value.length === 7) menuPayload.weeklySchedule = weeklySchedule.value.map(w=>({ day: Number(w.day)||0, enabled: !!w.enabled, from: String(w.from||''), to: String(w.to||'') }))
+          if (form.value.allowDelivery !== undefined) menuPayload.allowDelivery = !!form.value.allowDelivery
+          if (form.value.allowPickup !== undefined) menuPayload.allowPickup = !!form.value.allowPickup
+          if (Object.keys(menuPayload).length && targetId) {
+            await api.patch(`/menu/menus/${targetId}`, menuPayload)
+          }
+        }catch(e){ console.warn('Failed to persist menu-level fields to DB', e) }
       } catch (e) {
         console.warn('Menu image/meta upload failed', e)
       }

@@ -1,0 +1,20 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | X-Salada | 18.5
+1 | Batata Média | 9.9
+
+
+[alignLeft]
+Cliente: Joãaaaao da Silva
+Endereço: Rua dos Testes, 123 - Centro - São Paulo/SP
+Total: R$ 34.39
+
+
+FORMAS DE PAGAMENTO
+
+
+[alignCenter]
+Obrigado!
+[CUT]

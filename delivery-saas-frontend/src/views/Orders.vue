@@ -8,6 +8,7 @@ import Swal from 'sweetalert2';
 import { io } from 'socket.io-client';
 import 'sweetalert2/dist/sweetalert2.min.css';
 import printService from "../services/printService.js";
+import { useModulesStore } from '../stores/modules.js';
 import PrinterStatus from '../components/PrinterStatus.vue';
 import PrinterConfig from '../components/PrinterConfig.vue';
 import POSOrderWizard from '../components/POSOrderWizard.vue';
@@ -19,11 +20,14 @@ import QRCode from 'qrcode';
 import { formatCurrency, formatAmount } from '../utils/formatters.js';
 import { formatDate, formatTime } from '../utils/dates'
 import { createApp, h } from 'vue';
-import CurrencyInput from '../components/CurrencyInput.vue';
+import OrderTicketPreview from '../components/OrderTicketPreview.vue';
+import CurrencyInput from '../components/form/input/CurrencyInput.vue';
 import { bindLoading } from '../state/globalLoading.js';
 import Sortable from 'sortablejs';
+import ListGroup from '../components/form/list-group/ListGroup.vue';
 const store = useOrdersStore();
 const auth = useAuthStore();
+const modules = useModulesStore();
 const router = useRouter();
 
 // helper para formatar displayId com dois dígitos e garantir consistência
@@ -61,6 +65,11 @@ const now = ref(Date.now());
 // connection state for a dev-friendly badge (moved to module scope so computed can access it)
 const connectionState = ref({ status: 'idle', since: Date.now(), url: null });
 const showPrinterConfig = ref(false);
+// compute module gating flags
+const printingEnabled = computed(() => modules.has('printing'));
+const ridersEnabled = computed(() => {
+  return modules.has('riders') || modules.has('rider') || modules.has('delivery') || modules.has('entregadores') || modules.has('motoboy') || modules.has('motoboys')
+});
 const showPdv = ref(false);
 const newOrderPhone = ref('');
 const pdvPreset = ref(null);
@@ -126,12 +135,25 @@ function showNotification(pedido) {
 // =============================
 onMounted(async () => {
   await requestNotificationPermission();
+  // load enabled modules for this company to gate features
+  try { await modules.fetchEnabled(); } catch (e) { /* ignore */ }
+
+  // If this is a SaaS Super Admin session, do not initialize restaurant listeners or fetching —
+  // redirect the admin to the SaaS dashboard instead.
+  try {
+    if (auth.user && String(auth.user.role || '').toUpperCase() === 'SUPER_ADMIN') {
+      try { console.log('SUPER_ADMIN detected — skipping Orders listeners and redirecting to /saas'); } catch(e){}
+      try { router.replace('/saas'); } catch(e){}
+      return;
+    }
+
+  } catch (e) { /* ignore detection errors */ }
 
   try {
     await store.fetch();
     // ensure store names are hydrated when backend omitted the relation
     await hydrateMissingStores();
-    await store.fetchRiders();
+    if (ridersEnabled.value) await store.fetchRiders();
     // load company payment methods (admin endpoint)
     try {
       const cid = auth?.user?.companyId || null;
@@ -144,7 +166,8 @@ onMounted(async () => {
     }
   } catch (e) {
     console.error(e);
-    Swal.fire('Erro', 'Falha ao carregar pedidos/entregadores.', 'error');
+    const msg = ridersEnabled.value ? 'Falha ao carregar pedidos/entregadores.' : 'Falha ao carregar pedidos.';
+    Swal.fire('Erro', msg, 'error');
   }
 
   // 🔌 Conectar ao servidor (tempo real)
@@ -248,11 +271,11 @@ onMounted(async () => {
       // and emit `print-result` events back to the UI — avoid double-printing.
       try {
         const route = (printService && printService.getPrintRoute) ? printService.getPrintRoute() : null;
-        if (route === 'agent') {
+        if (printingEnabled.value && (route === 'agent' || route === 'qz' || route == null)) {
           await printService.enqueuePrint(full);
           console.log(`🖨️ Impressão automática (frontend->agent) enviada: ${formatDisplay(full)}`);
         } else {
-          console.log(`🖨️ Frontend print skipped (route=${route}) — backend will handle auto-print.`);
+          console.log(`🖨️ Frontend print skipped (module printing disabled or route=${route}).`);
         }
       } catch (e) {
         console.warn('printService check/print failed', e);
@@ -492,6 +515,20 @@ function getCreatedAt(o) {
 // Compute displayed total as sum(items + options) + delivery fee, robust to different payload shapes
 function computeDisplayedTotal(o){
   try{
+    // Prefer an explicit persisted total when available to avoid double-counting
+    // scenarios where `item.price` already includes option values while `options`
+    // are also present in the payload. Use available total/amount fields first.
+    // Prefer explicit payment total from the persisted payload when present
+    // (covers PDV and public flows where `payload.payment.amount` is authoritative)
+    const paymentAmount = Number(
+      o.payload?.payment?.amount ??
+      o.payload?.rawPayload?.payment?.amount ??
+      o.payload?.total?.orderAmount ??
+      o.total ??
+      o.amount ??
+      0
+    ) || 0;
+    if(paymentAmount > 0) return paymentAmount;
     const items = normalizeOrderItems(o) || [];
     let subtotal = 0;
     for(const it of items){
@@ -668,7 +705,59 @@ function normalizeOrder(o){
   // build a robust address extraction checking many common payload shapes
   function extractAddress(o) {
     if (!o) return '';
-    const a = o.address ||
+    // helper to format address objects consistently
+    const formatAddrObj = (addr) => {
+      if (!addr) return '';
+      const formatted = addr.formatted || addr.formattedAddress || addr.formatted_address;
+      if (formatted) return String(formatted);
+      const street = addr.street || addr.streetName || '';
+      const number = addr.number || addr.streetNumber || '';
+      const complement = addr.complement || addr.complemento || '';
+      const neighborhood = addr.neighborhood || '';
+      const city = addr.city || '';
+      const state = addr.state || addr.uf || '';
+      const postalCode = addr.postalCode || addr.zip || addr.postal_code || '';
+      const reference = addr.reference || addr.ref || '';
+      const observation = addr.observation || addr.observacao || '';
+      const base = [street, number].filter(Boolean).join(', ');
+      const tailParts = [neighborhood, city, state].filter(Boolean);
+      if (postalCode) tailParts.push(postalCode);
+      if (complement) tailParts.push('Comp: ' + complement);
+      if (reference) tailParts.push('Ref: ' + reference);
+      if (observation) tailParts.push('Obs: ' + observation);
+      const tail = tailParts.filter(Boolean).join(' - ');
+      return [base, tail].filter(Boolean).join(' | ');
+    };
+
+    // address could be a string or an object created by PDV wizard
+    if (typeof o.address === 'string') return o.address;
+    if (o.address && typeof o.address === 'object') return formatAddrObj(o.address);
+
+    // customer attached addresses (created via PDV/customer book)
+    if (o.customerAddress) {
+      const ca = typeof o.customerAddress === 'string' ? o.customerAddress : formatAddrObj(o.customerAddress);
+      if (ca) return ca;
+    }
+    if (o.customer && Array.isArray(o.customer.addresses) && o.customer.addresses.length) {
+      // prefer default, else first
+      const def = o.customer.addresses.find(a => a && a.isDefault) || o.customer.addresses[0];
+      const ca = typeof def === 'string' ? def : formatAddrObj(def);
+      if (ca) return ca;
+    }
+    if (o.customer && o.customer.address) {
+      const ca = typeof o.customer.address === 'string' ? o.customer.address : formatAddrObj(o.customer.address);
+      if (ca) return ca;
+    }
+
+    // payload shapes from integrators/backends
+    // Try formatting known object shapes when formatted string is missing
+    const fromPayloadObj = (
+      formatAddrObj(o.payload?.rawPayload?.address) ||
+      formatAddrObj(o.payload?.delivery?.deliveryAddress) ||
+      formatAddrObj(o.payload?.order?.delivery?.address)
+    );
+
+    const a = fromPayloadObj ||
       o.payload?.delivery?.deliveryAddress?.formattedAddress ||
       o.payload?.deliveryAddress?.formattedAddress ||
       o.payload?.delivery?.address?.formattedAddress ||
@@ -682,11 +771,11 @@ function normalizeOrder(o){
       o.payload?.rawPayload?.address?.formatted ||
       o.payload?.rawPayload?.address?.formattedAddress ||
       o.payload?.rawPayload?.address?.formatted_address ||
-      o.rawPayload?.neighborhood ||
       (typeof o.rawPayload?.address === 'string' ? o.rawPayload.address : null) ||
+      o.rawPayload?.neighborhood ||
       o.customer?.address?.formattedAddress ||
       '';
-    return a;
+    return a || '';
   }
 
   const normalized = {
@@ -823,7 +912,7 @@ const filteredOrders = computed(() => {
     // filtro de status/entregador
     const statusMatch = selectedStatus.value === 'TODOS' || o.status === selectedStatus.value;
     // compare as strings to avoid numeric/string id mismatches
-    const riderMatch = selectedRider.value === 'TODOS' || (o.rider && String(o.rider.id) === String(selectedRider.value));
+    const riderMatch = !ridersEnabled.value || selectedRider.value === 'TODOS' || (o.rider && String(o.rider.id) === String(selectedRider.value));
 
     // order number filter (match display or id)
     const qOrder = String(searchOrderNumber.value || '').trim().toLowerCase();
@@ -861,6 +950,30 @@ const openTimeline = ref({});
 
 function toggleTimeline(id) {
   openTimeline.value[id] = !openTimeline.value[id];
+}
+
+// Details modal state
+const selectedOrder = ref(null);
+const detailsModalVisible = ref(false);
+const detailsTab = ref('customer');
+const selectedNormalized = computed(() => selectedOrder.value ? normalizeOrder(selectedOrder.value) : null);
+
+// Assign rider modal state
+const assignModalVisible = ref(false);
+const assignModalOrder = ref(null);
+const assignModalRiders = ref([]);
+const assignSelectedRider = ref(null);
+const assignOrderId = computed(() => (assignModalOrder && assignModalOrder.value && assignModalOrder.value.id) || null);
+
+function openDetails(o) {
+  selectedOrder.value = o;
+  detailsTab.value = 'customer';
+  detailsModalVisible.value = true;
+}
+
+function closeDetails() {
+  detailsModalVisible.value = false;
+  selectedOrder.value = null;
 }
 
 const STATUS_LABEL = {
@@ -1030,37 +1143,45 @@ async function viewReceipt(order) {
     const text = (printService && printService.formatOrderText) ? printService.formatOrderText(order) : null;
     const content = text || (`Comanda: ${formatDisplay(order)}\n\n` + JSON.stringify(order, null, 2));
 
-    // show QR and receipt directly in a modal (no separate page)
+    // show QR and receipt using the Vue ticket component mounted inside the Swal modal
     try {
-      let modalHtml = '';
-      modalHtml += `<div style="max-width:520px;margin:0 auto;text-align:left"><div style="white-space:pre-wrap;font-family:monospace;margin-bottom:12px">${escapeHtml(content)}</div>`;
-      if (qrDataUrl) {
-        modalHtml += `<div style="display:flex;justify-content:center;margin-top:6px"><img src="${qrDataUrl}" alt="QR do pedido" style="width:220px;height:220px;object-fit:contain;border:0;border-radius:8px"/></div>`;
-        // small tip for riders explaining how to claim the order
-        modalHtml += `<div style="margin-top:8px;padding:10px;border-radius:8px;background:#f8f9fa;border:1px solid #e9ecef;color:#333;font-size:13px;text-align:center;">`;
-        modalHtml += `<strong>Como o motoboy deve proceder:</strong><br/>Abra o app "Painel do Motoboy" e toque em <em>Ler pedido (QR)</em>. Aponte a câmera para este QR; ao escanear, o pedido será atribuído a você automaticamente.`;
-        modalHtml += `</div>`;
-        modalHtml += `<div style="text-align:center;font-size:12px;color:#666;margin-top:6px">Escaneie para despachar</div>`;
-      }
-      modalHtml += `</div>`;
-
+      // if server returned an explicit QR URL token, attach to order so component can build QR
+      if (qrDataUrl && t && t.qrUrl) order.url = t.qrUrl;
+      const rootId = `ticket-root-${Date.now()}`;
+      let appInstance = null;
       await Swal.fire({
         title: `Comanda ${escapeHtml(formatDisplay(order))}`,
-        html: modalHtml,
+        html: `<div id="${rootId}" style="display:flex;justify-content:center"></div>`,
         width: Math.min(window.innerWidth - 40, 560),
         showCloseButton: true,
+        didOpen: () => {
+          try {
+            const el = document.getElementById(rootId);
+            if (el) {
+              appInstance = createApp(OrderTicketPreview, { order });
+              appInstance.mount(el);
+            }
+          } catch (err) {
+            console.warn('Failed to mount OrderTicketPreview', err);
+          }
+        },
+        willClose: () => {
+          try { if (appInstance) appInstance.unmount(); } catch(e) {}
+        },
         confirmButtonText: 'Fechar',
         focusConfirm: false,
       });
     } catch (e) {
-      console.warn('Falha ao abrir modal de visualização, tentando abrir em nova aba', e);
+      console.warn('Falha ao abrir componente de pré-visualização, tentando fallback', e);
+      // fallback: open a plain new tab with textual preview
       const w = window.open('', '_blank');
       if (!w) {
         Swal.fire('Bloqueado', 'Não foi possível abrir a janela de visualização (bloqueador de popups).', 'warning');
         return;
       }
+      const textFallback = (printService && printService.formatOrderText) ? printService.formatOrderText(order) : (`Comanda: ${formatDisplay(order)}\n\n` + JSON.stringify(order, null, 2));
       let html = `<!doctype html><html><head><meta charset="utf-8"><title>Comanda ${escapeHtml(formatDisplay(order))}</title>
-        <style>body{font-family:monospace;white-space:pre-wrap;padding:16px} .qr-wrap{display:flex;justify-content:center;margin-top:12px} .receipt-box{max-width:520px;margin:0 auto}</style></head><body><div class="receipt-box"><pre>${escapeHtml(content)}</pre>`;
+        <style>body{font-family:monospace;white-space:pre-wrap;padding:16px} .qr-wrap{display:flex;justify-content:center;margin-top:12px} .receipt-box{max-width:520px;margin:0 auto}</style></head><body><div class="receipt-box"><pre>${escapeHtml(textFallback)}</pre>`;
       if (qrDataUrl) {
         html += `<div class="qr-wrap"><img src="${qrDataUrl}" alt="QR do pedido" style="width:180px;height:180px;object-fit:contain;border:0;" /></div><div style="text-align:center;font-size:12px;color:#666;margin-top:6px;">Escaneie para despachar</div>`;
       }
@@ -1077,6 +1198,9 @@ async function viewReceipt(order) {
 
 // Dev helper: send a canned test order to the print service
 async function sendTestPrint() {
+  if (!printingEnabled.value) {
+    Swal.fire({ icon: 'info', title: 'Impressão desabilitada no módulo', text: 'O módulo de impressão está desabilitado, mas será feita uma tentativa de envio ao agente/QZ.', timer: 3500, toast: true, position: 'top-end', showConfirmButton: false });
+  }
   const testOrder = {
     id: `dev-test-${Date.now()}`,
     displaySimple: 'TT',
@@ -1100,47 +1224,33 @@ async function sendTestPrint() {
 }
 
 async function openAssignModal(order) {
+  if (!ridersEnabled.value) {
+    // Riders module disabled: do not show assignment modal
+    return
+  }
+  // Fetch riders and open a Vue modal that uses ListGroup for selection
   const riders = (await store.fetchRiders()) || [];
-  const options = riders.reduce((acc, r) => {
-    acc[r.id] = `${r.name} — ${r.whatsapp || 'sem WhatsApp'}`;
-    return acc;
-  }, {});
+  assignModalRiders.value = riders.map(r => ({ id: r.id, name: r.name, description: r.whatsapp || 'sem WhatsApp', whatsapp: r.whatsapp || '' }));
+  assignSelectedRider.value = null;
+  // store only the id to avoid references being lost; handlers only need the id
+  assignModalOrder.value = order ? { id: order.id } : null;
+  // Close any open SweetAlert modal to avoid overlays stacking
+  try { Swal.close(); } catch(e) {}
+  await nextTick();
+  assignModalVisible.value = true;
 
-  const { value: riderId } = await Swal.fire({
-    title: 'Escolher entregador',
-    input: 'select',
-    inputOptions: options,
-    inputPlaceholder: 'Selecione um entregador',
-    showCancelButton: true,
-    confirmButtonText: 'Atribuir',
-    cancelButtonText: 'Cancelar',
-  });
-
-  if (riderId) {
-    await store.assignOrder(order.id, { riderId, alsoSetStatus: true });
-    await store.fetch();
-    Swal.fire('OK', 'Pedido atribuído e notificado via WhatsApp.', 'success');
-    return;
-  }
-
-  const { value: phone } = await Swal.fire({
-    title: 'WhatsApp do entregador',
-    input: 'text',
-    inputPlaceholder: '5599999999999',
-    showCancelButton: true,
-    confirmButtonText: 'Atribuir via WhatsApp',
-  });
-
-  if (phone) {
-    await store.assignOrder(order.id, { riderPhone: phone, alsoSetStatus: true });
-    await store.fetch();
-    Swal.fire('OK', 'Pedido atribuído e notificado via WhatsApp.', 'success');
-  }
+  // Modal Vue opened; selection/dispatch handled inside the modal UI
 }
 
 async function changeStatus(order, to) {
   try {
     if (to === 'SAIU_PARA_ENTREGA') {
+      if (!ridersEnabled.value) {
+        // Riders module disabled: just change status without asking for a rider
+        await store.updateStatus(order.id, 'SAIU_PARA_ENTREGA')
+        await store.fetch()
+        return
+      }
       await openAssignModal(order);
       return;
     }
@@ -1285,18 +1395,11 @@ async function openWhatsAppToRider(order) {
   const phone = order.rider.whatsapp || order.rider.phone || order.rider.mobile;
   const opts = {};
   Object.keys(riderWhatsAppMessages).forEach((k) => { opts[k] = riderWhatsAppMessages[k]; });
-  // build html with buttons for preview
-  const choicesHtml = Object.keys(riderWhatsAppMessages).map(k => {
-    const txt = String(riderWhatsAppMessages[k]).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    // button full width, text aligned left so preview is easier to read
-    return `<button type="button" data-key="${k}" data-txt="${encodeURIComponent(String(riderWhatsAppMessages[k]))}" class="wa-choose btn btn-outline-primary w-100 text-start mb-2">${txt}</button>`;
-  }).join('');
-
   const html = `
     <div class="wa-choices">
       <div class="mb-2 small text-muted">Escolha uma mensagem:</div>
       <div id="wa_preview" class="wa-preview mb-2 small text-muted">(nenhuma mensagem selecionada)</div>
-      <div>${choicesHtml}</div>
+      <div id="wa_vue"></div>
       <input type="hidden" id="wa_selected" />
     </div>
   `;
@@ -1317,21 +1420,45 @@ async function openWhatsAppToRider(order) {
     didOpen: () => {
       const popup = Swal.getPopup();
       if (!popup) return;
-      popup.querySelectorAll('.wa-choose').forEach((btn) => {
-        btn.addEventListener('click', (ev) => {
-          // mark selection
-          popup.querySelectorAll('.wa-choose').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          const key = btn.getAttribute('data-key');
-          const hid = popup.querySelector('#wa_selected');
-          if (hid) hid.value = key;
-          // update preview area with original text (decoded)
-          const raw = btn.getAttribute('data-txt') || '';
-          const decoded = decodeURIComponent(raw);
-          const preview = popup.querySelector('#wa_preview');
-          if (preview) preview.innerText = decoded;
-        });
-      });
+      const mountEl = popup.querySelector('#wa_vue');
+      if (!mountEl) return;
+      const msgs = Object.keys(riderWhatsAppMessages).map(k => ({ key: k, text: String(riderWhatsAppMessages[k]) }));
+      const App = {
+        components: { ListGroup },
+        data() { return { msgs, selected: null }; },
+        template: `<div><ListGroup :items="msgs" itemKey="key" :selectedId="selected" :showActions="false" @select="onSelect"><template #primary="{ item }"><div class=\"small text-start\">{{ item.text }}</div></template></ListGroup></div>`,
+        methods: {
+          onSelect(v){
+            this.selected = v;
+            const hid = document.getElementById('wa_selected'); if(hid) hid.value = v;
+            const preview = popup.querySelector('#wa_preview'); if(preview) preview.innerText = (riderWhatsAppMessages && riderWhatsAppMessages[v]) || '(nenhuma mensagem selecionada)';
+            // visually mark active via ListGroup selected class
+          }
+        }
+      };
+      try{
+        const vm = createApp({
+          data(){ return { selected: null, msgs } },
+          render() {
+            return h(ListGroup, {
+              items: this.msgs,
+              itemKey: 'key',
+              selectedId: this.selected,
+              showActions: false,
+              onSelect: (v) => this.onSelect(v)
+            }, {
+              primary: ({ item }) => h('div', { class: 'small text-start' }, item.text)
+            });
+          },
+          methods: {
+            onSelect(v){
+              this.selected = v;
+              const hid = document.getElementById('wa_selected'); if(hid) hid.value = v;
+              const preview = popup.querySelector('#wa_preview'); if(preview) preview.innerText = (riderWhatsAppMessages && riderWhatsAppMessages[v]) || '(nenhuma mensagem selecionada)';
+            }
+          }
+        }).mount(mountEl);
+      }catch(e){ console.error('failed to mount wa list', e); }
     }
   });
 
@@ -1357,10 +1484,28 @@ function toggleSound() {
   playSound.value = !playSound.value;
 }
 
-function openPdv(){
+async function openPdv(){
   try{
     pdvPreset.value = null;
   }catch(e){}
+  // If a phone is provided, try to preload customer and if they have saved addresses,
+  // open the PDV wizard directly on the address-selection step.
+  try{
+    const phone = String(newOrderPhone.value || '').replace(/\D/g,'');
+    if (phone) {
+      const res = await api.get(`/customers?q=${encodeURIComponent(phone)}`);
+      const rows = res.data?.rows || [];
+      const match = rows.find(c => {
+        const d = String((c.whatsapp||c.phone||'')).replace(/\D/g,'');
+        return d.length>0 && d.slice(-8) === phone.slice(-8);
+      });
+      if (match && Array.isArray(match.addresses) && match.addresses.length>0) {
+        pdvPreset.value = { customerName: match.fullName || match.name || '', orderType: 'DELIVERY', autoStep: 2 };
+      } else {
+        pdvPreset.value = null;
+      }
+    }
+  }catch(e){ pdvPreset.value = null }
   showPdv.value = true;
 }
 
@@ -1428,7 +1573,7 @@ function pulseButton() {
         </span>
       </div>
       <PrinterWatcher />
-      <PrinterStatus />
+      <PrinterStatus v-if="printingEnabled" />
       <!-- Dev: quick test print button -->
       <div class="ms-2 d-flex gap-2 align-items-center">
         
@@ -1450,7 +1595,7 @@ function pulseButton() {
         <button type="button" class="btn btn-sm btn-outline-primary" @click="showPrinterConfig = true" title="Configurar impressora">
           <i class="bi bi-gear"></i>&nbsp;Configurar Impressora
         </button>
-        <button type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
+        <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
           <i class="bi bi-printer"></i>&nbsp;Teste Impressão
         </button>
         <CashControl />
@@ -1476,12 +1621,12 @@ function pulseButton() {
           <div class="flex-grow-1" style="max-width: 500px;">
             <TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control" />
           </div>
-          <button type="button" class="btn btn-success" @click="openPdv">
+          <button type="button" class="btn btn-primary" @click="openPdv">
             <i class="bi bi-arrow-right-circle"></i>
             Criar Pedido
           </button>
 
-           <button type="button" class="btn btn-outline-secondary ms-2" @click="openBalcao" title="Pedido balcão">
+           <button type="button" class="btn btn-outline-primary ms-2" @click="openBalcao" title="Pedido balcão">
             <i class="bi bi-shop"></i>
             &nbsp;Pedido balcão
           </button>
@@ -1493,9 +1638,7 @@ function pulseButton() {
 
           <div class="col-sm-6">
 
-              <div
-      class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;"
-    >
+              <div class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;">
     <div class="card-body">
       <div class="d-flex align-items-center justify-content-between">
           <div>
@@ -1523,6 +1666,7 @@ function pulseButton() {
 
       <!-- Filtros adicionais -->
       <div class="d-flex align-items-center gap-2">
+        <template v-if="ridersEnabled">
         <SelectInput 
            v-model="selectedRider" 
           class="form-select form-select"
@@ -1534,6 +1678,7 @@ function pulseButton() {
             {{ r.name }}
           </option>
         </SelectInput>
+        </template>
 
         <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control form-control" />
         <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control form-control" />
@@ -1549,7 +1694,7 @@ function pulseButton() {
     
     <!-- Orders board: columns with drag & drop -->
     <div v-if="store.orders && store.orders.length > 0" class="orders-board">
-      <div class="boards d-flex gap-3 overflow-auto py-2">
+      <div class="boards d-flex gap-3 overflow-auto justify-content-between">
         <div class="orders-column card" v-for="col in (isMobile ? COLUMNS.filter(c => c.key === selectedStatus) : COLUMNS)" :key="col.key" :data-status="col.key">
           <div class="card-header d-flex align-items-center justify-content-between">
             <div class="fw-semibold">{{ col.label }}</div>
@@ -1577,6 +1722,7 @@ function pulseButton() {
                               <span v-if="normalizeOrder(o).paymentChange" class="ms-2 text-muted">• Troco: {{ formatCurrency(normalizeOrder(o).paymentChange) }}</span>
                             </span>
                           </div>
+                          <template v-if="ridersEnabled">
                           <div class="mt-1 small text-muted d-flex align-items-center">
                             <i class="bi bi-person-badge me-1"></i>
                             <span v-if="o.rider">{{ o.rider.name }}</span>
@@ -1585,6 +1731,7 @@ function pulseButton() {
                               <i class="bi bi-whatsapp text-success"></i>
                             </button>
                           </div>
+                          </template>
                     </div>
                     <!-- status badge removed from card; column header indicates status -->
                   </div>
@@ -1597,7 +1744,7 @@ function pulseButton() {
               </div>
               <div class="card-footer bg-transparent p-1 d-flex justify-content-between align-items-center">
                 <div>
-                        <button class="btn btn-sm btn-outline-secondary" @click="toggleTimeline(o.id)">Detalhes</button>
+                  <button class="btn btn-sm btn-outline-secondary" @click.stop="openDetails(o)">Detalhes</button>
                 </div>
                
                 <div>
@@ -1616,7 +1763,7 @@ function pulseButton() {
                     <div class="fw-semibold">{{ it.quantity || 1 }}x {{ it.name }} <span class="text-success ms-2">{{ formatCurrency(it.unitPrice || 0) }}</span></div>
                     <div v-if="extractItemOptions(it).length" class="small text-muted ms-3 mt-1">
                       <div v-for="(opt, idx) in extractItemOptions(it)" :key="(opt.name || idx) + idx">
-                        <span v-if="opt.quantity">{{ opt.quantity }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
+                        <span v-if="opt.quantity">{{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
                       </div>
                     </div>
                   </li>
@@ -1640,6 +1787,95 @@ function pulseButton() {
       <p class="mb-0">Nenhum pedido encontrado.</p>
     </div>
     </div>
+    <!-- Detalhes do pedido (modal com tabs) -->
+  <div v-if="detailsModalVisible" class="modal fade show" style="display:block; background: rgba(0,0,0,0.45);" @click.self="closeDetails">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Detalhes do pedido {{ selectedNormalized ? (' — ' + (selectedNormalized.display || selectedOrder?.displaySimple || (selectedOrder && selectedOrder.id?.slice?.(0,6)))) : '' }}</h5>
+          <button type="button" class="btn-close" aria-label="Fechar" @click="closeDetails"></button>
+        </div>
+        <div class="modal-body">
+          <ul class="nav nav-tabs">
+            <li class="nav-item"><a href="#" class="nav-link" :class="{active: detailsTab==='customer'}" @click.prevent="detailsTab='customer'">Dados do cliente</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" :class="{active: detailsTab==='order'}" @click.prevent="detailsTab='order'">Dados do pedido</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" :class="{active: detailsTab==='payment'}" @click.prevent="detailsTab='payment'">Dados de pagamento</a></li>
+          </ul>
+
+          <div class="tab-content mt-3">
+            <div v-show="detailsTab==='customer'">
+              <div class="mb-2"><strong>Nome:</strong> {{ selectedNormalized ? selectedNormalized.customerName : (selectedOrder && (selectedOrder.customerName || selectedOrder.name)) || '—' }}</div>
+              <div class="mb-2"><strong>Telefone:</strong> {{ selectedNormalized ? (selectedNormalized.customerPhone || '—') : (selectedOrder && (selectedOrder.customerPhone || selectedOrder.contact)) || '—' }}</div>
+              <div class="mb-2"><strong>Endereço:</strong> {{ selectedNormalized ? (selectedNormalized.address || '—') : (selectedOrder ? normalizeOrder(selectedOrder).address : '—') }}</div>
+              <div class="mb-2"><strong>Loja:</strong> {{ selectedNormalized ? (selectedNormalized.storeName || '—') : (selectedOrder && selectedOrder.store && selectedOrder.store.name) || '—' }}</div>
+              <div class="mb-2"><strong>Canal:</strong> {{ selectedNormalized ? (selectedNormalized.channelLabel || '—') : (selectedOrder && (selectedOrder.channelLabel || '-')) }}</div>
+            </div>
+
+            <div v-show="detailsTab==='order'">
+              <div class="fw-semibold mb-2">Itens</div>
+              <ul class="list-group mb-2">
+                <li v-for="(it, idx) in (selectedNormalized && selectedNormalized.items) ? selectedNormalized.items : normalizeOrderItems(selectedOrder || {})" :key="(it.id||idx)+''" class="list-group-item">
+                  <div class="d-flex justify-content-between">
+                    <div>{{ it.quantity || 1 }}x {{ it.name }}</div>
+                    <div class="text-success">{{ formatCurrency(it.unitPrice || it.price || 0) }}</div>
+                  </div>
+                  <div v-if="extractItemOptions(it).length" class="small text-muted ms-2 mt-1">
+                    <div v-for="(opt, i) in extractItemOptions(it)" :key="(opt.name||i)+'opt'"> 
+                      <span v-if="opt.quantity">{{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+              <div v-if="getOrderNotes(selectedOrder)" class="mb-2"><strong>Observações:</strong> {{ getOrderNotes(selectedOrder) }}</div>
+            </div>
+
+            <div v-show="detailsTab==='payment'">
+              <div class="mb-2"><strong>Forma de pagamento:</strong> {{ selectedNormalized ? (selectedNormalized.paymentMethod || '—') : normalizeOrder(selectedOrder).paymentMethod }}</div>
+              <div v-if="selectedNormalized && selectedNormalized.couponCode" class="mb-2"><strong>Cupom:</strong> {{ selectedNormalized.couponCode }}</div>
+              <div v-if="selectedNormalized && selectedNormalized.couponDiscount" class="mb-2"><strong>Desconto:</strong> -{{ formatCurrency(selectedNormalized.couponDiscount) }}</div>
+              <div v-if="selectedNormalized && selectedNormalized.paymentChange" class="mb-2"><strong>Troco:</strong> {{ formatCurrency(selectedNormalized.paymentChange) }}</div>
+              <div class="mb-2"><strong>Total exibido:</strong> {{ formatCurrency(computeDisplayedTotal(selectedOrder || {})) }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="closeDetails">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Atribuir entregador (modal custom usando ListGroup) -->
+  <div v-if="assignModalVisible" class="modal fade show" style="display:block; background: rgba(0,0,0,0.45); z-index:20000;" @click.self="(assignModalVisible=false)">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Escolher entregador</h5>
+          <button type="button" class="btn-close" aria-label="Fechar" @click="assignModalVisible=false"></button>
+        </div>
+        <div class="modal-body">
+          <div v-if="assignModalRiders && assignModalRiders.length">
+            <ListGroup :items="assignModalRiders" itemKey="id" :selectedId="assignSelectedRider" :showActions="false" @select="assignSelectedRider = $event">
+              <template #primary="{ item }">
+                <div><strong>{{ item.name }}</strong></div>
+                <div v-if="item.description" class="small text-muted">{{ item.description }}</div>
+              </template>
+            </ListGroup>
+          </div>
+          <div v-else class="text-muted">Nenhum entregador disponível.</div>
+        </div>
+        <div class="modal-footer d-flex justify-content-between">
+          <div>
+            <button class="btn btn-outline-secondary" type="button" @click="assignModalVisible=false">Cancelar</button>
+            <button class="btn btn-outline-danger ms-2" type="button" :disabled="!assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } assignModalVisible=false; await store.updateStatus(id, 'SAIU_PARA_ENTREGA'); await store.fetch(); Swal.fire('OK','Pedido despachado sem entregador.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao despachar pedido.','error') } })()">Despachar sem entregador</button>
+          </div>
+          <div>
+            <button class="btn btn-secondary" type="button" :disabled="!assignSelectedRider || !assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } await store.assignOrder(id, { riderId: assignSelectedRider, alsoSetStatus: true }); await store.fetch(); assignModalVisible=false; Swal.fire('OK','Pedido atribuído e notificado via WhatsApp.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao atribuir entregador.','error') } })()">Atribuir</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
   </div>
 </template>
 
@@ -1676,11 +1912,17 @@ function pulseButton() {
 
 /* Boards layout */
 .orders-board .boards { padding: 8px 0; }
-.orders-column {background-color: #E6E6E6; flex: 0 0 23.5%; }
+.orders-column {   
+   background-color: #FFF;
+    flex: 0 0 23.5%;
+    border: none;
+    border-radius: 24px;
+  }
 .orders-column .list { max-height: 70vh; overflow:auto; }
 .orders-column .card-header {
   background: #FFF;
   border: none;
+  border-radius: 24px 24px 0px 0px;
 }
 .order-card { border: none;}
 .orders-column .card-body { cursor: grab; }

@@ -319,10 +319,16 @@ function formatOrderText(order, opts = {}) {
     }
     if (Array.isArray(extras) && extras.length) {
       extras.forEach(ex => {
-        const exQty = ex.quantity ?? ex.qty ?? 1;
-        const exName = ex.name || ex.title || ex.description || String(ex).slice(0,40);
-        const exPrice = Number(ex.price ?? ex.amount ?? 0) || 0;
-        lines.push(`-- ${exQty} ${exName.slice(0,40)}   ${exPrice.toFixed(2).padStart(7,' ')}`);
+        // support shapes: { option: { name, price, quantity }, qty } or simple { name, price, quantity }
+        const inner = ex && ex.option ? ex.option : ex;
+        const exQtyPerUnit = Number(inner.quantity ?? inner.qty ?? ex.quantity ?? ex.qty ?? 1) || 1;
+        const exName = inner.name || inner.title || inner.description || String(inner).slice(0,40);
+        const exPrice = Number(inner.price ?? inner.amount ?? ex.price ?? ex.amount ?? 0) || 0;
+        // multiply option qty by parent item qty to show total units printed on comanda
+        const totalExQty = exQtyPerUnit * qty;
+        // include extras in subtotal so totals reflect extras if order.total absent
+        subtotal += exPrice * exQtyPerUnit * qty;
+        lines.push(`-- ${String(totalExQty).padEnd(3,' ')} ${exName.slice(0,40)}   ${exPrice.toFixed(2).padStart(7,' ')}`);
       })
     }
   });

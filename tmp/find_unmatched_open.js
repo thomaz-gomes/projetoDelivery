@@ -1,0 +1,4 @@
+const fs=require('fs'); const p='d:/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-frontend/src/views/PublicMenu.vue'; const s=fs.readFileSync(p,'utf8'); const start=s.indexOf('<script'); const openClose=s.indexOf('>', start); const end = s.indexOf('</script>', openClose); const script = s.slice(openClose+1, end); const lines = script.split(/\r?\n/);
+let bal=0; let found=null; for(let i=lines.length-1;i>=0;i--){ const line=lines[i]; for(let j=line.length-1;j>=0;j--){ const ch=line[j]; if(ch==='}') bal++; else if(ch==='{'){ if(bal===0){ found=i+1; break; } else bal--; } } if(found) break; }
+let out='foundLine: '+found+'\n'; if(found){ const from=Math.max(1,found-6); const to=Math.min(lines.length, found+6); for(let k=from;k<=to;k++) out+=((k).toString().padStart(4,' ')+': '+lines[k-1])+'\n'; }
+fs.writeFileSync('d:/Users/gomes/Documents/GitHub/projetoDelivery/tmp/unmatched_open_out.txt', out,'utf8'); console.log('wrote');

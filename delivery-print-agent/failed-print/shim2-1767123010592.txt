@@ -1,0 +1,20 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | PRODUTO 1 - NÃO ENTREGAR - Primeiro Nível | 5
+1 | PRODUTO 2 (COMBO) - NÃO ENTREGAR - Primeiro Nível | 5
+
+
+[alignLeft]
+Cliente: PEDIDO DE TESTE -  Thomaz Campos Gomes
+Endereço: Rua TESTE, 999999
+Total: R$ 27.00
+
+
+FORMAS DE PAGAMENTO
+
+
+[alignCenter]
+Obrigado!
+[CUT]

@@ -88,6 +88,8 @@ customersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
           number: a.number || null,
           complement: a.complement || null,
           neighborhood: a.neighborhood || null,
+          reference: a.reference || null,
+          observation: a.observation || null,
           city: a.city || null,
           state: a.state || null,
           postalCode: a.postalCode || null,
@@ -131,6 +133,54 @@ customersRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   res.json(updated);
 });
 
+// Create a new address for an existing customer
+customersRouter.post('/:id/addresses', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  const { id } = req.params;
+  const { label, street, number, complement, neighborhood, reference, observation, state, postalCode, latitude, longitude, formatted } = req.body || {};
+  // ensure customer belongs to company
+  const customer = await prisma.customer.findFirst({ where: { id, companyId } });
+  if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+
+  // unset previous default
+  try {
+    await prisma.customerAddress.updateMany({ where: { customerId: customer.id, isDefault: true }, data: { isDefault: false } });
+  } catch (e) { /* ignore */ }
+  // Avoid creating duplicate addresses: check existing by formatted, or by street+number+postalCode, or street+number+neighborhood
+  const whereOr = [];
+  if (formatted) whereOr.push({ formatted });
+  if (postalCode) whereOr.push({ postalCode });
+  if (street && number) whereOr.push({ street, number });
+  if (whereOr.length) {
+    const exists = await prisma.customerAddress.findFirst({ where: { customerId: customer.id, OR: whereOr } });
+    if (exists) {
+      // ensure it's marked default and return it
+      try { await prisma.customerAddress.update({ where: { id: exists.id }, data: { isDefault: true } }); } catch(e){}
+      return res.status(200).json(exists);
+    }
+  }
+
+  const created = await prisma.customerAddress.create({ data: {
+    customerId: customer.id,
+    label: label || null,
+    street: street || null,
+    number: number || null,
+    complement: complement || null,
+    neighborhood: neighborhood || null,
+    reference: reference || null,
+    observation: observation || null,
+    city: null,
+    state: state || null,
+    postalCode: postalCode || null,
+    formatted: formatted || null,
+    latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : null,
+    longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : null,
+    isDefault: true,
+  } });
+
+  res.status(201).json(created);
+});
+
 // Importação CSV/XLSX (colunas suportadas: fullName, cpf, whatsapp, phone, street, number, complement, neighborhood, city, state, postalCode, latitude, longitude, formatted)
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -155,6 +205,8 @@ customersRouter.post('/import', requireRole('ADMIN'), upload.single('file'), asy
         number: r.number || r.numero || '',
         complement: r.complement || r.complemento || '',
         neighborhood: r.neighborhood || r.bairro || '',
+        reference: r.reference || r.referencia || r.referência || '',
+        observation: r.observation || r.observacao || r.observação || r.note || r.notes || '',
         city: r.city || r.cidade || '',
         state: r.state || r.estado || '',
         postalCode: r.postalCode || r.cep || '',

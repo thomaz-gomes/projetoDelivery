@@ -25,6 +25,23 @@ export default defineConfig({
     }
   },
   server: {
+    // Windows + Node.js 24 currently triggers a Vite HMR crash
+    // (Cannot set properties of undefined (setting 'error')).
+    // As a safe fallback, disable HMR automatically when running
+    // on Node >= 24 or when VITE_DISABLE_HMR=1 is set.
+    hmr: (function() {
+      try {
+        const disableEnv = String(process.env.VITE_DISABLE_HMR || '').toLowerCase();
+        if (disableEnv === '1' || disableEnv === 'true') return false;
+        const major = Number((process.versions && process.versions.node || '0').split('.')[0]);
+        if (major >= 24) return false; // disable HMR for Node 24+
+        return { overlay: true };
+      } catch {
+        return { overlay: true };
+      }
+    })(),
+    // Improve file watching stability on Windows
+    watch: { usePolling: true, interval: 300 },
   // To use a custom certificate for dev.redemultilink.com.br, place these files under
     // <project>/delivery-saas-frontend/ssl/:
     // - private.key (your private key)
@@ -65,23 +82,16 @@ export default defineConfig({
     // environment vars are not loaded the same way in different shells). If
     // `VITE_API_URL` is not set, fall back to the DISABLE_SSL heuristic.
     proxy: (function() {
-      let target = null;
-      // Prefer explicit VITE_API_URL if present (this should be set in .env.development)
-      if (process.env.VITE_API_URL) {
-        target = process.env.VITE_API_URL.replace(/\/$/, '');
-      } else {
-        const backendProto = (String(process.env.DISABLE_SSL || '').toLowerCase() === '1') ? 'http' : 'https';
-        target = `${backendProto}://localhost:3000`;
-      }
-      // ensure target has protocol
+      // Prefer explicit VITE_API_URL, else default to http://localhost:3000
+      let target = (process.env.VITE_API_URL ? process.env.VITE_API_URL.replace(/\/$/, '') : 'http://localhost:3000');
+      // ensure protocol
       if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
+      const agentTarget = target; // keep agent endpoints consistent
       try { console.log('Vite proxy target resolved to:', target); } catch(e) {}
-      // Prefer HTTP for agent endpoints during local development to avoid
-      // TLS/EPROTO errors when backend runs with DISABLE_SSL=1.
-      const agentTarget = (String(process.env.DISABLE_SSL || '').toLowerCase() === '1') ? 'http://localhost:3000' : target;
       try { console.log('Vite proxy agent endpoints target:', agentTarget); } catch(e) {}
       return {
         '/api': { target, changeOrigin: true, secure: false },
+        '/menu': { target, changeOrigin: true, secure: false },
         '/auth': { target, changeOrigin: true, secure: false },
         '/socket.io': { target: agentTarget, ws: true, changeOrigin: true, secure: false },
         // Agent setup endpoints used by the PrinterSetup UI

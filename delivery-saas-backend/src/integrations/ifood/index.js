@@ -1,6 +1,7 @@
 // src/integrations/ifood/index.js
 import { ifoodGet, ifoodPost } from './client.js';
 import { prisma } from '../../prisma.js';
+import { buildConcatenatedAddress, normalizeDeliveryAddressFromPayload } from '../../services/customers.js';
 
 /**
  * Faz polling dos eventos do iFood para a empresa
@@ -60,10 +61,11 @@ async function upsertIFoodOrder(companyId, orderData) {
       status: 'EM_PREPARO',
       customerName: customer?.name,
       customerPhone: customer?.phones?.[0]?.number,
-      address: delivery?.deliveryAddress?.formattedAddress,
+      address: buildConcatenatedAddress({ delivery: { deliveryAddress: delivery?.deliveryAddress } }) || delivery?.deliveryAddress?.formattedAddress,
       latitude: lat || null,
       longitude: lng || null,
       payload: orderData,
+      deliveryNeighborhood: (delivery && delivery.deliveryAddress && delivery.deliveryAddress.neighborhood) || normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: delivery?.deliveryAddress } })?.neighborhood || null,
       total: Number(total?.orderAmount || 0),
     },
     create: {
@@ -74,9 +76,10 @@ async function upsertIFoodOrder(companyId, orderData) {
       status: 'EM_PREPARO',
       customerName: customer?.name,
       customerPhone: customer?.phones?.[0]?.number,
-      address: delivery?.deliveryAddress?.formattedAddress,
+      address: buildConcatenatedAddress({ delivery: { deliveryAddress: delivery?.deliveryAddress } }) || delivery?.deliveryAddress?.formattedAddress,
       latitude: lat || null,
       longitude: lng || null,
+      deliveryNeighborhood: (delivery && delivery.deliveryAddress && delivery.deliveryAddress.neighborhood) || normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: delivery?.deliveryAddress } })?.neighborhood || null,
       payload: orderData,
       total: Number(total?.orderAmount || 0),
     },

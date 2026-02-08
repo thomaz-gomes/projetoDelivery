@@ -86,3 +86,68 @@ What it does:
 - Starts backend, frontend and the print agent in separate PowerShell windows, exporting `PRINT_AGENT_TOKEN` into each process so they can authenticate automatically.
 
 Important: this is a developer convenience only. For production use a proper secret store and register agent tokens from the backend admin UI.
+
+#run projeto
+pull origin develop && docker compose -f docker-compose.yml -f docker-compose.prod.yml down && docker compose -f docker-compose.prod.yml up -d --build
+
+
+
+command run project
+Aqui está o passo a passo de como você deve fazer:
+
+1. Alterar o Schema
+
+precisa ter um arquivo .env.migration
+
+
+DATABASE_URL="postgresql://tomgomes:03t01F007TF@72.60.7.28:5432/tomgomes"
+DB_HOST=delivery_db
+DB_USER=tomgomes
+DB_NAME=tomgomes
+DB_PORT=5432
+ 
+ 
+Abra o arquivo prisma/schema.postgres.prisma e adicione o novo campo ao modelo desejado.
+
+Code snippet
+
+model User {
+  id    Int    @id @default(autoincrement())
+  name  String
+  email String @unique
+  phone String? // <--- Novo campo adicionado
+}
+2. Gerar a Migration (Na sua máquina local)
+Para que o Prisma crie o arquivo SQL que altera o banco, rode o comando que configuramos no seu package.json:
+
+Bash
+
+npm run migrate
+O que isso faz: O Prisma compara seu schema com o banco, cria uma nova pasta em prisma/migrations contendo o comando ALTER TABLE... e atualiza o seu Prisma Client local.
+
+3. Enviar para o Servidor
+Faça o commit e o push dessas alterações (incluindo a nova pasta de migrations que foi gerada):
+
+Bash
+
+git add .
+git commit -m "add phone field to user"
+git push origin develop
+4. Atualizar o Servidor (Produção)
+Agora, no servidor, você roda aquele comando completo que discutimos:
+
+Bash
+
+git pull origin develop && \
+docker compose -f docker-compose.prod.yml up -d --build
+Por que esse fluxo é seguro?
+Histórico: A pasta prisma/migrations mantém o registro de todas as mudanças.
+
+Automação: Como seu Dockerfile roda o script wait-for-db-and-migrate.js, assim que o container subir com a nova imagem, ele vai detectar a nova migration e aplicar o prisma migrate deploy automaticamente no Postgres.
+
+Consistência: O campo novo existirá tanto no banco de dados quanto nas tipagens do seu código Node.js.
+
+Uma dica importante:
+Nunca altere o banco de dados manualmente (via DBeaver, pgAdmin, etc). Sempre altere o schema.postgres.prisma e gere uma migration. Se você alterar o banco por fora, o Prisma pode se perder e tentar sobrescrever suas mudanças.
+
+

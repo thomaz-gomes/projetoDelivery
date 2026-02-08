@@ -1,0 +1,23 @@
+[
+  {
+    "id": "36236329-698b-44f1-9932-4a1d72ad4b04",
+    "planId": "e21165e7-a909-48cb-90ba-7d4c1081f50c",
+    "period": "MONTHLY",
+    "price": "99",
+    "createdAt": "2025-12-26T00:14:04.183Z"
+  },
+  {
+    "id": "54154c23-5dce-415d-ad64-3855ae84bcd3",
+    "planId": "e21165e7-a909-48cb-90ba-7d4c1081f50c",
+    "period": "QUARTERLY",
+    "price": "269",
+    "createdAt": "2025-12-26T00:14:04.183Z"
+  },
+  {
+    "id": "41a2eae8-8e15-4b60-bd7c-31baae24d6e8",
+    "planId": "e21165e7-a909-48cb-90ba-7d4c1081f50c",
+    "period": "ANNUAL",
+    "price": "1260",
+    "createdAt": "2025-12-26T00:14:04.183Z"
+  }
+]

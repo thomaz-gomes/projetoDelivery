@@ -1,32 +1,39 @@
 // src/services/customer.js
 import { prisma } from '../prisma.js';
 
-// normaliza telefone → apenas dígitos + garante DDI 55 se parecer BR
+// normaliza telefone → apenas dígitos; NÃO armazena DDI '55'.
+// The DDI (country code) should be considered only when sending messages.
 export function normalizePhone(n) {
   const digits = String(n || '').replace(/\D+/g, '');
   if (!digits) return '';
-  // se já tiver 55 e tiver tamanho plausível, mantém
-  if (digits.startsWith('55')) return digits;
-  // se tiver tamanho de celular BR (10~11) adiciona 55
-  if (digits.length >= 10 && digits.length <= 11) return '55' + digits;
+  // If caller provided a number with leading '55', strip it for storage.
+  if (digits.startsWith('55')) return digits.slice(2);
+  // Otherwise return digits as-is (do not auto-prepend any DDI).
   return digits;
 }
 
 function mapAddressFromPayload(payload) {
   const a = payload?.delivery?.deliveryAddress || {};
+  // support either { coordinates: { latitude, longitude } } or top-level latitude/longitude
   const c = a.coordinates || {};
+  const latRawRaw = (c && (c.latitude !== undefined && c.latitude !== null)) ? c.latitude : (a.latitude ?? null);
+  const lngRawRaw = (c && (c.longitude !== undefined && c.longitude !== null)) ? c.longitude : (a.longitude ?? null);
+  const latRaw = (latRawRaw === '' || latRawRaw === undefined) ? null : latRawRaw;
+  const lngRaw = (lngRawRaw === '' || lngRawRaw === undefined) ? null : lngRawRaw;
   return {
-    formatted: a.formattedAddress || null,
-    street: a.streetName || null,
-    number: a.streetNumber || null,
-    complement: a.complement || null,
-    neighborhood: a.neighborhood || null,
+    formatted: a.formattedAddress || a.formatted || null,
+    street: a.streetName || a.street || null,
+    number: a.streetNumber || a.number || null,
+    complement: a.complement || a.complemento || null,
+    neighborhood: a.neighborhood || a.neigh || null,
+    reference: a.reference || a.referencePoint || a.referencia || null,
+    observation: a.note || a.notes || a.observation || a.observacao || null,
     city: a.city || null,
     state: a.state || null,
-    postalCode: a.postalCode || null,
+    postalCode: a.postalCode || a.zip || null,
     country: a.country || 'BR',
-    latitude: Number.isFinite(Number(c.latitude)) ? Number(c.latitude) : null,
-    longitude: Number.isFinite(Number(c.longitude)) ? Number(c.longitude) : null,
+    latitude: (latRaw === null) ? null : (Number.isFinite(Number(latRaw)) ? Number(latRaw) : null),
+    longitude: (lngRaw === null) ? null : (Number.isFinite(Number(lngRaw)) ? Number(lngRaw) : null),
     isDefault: true,
   };
 }
@@ -164,6 +171,31 @@ export async function upsertCustomerFromIfood({ companyId, payload }) {
   return { customer, addressId: defaultAddr?.id || null };
 }
 
+// Normalize a variety of incoming payload shapes into a single deliveryAddress shape
+export function normalizeDeliveryAddressFromPayload(payload) {
+  try {
+    try { console.log('normalizeDeliveryAddressFromPayload called - payload keys:', Object.keys(payload || {}).join(',')) } catch(e){}
+    const a = mapAddressFromPayload(payload || {});
+    return {
+      formattedAddress: a.formatted || null,
+      streetName: a.street || null,
+      streetNumber: a.number || null,
+      complement: a.complement || null,
+      neighborhood: a.neighborhood || null,
+      reference: a.reference || null,
+      observation: a.observation || null,
+      city: a.city || null,
+      state: a.state || null,
+      postalCode: a.postalCode || null,
+      country: a.country || null,
+      latitude: a.latitude ?? null,
+      longitude: a.longitude ?? null,
+    };
+  } catch (e) {
+    console.warn('normalizeDeliveryAddressFromPayload failed:', e?.message || e)
+    return null;
+  }
+}
 /**
  * Transactional variant: given an active Prisma transaction (tx), try to find or create
  * a Customer and CustomerAddress from a normalized payload. Returns { customerId, customer }
@@ -291,4 +323,27 @@ export async function upsertCustomerFromPayloadTx(tx, { companyId, payload }) {
   }
 
   return null;
+}
+
+// Build a compact, human-friendly concatenated address string for storing in
+// the `order.address` field. Uses the normalized delivery address when
+// available and falls back to formattedAddress when possible.
+export function buildConcatenatedAddress(payload) {
+  try {
+    const n = normalizeDeliveryAddressFromPayload(payload) || {};
+    const parts = [];
+    if (n.formattedAddress) parts.push(n.formattedAddress);
+    else if (n.streetName || n.streetNumber) parts.push([n.streetName || '', n.streetNumber || ''].filter(Boolean).join(' ').trim());
+    if (n.complement) parts.push(n.complement);
+    if (n.neighborhood) parts.push(n.neighborhood);
+    if (n.reference) parts.push(`ref: ${n.reference}`);
+    if (n.observation) parts.push(`obs: ${n.observation}`);
+    // append city/state/postalCode for additional context
+    const cityParts = [n.city, n.state, n.postalCode].filter(Boolean).join(' ');
+    if (cityParts) parts.push(cityParts);
+    const joined = parts.filter(Boolean).join(', ').trim();
+    return joined || null;
+  } catch (e) {
+    return null;
+  }
 }

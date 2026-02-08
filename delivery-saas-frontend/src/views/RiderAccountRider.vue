@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { formatCurrency } from '../utils/formatters.js';
+import { formatDateWithOptionalTime } from '../utils/dates.js';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
 
@@ -79,7 +80,7 @@ onMounted(() => { fetchSummary(); });
       <ul class="list-group list-group-flush mt-2">
         <li v-for="t in transactions" :key="t.id" class="list-group-item py-2 d-flex justify-content-between align-items-center">
           <div>
-            <div class="small text-muted">{{ new Date(t.date).toLocaleDateString() }}</div>
+            <div class="small text-muted">{{ formatDateWithOptionalTime(t.date) }}</div>
             <div>{{ t.order?.displayId || t.displayId || '—' }} — {{ t.note || '' }}</div>
           </div>
           <div class="fw-bold">{{ formatCurrency(Number(t.amount || 0)) }}</div>

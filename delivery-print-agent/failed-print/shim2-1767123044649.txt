@@ -1,0 +1,19 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+1 | Tropeiro com carne | 26
+
+
+[alignLeft]
+Cliente: Balcão
+Endereço: -
+Total: R$ 26.00
+
+
+FORMAS DE PAGAMENTO
+
+
+[alignCenter]
+Obrigado!
+[CUT]

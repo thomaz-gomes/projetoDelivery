@@ -1,0 +1,52 @@
+{
+  "menus": {
+    "e5afb575-f1d3-4350-a801-bebe1b79a81f": {
+      "open24Hours": true,
+      "weeklySchedule": [
+        {
+          "day": 0,
+          "enabled": false,
+          "from": "",
+          "to": ""
+        },
+        {
+          "day": 1,
+          "enabled": true,
+          "from": "10:30",
+          "to": "22:30"
+        },
+        {
+          "day": 2,
+          "enabled": true,
+          "from": "10:30",
+          "to": "22:30"
+        },
+        {
+          "day": 3,
+          "enabled": true,
+          "from": "10:30",
+          "to": "22:30"
+        },
+        {
+          "day": 4,
+          "enabled": true,
+          "from": "10:30",
+          "to": "22:30"
+        },
+        {
+          "day": 5,
+          "enabled": true,
+          "from": "10:30",
+          "to": "22:30"
+        },
+        {
+          "day": 6,
+          "enabled": true,
+          "from": "10:30",
+          "to": "22:30"
+        }
+      ],
+      "timezone": "America/Sao_Paulo"
+    }
+  }
+}

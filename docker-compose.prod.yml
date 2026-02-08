@@ -1,55 +1,68 @@
-# Docker Compose para produção
-# Substitua as variáveis abaixo em um arquivo .env ou exporte no ambiente antes de executar os comandos remotos.
-# Exemplo .env:
-# BACKEND_IMAGE=ghcr.io/OWNER/projetodelivery-backend:develop
-# FRONTEND_IMAGE=ghcr.io/OWNER/projetodelivery-frontend:develop
-# DATABASE_URL=postgres://app:password@db:5432/appdb
+  # Docker Compose para produção
+  # Substitua as variáveis abaixo em um arquivo .env ou exporte no ambiente antes de executar os comandos remotos.
+  # Exemplo .env:
+  # BACKEND_IMAGE=ghcr.io/OWNER/projetodelivery-backend:develop
+  # FRONTEND_IMAGE=ghcr.io/OWNER/projetodelivery-frontend:develop
+  # DATABASE_URL=postgres://app:password@db:5432/appdb
 
-services:
-  delivery_db:
-    image: postgres:17
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-tomgomes}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-03t01F007TF}
-      POSTGRES_DB: ${POSTGRES_DB:-tomgomes}
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    restart: unless-stopped
+  services:
+    delivery_db:
+      image: postgres:17
+      environment:
+        POSTGRES_USER: ${POSTGRES_USER:-tomgomes}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-03t01F007TF}
+        POSTGRES_DB: ${POSTGRES_DB:-tomgomes}
+      volumes:
+        - db_data:/var/lib/postgresql/data
+      ports:
+        - "5432:5432"
+      restart: unless-stopped
 
-  backend:
-    # Prefer image from registry if provided; otherwise build locally from repo subfolder
-    image: ${BACKEND_IMAGE:-}
-    build: 
-      context: ./delivery-saas-backend
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
-      NODE_ENV: production
-      PORT: 3000
-    # Persist uploads outside the ephemeral container filesystem
-    volumes:
-      - backend_uploads:/app/public/uploads
-    depends_on:
-      - delivery_db
-    ports:
-      - "${BACKEND_PORT:-3000}:3000"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+    backend:
+      # Prefer image from registry if provided; otherwise build locally from repo subfolder
+      image: ${BACKEND_IMAGE:-}
+      build: 
+        context: ./delivery-saas-backend
+        dockerfile: Dockerfile
+      environment:
+        # Allow overriding via env or .env file; fall back to the internal service credentials
+        DATABASE_URL: ${DATABASE_URL:-postgresql://tomgomes:03t01F007TF@delivery_db:5432/tomgomes}
+        NODE_ENV: production
+        PORT: 3000
+        RUN_MIGRATIONS: 1
+        # QZ Tray signing (provide cert/key via envs or files)
+        QZ_CERT: ${QZ_CERT:-}
+        QZ_PRIVATE_KEY: ${QZ_PRIVATE_KEY:-}
+        QZ_CERT_BASE64: ${QZ_CERT_BASE64:-}
+        QZ_PRIVATE_KEY_BASE64: ${QZ_PRIVATE_KEY_BASE64:-}
+        QZ_CERT_FILE: ${QZ_CERT_FILE:-}
+        QZ_PRIVATE_KEY_FILE: ${QZ_PRIVATE_KEY_FILE:-}
+      # Persist uploads outside the ephemeral container filesystem
+      volumes:
+        - backend_uploads:/app/public/uploads
+      depends_on:
+        - delivery_db
+      ports:
+        - "${BACKEND_PORT:-3000}:3000"
+      restart: unless-stopped
+      healthcheck:
+        test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
 
-  frontend:
-    image: ${FRONTEND_IMAGE:-}
-    build:
-      context: ./delivery-saas-frontend
-      dockerfile: Dockerfile
-    ports:
-      - "${FRONTEND_PORT:-80}:80"
-    restart: unless-stopped
+    frontend:
+      image: ${FRONTEND_IMAGE:-}
+      build:
+        context: ./delivery-saas-frontend
+        dockerfile: Dockerfile
+        args:
+          VITE_ENABLE_QZ: ${VITE_ENABLE_QZ:-0}
+      ports:
+        - "${FRONTEND_PORT:-80}:80"
+      restart: unless-stopped
 
-volumes:
-  db_data:
-  backend_uploads:
-    driver: local
+  volumes:
+    db_data:
+    backend_uploads:
+      driver: local

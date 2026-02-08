@@ -1,0 +1,14 @@
+foundLine: 162
+ 156:     }
+ 157:   }catch(e){ console.warn('handleScroll err', e) }
+ 158: }
+ 159: 
+ 160: // Integrate scrollspy into handleScroll by calling updateActiveCategory
+ 161: 
+ 162: onMounted(()=>{
+ 163:   const onScroll = () => {
+ 164:     if(rafId) cancelAnimationFrame(rafId)
+ 165:     rafId = requestAnimationFrame(()=>{ handleScroll(); updateActiveCategory(); })
+ 166:   }
+ 167:   window.addEventListener('scroll', onScroll, { passive: true })
+ 168:   window.addEventListener('resize', onScroll)

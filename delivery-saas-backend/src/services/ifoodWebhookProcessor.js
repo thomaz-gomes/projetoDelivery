@@ -2,6 +2,8 @@
 import { prisma } from '../prisma.js';
 import { getIFoodOrderDetails } from '../integrations/ifood/orders.js';
 import { emitirNovoPedido } from '../index.js';
+import buildAndPersistStockMovementFromOrderItems from './stockFromOrder.js';
+import { canTransition } from '../stateMachine.js';
 
 /**
  * Extrai companyId a partir do merchantId do payload
@@ -174,6 +176,8 @@ function determineStatusFromIFoodEvent(payload, orderObj) {
 /**
  * Upsert do pedido no nosso banco
  */
+import { buildConcatenatedAddress, normalizeDeliveryAddressFromPayload } from './customers.js';
+
 async function upsertOrder({ companyId, mapped, storeId = null }) {
   const exists = mapped.externalId
     ? await prisma.order.findUnique({ where: { externalId: mapped.externalId } })
@@ -186,7 +190,8 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     status: mapped.status,
     customerName: mapped.customerName,
     customerPhone: mapped.customerPhone,
-    address: mapped.address,
+    address: buildConcatenatedAddress(mapped.raw) || mapped.address,
+    deliveryNeighborhood: (mapped.raw && (mapped.raw.delivery && mapped.raw.delivery.deliveryAddress && mapped.raw.delivery.deliveryAddress.neighborhood)) || (normalizeDeliveryAddressFromPayload(mapped.raw || {})?.neighborhood) || mapped.raw?.neighborhood || null,
     latitude: mapped.latitude,
     longitude: mapped.longitude,
     total: mapped.total,
@@ -222,12 +227,41 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     });
   }
 
-  // se já existe, só atualizamos campos principais (não recriamos itens)
-  return prisma.order.update({
-    where: { id: exists.id },
-    data: baseData,
-    include: { items: true },
-  });
+  // se já existe, atualizamos campos principais — mas NÃO sobrescrevemos o
+  // status indiscriminadamente. Apenas altere o status se a transição for
+  // permitida pelo `canTransition` centralizado (evita regressões como quando
+  // um evento PLACED é reprocessado após o pedido já ter sido concluído).
+  try {
+    const updateData = Object.assign({}, baseData);
+    // Determine whether we should change the status
+    const incomingStatus = mapped.status || null;
+    const currentStatus = exists.status || null;
+    if (incomingStatus && incomingStatus !== currentStatus) {
+      // Only set status when a valid forward transition exists
+      if (canTransition(currentStatus, incomingStatus)) {
+        updateData.status = incomingStatus;
+        // record history entry for status change
+        updateData.histories = { create: { from: currentStatus, to: incomingStatus, reason: 'iFood webhook (update)' } };
+      } else {
+        // Do not overwrite status; keep existing
+        delete updateData.status;
+      }
+    } else {
+      // Ensure we don't unset status unintentionally
+      delete updateData.status;
+    }
+
+    const updated = await prisma.order.update({
+      where: { id: exists.id },
+      data: updateData,
+      include: { items: true, histories: true },
+    });
+    return updated;
+  } catch (e) {
+    // Fallback: if update fails, log and rethrow
+    console.error('[iFood Processor] failed to update existing order:', e?.message || e);
+    throw e;
+  }
 }
 
 /**
@@ -300,6 +334,13 @@ export async function processIFoodWebhook(eventId) {
         if (inferred) mapped.status = inferred;
       } catch (e) { /* ignore */ }
       const saved = await upsertOrder({ companyId, mapped, storeId });
+
+      // attempt to decrement stock for items that reference technical sheets (best-effort)
+      try {
+        await buildAndPersistStockMovementFromOrderItems(prisma, saved);
+      } catch (e) {
+        console.warn('[iFood Processor] failed to create stock movement for order', saved && saved.id, e && e.message);
+      }
 
       // Emite o novo pedido ao painel (Socket.IO) para evitar necessidade de refresh
       try {

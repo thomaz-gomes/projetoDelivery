@@ -11,12 +11,16 @@ export function signToken(payload) {
 export function authMiddleware(req, res, next) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!token) return res.status(401).json({ message: 'Unauthorized' });
+  if (!token) {
+    console.warn('[auth] no Authorization token on request to', req.method, req.originalUrl);
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
 
   try {
     req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch {
+    return next();
+  } catch (err) {
+    try { console.warn('[auth] token verification failed for request', req.method, req.originalUrl, 'error:', err && err.message); } catch(e){}
     return res.status(401).json({ message: 'Invalid token' });
   }
 }

@@ -1,0 +1,55 @@
+{
+  "menus": {
+    "48209fba-bd8e-4f08-81c8-20239fc2a428": {
+      "address": "Av ruy barbosa 118",
+      "phone": "73991429676",
+      "open24Hours": true,
+      "timezone": "America/New_York",
+      "forceOpen": true,
+      "weeklySchedule": [
+        {
+          "day": 0,
+          "enabled": true,
+          "from": "10:00",
+          "to": "23:00"
+        },
+        {
+          "day": 1,
+          "enabled": true,
+          "from": "10:00",
+          "to": "23:00"
+        },
+        {
+          "day": 2,
+          "enabled": true,
+          "from": "10:00",
+          "to": "23:00"
+        },
+        {
+          "day": 3,
+          "enabled": true,
+          "from": "10:00",
+          "to": "23:00"
+        },
+        {
+          "day": 4,
+          "enabled": true,
+          "from": "10:00",
+          "to": "23:00"
+        },
+        {
+          "day": 5,
+          "enabled": true,
+          "from": "10:00",
+          "to": "23:00"
+        },
+        {
+          "day": 6,
+          "enabled": true,
+          "from": "10:00",
+          "to": "23:00"
+        }
+      ]
+    }
+  }
+}

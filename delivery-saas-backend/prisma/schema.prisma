@@ -30,36 +30,50 @@ enum CustomerSource {
 }
 
 model Company {
-  id                String             @id @default(uuid())
-  name              String
+  id                   String                @id @default(uuid())
+  name                 String
   // optional URL-friendly slug (ex: "nomedaloja")
-  slug              String?            @unique
-  createdAt         DateTime           @default(now())
-  users             User[]
-  riders            Rider[]
-  neighborhoods     Neighborhood[]
-  orders            Order[]
-  nfeProtocols      NfeProtocol[]
-  whatsAppInstances WhatsAppInstance[]
-  Customer          Customer[]
-  apiIntegrations   ApiIntegration[]
+  slug                 String?               @unique
+  createdAt            DateTime              @default(now())
+  users                User[]
+  riders               Rider[]
+  neighborhoods        Neighborhood[]
+  orders               Order[]
+  nfeProtocols         NfeProtocol[]
+  whatsAppInstances    WhatsAppInstance[]
+  Customer             Customer[]
+  apiIntegrations      ApiIntegration[]
   // stores associated to this company (multi-store support)
-  stores            Store[]
-  affiliates        Affiliate[]
-  coupons           Coupon[]
+  stores               Store[]
+  affiliates           Affiliate[]
+  coupons              Coupon[]
+  customerAccounts     CustomerAccount[]
+  customerGroups       CustomerGroup[]
   // relations for menu / payments (inverse relation fields required by Prisma)
-  menuCategories    MenuCategory[]
-  products          Product[]
-  paymentMethods    PaymentMethod[]
-  optionGroups      OptionGroup[]
+  menuCategories       MenuCategory[]
+  products             Product[]
+  paymentMethods       PaymentMethod[]
+  optionGroups         OptionGroup[]
+  // ingredients and technical sheets
+  ingredientGroups     IngredientGroup[]
+  ingredients          Ingredient[]
+  technicalSheets      TechnicalSheet[]
+  // stock movements (entries/exits) for this company
+  stockMovements       StockMovement[]
   // operating hours: if alwaysOpen is true the store accepts orders anytime
-  alwaysOpen        Boolean            @default(true)
+  alwaysOpen           Boolean               @default(true)
   // IANA timezone string (ex: "America/Sao_Paulo"). If null, server timezone is used.
-  timezone          String?
+  timezone             String?
   // optional per-week schedule: array of { day: 0..6, enabled: boolean, from: "HH:MM"?, to: "HH:MM"? }
-  weeklySchedule    Json?
+  weeklySchedule       Json?
   // one-to-one optional file source configured for this company
-  fileSource        FileSource?
+  fileSource           FileSource?
+  // SaaS subscription (one-to-one)
+  saasSubscription     SaasSubscription?
+  // cashback relations
+  cashbackSetting      CashbackSetting?
+  cashbackProductRules CashbackProductRule[]
+  cashbackWallets      CashbackWallet[]
 }
 
 model User {
@@ -90,48 +104,52 @@ model Rider {
 }
 
 model Order {
-  id                String               @id @default(uuid())
-  companyId         String
-  company           Company              @relation(fields: [companyId], references: [id])
+  id                   String                @id @default(uuid())
+  companyId            String
+  company              Company               @relation(fields: [companyId], references: [id])
   // optional: associate this order to a specific store (useful for multistore / multi-CNPJ setups)
-  storeId           String?
-  store             Store?               @relation(fields: [storeId], references: [id])
-  externalId        String?              @unique
-  displayId         String?
+  storeId              String?
+  store                Store?                @relation(fields: [storeId], references: [id])
+  externalId           String?               @unique
+  displayId            String?
   // Per-day sequential visual number (1,2,3...). Persisted as integer.
   // Use nullable to allow existing rows to remain unchanged until migrated.
-  displaySimple     Int?
+  displaySimple        Int?
   // delivery or pickup request from public ordering
-  orderType         String?
-  status            OrderStatus          @default(EM_PREPARO)
-  customerName      String?
-  customerPhone     String?
-  customerSource    CustomerSource?      @default(MANUAL)
-  customerId        String?
-  customer          Customer?            @relation(fields: [customerId], references: [id])
-  address           String?
-  latitude          Float?
-  longitude         Float?
-  total             Decimal              @default(0)
+  orderType            String?
+  status               OrderStatus           @default(EM_PREPARO)
+  customerName         String?
+  customerPhone        String?
+  customerSource       CustomerSource?       @default(MANUAL)
+  customerId           String?
+  customer             Customer?             @relation(fields: [customerId], references: [id])
+  address              String?
+  latitude             Float?
+  longitude            Float?
+  total                Decimal               @default(0)
+  // keep a denormalized neighborhood column for efficient queries/filters
+  deliveryNeighborhood String?
   // persisted coupon information (nullable - may be null for older orders)
-  couponCode        String?
-  couponDiscount    Decimal?
-  deliveryFee       Decimal?
-  payload           Json?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  items             OrderItem[]
-  riderId           String?
-  rider             Rider?               @relation(fields: [riderId], references: [id])
-  tickets           Ticket[]
-  histories         OrderStatusHistory[]
-  riderTransactions RiderTransaction[]
-  affiliateSales    AffiliateSale[]
-  nfeProtocols      NfeProtocol[]
+  couponCode           String?
+  couponDiscount       Decimal?
+  deliveryFee          Decimal?
+  payload              Json?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  items                OrderItem[]
+  riderId              String?
+  rider                Rider?                @relation(fields: [riderId], references: [id])
+  tickets              Ticket[]
+  histories            OrderStatusHistory[]
+  riderTransactions    RiderTransaction[]
+  affiliateSales       AffiliateSale[]
+  nfeProtocols         NfeProtocol[]
+  cashbackTransactions CashbackTransaction[]
 
-// Index to speed up queries by company + couponCode
-    @@index([companyId, couponCode], name: "idx_order_company_coupon")
+  // Index to speed up queries by company + couponCode
+  @@index([companyId, couponCode], name: "idx_order_company_coupon")
 }
+
 // NFC-e / NFe protocol records (stores SEFAZ responses such as protNFe)
 model NfeProtocol {
   id        String   @id @default(uuid())
@@ -139,7 +157,7 @@ model NfeProtocol {
   company   Company  @relation(fields: [companyId], references: [id])
   storeId   String?
   store     Store?   @relation(fields: [storeId], references: [id])
-  orderId   String?  
+  orderId   String?
   order     Order?   @relation(fields: [orderId], references: [id])
   nProt     String?  @unique
   cStat     String?
@@ -213,20 +231,38 @@ model WhatsAppInstance {
 }
 
 model Customer {
-  id        String            @id @default(uuid())
-  companyId String
-  company   Company           @relation(fields: [companyId], references: [id])
-  fullName  String
-  cpf       String?
-  whatsapp  String? // telefone principal normalizado (somente dígitos e com DDI)
-  phone     String? // opcional (outro telefone)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  addresses CustomerAddress[]
-  orders    Order[]
+  id               String                @id @default(uuid())
+  companyId        String
+  company          Company               @relation(fields: [companyId], references: [id])
+  fullName         String
+  cpf              String?
+  whatsapp         String? // telefone principal normalizado (somente dígitos e com DDI)
+  phone            String? // opcional (outro telefone)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  addresses        CustomerAddress[]
+  orders           Order[]
+  accounts         CustomerAccount[]
+  cashbackWallets  CashbackWallet[]
+  groupMemberships CustomerGroupMember[]
 
   @@unique([companyId, cpf], name: "company_cpf")
   @@unique([companyId, whatsapp], name: "company_whatsapp")
+}
+
+// Customer-facing accounts for public users (optional, per-company)
+model CustomerAccount {
+  id         String   @id @default(uuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  email      String?
+  password   String // bcrypt hash
+  createdAt  DateTime @default(now())
+
+  @@unique([companyId, email], name: "company_email")
+  @@index([companyId], name: "idx_customeraccount_company")
 }
 
 model CustomerAddress {
@@ -239,6 +275,8 @@ model CustomerAddress {
   number       String?
   complement   String?
   neighborhood String?
+  reference    String?
+  observation  String?
   city         String?
   state        String?
   postalCode   String?
@@ -252,6 +290,77 @@ model CustomerAddress {
   updatedAt DateTime @updatedAt
 }
 
+// Customer Groups: allow grouping customers and attaching discount rules
+enum CustomerGroupRuleType {
+  PERCENT
+  FIXED
+}
+
+enum CustomerGroupRuleTarget {
+  PRODUCT
+  CATEGORY
+  ORDER
+}
+
+enum DeliveryType {
+  ANY
+  DELIVERY
+  PICKUP
+}
+
+model CustomerGroup {
+  id          String                @id @default(uuid())
+  companyId   String
+  company     Company               @relation(fields: [companyId], references: [id])
+  name        String
+  description String?
+  active      Boolean               @default(true)
+  rules       CustomerGroupRule[]
+  members     CustomerGroupMember[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@unique([companyId, name], name: "company_customergroup_name")
+  @@index([companyId], name: "idx_customergroup_company")
+}
+
+model CustomerGroupMember {
+  id         String        @id @default(uuid())
+  groupId    String
+  group      CustomerGroup @relation(fields: [groupId], references: [id])
+  customerId String
+  customer   Customer      @relation(fields: [customerId], references: [id])
+  createdAt  DateTime      @default(now())
+
+  @@index([groupId], name: "idx_cgmember_group")
+  @@index([customerId], name: "idx_cgmember_customer")
+}
+
+model CustomerGroupRule {
+  id           String                  @id @default(uuid())
+  groupId      String
+  group        CustomerGroup           @relation(fields: [groupId], references: [id])
+  type         CustomerGroupRuleType
+  target       CustomerGroupRuleTarget
+  // when target is PRODUCT or CATEGORY, targetRef holds the referenced id (productId or categoryId)
+  targetRef    String?
+  // value: percent (0-100) when type=PERCENT, or fixed currency amount when type=FIXED
+  value        Decimal
+  // optional minimum subtotal to apply rule
+  minSubtotal  Decimal?
+  // optional schedule or restrictions (days/times) as JSON
+  schedule     Json?
+  // delivery type condition: ANY | DELIVERY | PICKUP
+  deliveryType DeliveryType            @default(ANY)
+  // if true, this rule will not be applied when a coupon is used (coupon takes precedence)
+  noCoupon     Boolean                 @default(false)
+  active       Boolean                 @default(true)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  @@index([groupId], name: "idx_cgrule_group")
+}
+
 model ApiIntegration {
   id           String  @id @default(uuid())
   companyId    String
@@ -259,7 +368,7 @@ model ApiIntegration {
   provider     String
   // optional: if this integration is bound to a specific store
   storeId      String?
-  store        Store?   @relation(fields: [storeId], references: [id])
+  store        Store?  @relation(fields: [storeId], references: [id])
   clientId     String?
   clientSecret String?
   merchantId   String?
@@ -285,46 +394,58 @@ model ApiIntegration {
 
 // Optional mapping of an API integration to a specific Store (for multi-store setups)
 model Store {
-  id            String    @id @default(uuid())
-  companyId     String
-  company       Company   @relation(fields: [companyId], references: [id])
-  name          String
+  id              String           @id @default(uuid())
+  companyId       String
+  company         Company          @relation(fields: [companyId], references: [id])
+  name            String
   // optional URL-friendly slug (ex: "nomedaloja")
-  slug          String?   @unique
-  cnpj          String?   @unique
-  logoUrl       String?
-  bannerUrl     String?
-  timezone      String?
-  open24Hours   Boolean   @default(false)
-  weeklySchedule Json?
-  address       String?
-  isActive      Boolean   @default(true)
-  menus         Menu[]
+  slug            String?          @unique
+  cnpj            String?          @unique
+  logoUrl         String?
+  bannerUrl       String?
+  timezone        String?
+  open24Hours     Boolean          @default(false)
+  weeklySchedule  Json?
+  address         String?
+  isActive        Boolean          @default(true)
+  menus           Menu[]
   // integrations that are bound to this store
   apiIntegrations ApiIntegration[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
-  orders        Order[]
-  nfeProtocols  NfeProtocol[]
+  orders         Order[]
+  nfeProtocols   NfeProtocol[]
+  // stock movements originating/associated with this store
+  stockMovements StockMovement[]
 }
 
 model Menu {
-  id        String    @id @default(uuid())
-  storeId   String
-  store     Store     @relation(fields: [storeId], references: [id])
-  name      String
+  id             String         @id @default(uuid())
+  storeId        String
+  store          Store          @relation(fields: [storeId], references: [id])
+  name           String
   // optional URL-friendly slug for menu (ex: "festival-de-verao")
-  slug      String?   @unique
-  description String?
-  logoUrl   String?
-  isActive  Boolean   @default(true)
-  position  Int       @default(0)
-  categories MenuCategory[]
+  slug           String?        @unique
+  description    String?
+  logoUrl        String?
+  // menu-specific contact/location/schedule fields
+  address        String?
+  phone          String?
+  whatsapp       String?
+  timezone       String?
+  weeklySchedule Json?
+  open24Hours    Boolean        @default(false)
+  // delivery type switches: enable/disable delivery and pickup independently per menu
+  allowDelivery  Boolean        @default(true)
+  allowPickup    Boolean        @default(true)
+  isActive       Boolean        @default(true)
+  position       Int            @default(0)
+  categories     MenuCategory[]
   // products optionally assigned to this menu
-  products   Product[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  products       Product[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 }
 
 // File system based order sources (local folder monitored by backend)
@@ -338,18 +459,18 @@ model FileSource {
 }
 
 model PrinterSetting {
-  id         String   @id @default(cuid())
-  companyId  String   @unique
-  interface  String   @default("printer:EPSON")
-  type       String   @default("EPSON")
-  width      Int      @default(48)
-  headerName String?  @default("Minha Loja")
-  headerCity String?  @default("Cidade")
+  id                  String    @id @default(cuid())
+  companyId           String    @unique
+  interface           String    @default("printer:EPSON")
+  type                String    @default("EPSON")
+  width               Int       @default(48)
+  headerName          String?   @default("Minha Loja")
+  headerCity          String?   @default("Cidade")
   // Agent token (hashed) used by delivery-print-agent for authentication
-  agentTokenHash String?
+  agentTokenHash      String?
   agentTokenCreatedAt DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }
 
 // ---- Neighborhoods (Bairros) ----
@@ -419,24 +540,24 @@ model Affiliate {
 
 // ---- Coupons ----
 model Coupon {
-  id           String     @id @default(uuid())
-  companyId    String
-  company      Company    @relation(fields: [companyId], references: [id])
-  code         String     @unique
-  description  String?
+  id                 String     @id @default(uuid())
+  companyId          String
+  company            Company    @relation(fields: [companyId], references: [id])
+  code               String     @unique
+  description        String?
   // Either percentage (0.10 = 10%) or absolute amount (in currency)
-  isPercentage Boolean    @default(true)
-  value        Decimal    @default(0) // if isPercentage=true this is fraction (0.1), else absolute amount
-  isActive     Boolean    @default(true)
-  affiliateId  String? // optional association
-  affiliate    Affiliate? @relation(fields: [affiliateId], references: [id])
+  isPercentage       Boolean    @default(true)
+  value              Decimal    @default(0) // if isPercentage=true this is fraction (0.1), else absolute amount
+  isActive           Boolean    @default(true)
+  affiliateId        String? // optional association
+  affiliate          Affiliate? @relation(fields: [affiliateId], references: [id])
   // Advanced validation rules
-  expiresAt    DateTime?  // optional expiration date/time
-  maxUses      Int?       // maximum number of times this coupon can be used globally
+  expiresAt          DateTime? // optional expiration date/time
+  maxUses            Int? // maximum number of times this coupon can be used globally
   maxUsesPerCustomer Int? // maximum uses per customer (phone/whatsapp)
-  minSubtotal  Decimal?   // minimum subtotal required to apply coupon
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  minSubtotal        Decimal? // minimum subtotal required to apply coupon
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
   @@unique([companyId, code], name: "company_coupon_code")
 }
@@ -501,9 +622,11 @@ model Product {
   image               String?
   name                String
   description         String?
+  technicalSheetId    String?
   price               Decimal              @default(0)
   isActive            Boolean              @default(true)
   position            Int                  @default(0)
+  cashbackPercent     Decimal?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   productOptionGroups ProductOptionGroup[]
@@ -513,18 +636,176 @@ model Product {
   @@index([companyId, name], name: "company_product_name_idx")
 }
 
+enum CashbackTransactionType {
+  CREDIT
+  DEBIT
+}
+
+model CashbackSetting {
+  id             String   @id @default(uuid())
+  companyId      String   @unique
+  company        Company  @relation(fields: [companyId], references: [id])
+  enabled        Boolean  @default(false)
+  defaultPercent Decimal  @default(0)
+  minRedeemValue Decimal  @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([companyId], name: "idx_cashbacksetting_company")
+}
+
+model CashbackProductRule {
+  id              String   @id @default(uuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id])
+  productId       String
+  cashbackPercent Decimal  @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, productId], name: "uniq_cashback_product")
+  @@index([companyId], name: "idx_cashbackproduct_company")
+}
+
+model CashbackWallet {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  clientId  String
+  client    Customer @relation(fields: [clientId], references: [id])
+  balance   Decimal  @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions CashbackTransaction[]
+
+  @@unique([companyId, clientId], name: "uniq_cashback_wallet_company_client")
+  @@index([companyId, clientId], name: "idx_cashbackwallet_company_client")
+}
+
+model CashbackTransaction {
+  id          String                  @id @default(uuid())
+  walletId    String
+  wallet      CashbackWallet          @relation(fields: [walletId], references: [id])
+  orderId     String?
+  order       Order?                  @relation(fields: [orderId], references: [id])
+  type        CashbackTransactionType
+  amount      Decimal
+  description String?
+  createdAt   DateTime                @default(now())
+
+  @@index([walletId], name: "idx_cashbacktx_wallet")
+  @@index([orderId], name: "idx_cashbacktx_order")
+}
+
+// =============================
+// SaaS: Plans, Modules, Subscriptions, Invoices
+// =============================
+
+enum ModuleKey {
+  RIDERS
+  AFFILIATES
+}
+
+// Feature module that plans can enable/disable
+model SaasModule {
+  id          String    @id @default(uuid())
+  key         ModuleKey @unique
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  plans SaasPlanModule[]
+}
+
+// Subscription plan with price, limits and enabled modules
+model SaasPlan {
+  id              String   @id @default(uuid())
+  name            String
+  price           Decimal  @default(0)
+  // Limits: when null -> unlimited (or use flags below)
+  menuLimit       Int?
+  storeLimit      Int?
+  unlimitedMenus  Boolean  @default(false)
+  unlimitedStores Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  modules       SaasPlanModule[]
+  prices        SaasPlanPrice[]
+  subscriptions SaasSubscription[]
+}
+
+// Pricing tiers for plans (periodic prices)
+model SaasPlanPrice {
+  id        String   @id @default(uuid())
+  planId    String
+  plan      SaasPlan @relation(fields: [planId], references: [id])
+  period    String // e.g. MONTHLY, BIMONTHLY, QUARTERLY, ANNUAL
+  price     Decimal
+  createdAt DateTime @default(now())
+
+  @@index([planId], name: "plan_price_idx")
+}
+
+// Join table Plan <-> Module
+model SaasPlanModule {
+  planId   String
+  plan     SaasPlan   @relation(fields: [planId], references: [id])
+  moduleId String
+  module   SaasModule @relation(fields: [moduleId], references: [id])
+
+  @@id([planId, moduleId])
+}
+
+// Company subscription to a plan
+model SaasSubscription {
+  id        String    @id @default(uuid())
+  companyId String    @unique
+  company   Company   @relation(fields: [companyId], references: [id])
+  planId    String
+  plan      SaasPlan  @relation(fields: [planId], references: [id])
+  status    String    @default("ACTIVE") // ACTIVE, SUSPENDED, CANCELED
+  // chosen billing period for this subscription (e.g. MONTHLY)
+  period    String?
+  startedAt DateTime  @default(now())
+  nextDueAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  invoices SaasInvoice[]
+}
+
+// Monthly invoice (mensalidade)
+model SaasInvoice {
+  id             String           @id @default(uuid())
+  subscriptionId String
+  subscription   SaasSubscription @relation(fields: [subscriptionId], references: [id])
+  year           Int
+  month          Int // 1..12
+  amount         Decimal
+  status         String           @default("PENDING") // PENDING, PAID, OVERDUE
+  dueDate        DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([subscriptionId, year, month], name: "sub_month_idx")
+}
+
 model PaymentMethod {
   id        String   @id @default(uuid())
   companyId String
   company   Company  @relation(fields: [companyId], references: [id])
   name      String
-  code      String   @unique // ex: PIX, CASH, CARD_ON_DELIVERY
+  // code should be unique per company (not globally). uniqueness enforced below.
+  code      String // ex: PIX, CASH, CARD_ON_DELIVERY
   isActive  Boolean  @default(true)
   config    Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([companyId, code], name: "company_payment_code_idx")
+  @@unique([companyId, code], name: "company_payment_code_key")
 }
 
 // ---- Option Groups (Grupos de Complementos) ----
@@ -546,19 +827,20 @@ model OptionGroup {
 }
 
 model Option {
-  id              String      @id @default(uuid())
-  groupId         String
-  group           OptionGroup @relation(fields: [groupId], references: [id])
+  id               String      @id @default(uuid())
+  groupId          String
+  group            OptionGroup @relation(fields: [groupId], references: [id])
   // If this option is actually a linked product, link it here.
-  linkedProductId String?
-  linkedProduct   Product?    @relation(fields: [linkedProductId], references: [id])
-  name            String
-  isAvailable     Boolean     @default(true)
-  price           Decimal     @default(0)
-  image           String?
-  position        Int         @default(0)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  linkedProductId  String?
+  linkedProduct    Product?    @relation(fields: [linkedProductId], references: [id])
+  name             String
+  technicalSheetId String?
+  isAvailable      Boolean     @default(true)
+  price            Decimal     @default(0)
+  image            String?
+  position         Int         @default(0)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   @@index([groupId, name], name: "group_option_name_idx")
 }
@@ -572,4 +854,108 @@ model ProductOptionGroup {
 
   @@id([productId, groupId])
   @@index([groupId], name: "idx_productoptiongroup_group")
+}
+
+// ---- Ingredients / Technical Sheets (Stock controlled only for Ingredients) ----
+model IngredientGroup {
+  id          String            @id @default(uuid())
+  companyId   String
+  company     Company           @relation(fields: [companyId], references: [id])
+  name        String
+  parentId    String?
+  parent      IngredientGroup?  @relation("IngredientGroupParent", fields: [parentId], references: [id])
+  children    IngredientGroup[] @relation("IngredientGroupParent")
+  ingredients Ingredient[]
+  composesCmv Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([companyId, name], name: "company_ingredientgroup_name_idx")
+}
+
+model Ingredient {
+  id            String           @id @default(uuid())
+  companyId     String
+  company       Company          @relation(fields: [companyId], references: [id])
+  description   String
+  unit          String // UN, GR, KG, ML, L
+  groupId       String?
+  group         IngredientGroup? @relation(fields: [groupId], references: [id])
+  controlsStock Boolean          @default(true)
+  composesCmv   Boolean          @default(false)
+  minStock      Decimal?         @default(0)
+  currentStock  Decimal?         @default(0)
+  avgCost       Decimal? // nullable average cost per unit
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  technicalItems     TechnicalSheetItem[]
+  // stock movement items referencing this ingredient
+  stockMovementItems StockMovementItem[]
+
+  @@index([companyId, description], name: "company_ingredient_description_idx")
+}
+
+model TechnicalSheet {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  name      String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items TechnicalSheetItem[]
+
+  @@index([companyId, name], name: "company_technical_sheet_name_idx")
+}
+
+model TechnicalSheetItem {
+  id               String         @id @default(uuid())
+  technicalSheetId String
+  technicalSheet   TechnicalSheet @relation(fields: [technicalSheetId], references: [id])
+  ingredientId     String
+  ingredient       Ingredient     @relation(fields: [ingredientId], references: [id])
+  quantity         Decimal
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([technicalSheetId], name: "idx_tsheet_items_sheet")
+  @@index([ingredientId], name: "idx_tsheet_items_ingredient")
+}
+
+// Stock movements (entries/exits)
+enum MovementType {
+  IN
+  OUT
+}
+
+model StockMovement {
+  id        String              @id @default(uuid())
+  companyId String
+  company   Company             @relation(fields: [companyId], references: [id])
+  storeId   String?
+  store     Store?              @relation(fields: [storeId], references: [id])
+  type      MovementType
+  reason    String?
+  note      String?
+  createdAt DateTime            @default(now())
+  items     StockMovementItem[]
+
+  @@index([companyId], name: "idx_stockmovement_company")
+  @@index([storeId], name: "idx_stockmovement_store")
+}
+
+model StockMovementItem {
+  id              String        @id @default(uuid())
+  stockMovementId String
+  stockMovement   StockMovement @relation(fields: [stockMovementId], references: [id])
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  quantity        Decimal
+  unitCost        Decimal? // cost per unit for this movement (for IN movements)
+  createdAt       DateTime      @default(now())
+
+  @@index([stockMovementId], name: "idx_stockmovementitem_movement")
+  @@index([ingredientId], name: "idx_stockmovementitem_ingredient")
 }

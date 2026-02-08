@@ -1,0 +1,19 @@
+[alignCenter]
+*** PEDIDO ***
+
+
+2 | coxinha | 5
+
+
+[alignLeft]
+Cliente: thomaz
+Endereço: Tordesilha 243
+Total: R$ 11.50
+
+
+FORMAS DE PAGAMENTO
+
+
+[alignCenter]
+Obrigado!
+[CUT]

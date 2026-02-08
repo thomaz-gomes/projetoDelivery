@@ -1,0 +1,24 @@
+[
+  {
+    "id": "8d51a4ff-716c-4e27-9258-72167ae1d5f4",
+    "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+    "planId": "91320493-e297-464a-a676-d3c62d6b7c88",
+    "status": "ACTIVE",
+    "period": null,
+    "startedAt": "2025-12-25T23:08:09.185Z",
+    "nextDueAt": "2026-01-25T00:00:00.000Z",
+    "createdAt": "2025-12-25T23:08:09.185Z",
+    "updatedAt": "2025-12-26T01:57:02.474Z"
+  },
+  {
+    "id": "96c844f9-6859-4999-adbc-fb71e01f5358",
+    "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+    "planId": "91320493-e297-464a-a676-d3c62d6b7c88",
+    "status": "ACTIVE",
+    "period": null,
+    "startedAt": "2025-12-25T23:08:09.385Z",
+    "nextDueAt": "2026-01-25T23:08:09.384Z",
+    "createdAt": "2025-12-25T23:08:09.385Z",
+    "updatedAt": "2025-12-25T23:08:09.385Z"
+  }
+]

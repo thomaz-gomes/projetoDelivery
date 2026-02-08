@@ -15,9 +15,10 @@
         </div>
         <div v-else>
           <div v-if="foundCustomer" class="alert alert-success py-2 mb-3">
-            <strong>Cliente encontrado:</strong><br>
-            {{ foundCustomer.fullName }} ({{ foundCustomer.whatsapp || foundCustomer.phone }})
-          </div>
+                    <strong>Cliente encontrado:</strong><br>
+                    <span v-if="fetchingFullCustomer" class="spinner-border spinner-border-sm text-primary me-2" role="status" aria-hidden="true"></span>
+                    {{ foundCustomer.fullName }} ({{ foundCustomer.whatsapp || foundCustomer.phone }})
+                  </div>
           <div v-else-if="customerNotFound" class="alert alert-warning py-2 mb-3">Cliente não encontrado.</div>
           
           <label class="form-label small fw-semibold">Tipo do pedido</label>
@@ -41,20 +42,7 @@
         <!-- Lista de endereços salvos -->
         <div v-if="savedAddresses.length > 0" class="mb-3">
           <label class="form-label small fw-semibold">Endereços salvos</label>
-          <ul class="list-unstyled">
-            <li v-for="a in savedAddresses" :key="a.id" class="border rounded p-2 mb-2" :class="{'border-primary bg-light': selectedAddressId === a.id}">
-              <div class="d-flex justify-content-between align-items-start gap-2">
-                <div class="flex-grow-1">
-                  <div class="fw-semibold">{{ a.formatted || [a.street, a.number].filter(Boolean).join(', ') || 'Endereço sem rua' }}</div>
-                  <div class="small text-muted">
-                    {{ a.neighborhood || 'Sem bairro' }}{{ a.city ? (' - ' + a.city) : '' }}
-                  </div>
-                  <div v-if="a.complement" class="small text-muted">{{ a.complement }}</div>
-                </div>
-                <input type="radio" :value="a.id" v-model="selectedAddressId" @change="selectSavedAddress(a)" />
-              </div>
-            </li>
-          </ul>
+          <ListGroup :items="savedAddresses" item-key="id" :selected-id="selectedAddressId" @select="selectSavedAddress" @edit="editSavedAddress" @remove="removeSavedAddress" />
         </div>
 
         <div class="small mb-2">
@@ -83,13 +71,18 @@
                 </option>
               </SelectInput>
             </div>
-            <div class="col-6">
-              <label class="form-label small">Cidade</label>
-              <TextInput v-model="addr.city" inputClass="form-control" />
-            </div>
+            <!-- cidade removida: todas as entregas na mesma cidade -->
             <div class="col-12">
               <label class="form-label small">Complemento</label>
               <TextInput v-model="addr.complement" inputClass="form-control" />
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Referência</label>
+              <TextInput v-model="addr.reference" inputClass="form-control" />
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Observação</label>
+              <TextInput v-model="addr.observation" inputClass="form-control" />
             </div>
           </div>
               <div class="mt-2 small">
@@ -154,7 +147,7 @@
               <div>{{ formatCurrency(it.price*it.quantity) }}</div>
             </div>
               <div v-if="it.options && it.options.length" class="small text-muted ms-2">
-              <div v-for="(o,i2) in it.options" :key="i2">- {{ o.name }} ({{ formatCurrency(o.price) }})</div>
+              <div v-for="(o,i2) in it.options" :key="i2">- {{ (o.quantity && Number(o.quantity) > 1) ? (o.quantity + 'x ') : '' }}{{ o.name }} ({{ formatCurrency(o.price) }})</div>
             </div>
             <div class="small d-flex gap-2 mt-1">
               <button class="btn btn-sm btn-outline-secondary" @click="it.quantity++; recalc()">+1</button>
@@ -239,7 +232,7 @@
                   <div class="small fw-semibold mb-2">Opcionais selecionados</div>
                   <ul class="list-unstyled small text-muted mb-2">
                     <li v-for="(opt, oi) in chosenOptions" :key="oi" class="d-flex justify-content-between align-items-center">
-                      <div>{{ opt.name }} <span class="text-muted">({{ formatCurrency(opt.price) }})</span></div>
+                      <div>{{ (opt.quantity && Number(opt.quantity) > 1) ? (opt.quantity + 'x ') : '' }}{{ opt.name }} <span class="text-muted">({{ formatCurrency(opt.price) }})</span></div>
                       <div>
                         <button class="btn btn-sm btn-outline-danger" @click.prevent="removeChosenOption(oi)">Remover</button>
                       </div>
@@ -266,13 +259,15 @@
         <h6 class="fw-semibold mb-3">Pagamento</h6>
         <div class="mb-2">
           <label class="form-label small">Forma</label>
-          <SelectInput   v-model="paymentMethodCode"  class="form-select">
-            <option v-for="pm in paymentMethods" :key="pm.id" :value="pm.code || pm.name">{{ pm.name }}</option>
-          </SelectInput>
+          <ListGroup :items="paymentMethods" itemKey="code" :selectedId="paymentMethodCode" :showActions="false" @select="paymentMethodCode = $event">
+            <template #primary="{ item }">
+              <div><strong>{{ item.name }}</strong></div>
+              <div v-if="item.description" class="small text-muted">{{ item.description }}</div>
+            </template>
+          </ListGroup>
         </div>
         <div v-if="isCashPayment" class="mb-2">
-          <label class="form-label small">Troco para (opcional)</label>
-          <CurrencyInput v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />
+          <CurrencyInput label="Troco para (opcional)" labelClass="form-label small" v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />
         </div>
         <div class="alert alert-light small">Total: <strong>{{ formatCurrency(totalWithDelivery) }}</strong> (Entrega: {{ formatCurrency(deliveryFee) }})</div>
         <div class="d-flex justify-content-between mt-3">
@@ -294,6 +289,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue';
+import ListGroup from './form/list-group/ListGroup.vue';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
 import { formatCurrency } from '../utils/formatters.js';
@@ -310,7 +306,13 @@ async function resolveCompanyId(){
       if(u){ auth.user = u; return u.companyId; }
     }
   } catch(e){ console.warn('PDV: falha ao hidratar /auth/me', e); }
-  return null;
+  // Fallback: allow PDV to operate using a developer/local companyId saved in localStorage
+  try {
+    const fromStorage = localStorage.getItem('companyId');
+    if(fromStorage) return fromStorage;
+  } catch(e){}
+  // final fallback to company 1 for local dev/public menus
+  return '1';
 }
 // use shared `formatCurrency` helper from `src/utils/formatters.js`
 const props = defineProps({ 
@@ -327,7 +329,7 @@ const customerNotFound = ref(false);
 const customerSearchLoading = ref(false);
 const newCustomerName = ref('');
 const orderType = ref('BALCAO');
-const addr = ref({ street:'', number:'', neighborhood:'', city:'', complement:'', formatted:'' });
+const addr = ref({ street:'', number:'', neighborhood:'', complement:'', formatted:'' });
 
 const menuLoading = ref(false);
 const allProducts = ref([]);
@@ -362,12 +364,17 @@ const phoneDigits = computed(()=> {
   // Remove DDI 55 se presente, pega últimos 11 dígitos
   return digits.length > 11 ? digits.slice(-11) : digits;
 });
-function searchCustomer(){
+const fetchingFullCustomer = ref(false);
+async function searchCustomer(){
   if(!phoneDigits.value) return;
   customerSearchLoading.value = true;
   foundCustomer.value = null; customerNotFound.value = false;
+  // clear any previously loaded addresses to avoid showing stale data
+  savedAddresses.value = [];
+  selectedAddressId.value = null;
   console.log('Buscando cliente com telefone:', phoneDigits.value);
-  api.get(`/customers?q=${encodeURIComponent(phoneDigits.value)}`).then(r=>{
+  try {
+    const r = await api.get(`/customers?q=${encodeURIComponent(phoneDigits.value)}`);
     const rows = r.data?.rows || [];
     console.log('Resultados da busca:', rows.length, rows);
     // Normaliza telefones removendo não-dígitos e pegando últimos 11
@@ -378,25 +385,57 @@ function searchCustomer(){
     const match = rows.find(c => normalizePhone(c.whatsapp)===phoneDigits.value || normalizePhone(c.phone)===phoneDigits.value);
     console.log('Cliente encontrado:', match);
     if(match){ 
-      foundCustomer.value = match; 
-      newCustomerName.value = match.fullName; 
+      // fetch full customer record to ensure we have all addresses and latest data
+      fetchingFullCustomer.value = true;
+      try{
+        const full = await api.get(`/customers/${match.id}`);
+        foundCustomer.value = full.data || match;
+        savedAddresses.value = (full.data && full.data.addresses) ? full.data.addresses : (match.addresses || []);
+      }catch(fetchErr){
+        // fallback to match if full fetch fails
+        console.warn('Falha ao buscar cliente completo, usando resultado parcial', fetchErr);
+        foundCustomer.value = match;
+        savedAddresses.value = match.addresses || [];
+      } finally {
+        fetchingFullCustomer.value = false;
+      }
+      newCustomerName.value = foundCustomer.value.fullName;
       orderType.value='BALCAO';
-      // Carrega endereços salvos do cliente
-      savedAddresses.value = match.addresses || [];
       console.log('Endereços do cliente:', savedAddresses.value);
+    } else {
+      customerNotFound.value = true;
     }
-    else { customerNotFound.value = true; }
-  }).catch(e=>{ console.error('Erro na busca:', e); customerNotFound.value = true; }).finally(()=> customerSearchLoading.value=false);
+  } catch(e){
+    console.error('Erro na busca:', e);
+    customerNotFound.value = true;
+  } finally {
+    customerSearchLoading.value=false;
+  }
 }
 
-function selectSavedAddress(address){
-  console.log('Endereço selecionado:', address);
+function selectSavedAddress(addressOrId){
+  console.log('Endereço selecionado (raw):', addressOrId);
+  // support either an address object or an id emitted by ListGroup
+  let address = null
+  try{
+    if(addressOrId && typeof addressOrId === 'object') address = addressOrId
+    else address = savedAddresses.value.find(s => String(s.id) === String(addressOrId))
+  }catch(e){ address = null }
+  if(!address){
+    // still set selected id if we received a primitive id
+    try{ selectedAddressId.value = addressOrId }catch(e){}
+    return
+  }
+  // ensure selected id sync
+  selectedAddressId.value = address.id
+
   // Extrai dados do endereço (pode estar em formatted ou campos separados)
   let street = address.street || '';
   let number = address.number || '';
   let neighborhood = address.neighborhood || '';
-  let city = address.city || '';
   let complement = address.complement || '';
+  let reference = address.reference || '';
+  let observation = address.observation || '';
   
   // Se não tem campos separados mas tem formatted, tenta extrair do formatted
   if(!street && address.formatted){
@@ -409,12 +448,33 @@ function selectSavedAddress(address){
     street,
     number,
     neighborhood,
-    city: city || 'Aracaju', // Default city se não tiver
     complement,
+    reference,
+    observation,
     formatted: address.formatted || ''
   };
   showNewAddressForm.value = false;
   console.log('Campos preenchidos:', addr.value);
+}
+function editSavedAddress(id){
+  const a = savedAddresses.value.find(s => s.id === id);
+  if(!a) return;
+  addr.value = {
+    street: a.street || '',
+    number: a.number || '',
+    neighborhood: a.neighborhood || '',
+    complement: a.complement || '',
+    reference: a.reference || '',
+    observation: a.observation || '',
+    formatted: a.formatted || ''
+  };
+  showNewAddressForm.value = true;
+  selectedAddressId.value = id;
+}
+
+function removeSavedAddress(id){
+  savedAddresses.value = savedAddresses.value.filter(s => s.id !== id);
+  if(selectedAddressId.value === id) selectedAddressId.value = null;
 }
 const canConfirmCustomer = computed(()=> {
   // DELIVERY exige nome preenchido
@@ -648,7 +708,12 @@ function validateOptionGroups(){
   }catch(e){ console.warn('validateOptionGroups failed', e); return true; }
 }
 
-const subtotal = computed(()=> cart.value.reduce((s,it)=> s + (Number(it.price||0)*Number(it.quantity||1) + (it.options||[]).reduce((so,o)=> so + (Number(o.price||0) * (Number(o.quantity||1) || 1)),0)),0));
+const subtotal = computed(()=> cart.value.reduce((s,it)=> {
+  const qty = Number(it.quantity || 1) || 1;
+  const unit = Number(it.price || 0) || 0;
+  const optsPerUnit = (it.options || []).reduce((so,o)=> so + (Number(o.price || 0) * (Number(o.quantity || 1) || 1)), 0);
+  return s + (unit + optsPerUnit) * qty;
+}, 0));
 const deliveryFee = computed(()=> orderType.value==='DELIVERY' ? estimateDeliveryFee() : 0);
 const matchedNeighborhood = computed(()=>{
   if(orderType.value!=='DELIVERY') return null;
@@ -685,10 +750,36 @@ watch(paymentMethodCode, ()=> { if(!isCashPayment.value) changeFor.value = null;
 async function loadMenu(){
   if(menuLoading.value) return; menuLoading.value=true;
   try {
-    const companyId = await resolveCompanyId();
-    if(!companyId){ console.warn('PDV: companyId não encontrado'); return; }
-    console.log('Carregando menu para companyId:', companyId);
-    const { data } = await api.get(`/public/${companyId}/menu`);
+    let companyId = await resolveCompanyId();
+    console.log('PDV: resolved companyId initial=', companyId);
+    // Ensure stores are loaded so we can request a store-scoped public menu when possible
+    if(!stores.value || stores.value.length === 0) {
+      try { await loadStores(); } catch(e) { console.warn('PDV: loadStores failed', e); }
+    }
+    console.log('PDV: stores count=', (stores.value || []).length, 'selectedStoreId=', selectedStoreId.value);
+    // if stores available but no selection, pick the first as default to fetch store-scoped menu
+    if((stores.value || []).length > 0 && !selectedStoreId.value) selectedStoreId.value = stores.value[0].id;
+    // If we have a selected store, prefer its companyId for public menu requests
+    try{
+      const storeObj = (stores.value || []).find(s => String(s.id) === String(selectedStoreId.value));
+      if(storeObj && storeObj.companyId){
+        companyId = storeObj.companyId;
+        console.log('PDV: using store.companyId for menu request=', companyId);
+      }
+    }catch(e){ console.warn('PDV: error resolving store.companyId', e); }
+    const params = {};
+    if(selectedStoreId.value) params.storeId = selectedStoreId.value;
+    console.log('PDV: requesting public menu with params=', params);
+    let resp;
+    try {
+      resp = await api.get(`/public/${companyId}/menu`, { params });
+      console.log('PDV: menu request status=', resp.status);
+    } catch (err) {
+      console.error('PDV: menu request failed', err?.response?.status, err?.response?.data || err);
+      throw err;
+    }
+    const data = resp.data || {};
+    console.log('PDV: /public/' + companyId + '/menu response:', data);
     // merge categories + uncategorized
     const rawCats = data.categories || [];
     // filtra categorias e produtos inativos para evitar lixo no PDV
@@ -698,6 +789,11 @@ async function loadMenu(){
     // each product ensure price property (fallback to first option price or 0)
     cats.forEach(c=> c.products.forEach(p=> { if(p.price==null) p.price = Number(p.basePrice||0); }));
     allProducts.value = cats;
+    console.log('PDV: processed categories count=', cats.length, 'uncategorized count=', (data.uncategorized || []).length);
+    if(cats && cats.length > 0){
+      console.log('PDV: first category sample=', cats[0]);
+      console.log('PDV: first product sample=', (cats[0].products || [])[0] || null);
+    }
     paymentMethods.value = data.company?.paymentMethods || [];
     // ensure stores are loaded so the user can assign a store before finalizing
     if(!stores.value || stores.value.length===0) await loadStores();
@@ -764,6 +860,26 @@ async function finalize(){
     // Para pedido balcão sem identificação, usa nome genérico
     const customerNameFinal = newCustomerName.value.trim() || (orderType.value === 'BALCAO' ? 'Cliente Balcão' : '');
     const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value };
+    // If customer was found and we're using a new address (not selecting existing), persist address to customer first
+    try{
+      if(orderType.value === 'DELIVERY' && !selectedAddressId.value && foundCustomer.value){
+        const formatted = addr.value.formatted || [addr.value.street, addr.value.number].filter(Boolean).join(', ');
+        const payload = {
+          street: addr.value.street || null,
+          number: addr.value.number || null,
+          complement: addr.value.complement || null,
+          neighborhood: addr.value.neighborhood || null,
+          reference: addr.value.reference || null,
+          observation: addr.value.observation || null,
+          formatted: formatted || null
+        };
+        // create address on customer and set customerId on order body so backend uses existing customer
+        await api.post(`/customers/${foundCustomer.value.id}/addresses`, payload);
+        body.customerId = foundCustomer.value.id;
+        // ensure order.address is the formatted string
+        if(formatted) body.address = formatted;
+      }
+    }catch(addrErr){ console.warn('Falha ao persistir endereço no cliente:', addrErr); }
     // include coupon information when applied so backend can persist and track usage
     try{
       if(couponApplied.value && couponInfo.value){
@@ -786,6 +902,11 @@ function resetWizard(){
   paymentMethodCode.value=''; 
   changeFor.value=null;
   phoneInput.value = '';
+  // clear addresses and address form state to avoid reusing previous customer's data
+  savedAddresses.value = [];
+  selectedAddressId.value = null;
+  showNewAddressForm.value = false;
+  addr.value = { street:'', number:'', neighborhood:'', complement:'', formatted:'', reference:'', observation:'' };
 }
 
 watch(()=>props.visible, async (v)=>{ 
@@ -805,6 +926,17 @@ watch(()=>props.visible, async (v)=>{
           const ot = String(props.preset.orderType).toUpperCase();
           if(ot === 'RETIRADA' || ot === 'BALCAO' || ot === 'BALCÃO') orderType.value = 'BALCAO';
           else orderType.value = ot;
+        }
+        // if preset requests a start step (e.g. autoStep: 2 -> address selection)
+        if(props.preset.autoStep){
+          const s = Number(props.preset.autoStep) || 1;
+          step.value = s;
+          if(s === 2){
+            if(neighborhoods.value.length === 0) await loadNeighborhoods();
+          } else if(s === 3){
+            await loadMenu();
+            return;
+          }
         }
         // if preset indicates skipAddress or it's a balcão/retirada, jump to products
         if(props.preset.skipAddress || orderType.value === 'BALCAO'){

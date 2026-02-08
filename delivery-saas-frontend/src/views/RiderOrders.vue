@@ -24,7 +24,7 @@
             </div>
           </div>
           <div class="card-body">
-            <div class="mb-2"><strong>Endereço:</strong> {{ o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || o.rawPayload?.neighborhood || '-' }}</div>
+            <div class="mb-2"><strong>Endereço:</strong> {{ formatAddress(o) }}</div>
             <div class="mb-2"><strong>Pagamento:</strong> {{ o.payload?.payments ? (o.payload.payments[0]?.method || o.payload.payments[0]?.type) : (o.payment?.method || o.payment?.type) || '-' }}</div>
             <div class="mb-2"><strong>Itens:</strong>
               <ul class="mb-0">
@@ -65,6 +65,21 @@ let socket = null
 
 function formatMoney(v){ try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0)) }catch(e){ return v } }
 function formatDate(d){ if(!d) return ''; try{ return formatDateTime(d) }catch(e){ return d } }
+function formatAddress(o){
+  try{
+    if(!o) return '-'
+    const a = o.address || o.payload?.delivery?.deliveryAddress || o.deliveryAddress || o.customerAddress || o.rawPayload?.address
+    if(!a) return o.rawPayload?.neighborhood || o.address || '-'
+    const main = a.formatted || a.formattedAddress || [a.street || a.streetName, a.number || a.streetNumber].filter(Boolean).join(', ')
+    const tail = []
+    if(a.neighborhood) tail.push(a.neighborhood)
+    if(a.complement) tail.push('Comp: ' + a.complement)
+    if(a.reference) tail.push('Ref: ' + a.reference)
+    if(a.observation) tail.push('Obs: ' + a.observation)
+    if(a.city && !tail.includes(a.city)) tail.push(a.city)
+    return [main, tail.filter(Boolean).join(' — ')].filter(Boolean).join(' | ')
+  }catch(e){ return o.address || o.payload?.delivery?.deliveryAddress?.formattedAddress || '-' }
+}
 
 async function load(){
   loading.value = true

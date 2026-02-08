@@ -1,3 +1,11 @@
+:root {
+  --brand: #8bbf62;
+  --brand-dark: rgb(66, 114, 26);
+  --brand-light: #d6ffb3;
+  --brand-lightest: #c9e9a8;
+  --border-color: #DDD;
+}
+
 body {
   background-color: #f8f9fa;
   font-family: "Roboto", sans-serif;
@@ -6,4 +14,297 @@ body {
 /* Utility: consistent modal content padding used across components */
 .modal-content-padding {
   padding: 16px !important;
+}
+.list-group-item .small{
+  font-size: 0.7em !important;
+}
+.list-group-item .custom-radio, .payment-method .custom-radio {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #212529 !important;
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.list-group-item.selected .custom-radio, .payment-method.selected .custom-radio {
+  border: 2px solid var(--brand-dark) !important;
+}
+.list-group-item .custom-radio:focus, .payment-method .custom-radio:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--brand-dark) !important;
+}
+.list-group-item.selected .custom-radio::after, .payment-method.selected .custom-radio::after {
+  background:  var(--brand-dark) !important;
+}
+.list-group-item .custom-radio::after, .payment-method .custom-radio::after {
+  background:#212529 !important;
+}
+.list-group-item .custom-radio::after, .payment-method .custom-radio::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.6);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.list-group-item .custom-radio:checked, .payment-method .custom-radio:checked {
+  border-color: var(--brand-dark) !important;
+}
+.list-group-item .custom-radio:checked::after, .payment-method .custom-radio:checked::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Slightly increase clickable area without changing visual size */
+.list-group-item .radio-wrapper, .payment-method .radio-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 36px;
+}
+
+/* Selected list item visual */
+.list-group-item.selected, .payment-method.selected {
+  background: rgb(214 255 179 / 38%);;
+  border-color: rgba(13,110,253,0.12);
+}
+
+/* Order type toggle (Entrega / Retirada) */
+.order-type-toggle .ot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color) !important;
+  background: transparent;
+  color: #212529;
+  cursor: pointer;
+  user-select: none;
+}
+.order-type-toggle .ot-btn input[type=radio] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.order-type-toggle .ot-btn .ot-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid var(--border-color);
+  display: inline-block;
+  box-sizing: border-box;
+  background: white;
+}
+.order-type-toggle .ot-btn.active{
+  border: 1px solid var(--brand-dark) !important;
+}
+.order-type-toggle .ot-btn .ot-label {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.order-type-toggle .ot-btn.active {
+  background: var(--brand-light) !important;
+  color: var(--brand-dark) !important;
+  border-color: #8cbf62 !important;
+}
+.order-type-toggle .ot-btn.active .ot-circle {
+  background: var(--brand-dark);
+  box-shadow: none;
+  border-color: #FFF;
+}
+.order-type-toggle .ot-btn:not(.active) {
+  background: transparent;
+}
+
+/* Checkout modal: mobile-only layout tweaks
+   - make modal-content full-height on small screens
+   - keep header sticky and footer fixed; body scrolls
+*/
+@media (max-width: 991.98px) {
+  .checkout-modal .modal-content {
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .checkout-modal .modal-content .checkout-header {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1076;
+    padding-top: 0px;
+    padding-bottom: 12px;
+  }
+
+  .checkout-modal .modal-content .checkout-body {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto;
+    padding-right: 8px;
+    padding-left: 8px;
+    padding-bottom: 96px; /* room for fixed footer */
+  }
+
+  .checkout-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1080;
+    padding: 12px;
+    background: #fff;
+    box-shadow: 0 -6px 18px rgba(0,0,0,0.08);
+    gap: 8px;
+  }
+
+  /* Hide per-step inline action rows on mobile (we show the fixed footer instead) */
+  .checkout-modal .modal-content .d-flex.justify-content-between.mt-3 {
+    display: none;
+  }
+}
+
+/* Cashback box: full-box clickable + easy-to-style class
+   - Use `.use-cashback` on the container that wraps the cashback radio/input and labels
+   - Browsers that support `:has()` will highlight the container when the internal input is checked
+   - JS-driven toggles can add `.use-cashback--active` as a fallback
+*//*
+.use-cashback {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(139,191,98,0.08);
+  border: 1px solid rgba(139,191,98,0.12);
+  position: relative;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.use-cashback:hover {
+  box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+}
+.use-cashback label {
+  display: block;
+  cursor: pointer;
+}
+.use-cashback .cashback-radio, .use-cashback input[type=radio] {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+}*/
+
+/* Active styles: prefer CSS :has() when available, otherwise use the helper class */
+.use-cashback:has(input[type=radio]:checked),
+.use-cashback.use-cashback--active {
+  background: rgba(139,191,98,0.18);
+  border-color: rgba(139,191,98,0.28);
+}
+
+/* Smaller helper when the UI contains descriptive text inside */
+.use-cashback .cashback-amount {
+  font-weight: 600;
+  color: var(--brand-dark);
+}
+
+/* Ensure cashback input-group stays in a single row
+   - Make the input group a flex container
+   - Let the input expand, keep prefix and button compact
+*/
+.use-cashback .input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.use-cashback .input-group .form-control {
+  flex: 1 1 auto;
+  min-width: 0; /* allow shrinking in narrow containers */
+}
+.use-cashback .input-group .input-group-text {
+  flex: 0 0 auto;
+  cursor: default;
+}
+.use-cashback .input-group .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Icon used when pickup: keep it subtle and not interactive */
+.address-edit-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(33,37,41,0.65);
+  opacity: 0.9;
+}
+.address-edit-icon i {
+  font-size: 1.05rem;
+}
+.bg-primary {
+  background-color: var(--brand) !important;
+}
+.btn-qty:hover{
+  background-color: var(--brand-lightest) !important;
+  border-color: var(--brand-dark) !important;
+  color: var(--brand-dark) !important;
+}
+/*BUTTONS*/
+.btn-primary {
+  background-color: var(--brand) !important;
+  border-color: var(--brand) !important;
+  color: #fff !important;
+}
+.btn-secondary {
+  background-color: var(--brand-lightest) !important;
+  border-color: var(--brand-lightest) !important;
+  color: var(--brand-dark) !important;
+}
+.btn-outline-primary {
+  color: var(--brand-dark) !important;
+  border-color: var(--brand-dark) !important;
+}
+.btn-outline-primary:hover {
+  background-color: var(--brand-light) !important;
+  border-color: var(--brand-dark) !important;
+  color: var(--brand-dark) !important;
+}
+.btn-outline-secondary {
+  color: var(--brand-dark) !important;
+  border-color: var(--brand-dark) !important;
+}
+.btn:hover .btn-outline-secondary{
+  background-color: var(--brand-lightest) !important;
+  border-color: var(--brand-dark) !important;
+  color: var(--brand-dark) !important;
+}
+.btn-check:checked+.btn, .btn.active, .btn.show, .btn:first-child:active, :not(.btn-check)+.btn:active{
+  background-color: var(--brand-dark) !important;
+  border-color: var(--brand-dark) !important;
+  color: #fff !important; 
+}
+.btn:focus-visible {
+    background-color: var(--brand-dark) !important;
+  border-color: var(--brand-dark) !important;
+  color: #fff !important; 
 }

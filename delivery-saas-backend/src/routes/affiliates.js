@@ -2,10 +2,22 @@ import express from 'express';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { getAffiliateIfOwned } from './affiliates.helpers.js';
+import { assertModuleEnabled } from '../utils/saas.js';
 
 export const affiliatesRouter = express.Router();
 
 affiliatesRouter.use(authMiddleware);
+
+// Enforce SaaS module availability: AFFILIATES must be enabled for this company
+affiliatesRouter.use(async (req, res, next) => {
+  try {
+    await assertModuleEnabled(req.user.companyId, 'AFFILIATES')
+    return next()
+  } catch (e) {
+    const status = e && e.statusCode ? e.statusCode : 403
+    return res.status(status).json({ message: 'Módulo de afiliados não está disponível no seu plano.' })
+  }
+});
 
 // GET /affiliates - Lista todos os afiliados da empresa
 affiliatesRouter.get('/', async (req, res) => {

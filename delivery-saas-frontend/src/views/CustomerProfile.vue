@@ -16,7 +16,11 @@ onMounted(() => store.get(route.params.id));
     <!-- Cabeçalho -->
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h2 class="h4 fw-semibold mb-0">{{ store.current.fullName }}</h2>
-      <BaseButton variant="outline" @click="$router.push('/customers')">Voltar</BaseButton>
+      <div class="d-flex gap-2">
+        <BaseButton variant="outline" @click="$router.push('/customers')">Voltar</BaseButton>
+        <BaseButton variant="primary" @click="$router.push(`/customers/${store.current.id}/edit`)">Editar cliente</BaseButton>
+        <BaseButton variant="success" @click="$router.push(`/customers/${store.current.id}/edit?addAddress=1`)">Adicionar endereço</BaseButton>
+      </div>
     </div>
 
     <!-- Grid principal -->
@@ -44,13 +48,26 @@ onMounted(() => store.get(route.params.id));
                 </div>
 
                 <div>
-                  {{ a.formatted || [a.street, a.number].filter(Boolean).join(', ') }}
+                  <div v-if="a.formatted && !a.street">{{ a.formatted }}</div>
+                  <div v-else>
+                    {{ [a.street, a.number].filter(Boolean).join(', ') }}
+                    <span v-if="a.complement"> — {{ a.complement }}</span>
+                  </div>
                 </div>
 
                 <div class="small text-muted">
-                  {{ a.neighborhood }} — {{ a.city }}/{{ a.state }} • CEP {{ a.postalCode }}
+                  <span v-if="a.neighborhood">{{ a.neighborhood }} — </span>
+                  <span v-if="a.city || a.state">{{ [a.city, a.state].filter(Boolean).join('/') }}</span>
+                  <span v-if="(a.postalCode || a.zip || a.postal_code)"> • CEP {{ a.postalCode || a.zip || a.postal_code }}</span>
+                  <span v-if="a.reference"> — ref: {{ a.reference }}</span>
                 </div>
 
+                <div class="d-flex gap-2 mt-2">
+                  <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" @click="$router.push(`/customers/${store.current.id}/edit?editAddressIndex=${i}`)">Editar</button>
+                    <button class="btn btn-sm btn-outline-danger" @click="$emit && $emit('todo')">Remover</button>
+                  </div>
+                </div>
                 <div v-if="a.latitude && a.longitude" class="small mt-1">
                   <a
                     :href="`https://www.google.com/maps?q=${a.latitude},${a.longitude}`"
@@ -60,7 +77,7 @@ onMounted(() => store.get(route.params.id));
                     📍 Ver no mapa
                   </a>
                 </div>
-              </li>
+                </li>
 
               <li
                 v-if="!store.current.addresses?.length"

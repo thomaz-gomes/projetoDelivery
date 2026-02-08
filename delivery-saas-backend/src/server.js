@@ -101,6 +101,26 @@ async function ensureAgentTokenFromFile() {
   }
 }
 
+// Ensure each company has a default 'Dinheiro' (CASH) payment method.
+async function ensureDefaultCashForCompanies() {
+  try {
+    const companies = await prisma.company.findMany({ select: { id: true } })
+    for (const c of companies) {
+      try {
+        const exists = await prisma.paymentMethod.findFirst({ where: { companyId: c.id, OR: [{ code: 'CASH' }, { name: 'Dinheiro' }] } })
+        if (!exists) {
+          await prisma.paymentMethod.create({ data: { companyId: c.id, name: 'Dinheiro', code: 'CASH', isActive: true } })
+          console.log(`Created default payment method 'Dinheiro' for company ${c.id}`)
+        }
+      } catch (e) {
+        console.warn('Failed to ensure CASH payment for company', c.id, e && e.message)
+      }
+    }
+  } catch (e) {
+    console.error('Failed to ensure default CASH payment methods for companies', e && e.message)
+  }
+}
+
 
 /**
  * Tenta iniciar o servidor HTTPS em `port`. Se o porto estiver em uso,
@@ -160,9 +180,12 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
   });
 }
 
-// Ensure token file (if present) is registered, then start the server
-ensureAgentTokenFromFile().then(() => startServer()).catch(e => {
-  console.error('Error processing .print-agent-token:', e && e.message ? e.message : e);
-  // still attempt to start server even if token processing failed
-  startServer();
-});
+// Ensure token file (if present) is registered, ensure default cash payment methods, then start the server
+ensureAgentTokenFromFile()
+  .then(() => ensureDefaultCashForCompanies())
+  .then(() => startServer())
+  .catch(e => {
+    console.error('Startup error:', e && e.message ? e.message : e);
+    // still attempt to start server even if some startup tasks failed
+    startServer();
+  });

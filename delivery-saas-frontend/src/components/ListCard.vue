@@ -15,6 +15,19 @@
           </div>
         </div>
 
+        <div v-if="quickSearch" class="mb-3">
+          <div class="d-flex gap-2 align-items-center">
+            <input
+              type="search"
+              class="form-control"
+              :placeholder="quickSearchPlaceholder"
+              v-model="searchQuery"
+              @input="onSearchInput"
+            />
+            <button v-if="searchQuery" class="btn btn-outline-secondary" @click="clearSearch">Limpar</button>
+          </div>
+        </div>
+
         <div v-if="$slots.filters" class="mb-3">
           <slot name="filters"></slot>
         </div>
@@ -30,12 +43,37 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref, onBeforeUnmount } from 'vue'
+
+const props = defineProps({
   title: { type: String, default: '' },
   subtitle: { type: String, default: '' },
   icon: { type: String, default: '' },
-  variant: { type: String, default: '' }
+  variant: { type: String, default: '' },
+  quickSearch: { type: Boolean, default: false },
+  quickSearchPlaceholder: { type: String, default: 'Buscar por...' }
 })
+
+const emit = defineEmits(['quick-search', 'quick-clear'])
+
+const searchQuery = ref('')
+let debounceTimer = null
+
+function onSearchInput() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    emit('quick-search', searchQuery.value)
+  }, 300)
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+  clearTimeout(debounceTimer)
+  emit('quick-clear')
+  emit('quick-search', '')
+}
+
+onBeforeUnmount(() => clearTimeout(debounceTimer))
 </script>
 
 <style scoped>

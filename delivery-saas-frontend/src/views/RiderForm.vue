@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import TextInput from '../components/form/input/TextInput.vue';
+import CurrencyInput from '../components/form/input/CurrencyInput.vue';
 import { useRidersStore } from '../stores/riders';
 import { useRoute, useRouter } from 'vue-router';
 import { applyPhoneMask } from '../utils/phoneMask';
@@ -77,8 +78,7 @@ async function save() {
             <TextInput v-model="rider.whatsapp" @input="handleWhatsAppInput" type="tel" maxlength="16" placeholder="(00) 0 0000-0000" />
           </div>
           <div class="col-md-3">
-            <label class="form-label">Diária</label>
-            <CurrencyInput v-model="rider.dailyRate" inputClass="form-control" placeholder="0,00" />
+            <CurrencyInput label="Diária" labelClass="form-label" v-model="rider.dailyRate" inputClass="form-control" placeholder="0,00" />
           </div>
           <div class="col-md-6">
             <label class="form-label">Senha (para o app do motoboy)</label>
