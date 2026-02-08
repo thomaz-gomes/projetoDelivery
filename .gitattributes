@@ -1,0 +1,4 @@
+# Forçar LF em scripts shell (evita problemas no Linux)
+*.sh text eol=lf
+*.bash text eol=lf
+deploy/nginx/*.conf text eol=lf
