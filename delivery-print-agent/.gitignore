@@ -1,0 +1,22 @@
+# Arquivo de configuração local com credenciais sensíveis
+.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Arquivos temporários de impressão
+tmp-print-*.txt
+failed-print/
+raw-spooler/
+
+# Configuração local do agente
+agent-config.json
+
+# Dependências
+node_modules/
+
+# Sistema
+.DS_Store
+Thumbs.db

@@ -37,7 +37,28 @@ bash "$SCRIPT_DIR/backup-db.sh" || echo -e "${YELLOW}Aviso: backup falhou, conti
 # =========================================
 echo -e "${YELLOW}[2/5] Atualizando código (git pull)...${NC}"
 cd "$PROJECT_DIR"
+
+# Fazer stash de arquivos locais (.env, configs, etc) antes do pull
+# Isso preserva alterações locais que não estão mais no repo
+if ! git diff-files --quiet; then
+    echo -e "${YELLOW}Salvando alterações locais temporariamente...${NC}"
+    git stash push -u -m "auto-stash before update $(date +%Y%m%d_%H%M%S)"
+    STASHED=1
+else
+    STASHED=0
+fi
+
 git pull origin main
+
+# Restaurar alterações locais se necessário
+if [ "$STASHED" -eq 1 ]; then
+    echo -e "${YELLOW}Restaurando alterações locais...${NC}"
+    if ! git stash pop; then
+        echo -e "${YELLOW}Não foi possível aplicar stash automaticamente.${NC}"
+        echo -e "${YELLOW}Arquivos locais preservados em: git stash list${NC}"
+        echo -e "${YELLOW}Use 'git stash pop' manualmente se necessário.${NC}"
+    fi
+fi
 
 # =========================================
 # 3. Rebuild dos containers
