@@ -123,17 +123,18 @@ saasRouter.post('/subscriptions', requireRole('SUPER_ADMIN'), async (req, res) =
       return res.json(updated)
     }
 
+    // Resolve plan pricing before creating subscription
+    const plan = await prisma.saasPlan.findUnique({ where: { id: String(planId) }, include: { prices: true } })
+    let chosen = null
+    if (plan && Array.isArray(plan.prices) && plan.prices.length) {
+      chosen = plan.prices.find(p => String(p.period || '').toUpperCase() === 'MONTHLY') || plan.prices[0]
+    }
+
     // create subscription
     const created = await prisma.saasSubscription.create({ data: { companyId, planId, nextDueAt: nextDueAt ? new Date(nextDueAt) : null, period: chosen ? chosen.period : (req.body.period || null) } })
 
     // create initial invoice based on plan pricing (if available)
     try {
-      const plan = await prisma.saasPlan.findUnique({ where: { id: String(planId) }, include: { prices: true } })
-      let chosen = null
-      if (plan && Array.isArray(plan.prices) && plan.prices.length) {
-        // prefer MONTHLY if present
-        chosen = plan.prices.find(p => String(p.period || '').toUpperCase() === 'MONTHLY') || plan.prices[0]
-      }
       const now = new Date()
       const invoiceDate = nextDueAt ? new Date(nextDueAt) : now
       const year = invoiceDate.getFullYear()

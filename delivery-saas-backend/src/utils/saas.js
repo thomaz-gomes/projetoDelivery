@@ -40,7 +40,7 @@ export async function assertLimit(companyId, type) {
   } else if (type === 'menus') {
     if (p.unlimitedMenus || p.menuLimit == null) return
     // Menus are by store; count all menus under company (use relation filter `is`)
-    const count = await prisma.menu.count({ where: { store: { is: { companyId } } } })
+    const count = await prisma.menu.count({ where: { store: { companyId } } })
     if (count >= p.menuLimit) {
       const err = new Error('Limite de cardápios atingido para seu plano')
       err.statusCode = 403

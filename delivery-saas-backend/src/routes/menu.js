@@ -15,9 +15,14 @@ router.use(authMiddleware)
 // correctly regardless of which mount point the app uses.
 // GET /menu/menus
 router.get('/menus', async (req, res) => {
-  const companyId = req.user.companyId
-  const rows = await prisma.menu.findMany({ where: { store: { is: { companyId } } }, orderBy: { position: 'asc' } })
-  res.json(rows)
+  try {
+    const companyId = req.user.companyId
+    const rows = await prisma.menu.findMany({ where: { store: { companyId } }, orderBy: { position: 'asc' } })
+    res.json(rows)
+  } catch (e) {
+    console.error('GET /menu/menus failed', e)
+    res.status(500).json({ message: 'Erro ao listar cardápios', error: e?.message || String(e) })
+  }
 })
 
 // POST /menu/menus - create a new menu (optionally link to a store)
