@@ -37,7 +37,6 @@ EXPOSE 3000
 # Set RUN_MIGRATIONS=1 to run the included wait-and-migrate script at container start.
 ENV RUN_MIGRATIONS=1
 # When RUN_MIGRATIONS=1 use the `wait-for-db-and-migrate.js` script which waits for the
-# database to become ready and then runs `prisma migrate deploy` (handles provider changes
-# and migration locks). This avoids race conditions where Prisma tries to deploy while
-# Postgres is still initializing.
+# database to become ready and then runs `prisma db push` to sync the schema.
+# This avoids race conditions where Prisma tries to connect while Postgres is still initializing.
 CMD ["sh", "-lc", "if [ \"$RUN_MIGRATIONS\" = \"1\" ]; then node scripts/wait-for-db-and-migrate.js; fi; node src/server.js"]

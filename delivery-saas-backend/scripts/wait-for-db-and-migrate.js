@@ -102,10 +102,13 @@ async function waitForDb(retries = 120, delay = 3000) {
   console.log('Running prisma generate...', schemaArg)
   execSync((`npx prisma generate ${schemaArg}`).trim(), { stdio: 'inherit', env: process.env })
 
-  console.log('Running prisma migrate deploy...', schemaArg)
-  execSync((`npx prisma migrate deploy ${schemaArg}`).trim(), { stdio: 'inherit', env: process.env })
+  // Use `db push` instead of `migrate deploy` to sync the database schema.
+  // `db push` compares the Prisma schema to the actual database and adds
+  // missing tables/columns without requiring migration files to be up-to-date.
+  console.log('Running prisma db push...', schemaArg)
+  execSync((`npx prisma db push ${schemaArg}`).trim(), { stdio: 'inherit', env: process.env })
 
-    console.log('Migrations applied successfully')
+    console.log('Database schema synced successfully')
     await prisma.$disconnect()
     process.exit(0)
   } catch (err) {
