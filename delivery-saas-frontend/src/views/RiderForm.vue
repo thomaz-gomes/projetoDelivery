@@ -31,8 +31,8 @@ onMounted(async () => {
   }
 });
 
-function handleWhatsAppInput(e) {
-  rider.value.whatsapp = applyPhoneMask(e.target.value);
+function handleWhatsAppInput(val) {
+  rider.value.whatsapp = applyPhoneMask(val);
 }
 
 async function save() {

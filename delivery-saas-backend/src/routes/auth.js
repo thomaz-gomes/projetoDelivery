@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { randomToken, sha256 } from '../utils.js';
 import { rotateAgentToken } from '../agentTokenManager.js';
+import { normalizePhone } from '../wa.js';
 
 export const authRouter = express.Router();
 
@@ -83,16 +84,16 @@ authRouter.post('/login-whatsapp', async (req, res) => {
     console.debug('[auth] login-whatsapp normalized digits:', digits);
   } catch (e) { /* ignore logging errors */ }
 
-  // Try to find user by rider.whatsapp (exact / endsWith / with leading 55 / contains)
+  // Try to find user by rider.whatsapp using both raw digits and normalized (55-prefixed) form
   let finalUser = null;
   try {
       const user = await prisma.user.findFirst({
         where: {
           OR: [
             { rider: { whatsapp: phoneClean } },
-            { rider: { whatsapp: '55' + phoneClean } },
-            { rider: { whatsapp: { endsWith: phoneClean } } },
-            { rider: { whatsapp: { contains: phoneClean } } }
+            { rider: { whatsapp: digits } },
+            { rider: { whatsapp: { endsWith: digits } } },
+            { rider: { whatsapp: { contains: digits } } }
           ]
         },
         include: { rider: true }
@@ -109,9 +110,9 @@ authRouter.post('/login-whatsapp', async (req, res) => {
           where: {
             OR: [
               { whatsapp: phoneClean },
-              { whatsapp: '55' + phoneClean },
-              { whatsapp: { endsWith: phoneClean } },
-              { whatsapp: { contains: phoneClean } }
+              { whatsapp: digits },
+              { whatsapp: { endsWith: digits } },
+              { whatsapp: { contains: digits } }
             ]
           }
         });

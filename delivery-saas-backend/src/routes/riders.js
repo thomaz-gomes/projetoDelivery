@@ -177,7 +177,7 @@ ridersRouter.post('/:id/account/adjust', requireRole('ADMIN'), async (req, res) 
 
   const adjAmount = type === 'DEBIT' ? -Math.abs(val) : Math.abs(val);
 
-  const tx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: adjAmount, type: 'MANUAL_ADJUSTMENT', note: note || (type === 'DEBIT' ? 'Manual debit' : 'Manual credit'), date: new Date() });
+  const tx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: adjAmount, type: 'MANUAL_ADJUSTMENT', note: note || (type === 'DEBIT' ? 'Débito manual' : 'Crédito manual'), date: new Date() });
 
   res.json({ ok: true, tx });
 });

@@ -9,7 +9,7 @@
       </button>
 
       <!-- Leitor de QR -->
-      <button :class="['nav-item btn btn-link', isActive('/rider/home') ? 'active' : 'text-muted']" @click.prevent="goRiderHome" aria-label="Leitor QR">
+      <button :class="['nav-item btn btn-link text-muted']" @click.prevent="openScanner" aria-label="Leitor QR">
         <i class="bi bi-upc-scan nav-icon" aria-hidden="true" style="font-size:1.15rem"></i>
         <div class="nav-label small">Leitor QR</div>
       </button>
@@ -38,11 +38,11 @@ const route = useRoute();
 const auth = useAuthStore();
 
 function goRiderOrders(){ router.push({ path: '/rider/orders' }) }
-function goRiderHome(){
-  // navigate to rider home and trigger the scanner open event; if already there, just trigger
+function openScanner(){
+  // dispatch event to trigger scanner modal; ensure we're on rider/orders
   const doDispatch = () => { try{ window.dispatchEvent(new CustomEvent('open-rider-scanner')) }catch(e){ console.warn('dispatch open-rider-scanner failed', e) } }
-  if(route.path && String(route.path).startsWith('/rider/home')){ doDispatch(); return }
-  router.push({ path: '/rider/home' }).then(()=> setTimeout(doDispatch, 280)).catch(()=> setTimeout(doDispatch, 500))
+  if(route.path && String(route.path) === '/rider/orders'){ doDispatch(); return }
+  router.push({ path: '/rider/orders' }).then(()=> setTimeout(doDispatch, 300)).catch(()=> setTimeout(doDispatch, 500))
 }
 function goStatement(){
   try{ console.debug('MobileBottomNav: navigating to /rider/account') }catch(e){}

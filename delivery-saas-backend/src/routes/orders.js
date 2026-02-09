@@ -89,6 +89,7 @@ ordersRouter.post('/:id/assign', requireRole('ADMIN','STORE'), async (req, res) 
   if (alsoSetStatus === true) data.status = 'SAIU_PARA_ENTREGA';
 
   // se também alterou status, registre histórico
+  const fullInclude = { histories: true, rider: true, items: true, store: true, company: true, customer: { include: { addresses: true } } };
   let order;
   if (data.status) {
     const existing = await prisma.order.findUnique({ where: { id } });
@@ -100,14 +101,17 @@ ordersRouter.post('/:id/assign', requireRole('ADMIN','STORE'), async (req, res) 
           create: { from: existing?.status || null, to: data.status, byUserId: req.user.id, reason: 'Atribuição' }
         }
       },
-      include: { histories: true }
+      include: fullInclude
     });
   } else {
-    order = await prisma.order.update({ where: { id }, data, include: { histories: true } });
+    order = await prisma.order.update({ where: { id }, data, include: fullInclude });
   }
 
   // notifica o rider (usa rider.phone ou o override riderPhone)
   notifyRiderAssigned(order.id, { overridePhone: riderPhone }).catch(() => {});
+
+  // emitir evento de atualização via Socket.IO para todos os clientes conectados
+  try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(order); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e); }
 
   // notifica cliente (stub)
   const newStatus = data.status || order.status;

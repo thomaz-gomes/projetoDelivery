@@ -18,6 +18,26 @@ const periodBalance = ref(0);
 
 const filters = ref({ from: '', to: '' });
 
+function translateNote(note) {
+  if (!note) return '';
+  // Traduzir mensagens antigas em inglês
+  const translations = {
+    'Daily rate': 'Diária',
+    'Manual debit': 'Débito manual',
+    'Manual credit': 'Crédito manual'
+  };
+  
+  // Se a nota é exatamente uma das chaves, traduz
+  if (translations[note]) return translations[note];
+  
+  // Se começa com "Delivery fee for neighborhood", traduz
+  if (note.startsWith('Delivery fee for neighborhood')) {
+    return note.replace('Delivery fee for neighborhood', 'Taxa de entrega para bairro').replace('unknown', 'desconhecido');
+  }
+  
+  return note;
+}
+
 function paramsForSummary() {
   const p = { page: 1, pageSize: 10, sort: 'desc' };
   if (filters.value.from) p.from = filters.value.from;
@@ -81,7 +101,7 @@ onMounted(() => { fetchSummary(); });
         <li v-for="t in transactions" :key="t.id" class="list-group-item py-2 d-flex justify-content-between align-items-center">
           <div>
             <div class="small text-muted">{{ formatDateWithOptionalTime(t.date) }}</div>
-            <div>{{ t.order?.displayId || t.displayId || '—' }} — {{ t.note || '' }}</div>
+            <div>{{ t.order?.displayId || t.displayId || '—' }} — {{ translateNote(t.note) }}</div>
           </div>
           <div class="fw-bold">{{ formatCurrency(Number(t.amount || 0)) }}</div>
         </li>

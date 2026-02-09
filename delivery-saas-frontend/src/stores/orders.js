@@ -56,14 +56,14 @@ export const useOrdersStore = defineStore('orders', {
     async updateOrder(id, fields = {}) {
       const { data } = await api.patch(`/orders/${id}`, fields);
       const idx = this.orders.findIndex(o => o.id === id);
-      if (idx >= 0) this.orders[idx] = data;
+      if (idx >= 0) this.orders.splice(idx, 1, data);
       return data;
     },
 
     async updateStatus(id, status, extra = {}) {
       const { data } = await api.patch(`/orders/${id}/status`, { status, ...extra });
       const idx = this.orders.findIndex(o => o.id === id);
-      if (idx >= 0) this.orders[idx] = data;
+      if (idx >= 0) this.orders.splice(idx, 1, data);
       return data;
     },
 
@@ -79,7 +79,7 @@ export const useOrdersStore = defineStore('orders', {
         alsoSetStatus,
       });
       const idx = this.orders.findIndex(o => o.id === id);
-      if (idx >= 0) this.orders[idx] = data.order;
+      if (idx >= 0) this.orders.splice(idx, 1, data.order);
       return data.order;
     },
 

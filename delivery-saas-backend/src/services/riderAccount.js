@@ -65,7 +65,7 @@ export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId,
   }
 
   // add delivery fee transaction (even if zero, recording helps)
-  await addRiderTransaction({ companyId, riderId, orderId, amount: riderFee, type: 'DELIVERY_FEE', date: orderDate, note: `Delivery fee for neighborhood ${neigh?.name || 'unknown'}` });
+  await addRiderTransaction({ companyId, riderId, orderId, amount: riderFee, type: 'DELIVERY_FEE', date: orderDate, note: `Taxa de entrega para bairro ${neigh?.name || 'desconhecido'}` });
 
   // check daily rate for rider
   const rider = await prisma.rider.findUnique({ where: { id: riderId } });
@@ -88,7 +88,7 @@ export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId,
   });
 
   if (!existingDaily) {
-    await addRiderTransaction({ companyId, riderId, orderId: null, amount: daily, type: 'DAILY_RATE', date: orderDate, note: 'Daily rate' });
+    await addRiderTransaction({ companyId, riderId, orderId: null, amount: daily, type: 'DAILY_RATE', date: orderDate, note: 'Diária' });
   }
 }
 

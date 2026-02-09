@@ -71,9 +71,7 @@ async function startScanner() {
     }
   } catch (e) {
     console.error('Scanner error', e);
-    // fallback to manual input if camera access failed
-    const { value: token } = await Swal.fire({ title: 'Ler QR', input: 'text', inputLabel: 'Cole o token do QR ou URL', inputPlaceholder: 'cole aqui', showCancelButton: true });
-    if (token) await claimTokenFromText(token);
+    Swal.fire({ icon: 'error', text: 'Não foi possível acessar a câmera. Verifique as permissões.' });
     scanning.value = false;
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   }
@@ -92,8 +90,7 @@ async function startQrScannerFallback() {
     await qrScanner.start();
   } catch (e) {
     console.error('qr-scanner fallback failed', e);
-    const { value: token } = await Swal.fire({ title: 'Ler QR', input: 'text', inputLabel: 'Cole o token do QR ou URL', inputPlaceholder: 'cole aqui', showCancelButton: true });
-    if (token) await claimTokenFromText(token);
+    Swal.fire({ icon: 'error', text: 'Falha ao iniciar o leitor. Tente novamente.' });
   }
 }
 
@@ -138,14 +135,16 @@ onBeforeUnmount(()=>{ try{ window.removeEventListener('open-rider-scanner', exte
       <button v-if="!scanning" class="btn btn-success btn-lg py-3" @click="startScanner">Ler pedido (QR)</button>
     </div>
 
-    <div v-if="scanning" class="scanner-overlay fixed-top d-flex flex-column align-items-center justify-content-center p-3">
-      <div class="card p-2" style="width:100%;max-width:420px;">
-        <div class="d-flex justify-content-between align-items-center mb-2">
+    <div v-if="scanning" class="scanner-overlay">
+      <div class="scanner-container">
+        <div class="scanner-header">
           <strong>Leitor QR</strong>
-          <button class="btn btn-sm btn-outline-secondary" @click="stopScanner">Fechar</button>
+          <button class="btn btn-sm btn-outline-light" @click="stopScanner">Fechar</button>
         </div>
-        <video ref="videoEl" autoplay playsinline muted style="width:100%;height:360px;object-fit:cover;border-radius:8px;background:#000"></video>
-        <div class="small text-muted mt-2">Aponte a câmera para o QR do pedido. Caso não funcione, cole o token manualmente.</div>
+        <video ref="videoEl" autoplay playsinline muted class="scanner-video"></video>
+        <div class="scanner-footer">
+          <div class="small text-white">Aponte a câmera para o QR do pedido</div>
+        </div>
       </div>
     </div>
   </div>
@@ -153,7 +152,42 @@ onBeforeUnmount(()=>{ try{ window.removeEventListener('open-rider-scanner', exte
 
 <style scoped>
 .rider-home { background: #f8f9fa; }
-.scanner-overlay { z-index: 2000; padding-top:60px; }
+.scanner-overlay { 
+  position: fixed; 
+  top: 0; 
+  left: 0; 
+  right: 0; 
+  bottom: 0; 
+  z-index: 9999; 
+  background: #000; 
+  display: flex; 
+  flex-direction: column;
+}
+.scanner-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.scanner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+}
+.scanner-video {
+  flex: 1;
+  width: 100%;
+  object-fit: cover;
+  background: #000;
+}
+.scanner-footer {
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  text-align: center;
+}
 @media (min-width: 480px) {
   .rider-home { max-width:420px; }
 }
