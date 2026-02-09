@@ -38,27 +38,49 @@ bash "$SCRIPT_DIR/backup-db.sh" || echo -e "${YELLOW}Aviso: backup falhou, conti
 echo -e "${YELLOW}[2/5] Atualizando código (git pull)...${NC}"
 cd "$PROJECT_DIR"
 
-# Fazer stash de arquivos locais (.env, configs, etc) antes do pull
-# Isso preserva alterações locais que não estão mais no repo
-if ! git diff-files --quiet; then
-    echo -e "${YELLOW}Salvando alterações locais temporariamente...${NC}"
-    git stash push -u -m "auto-stash before update $(date +%Y%m%d_%H%M%S)"
-    STASHED=1
-else
-    STASHED=0
+# Limpar qualquer merge/stash pendente
+git reset --hard HEAD 2>/dev/null || true
+git stash drop 2>/dev/null || true
+
+# Salvar arquivos locais críticos (que não devem estar no repo)
+TEMP_BACKUP="/tmp/delivery-update-backup-$(date +%s)"
+mkdir -p "$TEMP_BACKUP"
+
+# Fazer backup de .env locais se existirem
+if [ -f "delivery-print-agent/.env" ]; then
+    echo -e "${YELLOW}Salvando delivery-print-agent/.env...${NC}"
+    cp "delivery-print-agent/.env" "$TEMP_BACKUP/print-agent.env"
 fi
 
+if [ -f "delivery-saas-backend/.env" ]; then
+    echo -e "${YELLOW}Salvando delivery-saas-backend/.env...${NC}"
+    cp "delivery-saas-backend/.env" "$TEMP_BACKUP/backend.env"
+fi
+
+if [ -f "delivery-saas-frontend/.env" ]; then
+    echo -e "${YELLOW}Salvando delivery-saas-frontend/.env...${NC}"
+    cp "delivery-saas-frontend/.env" "$TEMP_BACKUP/frontend.env"
+fi
+
+# Fazer pull limpo
 git pull origin main
 
-# Restaurar alterações locais se necessário
-if [ "$STASHED" -eq 1 ]; then
-    echo -e "${YELLOW}Restaurando alterações locais...${NC}"
-    if ! git stash pop; then
-        echo -e "${YELLOW}Não foi possível aplicar stash automaticamente.${NC}"
-        echo -e "${YELLOW}Arquivos locais preservados em: git stash list${NC}"
-        echo -e "${YELLOW}Use 'git stash pop' manualmente se necessário.${NC}"
-    fi
+# Restaurar arquivos locais
+if [ -f "$TEMP_BACKUP/print-agent.env" ]; then
+    echo -e "${YELLOW}Restaurando delivery-print-agent/.env...${NC}"
+    cp "$TEMP_BACKUP/print-agent.env" "delivery-print-agent/.env"
 fi
+
+if [ -f "$TEMP_BACKUP/backend.env" ]; then
+    cp "$TEMP_BACKUP/backend.env" "delivery-saas-backend/.env"
+fi
+
+if [ -f "$TEMP_BACKUP/frontend.env" ]; then
+    cp "$TEMP_BACKUP/frontend.env" "delivery-saas-frontend/.env"
+fi
+
+# Limpar backup temporário
+rm -rf "$TEMP_BACKUP"
 
 # =========================================
 # 3. Rebuild dos containers

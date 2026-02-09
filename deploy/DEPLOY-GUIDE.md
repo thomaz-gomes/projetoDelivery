@@ -167,13 +167,39 @@ bash deploy/scripts/update.sh
 
 O script faz automaticamente:
 1. Backup do banco de dados
-2. `git pull` do código novo
-3. Rebuild das imagens Docker
-4. Reinicia os containers
-5. Limpa imagens antigas
-6. Verifica saúde da API
+2. Salva arquivos `.env` locais temporariamente
+3. `git pull` do código novo (com reset para evitar conflitos)
+4. Restaura arquivos `.env` locais
+5. Rebuild das imagens Docker
+6. Reinicia os containers
+7. Limpa imagens antigas
+8. Verifica saúde da API
 
 **Nenhum dado é perdido** - o banco e uploads ficam em volumes Docker persistentes.
+
+### Se o update.sh falhar
+
+Em caso de conflito git que o script não resolveu automaticamente:
+
+```bash
+cd /opt/delivery
+
+# 1. Salvar .env manualmente
+cp delivery-print-agent/.env /tmp/print-agent-env-backup
+cp deploy/.env /tmp/deploy-env-backup
+
+# 2. Resetar repositório completamente
+git reset --hard HEAD
+git clean -fd
+git pull origin main
+
+# 3. Restaurar .env
+cp /tmp/print-agent-env-backup delivery-print-agent/.env
+cp /tmp/deploy-env-backup deploy/.env
+
+# 4. Continuar com update
+docker compose -f deploy/docker-compose.production.yml up -d --build
+```
 
 ---
 
