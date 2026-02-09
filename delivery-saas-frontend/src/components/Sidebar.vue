@@ -50,11 +50,8 @@ const nav = [
   // Configurações has sub-items
     { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', children: [
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt' },
-    { name: 'iFood', to: '/settings/ifood', icon: 'bi bi-shop' },
     { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug' },
     { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
-    { name: 'Pasta (import)', to: '/settings/file-source', icon: 'bi bi-folder' },
-    { name: 'Preview (pasta)', to: '/settings/file-source/preview', icon: 'bi bi-eye' },
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp' },
     { name: 'Dev Tools', to: '/settings/devtools', icon: 'bi bi-tools' },
     { name: 'Formas de pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card-2-front' },
