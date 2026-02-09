@@ -100,7 +100,7 @@ authRouter.post('/login-whatsapp', async (req, res) => {
       });
     if (user) finalUser = user;
   } catch (eFindUser) {
-    console.warn('[auth] login-whatsapp: error searching user by rider relation:', eFindUser && eFindUser.message);
+    console.warn('[auth] login-whatsapp: error searching user by rider relation:', eFindUser && eFindUser.message, eFindUser && eFindUser.code);
   }
 
   // Fallback: if no user was found, look for a Rider record and load its linked user (rider.userId)
@@ -136,6 +136,42 @@ authRouter.post('/login-whatsapp', async (req, res) => {
       }
     } catch (eFind) {
       console.warn('[auth] login-whatsapp: error trying fallback rider lookup for digits=', digits, eFind && eFind.message);
+    }
+  }
+
+  // Fallback 2: raw SQL lookup stripping non-digit characters from stored whatsapp
+  // This handles cases where whatsapp was saved with formatting (e.g., "(73) 98128-7040")
+  if (!finalUser) {
+    try {
+      const isPostgres = (process.env.DATABASE_URL || '').startsWith('postgres');
+      let riderRows = [];
+      if (isPostgres) {
+        riderRows = await prisma.$queryRaw`
+          SELECT r.* FROM "Rider" r
+          WHERE regexp_replace(r."whatsapp", '[^0-9]', '', 'g') LIKE ${'%' + digits}
+             OR regexp_replace(r."whatsapp", '[^0-9]', '', 'g') LIKE ${'%' + digits + '%'}
+          LIMIT 1
+        `;
+      } else {
+        riderRows = await prisma.$queryRaw`
+          SELECT r.* FROM "Rider" r
+          WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(r."whatsapp", ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ${'%' + digits}
+             OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(r."whatsapp", ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ${'%' + digits + '%'}
+          LIMIT 1
+        `;
+      }
+      if (riderRows && riderRows.length > 0) {
+        const rider = riderRows[0];
+        console.warn('[auth] login-whatsapp: found rider via raw SQL digit-strip for digits=', digits, 'riderId=', rider.id, 'stored whatsapp=', rider.whatsapp);
+        if (rider.userId) {
+          const u = await prisma.user.findUnique({ where: { id: rider.userId }, include: { rider: true } });
+          if (u) finalUser = u;
+        } else {
+          console.warn('[auth] login-whatsapp: rider found via raw SQL but no linked user (riderId=' + rider.id + ')');
+        }
+      }
+    } catch (eRaw) {
+      console.warn('[auth] login-whatsapp: raw SQL fallback error:', eRaw && eRaw.message);
     }
   }
 

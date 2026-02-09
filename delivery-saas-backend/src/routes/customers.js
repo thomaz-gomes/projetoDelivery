@@ -104,6 +104,36 @@ customersRouter.get('/', async (req, res) => {
   res.json({ total, rows: enriched });
 });
 
+// Pedidos paginados do cliente
+customersRouter.get('/:id/orders', async (req, res) => {
+  const companyId = req.user.companyId;
+  const { id } = req.params;
+  const take = Math.min(Number(req.query.take || 10), 50);
+  const skip = Math.max(Number(req.query.skip || 0), 0);
+
+  const customer = await prisma.customer.findFirst({ where: { id, companyId } });
+  if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+
+  const [rows, total] = await Promise.all([
+    prisma.order.findMany({
+      where: { customerId: customer.id },
+      orderBy: { createdAt: 'desc' },
+      take,
+      skip,
+      select: {
+        id: true, displayId: true, displaySimple: true,
+        status: true, createdAt: true, total: true,
+        orderType: true, address: true, customerName: true,
+        deliveryFee: true, couponCode: true, couponDiscount: true,
+        items: { select: { name: true, quantity: true, price: true, notes: true } },
+      },
+    }),
+    prisma.order.count({ where: { customerId: customer.id } }),
+  ]);
+
+  res.json({ rows, total });
+});
+
 // Perfil
 customersRouter.get('/:id', async (req, res) => {
   const companyId = req.user.companyId;
@@ -241,6 +271,70 @@ customersRouter.post('/:id/addresses', requireRole('ADMIN'), async (req, res) =>
   } });
 
   res.status(201).json(created);
+});
+
+// Definir endereço padrão
+customersRouter.patch('/:id/addresses/:addressId/default', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  const { id, addressId } = req.params;
+
+  const customer = await prisma.customer.findFirst({ where: { id, companyId } });
+  if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+
+  const address = await prisma.customerAddress.findFirst({ where: { id: addressId, customerId: customer.id } });
+  if (!address) return res.status(404).json({ message: 'Endereço não encontrado' });
+
+  await prisma.$transaction([
+    prisma.customerAddress.updateMany({ where: { customerId: customer.id }, data: { isDefault: false } }),
+    prisma.customerAddress.update({ where: { id: addressId }, data: { isDefault: true } }),
+  ]);
+
+  res.json({ ok: true });
+});
+
+// Editar endereço
+customersRouter.patch('/:id/addresses/:addressId', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  const { id, addressId } = req.params;
+
+  const customer = await prisma.customer.findFirst({ where: { id, companyId } });
+  if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+
+  const address = await prisma.customerAddress.findFirst({ where: { id: addressId, customerId: customer.id } });
+  if (!address) return res.status(404).json({ message: 'Endereço não encontrado' });
+
+  const fields = ['label','street','number','complement','neighborhood','reference','observation','city','state','postalCode','formatted'];
+  const patch = {};
+  for (const f of fields) {
+    if (req.body[f] !== undefined) patch[f] = req.body[f] || null;
+  }
+
+  const updated = await prisma.customerAddress.update({ where: { id: addressId }, data: patch });
+  res.json(updated);
+});
+
+// Excluir endereço
+customersRouter.delete('/:id/addresses/:addressId', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  const { id, addressId } = req.params;
+
+  const customer = await prisma.customer.findFirst({ where: { id, companyId } });
+  if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+
+  const address = await prisma.customerAddress.findFirst({ where: { id: addressId, customerId: customer.id } });
+  if (!address) return res.status(404).json({ message: 'Endereço não encontrado' });
+
+  await prisma.customerAddress.delete({ where: { id: addressId } });
+
+  // Se era o padrão, promove o primeiro restante
+  if (address.isDefault) {
+    const first = await prisma.customerAddress.findFirst({ where: { customerId: customer.id }, orderBy: { createdAt: 'asc' } });
+    if (first) {
+      await prisma.customerAddress.update({ where: { id: first.id }, data: { isDefault: true } });
+    }
+  }
+
+  res.json({ ok: true });
 });
 
 // Importação CSV/XLSX (colunas suportadas: fullName, cpf, whatsapp, phone, street, number, complement, neighborhood, city, state, postalCode, latitude, longitude, formatted)

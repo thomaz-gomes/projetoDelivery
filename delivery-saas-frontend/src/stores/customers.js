@@ -7,6 +7,9 @@ export const useCustomersStore = defineStore('customers', {
     total: 0,
     loading: false,
     current: null,
+    orders: [],
+    ordersTotal: 0,
+    ordersLoading: false,
   }),
   actions: {
     async fetch({ q = '', skip = 0, take = 50 } = {}) {
@@ -40,6 +43,30 @@ export const useCustomersStore = defineStore('customers', {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       return data;
+    },
+    async setDefaultAddress(customerId, addressId) {
+      await api.patch(`/customers/${customerId}/addresses/${addressId}/default`);
+      await this.get(customerId);
+    },
+    async updateAddress(customerId, addressId, payload) {
+      const { data } = await api.patch(`/customers/${customerId}/addresses/${addressId}`, payload);
+      await this.get(customerId);
+      return data;
+    },
+    async deleteAddress(customerId, addressId) {
+      await api.delete(`/customers/${customerId}/addresses/${addressId}`);
+      await this.get(customerId);
+    },
+    async fetchOrders(customerId, { skip = 0, take = 10 } = {}) {
+      this.ordersLoading = true;
+      try {
+        const { data } = await api.get(`/customers/${customerId}/orders`, { params: { skip, take } });
+        this.orders = data.rows;
+        this.ordersTotal = data.total;
+        return data;
+      } finally {
+        this.ordersLoading = false;
+      }
     },
   },
 });

@@ -184,7 +184,8 @@ ridersRouter.post('/:id/account/adjust', requireRole('ADMIN'), async (req, res) 
 
 ridersRouter.post('/', async (req, res) => {
   const companyId = req.user.companyId;
-  const { name, whatsapp, dailyRate, active, password } = req.body || {};
+  const { name, whatsapp: rawWhatsapp, dailyRate, active, password } = req.body || {};
+  const whatsapp = rawWhatsapp ? String(rawWhatsapp).replace(/\D/g, '') : rawWhatsapp;
   const created = await prisma.rider.create({ data: { companyId, name, whatsapp, dailyRate: dailyRate ? Number(dailyRate) : undefined, active: active !== false } });
 
   // If a password was provided, create a linked User record with role RIDER
@@ -210,7 +211,8 @@ ridersRouter.post('/', async (req, res) => {
 ridersRouter.patch('/:id', async (req, res) => {
   const { id } = req.params;
   const companyId = req.user.companyId;
-  const { name, whatsapp, dailyRate, active } = req.body || {};
+  const { name, whatsapp: rawWhatsapp, dailyRate, active } = req.body || {};
+  const whatsapp = rawWhatsapp ? String(rawWhatsapp).replace(/\D/g, '') : rawWhatsapp;
   const existing = await prisma.rider.findFirst({ where: { id, companyId } });
   if (!existing) return res.status(404).json({ message: 'Entregador não encontrado' });
   const updated = await prisma.rider.update({ where: { id }, data: { name, whatsapp, dailyRate: dailyRate ? Number(dailyRate) : existing.dailyRate, active: typeof active === 'boolean' ? active : existing.active } });

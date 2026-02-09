@@ -1,14 +1,36 @@
 <script setup>
-import { onMounted, computed } from 'vue';
+import { ref, onMounted, computed, reactive } from 'vue';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
 import { useRoute } from 'vue-router';
 import { useCustomersStore } from '../stores/customers';
 import BaseButton from '../components/BaseButton.vue';
+import TextInput from '../components/form/input/TextInput.vue';
+import Swal from 'sweetalert2';
 
 const route = useRoute();
 const store = useCustomersStore();
 
-onMounted(() => store.get(route.params.id));
+const activeTab = ref('dados');
+
+// Orders pagination
+const ordersPage = ref(1);
+const ordersPerPage = 10;
+const totalOrderPages = computed(() => Math.ceil(store.ordersTotal / ordersPerPage));
+
+// Address edit modal
+const editingAddress = ref(null);
+const editForm = reactive({
+  label: '', street: '', number: '', complement: '', neighborhood: '',
+  reference: '', observation: '', city: '', state: '', postalCode: '',
+});
+
+// Order detail modal
+const selectedOrder = ref(null);
+
+onMounted(async () => {
+  await store.get(route.params.id);
+  await loadOrders(1);
+});
 
 const stats = computed(() => store.current?.stats || {});
 
@@ -34,12 +56,78 @@ function statusColor(s) {
   const map = { EM_PREPARO: '#ffc107', SAIU_PARA_ENTREGA: '#0d6efd', CONFIRMACAO_PAGAMENTO: '#6f42c1', CONCLUIDO: '#198754', CANCELADO: '#dc3545', INVOICE_AUTHORIZED: '#0dcaf0' };
   return map[s] || '#6c757d';
 }
+
+// Address operations
+async function setDefault(addressId) {
+  try {
+    await store.setDefaultAddress(store.current.id, addressId);
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao definir endereço padrão' });
+  }
+}
+
+function openEditAddress(address) {
+  editingAddress.value = address;
+  Object.assign(editForm, {
+    label: address.label || '',
+    street: address.street || '',
+    number: address.number || '',
+    complement: address.complement || '',
+    neighborhood: address.neighborhood || '',
+    reference: address.reference || '',
+    observation: address.observation || '',
+    city: address.city || '',
+    state: address.state || '',
+    postalCode: address.postalCode || '',
+  });
+}
+
+async function saveAddress() {
+  try {
+    await store.updateAddress(store.current.id, editingAddress.value.id, { ...editForm });
+    editingAddress.value = null;
+    Swal.fire({ icon: 'success', text: 'Endereço atualizado', timer: 1500, showConfirmButton: false });
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao salvar' });
+  }
+}
+
+async function deleteAddress(address) {
+  const r = await Swal.fire({
+    title: 'Excluir endereço?',
+    text: address.formatted || [address.street, address.number].filter(Boolean).join(', ') || 'Este endereço',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Excluir',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#dc3545',
+  });
+  if (!r.isConfirmed) return;
+  try {
+    await store.deleteAddress(store.current.id, address.id);
+    Swal.fire({ icon: 'success', text: 'Endereço removido', timer: 1500, showConfirmButton: false });
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao excluir' });
+  }
+}
+
+// Orders pagination
+async function loadOrders(page = 1) {
+  ordersPage.value = page;
+  await store.fetchOrders(store.current.id, { skip: (page - 1) * ordersPerPage, take: ordersPerPage });
+}
+
+function orderDisplayId(o) {
+  if (o.displaySimple != null) return String(o.displaySimple).padStart(2, '0');
+  if (o.displayId != null) return String(o.displayId).padStart(2, '0');
+  return o.id.slice(0, 6);
+}
 </script>
 
 <template>
   <div v-if="store.current" class="container py-4">
     <!-- Cabeçalho -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
       <div class="d-flex align-items-center gap-3">
         <div class="profile-avatar" :style="{ background: currentTier.bg, color: currentTier.color }">
           {{ (store.current.fullName || '?')[0].toUpperCase() }}
@@ -103,127 +191,315 @@ function statusColor(s) {
       </div>
     </div>
 
-    <!-- Grid principal -->
-    <div class="row g-4">
-      <!-- Dados do cliente e endereços -->
-      <div class="col-md-7">
-        <div class="card mb-4">
-          <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
-            <i class="bi bi-person-vcard text-primary"></i> Dados do cliente
-          </div>
-          <div class="card-body">
-            <div class="row g-3">
-              <div class="col-sm-4">
-                <div class="info-label">CPF</div>
-                <div class="info-value">{{ store.current.cpf || '—' }}</div>
-              </div>
-              <div class="col-sm-4">
-                <div class="info-label">WhatsApp</div>
-                <div class="info-value">{{ store.current.whatsapp || '—' }}</div>
-              </div>
-              <div class="col-sm-4">
-                <div class="info-label">Telefone</div>
-                <div class="info-value">{{ store.current.phone || '—' }}</div>
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4">
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: activeTab === 'dados' }" href="#" @click.prevent="activeTab = 'dados'">
+          <i class="bi bi-person-vcard me-1"></i> Dados / Endereços
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: activeTab === 'pedidos' }" href="#" @click.prevent="activeTab = 'pedidos'; loadOrders(1)">
+          <i class="bi bi-bag me-1"></i> Pedidos
+          <span class="badge bg-light text-dark ms-1">{{ store.ordersTotal }}</span>
+        </a>
+      </li>
+    </ul>
+
+    <!-- Tab: Dados / Endereços -->
+    <div v-show="activeTab === 'dados'">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card">
+            <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
+              <i class="bi bi-person-vcard text-primary"></i> Dados do cliente
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-sm-4">
+                  <div class="info-label">CPF</div>
+                  <div class="info-value">{{ store.current.cpf || '—' }}</div>
+                </div>
+                <div class="col-sm-4">
+                  <div class="info-label">WhatsApp</div>
+                  <div class="info-value">{{ store.current.whatsapp || '—' }}</div>
+                </div>
+                <div class="col-sm-4">
+                  <div class="info-label">Telefone</div>
+                  <div class="info-value">{{ store.current.phone || '—' }}</div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center gap-2">
-              <i class="bi bi-geo-alt text-primary"></i> Endereços
-              <span class="badge bg-light text-dark">{{ store.current.addresses?.length || 0 }}</span>
-            </div>
-          </div>
-          <div class="card-body p-0">
-            <div
-              v-for="(a, i) in store.current.addresses"
-              :key="a.id"
-              class="address-item"
-            >
-              <div class="d-flex justify-content-between align-items-start">
-                <div>
-                  <div class="fw-medium">
-                    {{ a.label || 'Endereço ' + (i + 1) }}
-                    <span v-if="a.isDefault" class="badge bg-success-subtle text-success ms-1">Padrão</span>
-                  </div>
-                  <div class="mt-1">
-                    <div v-if="a.formatted && !a.street">{{ a.formatted }}</div>
-                    <div v-else>
-                      {{ [a.street, a.number].filter(Boolean).join(', ') }}
-                      <span v-if="a.complement"> — {{ a.complement }}</span>
-                    </div>
-                  </div>
-                  <div class="small text-muted mt-1">
-                    <span v-if="a.neighborhood">{{ a.neighborhood }} — </span>
-                    <span v-if="a.city || a.state">{{ [a.city, a.state].filter(Boolean).join('/') }}</span>
-                    <span v-if="(a.postalCode || a.zip || a.postal_code)"> | CEP {{ a.postalCode || a.zip || a.postal_code }}</span>
-                  </div>
-                  <div v-if="a.reference" class="small text-muted">Ref: {{ a.reference }}</div>
-                </div>
-                <div class="d-flex gap-1">
-                  <button class="btn btn-sm btn-outline-primary" @click="$router.push(`/customers/${store.current.id}/edit?editAddressIndex=${i}`)">
-                    <i class="bi bi-pencil"></i>
-                  </button>
-                  <a v-if="a.latitude && a.longitude" :href="`https://www.google.com/maps?q=${a.latitude},${a.longitude}`" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver no mapa">
-                    <i class="bi bi-geo-alt"></i>
-                  </a>
-                </div>
+        <div class="col-lg-6">
+          <div class="card">
+            <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-geo-alt text-primary"></i> Endereços
+                <span class="badge bg-light text-dark">{{ store.current.addresses?.length || 0 }}</span>
               </div>
             </div>
+            <div class="card-body p-0">
+              <div
+                v-for="(a, i) in store.current.addresses"
+                :key="a.id"
+                class="address-item"
+              >
+                <div class="d-flex justify-content-between align-items-start">
+                  <div class="d-flex gap-3 align-items-start flex-grow-1">
+                    <div class="pt-1">
+                      <input
+                        type="radio"
+                        class="form-check-input"
+                        name="default-addr"
+                        :checked="a.isDefault"
+                        @change="setDefault(a.id)"
+                        title="Definir como padrão"
+                      />
+                    </div>
+                    <div>
+                      <div class="fw-medium">
+                        {{ a.label || 'Endereço ' + (i + 1) }}
+                        <span v-if="a.isDefault" class="badge bg-success-subtle text-success ms-1">Padrão</span>
+                      </div>
+                      <div class="mt-1">
+                        <div v-if="a.formatted && !a.street">{{ a.formatted }}</div>
+                        <div v-else>
+                          {{ [a.street, a.number].filter(Boolean).join(', ') }}
+                          <span v-if="a.complement"> — {{ a.complement }}</span>
+                        </div>
+                      </div>
+                      <div class="small text-muted mt-1">
+                        <span v-if="a.neighborhood">{{ a.neighborhood }} — </span>
+                        <span v-if="a.city || a.state">{{ [a.city, a.state].filter(Boolean).join('/') }}</span>
+                        <span v-if="(a.postalCode || a.zip || a.postal_code)"> | CEP {{ a.postalCode || a.zip || a.postal_code }}</span>
+                      </div>
+                      <div v-if="a.reference" class="small text-muted">Ref: {{ a.reference }}</div>
+                    </div>
+                  </div>
+                  <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-primary" @click="openEditAddress(a)" title="Editar">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" @click="deleteAddress(a)" title="Excluir">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                    <a v-if="a.latitude && a.longitude" :href="`https://www.google.com/maps?q=${a.latitude},${a.longitude}`" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver no mapa">
+                      <i class="bi bi-geo-alt"></i>
+                    </a>
+                  </div>
+                </div>
+              </div>
 
-            <div
-              v-if="!store.current.addresses?.length"
-              class="text-muted text-center py-4 small"
-            >
-              Nenhum endereço cadastrado.
+              <div
+                v-if="!store.current.addresses?.length"
+                class="text-muted text-center py-4 small"
+              >
+                Nenhum endereço cadastrado.
+              </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- Pedidos -->
-      <div class="col-md-5">
-        <div class="card">
-          <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center gap-2">
-              <i class="bi bi-bag text-primary"></i> Pedidos
-              <span class="badge bg-light text-dark">{{ store.current.orders?.length || 0 }}</span>
-            </div>
+    <!-- Tab: Pedidos -->
+    <div v-show="activeTab === 'pedidos'">
+      <div class="card">
+        <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-bag text-primary"></i> Pedidos
+            <span class="badge bg-light text-dark">{{ store.ordersTotal }}</span>
           </div>
-          <div class="card-body p-0">
-            <div
-              v-for="o in store.current.orders"
-              :key="o.id"
-              class="order-item"
-            >
-              <div class="d-flex justify-content-between align-items-start">
-                <div>
-                  <div class="fw-medium">
-                    #{{ o.displaySimple != null ? String(o.displaySimple).padStart(2,'0') : (o.displayId != null ? String(o.displayId).padStart(2,'0') : o.id.slice(0, 6)) }}
-                  </div>
-                  <div class="small text-muted">{{ formatDate(o.createdAt) }}</div>
-                  <div v-if="o.items?.length" class="small text-muted mt-1">
-                    {{ o.items.map(i => `${i.quantity}x ${i.name}`).join(', ') }}
-                  </div>
-                </div>
-                <div class="text-end">
-                  <div class="fw-semibold">{{ formatCurrency(Number(o.total || 0)) }}</div>
-                  <span class="badge" :style="{ background: statusColor(o.status) + '1a', color: statusColor(o.status) }">
-                    {{ statusLabel(o.status) }}
-                  </span>
+        </div>
+        <div class="card-body p-0">
+          <div
+            v-for="o in store.orders"
+            :key="o.id"
+            class="order-item order-item-clickable"
+            @click="selectedOrder = o"
+          >
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-medium">#{{ orderDisplayId(o) }}</div>
+                <div class="small text-muted">{{ formatDate(o.createdAt) }}</div>
+                <div v-if="o.items?.length" class="small text-muted mt-1">
+                  {{ o.items.map(i => `${i.quantity}x ${i.name}`).join(', ') }}
                 </div>
               </div>
-            </div>
-
-            <div
-              v-if="!store.current.orders?.length"
-              class="text-muted text-center py-4 small"
-            >
-              Nenhum pedido encontrado.
+              <div class="text-end">
+                <div class="fw-semibold">{{ formatCurrency(Number(o.total || 0)) }}</div>
+                <span class="badge" :style="{ background: statusColor(o.status) + '1a', color: statusColor(o.status) }">
+                  {{ statusLabel(o.status) }}
+                </span>
+              </div>
             </div>
           </div>
+
+          <div v-if="!store.orders?.length && !store.ordersLoading" class="text-muted text-center py-4 small">
+            Nenhum pedido encontrado.
+          </div>
+          <div v-if="store.ordersLoading" class="text-center py-4">
+            <div class="spinner-border spinner-border-sm text-secondary"></div>
+          </div>
+        </div>
+
+        <!-- Paginação -->
+        <div v-if="totalOrderPages > 1" class="d-flex justify-content-between align-items-center p-3 border-top">
+          <div class="text-muted small">
+            Página {{ ordersPage }} de {{ totalOrderPages }} ({{ store.ordersTotal }} pedidos)
+          </div>
+          <nav>
+            <ul class="pagination pagination-sm mb-0">
+              <li class="page-item" :class="{ disabled: ordersPage === 1 }">
+                <button class="page-link" @click="loadOrders(ordersPage - 1)" :disabled="ordersPage === 1">Anterior</button>
+              </li>
+              <li
+                v-for="p in totalOrderPages"
+                :key="p"
+                class="page-item"
+                :class="{ active: p === ordersPage }"
+              >
+                <button class="page-link" @click="loadOrders(p)">{{ p }}</button>
+              </li>
+              <li class="page-item" :class="{ disabled: ordersPage >= totalOrderPages }">
+                <button class="page-link" @click="loadOrders(ordersPage + 1)" :disabled="ordersPage >= totalOrderPages">Próxima</button>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Editar Endereço -->
+    <div v-if="editingAddress" class="modal-overlay" @click.self="editingAddress = null">
+      <div class="modal-box">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Editar Endereço</h5>
+          <button class="btn-close" @click="editingAddress = null"></button>
+        </div>
+        <form @submit.prevent="saveAddress">
+          <div class="row g-2">
+            <div class="col-12">
+              <TextInput label="Rótulo" v-model="editForm.label" placeholder="Casa, Trabalho..." inputClass="form-control" />
+            </div>
+            <div class="col-8">
+              <TextInput label="Rua" v-model="editForm.street" inputClass="form-control" />
+            </div>
+            <div class="col-4">
+              <TextInput label="Número" v-model="editForm.number" inputClass="form-control" />
+            </div>
+            <div class="col-6">
+              <TextInput label="Complemento" v-model="editForm.complement" inputClass="form-control" />
+            </div>
+            <div class="col-6">
+              <TextInput label="Bairro" v-model="editForm.neighborhood" inputClass="form-control" />
+            </div>
+            <div class="col-6">
+              <TextInput label="Cidade" v-model="editForm.city" inputClass="form-control" />
+            </div>
+            <div class="col-3">
+              <TextInput label="UF" v-model="editForm.state" maxlength="2" inputClass="form-control text-uppercase" />
+            </div>
+            <div class="col-3">
+              <TextInput label="CEP" v-model="editForm.postalCode" inputClass="form-control" />
+            </div>
+            <div class="col-6">
+              <TextInput label="Referência" v-model="editForm.reference" inputClass="form-control" />
+            </div>
+            <div class="col-6">
+              <TextInput label="Observação" v-model="editForm.observation" inputClass="form-control" />
+            </div>
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <BaseButton variant="outline" type="button" @click="editingAddress = null">Cancelar</BaseButton>
+            <BaseButton variant="primary" type="submit">Salvar</BaseButton>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal: Detalhes do Pedido -->
+    <div v-if="selectedOrder" class="modal-overlay" @click.self="selectedOrder = null">
+      <div class="modal-box modal-box-lg">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Pedido #{{ orderDisplayId(selectedOrder) }}</h5>
+          <button class="btn-close" @click="selectedOrder = null"></button>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-sm-4">
+            <div class="info-label">Data</div>
+            <div class="info-value">{{ formatDate(selectedOrder.createdAt) }}</div>
+          </div>
+          <div class="col-sm-4">
+            <div class="info-label">Status</div>
+            <span class="badge" :style="{ background: statusColor(selectedOrder.status) + '1a', color: statusColor(selectedOrder.status) }">
+              {{ statusLabel(selectedOrder.status) }}
+            </span>
+          </div>
+          <div class="col-sm-4">
+            <div class="info-label">Total</div>
+            <div class="info-value fw-bold">{{ formatCurrency(Number(selectedOrder.total || 0)) }}</div>
+          </div>
+        </div>
+
+        <div v-if="selectedOrder.address" class="mb-3">
+          <div class="info-label">Endereço de entrega</div>
+          <div class="info-value">{{ selectedOrder.address }}</div>
+        </div>
+
+        <div v-if="selectedOrder.orderType" class="mb-3">
+          <div class="info-label">Tipo</div>
+          <div class="info-value">{{ selectedOrder.orderType === 'delivery' ? 'Entrega' : selectedOrder.orderType === 'pickup' ? 'Retirada' : selectedOrder.orderType }}</div>
+        </div>
+
+        <div v-if="selectedOrder.couponCode" class="mb-3">
+          <div class="info-label">Cupom</div>
+          <div class="info-value">{{ selectedOrder.couponCode }} (-{{ formatCurrency(Number(selectedOrder.couponDiscount || 0)) }})</div>
+        </div>
+
+        <h6 class="fw-semibold mt-3">Itens</h6>
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Qtd</th>
+              <th>Item</th>
+              <th class="text-end">Preço</th>
+              <th class="text-end">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(item, idx) in selectedOrder.items" :key="idx">
+              <td>{{ item.quantity }}</td>
+              <td>
+                {{ item.name }}
+                <div v-if="item.notes" class="small text-muted">{{ item.notes }}</div>
+              </td>
+              <td class="text-end">{{ formatCurrency(Number(item.price || 0)) }}</td>
+              <td class="text-end">{{ formatCurrency(Number(item.price || 0) * item.quantity) }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr v-if="selectedOrder.deliveryFee">
+              <td colspan="3" class="text-end text-muted">Taxa de entrega</td>
+              <td class="text-end">{{ formatCurrency(Number(selectedOrder.deliveryFee || 0)) }}</td>
+            </tr>
+            <tr v-if="selectedOrder.couponDiscount">
+              <td colspan="3" class="text-end text-muted">Desconto cupom</td>
+              <td class="text-end text-danger">-{{ formatCurrency(Number(selectedOrder.couponDiscount || 0)) }}</td>
+            </tr>
+            <tr class="fw-bold">
+              <td colspan="3" class="text-end">Total</td>
+              <td class="text-end">{{ formatCurrency(Number(selectedOrder.total || 0)) }}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="text-end mt-3">
+          <BaseButton variant="outline" @click="selectedOrder = null">Fechar</BaseButton>
         </div>
       </div>
     </div>
@@ -318,13 +594,44 @@ function statusColor(s) {
 .order-item:last-child {
   border-bottom: none;
 }
-.order-item:hover {
-  background: #f9fafb;
+.order-item-clickable {
+  cursor: pointer;
+}
+.order-item-clickable:hover {
+  background: #f0f4ff;
 }
 
 /* Card headers */
 .card-header {
   border-bottom: 1px solid #e9ecef;
   padding: 12px 18px;
+}
+
+/* Tabs */
+.nav-tabs .nav-link.active {
+  font-weight: 600;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+}
+.modal-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-box-lg {
+  max-width: 680px;
 }
 </style>
