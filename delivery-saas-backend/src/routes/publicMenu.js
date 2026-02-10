@@ -131,7 +131,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
     // uncategorized products will not be exposed via the public menu for privacy/consistency
 
   // include company basic info (hours)
-  let company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, alwaysOpen: true, timezone: true, weeklySchedule: true } })
+  let company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, alwaysOpen: true, timezone: true, weeklySchedule: true, city: true, state: true } })
   // container for an optional menu-scoped object to expose menu-level images/settings
   let menuObj = null
     // attach public-facing settings file (banner/logo/address/phone) when present

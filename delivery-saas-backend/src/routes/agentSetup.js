@@ -287,7 +287,8 @@ agentSetupRouter.post('/print-test', requireRole('ADMIN'), async (req, res) => {
     const companyId = req.user && req.user.companyId
     if (!companyId) return res.status(400).json({ message: 'companyId ausente no token' })
 
-    const { storeId, printerName, text, printerType, dryRun, printerInterface, printerCodepage } = req.body || {}
+    const { storeId, printerName, text, printerType, dryRun, printerInterface, printerCodepage,
+            receiptTemplate, headerName, headerCity, copies } = req.body || {}
     if (!storeId) return res.status(400).json({ message: 'storeId é obrigatório' })
 
     const io = req.app && req.app.locals && req.app.locals.io
@@ -297,13 +298,32 @@ agentSetupRouter.post('/print-test', requireRole('ADMIN'), async (req, res) => {
     const sockets = Array.from(io.sockets.sockets.values()).slice().reverse().filter(s => s.agent && Array.isArray(s.agent.storeIds) && s.agent.storeIds.includes(storeId))
     if (!sockets || sockets.length === 0) return res.status(404).json({ message: 'Nenhum agente conectado para esse storeId' })
 
+    // Buscar configurações de impressão do banco para incluir template e headers
+    let dbSettings = {}
+    try {
+      const ps = await prisma.printerSetting.findUnique({ where: { companyId } })
+      if (ps) {
+        dbSettings = {
+          receiptTemplate: ps.receiptTemplate || null,
+          headerName: ps.headerName || null,
+          headerCity: ps.headerCity || null,
+          copies: ps.copies || 1,
+          printerName: ps.printerName || null,
+        }
+      }
+    } catch (e) { /* ignore */ }
+
     const payload = {
-      printerName: printerName || null,
+      printerName: printerName || dbSettings.printerName || null,
       printerInterface: printerInterface || null,
       printerType: printerType || null,
       printerCodepage: printerCodepage || null,
       dryRun: typeof dryRun === 'boolean' ? dryRun : undefined,
-      text: text || 'Teste de impressão — Delivery'
+      text: text || 'Teste de impressão — Delivery',
+      receiptTemplate: receiptTemplate !== undefined ? receiptTemplate : dbSettings.receiptTemplate,
+      headerName: headerName !== undefined ? headerName : dbSettings.headerName,
+      headerCity: headerCity !== undefined ? headerCity : dbSettings.headerCity,
+      copies: copies || dbSettings.copies || 1,
     }
 
     // Try each candidate socket in order (newest first) until one responds successfully

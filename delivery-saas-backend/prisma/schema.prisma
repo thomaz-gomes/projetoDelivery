@@ -74,18 +74,28 @@ model Company {
   cashbackSetting      CashbackSetting?
   cashbackProductRules CashbackProductRule[]
   cashbackWallets      CashbackWallet[]
+  // Company address (used as default city/state for customer addresses)
+  street               String?
+  addressNumber        String?
+  addressNeighborhood  String?
+  city                 String?
+  state                String?
+  postalCode           String?
 }
 
 model User {
-  id        String   @id @default(uuid())
-  companyId String?
-  company   Company? @relation(fields: [companyId], references: [id])
-  role      Role
-  name      String
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-  rider     Rider?
+  id            String   @id @default(uuid())
+  companyId     String?
+  company       Company? @relation(fields: [companyId], references: [id])
+  role          Role
+  name          String
+  email         String   @unique
+  whatsapp      String?
+  password      String
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+  rider         Rider?
 }
 
 model Rider {
@@ -965,4 +975,16 @@ model StockMovementItem {
 
   @@index([stockMovementId], name: "idx_stockmovementitem_movement")
   @@index([ingredientId], name: "idx_stockmovementitem_ingredient")
+}
+
+// Email verification codes for user registration
+model EmailVerification {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, code], name: "idx_emailverification_email_code")
 }
