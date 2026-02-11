@@ -10,9 +10,12 @@ const mobileOpen = ref(false);
 // show the dashboard layout (sidebar/topbar) for all routes except the login page and public menu
 const route = useRoute();
 const showLayout = computed(() => {
-  // hide layout for login and for any public routes (start with /public)
+  // hide layout for login, register, verify, setup and for any public routes (start with /public)
   if(!route || !route.path) return true
   if(route.path === '/login') return false
+  if(route.path === '/register') return false
+  if(route.path === '/verify-email') return false
+  if(route.path === '/setup') return false
   if(route.path.startsWith && route.path.startsWith('/public')) return false
   return true
 });

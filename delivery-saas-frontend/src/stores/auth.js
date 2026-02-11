@@ -25,6 +25,7 @@ export const useAuthStore = defineStore('auth', {
       try { localStorage.setItem('user', JSON.stringify(this.user)); } catch(e){}
       // Notify other parts of the SPA that a login occurred so they can identify sockets
       try { window.dispatchEvent(new CustomEvent('app:user-logged-in', { detail: { token: this.token } })); } catch(e) {}
+      return data;
     },
     async loginWhatsapp(whatsapp, password) {
       // send masked or unmasked WhatsApp; backend will normalize

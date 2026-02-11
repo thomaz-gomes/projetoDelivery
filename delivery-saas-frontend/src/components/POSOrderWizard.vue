@@ -329,7 +329,8 @@ const customerNotFound = ref(false);
 const customerSearchLoading = ref(false);
 const newCustomerName = ref('');
 const orderType = ref('BALCAO');
-const addr = ref({ street:'', number:'', neighborhood:'', complement:'', formatted:'' });
+const addr = ref({ street:'', number:'', neighborhood:'', complement:'', formatted:'', city:'', state:'' });
+const companyDefaults = ref({ city:'', state:'' });
 
 const menuLoading = ref(false);
 const allProducts = ref([]);
@@ -821,6 +822,16 @@ async function loadNeighborhoods(){
     const { data } = await api.get(`/public/${companyId}/neighborhoods`);
     neighborhoods.value = Array.isArray(data) ? data : [];
     console.log('Bairros carregados:', neighborhoods.value);
+    // Load company defaults (city/state) for address pre-fill
+    if (!companyDefaults.value.city) {
+      try {
+        const { data: menuData } = await api.get(`/public/${companyId}/menu`);
+        if (menuData?.company) {
+          companyDefaults.value.city = menuData.company.city || '';
+          companyDefaults.value.state = menuData.company.state || '';
+        }
+      } catch(e) { /* ignore */ }
+    }
   } catch(e){ console.error('Falha ao carregar bairros públicos para PDV', e); }
   finally{ neighborhoodsLoading.value=false; }
 }
@@ -871,6 +882,8 @@ async function finalize(){
           neighborhood: addr.value.neighborhood || null,
           reference: addr.value.reference || null,
           observation: addr.value.observation || null,
+          city: addr.value.city || companyDefaults.value.city || null,
+          state: addr.value.state || companyDefaults.value.state || null,
           formatted: formatted || null
         };
         // create address on customer and set customerId on order body so backend uses existing customer
@@ -906,7 +919,7 @@ function resetWizard(){
   savedAddresses.value = [];
   selectedAddressId.value = null;
   showNewAddressForm.value = false;
-  addr.value = { street:'', number:'', neighborhood:'', complement:'', formatted:'', reference:'', observation:'' };
+  addr.value = { street:'', number:'', neighborhood:'', complement:'', formatted:'', reference:'', observation:'', city: companyDefaults.value.city || '', state: companyDefaults.value.state || '' };
 }
 
 watch(()=>props.visible, async (v)=>{ 

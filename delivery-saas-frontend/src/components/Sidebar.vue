@@ -55,6 +55,7 @@ const nav = [
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp' },
     { name: 'Dev Tools', to: '/settings/devtools', icon: 'bi bi-tools' },
     { name: 'Formas de pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card-2-front' },
+    { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' },
     { name: 'Gestão de Acessos', to: '/settings/access-control', icon: 'bi bi-shield-lock' },
   ] },
   // SaaS admin area (parent with CRUD children for SUPER_ADMIN)

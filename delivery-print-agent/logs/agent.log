@@ -8454,3 +8454,39 @@ Require stack:
 - D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
 - D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\index.js
 [2026-02-09T13:17:30.649Z] Printed via system fallback (win32)
+[2026-02-10T00:41:00.957Z] Printing order test-1 - 1 copies - format json-v2 - printer default
+[2026-02-10T00:41:00.959Z] [DRY_RUN] ================================================
+                   MINHA LOJA
+================================================
+                   PEDIDO #42
+CLIENTE: JOAO TESTE
+Endereco: Rua Teste 123
+================================================
+2x  Pizza Margherita  R$ 90.00
+================================================
+TOTAL: R$ 90.00
+================================================
+                   Obrigado!
+================================================
+[2026-02-10T01:07:53.657Z] Printing order test-verify-1770685673638 - 1 copies - format json-v2 - printer FAKE_PRINTER_FOR_TEST
+[2026-02-10T01:07:55.369Z] raw-spooler failed: raw-spooler exit 5: OpenPrinter failed for: FAKE_PRINTER_FOR_TEST
+
+[2026-02-10T01:07:55.400Z] node-thermal-printer native execute failed: Cannot find module 'printer'
+Require stack:
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\interfaces\index.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\lib\core.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\node_modules\node-thermal-printer\node-thermal-printer.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\printerService.js
+- D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\[eval]
+[2026-02-10T01:07:56.032Z] System fallback failed: PowerShell Out-Printer exit 1: out-lineoutput : As configurações para acessar a impressora 
+'FAKE_PRINTER_FOR_TEST' não são válidas.
+No linha:1 caractere:59
++ ... ing]::UTF8; Get-Content -Raw -Encoding UTF8 'D:\Users\gomes\Docum
+[2026-02-10T01:07:56.034Z] Saved failed print to D:\Users\gomes\Documents\GitHub\projetoDelivery\delivery-print-agent\failed-print\failed-test-verify-1770685673638-1770685676033.txt
+[2026-02-10T14:08:17.503Z] Printing order test-real-1770732497485 - 1 copies - format json-v2 - printer Print iD2
+[2026-02-10T14:08:17.738Z] Printed via raw-spooler (1043 bytes) to Print iD2
+[2026-02-10T17:47:21.755Z] Printing order 649465f3-2d8d-4d27-81e3-f32ac9ce883f - 1 copies - format json-v2 - printer Print iD2
+[2026-02-10T17:47:23.237Z] Printed via raw-spooler (976 bytes) to Print iD2
+[2026-02-10T17:47:23.240Z] Printing order 9c3b2562-f2b8-42f3-9154-7eb3a02fbf08 - 1 copies - format json-v2 - printer Print iD2
+[2026-02-10T17:47:23.356Z] Printed via raw-spooler (976 bytes) to Print iD2

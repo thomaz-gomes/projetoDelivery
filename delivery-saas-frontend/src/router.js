@@ -1,5 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Login from './views/Login.vue';
+import Register from './views/Register.vue';
+import VerifyEmail from './views/VerifyEmail.vue';
+import SetupCompany from './views/SetupCompany.vue';
 import Orders from './views/Orders.vue';
 import Claim from './views/Claim.vue';
 import Receipt from './views/Receipt.vue';
@@ -87,6 +90,9 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', component: Login },
+    { path: '/register', component: Register },
+    { path: '/verify-email', component: VerifyEmail },
+    { path: '/setup', component: SetupCompany, meta: { requiresAuth: true, noSidebar: true } },
     { path: '/', redirect: '/orders' },
     { path: '/orders', component: Orders, meta: { requiresAuth: true } },
     { path: '/orders/:id/receipt', component: Receipt, meta: { requiresAuth: true } },
@@ -195,6 +201,20 @@ router.beforeEach(async (to) => {
   const token = localStorage.getItem('token');
   if (to.meta.requiresAuth && !token) {
     return { path: '/login', query: { redirect: to.fullPath } };
+  }
+
+  // Redirect users without company to setup (except if already on /setup)
+  if (token && to.meta.requiresAuth && to.path !== '/setup') {
+    const auth = useAuthStore();
+    if (!auth.user && token) {
+      try {
+        const { data } = await api.get('/auth/me');
+        if (data && data.user) auth.user = data.user;
+      } catch (e) { /* ignore */ }
+    }
+    if (auth.user && !auth.user.companyId && auth.user.role !== 'SUPER_ADMIN') {
+      return { path: '/setup' };
+    }
   }
 
   // role-based guard: if route requires a role, ensure current user has it

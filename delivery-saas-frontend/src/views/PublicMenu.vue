@@ -1522,7 +1522,7 @@ try{
     }
   }
 }catch(e){ console.warn('restore cart from localStorage failed', e) }
-const customer = ref({ name: '', contact: '', address: { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' } });
+const customer = ref({ name: '', contact: '', address: { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', latitude: null, longitude: null, fullDisplay: '' } });
 // reactive token so UI recomputes when login sets/removes token
 const tokenRef = ref(localStorage.getItem('token') || null)
 const accountExists = ref(false)
@@ -3311,6 +3311,13 @@ onMounted(async ()=>{
   // if a previously selected/active category is now inactive/absent, reset active state
   if(activeCategoryId.value && !categories.value.find(c => c.id === activeCategoryId.value)) activeCategoryId.value = null
   company.value = data.company || null
+  // Set default city/state from company address for new customer addresses
+  if (company.value && company.value.city && !customer.value.address.city) {
+    customer.value.address.city = company.value.city
+  }
+  if (company.value && company.value.state && !customer.value.address.state) {
+    customer.value.address.state = company.value.state
+  }
   menu.value = data.menu || null
     try{
       if(menu.value){

@@ -65,11 +65,8 @@
                 <div class="mb-2"><TextInput label="Whatsapp" labelClass="form-label" v-model="form.whatsapp" inputClass="form-control" /></div>
                 <div class="mb-2"><label class="form-label">Role</label>
                 <SelectInput  class="form-select"  v-model="form.role" >
-                  <option value="SUPER_ADMIN">Super Admin</option>
                   <option value="ADMIN">Admin</option>
                   <option value="ATTENDANT">Atendimento</option>
-                  <option value="RIDER">Rider</option>
-                  <option value="AFFILIATE">Afiliado</option>
                 </SelectInput>
               </div>
               <div class="mb-2" v-if="!editing"><TextInput label="Senha (opcional)" labelClass="form-label" v-model="form.password" inputClass="form-control" /></div>

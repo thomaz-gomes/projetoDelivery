@@ -31,7 +31,17 @@ async function onSubmit() {
         await auth.loginWhatsappAffiliate(digits.slice(-11), password.value);
       }
     } else {
-      await auth.login(email.value, password.value);
+      const data = await auth.login(email.value, password.value);
+      // Handle needsVerification: redirect to verify-email
+      if (data?.needsVerification) {
+        router.push({ path: '/verify-email', query: { email: email.value } });
+        return;
+      }
+      // Handle needsSetup: redirect to company wizard
+      if (data?.needsSetup) {
+        router.push('/setup');
+        return;
+      }
     }
   // redirect: affiliates -> /affiliate, riders -> /rider, super admin -> /saas, otherwise redirect param or /orders
   let destination = route.query.redirect || '/orders';
@@ -147,6 +157,12 @@ function onWhatsappInput(e) {
               ></span>
               Entrar
             </button>
+          </div>
+
+          <div class="text-center mt-3">
+            <router-link to="/register" class="text-decoration-none small">
+              Não tem conta? Cadastre-se
+            </router-link>
           </div>
         </form>
 
