@@ -1,11 +1,14 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 
 const stores = ref([]);
 const form = ref({ name: '', cnpj: '', timezone: '', address: '', logoUrl: '' });
 const editing = ref(null);
 const loading = ref(false);
+
+// The primary store is the first one created (oldest, returned first by API) — it cannot be deleted
+const primaryStoreId = computed(() => stores.value.length ? stores.value[0].id : null)
 
 async function load() {
   loading.value = true;
@@ -79,7 +82,7 @@ onMounted(load);
                     <td>{{ s.timezone || '-' }}</td>
                     <td class="text-end">
                       <button class="btn btn-sm btn-outline-primary me-1" @click="$router.push(`/settings/stores/${s.id}`)">Editar</button>
-                      <button class="btn btn-sm btn-outline-danger" @click="remove(s.id)">Remover</button>
+                      <button class="btn btn-sm btn-outline-danger" @click="remove(s.id)" :disabled="s.id === primaryStoreId" :title="s.id === primaryStoreId ? 'A loja principal não pode ser removida' : ''">Remover</button>
                     </td>
                   </tr>
                   <tr v-if="stores.length === 0"><td colspan="4" class="text-muted">Nenhuma loja cadastrada</td></tr>

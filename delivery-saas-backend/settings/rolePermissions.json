@@ -1,0 +1,6 @@
+{
+  "SUPER_ADMIN": ["*"],
+  "ADMIN": ["users:read", "users:create", "users:update", "users:delete", "orders:view", "menu:edit", "settings:update", "customers:view"],
+  "ATTENDANT": ["orders:view", "orders:update", "customers:view"],
+  "RIDER": ["orders:view", "orders:update"]
+}

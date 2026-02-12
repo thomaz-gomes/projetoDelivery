@@ -1,28 +1,36 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import api from '../api'
 
 const route = useRoute()
 const router = useRouter()
-const id = route.params.id
+const auth = useAuthStore()
+
+// ADMIN edits their own company; SUPER_ADMIN edits any company via :id
+const isSuperAdmin = computed(() => auth.user?.role === 'SUPER_ADMIN')
+const id = route.params.id || auth.user?.companyId
+
 const company = ref(null)
 const plans = ref([])
 const subscription = ref(null)
 const form = ref({ name: '', slug: '', planId: '', nextDueAt: '', period: 'MONTHLY' })
 
 async function load(){
-  // fetch company
+  if (!id) { router.push('/'); return }
   try {
-    const [cRes, pRes, sRes] = await Promise.all([
-      api.get(`/saas/companies/${id}`),
-      api.get('/saas/plans'),
-      api.get(`/saas/subscription/${id}`).catch(()=>({ data: null }))
-    ])
+    const promises = [api.get(`/saas/companies/${id}`)]
+    // Only SUPER_ADMIN can manage plans and subscriptions
+    if (isSuperAdmin.value) {
+      promises.push(api.get('/saas/plans'))
+      promises.push(api.get(`/saas/subscription/${id}`).catch(()=>({ data: null })))
+    }
+    const [cRes, pRes, sRes] = await Promise.all(promises)
     const row = cRes.data
-    if (!row) { router.push('/saas/companies'); return }
+    if (!row) { router.push(isSuperAdmin.value ? '/saas/companies' : '/'); return }
     company.value = row
-    plans.value = pRes.data || []
+    plans.value = pRes?.data || []
     subscription.value = sRes && sRes.data ? sRes.data : null
     form.value = {
       name: row.name || '',
@@ -33,31 +41,24 @@ async function load(){
     }
   } catch (e) {
     console.error('Failed to load company edit data', e)
-    router.push('/saas/companies')
+    router.push(isSuperAdmin.value ? '/saas/companies' : '/')
   }
 }
 
 onMounted(load)
 
 async function submit(){
-  // update company
   await api.put(`/saas/companies/${id}`, { name: form.value.name, slug: form.value.slug })
-  // update or create subscription
-  if (form.value.planId) {
+  // Only SUPER_ADMIN manages subscriptions
+  if (isSuperAdmin.value && form.value.planId) {
     await api.post('/saas/subscriptions', { companyId: id, planId: form.value.planId, nextDueAt: form.value.nextDueAt || null, period: form.value.period })
   }
-  router.push('/saas/companies')
+  router.push(isSuperAdmin.value ? '/saas/companies' : '/')
 }
 
 async function suspend(){
   if (!confirm('Suspender empresa?')) return
   await api.post(`/saas/companies/${id}/suspend`, { suspend: true })
-  router.push('/saas/companies')
-}
-
-async function removeCompany(){
-  if (!confirm('Excluir (soft-delete) empresa?')) return
-  await api.delete(`/saas/companies/${id}`)
   router.push('/saas/companies')
 }
 </script>
@@ -67,18 +68,29 @@ async function removeCompany(){
     <h2 class="mb-3">Editar Empresa</h2>
     <div class="card">
         <div class="card-body">
+          <div v-if="company" class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Responsável</label>
+              <input :value="company.ownerName" class="form-control" disabled />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">E-mail do responsável</label>
+              <input :value="company.ownerEmail" class="form-control" disabled />
+            </div>
+          </div>
+
           <div class="row g-2">
             <div class="col-md-6">
               <label class="form-label">Nome da empresa</label>
               <input v-model="form.name" class="form-control" />
             </div>
-            <div class="col-md-6">
+            <div v-if="isSuperAdmin" class="col-md-6">
               <label class="form-label">Slug (opcional)</label>
               <input v-model="form.slug" class="form-control" />
             </div>
           </div>
 
-          <div class="row g-2 mt-3">
+          <div v-if="isSuperAdmin" class="row g-2 mt-3">
             <div class="col-md-6">
               <label class="form-label">Plano</label>
               <select v-model="form.planId" class="form-select">
@@ -101,9 +113,8 @@ async function removeCompany(){
 
           <div class="mt-3">
             <button class="btn btn-primary" @click="submit">Salvar</button>
-            <button class="btn btn-warning ms-2" @click="suspend">Suspender</button>
-            <button class="btn btn-danger ms-2" @click="removeCompany">Excluir</button>
-            <router-link class="btn btn-link ms-2" to="/saas/companies">Voltar</router-link>
+            <button v-if="isSuperAdmin" class="btn btn-warning ms-2" @click="suspend">Suspender</button>
+            <router-link class="btn btn-link ms-2" :to="isSuperAdmin ? '/saas/companies' : '/'">Voltar</router-link>
           </div>
         </div>
       </div>

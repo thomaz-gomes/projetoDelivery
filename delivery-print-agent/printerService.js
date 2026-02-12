@@ -153,11 +153,13 @@ function clearRecentPrint(orderId) {
 const ntp = require('node-thermal-printer');
 
 // --- ESC/POS raw byte sequences ---
+const PAPER_WIDTH_DOTS = Number(process.env.PAPER_WIDTH_DOTS || 576); // 576 = 80mm, 384 = 58mm
 const ESCPOS_INIT = Buffer.from([
   0x1b, 0x40,       // ESC @ - Initialize / reset printer
   0x1b, 0x52, 0x08, // ESC R 8 - Select character table (PC860 Portuguese)
+  0x1b, 0x21, 0x00, // ESC ! 0 - Select Font A, normal size (not condensed)
   0x1d, 0x4c, 0x00, 0x00, // GS L 0 0 - Set left margin to 0
-  0x1d, 0x57, 0x00, 0x02, // GS W 512 - Set print area width to 512 dots (full 80mm)
+  0x1d, 0x57, PAPER_WIDTH_DOTS & 0xFF, (PAPER_WIDTH_DOTS >> 8) & 0xFF, // GS W - Set print area width (576 dots = 80mm)
   0x1b, 0x32,       // ESC 2 - Set default line spacing
 ]);
 

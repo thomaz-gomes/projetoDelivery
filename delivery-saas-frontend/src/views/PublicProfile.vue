@@ -40,7 +40,7 @@
               </div>
             </div>
           </div>
-          <div v-if="wallet && (wallet.balance!==undefined)" class="card mt-3">
+          <div v-if="cashbackEnabled && wallet && (wallet.balance!==undefined)" class="card mt-3">
             <div class="card-body">
               <h5 class="card-title">Saldo de Cashback</h5>
               <div class="d-flex justify-content-between align-items-center">
@@ -169,11 +169,14 @@ const profile = ref(null)
 const lastOrder = ref(null)
 const loadingLast = ref(false)
 const wallet = ref({ balance: 0, transactions: [] })
+const cashbackEnabled = ref(false)
 const tokenPresent = ref(false)
 
 const COMPANY_CUSTOMER_KEY = `public_customer_${companyId}`
 
 onMounted(()=>{
+  // fetch cashback settings to decide whether to show wallet section
+  fetchCashbackSettings()
   const token = localStorage.getItem('token')
   const stored = JSON.parse(localStorage.getItem(COMPANY_CUSTOMER_KEY) || 'null')
   if(token && stored){
@@ -231,6 +234,13 @@ async function fetchWallet(){
     const res = await api.get(`/cashback/wallet?clientId=${profile.value.id}`)
     wallet.value = res.data || { balance: 0, transactions: [] }
   }catch(e){ console.warn('fetchWallet', e) }
+}
+
+async function fetchCashbackSettings(){
+  try{
+    const res = await api.get(`/public/${companyId}/cashback-settings`)
+    cashbackEnabled.value = !!(res.data && res.data.enabled)
+  }catch(e){ cashbackEnabled.value = false }
 }
 
 function repeatOrder(order){

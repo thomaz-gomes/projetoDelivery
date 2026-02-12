@@ -326,17 +326,46 @@ saasRouter.post('/jobs/generate-invoices', requireRole('SUPER_ADMIN'), async (re
 // -------- Company (tenant) management --------
 // List companies (SUPER_ADMIN)
 saasRouter.get('/companies', requireRole('SUPER_ADMIN'), async (_req, res) => {
-  const rows = await prisma.company.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true, slug: true, createdAt: true } })
+  const rows = await prisma.company.findMany({
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true, name: true, slug: true, createdAt: true,
+      saasSubscription: {
+        select: {
+          id: true, status: true, period: true,
+          plan: { select: { id: true, name: true, price: true } }
+        }
+      },
+      _count: { select: { stores: true, users: true } }
+    }
+  })
   res.json(rows)
 })
 
-// Get single company (SUPER_ADMIN)
-saasRouter.get('/companies/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
+// Get single company (SUPER_ADMIN or ADMIN for own company)
+saasRouter.get('/companies/:id', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
+  // ADMIN can only view their own company
+  if (req.user.role === 'ADMIN' && req.user.companyId !== id) {
+    return res.status(403).json({ message: 'Acesso negado' })
+  }
   try {
-    const c = await prisma.company.findUnique({ where: { id }, select: { id: true, name: true, slug: true, createdAt: true } })
+    const c = await prisma.company.findUnique({
+      where: { id },
+      select: {
+        id: true, name: true, slug: true, createdAt: true,
+        users: {
+          where: { role: 'ADMIN' },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+          select: { name: true, email: true }
+        }
+      }
+    })
     if (!c) return res.status(404).json({ message: 'Empresa não encontrada' })
-    res.json(c)
+    const owner = c.users && c.users[0] ? c.users[0] : null
+    const { users, ...rest } = c
+    res.json({ ...rest, ownerName: owner?.name || '', ownerEmail: owner?.email || '' })
   } catch (e) {
     res.status(500).json({ message: 'Erro ao obter empresa', error: e?.message || String(e) })
   }
@@ -364,9 +393,13 @@ saasRouter.post('/companies', requireRole('SUPER_ADMIN'), async (req, res) => {
   }
 })
 
-// Update company (SUPER_ADMIN)
-saasRouter.put('/companies/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
+// Update company (SUPER_ADMIN or ADMIN for own company)
+saasRouter.put('/companies/:id', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
+  // ADMIN can only edit their own company
+  if (req.user.role === 'ADMIN' && req.user.companyId !== id) {
+    return res.status(403).json({ message: 'Acesso negado' })
+  }
   const { name, slug } = req.body || {}
   try {
     const data = {}
@@ -430,24 +463,9 @@ saasRouter.post('/companies/:id/suspend', requireRole('SUPER_ADMIN'), async (req
   }
 })
 
-// Soft-delete / deactivate company (SUPER_ADMIN)
-saasRouter.delete('/companies/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
-  const { id } = req.params
-  try {
-    // Soft actions: cancel subscriptions, deactivate stores, demote users, prefix name to indicate deletion
-    const company = await prisma.company.findUnique({ where: { id } })
-    if (!company) return res.status(404).json({ message: 'Empresa não encontrada' })
-    const newName = `[DELETED] ${company.name}`
-    await prisma.$transaction([
-      prisma.saasSubscription.updateMany({ where: { companyId: id }, data: { status: 'CANCELED' } }),
-      prisma.store.updateMany({ where: { companyId: id }, data: { isActive: false } }),
-      prisma.user.updateMany({ where: { companyId: id, NOT: { role: 'SUPER_ADMIN' } }, data: { role: 'ATTENDANT' } }),
-      prisma.company.update({ where: { id }, data: { name: newName } })
-    ])
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(500).json({ message: 'Erro ao remover empresa', error: e?.message || String(e) })
-  }
+// DELETE company is intentionally disabled — companies must never be deleted
+saasRouter.delete('/companies/:id', requireRole('SUPER_ADMIN'), async (_req, res) => {
+  return res.status(403).json({ message: 'Empresas não podem ser excluídas. Use a opção de suspender.' })
 })
 
 export default saasRouter

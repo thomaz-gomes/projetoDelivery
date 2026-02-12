@@ -24,22 +24,22 @@ const nav = [
   { name: 'Relatórios', to: '/reports', icon: 'bi bi-file-earmark-bar-graph', children: [
     { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
     { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
-    { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat' }
+    { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat', moduleKey: 'stock' }
   ] },
   { name: 'Clientes', to: '/customers', icon: 'bi bi-person', children: [
     { name: 'Listar clientes', to: '/customers', icon: 'bi bi-people' },
     { name: 'Grupos de clientes', to: '/customer-groups', icon: 'bi bi-people-fill' }
   ] },
-  { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', children: [
+  { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', moduleKey: 'riders', children: [
     { name: 'Lista', to: '/riders', icon: 'bi bi-people' },
     { name: 'Créditos/Débitos', to: '/rider-adjustments', icon: 'bi bi-credit-card' },
   ] },
   { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', children: [
-    { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill' },
-    { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated' },
-    { name: 'Cashback', to: '/settings/cashback', icon: 'bi bi-cash-stack' }
+    { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill', moduleKey: 'affiliates' },
+    { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated', moduleKey: 'coupons' },
+    { name: 'Cashback', to: '/settings/cashback', icon: 'bi bi-cash-stack', moduleKey: 'cashback' }
   ] },
-  { name: 'Ingredientes', to: '/ingredient-groups', icon: 'bi bi-box', children: [
+  { name: 'Ingredientes', to: '/ingredient-groups', icon: 'bi bi-box', moduleKey: 'stock', children: [
     { name: 'Grupos de Ingredientes', to: '/ingredient-groups', icon: 'bi bi-list' },
     { name: 'Ingredientes', to: '/ingredients', icon: 'bi bi-basket' },
     { name: 'Fichas Técnicas', to: '/technical-sheets', icon: 'bi bi-file-earmark-text' }
@@ -52,7 +52,7 @@ const nav = [
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt' },
     { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug' },
     { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
-    { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp' },
+    { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp' },
     { name: 'Dev Tools', to: '/settings/devtools', icon: 'bi bi-tools' },
     { name: 'Formas de pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card-2-front' },
     { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' },
@@ -241,24 +241,21 @@ const visibleNav = computed(() => {
 
     // Default: hide items that explicitly require a role the user doesn't have
     const enabled = (saas.enabledModules || []).map(k => String(k).toLowerCase())
+    const isModuleEnabled = (key) => !key || enabled.includes(String(key).toLowerCase())
     return nav.map((item) => {
       if(item.role && role !== String(item.role).toUpperCase()) return null;
+      // Module gating at parent level: hide entire section if moduleKey not enabled
+      if(item.moduleKey && !isModuleEnabled(item.moduleKey)) return null;
       const copy = { ...item };
       if(Array.isArray(copy.children)){
-        copy.children = copy.children.filter(c => !c.role || String(c.role).toUpperCase() === role);
+        copy.children = copy.children.filter(c => {
+          if(c.role && String(c.role).toUpperCase() !== role) return false;
+          if(c.moduleKey && !isModuleEnabled(c.moduleKey)) return false;
+          return true;
+        });
+        // Hide parent if all children were filtered out
+        if(copy.children.length === 0) return null;
       }
-      // Module gating: hide Riders/nav when module not enabled for this company
-      try{
-        if (String(copy.to || '').startsWith('/riders') || (copy.children && copy.children.some(c=>String(c.to||'').startsWith('/riders')))){
-          const ok = enabled.includes('riders') || enabled.includes('rider') || enabled.includes('motoboy') || enabled.includes('motoboys') || enabled.includes('entregadores')
-          if(!ok) return null
-        }
-        // Hide Affiliates menu if affiliate module disabled
-        if (String(copy.to || '').startsWith('/affiliates') || (copy.children && copy.children.some(c=>String(c.to||'').startsWith('/affiliates')))){
-          const ok2 = enabled.includes('affiliates') || enabled.includes('affiliate') || enabled.includes('afiliados')
-          if(!ok2) return null
-        }
-      }catch(e){}
       return copy;
     }).filter(Boolean);
   }catch(e){ return nav }

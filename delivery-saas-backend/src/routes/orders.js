@@ -272,6 +272,7 @@ ordersRouter.patch('/:id', requireRole('ADMIN', 'STORE'), async (req, res) => {
       await prisma.orderItem.createMany({
         data: items.map(it => ({
           orderId: id,
+          productId: it.productId || null,
           name: it.name || '',
           quantity: Number(it.quantity) || 1,
           price: Number(it.price) || 0,
@@ -347,7 +348,7 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res
     const updated = await prisma.order.update({
       where: { id },
       data: updateData,
-      include: { histories: true, rider: true }
+      include: { histories: true, rider: true, items: true }
     });
 
     // notify customer and emit websocket update
@@ -706,7 +707,7 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
           total: total
         },
         items: {
-          create: cleanItems.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes, options: it.options || null }))
+          create: cleanItems.map(it => ({ productId: it.productId || null, name: it.name, quantity: it.quantity, price: it.price, notes: it.notes, options: it.options || null }))
         },
         histories: { create: { from: null, to: 'EM_PREPARO', byUserId: req.user.id, reason: 'Criação PDV' } }
       },

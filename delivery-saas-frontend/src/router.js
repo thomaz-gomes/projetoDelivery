@@ -6,18 +6,18 @@ import SetupCompany from './views/SetupCompany.vue';
 import Orders from './views/Orders.vue';
 import Claim from './views/Claim.vue';
 import Receipt from './views/Receipt.vue';
-import WhatsAppConnect from './views/WhatsAppConnect.vue';
+import WhatsAppConnect from './views/whatsapp/WhatsAppConnect.vue';
 import Riders from './views/Riders.vue';
 import RiderForm from './views/RiderForm.vue';
 import Neighborhoods from './views/Neighborhoods.vue';
-import IngredientGroups from './views/IngredientGroups.vue';
-import Ingredients from './views/Ingredients.vue';
-import IngredientGroupForm from './views/ingredients/IngredientGroupForm.vue';
-import IngredientForm from './views/ingredients/IngredientForm.vue';
-import TechnicalSheets from './views/TechnicalSheets.vue';
-import TechnicalSheetEdit from './views/TechnicalSheetEdit.vue';
-import StockMovements from './views/StockMovements.vue';
-import StockMovementForm from './views/StockMovementForm.vue';
+import IngredientGroups from './views/stock/IngredientGroups.vue';
+import Ingredients from './views/stock/Ingredients.vue';
+import IngredientGroupForm from './views/stock/IngredientGroupForm.vue';
+import IngredientForm from './views/stock/IngredientForm.vue';
+import TechnicalSheets from './views/stock/TechnicalSheets.vue';
+import TechnicalSheetEdit from './views/stock/TechnicalSheetEdit.vue';
+import StockMovements from './views/stock/StockMovements.vue';
+import StockMovementForm from './views/stock/StockMovementForm.vue';
 import RiderAccount from './views/RiderAccount.vue';
 import RiderAccountAdmin from './views/RiderAccountAdmin.vue';
 import api from './api';
@@ -38,16 +38,16 @@ import AgentTokenAdmin from './views/AgentTokenAdmin.vue';
 import StoreForm from './views/StoreForm.vue';
 import FileSourceSettings from './views/FileSourceSettings.vue';
 import FileSourcePreview from './views/FileSourcePreview.vue';
-import AffiliateListing from './views/AffiliateListing.vue';
-import AffiliateCreate from './views/AffiliateCreate.vue';
-import AffiliateEdit from './views/AffiliateEdit.vue';
-import AffiliateSaleNew from './views/AffiliateSaleNew.vue';
-import AffiliatePaymentNew from './views/AffiliatePaymentNew.vue';
-import AffiliateStatement from './views/AffiliateStatement.vue';
-import AffiliateHome from './views/AffiliateHome.vue';
-import AffiliateStatementSelf from './views/affiliate/Statement.vue';
-import CouponsList from './views/CouponsList.vue';
-import CouponForm from './views/CouponForm.vue';
+import AffiliateListing from './views/affiliates/AffiliateListing.vue';
+import AffiliateCreate from './views/affiliates/AffiliateCreate.vue';
+import AffiliateEdit from './views/affiliates/AffiliateEdit.vue';
+import AffiliateSaleNew from './views/affiliates/AffiliateSaleNew.vue';
+import AffiliatePaymentNew from './views/affiliates/AffiliatePaymentNew.vue';
+import AffiliateStatement from './views/affiliates/AffiliateStatement.vue';
+import AffiliateHome from './views/affiliates/AffiliateHome.vue';
+import AffiliateStatementSelf from './views/affiliates/StatementSelf.vue';
+import CouponsList from './views/coupons/CouponsList.vue';
+import CouponForm from './views/coupons/CouponForm.vue';
 import PublicMenu from './views/PublicMenu.vue';
 import PublicSlugResolver from './views/PublicSlugResolver.vue';
 import PublicProfile from './views/PublicProfile.vue';
@@ -84,7 +84,7 @@ import SaasCompanyEdit from './views/SaasCompanyEdit.vue';
 import SaasBilling from './views/SaasBilling.vue';
 import SaasModules from './views/SaasModules.vue';
 import SaasAdmin from './views/SaasAdmin.vue';
-import CashbackSettings from './views/CashbackSettings.vue';
+import CashbackSettings from './views/cashback/CashbackSettings.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -189,7 +189,7 @@ const router = createRouter({
   ,{ path: '/saas/plans', component: SaasPlans, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies', component: SaasCompanies, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies/new', component: SaasCompanyNew, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
-  ,{ path: '/saas/companies/:id/edit', component: SaasCompanyEdit, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/companies/:id/edit', component: SaasCompanyEdit, meta: { requiresAuth: true, role: ['ADMIN', 'SUPER_ADMIN'] } }
   ,{ path: '/saas/modules', component: SaasModules, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/billing', component: SaasBilling, meta: { requiresAuth: true, role: ['ADMIN','SUPER_ADMIN'] } }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },

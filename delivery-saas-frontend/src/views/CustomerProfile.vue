@@ -6,6 +6,7 @@ import { useCustomersStore } from '../stores/customers';
 import BaseButton from '../components/BaseButton.vue';
 import TextInput from '../components/form/input/TextInput.vue';
 import Swal from 'sweetalert2';
+import api from '../api';
 
 const route = useRoute();
 const store = useCustomersStore();
@@ -30,6 +31,7 @@ const selectedOrder = ref(null);
 onMounted(async () => {
   await store.get(route.params.id);
   await loadOrders(1);
+  loadCashback();
 });
 
 const stats = computed(() => store.current?.stats || {});
@@ -122,6 +124,66 @@ function orderDisplayId(o) {
   if (o.displayId != null) return String(o.displayId).padStart(2, '0');
   return o.id.slice(0, 6);
 }
+
+// Cashback
+const cashbackEnabled = ref(false);
+const cashbackLoading = ref(false);
+const cashbackBalance = ref(0);
+const cashbackTransactions = ref([]);
+const manualCashbackAmount = ref('');
+const manualCashbackDesc = ref('');
+
+async function loadCashback() {
+  if (!store.current?.id) return;
+  cashbackLoading.value = true;
+  try {
+    const res = await api.get(`/cashback/wallet?clientId=${store.current.id}`);
+    cashbackBalance.value = Number(res.data?.balance || 0);
+    cashbackTransactions.value = Array.isArray(res.data?.transactions) ? res.data.transactions : [];
+    cashbackEnabled.value = true;
+  } catch (e) {
+    cashbackEnabled.value = false;
+  } finally {
+    cashbackLoading.value = false;
+  }
+}
+
+async function manualCredit() {
+  const amount = Number(manualCashbackAmount.value);
+  if (!(amount > 0)) return Swal.fire({ icon: 'warning', text: 'Informe um valor maior que 0' });
+  try {
+    await api.post('/cashback/credit', {
+      clientId: store.current.id,
+      amount,
+      description: manualCashbackDesc.value || 'Crédito manual (admin)',
+    });
+    manualCashbackAmount.value = '';
+    manualCashbackDesc.value = '';
+    Swal.fire({ icon: 'success', text: 'Crédito adicionado', timer: 1500, showConfirmButton: false });
+    await loadCashback();
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao creditar' });
+  }
+}
+
+async function manualDebit() {
+  const amount = Number(manualCashbackAmount.value);
+  if (!(amount > 0)) return Swal.fire({ icon: 'warning', text: 'Informe um valor maior que 0' });
+  if (amount > cashbackBalance.value) return Swal.fire({ icon: 'warning', text: 'Saldo insuficiente' });
+  try {
+    await api.post('/cashback/debit', {
+      clientId: store.current.id,
+      amount,
+      description: manualCashbackDesc.value || 'Débito manual (admin)',
+    });
+    manualCashbackAmount.value = '';
+    manualCashbackDesc.value = '';
+    Swal.fire({ icon: 'success', text: 'Débito realizado', timer: 1500, showConfirmButton: false });
+    await loadCashback();
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao debitar' });
+  }
+}
 </script>
 
 <template>
@@ -202,6 +264,11 @@ function orderDisplayId(o) {
         <a class="nav-link" :class="{ active: activeTab === 'pedidos' }" href="#" @click.prevent="activeTab = 'pedidos'; loadOrders(1)">
           <i class="bi bi-bag me-1"></i> Pedidos
           <span class="badge bg-light text-dark ms-1">{{ store.ordersTotal }}</span>
+        </a>
+      </li>
+      <li v-if="cashbackEnabled" class="nav-item">
+        <a class="nav-link" :class="{ active: activeTab === 'cashback' }" href="#" @click.prevent="activeTab = 'cashback'; loadCashback()">
+          <i class="bi bi-wallet2 me-1"></i> Cashback
         </a>
       </li>
     </ul>
@@ -369,6 +436,85 @@ function orderDisplayId(o) {
               </li>
             </ul>
           </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Cashback -->
+    <div v-show="activeTab === 'cashback'">
+      <div class="row g-4">
+        <div class="col-lg-5">
+          <div class="card">
+            <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
+              <i class="bi bi-wallet2 text-success"></i> Saldo de Cashback
+            </div>
+            <div class="card-body">
+              <div v-if="cashbackLoading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-secondary"></div></div>
+              <div v-else>
+                <div class="text-center mb-3">
+                  <div class="small text-muted">Saldo atual</div>
+                  <div class="fs-3 fw-bold text-success">{{ formatCurrency(cashbackBalance) }}</div>
+                </div>
+                <hr>
+                <div class="small fw-semibold mb-2">Crédito / Débito manual</div>
+                <div class="row g-2 mb-2">
+                  <div class="col-12">
+                    <TextInput label="Valor (R$)" v-model="manualCashbackAmount" type="number" step="0.01" min="0" inputClass="form-control" />
+                  </div>
+                  <div class="col-12">
+                    <TextInput label="Descrição (opcional)" v-model="manualCashbackDesc" inputClass="form-control" />
+                  </div>
+                </div>
+                <div class="d-flex gap-2">
+                  <BaseButton variant="success" size="sm" @click="manualCredit">
+                    <i class="bi bi-plus-circle me-1"></i> Creditar
+                  </BaseButton>
+                  <BaseButton variant="outline" size="sm" @click="manualDebit">
+                    <i class="bi bi-dash-circle me-1"></i> Debitar
+                  </BaseButton>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-7">
+          <div class="card">
+            <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
+              <i class="bi bi-clock-history text-primary"></i> Histórico de Transações
+              <span class="badge bg-light text-dark">{{ cashbackTransactions.length }}</span>
+            </div>
+            <div class="card-body p-0">
+              <div v-if="cashbackLoading" class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div></div>
+              <div v-else-if="!cashbackTransactions.length" class="text-muted text-center py-4 small">
+                Nenhuma transação de cashback encontrada.
+              </div>
+              <div v-else>
+                <div
+                  v-for="t in cashbackTransactions"
+                  :key="t.id"
+                  class="cashback-tx-item"
+                >
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                      <div class="fw-medium">
+                        <span :class="t.type === 'CREDIT' ? 'text-success' : 'text-danger'">
+                          {{ t.type === 'CREDIT' ? 'Crédito' : 'Débito' }}
+                        </span>
+                      </div>
+                      <div class="small text-muted">{{ t.description || '—' }}</div>
+                      <div class="small text-muted">{{ formatDate(t.createdAt) }}</div>
+                    </div>
+                    <div class="text-end">
+                      <div class="fw-semibold" :class="t.type === 'CREDIT' ? 'text-success' : 'text-danger'">
+                        {{ t.type === 'CREDIT' ? '+' : '-' }}{{ formatCurrency(Number(t.amount || 0)) }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -633,5 +779,14 @@ function orderDisplayId(o) {
 }
 .modal-box-lg {
   max-width: 680px;
+}
+
+/* Cashback tx items */
+.cashback-tx-item {
+  padding: 12px 18px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.cashback-tx-item:last-child {
+  border-bottom: none;
 }
 </style>

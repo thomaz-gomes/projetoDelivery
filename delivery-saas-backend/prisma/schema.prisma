@@ -180,15 +180,16 @@ model NfeProtocol {
 }
 
 model OrderItem {
-  id       String  @id @default(uuid())
-  orderId  String
-  order    Order   @relation(fields: [orderId], references: [id])
-  name     String
-  quantity Int
-  price    Decimal
-  notes    String?
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String?
+  name      String
+  quantity  Int
+  price     Decimal
+  notes     String?
   // options: store selected complements/options for this item (array of {id,name,price})
-  options  Json?
+  options   Json?
 }
 
 model Ticket {
@@ -449,6 +450,7 @@ model Menu {
   // delivery type switches: enable/disable delivery and pickup independently per menu
   allowDelivery  Boolean        @default(true)
   allowPickup    Boolean        @default(true)
+  catalogMode    Boolean        @default(false)
   isActive       Boolean        @default(true)
   position       Int            @default(0)
   categories     MenuCategory[]
@@ -722,6 +724,10 @@ model CashbackTransaction {
 enum ModuleKey {
   RIDERS
   AFFILIATES
+  STOCK
+  CASHBACK
+  COUPONS
+  WHATSAPP
 }
 
 // Feature module that plans can enable/disable

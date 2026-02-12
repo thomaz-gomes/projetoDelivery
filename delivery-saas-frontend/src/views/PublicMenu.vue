@@ -12,7 +12,7 @@
               <div class="nav-actions d-flex align-items-center gap-3 text-white">
                 <a href="#" class="d-none d-md-inline text-white small me-3" @click.prevent="openRegister">Entre ou Cadastre-se</a>
                 <button class="btn btn-link text-white p-0 d-flex align-items-center" @click.prevent="goProfile" aria-label="Perfil"><i class="bi bi-person" aria-hidden="true"></i></button>
-                <button class="btn btn-link text-white p-0 d-flex align-items-center position-relative" @click.prevent="openCartModal" aria-label="Carrinho">
+                <button v-if="!isCatalogMode" class="btn btn-link text-white p-0 d-flex align-items-center position-relative" @click.prevent="openCartModal" aria-label="Carrinho">
                   <i class="bi bi-cart-fill" aria-hidden="true"></i>
                   <span v-if="cart.length>0" class="cart-badge-top badge bg-danger rounded-pill">{{ cart.length }}</span>
                 </button>
@@ -91,7 +91,7 @@
       
     </div>
     <!-- Mobile compact cart bar (visible on small screens) -->
-  <div v-if="cart.length > 0 && !cartModalOpen && !modalOpen && !checkoutModalOpen" class="mobile-cart-bar d-lg-none d-flex justify-content-between align-items-center px-3 py-2" style="background:#fff; border-top:1px solid rgba(0,0,0,0.06); z-index:1070">
+  <div v-if="!isCatalogMode && cart.length > 0 && !cartModalOpen && !modalOpen && !checkoutModalOpen" class="mobile-cart-bar d-lg-none d-flex justify-content-between align-items-center px-3 py-2" style="background:#fff; border-top:1px solid rgba(0,0,0,0.06); z-index:1070">
       <div>
         <strong>{{ formatCurrency(subtotal) }}</strong> / {{ cart.length }} item{{ cart.length>1 ? 's' : '' }}
         <div class="small text-muted">Total sem entrega</div>
@@ -116,7 +116,7 @@
         <i class="bi bi-journal-text nav-icon" aria-hidden="true"></i>
         <div class="nav-label">Histórico</div>
       </button>
-      <button class="nav-item" @click.prevent="openCartModal" aria-label="Carrinho">
+      <button v-if="!isCatalogMode" class="nav-item" @click.prevent="openCartModal" aria-label="Carrinho">
         <div style="position:relative;display:inline-flex;align-items:center;">
           <i class="bi bi-cart-fill nav-icon" aria-hidden="true"></i>
           <span v-if="cart.length>0" class="cart-badge">{{ cart.length }}</span>
@@ -206,17 +206,19 @@
                       <div class="small text-muted product-desc">{{ p.description }}</div>
                       </div>
                       <div>
-                      <div class="d-flex align-items-center gap-3">
+                      <div class="mt-2 d-flex flex-column align-items-start gap-2">
+                        
+                        <div v-if="cashbackEnabled && (p.cashback || p.cashbackPercent) && Number(p.cashback || p.cashbackPercent) > 0" class="badge bg-success">{{ Number(p.cashback || p.cashbackPercent) }}% cashback ({{ formatCurrency(Number(p.price || 0) * Number(p.cashback || p.cashbackPercent) / 100) }})</div>
+
                         <strong class="product-price">
                           <span v-if="getStartingPrice(p) > Number(p.price || 0)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
                           <span v-else>{{ formatCurrency(p.price) }}</span>
                         </strong>
-                        <div v-if="(p.cashback || p.cashbackPercent) && Number(p.cashback || p.cashbackPercent) > 0" class="badge bg-success">{{ Number(p.cashback || p.cashbackPercent) }}% cashback</div>
                       </div>
                       </div>
                     </div>
                     <div class="product-card-media text-end">
-                      <div class="add-to-card-plus"><i class="bi bi-cart-plus"></i></div>
+                      <div v-if="!isCatalogMode" class="add-to-card-plus"><i class="bi bi-cart-plus"></i></div>
                       <div>
                         <img v-if="p.image" :src="assetUrl(p.image)" class="product-image" />
                         <div v-else class="bg-light product-image-placeholder"></div>
@@ -237,7 +239,7 @@
         <!-- mobile compact cart removed (we show a mobile cart bar above the bottom nav) -->
 
         <!-- desktop sticky bottom cart bar when there are items -->
-  <div v-if="cart.length > 0 && !cartModalOpen" class="desktop-cart-bar d-none d-lg-flex justify-content-between align-items-center">
+  <div v-if="!isCatalogMode && cart.length > 0 && !cartModalOpen" class="desktop-cart-bar d-none d-lg-flex justify-content-between align-items-center">
           <div class="cart-info">
             <strong>{{ formatCurrency(finalTotal) }}</strong>
             <div class="small text-muted">/ {{ cart.length }} item{{ cart.length>1 ? 's' : '' }}</div>
@@ -352,7 +354,7 @@
                 <div>
               <div v-if="modalError" class="alert alert-danger mt-3">{{ modalError }}</div>
               </div>
-              <div class="d-flex justify-content-between align-items-center modal-actions-footer gap-4 w-100">
+              <div v-if="!isCatalogMode" class="d-flex justify-content-between align-items-center modal-actions-footer gap-4 w-100">
                 <div class="d-flex align-items-center gap-2 qty-control">
                   <button class="btn btn-outline-secondary btn-qty" @pointerdown.prevent="startModalAutoChange(-1, $event)" @pointerup.prevent="stopModalAutoChange($event)" @pointerleave.prevent="stopModalAutoChange($event)">-</button>
                   <input type="number" v-model.number="modalQty" class="form-control text-center qty-input" style="width:60px" min="1" @blur="modalQty = Math.max(1, Math.floor(Number(modalQty) || 1))" />
@@ -381,7 +383,7 @@
   <!-- Multi-step checkout modal -->
   
       </div>
-      <div v-if="checkoutModalOpen" class="product-modal checkout-modal full-mobile" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:11000">
+      <div v-if="!isCatalogMode && checkoutModalOpen" class="product-modal checkout-modal full-mobile" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:11000">
   <div :class="['modal-content','bg-white','rounded','shadow','modal-content-padding']">
     <div class="d-flex align-items-center justify-content-between mb-3 checkout-header">
       <div class="step-back">
@@ -582,11 +584,11 @@
                   </div>
                 </div>
               </div>
-                <div v-if="cashbackEnabled" class="mt-3 alert alert-light p-2" :class="{ 'use-cashback': publicCustomerConnected, 'use-cashback--active': useCashback }"
+                <div v-if="cashbackEnabled" class="mt-3 alert alert-light p-2" :class="{ 'use-cashback': publicCustomerConnected && cashbackCanRedeem, 'use-cashback--active': useCashback }"
                   role="button"
                   tabindex="0"
-                  @click="publicCustomerConnected ? (useCashback = !useCashback) : null"
-                  @keydown.enter.prevent="publicCustomerConnected ? (useCashback = !useCashback) : null">
+                  @click="publicCustomerConnected && cashbackCanRedeem ? (useCashback = !useCashback) : null"
+                  @keydown.enter.prevent="publicCustomerConnected && cashbackCanRedeem ? (useCashback = !useCashback) : null">
                 <div   class="d-flex justify-content-between align-items-center">
                   <div class="d-flex align-items-center gap-2">
                     <div class="summary-icon"><i class="bi bi-cash-stack"></i></div>
@@ -597,7 +599,10 @@
                   </div>
                   <div>
                     <template v-if="publicCustomerConnected">
-                      <div class="d-flex align-items-center">
+                      <div v-if="!cashbackCanRedeem && walletLoaded" class="text-end">
+                        <small class="text-muted">Mínimo para resgate: {{ formatCurrency(cashbackMinRedeem) }}</small>
+                      </div>
+                      <div v-else class="d-flex align-items-center">
                         <button
                           type="button"
                           class="btn btn-primary btn-sm cashback-toggle"
@@ -620,7 +625,7 @@
                     <button class="btn btn-primary btn-sm" type="button" @click.stop="useCashbackAmount = Math.min(Number(wallet.balance||0), Number(finalTotal))">Máx</button>
 
                   </div>
-                  
+
                   <div class="small text-muted mt-1">Máx. {{ formatCurrency(Math.min(Number(wallet.balance||0), Number(finalTotal))) }}</div>
                 </div>
               </div>
@@ -722,6 +727,7 @@
                 </div>
                 <div v-if="useCashback && Number(useCashbackAmount) > 0" class="d-flex justify-content-between text-success"><div>Cashback usado</div><div>-{{ formatCurrency(useCashbackAmount) }}</div></div>
                 <div class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(finalTotal) }}</div></div>
+                <div v-if="cashbackEnabled && estimatedCashbackTotal > 0" class="d-flex justify-content-between mt-1 small" style="color: #198754;"><div><i class="bi bi-cash-stack me-1"></i>Cashback a receber</div><div>+{{ formatCurrency(estimatedCashbackTotal) }}</div></div>
               </div>
 
               <!-- Payment row with quick edit -->
@@ -759,8 +765,8 @@
     </div>
   </div>
    <!-- Unified slide-in drawer (used on desktop and mobile) -->
-  <div class="drawer-backdrop" v-if="cartModalOpen && cart.length > 0" @click="closeCartModal"></div>
-  <aside class="cart-drawer" :class="{ open: cartModalOpen && cart.length > 0 }" :aria-hidden="!cartModalOpen" role="dialog" aria-label="Carrinho">
+  <div class="drawer-backdrop" v-if="!isCatalogMode && cartModalOpen && cart.length > 0" @click="closeCartModal"></div>
+  <aside v-if="!isCatalogMode" class="cart-drawer" :class="{ open: cartModalOpen && cart.length > 0 }" :aria-hidden="!cartModalOpen" role="dialog" aria-label="Carrinho">
           <div class="drawer-header d-flex justify-content-between align-items-center p-3 border-bottom">
             <h5 class="m-0">Sua sacola</h5>
             <div class="d-flex align-items-center gap-2">
@@ -821,6 +827,7 @@
                         <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
                         <div v-if="discountsList.length>0" class="d-flex justify-content-between mb-2 text-success"><div>Desconto(s)</div><div>-{{ formatCurrency(discountsTotal) }}</div></div>
                         <div class="d-flex justify-content-between fw-bold mb-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0) - (discountsTotal || 0)) + currentDeliveryFee) }}</div></div>
+                        <div v-if="cashbackEnabled && estimatedCashbackTotal > 0" class="d-flex justify-content-between mb-2 small" style="color: #198754;"><div><i class="bi bi-cash-stack me-1"></i>Cashback estimado</div><div>+{{ formatCurrency(estimatedCashbackTotal) }}</div></div>
 
               <div class="coupon-block mt-3">
                 <div class="d-flex justify-content-between align-items-center">
@@ -981,6 +988,7 @@ const uncategorized = ref([]);
 const paymentMethods = ref([]);
 const company = ref(null)
 const menu = ref(null)
+const isCatalogMode = computed(() => !!(menu.value && menu.value.catalogMode))
 const orderType = ref('DELIVERY') // 'DELIVERY' or 'PICKUP'
 const productSearchTerm = ref('')
 const searchExpanded = ref(false)
@@ -1612,6 +1620,7 @@ const changeFor = ref('');
 // cashback state
 const cashbackEnabled = ref(false)
 const cashbackSettings = ref(null)
+const cashbackMinRedeem = ref(0)
 const wallet = ref({ balance: 0 })
 const walletLoaded = ref(false)
 
@@ -1626,6 +1635,12 @@ try{
 }catch(e){}
 const useCashback = ref(false)
 const useCashbackAmount = ref(0)
+// whether wallet balance meets minimum redemption threshold
+const cashbackCanRedeem = computed(() => {
+  const balance = Number(wallet.value?.balance || 0)
+  const min = Number(cashbackMinRedeem.value || 0)
+  return min <= 0 || balance >= min
+})
 // (info modal removed) handlers and visibility state deleted
 const submitting = ref(false);
 const serverError = ref('');
@@ -1757,6 +1772,22 @@ const productCashbackMap = computed(() => {
     }
   }catch(e){}
   return map
+})
+
+// estimated total cashback for current cart (in R$)
+const estimatedCashbackTotal = computed(() => {
+  if (!cashbackEnabled.value) return 0
+  try {
+    const defaultPct = Number(cashbackSettings.value?.defaultPercent || 0)
+    let total = 0
+    for (const it of (cart.value || [])) {
+      const pct = (it.productId && productCashbackMap.value[String(it.productId)]) || defaultPct
+      if (pct > 0) {
+        total += Number(it.price || 0) * Number(it.quantity || 1) * (pct / 100)
+      }
+    }
+    return Number(total.toFixed(2))
+  } catch (e) { return 0 }
 })
 
 // compute if company is open (client-side check)
@@ -3561,15 +3592,17 @@ watch(() => menu.value?.logo || company.value?.logo, (newLogo) => {
 // fetch cashback settings for company and (if logged) the customer's wallet
 async function fetchCashbackSettingsAndWallet(){
   try{
-    // fetch settings (may require admin role). If forbidden, don't treat as fatal — continue to try wallet fetch.
+    // fetch public cashback settings (no auth required)
     try{
-      const r = await api.get(`/cashback/settings?companyId=${companyId}`)
+      const r = await api.get(`/public/${companyId}/cashback-settings`)
       cashbackSettings.value = r.data || null
-      cashbackEnabled.value = !!(cashbackSettings.value && (cashbackSettings.value.enabled || cashbackSettings.value.isEnabled))
+      cashbackEnabled.value = !!(cashbackSettings.value && cashbackSettings.value.enabled)
+      cashbackMinRedeem.value = Number(cashbackSettings.value?.minRedeemValue || 0)
     }catch(e){
       cashbackSettings.value = null
+      cashbackEnabled.value = false
+      cashbackMinRedeem.value = 0
       try{ console.debug('[debug] cashback settings fetch failed', e?.response?.status || e) }catch(_){}
-      // do not assume disabled here; continue and try to fetch wallet below
     }
 
     // fetch wallet for logged-in public customer when possible, or when we have a stored public customer id
@@ -3600,10 +3633,6 @@ async function fetchCashbackSettingsAndWallet(){
           const w = await api.get(`/cashback/wallet?clientId=${encodeURIComponent(clientIdToUse)}&companyId=${companyId}`)
           try{ console.debug('[debug] fetchCashbackSettingsAndWallet -> wallet response', w && w.data) }catch(e){}
           wallet.value = w.data || { balance: 0 }
-          // if wallet exists, enable cashback UI even if settings endpoint was not accessible
-          if(wallet.value && (wallet.value.balance !== undefined || (Array.isArray(wallet.value.transactions) && wallet.value.transactions.length > 0))){
-            cashbackEnabled.value = true
-          }
         }catch(e){ console.debug('[debug] fetchCashbackSettingsAndWallet -> wallet fetch error', e); wallet.value = { balance: 0 } }
       } else {
         wallet.value = { balance: 0 }
@@ -3975,11 +4004,11 @@ li.list-group-item.selected, .payment-method.selected {
 .product-desc { color: #666; font-size:12px; line-height:135%; max-height: 3em; overflow: hidden; text-overflow: ellipsis; }
 .product-price {
   line-height: 100%;
-  font-size: .9rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: var(--brand-dark);
 }
-.product-price small{font-size: 0.6rem; line-height: 95%;}
+.product-price small{font-size: 0.8rem; line-height: 95%;}
 .product-card-media { width: 110px; flex: 0 0 110px; position:relative}
 .product-image { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; }
 .product-image-placeholder { width: 96px; height: 96px; border-radius: 8px; }
@@ -3988,8 +4017,8 @@ li.list-group-item.selected, .payment-method.selected {
     color: var(--brand-dark);
     font-weight: 600;
     border-radius: 19px;
-    padding: 5px 8px;
-    font-size: 0.8rem;
+    padding: 5px 7px;
+    font-size: 0.7rem;
 }
 
 /* Cashback badge shown on product cards */

@@ -103,6 +103,11 @@
               <input class="form-check-input" type="checkbox" id="allowPickup" v-model="form.allowPickup">
               <label class="form-check-label" for="allowPickup">Retirada (Pickup)</label>
             </div>
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="catalogMode" v-model="form.catalogMode">
+              <label class="form-check-label" for="catalogMode">Modo catálogo</label>
+              <div class="form-text">Quando ativo, o cliente poderá apenas visualizar os produtos, sem opção de compra.</div>
+            </div>
           </div>
           <div class="col-md-6 mb-3">
             <ImageUploader label="Banner" :initialUrl="form.bannerUrl" :aspect="1200/400" :targetWidth="1200" :targetHeight="400" uploadKey="bannerBase64" @cropped="onBannerCropped" />
@@ -142,7 +147,7 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true })
+const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
 const dayNames = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado']
 const weeklySchedule = ref(Array.from({length:7}).map((_,i)=>({ day: i, enabled: false, from: '', to: '' })))
 
@@ -175,7 +180,7 @@ async function load(){
     if(isEdit){
       const res = await api.get(`/menu/menus/${id}`)
       const d = res.data || {}
-      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: d.address || '', phone: d.phone || '', whatsapp: d.whatsapp || '', bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null, open24Hours: !!d.open24Hours, timezone: d.timezone || '', allowDelivery: typeof d.allowDelivery !== 'undefined' ? !!d.allowDelivery : true, allowPickup: typeof d.allowPickup !== 'undefined' ? !!d.allowPickup : true }
+      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: d.address || '', phone: d.phone || '', whatsapp: d.whatsapp || '', bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null, open24Hours: !!d.open24Hours, timezone: d.timezone || '', allowDelivery: typeof d.allowDelivery !== 'undefined' ? !!d.allowDelivery : true, allowPickup: typeof d.allowPickup !== 'undefined' ? !!d.allowPickup : true, catalogMode: !!d.catalogMode }
       // Try to fetch store settings to prefill menu-specific metadata (menus map)
       try {
         if (d.storeId) {
@@ -308,6 +313,7 @@ async function save(){
           if (Array.isArray(weeklySchedule.value) && weeklySchedule.value.length === 7) menuPayload.weeklySchedule = weeklySchedule.value.map(w=>({ day: Number(w.day)||0, enabled: !!w.enabled, from: String(w.from||''), to: String(w.to||'') }))
           if (form.value.allowDelivery !== undefined) menuPayload.allowDelivery = !!form.value.allowDelivery
           if (form.value.allowPickup !== undefined) menuPayload.allowPickup = !!form.value.allowPickup
+          if (form.value.catalogMode !== undefined) menuPayload.catalogMode = !!form.value.catalogMode
           if (Object.keys(menuPayload).length && targetId) {
             await api.patch(`/menu/menus/${targetId}`, menuPayload)
           }

@@ -18,7 +18,12 @@ const DEFAULT = {
 async function loadMapping(){
   try{
     const raw = await fsp.readFile(FILE, 'utf8')
-    mapping = JSON.parse(raw || '{}')
+    const parsed = JSON.parse(raw || '{}')
+    if(!parsed || Object.keys(parsed).length === 0){
+      mapping = DEFAULT
+      return
+    }
+    mapping = parsed
     lastLoadedAt = Date.now()
     // normalize to arrays
     for(const k of Object.keys(mapping)){

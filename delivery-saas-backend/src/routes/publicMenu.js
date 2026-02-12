@@ -5,6 +5,7 @@ import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountB
 import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js'
 import jwt from 'jsonwebtoken'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
+import * as cashbackSvc from '../services/cashback.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -213,7 +214,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                   }
                 })
                 // expose the chosen menu so the frontend can show menu-specific images
-                menuObj = { id: menuForStore.id, name: menuForStore.name, description: menuForStore.description, logo: menuForStore.logoUrl || null }
+                menuObj = { id: menuForStore.id, name: menuForStore.name, description: menuForStore.description, logo: menuForStore.logoUrl || null, catalogMode: !!menuForStore.catalogMode }
               }
           }
         }
@@ -364,8 +365,8 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
     try {
       let m = null
       if (menuId) {
-        m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, name: true, description: true, logoUrl: true, address: true, phone: true, whatsapp: true, timezone: true, weeklySchedule: true, open24Hours: true, allowDelivery: true, allowPickup: true } })
-        if (m) menuObj = { id: m.id, name: m.name, description: m.description, logo: m.logoUrl || null, address: m.address || null, phone: m.phone || null, whatsapp: m.whatsapp || null, timezone: m.timezone || null, weeklySchedule: m.weeklySchedule || null, open24Hours: !!m.open24Hours, allowDelivery: m.allowDelivery !== undefined ? !!m.allowDelivery : true, allowPickup: m.allowPickup !== undefined ? !!m.allowPickup : true }
+        m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, name: true, description: true, logoUrl: true, address: true, phone: true, whatsapp: true, timezone: true, weeklySchedule: true, open24Hours: true, allowDelivery: true, allowPickup: true, catalogMode: true } })
+        if (m) menuObj = { id: m.id, name: m.name, description: m.description, logo: m.logoUrl || null, address: m.address || null, phone: m.phone || null, whatsapp: m.whatsapp || null, timezone: m.timezone || null, weeklySchedule: m.weeklySchedule || null, open24Hours: !!m.open24Hours, allowDelivery: m.allowDelivery !== undefined ? !!m.allowDelivery : true, allowPickup: m.allowPickup !== undefined ? !!m.allowPickup : true, catalogMode: !!m.catalogMode }
       }
       // load menu-level settings from the store's settings file (settings/stores/<storeId>/settings.json)
       if (menuObj && menuObj.id) {
@@ -413,6 +414,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
               if (typeof m.open24Hours !== 'undefined') company.alwaysOpen = !!m.open24Hours
               if (typeof m.allowDelivery !== 'undefined') menuObj.allowDelivery = !!m.allowDelivery
               if (typeof m.allowPickup !== 'undefined') menuObj.allowPickup = !!m.allowPickup
+              if (typeof m.catalogMode !== 'undefined') menuObj.catalogMode = !!m.catalogMode
             }
           }catch(e){}
         } catch (e) { /* ignore */ }
@@ -1306,6 +1308,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
           items: {
             // persist provided options (if any) into the OrderItem.options JSON column
             create: items.map(it => ({
+              productId: it.productId || null,
               name: it.name || it.productName || 'Item',
               quantity: Number(it.quantity || 1),
               price: Number(it.price || 0),
@@ -1351,8 +1354,17 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         }
         if (clientId) {
           try {
-            await cashbackSvc.debitWallet(companyId, clientId, applied, created.id, 'Uso de cashback no checkout (public)')
-            console.log('Applied public cashback debit', { orderId: created.id, clientId, amount: applied })
+            // Validate minRedeemValue before debiting
+            const cbSettings = await cashbackSvc.getSettings(companyId)
+            const minRedeem = Number(cbSettings?.minRedeemValue || 0)
+            const wallet = await cashbackSvc.getOrCreateWallet(companyId, clientId)
+            const balance = Number(wallet.balance || 0)
+            if (minRedeem > 0 && balance < minRedeem) {
+              console.warn('Cashback debit skipped: balance', balance, '< minRedeemValue', minRedeem, 'for order', created.id)
+            } else {
+              await cashbackSvc.debitWallet(companyId, clientId, applied, created.id, 'Uso de cashback no checkout (public)')
+              console.log('Applied public cashback debit', { orderId: created.id, clientId, amount: applied })
+            }
           } catch (eDebit) {
             console.warn('Failed to debit cashback for public order', created.id, eDebit?.message || eDebit)
           }
@@ -1435,6 +1447,18 @@ publicMenuRouter.post('/:companyId/login', async (req, res) => {
   }
 })
 
+// Public: GET cashback settings (no auth required, returns only public fields)
+publicMenuRouter.get('/:companyId/cashback-settings', async (req, res) => {
+  try {
+    const { companyId } = req.params
+    if (!companyId) return res.status(400).json({ message: 'companyId é obrigatório' })
+    const s = await cashbackSvc.getSettings(companyId)
+    res.json({ enabled: !!s?.enabled, minRedeemValue: Number(s?.minRedeemValue || 0) })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao obter configurações de cashback', error: e?.message || String(e) })
+  }
+})
+
 // Public: GET single order (by id) with phone verification
 publicMenuRouter.get('/:companyId/orders/:orderId', async (req, res) => {
   const { companyId, orderId } = req.params
@@ -1472,7 +1496,13 @@ publicMenuRouter.get('/:companyId/orders/:orderId', async (req, res) => {
           res.setHeader('Set-Cookie', `public_phone=${encodeURIComponent(digitsReq)}; Path=/; Max-Age=${30*24*60*60}; SameSite=Lax; HttpOnly`)
         }
       }
-      return res.json(order)
+      // enrich with cashbackEarned if available
+      let cashbackEarned = 0
+      try {
+        const cbTx = await prisma.cashbackTransaction.findFirst({ where: { orderId: order.id, type: 'CREDIT' } })
+        if (cbTx) cashbackEarned = Number(cbTx.amount || 0)
+      } catch (e) { /* ignore */ }
+      return res.json({ ...order, cashbackEarned })
     }
     return res.status(403).json({ message: 'Número não autorizado para visualizar este pedido' })
   } catch (e) {

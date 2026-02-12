@@ -21,9 +21,9 @@ import { ifoodRouter } from "./routes/ifood.js";
 import { ridersRouter } from "./routes/riders.js";
 import { customersRouter } from "./routes/customers.js";
 import { neighborhoodsRouter } from "./routes/neighborhoods.js";
-import { waRouter } from "./routes/wa.js";
-import { affiliatesRouter } from "./routes/affiliates.js";
-import { couponsRouter } from "./routes/coupons.js";
+import { waRouter } from "./routes/whatsapp/wa.js";
+import { affiliatesRouter } from "./routes/affiliates/affiliates.js";
+import { couponsRouter } from "./routes/coupons/coupons.js";
 import publicMenuRouter from './routes/publicMenu.js'
 import publicCartRouter from './routes/publicCart.js'
 import menuAdminRouter from './routes/menu.js'
@@ -33,10 +33,10 @@ import companiesRouter from './routes/companies.js'
 import storesRouter from './routes/stores.js'
 import usersRouter from './routes/users.js'
 import rolesRouter from './routes/rolePermissions.js'
-import ingredientGroupsRouter from './routes/ingredientGroups.js'
-import ingredientsRouter from './routes/ingredients.js'
-import technicalSheetsRouter from './routes/technicalSheets.js'
-import stockMovementsRouter from './routes/stockMovements.js'
+import ingredientGroupsRouter from './routes/stock/ingredientGroups.js'
+import ingredientsRouter from './routes/stock/ingredients.js'
+import technicalSheetsRouter from './routes/stock/technicalSheets.js'
+import stockMovementsRouter from './routes/stock/stockMovements.js'
 import agentSetupRouter, { agentPairRouter } from './routes/agentSetup.js'
 import agentPrintRouter from './routes/agentPrint.js'
 import qrActionRouter from './routes/qrAction.js'
@@ -44,7 +44,7 @@ import rasterizeRouter from './routes/rasterize.js'
 import printerSettingRouter from './routes/printerSetting.js'
 import cashRouter from './routes/cash.js'
 import customerGroupsRouter from './routes/customerGroups.js'
-import cashbackRouter from './routes/cashback.js'
+import cashbackRouter from './routes/cashback/cashback.js'
 import checkoutRouter from './routes/checkout.js'
 import events from './utils/events.js'
 import printQueue from './printQueue.js'
@@ -162,9 +162,9 @@ app.use("/ifood", requireModule('ifood'), ifoodRouter);
 app.use("/riders", ridersRouter);
 app.use("/customers", customersRouter);
 app.use("/neighborhoods", neighborhoodsRouter);
-app.use("/wa", waRouter);
+app.use("/wa", requireModule('WHATSAPP'), waRouter);
 app.use("/affiliates", affiliatesRouter);
-app.use('/coupons', couponsRouter);
+app.use('/coupons', requireModule('COUPONS'), couponsRouter);
 app.use('/public', publicMenuRouter);
 // Public cart endpoints (evaluations) for a given companyId
 app.use('/public/:companyId/cart', publicCartRouter);
@@ -180,10 +180,10 @@ app.use('/settings', menuAdminRouter);
 app.use('/stores', storesRouter);
 app.use('/users', usersRouter);
 app.use('/roles', rolesRouter);
-app.use('/ingredient-groups', ingredientGroupsRouter);
-app.use('/ingredients', ingredientsRouter);
-app.use('/technical-sheets', technicalSheetsRouter);
-app.use('/stock-movements', stockMovementsRouter);
+app.use('/ingredient-groups', requireModule('STOCK'), ingredientGroupsRouter);
+app.use('/ingredients', requireModule('STOCK'), ingredientsRouter);
+app.use('/technical-sheets', requireModule('STOCK'), technicalSheetsRouter);
+app.use('/stock-movements', requireModule('STOCK'), stockMovementsRouter);
 // Agent pairing endpoint (unauthenticated - agent has no token yet)
 app.use('/agent-setup', agentPairRouter);
 // Agent setup endpoint: returns socket URL and store IDs for the authenticated user's company
@@ -196,7 +196,7 @@ app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
 app.use('/customer-groups', customerGroupsRouter);
 app.use('/qr-action', qrActionRouter);
-app.use('/cashback', cashbackRouter);
+app.use('/cashback', requireModule('CASHBACK'), cashbackRouter);
 app.use('/checkout', checkoutRouter);
 // Server-side rasterization endpoint (returns PNG data URL)
 app.use('/rasterize', rasterizeRouter);

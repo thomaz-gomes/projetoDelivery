@@ -612,13 +612,18 @@ storesRouter.delete('/:id/cert', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
-// Delete store (ADMIN)
+// Delete store (ADMIN) — primary (first-created) store cannot be deleted
 storesRouter.delete('/:id', requireRole('ADMIN'), async (req, res) => {
   try {
     const { id } = req.params
     const companyId = req.user.companyId
     const existing = await prisma.store.findFirst({ where: { id, companyId } })
     if (!existing) return res.status(404).json({ message: 'Loja não encontrada' })
+    // Check if this is the primary (oldest) store for the company
+    const primaryStore = await prisma.store.findFirst({ where: { companyId }, orderBy: { createdAt: 'asc' } })
+    if (primaryStore && primaryStore.id === id) {
+      return res.status(403).json({ message: 'A loja principal não pode ser removida.' })
+    }
     await prisma.store.delete({ where: { id } })
     res.json({ ok: true })
   } catch (e) {

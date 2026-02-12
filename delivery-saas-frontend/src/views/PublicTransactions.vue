@@ -3,7 +3,8 @@
     <div class="list-card container py-4 list-card--card-style">
       <div class="card"><div class="card-body">
         <h4 class="mb-3">Extrato de Cashback</h4>
-        <div v-if="loading" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div>
+        <div v-if="!cashbackEnabled && !loading" class="text-muted py-3">Cashback não está disponível no momento.</div>
+        <div v-else-if="loading" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div>
         <div v-else>
           <div class="mb-3">
             <div class="small text-muted">Saldo atual</div>
@@ -40,6 +41,7 @@ const router = useRouter()
 const companyId = route.params.companyId || ''
 
 const loading = ref(false)
+const cashbackEnabled = ref(true)
 const wallet = ref({ balance: 0, transactions: [] })
 const transactions = ref([])
 
@@ -47,6 +49,12 @@ function formatDate(d){ try{ return new Date(d).toLocaleString() }catch(e){ retu
 
 onMounted(async ()=>{
   loading.value = true
+  // check if cashback is enabled before loading transactions
+  try{
+    const settingsRes = await api.get(`/public/${companyId}/cashback-settings`)
+    cashbackEnabled.value = !!(settingsRes.data && settingsRes.data.enabled)
+  }catch(e){ cashbackEnabled.value = false }
+  if(!cashbackEnabled.value){ loading.value = false; return }
   try{
     const stored = JSON.parse(localStorage.getItem(`public_customer_${companyId}`) || 'null')
     const clientId = stored && (stored.id || stored.clientId || stored.customerId) ? (stored.id || stored.clientId || stored.customerId) : null

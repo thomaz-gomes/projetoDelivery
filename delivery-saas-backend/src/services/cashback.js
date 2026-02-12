@@ -81,11 +81,32 @@ export async function creditWalletForOrder(companyId, clientId, order, descripti
   let totalCashback = 0
 
   // Compute item subtotals (ignore delivery fee) and detect order-level discount.
-  const items = Array.isArray(order.items) ? order.items.map(it => ({
-    price: Number(it.price || 0),
-    qty: Number(it.quantity || 1),
-    productId: it.productId || null
-  })) : []
+  // Build a fallback productId map from payload.rawPayload.items (for orders where OrderItem lacks productId)
+  let payloadItemsMap = null
+  try {
+    const pItems = order.payload && order.payload.rawPayload && Array.isArray(order.payload.rawPayload.items) ? order.payload.rawPayload.items : []
+    if (pItems.length) {
+      payloadItemsMap = new Map()
+      for (const pi of pItems) {
+        if (pi.productId) {
+          const key = `${String(pi.name || '').toLowerCase()}|${Number(pi.price || 0)}`
+          payloadItemsMap.set(key, pi.productId)
+        }
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  const items = Array.isArray(order.items) ? order.items.map(it => {
+    let pid = it.productId || null
+    // fallback: try to match by name+price from payload items
+    if (!pid && payloadItemsMap) {
+      try {
+        const key = `${String(it.name || '').toLowerCase()}|${Number(it.price || 0)}`
+        pid = payloadItemsMap.get(key) || null
+      } catch (e) { /* ignore */ }
+    }
+    return { price: Number(it.price || 0), qty: Number(it.quantity || 1), productId: pid }
+  }) : []
   const itemsTotal = items.reduce((s,it) => s + (it.price * it.qty), 0)
 
   // Determine total discount applicable to items.
@@ -143,6 +164,18 @@ export async function creditWalletForOrder(companyId, clientId, order, descripti
     await tx.cashbackWallet.update({ where: { id: wallet.id }, data: { balance: String(newBalance) } })
     const txr = await tx.cashbackTransaction.create({ data: { walletId: wallet.id, orderId: order.id, type: 'CREDIT', amount: String(totalCashback), description: description || 'Cashback de compra' } })
     return { walletId: wallet.id, amount: totalCashback, tx: txr }
+  })
+}
+
+export async function creditWalletManual(companyId, clientId, amount, description){
+  if(Number(amount) <= 0) throw new Error('amount must be > 0')
+  return prisma.$transaction(async (tx) => {
+    let wallet = await tx.cashbackWallet.findFirst({ where: { companyId, clientId } })
+    if(!wallet) wallet = await tx.cashbackWallet.create({ data: { companyId, clientId, balance: 0 } })
+    const newBalance = Number(wallet.balance) + Number(amount)
+    await tx.cashbackWallet.update({ where: { id: wallet.id }, data: { balance: String(newBalance) } })
+    const txr = await tx.cashbackTransaction.create({ data: { walletId: wallet.id, type: 'CREDIT', amount: String(amount), description: description || 'Crédito manual' } })
+    return { walletId: wallet.id, amount: Number(amount), tx: txr }
   })
 }
 
