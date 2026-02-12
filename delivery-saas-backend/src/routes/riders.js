@@ -6,6 +6,7 @@ import { evoSendDocument, evoSendMediaUrl, evoSendText, normalizePhone } from '.
 import fs from 'fs';
 import path from 'path';
 import { assertModuleEnabled } from '../utils/saas.js';
+import { createFinancialEntryForRider } from '../services/financial/orderFinancialBridge.js';
 
 export const ridersRouter = express.Router();
 ridersRouter.use(authMiddleware);
@@ -178,6 +179,9 @@ ridersRouter.post('/:id/account/adjust', requireRole('ADMIN'), async (req, res) 
   const adjAmount = type === 'DEBIT' ? -Math.abs(val) : Math.abs(val);
 
   const tx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: adjAmount, type: 'MANUAL_ADJUSTMENT', note: note || (type === 'DEBIT' ? 'Débito manual' : 'Crédito manual'), date: new Date() });
+
+  // Bridge: registrar no módulo financeiro
+  try { await createFinancialEntryForRider(tx, companyId); } catch (e) { console.warn('Financial bridge rider error:', e?.message); }
 
   res.json({ ok: true, tx });
 });
@@ -656,6 +660,9 @@ ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => 
   // Create a payment transaction with negative amount to deduct balance
   const note = `Pagamento do período ${from || '-'} → ${to || '-'}`;
   const paymentTx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: -Math.abs(sum), type: 'MANUAL_ADJUSTMENT', date: new Date(), note });
+
+  // Bridge: registrar no módulo financeiro
+  try { await createFinancialEntryForRider(paymentTx, companyId); } catch (e) { console.warn('Financial bridge rider payment error:', e?.message); }
 
   return res.json({ ok: true, message: 'Pagamento registrado', total: sum, tx: paymentTx });
 });

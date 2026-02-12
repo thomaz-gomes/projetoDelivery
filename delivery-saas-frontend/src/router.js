@@ -85,6 +85,14 @@ import SaasBilling from './views/SaasBilling.vue';
 import SaasModules from './views/SaasModules.vue';
 import SaasAdmin from './views/SaasAdmin.vue';
 import CashbackSettings from './views/cashback/CashbackSettings.vue';
+import FinancialDashboard from './views/financial/FinancialDashboard.vue';
+import FinancialAccounts from './views/financial/FinancialAccounts.vue';
+import FinancialTransactions from './views/financial/FinancialTransactions.vue';
+import FinancialCashFlow from './views/financial/FinancialCashFlow.vue';
+import FinancialDRE from './views/financial/FinancialDRE.vue';
+import FinancialGateways from './views/financial/FinancialGateways.vue';
+import FinancialOFX from './views/financial/FinancialOFX.vue';
+import FinancialCostCenters from './views/financial/FinancialCostCenters.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -194,6 +202,15 @@ const router = createRouter({
   ,{ path: '/saas/billing', component: SaasBilling, meta: { requiresAuth: true, role: ['ADMIN','SUPER_ADMIN'] } }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
     { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true } },
+    // ---- Módulo Financeiro ----
+    { path: '/financial', component: FinancialDashboard, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/financial/accounts', component: FinancialAccounts, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/financial/transactions', component: FinancialTransactions, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/financial/cash-flow', component: FinancialCashFlow, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/financial/dre', component: FinancialDRE, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/financial/gateways', component: FinancialGateways, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/financial/ofx', component: FinancialOFX, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/financial/cost-centers', component: FinancialCostCenters, meta: { requiresAuth: true, role: 'ADMIN' } },
   ]
 });
 

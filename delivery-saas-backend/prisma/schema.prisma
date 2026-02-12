@@ -81,6 +81,14 @@ model Company {
   city                 String?
   state                String?
   postalCode           String?
+
+  // ---- Financial module relations ----
+  financialAccounts    FinancialAccount[]
+  costCenters          CostCenter[]
+  gatewayConfigs       PaymentGatewayConfig[]
+  financialTransactions FinancialTransaction[]
+  cashFlowEntries      CashFlowEntry[]
+  ofxImports           OfxImport[]
 }
 
 model User {
@@ -728,6 +736,7 @@ enum ModuleKey {
   CASHBACK
   COUPONS
   WHATSAPP
+  FINANCIAL
 }
 
 // Feature module that plans can enable/disable
@@ -981,6 +990,308 @@ model StockMovementItem {
 
   @@index([stockMovementId], name: "idx_stockmovementitem_movement")
   @@index([ingredientId], name: "idx_stockmovementitem_ingredient")
+}
+
+// =============================
+// Financial Module
+// =============================
+
+// Tipo de conta financeira
+enum FinancialAccountType {
+  CHECKING    // Conta Corrente
+  SAVINGS     // Poupança
+  CASH        // Caixa físico
+  CREDIT_CARD // Cartão de crédito
+  MARKETPLACE // Conta em marketplace (iFood, Rappi)
+  OTHER
+}
+
+// Tipo de transação financeira
+enum FinancialTransactionType {
+  PAYABLE     // Conta a Pagar
+  RECEIVABLE  // Conta a Receber
+}
+
+// Status de uma transação financeira (título)
+enum FinancialTransactionStatus {
+  PENDING     // Agendada / em aberto
+  CONFIRMED   // Confirmada (prevista no fluxo)
+  PAID        // Paga / Recebida (realizada)
+  OVERDUE     // Vencida
+  CANCELED    // Cancelada
+  PARTIALLY   // Parcialmente paga
+}
+
+// Tipo da movimentação real de dinheiro
+enum CashFlowEntryType {
+  INFLOW      // Entrada
+  OUTFLOW     // Saída
+}
+
+// Status de conciliação OFX
+enum OfxMatchStatus {
+  PENDING     // Aguardando match
+  MATCHED     // Conciliado automaticamente
+  MANUAL      // Conciliado manualmente
+  IGNORED     // Ignorado pelo operador
+  UNMATCHED   // Sem correspondência
+}
+
+// Recorrência para transações financeiras
+enum RecurrenceType {
+  NONE
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+// ---- Contas Financeiras (caixas, contas bancárias, marketplaces) ----
+model FinancialAccount {
+  id          String               @id @default(uuid())
+  companyId   String
+  company     Company              @relation(fields: [companyId], references: [id])
+  name        String               // Ex: "Caixa Loja Centro", "Banco do Brasil CC", "iFood"
+  type        FinancialAccountType @default(CHECKING)
+  // dados bancários opcionais
+  bankCode    String?              // código do banco (ex: "001")
+  agency      String?
+  accountNumber String?
+  // saldo atual (atualizado por trigger/serviço ao registrar CashFlowEntry)
+  currentBalance Decimal           @default(0)
+  isActive    Boolean              @default(true)
+  isDefault   Boolean              @default(false) // conta padrão para novas transações
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  // relações
+  transactions  FinancialTransaction[]
+  cashFlowEntries CashFlowEntry[]
+  ofxImports    OfxImport[]
+
+  @@unique([companyId, name], name: "company_fin_account_name")
+  @@index([companyId], name: "idx_fin_account_company")
+}
+
+// ---- Centros de Custo (para DRE) ----
+model CostCenter {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  code        String   // Ex: "1.01", "2.03.01"
+  name        String   // Ex: "Receita de Vendas", "CMV", "Marketing"
+  parentId    String?
+  parent      CostCenter?  @relation("CostCenterParent", fields: [parentId], references: [id])
+  children    CostCenter[] @relation("CostCenterParent")
+  // DRE classification: REVENUE, COGS, OPEX, TAX, OTHER
+  dreGroup    String?      // Grupo no DRE (receita bruta, deduções, CMV, despesas operacionais, etc.)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions FinancialTransaction[]
+
+  @@unique([companyId, code], name: "company_costcenter_code")
+  @@index([companyId], name: "idx_costcenter_company")
+}
+
+// ---- Configurações de Taxas de Gateways / Operadoras / Marketplaces ----
+model PaymentGatewayConfig {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  // Identificação da operadora
+  provider    String   // Ex: "IFOOD", "RAPPI", "STONE", "CIELO", "PAGSEGURO", "PIX_MANUAL"
+  label       String?  // Nome amigável: "iFood Entrega", "Stone Crédito"
+  // Tipo de taxa
+  feeType     String   @default("PERCENTAGE") // PERCENTAGE | FIXED | MIXED
+  // Taxa percentual (ex: 0.12 = 12%)
+  feePercent  Decimal  @default(0)
+  // Taxa fixa por transação (em R$)
+  feeFixed    Decimal  @default(0)
+  // Prazo de recebimento em dias (D+N)
+  settlementDays Int   @default(0) // Ex: 30 para iFood, 1 para PIX
+  // Antecipação automática (se habilitada, recalcular taxa)
+  anticipationFeePercent Decimal? // taxa adicional se antecipar
+  // Regras adicionais em JSON (faixas de volume, taxa mínima, etc.)
+  rules       Json?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // relações com transações que usaram esta config
+  transactions FinancialTransaction[]
+
+  @@unique([companyId, provider, label], name: "company_gateway_provider_label")
+  @@index([companyId], name: "idx_gateway_config_company")
+}
+
+// ---- Transações Financeiras (Título Financeiro: Contas a Pagar / Receber) ----
+model FinancialTransaction {
+  id            String                     @id @default(uuid())
+  companyId     String
+  company       Company                    @relation(fields: [companyId], references: [id])
+  // Tipo: PAYABLE (pagar) ou RECEIVABLE (receber)
+  type          FinancialTransactionType
+  status        FinancialTransactionStatus @default(PENDING)
+  // Descrição legível
+  description   String
+  // Conta financeira vinculada (onde o dinheiro entra/sai)
+  accountId     String?
+  account       FinancialAccount?          @relation(fields: [accountId], references: [id])
+  // Centro de custo (para DRE)
+  costCenterId  String?
+  costCenter    CostCenter?                @relation(fields: [costCenterId], references: [id])
+  // Gateway/operadora (para cálculo automático de taxas)
+  gatewayConfigId String?
+  gatewayConfig   PaymentGatewayConfig?    @relation(fields: [gatewayConfigId], references: [id])
+
+  // ---- Valores ----
+  grossAmount   Decimal                    // Valor bruto
+  feeAmount     Decimal   @default(0)      // Total de taxas calculadas
+  netAmount     Decimal                    // Valor líquido (grossAmount - feeAmount)
+  paidAmount    Decimal   @default(0)      // Valor efetivamente pago/recebido até agora
+
+  // ---- Datas ----
+  issueDate     DateTime  @default(now())  // Data de emissão/competência
+  dueDate       DateTime                   // Data de vencimento
+  paidAt        DateTime?                  // Data de pagamento/recebimento efetivo
+  expectedDate  DateTime?                  // Data prevista de recebimento (D+N)
+
+  // ---- Rastreabilidade (Polimórfica) ----
+  // Vincula esta transação ao registro de origem (Order, RiderTransaction, AffiliateSale, Coupon, StockMovement, etc.)
+  sourceType    String?                    // Ex: "ORDER", "RIDER", "AFFILIATE", "COUPON", "STOCK_PURCHASE", "MANUAL"
+  sourceId      String?                    // ID do registro de origem
+
+  // ---- Recorrência ----
+  recurrence    RecurrenceType @default(NONE)
+  parentTransactionId String?              // referência à transação original se for parcela/recorrência
+  installmentNumber   Int?                 // número da parcela (1, 2, 3...)
+  totalInstallments   Int?                 // total de parcelas
+
+  // ---- Metadados ----
+  notes         String?
+  attachmentUrl String?                    // URL de comprovante/nota fiscal
+  createdBy     String?                    // userId que criou
+  updatedBy     String?                    // userId que alterou por último
+  metadata      Json?                      // dados extras flexíveis
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Movimentações reais vinculadas a este título
+  cashFlowEntries CashFlowEntry[]
+  // Fila de conciliação OFX
+  ofxMatches      OfxReconciliationItem[]
+
+  @@index([companyId, type], name: "idx_fin_tx_company_type")
+  @@index([companyId, status], name: "idx_fin_tx_company_status")
+  @@index([companyId, dueDate], name: "idx_fin_tx_company_due")
+  @@index([companyId, sourceType, sourceId], name: "idx_fin_tx_source")
+  @@index([companyId, costCenterId], name: "idx_fin_tx_costcenter")
+  @@index([companyId, issueDate], name: "idx_fin_tx_issue_date")
+}
+
+// ---- Movimentação Real de Dinheiro (Fluxo de Caixa Realizado) ----
+model CashFlowEntry {
+  id            String          @id @default(uuid())
+  companyId     String
+  company       Company         @relation(fields: [companyId], references: [id])
+  // Conta financeira onde ocorreu a movimentação
+  accountId     String
+  account       FinancialAccount @relation(fields: [accountId], references: [id])
+  // Transação financeira que originou esta movimentação (pode ser nulo para ajustes manuais)
+  transactionId String?
+  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id])
+  // Tipo: INFLOW (entrada) ou OUTFLOW (saída)
+  type          CashFlowEntryType
+  amount        Decimal                // Valor movimentado (sempre positivo)
+  // Saldo da conta após esta movimentação (para auditoria)
+  balanceAfter  Decimal?
+  // Data efetiva da movimentação
+  entryDate     DateTime @default(now())
+  description   String?
+  // Conciliação
+  reconciled    Boolean  @default(false) // marcado como conciliado via OFX ou manual
+  reconciledAt  DateTime?
+  // Metadados
+  createdBy     String?                 // userId
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  // Itens OFX vinculados
+  ofxMatches    OfxReconciliationItem[]
+
+  @@index([companyId, entryDate], name: "idx_cashflow_company_date")
+  @@index([companyId, accountId], name: "idx_cashflow_company_account")
+  @@index([companyId, reconciled], name: "idx_cashflow_reconciled")
+}
+
+// ---- Importação OFX ----
+model OfxImport {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  // Conta financeira associada à importação
+  accountId   String
+  account     FinancialAccount @relation(fields: [accountId], references: [id])
+  // Metadados do arquivo
+  fileName    String
+  // Período coberto pelo extrato
+  periodStart DateTime?
+  periodEnd   DateTime?
+  // Totais importados
+  totalItems  Int      @default(0)
+  matchedItems Int     @default(0)
+  unmatchedItems Int   @default(0)
+  // Status geral: PROCESSING, COMPLETED, FAILED
+  status      String   @default("PROCESSING")
+  errorMessage String?
+  importedBy  String?  // userId
+  createdAt   DateTime @default(now())
+
+  // Itens do extrato
+  items       OfxReconciliationItem[]
+
+  @@index([companyId], name: "idx_ofx_import_company")
+  @@index([companyId, accountId], name: "idx_ofx_import_account")
+}
+
+// ---- Fila de Conciliação OFX (cada linha do extrato) ----
+model OfxReconciliationItem {
+  id            String          @id @default(uuid())
+  importId      String
+  import_       OfxImport       @relation(fields: [importId], references: [id])
+  // Dados vindos do OFX
+  fitId         String?         // ID único da transação no banco (FITID)
+  ofxType       String?         // DEBIT, CREDIT, etc.
+  amount        Decimal         // Valor (positivo ou negativo conforme OFX)
+  ofxDate       DateTime        // Data da transação no extrato
+  memo          String?         // Descrição/memo do OFX
+  checkNum      String?         // Número do cheque/doc
+  refNum        String?         // Referência adicional
+
+  // ---- Match ----
+  matchStatus   OfxMatchStatus  @default(PENDING)
+  // Transação financeira vinculada (match)
+  transactionId String?
+  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id])
+  // Movimentação real vinculada (match)
+  cashFlowEntryId String?
+  cashFlowEntry   CashFlowEntry? @relation(fields: [cashFlowEntryId], references: [id])
+  // Confiança do match automático (0.0 a 1.0)
+  matchConfidence Decimal?
+  // Motivo do match ou rejeição
+  matchNotes    String?
+  resolvedBy    String?         // userId que resolveu manualmente
+  resolvedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([importId], name: "idx_ofx_recon_import")
+  @@index([importId, matchStatus], name: "idx_ofx_recon_status")
+  @@index([fitId], name: "idx_ofx_recon_fitid")
 }
 
 // Email verification codes for user registration

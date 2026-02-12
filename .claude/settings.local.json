@@ -17,7 +17,9 @@
       "Bash(npx prisma db push:*)",
       "Bash(npx prisma generate:*)",
       "Bash(git mv:*)",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(npx prisma validate:*)",
+      "Bash(node:*)"
     ]
   }
 }

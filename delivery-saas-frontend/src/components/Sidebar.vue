@@ -44,6 +44,16 @@ const nav = [
     { name: 'Ingredientes', to: '/ingredients', icon: 'bi bi-basket' },
     { name: 'Fichas Técnicas', to: '/technical-sheets', icon: 'bi bi-file-earmark-text' }
   ] },
+    { name: 'Financeiro', to: '/financial', icon: 'bi bi-cash-coin', moduleKey: 'financial', children: [
+      { name: 'Dashboard', to: '/financial', icon: 'bi bi-speedometer2' },
+      { name: 'Contas a Pagar/Receber', to: '/financial/transactions', icon: 'bi bi-receipt' },
+      { name: 'Fluxo de Caixa', to: '/financial/cash-flow', icon: 'bi bi-graph-up' },
+      { name: 'DRE', to: '/financial/dre', icon: 'bi bi-file-earmark-bar-graph' },
+      { name: 'Contas Bancárias', to: '/financial/accounts', icon: 'bi bi-bank' },
+      { name: 'Taxas e Operadoras', to: '/financial/gateways', icon: 'bi bi-percent' },
+      { name: 'Conciliação OFX', to: '/financial/ofx', icon: 'bi bi-file-earmark-arrow-up' },
+      { name: 'Centros de Custo', to: '/financial/cost-centers', icon: 'bi bi-diagram-3' },
+    ] },
     { name: 'Lista de cardápios', to: '/menu/menus', icon: 'bi bi-list' },
  
   

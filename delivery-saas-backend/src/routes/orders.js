@@ -11,6 +11,7 @@ import { canTransition } from '../stateMachine.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
 import riderAccountService from '../services/riderAccount.js';
 import { buildAndPersistStockMovementFromOrderItems } from '../services/stockFromOrder.js';
+import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
 
 export const ordersRouter = express.Router();
 
@@ -460,6 +461,13 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res
         }
       }
     } catch (e) { console.error('Error while attempting affiliate tracking on order status change:', e?.message || e); }
+
+    // If order was completed, create financial entries (receivable, fees, deductions)
+    try {
+      if (status === 'CONCLUIDO') {
+        await createFinancialEntriesForOrder(updated);
+      }
+    } catch (e) { console.error('Failed to create financial entries for order:', e?.message || e); }
 
     // If order was completed, attempt to credit cashback to customer wallet
     try {

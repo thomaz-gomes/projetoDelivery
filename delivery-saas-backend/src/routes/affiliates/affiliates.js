@@ -3,6 +3,7 @@ import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { getAffiliateIfOwned } from './helpers.js';
 import { assertModuleEnabled } from '../../utils/saas.js';
+import { createFinancialEntryForAffiliate } from '../../services/financial/orderFinancialBridge.js';
 
 export const affiliatesRouter = express.Router();
 
@@ -282,6 +283,9 @@ affiliatesRouter.post('/:id/payments', requireRole('ADMIN'), async (req, res) =>
 
       return { payment, affiliate: updatedAffiliate };
     });
+
+    // Bridge: registrar no módulo financeiro
+    try { await createFinancialEntryForAffiliate(result.payment, companyId); } catch (e) { console.warn('Financial bridge affiliate error:', e?.message); }
 
     res.status(201).json(result);
   } catch (e) {

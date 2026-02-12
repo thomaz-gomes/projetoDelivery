@@ -56,6 +56,7 @@ import startReportsCleanup from './cleanupReports.js';
 import startForceOpenCleanup from './cleanupForceOpen.js';
 import saasRouter from './routes/saas.js'
 import { requireModule } from './modules.js'
+import financialRouter from './routes/financial/index.js'
 
 const app = express();
 // When running behind a reverse proxy (EasyPanel / nginx / Cloudflare), enable
@@ -197,6 +198,7 @@ app.use('/cash', cashRouter);
 app.use('/customer-groups', customerGroupsRouter);
 app.use('/qr-action', qrActionRouter);
 app.use('/cashback', requireModule('CASHBACK'), cashbackRouter);
+app.use('/financial', requireModule('FINANCIAL'), financialRouter);
 app.use('/checkout', checkoutRouter);
 // Server-side rasterization endpoint (returns PNG data URL)
 app.use('/rasterize', rasterizeRouter);
