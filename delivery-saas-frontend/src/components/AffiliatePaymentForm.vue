@@ -25,6 +25,13 @@
         </SelectInput>
       </div>
 
+      <div class="form-group" v-if="accounts && accounts.length > 0">
+        <label for="accountId">Conta de saída</label>
+        <SelectInput id="accountId" class="form-select" v-model="form.accountId"
+          :options="accounts.map(a => ({ value: a.id, label: a.name }))"
+          placeholder="Selecione a conta..." />
+      </div>
+
       <div class="form-group">
         <label for="note">Observação (opcional)</label>
         <textarea id="note" class="form-control" v-model="form.note" rows="3"></textarea>
@@ -49,11 +56,13 @@ export default {
   props: {
     affiliate: { type: Object, default: null },
     initialAmount: { type: Number, default: 0 },
-    processing: { type: Boolean, default: false }
+    processing: { type: Boolean, default: false },
+    accounts: { type: Array, default: () => [] }
   },
   emits: ['submit', 'cancel'],
   setup(props, { emit }) {
-    const form = ref({ amount: props.initialAmount || '', method: '', note: '' })
+    const defaultAccountId = (props.accounts || []).find(a => a.isDefault)?.id || ''
+    const form = ref({ amount: props.initialAmount || '', method: '', note: '', accountId: defaultAccountId })
 
     watch(() => props.initialAmount, (v) => {
       form.value.amount = v || ''

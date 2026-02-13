@@ -127,12 +127,20 @@ export async function createFinancialEntriesForOrder(order) {
  * Cria transação financeira para pagamento de motoboy.
  * Chamado quando um RiderTransaction é criado.
  */
-export async function createFinancialEntryForRider(riderTransaction, companyId) {
+export async function createFinancialEntryForRider(riderTransaction, companyId, accountId) {
   try {
     const existing = await prisma.financialTransaction.findFirst({
       where: { companyId, sourceType: 'RIDER', sourceId: riderTransaction.id },
     });
     if (existing) return;
+
+    let resolvedAccountId = accountId || null;
+    if (!resolvedAccountId) {
+      const defaultAccount = await prisma.financialAccount.findFirst({
+        where: { companyId, isDefault: true, isActive: true },
+      });
+      resolvedAccountId = defaultAccount?.id || null;
+    }
 
     const opexCC = await prisma.costCenter.findFirst({
       where: { companyId, dreGroup: 'OPEX', code: { contains: '4.05' } },
@@ -144,6 +152,7 @@ export async function createFinancialEntryForRider(riderTransaction, companyId) 
         type: 'PAYABLE',
         status: 'CONFIRMED',
         description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
+        accountId: resolvedAccountId,
         costCenterId: opexCC?.id || null,
         grossAmount: Math.abs(Number(riderTransaction.amount)),
         feeAmount: 0,
@@ -163,12 +172,20 @@ export async function createFinancialEntryForRider(riderTransaction, companyId) 
  * Cria transação financeira para pagamento de comissão de afiliado.
  * Chamado quando um AffiliatePayment é criado.
  */
-export async function createFinancialEntryForAffiliate(affiliatePayment, companyId) {
+export async function createFinancialEntryForAffiliate(affiliatePayment, companyId, accountId) {
   try {
     const existing = await prisma.financialTransaction.findFirst({
       where: { companyId, sourceType: 'AFFILIATE', sourceId: affiliatePayment.id },
     });
     if (existing) return;
+
+    let resolvedAccountId = accountId || null;
+    if (!resolvedAccountId) {
+      const defaultAccount = await prisma.financialAccount.findFirst({
+        where: { companyId, isDefault: true, isActive: true },
+      });
+      resolvedAccountId = defaultAccount?.id || null;
+    }
 
     const opexCC = await prisma.costCenter.findFirst({
       where: { companyId, dreGroup: 'OPEX', code: { contains: '4.06' } },
@@ -180,6 +197,7 @@ export async function createFinancialEntryForAffiliate(affiliatePayment, company
         type: 'PAYABLE',
         status: 'PAID',
         description: `Comissão afiliado - ${affiliatePayment.method || 'N/A'}`,
+        accountId: resolvedAccountId,
         costCenterId: opexCC?.id || null,
         grossAmount: Number(affiliatePayment.amount),
         feeAmount: 0,

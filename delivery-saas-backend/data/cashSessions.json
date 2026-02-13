@@ -80,7 +80,7 @@
       "openedAt": "2025-12-04T22:54:47.958Z",
       "openedBy": "27521843-af5b-44c8-a2c8-d1415184ba53",
       "openingAmount": 10,
-      "balance": -40,
+      "balance": 1075.2,
       "note": null,
       "movements": [
         {
@@ -91,11 +91,26 @@
           "note": "teste",
           "at": "2025-12-04T23:24:14.864Z",
           "by": "27521843-af5b-44c8-a2c8-d1415184ba53"
+        },
+        {
+          "id": "258b2760-95a5-4b2a-bed7-8c5adbf72acf",
+          "type": "reforco",
+          "amount": 1115.2,
+          "account": null,
+          "note": "Fechamento: ",
+          "at": "2026-02-13T00:24:13.206Z",
+          "by": "a1d148f8-5347-4d64-8fee-c9a304a8caff"
         }
       ],
-      "closedAt": null,
-      "closedBy": null,
-      "closingSummary": null
+      "closedAt": "2026-02-13T00:24:13.223Z",
+      "closedBy": "a1d148f8-5347-4d64-8fee-c9a304a8caff",
+      "closingSummary": {
+        "note": "",
+        "counted": {
+          "Dinheiro": 1075.2,
+          "PIX": 85
+        }
+      }
     },
     {
       "id": "7197e297-422d-464b-a6e5-0fc838c2314d",
@@ -130,6 +145,19 @@
       "openedBy": "d37d7d9e-e174-4380-8416-2d021ff6473b",
       "openingAmount": 1,
       "balance": 1,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
+    },
+    {
+      "id": "66376521-446b-4d9e-9b6c-d2fa299553b7",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2026-02-13T00:24:48.813Z",
+      "openedBy": "a1d148f8-5347-4d64-8fee-c9a304a8caff",
+      "openingAmount": 1.08,
+      "balance": 1.08,
       "note": null,
       "movements": [],
       "closedAt": null,

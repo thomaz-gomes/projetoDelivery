@@ -8,6 +8,8 @@ import { formatDateWithOptionalTime } from '../utils/dates.js';
 import { useAuthStore } from '../stores/auth';
 import Swal from 'sweetalert2';
 import DateInput from '../components/form/date/DateInput.vue';
+import SelectInput from '../components/form/select/SelectInput.vue';
+import TextInput from '../components/form/input/TextInput.vue';
 
 const route = useRoute();
 const riderId = route.params.id;
@@ -44,6 +46,11 @@ const filters = ref({ from: '', to: '', type: '' });
 const adj = ref({ amount: '', type: 'CREDIT', note: '' });
 const adjusting = ref(false);
 
+// financial accounts (loaded if module is active)
+const financialAccounts = ref([]);
+const selectedAccountId = ref('');
+const financialAccountsLoaded = ref(false);
+
 // page state and common refs
 const error = ref('');
 const success = ref('');
@@ -53,6 +60,8 @@ const transactions = ref([]);
 const loadingTx = ref(false);
 const exporting = ref(false);
 const periodBalance = ref(0);
+const periodEarnings = ref(0);
+const periodPaid = ref(0);
 
 function parseDateInput(s) {
   if (!s) return null;
@@ -142,10 +151,20 @@ async function fetchPeriodFees() {
     params.full = true;
     const { data } = await api.get(`/riders/${riderId}/transactions`, { params });
     const items = data.items || [];
-    const sum = items.reduce((acc, t) => acc + Number(t.amount || 0), 0);
-    periodBalance.value = Number(sum || 0);
+    let earnings = 0;
+    let paid = 0;
+    for (const t of items) {
+      const amt = Number(t.amount || 0);
+      if (amt >= 0) earnings += amt;
+      else paid += Math.abs(amt);
+    }
+    periodEarnings.value = earnings;
+    periodPaid.value = paid;
+    periodBalance.value = earnings - paid;
   } catch (e) {
     console.error('Failed to compute period total', e);
+    periodEarnings.value = 0;
+    periodPaid.value = 0;
     periodBalance.value = 0;
   }
 }
@@ -166,25 +185,35 @@ const datesAreValid = computed(() => !dateValidationMessage.value);
 
 async function pagarPeriodo() {
   if (!datesAreValid.value) return Swal.fire({ icon: 'error', text: dateValidationMessage.value });
+  if (periodBalance.value <= 0) return Swal.fire({ icon: 'info', text: periodBalance.value === 0 ? 'Saldo no período é R$ 0,00. Nada a pagar.' : 'Valor já pago excede os ganhos neste período.' });
+
   const from = filters.value.from || null;
   const to = filters.value.to || null;
+  const acctName = financialAccounts.value.find(a => a.id === selectedAccountId.value)?.name || null;
+  const acctLine = acctName ? `<br><b>Conta de saída:</b> ${acctName}` : '';
+  const paidLine = periodPaid.value > 0 ? `<br><small class="text-muted">Já pago neste período: ${formatCurrency(periodPaid.value)}</small>` : '';
+
   const res = await Swal.fire({
     title: 'Confirmar pagamento',
-    html: `Deseja dar baixa no saldo do entregador por este período?<br><b>Período:</b> ${from || '—'} → ${to || '—'}`,
+    html: `<b>Ganho no período:</b> ${formatCurrency(periodEarnings.value)}`
+      + paidLine
+      + `<br><b style="font-size:1.1em">Valor a pagar: ${formatCurrency(periodBalance.value)}</b>`
+      + `<br><b>Período:</b> ${from || 'início'} → ${to || 'hoje'}`
+      + acctLine,
+    icon: 'question',
     showCancelButton: true,
-    confirmButtonText: 'Pagar',
+    confirmButtonText: `Pagar ${formatCurrency(periodBalance.value)}`,
     cancelButtonText: 'Cancelar'
   });
   if (!res.isConfirmed) return;
   try {
-    const payload = { from, to };
+    const payload = { from, to, accountId: selectedAccountId.value || null };
     const { data } = await api.post(`/riders/${riderId}/account/pay`, payload);
     const totalPaid = Number(data?.total || 0);
     const txId = data?.tx?.id;
     const msg = data?.message || 'Pagamento registrado.';
     const details = `Total pago: <b>${formatCurrency(totalPaid)}</b>` + (txId ? `<br>ID transação: <code>${txId}</code>` : '');
     await Swal.fire({ icon: 'success', title: msg, html: details });
-    // refresh
     await fetchBalance();
     await fetchTransactions();
     await fetchPeriodFees();
@@ -194,7 +223,22 @@ async function pagarPeriodo() {
   }
 }
 
-onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTransactions(); });
+async function fetchFinancialAccounts() {
+  try {
+    const { data } = await api.get('/financial/accounts');
+    financialAccounts.value = Array.isArray(data) ? data.filter(a => a.isActive !== false) : [];
+    financialAccountsLoaded.value = true;
+    // Pre-select default account
+    const def = financialAccounts.value.find(a => a.isDefault);
+    if (def) selectedAccountId.value = def.id;
+  } catch (e) {
+    // Module not active or no accounts — just ignore
+    financialAccounts.value = [];
+    financialAccountsLoaded.value = false;
+  }
+}
+
+onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTransactions(); await fetchFinancialAccounts(); });
 
 </script>
 
@@ -210,6 +254,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
       <div v-if="error" class="alert alert-danger">{{ error }}</div>
       <div v-if="success" class="alert alert-success">{{ success }}</div>
 
+      <!-- Filtros -->
       <div class="card mb-3 p-3">
         <div class="row g-2 align-items-end">
           <div class="col-md-3">
@@ -222,35 +267,94 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
           </div>
           <div class="col-md-3">
             <label class="form-label small">Tipo</label>
-            <SelectInput   v-model="filters.type"  class="form-select">
+            <SelectInput v-model="filters.type">
               <option value="">Todos</option>
               <option value="DELIVERY_FEE">Delivery fee</option>
               <option value="DAILY_RATE">Daily rate</option>
               <option value="MANUAL_ADJUSTMENT">Manual adjustment</option>
             </SelectInput>
           </div>
-          <div class="col-md-3 d-flex gap-2">
-            <button class="btn btn-primary" @click="fetchTransactions" :disabled="loadingTx || !datesAreValid">Buscar</button>
-            <button class="btn btn-outline-secondary" @click="fetchPeriodFees" :disabled="!datesAreValid">Calcular saldo</button>
-            <button class="btn btn-success" @click="pagarPeriodo" :disabled="!datesAreValid">PAGAR</button>
+          <div class="col-md-3 d-flex align-items-end">
+            <button class="btn btn-primary w-100" @click="fetchTransactions" :disabled="loadingTx || !datesAreValid">
+              {{ loadingTx ? 'Buscando...' : 'Buscar' }}
+            </button>
           </div>
         </div>
         <div v-if="dateValidationMessage" class="mt-2 text-danger small">{{ dateValidationMessage }}</div>
       </div>
 
+      <!-- Resumo financeiro do período -->
       <div class="card mb-3">
-        <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-2">
-          <div>
-            <div class="small text-muted">Saldo no período</div>
-            <div class="h3">{{ formatCurrency(periodBalance) }}</div>
-          </div>
-          <div>
-            <div class="d-none d-md-flex align-items-center gap-2">
-              <button class="btn btn-sm btn-primary" @click="fetchBalance" :disabled="loading">Atualizar</button>
-              <button class="btn btn-sm btn-outline-secondary" @click="exportCsv" :disabled="exporting || !datesAreValid">{{ exporting ? 'Exportando...' : 'Exportar CSV' }}</button>
-              <TextInput v-model="phoneTo" placeholder="+5511999999999" inputClass="form-control form-control-sm phone-input" />
-              <button class="btn btn-sm btn-success" @click="sendPdf" :disabled="sendingPdf || !datesAreValid">{{ sendingPdf ? 'Enviando...' : 'Enviar PDF (WhatsApp)' }}</button>
+        <div class="card-body">
+          <!-- Linha 1: Ganhos / Pago / A pagar -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Valor ganho no período</div>
+                <div class="h4 mb-0 text-success">{{ formatCurrency(periodEarnings) }}</div>
+              </div>
             </div>
+            <div class="col-md-4">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Valor já pago no período</div>
+                <div class="h4 mb-0" :class="periodPaid > 0 ? 'text-danger' : ''">{{ formatCurrency(periodPaid) }}</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="border rounded p-3 text-center" :class="periodBalance > 0 ? 'border-success' : ''">
+                <div class="small text-muted fw-semibold">Valor a pagar</div>
+                <div class="h4 mb-0 fw-bold" :class="periodBalance > 0 ? 'text-success' : periodBalance < 0 ? 'text-danger' : ''">
+                  {{ formatCurrency(periodBalance) }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Linha 2: Conta de saída + Pagar + Ações -->
+          <div class="row align-items-end g-3">
+            <!-- Conta de saída -->
+            <div class="col-md-4" v-if="financialAccounts.length > 0">
+              <label class="form-label small mb-1">Conta de saída</label>
+              <SelectInput
+                v-model="selectedAccountId"
+                :options="financialAccounts.map(a => ({ value: a.id, label: a.name }))"
+                placeholder="Selecione a conta..."
+              />
+            </div>
+            <div class="col-md-4" v-else-if="financialAccountsLoaded">
+              <label class="form-label small mb-1">Conta de saída</label>
+              <div class="text-muted small p-2 border rounded bg-light">
+                Nenhuma conta cadastrada.
+                <router-link to="/financial/accounts">Cadastrar</router-link>
+              </div>
+            </div>
+
+            <!-- Botão Pagar -->
+            <div class="col-md-4 d-flex align-items-end">
+              <button
+                class="btn btn-success w-100 py-2"
+                @click="pagarPeriodo"
+                :disabled="!datesAreValid || periodBalance <= 0"
+              >
+                PAGAR {{ periodBalance > 0 ? formatCurrency(periodBalance) : '' }}
+              </button>
+            </div>
+
+            <!-- Ações secundárias -->
+            <div class="col-md-4 d-flex gap-2 align-items-end">
+              <button class="btn btn-sm btn-outline-secondary" @click="exportCsv" :disabled="exporting || !datesAreValid">
+                {{ exporting ? 'Exportando...' : 'Exportar CSV' }}
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" @click="fetchBalance" :disabled="loading">Atualizar</button>
+            </div>
+          </div>
+
+          <!-- WhatsApp PDF (linha separada) -->
+          <div class="d-none d-md-flex align-items-center gap-2 mt-3 pt-3 border-top">
+            <TextInput v-model="phoneTo" placeholder="+5511999999999" inputClass="form-control form-control-sm phone-input" />
+            <button class="btn btn-sm btn-success" @click="sendPdf" :disabled="sendingPdf || !datesAreValid">
+              {{ sendingPdf ? 'Enviando...' : 'Enviar PDF (WhatsApp)' }}
+            </button>
           </div>
         </div>
       </div>

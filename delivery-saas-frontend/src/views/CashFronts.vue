@@ -18,6 +18,7 @@
                     <th>Saldo registrado (R$)</th>
                     <th>Retiradas</th>
                     <th>Reforços</th>
+                    <th>Diferença</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -26,9 +27,15 @@
                     <td>{{ formatDate(s.openedAt) }}</td>
                     <td>{{ s.closedAt ? formatDate(s.closedAt) : '-' }}</td>
                     <td class="text-end">{{ formatCurrency(Number(s.openingAmount || 0)) }}</td>
-                    <td class="text-end">{{ formatCurrency(Number(s.balance || 0)) }}</td>
+                    <td class="text-end">{{ formatCurrency(Number(s.currentBalance || s.balance || 0)) }}</td>
                     <td class="text-end">{{ formatCurrency(Number(s.summary?.totalWithdrawals || totalWithdrawalsFor(s) )) }}</td>
                     <td class="text-end">{{ formatCurrency(Number(s.summary?.totalReinforcements || totalReinforcementsFor(s) )) }}</td>
+                    <td class="text-end">
+                      <span v-if="s.differences" :class="totalDiffClass(s.differences)">
+                        {{ formatCurrency(totalDiff(s.differences)) }}
+                      </span>
+                      <span v-else class="text-muted">—</span>
+                    </td>
                     <td class="text-end">
                       <button class="btn btn-sm btn-outline-secondary" @click="showSessionDetails(s)">
                         Mais detalhes
@@ -66,19 +73,36 @@ function formatDate(d) {
 function totalWithdrawalsFor(s) {
   try {
     const m = Array.isArray(s.movements) ? s.movements : [];
-    return m.filter(x => String(x.type||'').toLowerCase().includes('retir') || String(x.type||'').toLowerCase().includes('withdraw')).reduce((a,b)=>a+Number(b.amount||0),0);
+    return m.filter(x => {
+      const t = String(x.type||'').toUpperCase();
+      return t === 'WITHDRAWAL' || t.includes('RETIR') || t.includes('WITHDRAW');
+    }).reduce((a,b)=>a+Number(b.amount||0),0);
   } catch(e){return 0}
 }
 function totalReinforcementsFor(s) {
   try {
     const m = Array.isArray(s.movements) ? s.movements : [];
-    return m.filter(x => String(x.type||'').toLowerCase().includes('refor') || String(x.type||'').toLowerCase().includes('reinfor')).reduce((a,b)=>a+Number(b.amount||0),0);
+    return m.filter(x => {
+      const t = String(x.type||'').toUpperCase();
+      return t === 'REINFORCEMENT' || t.includes('REFOR') || t.includes('REINFOR');
+    }).reduce((a,b)=>a+Number(b.amount||0),0);
   } catch(e){return 0}
+}
+
+function totalDiff(differences) {
+  if (!differences) return 0;
+  return Object.values(differences).reduce((sum, v) => sum + Number(v || 0), 0);
+}
+
+function totalDiffClass(differences) {
+  const d = totalDiff(differences);
+  if (Math.abs(d) < 0.01) return 'text-success fw-semibold';
+  return d > 0 ? 'text-primary fw-semibold' : 'text-danger fw-semibold';
 }
 
 function sortedMovements(movements){
   try {
-    return (Array.isArray(movements)?movements.slice():[]).sort((a,b)=> new Date(b.at||0)-new Date(a.at||0));
+    return (Array.isArray(movements)?movements.slice():[]).sort((a,b)=> new Date(b.createdAt||b.at||0)-new Date(a.createdAt||a.at||0));
   } catch(e){ return movements || [] }
 }
 
@@ -95,8 +119,8 @@ function showSessionDetails(s) {
     const summary = s.summary || {};
     const paymentsByMethod = summary.paymentsByMethod || {};
     const inRegisterByMethod = summary.inRegisterByMethod || {};
-    const totalWithdrawals = summary.totalWithdrawals || (Array.isArray(s.movements) ? s.movements.filter(m=>String(m.type||'').toLowerCase().includes('retir')||String(m.type||'').toLowerCase().includes('withdraw')).reduce((a,b)=>a+Number(b.amount||0),0) : 0);
-    const totalReinforcements = summary.totalReinforcements || (Array.isArray(s.movements) ? s.movements.filter(m=>String(m.type||'').toLowerCase().includes('refor')||String(m.type||'').toLowerCase().includes('reinfor')).reduce((a,b)=>a+Number(b.amount||0),0) : 0);
+    const totalWithdrawals = summary.totalWithdrawals || totalWithdrawalsFor(s);
+    const totalReinforcements = summary.totalReinforcements || totalReinforcementsFor(s);
 
     // build rows for payment methods
     const methods = Object.keys(inRegisterByMethod).length ? Object.keys(inRegisterByMethod) : (Object.keys(paymentsByMethod).length ? Object.keys(paymentsByMethod) : ['Dinheiro']);
@@ -109,7 +133,7 @@ function showSessionDetails(s) {
     const opening = Number(s.openingAmount||0);
     const totalInRegister = Object.values(inRegisterByMethod||{}).reduce((a,b)=>a+Number(b||0),0);
 
-    const closingNote = (s.closingSummary && (s.closingSummary.note || (s.closingSummary.note===0? s.closingSummary.note : ''))) || '';
+    const closingNote = s.closingNote || (s.closingSummary && (s.closingSummary.note || '')) || '';
 
     const openerName = usersMap.value && usersMap.value[s.openedBy] ? usersMap.value[s.openedBy] : (s.openedBy || '');
     const closerName = usersMap.value && usersMap.value[s.closedBy] ? usersMap.value[s.closedBy] : (s.closedBy || '');
@@ -231,8 +255,8 @@ function showSessionDetails(s) {
                     if (elR) elR.textContent = formatCurrency(updated.summary?.totalReinforcements ?? totalReinforcementsFor(updated));
                     if (elT) elT.textContent = formatCurrency(updated.summary ? Object.values(updated.summary.inRegisterByMethod || {}).reduce((a,b)=>a+Number(b||0),0) : (updated.balance||0));
                     const holder = root.querySelector('#cf-view-list-withdrawals');
-                    const actor = (movement && movement.by && usersMap.value && usersMap.value[movement.by]) ? usersMap.value[movement.by] : (movement && movement.by) || '';
-                    const liHtml = `<li style="padding:6px 0;border-bottom:1px dashed #eee">${escapeHtml(new Date(movement.at).toLocaleString())} - ${formatCurrency(Number(movement.amount||0))}${movement.note? ' - '+escapeHtml(movement.note):''}${actor? ' - '+escapeHtml(actor): ''}</li>`;
+                    const actor = (movement && (movement.createdBy||movement.by) && usersMap.value && usersMap.value[movement.createdBy||movement.by]) ? usersMap.value[movement.createdBy||movement.by] : (movement && (movement.createdBy||movement.by)) || '';
+                    const liHtml = `<li style="padding:6px 0;border-bottom:1px dashed #eee">${escapeHtml(new Date(movement.createdAt||movement.at).toLocaleString())} - ${formatCurrency(Number(movement.amount||0))}${movement.note? ' - '+escapeHtml(movement.note):''}${actor? ' - '+escapeHtml(actor): ''}</li>`;
                     if (holder) {
                       let ul = holder.querySelector('ul');
                       if (!ul) holder.innerHTML = '<ul style="list-style:none;padding:0;margin:0">' + liHtml + '</ul>';
@@ -309,8 +333,8 @@ function showSessionDetails(s) {
                     if (elR) elR.textContent = formatCurrency(updated.summary?.totalReinforcements ?? totalReinforcementsFor(updated));
                     if (elT) elT.textContent = formatCurrency(updated.summary ? Object.values(updated.summary.inRegisterByMethod || {}).reduce((a,b)=>a+Number(b||0),0) : (updated.balance||0));
                     const holder = root.querySelector('#cf-view-list-reinforcements');
-                    const actor = (movement && movement.by && usersMap.value && usersMap.value[movement.by]) ? usersMap.value[movement.by] : (movement && movement.by) || '';
-                    const liHtml = `<li style="padding:6px 0;border-bottom:1px dashed #eee">${escapeHtml(new Date(movement.at).toLocaleString())} - ${formatCurrency(Number(movement.amount||0))}${movement.note? ' - '+escapeHtml(movement.note):''}${actor? ' - '+escapeHtml(actor): ''}</li>`;
+                    const actor = (movement && (movement.createdBy||movement.by) && usersMap.value && usersMap.value[movement.createdBy||movement.by]) ? usersMap.value[movement.createdBy||movement.by] : (movement && (movement.createdBy||movement.by)) || '';
+                    const liHtml = `<li style="padding:6px 0;border-bottom:1px dashed #eee">${escapeHtml(new Date(movement.createdAt||movement.at).toLocaleString())} - ${formatCurrency(Number(movement.amount||0))}${movement.note? ' - '+escapeHtml(movement.note):''}${actor? ' - '+escapeHtml(actor): ''}</li>`;
                     if (holder) {
                       let ul = holder.querySelector('ul');
                       if (!ul) holder.innerHTML = '<ul style="list-style:none;padding:0;margin:0">' + liHtml + '</ul>';
@@ -369,14 +393,14 @@ function showMovementsInline(session, kind){
     }
     const movements = Array.isArray(session.movements)? session.movements : [];
     const filtered = movements.filter(mv => {
-      const t = String(mv.type||'').toLowerCase();
-      if(kind==='retirada') return t.includes('retir')||t.includes('withdraw');
-      return t.includes('refor')||t.includes('reinfor')||t.includes('refo');
-    }).sort((a,b)=> new Date(b.at||0)-new Date(a.at||0));
+      const t = String(mv.type||'').toUpperCase();
+      if(kind==='retirada') return t === 'WITHDRAWAL' || t.includes('RETIR') || t.includes('WITHDRAW');
+      return t === 'REINFORCEMENT' || t.includes('REFOR') || t.includes('REINFOR');
+    }).sort((a,b)=> new Date(b.createdAt||b.at||0)-new Date(a.createdAt||a.at||0));
     if(!filtered.length) { holder.innerHTML = '<div class="text-muted">Nenhuma movimentação encontrada</div>'; holder.style.display='block'; return; }
     holder.innerHTML = '<ul style="list-style:none;padding:0;margin:0">' + filtered.map(mv=>{
-      const actor = (mv.by && usersMap.value && usersMap.value[mv.by]) ? usersMap.value[mv.by] : (mv.by || '');
-      return `<li style="padding:6px 0;border-bottom:1px dashed #eee">${escapeHtml(new Date(mv.at).toLocaleString())} - ${formatCurrency(Number(mv.amount||0))}${mv.note? ' - '+escapeHtml(mv.note):''}${actor? ' - '+escapeHtml(actor): ''}</li>`
+      const actor = ((mv.createdBy||mv.by) && usersMap.value && usersMap.value[mv.createdBy||mv.by]) ? usersMap.value[mv.createdBy||mv.by] : (mv.createdBy||mv.by || '');
+      return `<li style="padding:6px 0;border-bottom:1px dashed #eee">${escapeHtml(new Date(mv.createdAt||mv.at).toLocaleString())} - ${formatCurrency(Number(mv.amount||0))}${mv.note? ' - '+escapeHtml(mv.note):''}${actor? ' - '+escapeHtml(actor): ''}</li>`
     }).join('') + '</ul>';
     holder.style.display='block';
   }catch(e){console.error(e)}

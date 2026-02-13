@@ -1,340 +1,407 @@
 import express from 'express';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware } from '../auth.js';
 import { prisma } from '../prisma.js';
+import {
+  aggregatePaymentsByMethod,
+  calculateExpectedValues,
+  calculateDifferences,
+} from '../services/cash/paymentAggregator.js';
+import { createFinancialEntriesForCashSession } from '../services/financial/cashSessionBridge.js';
 
 export const cashRouter = express.Router();
 cashRouter.use(authMiddleware);
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-const FILE_PATH = path.join(DATA_DIR, 'cashSessions.json');
+// ─── Helpers ───────────────────────────────────────────────────────────
 
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(FILE_PATH)) fs.writeFileSync(FILE_PATH, JSON.stringify({ sessions: [] }, null, 2));
+function sessionToJSON(s) {
+  return {
+    ...s,
+    openingAmount: Number(s.openingAmount),
+    currentBalance: Number(s.currentBalance),
+    movements: (s.movements || []).map(mv => ({
+      ...mv,
+      amount: Number(mv.amount),
+    })),
+  };
 }
 
-function readAll() {
-  ensureDataDir();
-  try {
-    const raw = fs.readFileSync(FILE_PATH, 'utf8');
-    return JSON.parse(raw || '{"sessions":[]}') || { sessions: [] };
-  } catch (e) {
-    console.warn('Could not read cash sessions file, returning empty', e);
-    return { sessions: [] };
-  }
-}
+// ─── GET /cash/current ─────────────────────────────────────────────────
 
-function writeAll(payload) {
-  ensureDataDir();
-  fs.writeFileSync(FILE_PATH, JSON.stringify(payload, null, 2));
-}
-
-// GET /cash/current - current open session for company
 cashRouter.get('/current', async (req, res) => {
-  const companyId = req.user.companyId;
+  const { companyId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
-  const all = readAll();
-  const s = all.sessions.find(x => x.companyId === companyId && !x.closedAt);
-  res.json(s || null);
+
+  const session = await prisma.cashSession.findFirst({
+    where: { companyId, status: 'OPEN' },
+    include: { movements: { orderBy: { createdAt: 'asc' } } },
+  });
+
+  res.json(session ? sessionToJSON(session) : null);
 });
 
-// POST /cash/open { openingAmount, note }
+// ─── POST /cash/open ───────────────────────────────────────────────────
+
 cashRouter.post('/open', async (req, res) => {
-  const companyId = req.user.companyId;
+  const { companyId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+
   let { openingAmount, note } = req.body || {};
-  const all = readAll();
-  // ensure no open session exists
-  const existing = all.sessions.find(x => x.companyId === companyId && !x.closedAt);
+
+  // Check no open session exists
+  const existing = await prisma.cashSession.findFirst({
+    where: { companyId, status: 'OPEN' },
+  });
   if (existing) return res.status(400).json({ message: 'Já existe sessão de caixa aberta' });
 
-  // If openingAmount not provided, try to initialize from last closed session counted cash
+  // Auto-suggest opening from last closed session's declared cash
   if (openingAmount == null) {
     try {
-      const closed = all.sessions.filter(x => x.companyId === companyId && x.closedAt).sort((a,b)=>new Date(b.closedAt)-new Date(a.closedAt))[0];
-      if (closed && closed.closingSummary) {
-        const cs = (typeof closed.closingSummary === 'string') ? (() => { try { return JSON.parse(closed.closingSummary); } catch (e) { return closed.closingSummary; } })() : closed.closingSummary;
-        if (cs && cs.counted) {
-          // try normalized keys: Dinheiro, CASH, dinheiro, cash
-          const candidates = ['Dinheiro','dinheiro','CASH','cash','Cash','DINHEIRO'];
-          let found = null;
-          for (const k of Object.keys(cs.counted || {})) {
-            const keyLower = String(k).toLowerCase();
-            if (keyLower.includes('din') || keyLower.includes('cash') || keyLower.includes('money')) { found = cs.counted[k]; break; }
+      const lastClosed = await prisma.cashSession.findFirst({
+        where: { companyId, status: 'CLOSED' },
+        orderBy: { closedAt: 'desc' },
+      });
+      if (lastClosed?.declaredValues) {
+        const declared = lastClosed.declaredValues;
+        for (const k of Object.keys(declared)) {
+          const kl = String(k).toLowerCase();
+          if (kl.includes('din') || kl.includes('cash') || kl.includes('money')) {
+            openingAmount = Number(declared[k] || 0);
+            break;
           }
-          if (found == null) {
-            // try explicit candidate names
-            for (const c of candidates) { if (cs.counted[c] != null) { found = cs.counted[c]; break; } }
-          }
-          if (found != null) openingAmount = Number(found || 0);
         }
       }
-    } catch (e) { /* ignore and keep openingAmount null */ }
+    } catch (e) { /* ignore */ }
   }
 
-  const s = {
-    id: uuidv4(),
-    companyId,
-    openedAt: new Date().toISOString(),
-    openedBy: req.user.id,
-    openingAmount: Number(openingAmount || 0),
-    balance: Number(openingAmount || 0),
-    note: note || null,
-    movements: [],
-    closedAt: null,
-    closedBy: null,
-    closingSummary: null
-  };
-  all.sessions.push(s);
-  writeAll(all);
-  res.status(201).json(s);
+  const amount = Number(openingAmount || 0);
+  const session = await prisma.cashSession.create({
+    data: {
+      companyId,
+      openedBy: req.user.id,
+      openingAmount: amount,
+      currentBalance: amount,
+      openingNote: note || null,
+      status: 'OPEN',
+    },
+    include: { movements: true },
+  });
+
+  res.status(201).json(sessionToJSON(session));
 });
 
-// POST /cash/movement { type, amount, account, note }
+// ─── POST /cash/movement ──────────────────────────────────────────────
+
 cashRouter.post('/movement', async (req, res) => {
-  const companyId = req.user.companyId;
+  const { companyId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
   const { type, amount, account, note } = req.body || {};
   if (!type || !amount) return res.status(400).json({ message: 'type e amount são obrigatórios' });
-  const all = readAll();
-  const s = all.sessions.find(x => x.companyId === companyId && !x.closedAt);
-  if (!s) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
 
-  const mv = { id: uuidv4(), type, amount: Number(amount), account: account || null, note: note || null, at: new Date().toISOString(), by: req.user.id };
-  // withdrawals decrease balance, reinforcements increase
-  if (type === 'withdrawal' || type === 'retirada') s.balance = Number(s.balance) - Number(amount);
-  else s.balance = Number(s.balance) + Number(amount);
-  s.movements.push(mv);
-  writeAll(all);
-  res.json({ ok: true, session: s, movement: mv });
+  const session = await prisma.cashSession.findFirst({
+    where: { companyId, status: 'OPEN' },
+  });
+  if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
+
+  // Normalize type
+  const t = String(type).toLowerCase();
+  const movementType = (t.includes('retir') || t.includes('withdraw'))
+    ? 'WITHDRAWAL'
+    : (t.includes('refor') || t.includes('reinfor') || t.includes('refo'))
+      ? 'REINFORCEMENT'
+      : 'ADJUSTMENT';
+
+  const absAmount = Math.abs(Number(amount));
+  const balanceDelta = movementType === 'WITHDRAWAL' ? -absAmount : absAmount;
+
+  // Atomic: create movement + update balance
+  const [movement, updatedSession] = await prisma.$transaction([
+    prisma.cashMovement.create({
+      data: {
+        sessionId: session.id,
+        type: movementType,
+        amount: absAmount,
+        note: note || null,
+        createdBy: req.user.id,
+        accountId: account || null,
+      },
+    }),
+    prisma.cashSession.update({
+      where: { id: session.id },
+      data: { currentBalance: { increment: balanceDelta } },
+      include: { movements: { orderBy: { createdAt: 'asc' } } },
+    }),
+  ]);
+
+  res.json({ ok: true, session: sessionToJSON(updatedSession), movement: { ...movement, amount: Number(movement.amount) } });
 });
 
-// POST /cash/close { closingSummary }
+// ─── POST /cash/close/finalize ─────────────────────────────────────────
+// New wizard-based close endpoint
+
+cashRouter.post('/close/finalize', async (req, res) => {
+  const { companyId } = req.user;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+
+  const { declaredValues, closingNote, blindClose, lastMinuteMovements } = req.body || {};
+
+  const session = await prisma.cashSession.findFirst({
+    where: { companyId, status: 'OPEN' },
+    include: { movements: true },
+  });
+  if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
+
+  // 1. Register last-minute movements (sangrias/reforços from step 3)
+  if (Array.isArray(lastMinuteMovements) && lastMinuteMovements.length > 0) {
+    for (const lm of lastMinuteMovements) {
+      const t = String(lm.type || '').toLowerCase();
+      const mvType = (t.includes('retir') || t.includes('withdraw'))
+        ? 'WITHDRAWAL'
+        : (t.includes('refor') || t.includes('reinfor') || t.includes('refo'))
+          ? 'REINFORCEMENT'
+          : 'ADJUSTMENT';
+      const absAmt = Math.abs(Number(lm.amount || 0));
+      const delta = mvType === 'WITHDRAWAL' ? -absAmt : absAmt;
+
+      await prisma.$transaction([
+        prisma.cashMovement.create({
+          data: {
+            sessionId: session.id,
+            type: mvType,
+            amount: absAmt,
+            note: lm.note || null,
+            createdBy: req.user.id,
+          },
+        }),
+        prisma.cashSession.update({
+          where: { id: session.id },
+          data: { currentBalance: { increment: delta } },
+        }),
+      ]);
+    }
+  }
+
+  // 2. Reload session with all movements
+  const freshSession = await prisma.cashSession.findUnique({
+    where: { id: session.id },
+    include: { movements: true },
+  });
+
+  // 3. Calculate expected values
+  const { expectedValues, paymentsByMethod, totalWithdrawals, totalReinforcements } =
+    await calculateExpectedValues(freshSession);
+
+  // 4. Calculate differences
+  const differences = calculateDifferences(declaredValues || {}, expectedValues);
+
+  const closedAt = new Date();
+
+  // 5. Close session
+  const closedSession = await prisma.cashSession.update({
+    where: { id: session.id },
+    data: {
+      status: 'CLOSED',
+      closedAt,
+      closedBy: req.user.id,
+      closingNote: closingNote || null,
+      blindClose: blindClose || false,
+      declaredValues: declaredValues || {},
+      expectedValues,
+      differences,
+    },
+    include: { movements: { orderBy: { createdAt: 'asc' } } },
+  });
+
+  // 6. Financial bridge (non-blocking)
+  try {
+    await createFinancialEntriesForCashSession({
+      ...closedSession,
+      differences,
+      companyId,
+    });
+  } catch (e) {
+    console.error('Cash close financial bridge error:', e?.message || e);
+  }
+
+  res.json({
+    ok: true,
+    session: sessionToJSON(closedSession),
+    summary: {
+      paymentsByMethod,
+      expectedValues,
+      declaredValues: declaredValues || {},
+      differences,
+      totalWithdrawals,
+      totalReinforcements,
+    },
+  });
+});
+
+// ─── POST /cash/close (legacy - backwards compatible) ─────────────────
+
 cashRouter.post('/close', async (req, res) => {
-  const companyId = req.user.companyId;
+  const { companyId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
   const { closingSummary } = req.body || {};
-  const all = readAll();
-  const s = all.sessions.find(x => x.companyId === companyId && !x.closedAt);
-  if (!s) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
-  s.closedAt = new Date().toISOString();
-  s.closedBy = req.user.id;
-  s.closingSummary = closingSummary || null;
-  writeAll(all);
-  res.json({ ok: true, session: s });
+
+  const session = await prisma.cashSession.findFirst({
+    where: { companyId, status: 'OPEN' },
+    include: { movements: true },
+  });
+  if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
+
+  // Parse legacy closingSummary
+  let parsed = closingSummary;
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed); } catch (e) { /* keep as-is */ }
+  }
+
+  const declaredValues = parsed?.counted || null;
+
+  // Calculate expected + differences if we have declared values
+  let expectedValues = null;
+  let differences = null;
+  if (declaredValues) {
+    const result = await calculateExpectedValues(session);
+    expectedValues = result.expectedValues;
+    differences = calculateDifferences(declaredValues, expectedValues);
+  }
+
+  const closedSession = await prisma.cashSession.update({
+    where: { id: session.id },
+    data: {
+      status: 'CLOSED',
+      closedAt: new Date(),
+      closedBy: req.user.id,
+      closingNote: parsed?.note || null,
+      declaredValues,
+      expectedValues,
+      differences,
+    },
+    include: { movements: { orderBy: { createdAt: 'asc' } } },
+  });
+
+  // Financial bridge (non-blocking)
+  if (differences) {
+    try {
+      await createFinancialEntriesForCashSession({
+        ...closedSession,
+        differences,
+        companyId,
+      });
+    } catch (e) {
+      console.error('Cash close (legacy) financial bridge error:', e?.message || e);
+    }
+  }
+
+  res.json({ ok: true, session: sessionToJSON(closedSession) });
 });
 
-// GET /cash/sessions - list sessions
+// ─── GET /cash/sessions ────────────────────────────────────────────────
+
 cashRouter.get('/sessions', async (req, res) => {
-  const companyId = req.user.companyId;
+  const { companyId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
-  const all = readAll();
-  const sessions = all.sessions.filter(x => x.companyId === companyId).sort((a,b)=>new Date(b.openedAt)-new Date(a.openedAt));
 
-  // For each session, compute a summary: totals per payment method (from confirmed payments),
-  // totals for movements, and expected balance. Also normalize/parse closingSummary if needed.
+  const sessions = await prisma.cashSession.findMany({
+    where: { companyId },
+    include: { movements: { orderBy: { createdAt: 'asc' } } },
+    orderBy: { openedAt: 'desc' },
+    take: 50,
+  });
+
+  // Enrich each session with payment summary
   const enriched = await Promise.all(sessions.map(async (s) => {
-    const sessionCopy = Object.assign({}, s);
+    const session = sessionToJSON(s);
 
-    // normalize closingSummary if it is a JSON string
     try {
-      if (sessionCopy.closingSummary && typeof sessionCopy.closingSummary === 'string') {
-        try { sessionCopy.closingSummary = JSON.parse(sessionCopy.closingSummary); } catch (e) { /* keep as string */ }
-      }
-    } catch (e) { /* ignore */ }
+      const { expectedValues, paymentsByMethod, totalWithdrawals, totalReinforcements } =
+        await calculateExpectedValues(s);
 
-    // aggregate movements
-    const movements = Array.isArray(sessionCopy.movements) ? sessionCopy.movements : [];
-    let totalWithdrawals = 0;
-    let totalReinforcements = 0;
-    for (const mv of movements) {
-      const t = String(mv.type || '').toLowerCase();
-      const a = Number(mv.amount || 0);
-      if (t.includes('retir') || t.includes('withdraw')) totalWithdrawals += a;
-      else if (t.includes('refor') || t.includes('reinfor') || t.includes('refo')) totalReinforcements += a;
-      else { if (a < 0) totalWithdrawals += Math.abs(a); else totalReinforcements += a; }
-    }
+      const opening = Number(s.openingAmount || 0);
+      const cashPayments = Number(paymentsByMethod['Dinheiro'] || 0);
+      const expectedBalance = opening + cashPayments + totalReinforcements - totalWithdrawals;
 
-    // compute payments per method from orders finalized during the session
-    const paymentsByMethod = {};
-    try {
-      const where = { companyId: sessionCopy.companyId, status: 'CONCLUIDO' };
-      const gte = sessionCopy.openedAt ? new Date(sessionCopy.openedAt) : null;
-      const lte = sessionCopy.closedAt ? new Date(sessionCopy.closedAt) : null;
-      if (gte || lte) where.updatedAt = {};
-      if (gte) where.updatedAt.gte = gte;
-      if (lte) where.updatedAt.lte = lte;
-
-      const orders = await prisma.order.findMany({ where, select: { id: true, payload: true, total: true, updatedAt: true, createdAt: true } });
-      const byMethodCents = {};
-      for (const o of orders) {
-        try {
-          const payload = o.payload || {};
-          let confirmed = null;
-          if (Array.isArray(payload.paymentConfirmed)) confirmed = payload.paymentConfirmed;
-          else if (payload.payment) confirmed = [payload.payment];
-          else if (typeof payload.paymentConfirmed === 'string') {
-            try { confirmed = JSON.parse(payload.paymentConfirmed); } catch (e) { confirmed = null; }
-          }
-          if (Array.isArray(confirmed)) {
-            for (const p of confirmed) {
-              const raw = (p && (p.method || p.methodCode || p.name)) ? (p.method || p.methodCode || p.name) : 'Outros';
-              const method = (function normalizeMethod(name) {
-                if (!name) return 'Outros';
-                const s = String(name).toLowerCase();
-                if (s.includes('din') || s.includes('cash') || s.includes('money') || s.includes('dinheiro')) return 'Dinheiro';
-                if (s.includes('pix')) return 'PIX';
-                if (s.includes('card') || s.includes('cartao') || s.includes('credito') || s.includes('cred')) return 'Cartão';
-                return String(name).trim();
-              })(raw);
-              const amt = (p && (p.amount != null)) ? Number(p.amount) : (o.total != null ? Number(o.total) : 0);
-              const cents = Math.round((Number(amt) || 0) * 100);
-              byMethodCents[method] = (byMethodCents[method] || 0) + cents;
-            }
-          }
-        } catch (e) { /* per-order parse error */ }
-      }
-      for (const [m, cents] of Object.entries(byMethodCents)) paymentsByMethod[m] = (cents || 0) / 100;
+      session.summary = {
+        paymentsByMethod,
+        inRegisterByMethod: expectedValues,
+        totalPayments: Object.values(paymentsByMethod).reduce((sum, v) => sum + Number(v || 0), 0),
+        totalWithdrawals,
+        totalReinforcements,
+        expectedBalance,
+      };
     } catch (e) {
-      console.warn('Failed to aggregate payments for session', sessionCopy.id, e && e.message);
+      console.warn('Failed to compute summary for session', s.id, e?.message);
+      session.summary = null;
     }
 
-    // expected balance: openingAmount + cash payments + reforcos - retiradas
-    const opening = Number(sessionCopy.openingAmount || 0);
-    const cashPayments = Number(paymentsByMethod['Dinheiro'] || 0);
-    const expected = opening + cashPayments + Number(totalReinforcements || 0) - Number(totalWithdrawals || 0);
-
-    // compute per-method in-register totals: for 'Dinheiro' start from opening and add/subtract movements,
-    // for other methods the in-register amount is the total payments (no physical movements tracked)
-    const inRegisterByMethod = {};
-    for (const [m, v] of Object.entries(paymentsByMethod)) {
-      if (String(m).toLowerCase().includes('din') || String(m).toLowerCase().includes('cash')) {
-        inRegisterByMethod[m] = Number(opening || 0) + Number(v || 0) + Number(totalReinforcements || 0) - Number(totalWithdrawals || 0);
-      } else {
-        inRegisterByMethod[m] = Number(v || 0);
-      }
-    }
-    // ensure Dinheiro exists as a key even if there were no payments
-    if (!Object.keys(inRegisterByMethod).some(k => String(k).toLowerCase().includes('din') || String(k).toLowerCase().includes('cash'))) {
-      inRegisterByMethod['Dinheiro'] = Number(opening || 0) + Number(totalReinforcements || 0) - Number(totalWithdrawals || 0);
-    }
-
-    sessionCopy.summary = {
-      paymentsByMethod,
-      inRegisterByMethod,
-      totalPayments: Object.values(paymentsByMethod).reduce((s,v)=>s+Number(v||0),0),
-      totalWithdrawals: Number(totalWithdrawals || 0),
-      totalReinforcements: Number(totalReinforcements || 0),
-      expectedBalance: Number(expected || 0)
-    };
-
-    return sessionCopy;
+    return session;
   }));
 
   res.json(enriched);
 });
 
-// GET /cash/summary/current - summary for current open session
+// ─── GET /cash/summary/current ─────────────────────────────────────────
+
 cashRouter.get('/summary/current', async (req, res) => {
-  const companyId = req.user.companyId;
+  const { companyId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
-  const all = readAll();
-  const s = all.sessions.find(x => x.companyId === companyId && !x.closedAt);
-  if (!s) return res.json(null);
 
-  const sessionCopy = Object.assign({}, s);
-  // normalize closingSummary if string
-  try { if (sessionCopy.closingSummary && typeof sessionCopy.closingSummary === 'string') { try { sessionCopy.closingSummary = JSON.parse(sessionCopy.closingSummary); } catch (e) {} } } catch (e) {}
+  const session = await prisma.cashSession.findFirst({
+    where: { companyId, status: 'OPEN' },
+    include: { movements: true },
+  });
+  if (!session) return res.json(null);
 
-  // aggregate movements
-  const movements = Array.isArray(sessionCopy.movements) ? sessionCopy.movements : [];
-  let totalWithdrawals = 0;
-  let totalReinforcements = 0;
-  for (const mv of movements) {
-    const t = String(mv.type || '').toLowerCase();
-    const a = Number(mv.amount || 0);
-    if (t.includes('retir') || t.includes('withdraw')) totalWithdrawals += a;
-    else if (t.includes('refor') || t.includes('reinfor') || t.includes('refo')) totalReinforcements += a;
-    else { if (a < 0) totalWithdrawals += Math.abs(a); else totalReinforcements += a; }
-  }
-
-  // compute payments per method from orders finalized during the session
-  const paymentsByMethod = {};
   try {
-    const where = { companyId: sessionCopy.companyId, status: 'CONCLUIDO' };
-    const gte = sessionCopy.openedAt ? new Date(sessionCopy.openedAt) : null;
-    const lte = sessionCopy.closedAt ? new Date(sessionCopy.closedAt) : null;
-    if (gte || lte) where.updatedAt = {};
-    if (gte) where.updatedAt.gte = gte;
-    if (lte) where.updatedAt.lte = lte;
+    const { expectedValues, paymentsByMethod, totalWithdrawals, totalReinforcements } =
+      await calculateExpectedValues(session);
 
-    const orders = await prisma.order.findMany({ where, select: { id: true, payload: true, total: true, updatedAt: true, createdAt: true } });
-    const byMethodCents = {};
-    for (const o of orders) {
-      try {
-        const payload = o.payload || {};
-        let confirmed = null;
-        if (Array.isArray(payload.paymentConfirmed)) confirmed = payload.paymentConfirmed;
-        else if (payload.payment) confirmed = [payload.payment];
-        else if (typeof payload.paymentConfirmed === 'string') {
-          try { confirmed = JSON.parse(payload.paymentConfirmed); } catch (e) { confirmed = null; }
-        }
-        if (Array.isArray(confirmed)) {
-          for (const p of confirmed) {
-            const raw = (p && (p.method || p.methodCode || p.name)) ? (p.method || p.methodCode || p.name) : 'Outros';
-            const method = (function normalizeMethod(name) {
-              if (!name) return 'Outros';
-              const s = String(name).toLowerCase();
-              if (s.includes('din') || s.includes('cash') || s.includes('money') || s.includes('dinheiro')) return 'Dinheiro';
-              if (s.includes('pix')) return 'PIX';
-              if (s.includes('card') || s.includes('cartao') || s.includes('credito') || s.includes('cred')) return 'Cartão';
-              return String(name).trim();
-            })(raw);
-            const amt = (p && (p.amount != null)) ? Number(p.amount) : (o.total != null ? Number(o.total) : 0);
-            const cents = Math.round((Number(amt) || 0) * 100);
-            byMethodCents[method] = (byMethodCents[method] || 0) + cents;
-          }
-        }
-      } catch (e) { /* per-order parse error */ }
-    }
-    for (const [m, cents] of Object.entries(byMethodCents)) paymentsByMethod[m] = (cents || 0) / 100;
+    const opening = Number(session.openingAmount || 0);
+    const cashPayments = Number(paymentsByMethod['Dinheiro'] || 0);
+    const expectedBalance = opening + cashPayments + totalReinforcements - totalWithdrawals;
+
+    res.json({
+      paymentsByMethod,
+      inRegisterByMethod: expectedValues,
+      totalPayments: Object.values(paymentsByMethod).reduce((sum, v) => sum + Number(v || 0), 0),
+      totalWithdrawals,
+      totalReinforcements,
+      expectedBalance,
+    });
   } catch (e) {
-    console.warn('Failed to aggregate payments for session', sessionCopy.id, e && e.message);
+    console.error('summary/current error:', e);
+    res.status(500).json({ message: 'Erro ao calcular resumo' });
   }
+});
 
-  // expected balance: openingAmount + cash payments + reforcos - retiradas
-  const opening = Number(sessionCopy.openingAmount || 0);
-  const cashPayments = Number(paymentsByMethod['Dinheiro'] || 0);
-  const expected = opening + cashPayments + Number(totalReinforcements || 0) - Number(totalWithdrawals || 0);
+// ─── GET /cash/settings ────────────────────────────────────────────────
 
-  // compute per-method in-register totals: for 'Dinheiro' start from opening and add/subtract movements,
-  // for other methods the in-register amount is the total payments (no physical movements tracked)
-  const inRegisterByMethod = {};
-  for (const [m, v] of Object.entries(paymentsByMethod)) {
-    if (String(m).toLowerCase().includes('din') || String(m).toLowerCase().includes('cash')) {
-      inRegisterByMethod[m] = Number(opening || 0) + Number(v || 0) + Number(totalReinforcements || 0) - Number(totalWithdrawals || 0);
-    } else {
-      inRegisterByMethod[m] = Number(v || 0);
-    }
-  }
-  // ensure Dinheiro exists as a key even if there were no payments
-  if (!Object.keys(inRegisterByMethod).some(k => String(k).toLowerCase().includes('din') || String(k).toLowerCase().includes('cash'))) {
-    inRegisterByMethod['Dinheiro'] = Number(opening || 0) + Number(totalReinforcements || 0) - Number(totalWithdrawals || 0);
-  }
+cashRouter.get('/settings', async (req, res) => {
+  const { companyId } = req.user;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
 
-  sessionCopy.summary = {
-    paymentsByMethod,
-    inRegisterByMethod,
-    totalPayments: Object.values(paymentsByMethod).reduce((s,v)=>s+Number(v||0),0),
-    totalWithdrawals: Number(totalWithdrawals || 0),
-    totalReinforcements: Number(totalReinforcements || 0),
-    expectedBalance: Number(expected || 0)
-  };
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { cashBlindCloseDefault: true },
+  });
 
-  res.json(sessionCopy.summary);
+  res.json({ blindCloseDefault: company?.cashBlindCloseDefault || false });
+});
+
+// ─── PUT /cash/settings ────────────────────────────────────────────────
+
+cashRouter.put('/settings', async (req, res) => {
+  const { companyId } = req.user;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+
+  const { blindCloseDefault } = req.body || {};
+
+  await prisma.company.update({
+    where: { id: companyId },
+    data: { cashBlindCloseDefault: blindCloseDefault === true },
+  });
+
+  res.json({ ok: true, blindCloseDefault: blindCloseDefault === true });
 });
 
 export default cashRouter;

@@ -16,6 +16,14 @@
     <template v-else>
       <button type="button" class="btn btn-outline-secondary btn-sm" @click="openCash">Abrir Caixa</button>
     </template>
+
+    <!-- Wizard de Fechamento -->
+    <CashClosingWizard
+      :visible="showWizard"
+      :session="currentSession"
+      @close="showWizard = false"
+      @completed="onWizardCompleted"
+    />
   </div>
 </template>
 
@@ -24,12 +32,14 @@ import Swal from 'sweetalert2';
 import api from '../api';
 import { ref, createApp, h, onMounted, onUnmounted } from 'vue';
 import CurrencyInput from './form/input/CurrencyInput.vue';
+import CashClosingWizard from './CashClosingWizard.vue';
 import { formatCurrency, formatAmount } from '../utils/formatters.js';
 
 const loading = ref(false);
 const currentSession = ref(null);
 const container = ref(null);
 const showDropdown = ref(false);
+const showWizard = ref(false);
 
 // Simple in-memory cache for /cash/summary/current to avoid repeated backend calls
 let cashSummaryCache = { value: null, ts: 0 };
@@ -325,208 +335,15 @@ async function reconcileBalance(diffCents) {
   }
 }
 
-async function closeCash() {
-  try {
-    const { data } = await api.get('/cash/current');
-    if (!data) return Swal.fire('Nenhuma sessão de caixa aberta', '', 'info');
+function closeCash() {
+  showWizard.value = true;
+}
 
-    // fetch server-side summary and use it instead of client-side aggregation
-    const summary = await fetchCashSummary();
-    let paymentsByMethod = (summary && summary.paymentsByMethod) ? summary.paymentsByMethod : {};
-    const inRegisterByMethod = (summary && summary.inRegisterByMethod) ? summary.inRegisterByMethod : {};
-    const totalWithdrawals = (summary && summary.totalWithdrawals) ? summary.totalWithdrawals : 0;
-    const totalReinforcements = (summary && summary.totalReinforcements) ? summary.totalReinforcements : 0;
-
-    Swal.close();
-    // Build modal HTML: table-like layout. For each method show expected and input for 'Em caixa'
-    let rows = [];
-    const methods = Object.keys(inRegisterByMethod).length ? Object.keys(inRegisterByMethod) : (Object.keys(paymentsByMethod).length ? Object.keys(paymentsByMethod) : ['Dinheiro']);
-    for (const m of methods) {
-      const expectedNum = Number(inRegisterByMethod[m] || paymentsByMethod[m] || 0);
-      const inputId = `close-in-${m.replace(/\s+/g, '_')}`;
-      rows.push(`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee"><div style="flex:1">${m}</div><div style="flex:1;text-align:center">${formatCurrency(expectedNum)}</div><div style="flex:1;text-align:center"><input id="${inputId}" inputmode="decimal" class="swal2-input" value="${formatAmount(expectedNum)}" style="width:100px;margin:0 auto"></div></div>`);
-    }
-
-    // helper to escape HTML in notes
-    function escapeHtml(str) {
-      if (!str && str !== 0) return '';
-      return String(str).replace(/[&<>"'`]/g, (s) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;', '`':'&#96;'})[s]);
-    }
-
-    // helper to show movements of a specific kind ('retirada' or 'reforco') inside a collapsible div next to the link
-    function showMovementDetails(kind, containerId) {
-      try {
-        const container = document.getElementById(containerId) || document.getElementById('swal-mov-details');
-        if (!container) return;
-        const movements = Array.isArray(data.movements) ? data.movements : [];
-        const filtered = movements.filter((mv) => {
-          const t = String(mv.type || '').toLowerCase();
-          if (kind === 'retirada') return t.includes('retir') || t.includes('withdraw');
-          if (kind === 'reforco') return t.includes('refor') || t.includes('reinfor') || t.includes('refo');
-          return false;
-        });
-
-        // toggle: if already visible and showing same kind, hide it
-        const currently = container.getAttribute('data-kind');
-        if (container.style.display && container.style.display !== 'none' && currently === kind) {
-          container.style.display = 'none';
-          container.setAttribute('data-kind', '');
-          return;
-        }
-
-        // build list
-        if (!filtered.length) {
-          container.innerHTML = `<div style="padding:8px">Nenhuma movimentação encontrada</div>`;
-          container.style.display = 'block';
-          container.setAttribute('data-kind', kind);
-          return;
-        }
-
-        // sort descending by date so newest appear first
-        filtered.sort((a,b) => new Date(b.at || 0) - new Date(a.at || 0));
-
-        const lines = filtered.map((mv) => {
-          const at = mv.at ? new Date(mv.at).toLocaleString() : '';
-          const val = formatCurrency(Number(mv.amount || 0));
-          const note = mv.note ? (' - ' + escapeHtml(mv.note)) : '';
-          return `<li style="padding:6px 0;border-bottom:1px dashed #eee">${at} - ${val}${note}</li>`;
-        });
-        container.innerHTML = `<div style="text-align:left;margin-top:8px"><ul style="list-style:none;padding:0;margin:0">${lines.join('')}</ul></div>`;
-        container.style.display = 'block';
-        container.setAttribute('data-kind', kind);
-      } catch (e) { console.error('Failed to show movement details', e); Swal.fire('Erro', 'Falha ao exibir detalhes', 'error'); }
-    }
-
-    // build html with a container where we'll mount a small Vue app that uses CurrencyInput
-    const html = `
-      <div style="text-align:center"><strong>Fechamento de Frente de Caixa</strong></div>
-      <div style="margin-top:8px">Abertura: ${data.openedAt} &nbsp;&nbsp; Saldo registrado: ${formatCurrency(Number(data.balance||0))}</div>
-      <div style="margin-top:12px"><div id="swal-vue-container">${rows.join('')}</div></div>
-      <hr/>
-      <div style="font-size:0.9rem">Abertura de caixa(+): ${formatCurrency(Number(data.openingAmount||0))}<br/>Totais em caixa: ${formatCurrency(Object.values(inRegisterByMethod).reduce((s,v)=>s+Number(v||0),0))}<br/>Retiradas(-): ${formatCurrency(Number(totalWithdrawals))} <a href="#" id="swal-details-withdrawals" style="margin-left:8px;font-size:0.9rem">Detalhes</a>
-      <div id="swal-mov-details-withdrawals" style="display:none;margin-top:6px;text-align:left;max-height:180px;overflow:auto;padding:6px;border:1px solid #f0f0f0;border-radius:4px;background:#fff"></div>
-      <br/>Reforços(+): ${formatCurrency(Number(totalReinforcements))} <a href="#" id="swal-details-reinforcements" style="margin-left:8px;font-size:0.9rem">Detalhes</a>
-      <div id="swal-mov-details-reinforcements" style="display:none;margin-top:6px;text-align:left;max-height:180px;overflow:auto;padding:6px;border:1px solid #f0f0f0;border-radius:4px;background:#fff"></div>
-      </div>
-      <hr/>
-      <label>Obs. Fechamento</label><textarea id="swal-close-note" class="form-control"></textarea>
-      <div id="swal-mov-details" style="display:none;margin-top:12px;text-align:left;max-height:220px;overflow:auto;padding:6px;border:1px solid #f0f0f0;border-radius:4px;background:#fff"></div>
-    `;
-
-    // prepare methods and expected values for the Vue app
-    const methodsList = methods;
-    const expectedMap = {};
-    for (const m of methodsList) expectedMap[m] = Number(inRegisterByMethod[m] || paymentsByMethod[m] || 0);
-
-    let vueInstance = null;
-    let mountedAppRef = null;
-
-    const result = await Swal.fire({
-      title: 'Fechamento de Frente de Caixa',
-      html,
-      width: 900,
-      showCancelButton: true,
-      confirmButtonText: 'Fechar Frente de Caixa',
-      cancelButtonText: 'Cancelar',
-      focusConfirm: false,
-      didOpen: () => {
-        // mount a tiny Vue app inside the modal to render CurrencyInput components
-        const App = {
-          components: { CurrencyInput },
-          data() {
-            const entered = {};
-            for (const m of methodsList) entered[m] = expectedMap[m] || 0;
-            return { methods: methodsList, expected: expectedMap, entered };
-          },
-          methods: { formatCurrency, formatAmount },
-          render() {
-            const vm = this;
-            return h('div', vm.methods.map((m) => {
-              const expectedNum = vm.expected[m] || 0;
-              return h('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee' }, [
-                h('div', { style: 'flex:1' }, String(m)),
-                h('div', { style: 'flex:1;text-align:center' }, vm.formatCurrency(expectedNum)),
-                h('div', { style: 'flex:1;text-align:center' }, [
-                  h(CurrencyInput, { modelValue: vm.entered[m], 'onUpdate:modelValue': v => vm.entered[m] = v, inputClass: 'swal2-input', style: 'width:100px;margin:0 auto' })
-                ])
-              ]);
-            }));
-          }
-        };
-
-        try {
-          const appRef = createApp(App);
-          vueInstance = appRef.mount('#swal-vue-container');
-          mountedAppRef = appRef;
-        } catch (e) {
-          // fallback: if mounting fails, keep the plain inputs (should not happen)
-          console.error('Failed to mount Vue app inside Swal modal', e);
-        }
-        // attach detail handlers for movements (withdrawals / reinforcements)
-        try {
-          const w = document.getElementById('swal-details-withdrawals');
-          const r = document.getElementById('swal-details-reinforcements');
-          if (w) w.addEventListener('click', (ev) => { ev.preventDefault(); showMovementDetails('retirada', 'swal-mov-details-withdrawals'); });
-          if (r) r.addEventListener('click', (ev) => { ev.preventDefault(); showMovementDetails('reforco', 'swal-mov-details-reinforcements'); });
-        } catch (e) { /* ignore */ }
-      },
-      preConfirm: () => {
-        // collect entered values from the mounted Vue instance when present
-        const entered = {};
-        const diffs = {};
-        if (vueInstance && vueInstance.entered) {
-          for (const m of methodsList) {
-            const num = Number(vueInstance.entered[m] || 0);
-            entered[m] = num;
-            const expected = Number(expectedMap[m] || 0);
-            diffs[m] = Number((num - expected).toFixed(2));
-          }
-        } else {
-          // fallback: read values from DOM inputs (string parsing)
-          for (const m of methodsList) {
-            const id = `close-in-${m.replace(/\s+/g, '_')}`;
-            const v = document.getElementById(id) ? document.getElementById(id).value.replace(',', '.') : '0';
-            const num = Number(v || 0);
-            entered[m] = num;
-            const expected = Number(expectedMap[m] || 0);
-            diffs[m] = Number((num - expected).toFixed(2));
-          }
-        }
-        const note = document.getElementById('swal-close-note') ? document.getElementById('swal-close-note').value : '';
-        return { entered, diffs, note };
-      }
-    });
-
-    // unmount the temporary Vue app if it was mounted
-    try { if (mountedAppRef) mountedAppRef.unmount(); } catch (e) { /* ignore */ }
-
-    if (!result || result.isDismissed) return;
-
-    const { entered, diffs, note } = result.value || {};
-    // Determine needed adjustment to stored balance based on counted cash (Dinheiro)
-    const countedCash = Number(entered['Dinheiro'] || entered['Cash'] || entered['dinheiro'] || 0);
-    const storedBalance = Number(data.balance || 0);
-    const adjust = Math.round((countedCash - storedBalance) * 100);
-    if (adjust !== 0) {
-      const type = adjust > 0 ? 'reforco' : 'retirada';
-      const amount = Math.abs(adjust) / 100;
-      try {
-        await api.post('/cash/movement', { type, amount, note: `Fechamento: ${note || ''}` });
-        // invalidate cache so UI picks up updated session state
-        invalidateCashSummary();
-      } catch (e) { console.error('Failed to register closing adjustment', e); }
-    }
-
-    // finally close the session with a closing summary (include entered breakdown)
-    const closingSummary = { note: note || '', counted: entered };
-    try {
-      await api.post('/cash/close', { closingSummary });
-      // refresh session state to reflect closed
-      await loadCurrentSession();
-      invalidateCashSummary();
-      Swal.fire('OK', 'Caixa fechado', 'success');
-    } catch (e) { console.error(e); Swal.fire('Erro', e?.response?.data?.message || 'Falha ao fechar caixa', 'error') }
-  } catch (e) { console.error(e); Swal.fire('Erro', 'Falha ao abrir modal de fechamento', 'error') }
+async function onWizardCompleted(data) {
+  showWizard.value = false;
+  await loadCurrentSession();
+  invalidateCashSummary();
+  Swal.fire('OK', 'Caixa fechado com sucesso!', 'success');
 }
 
 onMounted(() => {

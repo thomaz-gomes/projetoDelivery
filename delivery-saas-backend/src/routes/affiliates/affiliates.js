@@ -238,7 +238,7 @@ affiliatesRouter.post('/:id/sales', requireRole('ADMIN'), async (req, res) => {
 affiliatesRouter.post('/:id/payments', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params;
   const companyId = req.user.companyId;
-  const { amount, method, note } = req.body;
+  const { amount, method, note, accountId } = req.body;
 
   if (!amount || amount <= 0) {
     return res.status(400).json({ message: 'Valor do pagamento deve ser maior que zero' });
@@ -285,7 +285,7 @@ affiliatesRouter.post('/:id/payments', requireRole('ADMIN'), async (req, res) =>
     });
 
     // Bridge: registrar no módulo financeiro
-    try { await createFinancialEntryForAffiliate(result.payment, companyId); } catch (e) { console.warn('Financial bridge affiliate error:', e?.message); }
+    try { await createFinancialEntryForAffiliate(result.payment, companyId, accountId || null); } catch (e) { console.warn('Financial bridge affiliate error:', e?.message); }
 
     res.status(201).json(result);
   } catch (e) {

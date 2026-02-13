@@ -9,6 +9,7 @@
         :affiliate="affiliate"
         :initialAmount="affiliate?.currentBalance || 0"
         :processing="processing"
+        :accounts="accounts"
         @submit="handleSubmit"
         @cancel="onCancel"
       />
@@ -31,6 +32,7 @@ export default {
     const route = useRoute()
     const router = useRouter()
     const affiliate = ref(null)
+    const accounts = ref([])
   const loading = ref(true)
   bindLoading(loading)
     const processing = ref(false)
@@ -46,9 +48,15 @@ export default {
         affiliate.value.currentBalance = Number(affiliate.value.currentBalance || 0)
       } catch (err) {
         console.error('Failed to load affiliate', err)
-      } finally {
-        loading.value = false
       }
+      // Load financial accounts (module may be disabled)
+      try {
+        const { data } = await api.get('/financial/accounts')
+        accounts.value = Array.isArray(data) ? data.filter(a => a.isActive !== false) : []
+      } catch (_) {
+        accounts.value = []
+      }
+      loading.value = false
     }
 
     const setMax = () => {
@@ -77,7 +85,7 @@ export default {
 
     onMounted(load)
 
-    return { affiliate, loading, handleSubmit, onCancel, processing }
+    return { affiliate, accounts, loading, handleSubmit, onCancel, processing }
   }
 }
 </script>

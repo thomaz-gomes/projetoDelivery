@@ -216,5 +216,114 @@
     },
     "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x X-Burger Especial         R$ 28.00\n  - Bacon — R$4.50\\n  - Grande — R$10.00\n------------------------------\nSub-total = R$ 42.50\n\nTOTAL a cobrar: R$ 42.50\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
     "includeFullOrder": true
+  },
+  {
+    "id": "1770985223398-385183",
+    "createdAt": 1770985223398,
+    "order": {
+      "id": "a81efabd-5093-46ad-bfad-90c315b96e20",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "5e54f9af-ac25-46c7-b23c-41ce08763834",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "42.5",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Débito",
+          "methodCode": "Débito",
+          "amount": 42.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "X-Burger Especial",
+              "quantity": 1,
+              "price": 28,
+              "notes": null,
+              "options": [
+                {
+                  "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+                  "name": "Bacon",
+                  "price": 4.5,
+                  "quantity": 1
+                },
+                {
+                  "id": "123618c9-c034-4907-a6dc-a21979169316",
+                  "name": "Grande",
+                  "price": 10,
+                  "quantity": 1
+                }
+              ]
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        },
+        "computedTotal": 28,
+        "total": 42.5
+      },
+      "createdAt": "2026-02-13T12:20:23.197Z",
+      "updatedAt": "2026-02-13T12:20:23.197Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "ce719268-1e9c-40e1-9839-04d46e4cc24c",
+          "orderId": "a81efabd-5093-46ad-bfad-90c315b96e20",
+          "productId": null,
+          "name": "X-Burger Especial",
+          "quantity": 1,
+          "price": "28",
+          "notes": null,
+          "options": [
+            {
+              "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+              "name": "Bacon",
+              "price": 4.5,
+              "quantity": 1
+            },
+            {
+              "id": "123618c9-c034-4907-a6dc-a21979169316",
+              "name": "Grande",
+              "price": 10,
+              "quantity": 1
+            }
+          ]
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null,
+      "deliveryAddress": null,
+      "receiptTemplate": "{\"v\":2,\"blocks\":[{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"{{header_name}}\",\"a\":\"center\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"PEDIDO #{{display_id}}\",\"a\":\"center\",\"b\":true,\"s\":\"xl\"},{\"t\":\"text\",\"c\":\"Data: {{data_pedido}}  Hora: {{hora_pedido}}\"},{\"t\":\"cond\",\"key\":\"tipo_pedido\",\"c\":\"Tipo: {{tipo_pedido}}\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"CLIENTE: {{nome_cliente}}\",\"b\":true},{\"t\":\"text\",\"c\":\"Telefone: {{telefone_cliente}}\"},{\"t\":\"text\",\"c\":\"Endereco: {{endereco_cliente}}\"},{\"t\":\"sep\"},{\"t\":\"items\",\"itemBold\":true,\"itemSize\":\"normal\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Qtd itens: {{total_itens_count}}\",\"s\":\"xl\",\"b\":true},{\"t\":\"text\",\"c\":\"Subtotal: R$ {{subtotal}}\"},{\"t\":\"cond\",\"key\":\"taxa_entrega\",\"c\":\"Taxa entrega: R$ {{taxa_entrega}}\"},{\"t\":\"cond\",\"key\":\"desconto\",\"c\":\"Desconto: R$ {{desconto}}\"},{\"t\":\"text\",\"c\":\"TOTAL: R$ {{total}}\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"FORMAS DE PAGAMENTO\",\"b\":true},{\"t\":\"payments\"},{\"t\":\"cond\",\"key\":\"observacoes\",\"c\":\"OBS: {{observacoes}}\"},{\"t\":\"qr\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Obrigado e bom apetite!\",\"a\":\"center\"},{\"t\":\"sep\"}]}",
+      "copies": 1,
+      "printerName": "Print iD2",
+      "headerName": "Minha Loja de Testes",
+      "headerCity": "São Paulo",
+      "printerInterface": "printer:Print iD2",
+      "printerType": "EPSON",
+      "paperWidth": 80
+    },
+    "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x X-Burger Especial         R$ 28.00\n  - Bacon — R$4.50\\n  - Grande — R$10.00\n------------------------------\nSub-total = R$ 42.50\n\nTOTAL a cobrar: R$ 42.50\nPagamento: Débito\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "includeFullOrder": true
   }
 ]

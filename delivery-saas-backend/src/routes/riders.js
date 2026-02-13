@@ -627,7 +627,7 @@ ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => 
   const rider = await prisma.rider.findFirst({ where: { id, companyId } });
   if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
 
-  const { from, to } = req.body || {};
+  const { from, to, accountId } = req.body || {};
 
   // parse YYYY-MM-DD as local date
   function parseDateLocal(s) {
@@ -662,7 +662,7 @@ ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => 
   const paymentTx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: -Math.abs(sum), type: 'MANUAL_ADJUSTMENT', date: new Date(), note });
 
   // Bridge: registrar no módulo financeiro
-  try { await createFinancialEntryForRider(paymentTx, companyId); } catch (e) { console.warn('Financial bridge rider payment error:', e?.message); }
+  try { await createFinancialEntryForRider(paymentTx, companyId, accountId || null); } catch (e) { console.warn('Financial bridge rider payment error:', e?.message); }
 
   return res.json({ ok: true, message: 'Pagamento registrado', total: sum, tx: paymentTx });
 });

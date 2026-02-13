@@ -89,6 +89,10 @@ model Company {
   financialTransactions FinancialTransaction[]
   cashFlowEntries      CashFlowEntry[]
   ofxImports           OfxImport[]
+
+  // ---- Cash register (PDV) ----
+  cashSessions         CashSession[]
+  cashBlindCloseDefault Boolean @default(false)
 }
 
 model User {
@@ -1070,6 +1074,7 @@ model FinancialAccount {
   transactions  FinancialTransaction[]
   cashFlowEntries CashFlowEntry[]
   ofxImports    OfxImport[]
+  cashMovements CashMovement[]
 
   @@unique([companyId, name], name: "company_fin_account_name")
   @@index([companyId], name: "idx_fin_account_company")
@@ -1180,6 +1185,10 @@ model FinancialTransaction {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // ---- Vínculo com sessão de caixa (quebras/sobras) ----
+  cashSessionId String?
+  cashSession   CashSession? @relation(fields: [cashSessionId], references: [id])
 
   // Movimentações reais vinculadas a este título
   cashFlowEntries CashFlowEntry[]
@@ -1304,4 +1313,77 @@ model EmailVerification {
   createdAt DateTime @default(now())
 
   @@index([email, code], name: "idx_emailverification_email_code")
+}
+
+// ======== Cash Register (PDV) ========
+
+enum CashSessionStatus {
+  OPEN
+  IN_REVIEW
+  CLOSED
+}
+
+enum CashMovementType {
+  WITHDRAWAL
+  REINFORCEMENT
+  ADJUSTMENT
+}
+
+model CashSession {
+  id               String            @id @default(uuid())
+  companyId        String
+  company          Company           @relation(fields: [companyId], references: [id])
+
+  // Abertura
+  openedAt         DateTime          @default(now())
+  openedBy         String
+  openingAmount    Decimal           @default(0)
+  openingNote      String?
+
+  // Saldo corrente (atualizado por movimentos)
+  currentBalance   Decimal           @default(0)
+
+  // Status e fechamento
+  status           CashSessionStatus @default(OPEN)
+  closedAt         DateTime?
+  closedBy         String?
+  closingNote      String?
+
+  // Contagem cega
+  blindClose       Boolean           @default(false)
+
+  // Valores de fechamento (JSON por forma de pagamento)
+  declaredValues   Json?             // { "Dinheiro": 100.50, "PIX": 50.00 }
+  expectedValues   Json?             // Calculado pelo sistema
+  differences      Json?             // declared - expected
+
+  // Relações
+  movements        CashMovement[]
+  financialTransactions FinancialTransaction[]
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([companyId, status], name: "idx_cash_session_company_status")
+  @@index([companyId, openedAt], name: "idx_cash_session_company_opened")
+}
+
+model CashMovement {
+  id              String           @id @default(uuid())
+  sessionId       String
+  session         CashSession      @relation(fields: [sessionId], references: [id])
+
+  type            CashMovementType
+  amount          Decimal
+
+  // Conta financeira opcional (para integração)
+  accountId       String?
+  account         FinancialAccount? @relation(fields: [accountId], references: [id])
+
+  note            String?
+
+  createdAt       DateTime         @default(now())
+  createdBy       String?
+
+  @@index([sessionId], name: "idx_cash_movement_session")
 }
