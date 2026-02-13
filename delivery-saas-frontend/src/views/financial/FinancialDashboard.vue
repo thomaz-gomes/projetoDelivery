@@ -3,41 +3,37 @@
     <h3 class="mb-3">Financeiro</h3>
 
     <!-- Cards de resumo -->
-    <div class="row g-3 mb-4">
-      <div class="col-md-3">
-        <div class="card border-success">
-          <div class="card-body text-center">
-            <div class="text-muted small">A Receber (mês)</div>
-            <div class="fs-4 fw-bold text-success">{{ formatCurrency(summary.receivables?.total || 0) }}</div>
-            <div class="text-muted small">{{ summary.receivables?.count || 0 }} títulos</div>
-          </div>
+    <div class="stat-grid mb-4">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon--success"><i class="bi bi-arrow-down-circle"></i></div>
+        <div class="stat-body">
+          <div class="stat-label">A Receber (mês)</div>
+          <div class="stat-value text-success">{{ formatCurrency(summary.receivables?.total || 0) }}</div>
+          <div class="stat-sub">{{ summary.receivables?.count || 0 }} títulos</div>
         </div>
       </div>
-      <div class="col-md-3">
-        <div class="card border-danger">
-          <div class="card-body text-center">
-            <div class="text-muted small">A Pagar (mês)</div>
-            <div class="fs-4 fw-bold text-danger">{{ formatCurrency(summary.payables?.total || 0) }}</div>
-            <div class="text-muted small">{{ summary.payables?.count || 0 }} títulos</div>
-          </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon--danger"><i class="bi bi-arrow-up-circle"></i></div>
+        <div class="stat-body">
+          <div class="stat-label">A Pagar (mês)</div>
+          <div class="stat-value text-danger">{{ formatCurrency(summary.payables?.total || 0) }}</div>
+          <div class="stat-sub">{{ summary.payables?.count || 0 }} títulos</div>
         </div>
       </div>
-      <div class="col-md-3">
-        <div class="card border-warning">
-          <div class="card-body text-center">
-            <div class="text-muted small">Vencidos</div>
-            <div class="fs-4 fw-bold text-warning">{{ formatCurrency(summary.overdue?.total || 0) }}</div>
-            <div class="text-muted small">{{ summary.overdue?.count || 0 }} títulos</div>
-          </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon--warning"><i class="bi bi-exclamation-triangle"></i></div>
+        <div class="stat-body">
+          <div class="stat-label">Vencidos</div>
+          <div class="stat-value text-warning">{{ formatCurrency(summary.overdue?.total || 0) }}</div>
+          <div class="stat-sub">{{ summary.overdue?.count || 0 }} títulos</div>
         </div>
       </div>
-      <div class="col-md-3">
-        <div class="card border-primary">
-          <div class="card-body text-center">
-            <div class="text-muted small">Saldo Total</div>
-            <div class="fs-4 fw-bold text-primary">{{ formatCurrency(summary.totalBalance || 0) }}</div>
-            <div class="text-muted small">todas as contas</div>
-          </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon--primary"><i class="bi bi-wallet2"></i></div>
+        <div class="stat-body">
+          <div class="stat-label">Saldo Total</div>
+          <div class="stat-value">{{ formatCurrency(summary.totalBalance || 0) }}</div>
+          <div class="stat-sub">todas as contas</div>
         </div>
       </div>
     </div>

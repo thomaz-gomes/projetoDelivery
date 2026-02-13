@@ -1,0 +1,32 @@
+:root {
+  /* ── Paleta principal ── */
+  --primary:          #105784;
+  --primary-dark:     #0B3D5E;
+  --primary-light:    #1A6FA8;
+  --success:          #89D136;
+  --success-dark:     #6DAE1E;
+  --success-light:    #A8E866;
+  --bg-app:           #EEFFED;
+  --bg-card:          #FFFFFF;
+  --bg-hover:         #F0F0F0;
+  --bg-zebra:         #FAFAFA;
+
+  /* ── Texto ── */
+  --text-primary:     #212529;
+  --text-secondary:   #6C757D;
+  --text-muted:       #ADB5BD;
+
+  /* ── Bordas ── */
+  --border-color:     #E6E6E6;
+  --border-radius:    0.75rem;
+  --border-radius-sm: 0.5rem;
+  --border-radius-pill: 2rem;
+
+  /* ── Sombras ── */
+  --shadow-card:      0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  --shadow-dropdown:  0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+  --shadow-hover:     0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+
+  /* ── Transições ── */
+  --transition-base:  all 0.2s ease-in-out;
+}

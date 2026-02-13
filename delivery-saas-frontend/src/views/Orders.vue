@@ -2592,15 +2592,13 @@ function pulseButton() {
           </div>
         </div>
   <!-- Filtros de status (visível apenas em dispositivos pequenos) -->
-  <div class="btn-group flex-wrap d-flex d-md-none">
+  <div class="d-flex flex-wrap gap-2 d-md-none mb-2">
         <button
           v-for="s in statusFiltersMobile"
           :key="s.value"
           type="button"
-          class="btn"
-          :class="[
-            selectedStatus === s.value ? `btn-${s.color}` : 'btn-outline-secondary',
-          ]"
+          class="action-chip"
+          :class="{ 'action-chip--active': selectedStatus === s.value }"
           @click="selectedStatus = s.value"
         >
           {{ s.label }}
@@ -2952,27 +2950,29 @@ function pulseButton() {
 
 /* Boards layout */
 .orders-board .boards { padding: 8px 0; }
-.orders-column {   
-   background-color: #FFF;
+.orders-column {
+   background-color: var(--bg-card, #FFF);
     flex: 0 0 23.5%;
-    border: none;
-    border-radius: 24px;
+    border: 1px solid var(--border-color, #E6E6E6);
+    border-radius: var(--border-radius, 0.75rem);
+    box-shadow: var(--shadow-card, 0 0.125rem 0.25rem rgba(0,0,0,0.075));
   }
 .orders-column .list { max-height: 70vh; overflow:auto; }
 .orders-column .card-header {
-  background: #FFF;
+  background: var(--bg-card, #FFF);
   border: none;
-  border-radius: 24px 24px 0px 0px;
+  border-radius: var(--border-radius, 0.75rem) var(--border-radius, 0.75rem) 0 0;
 }
 .order-card {
-  border: none;
-  background: #FAFFF5;
-  border-radius: 12px;
+  border: 1px solid var(--border-color, #E6E6E6);
+  background: var(--bg-zebra, #FAFAFA);
+  border-radius: var(--border-radius-sm, 0.5rem);
   overflow: hidden;
   transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
 }
 .order-card:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow-hover, 0 0.25rem 0.5rem rgba(0,0,0,0.1));
+  border-color: var(--primary, #105784);
 }
 .order-card .card-body { cursor: grab; padding: 10px 12px !important; }
 
@@ -3035,7 +3035,7 @@ function pulseButton() {
   display: flex;
   align-items: center;
   gap: 6px;
-  border-top: 1px solid #eef2e8;
+  border-top: 1px solid var(--border-color, #E6E6E6);
   padding-top: 6px;
 }
 .oc-time {
@@ -3058,10 +3058,11 @@ function pulseButton() {
 .oc-actions .btn { padding: 2px 6px; font-size: 0.72rem; }
 
 button.btn.advance {
-  background-color: #B3EE7F !important;
+  background-color: var(--success, #89D136) !important;
   border: none;
-  color: #000 !important;
+  color: #fff !important;
   font-weight: 500;
+  border-radius: var(--border-radius-sm, 0.5rem);
 }
 
 /* responsive: horizontal scroll on small screens */
@@ -3086,22 +3087,22 @@ button.btn.advance {
 .wa-choose { text-align: left; }
 
 /* Order details modal */
-.od-modal { border-radius: 16px; overflow: hidden; }
+.od-modal { border-radius: var(--border-radius, 0.75rem); overflow: hidden; }
 .od-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #f8fdf4, #eaf7e0);
-  border-bottom: 1px solid #e2ecd6;
+  background: linear-gradient(135deg, var(--bg-app, #EEFFED), #e0f0de);
+  border-bottom: 1px solid var(--border-color, #E6E6E6);
 }
 .od-order-badge {
-  background: #198754;
+  background: var(--primary, #105784);
   color: #fff;
   font-weight: 700;
   font-size: 1.1rem;
   padding: 6px 14px;
-  border-radius: 10px;
+  border-radius: var(--border-radius-sm, 0.5rem);
   white-space: nowrap;
 }
 .od-customer-name { font-weight: 600; font-size: 1rem; color: #212529; }
@@ -3111,8 +3112,8 @@ button.btn.advance {
   flex-wrap: wrap;
   gap: 6px 16px;
   padding: 10px 20px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #eee;
+  background: var(--bg-zebra, #FAFAFA);
+  border-bottom: 1px solid var(--border-color, #E6E6E6);
 }
 .od-info-item {
   display: inline-flex;

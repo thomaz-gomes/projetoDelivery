@@ -77,10 +77,14 @@ function onWhatsappInput(e) {
 </script>
 
 <template>
-  <div class="d-flex align-items-center justify-content-center vh-100 bg-light">
-    <div class="card" style="width: 360px;border: none;border-radius: 36px;padding: 8px;">
+  <div class="login-page d-flex align-items-center justify-content-center vh-100">
+    <div class="card login-card">
       <div class="card-body">
-        <h4 class="card-title mb-4 text-center">Login</h4>
+        <div class="text-center mb-4">
+          <div class="login-logo mb-2"><i class="bi bi-box-seam"></i></div>
+          <h4 class="card-title mb-1">Delivery SaaS</h4>
+          <p class="text-muted small mb-0">Acesse sua conta</p>
+        </div>
 
         <form @submit.prevent="onSubmit" class="needs-validation">
           <div class="mb-3">
@@ -172,19 +176,44 @@ function onWhatsappInput(e) {
 </template>
 
 <style scoped>
-.form-label {
-  font-weight: bold;
-  font-size: 0.85rem;
-  margin-bottom: 0px;
+/* Login page background */
+.login-page {
+  background: linear-gradient(135deg, #105784 0%, #0B3D5E 60%, #083350 100%);
+  min-height: 100vh;
 }
-.page { max-width:360px; margin:60px auto; }
-input { display:block; width:100%; padding:8px; margin:8px 0; }
-button { padding:8px 12px; }
-.err { color:crimson; }
-.hint { color:#555; font-size:12px; margin-top:8px; }
+.login-card {
+  width: 380px;
+  border: none;
+  border-radius: var(--border-radius, 0.75rem);
+  padding: 2rem 1.5rem;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.2);
+}
+.login-logo {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: var(--border-radius, 0.75rem);
+  background: linear-gradient(135deg, #105784, #1A6FA8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.5rem;
+}
+.card-title {
+  font-weight: 700;
+  color: var(--text-primary, #212529);
+}
+
+.form-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  color: var(--text-secondary, #6C757D);
+}
 
 /* Custom radio card selector */
-.radio-list { display: grid; gap: 10px; }
+.radio-list { display: grid; gap: 8px; }
 .radio-card { display: block; cursor: pointer; }
 .radio-card input { position: absolute; opacity: 0; pointer-events: none; }
 .radio-card .card-content {
@@ -192,32 +221,43 @@ button { padding:8px 12px; }
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border: 1px solid #e6eef6;
+  border: 1px solid var(--border-color, #E6E6E6);
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(18, 38, 63, 0.04);
+  border-radius: var(--border-radius-sm, 0.5rem);
+  box-shadow: none;
   transition: all 160ms ease;
 }
 .radio-card .card-content .left { display:flex; align-items:center; gap:10px; }
 .radio-card .indicator {
   width:18px; height:18px; border-radius:50%;
-  background: #f1f5f9; border: 2px solid #e6eef6; display:inline-block; box-sizing:border-box;
+  background: var(--bg-zebra, #FAFAFA); border: 2px solid var(--border-color, #E6E6E6); display:inline-block; box-sizing:border-box;
+  transition: all 160ms ease;
 }
-.radio-card .label-text { font-weight:500; color:#0f1724; }
-.radio-card .label-text .muted { font-weight:400; color:#6b7280; font-size:12px; margin-left:6px; }
-.radio-card .right { color:#374151; font-size:13px; }
+.radio-card .label-text { font-weight:500; color: var(--text-primary, #212529); }
+.radio-card .label-text .muted { font-weight:400; color: var(--text-muted, #ADB5BD); font-size:12px; margin-left:6px; }
+.radio-card .right { color: var(--text-secondary, #6C757D); font-size:13px; }
 
 /* Selected state */
 .radio-card input:checked + .card-content {
-  border-color: #3b82f6; /* blue */
-  box-shadow: 0 6px 16px rgba(59,130,246,0.14);
+  border-color: var(--primary, #105784);
+  background: rgba(16, 87, 132, 0.04);
+  box-shadow: 0 0 0 1px var(--primary, #105784);
 }
 .radio-card input:checked + .card-content .indicator {
-  background-color: #3b82f6;
-  border-color: #3b82f6;
+  background-color: var(--primary, #105784);
+  border-color: var(--primary, #105784);
 }
 
 /* Hover */
-.radio-card:hover .card-content { transform: translateY(-1px); }
+.radio-card:hover .card-content {
+  border-color: var(--primary-light, #1A6FA8);
+  transform: translateY(-1px);
+}
 
+/* Button override for login */
+.login-card .btn-primary {
+  padding: 0.6rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
 </style>

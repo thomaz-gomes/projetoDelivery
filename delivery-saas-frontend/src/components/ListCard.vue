@@ -78,21 +78,34 @@ onBeforeUnmount(() => clearTimeout(debounceTimer))
 
 <style scoped>
 .list-card { padding-top: 16px }
-.list-card--card-style .card { background: #fff; border: 1px solid #eceff3; border-radius: 14px; }
-.list-card--card-style .card-body { padding: 18px 20px; border-radius: 14px; }
+.list-card .card {
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-color, #E6E6E6);
+  border-radius: var(--border-radius, 0.75rem);
+  box-shadow: var(--shadow-card, 0 0.125rem 0.25rem rgba(0,0,0,0.075));
+  overflow: hidden;
+}
+.list-card .card-body { padding: 1.25rem; }
+.list-card h4 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary, #212529);
+}
+.list-card .small.text-muted {
+  font-size: 0.8rem;
+}
+
+.list-card--card-style .card-body { padding: 18px 20px; }
 @media (max-width:576px){
   .list-card--card-style .card-body { padding: 16px; }
 }
 
-/* Compact variant: smaller header and reduced spacing for dense lists */
 .list-card--compact .card-body { padding: 10px 12px; }
 .list-card--compact h4 { font-size: 1rem; margin-bottom: 4px; }
 .list-card--compact .small { font-size: 0.75rem; }
 
-/* No-padding variant: card body has no inner padding (useful for embedded lists) */
 .list-card--no-padding .card-body { padding: 0; }
 
-/* Mobile: header wraps, actions go below title */
 @media (max-width: 575.98px) {
   .list-card-header {
     flex-wrap: wrap;
@@ -105,7 +118,7 @@ onBeforeUnmount(() => clearTimeout(debounceTimer))
     width: 100%;
   }
   .list-card .card-body { padding: 12px; }
-  .list-card h4 { font-size: 1.1rem; }
+  .list-card h4 { font-size: 1.05rem; }
   .list-card { padding-top: 8px; }
 }
 </style>

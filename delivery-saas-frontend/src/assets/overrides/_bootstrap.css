@@ -1,0 +1,358 @@
+/* ================================================================
+   Bootstrap 5 Overrides — Flat Moderno
+   ================================================================ */
+
+/* ── Body ── */
+body {
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+}
+
+/* ── Cards ── */
+.card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-card);
+  background: var(--bg-card);
+  transition: var(--transition-base);
+}
+.card:hover {
+  box-shadow: var(--shadow-hover);
+}
+.card-header {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
+  font-weight: 600;
+}
+.card-footer {
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-color);
+}
+
+/* ── Buttons ── */
+.btn {
+  border-radius: var(--border-radius-sm);
+  font-weight: 500;
+  transition: var(--transition-base);
+}
+.btn-primary {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #fff !important;
+}
+.btn-primary:hover,
+.btn-primary:focus-visible {
+  background-color: var(--primary-dark) !important;
+  border-color: var(--primary-dark) !important;
+  color: #fff !important;
+}
+.btn-outline-primary {
+  color: var(--primary) !important;
+  border-color: var(--primary) !important;
+  background: transparent !important;
+}
+.btn-outline-primary:hover,
+.btn-outline-primary:focus-visible {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #fff !important;
+}
+.btn-secondary {
+  background-color: var(--success) !important;
+  border-color: var(--success) !important;
+  color: #fff !important;
+}
+.btn-secondary:hover,
+.btn-secondary:focus-visible {
+  background-color: var(--success-dark) !important;
+  border-color: var(--success-dark) !important;
+  color: #fff !important;
+}
+.btn-outline-secondary {
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+.btn-outline-secondary:hover {
+  background-color: var(--bg-hover) !important;
+  border-color: var(--border-color) !important;
+}
+.btn-check:checked + .btn,
+.btn.active,
+.btn.show,
+.btn:first-child:active,
+:not(.btn-check) + .btn:active {
+  background-color: var(--primary-dark) !important;
+  border-color: var(--primary-dark) !important;
+  color: #fff !important;
+}
+.btn:focus-visible {
+  box-shadow: 0 0 0 0.2rem rgba(16, 87, 132, 0.25) !important;
+}
+
+/* ── Background utilities ── */
+.bg-primary {
+  background-color: var(--primary) !important;
+}
+.bg-success {
+  background-color: var(--success) !important;
+}
+.text-primary {
+  color: var(--primary) !important;
+}
+
+/* ── Tables ── */
+.table {
+  border-color: var(--border-color);
+}
+.table > thead > tr > th {
+  background: var(--bg-zebra);
+  border-bottom: 2px solid var(--border-color);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.75rem;
+}
+.table > tbody > tr > td {
+  padding: 0.75rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-color);
+}
+.table > tbody > tr:hover {
+  background-color: var(--bg-hover);
+}
+.table-striped > tbody > tr:nth-of-type(odd) > td {
+  background-color: var(--bg-zebra);
+}
+
+/* ── Forms ── */
+.form-control,
+.form-select {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  transition: var(--transition-base);
+}
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 0.2rem rgba(16, 87, 132, 0.15);
+}
+.form-label {
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
+.input-group-text {
+  border: 1px solid var(--border-color);
+  background: var(--bg-zebra);
+  border-radius: var(--border-radius-sm);
+}
+
+/* ── Nav / Tabs ── */
+.nav-link {
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: var(--transition-base);
+  border-radius: var(--border-radius-sm);
+}
+.nav-link:hover {
+  color: var(--primary);
+  background: rgba(16, 87, 132, 0.06);
+}
+.nav-link.active,
+.nav-pills .nav-link.active {
+  color: var(--primary) !important;
+  background: rgba(16, 87, 132, 0.1) !important;
+  font-weight: 600;
+}
+.nav-tabs .nav-link.active {
+  color: var(--primary);
+  border-bottom: 2px solid var(--primary);
+  background: transparent;
+}
+
+/* ── Badges ── */
+.badge {
+  border-radius: var(--border-radius-pill);
+  font-weight: 500;
+  font-size: 0.75rem;
+  padding: 0.3em 0.65em;
+}
+.badge.bg-primary {
+  background-color: var(--primary) !important;
+}
+.badge.bg-success {
+  background-color: var(--success) !important;
+}
+
+/* ── Modals ── */
+.modal-content {
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-dropdown);
+}
+.modal-header {
+  border-bottom: 1px solid var(--border-color);
+}
+.modal-footer {
+  border-top: 1px solid var(--border-color);
+}
+
+/* ── Dropdowns ── */
+.dropdown-menu {
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-dropdown);
+  padding: 0.35rem;
+}
+.dropdown-item {
+  border-radius: var(--border-radius-sm);
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  transition: var(--transition-base);
+}
+.dropdown-item:hover,
+.dropdown-item:focus {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.dropdown-item.active,
+.dropdown-item:active {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* ── List Group ── */
+.list-group-item {
+  border-color: var(--border-color);
+}
+.list-group-item.active {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* ── Pagination ── */
+.page-link {
+  color: var(--primary);
+  border-color: var(--border-color);
+  border-radius: var(--border-radius-sm);
+}
+.page-link:hover {
+  background: var(--bg-hover);
+  color: var(--primary-dark);
+}
+.page-item.active .page-link {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* ── Alerts ── */
+.alert {
+  border-radius: var(--border-radius);
+  border: none;
+}
+
+/* ── Progress ── */
+.progress {
+  border-radius: var(--border-radius-pill);
+  background: var(--bg-hover);
+  height: 0.5rem;
+}
+.progress-bar {
+  background-color: var(--primary);
+}
+
+/* ── Breadcrumb ── */
+.breadcrumb {
+  font-size: 0.85rem;
+}
+.breadcrumb-item a {
+  color: var(--primary);
+  text-decoration: none;
+}
+.breadcrumb-item.active {
+  color: var(--text-muted);
+}
+
+/* ── Switches & Checkboxes ── */
+.form-check-input {
+  border-color: var(--border-color);
+  transition: var(--transition-base);
+}
+.form-check-input:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+.form-check-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 0.2rem rgba(16, 87, 132, 0.2);
+}
+.form-check-input[type="checkbox"]:indeterminate {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+.form-switch .form-check-input:checked {
+  background-color: var(--success);
+  border-color: var(--success);
+}
+.form-switch .form-check-input:focus {
+  box-shadow: 0 0 0 0.2rem rgba(137, 209, 54, 0.2);
+  border-color: var(--success);
+}
+
+/* ── Focus ring global ── */
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ── Spinner ── */
+.spinner-border {
+  color: var(--primary);
+}
+
+/* ── Tooltip ── */
+.tooltip .tooltip-inner {
+  background: var(--primary-dark);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.78rem;
+}
+.tooltip .tooltip-arrow::before {
+  border-top-color: var(--primary-dark);
+}
+
+/* ── Offcanvas ── */
+.offcanvas {
+  border-right: 1px solid var(--border-color);
+}
+
+/* ── Close button ── */
+.btn-close:focus {
+  box-shadow: 0 0 0 0.2rem rgba(16, 87, 132, 0.2);
+}
+
+/* ── Accordion ── */
+.accordion-button:not(.collapsed) {
+  background: rgba(16, 87, 132, 0.06);
+  color: var(--primary);
+  box-shadow: none;
+}
+.accordion-button:focus {
+  box-shadow: 0 0 0 0.2rem rgba(16, 87, 132, 0.15);
+  border-color: var(--primary);
+}
+.accordion-item {
+  border-color: var(--border-color);
+  border-radius: var(--border-radius);
+}
+
+/* ── Toast ── */
+.toast {
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-dropdown);
+}

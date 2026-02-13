@@ -7,6 +7,10 @@ import PrinterWatcher from "./components/PrinterWatcher.vue";
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import 'bootstrap-icons/font/bootstrap-icons.css';
+import './assets/overrides/_variables.css';
+import './assets/overrides/_bootstrap.css';
+import './assets/overrides/_components.css';
+import './assets/overrides/_responsive.css';
 import './assets/main.css';
 import './assets/admin-shared.css';
 

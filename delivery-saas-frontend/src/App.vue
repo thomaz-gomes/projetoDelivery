@@ -57,7 +57,7 @@ const showMobileHeader = computed(() => {
           tabindex="-1"
           id="appSidebar"
           aria-labelledby="appSidebarLabel"
-          style="width:280px;background:#1e293b;"
+          style="width:280px;background:#0B3D5E;"
         >
           <div class="offcanvas-header border-bottom border-secondary py-2">
             <h5 class="offcanvas-title text-white" id="appSidebarLabel">Menu</h5>
@@ -103,7 +103,7 @@ const showMobileHeader = computed(() => {
   right: 0;
   z-index: 1040;
   height: 52px;
-  background: #1e293b;
+  background: #105784;
   display: flex;
   align-items: center;
   justify-content: space-between;

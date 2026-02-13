@@ -734,7 +734,7 @@ function logout() {
 
     <!-- Floating submenu for mini mode -->
     <div v-if="mini && openSub" id="sidebar-mini-popup" :style="{ position: 'absolute', top: subMenuPos.top + 'px', left: subMenuPos.left + 'px', zIndex: 1050 }">
-      <div style="background:#1e293b; border:1px solid rgba(255,255,255,0.08); padding:8px; border-radius:6px; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,0.18)">
+      <div style="background:#0B3D5E; border:1px solid rgba(255,255,255,0.08); padding:8px; border-radius:6px; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,0.18)">
         <ul class="nav flex-column">
           <li v-for="p in visibleNav.filter(n=>n.to===openSub)" :key="p.to">
             <template v-for="child in (p.children||[])">
@@ -768,11 +768,11 @@ function logout() {
 .child-link { font-size: .95rem; }
 .child-link i { font-size: 1rem }
 
-/* diagonal gradient background: dark slate that harmonises with the green brand */
-aside { background-color: #1e293b; background-image: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); }
+/* diagonal gradient background */
+aside { background-color: #0B3D5E; background-image: linear-gradient(180deg, #105784 0%, #0B3D5E 100%); }
 
-/* active state: green brand accent */
-.nav-link.active { background-color: rgba(139,191,98,0.18); font-weight:600; border-left: 3px solid #8bbf62; }
+/* active state: primary accent */
+.nav-link.active { background-color: rgba(255,255,255,0.12); font-weight:600; border-left: 3px solid #89D136; }
 
 /* chevron rotate on toggle */
 .chevron { transition: transform 180ms ease; transform-origin: 50% 50%; }
@@ -794,7 +794,7 @@ aside { background-color: #1e293b; background-image: linear-gradient(180deg, #1e
   z-index: 1400;
 }
 .menus-dropdown-mobile {
-  background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+  background: linear-gradient(180deg, #1A6FA8 0%, #0B3D5E 100%);
   color: #fff;
   border-radius: 10px;
   min-width: 170px;
@@ -849,9 +849,9 @@ aside { background-color: #1e293b; background-image: linear-gradient(180deg, #1e
 .sidebar-mini .logo-compact { width: 28px; height: 28px; object-fit: contain }
 .logo-compact-icon { font-size: 20px; color: #fff; }
 aside { transition: width 220ms ease; }
-.btn-toggle-mini { border-color: rgba(255,255,255,0.15); color: #fff;  margin-right: -35px;
-  background-color: #334155;}
-.btn-toggle-mini:hover { background-color: #475569; border-color: #475569; color: #fff; }
+.btn-toggle-mini { border-color: rgba(255,255,255,0.15); color: #fff; margin-right: -35px;
+  background-color: rgba(255,255,255,0.1);}
+.btn-toggle-mini:hover { background-color: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.2); color: #fff; }
 .btn-toggle-mini i { font-size: 0.92rem }
 
 /* Stores widget styles */

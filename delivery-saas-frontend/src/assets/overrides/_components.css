@@ -1,0 +1,244 @@
+/* ================================================================
+   Componentes Customizados — Flat Moderno
+   ================================================================ */
+
+/* ── .stat-card ──
+   Card de KPI / estatística com ícone, valor e variação.
+   Uso: <div class="stat-card"> ... </div>
+*/
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-card);
+  transition: var(--transition-base);
+  min-width: 0;
+}
+.stat-card:hover {
+  box-shadow: var(--shadow-hover);
+}
+.stat-card .stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--border-radius-sm);
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+.stat-card .stat-icon--primary {
+  background: rgba(16, 87, 132, 0.1);
+  color: var(--primary);
+}
+.stat-card .stat-icon--success {
+  background: rgba(137, 209, 54, 0.15);
+  color: var(--success-dark);
+}
+.stat-card .stat-icon--warning {
+  background: rgba(255, 193, 7, 0.15);
+  color: #D4A017;
+}
+.stat-card .stat-icon--danger {
+  background: rgba(220, 53, 69, 0.1);
+  color: #DC3545;
+}
+.stat-card .stat-body {
+  flex: 1;
+  min-width: 0;
+}
+.stat-card .stat-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.15rem;
+}
+.stat-card .stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.stat-card .stat-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+.stat-card .stat-change {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15em 0.5em;
+  border-radius: var(--border-radius-pill);
+  white-space: nowrap;
+}
+.stat-card .stat-change--up {
+  background: rgba(137, 209, 54, 0.15);
+  color: var(--success-dark);
+}
+.stat-card .stat-change--down {
+  background: rgba(220, 53, 69, 0.1);
+  color: #DC3545;
+}
+
+/* ── .sidebar-nav ──
+   Navegação lateral administrativa.
+*/
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+}
+.sidebar-nav .sidebar-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-radius: var(--border-radius-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: var(--transition-base);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+.sidebar-nav .sidebar-nav__item i {
+  font-size: 1.1rem;
+  width: 1.25rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.sidebar-nav .sidebar-nav__item:hover {
+  background: var(--bg-hover);
+  color: var(--primary);
+}
+.sidebar-nav .sidebar-nav__item--active {
+  background: rgba(16, 87, 132, 0.08);
+  color: var(--primary);
+  font-weight: 600;
+  border-left-color: var(--primary);
+}
+.sidebar-nav .sidebar-nav__divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 0.5rem 0;
+}
+.sidebar-nav .sidebar-nav__heading {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0.5rem 1rem 0.25rem;
+}
+
+/* ── .section-header ──
+   Título de seção com ação à direita ("Ver todos", etc).
+*/
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.section-header__title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+.section-header__action {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: none;
+  transition: var(--transition-base);
+}
+.section-header__action:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+/* ── .data-table ──
+   Wrapper de tabela administrativa com cantos arredondados.
+*/
+.data-table {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.data-table .table {
+  margin-bottom: 0;
+}
+.data-table .data-table__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.data-table .data-table__title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin: 0;
+}
+.data-table .data-table__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* ── .action-chip ──
+   Botão-pílula para filtros rápidos, tags de status.
+*/
+.action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: var(--border-radius-pill);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-base);
+  white-space: nowrap;
+  user-select: none;
+}
+.action-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
+.action-chip--active {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #fff !important;
+}
+.action-chip--success {
+  background: var(--success) !important;
+  border-color: var(--success) !important;
+  color: #fff !important;
+}
+.action-chip i {
+  font-size: 0.85rem;
+}

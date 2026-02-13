@@ -41,10 +41,14 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="d-flex align-items-center justify-content-center vh-100 bg-light">
-    <div class="card" style="width: 400px; border: none; border-radius: 36px; padding: 8px;">
+  <div class="register-page d-flex align-items-center justify-content-center vh-100">
+    <div class="card register-card">
       <div class="card-body">
-        <h4 class="card-title mb-4 text-center">Criar Conta</h4>
+        <div class="text-center mb-4">
+          <div class="register-logo mb-2"><i class="bi bi-person-plus"></i></div>
+          <h4 class="card-title mb-1">Criar Conta</h4>
+          <p class="text-muted small mb-0">Preencha seus dados para começar</p>
+        </div>
 
         <form @submit.prevent="onSubmit" class="needs-validation">
           <div class="mb-3">
@@ -119,9 +123,42 @@ async function onSubmit() {
 </template>
 
 <style scoped>
+.register-page {
+  background: linear-gradient(135deg, #105784 0%, #0B3D5E 60%, #083350 100%);
+  min-height: 100vh;
+}
+.register-card {
+  width: 400px;
+  border: none;
+  border-radius: var(--border-radius, 0.75rem);
+  padding: 2rem 1.5rem;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.2);
+}
+.register-logo {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: var(--border-radius, 0.75rem);
+  background: linear-gradient(135deg, #105784, #1A6FA8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.5rem;
+}
+.card-title {
+  font-weight: 700;
+  color: var(--text-primary, #212529);
+}
 .form-label {
-  font-weight: bold;
+  font-weight: 600;
   font-size: 0.85rem;
-  margin-bottom: 0px;
+  margin-bottom: 0.25rem;
+  color: var(--text-secondary, #6C757D);
+}
+.register-card .btn-primary {
+  padding: 0.6rem;
+  font-weight: 600;
+  font-size: 0.95rem;
 }
 </style>

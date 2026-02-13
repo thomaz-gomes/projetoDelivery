@@ -12,7 +12,9 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     restart: unless-stopped
-    # Sem porta exposta - acessível apenas pela rede interna Docker
+    ports:
+      - "5432:5432"
+    # Porta exposta para acesso externo (DBeaver, etc.) — remover se não necessário
 
   migrate:
     build:
