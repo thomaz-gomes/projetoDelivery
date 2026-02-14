@@ -1303,6 +1303,31 @@ model OfxReconciliationItem {
   @@index([fitId], name: "idx_ofx_recon_fitid")
 }
 
+// ---- Meta Pixel (Facebook) integration per Menu ----
+model MetaPixel {
+  id        String   @id @default(uuid())
+  companyId String
+  menuId    String
+  pixelId   String   // Facebook Pixel ID (e.g. "123456789012345")
+  enabled   Boolean  @default(true)
+  // Track specific event categories
+  trackPageView       Boolean @default(true)
+  trackViewContent    Boolean @default(true)
+  trackAddToCart       Boolean @default(true)
+  trackInitiateCheckout Boolean @default(true)
+  trackAddPaymentInfo Boolean @default(true)
+  trackPurchase       Boolean @default(true)
+  trackSearch         Boolean @default(true)
+  trackLead           Boolean @default(true)  // customer registration
+  trackContact        Boolean @default(true)  // WhatsApp/phone click
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, menuId], name: "company_menu_pixel")
+  @@index([companyId], name: "idx_metapixel_company")
+  @@index([menuId], name: "idx_metapixel_menu")
+}
+
 // Email verification codes for user registration
 model EmailVerification {
   id        String   @id @default(uuid())

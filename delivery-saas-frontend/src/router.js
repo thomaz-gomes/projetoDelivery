@@ -29,6 +29,7 @@ import CustomerProfile from './views/CustomerProfile.vue';
 import CustomerGroupsList from './views/CustomerGroupsList.vue';
 import CustomerGroupForm from './views/CustomerGroupForm.vue';
 import IFoodIntegration from './views/IFoodIntegration.vue';
+import MetaPixelIntegration from './views/MetaPixelIntegration.vue';
 import Integrations from './views/Integrations.vue';
 import IntegrationForm from './views/IntegrationForm.vue';
 import Stores from './views/Stores.vue';
@@ -129,7 +130,8 @@ const router = createRouter({
   { path: '/stock-movements/new', component: StockMovementForm, meta: { requiresAuth: true } },
   { path: '/stock-movements/:id', component: StockMovementForm, meta: { requiresAuth: true } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true } },
-  { path: '/settings/ifood', component: IFoodIntegration }, // 👈 AQUI
+  { path: '/settings/ifood', component: IFoodIntegration },
+  { path: '/settings/meta-pixel', component: MetaPixelIntegration, meta: { requiresAuth: true } },
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true } },
   { path: '/integrations/new', component: IntegrationForm, meta: { requiresAuth: true } },
   { path: '/integrations/:id', component: IntegrationForm, meta: { requiresAuth: true } },

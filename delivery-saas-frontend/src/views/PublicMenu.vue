@@ -946,6 +946,7 @@ import api from '../api';
 import { useRoute, useRouter } from 'vue-router';
 import { assetUrl } from '../utils/assetUrl.js';
 import { applyPhoneMask, removePhoneMask } from '../utils/phoneMask';
+import { initMetaPixel, trackViewContent, trackAddToCart as trackPixelAddToCart, trackSearch as trackPixelSearch, trackInitiateCheckout, trackAddPaymentInfo, trackPurchase, trackLead, trackContact } from '../utils/metaPixel';
 import ListGroup from '../components/form/list-group/ListGroup.vue';
 import { io } from 'socket.io-client'
 import { SOCKET_URL } from '@/config'
@@ -1259,6 +1260,8 @@ const selectedAddressId = ref(addresses.value.length ? addresses.value[0].id : n
 
 async function openCheckout(){
   checkoutModalOpen.value = true
+  // Meta Pixel: track initiate checkout
+  try{ trackInitiateCheckout(cart.value, subtotal.value) }catch(e){}
   // if a public customer is already authenticated (token + stored customer), skip customer step
   try{
     const token = localStorage.getItem('token')
@@ -1294,6 +1297,8 @@ function goBackFromStep(){
 }
 
 function openRegister(){
+  // Meta Pixel: track lead (customer registration intent)
+  try{ trackLead() }catch(e){}
   router.push({ path: `/public/${companyId}/profile`, query: { tab: 'register' } })
 }
 
@@ -1728,6 +1733,8 @@ const visibleCategories = computed(() => {
 function handleProductSearch() {
   // Scroll para o início dos produtos quando começar a buscar
   if (productSearchTerm.value && productSearchTerm.value.trim()) {
+    // Meta Pixel: track search
+    try{ trackPixelSearch(productSearchTerm.value.trim()) }catch(e){}
     try {
       const productsStart = document.getElementById('products-start')
       if (productsStart) {
@@ -2397,6 +2404,8 @@ function addToCartWithOptions(p, selections, qty=1){
   const idx = findCartIndex(p.id, selectedOptions)
   if(idx >= 0){ cart.value[idx].quantity += qty }
   else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, categoryId: p.categoryId || null }) }
+  // Meta Pixel: track add to cart
+  try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: p.price, options: selectedOptions }, qty) }catch(e){}
 }
 
 function openProductModal(p, force = false){
@@ -2407,6 +2416,8 @@ function openProductModal(p, force = false){
   }
 
   selectedProduct.value = p
+  // Meta Pixel: track product view
+  try{ trackViewContent(p) }catch(e){}
   modalQty.value = 1
   modalError.value = ''
   searchTerm.value = ''
@@ -3284,7 +3295,11 @@ function nextFromDelivery(){
 
 function goToCustomer(){ checkoutStep.value = 'customer' }
 function goToDelivery(){ checkoutStep.value = 'delivery' }
-function goToReview(){ checkoutStep.value = 'review' }
+function goToReview(){
+  // Meta Pixel: track payment info added
+  try{ const pm = (paymentMethods.value || []).find(m => m.code === paymentMethod.value); trackAddPaymentInfo(pm ? pm.name : paymentMethod.value) }catch(e){}
+  checkoutStep.value = 'review'
+}
 function backFromReview(){ checkoutStep.value = (orderType.value === 'DELIVERY' ? 'payment' : 'delivery') }
 
 onMounted(async ()=>{
@@ -3350,6 +3365,8 @@ onMounted(async ()=>{
     customer.value.address.state = company.value.state
   }
   menu.value = data.menu || null
+    // Initialize Meta Pixel if configured for this menu
+    try{ if(data.metaPixel) initMetaPixel(data.metaPixel) }catch(e){ console.warn('Meta Pixel init failed', e) }
     try{
       if(menu.value){
         if(menu.value.allowDelivery === false && menu.value.allowPickup === true) orderType.value = 'PICKUP'
@@ -3853,8 +3870,12 @@ try{
   try { console.debug && console.debug('Submitting public order payload', payload) } catch(e){}
   // include applied cashback for backend processing when present
   try{ payload.appliedCashback = Number(useCashback && Number(useCashbackAmount) > 0 ? Number(useCashbackAmount) : 0) }catch(e){ payload.appliedCashback = 0 }
+  const cartItemsBeforeReset = [...(cart.value || [])]
+  const totalBeforeReset = Number(payload.payment?.amount || subtotal.value || 0)
   const res = await api.post(publicPath(`/public/${companyId}/orders`), payload);
   orderResponse.value = res.data;
+  // Meta Pixel: track successful purchase
+  try{ trackPurchase(res.data?.id, totalBeforeReset, cartItemsBeforeReset) }catch(e){}
   cart.value = [];
   // persist customer contact so user can view history/status later
   saveCustomerToLocal()

@@ -423,7 +423,30 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
       console.warn('Failed to load menu metadata', e?.message || e)
     }
 
-    res.json({ categories: categoriesToReturn, uncategorized: uncategorizedToReturn || [], company: company || null, menu: menuObj || null })
+    // Load Meta Pixel configuration for this menu (if any)
+    let metaPixel = null
+    try {
+      const resolvedMenuId = (menuObj && menuObj.id) || menuId || null
+      if (resolvedMenuId) {
+        const px = await prisma.metaPixel.findFirst({ where: { companyId, menuId: resolvedMenuId, enabled: true } })
+        if (px) {
+          metaPixel = {
+            pixelId: px.pixelId,
+            trackPageView: px.trackPageView,
+            trackViewContent: px.trackViewContent,
+            trackAddToCart: px.trackAddToCart,
+            trackInitiateCheckout: px.trackInitiateCheckout,
+            trackAddPaymentInfo: px.trackAddPaymentInfo,
+            trackPurchase: px.trackPurchase,
+            trackSearch: px.trackSearch,
+            trackLead: px.trackLead,
+            trackContact: px.trackContact,
+          }
+        }
+      }
+    } catch (e) { console.warn('Failed to load Meta Pixel for public menu', e?.message || e) }
+
+    res.json({ categories: categoriesToReturn, uncategorized: uncategorizedToReturn || [], company: company || null, menu: menuObj || null, metaPixel })
   } catch (e) {
     console.error('Error loading public menu', e)
     res.status(500).json({ message: 'Erro ao carregar cardápio' })
