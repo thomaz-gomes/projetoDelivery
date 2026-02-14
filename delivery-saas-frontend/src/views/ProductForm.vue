@@ -69,13 +69,7 @@
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Imagem do produto</label>
-          <ImageUploader :initialUrl="form.image" label="Imagem do produto" :aspect="1" :targetWidth="600" :targetHeight="600" @cropped="onProductImageCropped" />
-          <div v-if="isUploading" class="mt-2">
-            <div class="progress">
-              <div class="progress-bar" role="progressbar" :style="{ width: uploadProgress + '%' }">{{ uploadProgress }}%</div>
-            </div>
-          </div>
+          <MediaField v-model="form.image" label="Imagem do produto" field-id="product-image" />
         </div>
 
         <div class="d-flex justify-content-between align-items-center">
@@ -98,7 +92,7 @@ import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
-import ImageUploader from '../components/ImageUploader.vue'
+import MediaField from '../components/MediaLibrary/MediaField.vue'
 import TextInput from '../components/form/input/TextInput.vue'
 import TextareaInput from '../components/form/input/TextareaInput.vue'
 import CurrencyInput from '../components/form/input/CurrencyInput.vue'
@@ -197,13 +191,9 @@ async function save(){
       const newId = res.data.id
       // attach groups
       try{ if((form.value.optionGroupIds||[]).length) await api.post(`/menu/products/${newId}/option-groups`, { groupIds: form.value.optionGroupIds }) }catch(e){ console.warn('Failed to attach groups', e) }
-      // if image provided as base64, send via upload endpoint
+      // if image URL provided via MediaField, persist it to the product record
       if(form.value.image){
-        try{
-          isUploading.value = true
-          await api.post(`/menu/products/${newId}/image`, { imageBase64: form.value.image, filename: 'upload.jpg' })
-        }catch(e){ console.warn('image upload failed', e) }
-        finally{ isUploading.value = false }
+        try{ await api.patch(`/menu/products/${newId}`, { image: form.value.image }) }catch(e){ console.warn('image persist failed', e) }
       }
       Swal.fire({ icon: 'success', text: 'Produto criado' })
       try{
@@ -221,28 +211,7 @@ async function save(){
   finally{ saving.value = false }
 }
 
-// receive cropped image from ImageUploader
-async function onProductImageCropped(dataUrl){
-  try{ console.log('[ProductForm] onProductImageCropped received length=', dataUrl ? dataUrl.length : 0) }catch(e){}
-  form.value.image = dataUrl
-  // if editing, upload immediately
-  if(isEdit){
-    try{
-      isUploading.value = true
-      const res = await api.post(`/menu/products/${id}/image`, { imageBase64: dataUrl, filename: 'crop.jpg' })
-      try{ console.log('[ProductForm] upload response', res && res.data) }catch(e){}
-    }catch(e){ console.warn('upload failed', e) }
-    finally{ isUploading.value = false }
-  }
-}
-
 onMounted(()=> load())
-onBeforeUnmount(()=>{
-  // nothing to clean here; ImageUploader handles object URLs
-})
-
-// register components
-const __components = { ImageUploader, TextInput, TextareaInput }
 
 // computed helpers for CMV
 const selectedTechnicalSheet = computed(() => {
@@ -265,31 +234,4 @@ const cmvPercent = computed(() => {
 </script>
 
 <style scoped>
-.cropper-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:2000 }
-.cropper-modal-content { background: #fff; border-radius:8px; max-width:92vw; width:720px; max-height:92vh; overflow:auto }
-.cropper-canvas-wrapper { width:100%; height: auto; display:flex; align-items:center; justify-content:center }
-.crop-image-container { position: relative; width:100%; max-height:64vh; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f5f5f5 }
-.crop-image { max-width:100%; max-height:64vh; user-select:none; -webkit-user-drag:none }
-.crop-box { position:absolute; border:2px dashed #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.2); background: rgba(255,255,255,0.02); touch-action: none }
-.crop-actions { display:flex; gap:8px }
-.cropper-actions .btn { min-width:100px }
-
-/* upload dropzone styles */
-.upload-dropzone { border: 2px dashed #d9d9e6; border-radius:12px; padding:28px; cursor:pointer; background: #fff; display:block }
-.upload-dropzone.drag-over { background: #f3f4ff; border-color: #b9afff }
-.upload-inner { display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px; min-height:120px }
-.upload-illustration svg { display:block }
-.upload-message { color:#6b6b7b }
-.btn-upload { background: linear-gradient(90deg,#5c6cff,#9b6bff); color: #fff; border: none; padding: .6rem 1.4rem; border-radius: 28px }
-.btn-upload:hover { opacity: .95 }
-/* preview with hover overlay */
-.image-preview-wrapper { position: relative; width:160px; height:160px; border-radius:6px; overflow:hidden; cursor:pointer; display:inline-block }
-.image-preview-img { width:100%; height:100%; object-fit:cover; display:block }
-.image-preview-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0.45); color:#fff; font-weight:700; letter-spacing:0.6px; opacity:0; transition: opacity .14s ease, transform .14s ease; transform: translateY(6px) }
-.image-preview-wrapper:hover .image-preview-overlay, .image-preview-wrapper:focus .image-preview-overlay { opacity:1; transform: translateY(0) }
-/* upload-preview inside dropzone */
-.upload-preview { width:160px; height:160px; margin:0 auto; position:relative; border-radius:6px; overflow:hidden }
-.upload-preview-img { width:100%; height:100%; object-fit:cover; display:block }
-.upload-preview .image-preview-overlay { opacity:0; transition: opacity .14s ease, transform .14s ease; transform: translateY(6px); position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0.45); color:#fff; font-weight:700; letter-spacing:0.6px }
-.upload-preview:hover .image-preview-overlay, .upload-preview:focus .image-preview-overlay { opacity:1; transform: translateY(0) }
 </style>

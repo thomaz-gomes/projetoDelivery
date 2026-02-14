@@ -29,4 +29,8 @@
 
   /* ── Transições ── */
   --transition-base:  all 0.2s ease-in-out;
+
+  /* ── Media Library ── */
+  --media-thumb-size: 4rem;
+  --media-grid-gap:   0.75rem;
 }

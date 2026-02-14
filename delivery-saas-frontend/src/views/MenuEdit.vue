@@ -110,10 +110,10 @@
             </div>
           </div>
           <div class="col-md-6 mb-3">
-            <ImageUploader label="Banner" :initialUrl="form.bannerUrl" :aspect="1200/400" :targetWidth="1200" :targetHeight="400" uploadKey="bannerBase64" @cropped="onBannerCropped" />
+            <MediaField v-model="form.bannerUrl" label="Banner" field-id="menu-banner" />
           </div>
           <div class="col-md-6 mb-3">
-            <ImageUploader label="Logotipo (450x450)" :initialUrl="form.logoUrl" :aspect="1" :targetWidth="450" :targetHeight="450" uploadKey="logoBase64" @cropped="onLogoCropped" />
+            <MediaField v-model="form.logoUrl" label="Logotipo" field-id="menu-logo" />
           </div>
         </div>
 
@@ -138,7 +138,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
-import ImageUploader from '../components/ImageUploader.vue'
+import MediaField from '../components/MediaLibrary/MediaField.vue'
 import { applyPhoneMask } from '../utils/phoneMask'
 import { assetUrl } from '../utils/assetUrl.js'
 
@@ -147,7 +147,7 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
+const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
 const dayNames = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado']
 const weeklySchedule = ref(Array.from({length:7}).map((_,i)=>({ day: i, enabled: false, from: '', to: '' })))
 
@@ -235,16 +235,6 @@ function handleWhatsAppInput(e) {
   form.value.whatsapp = applyPhoneMask(e.target.value)
 }
 
-function onBannerCropped(dataUrl){
-  form.value.bannerBase64 = dataUrl
-  form.value.bannerUrl = dataUrl
-}
-
-function onLogoCropped(dataUrl){
-  form.value.logoBase64 = dataUrl
-  form.value.logoUrl = dataUrl
-}
-
 async function save(){
   error.value = ''
   if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
@@ -268,9 +258,8 @@ async function save(){
       // If user provided menu-specific images, contact metadata or schedule, persist them into the store settings
       try {
         const toUpload = {}
-        if (form.value.logoBase64) toUpload.logoBase64 = form.value.logoBase64
-        if (form.value.bannerBase64) toUpload.bannerBase64 = form.value.bannerBase64
-        // include menu meta so it is stored under settings/stores/<storeId>/menus/<menuId>
+        if (form.value.logoUrl) toUpload.logo = form.value.logoUrl
+        if (form.value.bannerUrl) toUpload.banner = form.value.bannerUrl
         const meta = {}
         if (form.value.address) meta.address = form.value.address
         if (form.value.phone) meta.phone = form.value.phone

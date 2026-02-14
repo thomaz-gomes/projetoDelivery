@@ -1328,6 +1328,19 @@ model MetaPixel {
   @@index([menuId], name: "idx_metapixel_menu")
 }
 
+// ---- Media Library ----
+model Media {
+  id         String   @id @default(uuid())
+  companyId  String
+  filename   String
+  mimeType   String
+  size       Int
+  url        String
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, createdAt], name: "idx_media_company_created")
+}
+
 // Email verification codes for user registration
 model EmailVerification {
   id        String   @id @default(uuid())

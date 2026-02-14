@@ -30,10 +30,10 @@
             <div class="mb-3"><TextInput label="WhatsApp" labelClass="form-label" v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
             <div class="row">
               <div class="col-md-6 mb-3">
-                <ImageUploader label="Banner" :initialUrl="form.bannerUrl" :aspect="1200/400" :targetWidth="1200" :targetHeight="400" :uploadUrl="!isNew ? `/stores/${id}/settings/upload` : null" uploadKey="bannerBase64" @cropped="onBannerCropped" @uploaded="onBannerUploaded" />
+                <MediaField v-model="form.bannerUrl" label="Banner" field-id="store-banner" />
               </div>
               <div class="col-md-6 mb-3">
-                <ImageUploader label="Logotipo (450x450)" :initialUrl="form.logoUrl" :aspect="1" :targetWidth="450" :targetHeight="450" :uploadUrl="!isNew ? `/stores/${id}/settings/upload` : null" uploadKey="logoBase64" @cropped="onLogoCropped" @uploaded="onLogoUploaded" />
+                <MediaField v-model="form.logoUrl" label="Logotipo" field-id="store-logo" />
               </div>
             </div>
           </div>
@@ -121,7 +121,7 @@ import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import api from '../api'
 import Swal from 'sweetalert2'
 import { assetUrl } from '../utils/assetUrl.js'
-import ImageUploader from '../components/ImageUploader.vue'
+import MediaField from '../components/MediaLibrary/MediaField.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { applyPhoneMask } from '../utils/phoneMask'
 
@@ -325,58 +325,11 @@ async function deleteCert(){
 
 // schedule management moved to menu-level settings
 
-// handlers used by ImageUploader
-// handlers used by ImageUploader
-function onBannerCropped(dataUrl){
-  try{ console.log('[StoreForm] onBannerCropped received dataUrl length=', dataUrl ? dataUrl.length : 0) }catch(e){}
-  // when creating a new store we keep base64 until post-create upload
-  if (isNew) {
-    form.value.bannerBase64 = dataUrl
-    form.value.bannerUrl = dataUrl
-  } else {
-    // for existing stores we expect ImageUploader to upload and emit uploaded; keep preview only
-    form.value.bannerBase64 = null
-  }
-}
-function onLogoCropped(dataUrl){
-  try{ console.log('[StoreForm] onLogoCropped received dataUrl length=', dataUrl ? dataUrl.length : 0) }catch(e){}
-  if (isNew) {
-    form.value.logoBase64 = dataUrl
-    form.value.logoUrl = dataUrl
-  } else {
-    form.value.logoBase64 = null
-  }
-}
-
-function onBannerUploaded(url){
-  try{ console.log('[StoreForm] onBannerUploaded url=', url) }catch(e){}
-  form.value.bannerUrl = assetUrl(url)
-  form.value.bannerBase64 = null
-}
-
-function onLogoUploaded(url){
-  try{ console.log('[StoreForm] onLogoUploaded url=', url) }catch(e){}
-  form.value.logoUrl = assetUrl(url)
-  form.value.logoBase64 = null
-}
+// MediaField sets form.bannerUrl / form.logoUrl directly via v-model
 
 async function save(){
   try{
     saving.value = true;
-    // If user provided banner/logo via the cropper (base64), upload them to settings first
-    let uploaded = {}
-    try {
-        if (!isNew && (form.value.logoBase64 || form.value.bannerBase64)) {
-          try{ console.log('[StoreForm] about to POST /stores/' + id + '/settings/upload', { hasLogo: !!form.value.logoBase64, hasBanner: !!form.value.bannerBase64 }) }catch(e){}
-          const up = await api.post(`/stores/${id}/settings/upload`, { logoBase64: form.value.logoBase64, bannerBase64: form.value.bannerBase64 })
-          try{ console.log('[StoreForm] upload response', up && up.data) }catch(e){}
-          uploaded = up.data && up.data.saved ? up.data.saved : {}
-          if (uploaded.logo) form.value.logoUrl = assetUrl(uploaded.logo)
-          if (uploaded.banner) form.value.bannerUrl = assetUrl(uploaded.banner)
-        }
-    } catch (e) {
-      console.warn('Upload to settings failed', e)
-    }
 
     const payload = {
       name: form.value.name || undefined,
@@ -385,17 +338,12 @@ async function save(){
       timezone: form.value.timezone || undefined,
       cnpj: form.value.cnpj || undefined,
       isActive: form.value.isActive,
-      // schedule handled at menu level; do not send store-level schedule flags
-      // prefer persisted settings-stored logo URL when available; fall back to existing logoUrl
       logoUrl: form.value.logoUrl || undefined,
-      // include banner URL when present
       bannerUrl: form.value.bannerUrl || undefined,
       weeklySchedule: form.value.open24Hours ? null : form.value.weeklySchedule,
     }
 
-    // certificate handling: include certBase64 when selected
     if (form.value.certBase64) payload.certBase64 = form.value.certBase64
-    // include certPassword when user provided one OR when clearCert is checked (to clear stored password)
     if (form.value.clearCert) {
       payload.certPassword = ''
     } else if (form.value.certPassword && String(form.value.certPassword).length > 0) {
@@ -403,26 +351,7 @@ async function save(){
     }
 
     if (isNew) {
-      try{ console.log('[StoreForm] creating new store with payload', payload) }catch(e){}
       const { data } = await api.post('/stores', payload)
-      const newId = data && data.id
-      // for newly created store, upload banner/logo after creation if present
-      try {
-        if ((form.value.logoBase64 || form.value.bannerBase64) && newId) {
-          const up = await api.post(`/stores/${newId}/settings/upload`, { logoBase64: form.value.logoBase64, bannerBase64: form.value.bannerBase64 })
-          const saved = up.data && up.data.saved ? up.data.saved : {}
-          if (saved.logo || saved.banner) {
-            const toPut = {}
-            if (saved.logo) toPut.logoUrl = saved.logo
-            if (saved.banner) toPut.bannerUrl = saved.banner
-            // update preview to absolute URLs
-            if (saved.logo) form.value.logoUrl = assetUrl(saved.logo)
-            if (saved.banner) form.value.bannerUrl = assetUrl(saved.banner)
-            try{ console.log('[StoreForm] patching newly created store with', toPut) }catch(e){}
-            await api.put(`/stores/${newId}`, toPut)
-          }
-        }
-      } catch (e) { console.warn('Post-create upload failed', e) }
       message.value = 'Loja criada'
       messageClass.value = 'alert-success'
       router.push('/settings/stores')

@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import Sidebar from './components/Sidebar.vue';
 import PrinterWatcher from "./components/PrinterWatcher.vue";
 import MobileBottomNav from './components/MobileBottomNav.vue';
+import MediaLibraryModal from './components/MediaLibrary/MediaLibraryModal.vue';
 
 const mobileOpen = ref(false);
 
@@ -85,6 +86,7 @@ const showMobileHeader = computed(() => {
       <!-- Login (or other public/auth pages) — render full-screen without sidebar -->
       <router-view />
     </template>
+    <MediaLibraryModal />
   </div>
 </template>
 

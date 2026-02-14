@@ -11,6 +11,7 @@ import './assets/overrides/_variables.css';
 import './assets/overrides/_bootstrap.css';
 import './assets/overrides/_components.css';
 import './assets/overrides/_responsive.css';
+import './assets/overrides/_media-library.css';
 import './assets/main.css';
 import './assets/admin-shared.css';
 
