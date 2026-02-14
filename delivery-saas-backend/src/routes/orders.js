@@ -715,7 +715,7 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
           total: total
         },
         items: {
-          create: cleanItems.map(it => ({ productId: it.productId || null, name: it.name, quantity: it.quantity, price: it.price, notes: it.notes, options: it.options || null }))
+          create: cleanItems.map(it => ({ ...(it.productId ? { productId: it.productId } : {}), name: it.name, quantity: it.quantity, price: it.price, notes: it.notes, options: it.options || null }))
         },
         histories: { create: { from: null, to: 'EM_PREPARO', byUserId: req.user.id, reason: 'Criação PDV' } }
       },
