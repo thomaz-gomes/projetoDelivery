@@ -1109,6 +1109,54 @@ async function bulkPrint() {
   clearSelection();
 }
 
+async function emitirNfeOrder(order) {
+  const r = await Swal.fire({
+    title: 'Emitir NF-e?',
+    text: `Pedido #${formatDisplay(order)}`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Emitir',
+    cancelButtonText: 'Cancelar'
+  })
+  if (!r.isConfirmed) return
+  try {
+    const { data } = await api.post('/nfe/emit-from-order', { orderId: order.id })
+    if (data.success) {
+      Swal.fire({ icon: 'success', title: 'NF-e Autorizada', text: `Protocolo: ${data.nProt}`, toast: true, timer: 4000, position: 'top-end', showConfirmButton: false })
+    } else {
+      Swal.fire({ icon: 'error', title: 'Erro NF-e', text: data.xMotivo || data.error })
+    }
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro ao emitir NF-e', text: e.response?.data?.error || e.message })
+  }
+}
+
+async function bulkEmitNfe() {
+  const ids = [...selectedOrderIds.value]
+  if (!ids.length) return
+  const r = await Swal.fire({
+    title: `Emitir NF-e para ${ids.length} pedido(s)?`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Emitir todos',
+    cancelButtonText: 'Cancelar'
+  })
+  if (!r.isConfirmed) return
+  try {
+    const { data } = await api.post('/nfe/emit-from-order', { orderIds: ids })
+    const ok = data.results.filter(r => r.success).length
+    const fail = data.results.length - ok
+    Swal.fire({
+      icon: fail ? 'warning' : 'success',
+      title: `${ok} emitida(s)${fail ? `, ${fail} erro(s)` : ''}`,
+      timer: 5000, toast: true, position: 'top-end', showConfirmButton: false
+    })
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.error || e.message })
+  }
+  clearSelection()
+}
+
 // Clean stale selections when orders list changes
 watch(() => store.orders.length, () => {
   const valid = new Set([...selectedOrderIds.value].filter(id => store.orders.some(o => o.id === id)));
@@ -2674,6 +2722,7 @@ function pulseButton() {
                     <button class="btn btn-sm btn-outline-secondary" @click.stop="openDetails(o)" title="Detalhes"><i class="bi bi-list-ul"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" @click="viewReceipt(o)" title="Visualizar comanda"><i class="bi bi-eye"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" @click="printReceipt(o)" title="Imprimir comanda"><i class="bi bi-printer"></i></button>
+                    <button class="btn btn-sm btn-outline-success" @click.stop="emitirNfeOrder(o)" title="Emitir NF-e"><i class="bi bi-receipt"></i></button>
                     <button class="btn btn-sm btn-primary advance" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status) || !store.canTransition(o.status, getNextStatus(o.status)) || loading" title="Avançar status">
                       Avançar <i class="bi bi-arrow-right"></i>
                     </button>
@@ -2723,6 +2772,9 @@ function pulseButton() {
         <div class="d-flex gap-2">
           <button class="btn btn-sm btn-light" @click="bulkPrint" title="Imprimir selecionados">
             <i class="bi bi-printer"></i> Imprimir
+          </button>
+          <button class="btn btn-sm btn-success" @click="bulkEmitNfe" title="Emitir NF-e dos selecionados">
+            <i class="bi bi-receipt"></i> NF-e
           </button>
           <button class="btn btn-sm btn-primary"
             @click="bulkAdvanceStatus"
@@ -2866,6 +2918,9 @@ function pulseButton() {
           <div class="d-flex gap-2">
             <button type="button" class="btn btn-outline-secondary" @click="printReceipt(selectedOrder)" title="Imprimir">
               <i class="bi bi-printer"></i> Imprimir
+            </button>
+            <button type="button" class="btn btn-outline-success" @click="emitirNfeOrder(selectedOrder)" title="Emitir NF-e">
+              <i class="bi bi-receipt"></i> NF-e
             </button>
             <button type="button" class="btn btn-secondary" @click="closeDetails">Fechar</button>
           </div>

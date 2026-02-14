@@ -162,7 +162,7 @@ storesRouter.post('/admin/cleanup-forceopen', requireRole('ADMIN'), async (req, 
 storesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId
-      const { name, cnpj, logoUrl, bannerUrl, timezone, address, isActive, certBase64, certPassword, open24Hours, weeklySchedule, slug } = req.body || {}
+      const { name, cnpj, logoUrl, bannerUrl, timezone, address, isActive, certBase64, certPassword, open24Hours, weeklySchedule, slug, ie, razaoSocial, nfeSerie, nfeEnvironment, csc, cscId, enderEmit } = req.body || {}
 
       // slug handling: if provided, normalize and validate
       let normalizedSlug = null
@@ -207,11 +207,31 @@ storesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         // persist marker into public settings so resolver can find it
         const toSave = { certFilename: filename, certExists: true }
         if (certPassword !== undefined) {
-          try { toSave.certPasswordEnc = certPassword === '' || certPassword === null ? null : encryptText(String(certPassword)) } catch (e) { /* ignore */ }
+          if (certPassword === '' || certPassword === null) {
+            toSave.certPasswordEnc = null
+          } else {
+            toSave.certPasswordEnc = encryptText(String(certPassword))
+          }
         }
         await persistStoreSettings(s.id, toSave)
       } catch (e) {
         console.warn('Failed to save store certificate', e)
+      }
+    }
+
+    // Persist fiscal fields to settings.json
+    {
+      const fiscalFields = {}
+      if (ie) fiscalFields.ie = ie
+      if (razaoSocial) fiscalFields.razaoSocial = razaoSocial
+      if (nfeSerie) fiscalFields.nfeSerie = nfeSerie
+      if (nfeEnvironment) fiscalFields.nfeEnvironment = nfeEnvironment
+      if (csc) fiscalFields.csc = csc
+      if (cscId) fiscalFields.cscId = cscId
+      if (enderEmit) fiscalFields.enderEmit = enderEmit
+      if (cnpj) fiscalFields.cnpj = cnpj
+      if (Object.keys(fiscalFields).length) {
+        try { await persistStoreSettings(s.id, fiscalFields) } catch (e) { console.warn('Failed to persist fiscal settings on create', e) }
       }
     }
 
@@ -264,6 +284,22 @@ storesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       }
     } catch (e) { /* non-fatal */ }
 
+    // Persist fiscal fields to settings.json so NF-e service can read them
+    {
+      const fiscalFields = {}
+      if (body.ie !== undefined) fiscalFields.ie = body.ie || null
+      if (body.razaoSocial !== undefined) fiscalFields.razaoSocial = body.razaoSocial || null
+      if (body.nfeSerie !== undefined) fiscalFields.nfeSerie = body.nfeSerie || null
+      if (body.nfeEnvironment !== undefined) fiscalFields.nfeEnvironment = body.nfeEnvironment || null
+      if (body.csc !== undefined) fiscalFields.csc = body.csc || null
+      if (body.cscId !== undefined) fiscalFields.cscId = body.cscId || null
+      if (body.enderEmit !== undefined) fiscalFields.enderEmit = body.enderEmit || null
+      if (body.cnpj !== undefined) fiscalFields.cnpj = body.cnpj || null
+      if (Object.keys(fiscalFields).length) {
+        try { await persistStoreSettings(id, fiscalFields) } catch (e) { console.warn('Failed to persist fiscal settings', e) }
+      }
+    }
+
     // handle certificate upload/update for store
     if (body.certBase64 || body.certPassword !== undefined) {
       try {
@@ -284,7 +320,11 @@ storesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
           toSave.certExists = true
         }
         if (body.certPassword !== undefined) {
-          try { toSave.certPasswordEnc = body.certPassword === '' || body.certPassword === null ? null : encryptText(String(body.certPassword)) } catch (e) { /* ignore */ }
+          if (body.certPassword === '' || body.certPassword === null) {
+            toSave.certPasswordEnc = null
+          } else {
+            toSave.certPasswordEnc = encryptText(String(body.certPassword))
+          }
         }
         if (Object.keys(toSave).length) await persistStoreSettings(id, toSave)
       } catch (e) {

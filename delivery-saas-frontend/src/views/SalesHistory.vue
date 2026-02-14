@@ -32,29 +32,40 @@
           <table class="table table-hover mb-0">
             <thead class="table-light">
               <tr>
+                <th style="width:40px"><input type="checkbox" class="form-check-input" :checked="allSelected" @change="toggleSelectAll" /></th>
                 <th>Nº Pedido</th>
                 <th>Endereço</th>
                 <th>Cliente</th>
                 <th>Data</th>
                 <th>Entregador</th>
                 <th>Pagamento</th>
+                <th>NF-e</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="o in paginatedOrders" :key="o.id">
+                <td><input type="checkbox" class="form-check-input" :checked="selectedIds.has(o.id)" @change="toggleSelect(o.id)" /></td>
                 <td>{{ formatOrderNumber(o) }}</td>
                 <td>{{ formatAddress(o) }}</td>
                 <td>{{ o.customerName || o.customer?.fullName || o.customer?.name || o.customer?.contact || '-' }}</td>
                 <td>{{ formatDate(o.createdAt) }}</td>
                 <td>{{ o.rider?.name || '-' }}</td>
                 <td>{{ getPaymentMethod(o) || '-' }}</td>
+                <td>
+                  <span v-if="o.payload?.nfe?.nProt" class="badge bg-success" title="NF-e emitida">
+                    <i class="bi bi-check-circle"></i>
+                  </span>
+                  <button v-else class="btn btn-sm btn-outline-success" @click="emitirNfeOrder(o)" title="Emitir NF-e">
+                    <i class="bi bi-receipt"></i>
+                  </button>
+                </td>
                 <td class="text-end">
                   <button class="btn btn-sm btn-outline-primary" @click="viewDetails(o)">Ver</button>
                 </td>
               </tr>
               <tr v-if="displayed.length === 0">
-                <td colspan="7" class="text-center py-4">Nenhum pedido encontrado para o período.</td>
+                <td colspan="9" class="text-center py-4">Nenhum pedido encontrado para o período.</td>
               </tr>
             </tbody>
           </table>
@@ -92,12 +103,28 @@
         </div>
       </template>
     </ListCard>
+
+    <!-- Bulk actions bar -->
+    <div v-if="selectedIds.size > 0" class="position-fixed bottom-0 start-0 end-0 bg-dark text-white p-2 d-flex align-items-center justify-content-between" style="z-index:1050">
+      <div class="d-flex align-items-center gap-2 ms-3">
+        <span class="fw-semibold">{{ selectedIds.size }} pedido(s) selecionado(s)</span>
+        <button class="btn btn-sm btn-outline-light" @click="clearSelection">
+          <i class="bi bi-x-lg"></i> Limpar
+        </button>
+      </div>
+      <div class="d-flex gap-2 me-3">
+        <button class="btn btn-sm btn-success" @click="bulkEmitNfe" title="Emitir NF-e dos selecionados">
+          <i class="bi bi-receipt"></i> Emitir NF-e
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import Swal from 'sweetalert2';
 import api from '../api';
 import SelectInput from '../components/form/select/SelectInput.vue';
 import { formatDate } from '../utils/dates.js';
@@ -263,9 +290,94 @@ function onQuickSearch(val){
   currentPage.value = 1;
 }
 
-function onQuickClear(){ 
+function onQuickClear(){
   q.value = '';
   currentPage.value = 1;
+}
+
+const selectedIds = ref(new Set());
+
+const allSelected = computed(() => {
+  if (!paginatedOrders.value.length) return false;
+  return paginatedOrders.value.every(o => selectedIds.value.has(o.id));
+});
+
+function toggleSelect(id) {
+  const s = new Set(selectedIds.value);
+  if (s.has(id)) s.delete(id); else s.add(id);
+  selectedIds.value = s;
+}
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    const s = new Set(selectedIds.value);
+    paginatedOrders.value.forEach(o => s.delete(o.id));
+    selectedIds.value = s;
+  } else {
+    const s = new Set(selectedIds.value);
+    paginatedOrders.value.forEach(o => s.add(o.id));
+    selectedIds.value = s;
+  }
+}
+
+function clearSelection() { selectedIds.value = new Set(); }
+
+async function emitirNfeOrder(order) {
+  const r = await Swal.fire({
+    title: 'Emitir NF-e?',
+    text: `Pedido #${formatOrderNumber(order)}`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Emitir',
+    cancelButtonText: 'Cancelar'
+  });
+  if (!r.isConfirmed) return;
+  try {
+    const { data } = await api.post('/nfe/emit-from-order', { orderId: order.id });
+    if (data.success) {
+      Swal.fire({ icon: 'success', title: 'NF-e Autorizada', text: `Protocolo: ${data.nProt}`, toast: true, timer: 4000, position: 'top-end', showConfirmButton: false });
+      load();
+    } else {
+      Swal.fire({ icon: 'error', title: 'Erro NF-e', text: data.xMotivo || data.error });
+    }
+  } catch (e) {
+    const errData = e.response?.data;
+    let errorText = errData?.error || e.message;
+    if (errData?.detail) {
+      const d = errData.detail;
+      if (d.httpStatus) errorText += `\nHTTP ${d.httpStatus}`;
+      if (d.url) errorText += `\nURL: ${d.url}`;
+      if (d.httpData) errorText += `\nResposta: ${d.httpData.substring(0, 300)}`;
+    }
+    Swal.fire({ icon: 'error', title: 'Erro ao emitir NF-e', text: errorText });
+  }
+}
+
+async function bulkEmitNfe() {
+  const ids = [...selectedIds.value];
+  if (!ids.length) return;
+  const r = await Swal.fire({
+    title: `Emitir NF-e para ${ids.length} pedido(s)?`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Emitir todos',
+    cancelButtonText: 'Cancelar'
+  });
+  if (!r.isConfirmed) return;
+  try {
+    const { data } = await api.post('/nfe/emit-from-order', { orderIds: ids });
+    const ok = data.results.filter(r => r.success).length;
+    const fail = data.results.length - ok;
+    Swal.fire({
+      icon: fail ? 'warning' : 'success',
+      title: `${ok} emitida(s)${fail ? `, ${fail} erro(s)` : ''}`,
+      timer: 5000, toast: true, position: 'top-end', showConfirmButton: false
+    });
+    load();
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.error || e.message });
+  }
+  clearSelection();
 }
 </script>
 

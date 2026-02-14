@@ -54,5 +54,24 @@
       "allowPickup": true,
       "whatsapp": "73991429676"
     }
-  }
+  },
+  "ie": "200437473",
+  "razaoSocial": "THMZ COMERCIO DE ALIMENTOS LTDA",
+  "nfeSerie": "1",
+  "nfeEnvironment": "homologation",
+  "csc": "5D08FC68-124C-4D27-B0C0-3A8496171784",
+  "cscId": "1",
+  "enderEmit": {
+    "xLgr": "AV RUY BARBOSA",
+    "nro": "118",
+    "xBairro": "CENTRO",
+    "cMun": "2910727",
+    "xMun": "EUNAPOLIS",
+    "UF": "BA",
+    "CEP": "45820280"
+  },
+  "cnpj": "48432940000186",
+  "certFilename": "8433873c-5512-47aa-8847-c2f7282d9788.pfx",
+  "certExists": true,
+  "certPasswordEnc": "DfCO5RTBKbvT+2JZ:ZzO+ByWGjwLz0SGxQtajrQ==:72Liew5xFQAa9Q=="
 }

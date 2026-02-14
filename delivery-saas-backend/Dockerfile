@@ -5,8 +5,13 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 
-# Copy source and generate Prisma client (for both sqlite and postgres schemas if present)
+# Copy source
 COPY . .
+
+# Install nfe-module dependencies (sub-project with its own package.json)
+RUN if [ -f nfe-module/package.json ]; then cd nfe-module && npm ci --silent --omit=dev && cd ..; fi
+
+# Generate Prisma client (for both sqlite and postgres schemas if present)
 # Ensure migrations are copied explicitly (avoid cases where changes were added after a previous build)
 # This guarantees `/app/prisma/migrations` exists in the image even if .dockerignore or build context
 # behaved unexpectedly. The build context already includes the repo root, so this is idempotent.

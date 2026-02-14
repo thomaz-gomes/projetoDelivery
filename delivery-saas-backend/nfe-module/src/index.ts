@@ -1,6 +1,6 @@
 import path from 'path'
 import fs from 'fs-extra'
-import { generateNFCeXml } from './generate'
+import { generateNFCeXml, buildNFCeQrCodeUrl, getNFCeUrlChave, insertInfNFeSupl } from './generate'
 import { readPfx, readPfxFromBuffer, signXml } from './sign'
 import { loadConfig } from './config'
 import { validateXmlWithDir } from './validate'
@@ -13,10 +13,25 @@ export async function generateAndSignSimpleNFCe(example: {
   uf: string
   serie: string
   nNF: string
-  itens: Array<{ id: number; prodName: string; vProd: string; vUnCom?: string; qCom?: string; ncm?: string; cfop?: string; unity?: string }>
+  mod?: string
+  tpAmb?: string
+  crt?: string
+  natOp?: string
+  cMunFG?: string
+  tpEmis?: string
+  indPres?: string
+  enderEmit?: { xLgr?: string; nro?: string; xBairro?: string; cMun?: string; xMun?: string; UF?: string; CEP?: string; cPais?: string; xPais?: string }
+  ie?: string
+  dest?: { CPF?: string; CNPJ?: string; xNome?: string }
+  itens: Array<{ id: number; prodName: string; vProd: string; vUnCom?: string; qCom?: string; ncm?: string; cfop?: string; unity?: string; cProd?: string }>
+  pag?: { tPag?: string; vPag?: string; vTroco?: string }
+  csc?: string
+  cscId?: string
 }, options?: { certPath?: string; certBuffer?: Buffer; certPassword?: string; companyId?: string }) {
   const cfg = loadConfig()
-  const xml = await generateNFCeXml({ ...example })
+  const genResult = await generateNFCeXml({ ...example })
+  const xml = genResult.xml
+  const { chave44, tpAmb: genTpAmb, cscId: genCscId, csc: genCsc } = genResult
 
   // If XSDs dir configured, attempt validation before signing
   try {
@@ -51,7 +66,19 @@ export async function generateAndSignSimpleNFCe(example: {
     certPem = r.certPem
     certB64 = r.certB64
   }
-  const signed = signXml(xml, privateKeyPem, certB64)
+  let signed = signXml(xml, privateKeyPem, certB64)
+
+  // For NFC-e (mod 65), insert infNFeSupl with QR Code after signing
+  const mod = example.mod || '65'
+  if (mod === '65' && genCsc && genCscId) {
+    const uf = example.uf || 'BA'
+    const qrCodeUrl = buildNFCeQrCodeUrl(chave44, genTpAmb, genCscId, genCsc, uf)
+    const urlChave = getNFCeUrlChave(genTpAmb, uf)
+    signed = insertInfNFeSupl(signed, qrCodeUrl, urlChave)
+    console.log('[NFCe] QR Code URL:', qrCodeUrl)
+  } else if (mod === '65') {
+    console.warn('[NFCe] CSC/CSCId not provided - infNFeSupl will be missing. NFC-e may be rejected.')
+  }
 
   // save signed XML to emitidas dir
   const dir = path.isAbsolute(cfg.xmlDirs.emitidas) ? cfg.xmlDirs.emitidas : path.join(process.cwd(), cfg.xmlDirs.emitidas)

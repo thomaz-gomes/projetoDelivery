@@ -16,7 +16,8 @@ const xml_crypto_1 = require("xml-crypto");
  * Build a SOAP 1.2 envelope for NFe Autorizacao with the signed NFe inside nfeDadosMsg
  */
 function buildAutorizacaoEnvelope(signedXml, headerXml) {
-    return `<?xml version="1.0" encoding="UTF-8"?>\n<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope" xmlns:nfe="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao">\n  <soap12:Header>${headerXml || ''}</soap12:Header>\n  <soap12:Body>\n    <nfe:nfeAutorizacaoLote>\n      <nfe:nfeDadosMsg><![CDATA[${signedXml}]]></nfe:nfeDadosMsg>\n    </nfe:nfeAutorizacaoLote>\n  </soap12:Body>\n</soap12:Envelope>`;
+    const lote = Date.now().toString();
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">\n  <soap12:Header>${headerXml || ''}</soap12:Header>\n  <soap12:Body>\n    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">\n      <enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">\n        <idLote>${lote}</idLote>\n        <indSinc>1</indSinc>\n        ${signedXml}\n      </enviNFe>\n    </nfeDadosMsg>\n  </soap12:Body>\n</soap12:Envelope>`;
 }
 function buildWsSecurityHeader(certB64) {
     const created = new Date().toISOString();
@@ -100,24 +101,43 @@ async function sendNFCeToSefaz(signedXml, opts = {}) {
         }
     }
     const envelopeWithHeader = buildAutorizacaoEnvelope(signedXml, headerXml);
-    // Build HTTPS agent with client certificate (mutual TLS) if provided
+    // Build HTTPS agent with client certificate (mutual TLS) if provided.
+    // Use node-forge to extract PEM key+cert from PFX instead of passing the raw
+    // PFX buffer to Node's https.Agent — Node.js 17+ uses OpenSSL 3.0 which
+    // rejects legacy PKCS12 encryption (RC2/DES) commonly used by Brazilian CAs.
     let httpsAgent;
     if (opts.certBuffer || opts.certPath || cfg.certPath) {
-        const passphrase = opts.certPassword || cfg.certPassword;
-        let pfx;
+        const passphrase = opts.certPassword || cfg.certPassword || '';
+        let pfxBuf;
         if (opts.certBuffer)
-            pfx = opts.certBuffer;
+            pfxBuf = opts.certBuffer;
         else {
             const cp = opts.certPath || cfg.certPath;
             const p = path_1.default.isAbsolute(cp) ? cp : path_1.default.join(process.cwd(), cp);
             if (!fs_1.default.existsSync(p))
                 throw new Error(`Certificate file not found: ${p}`);
-            pfx = fs_1.default.readFileSync(p);
+            pfxBuf = fs_1.default.readFileSync(p);
         }
-        httpsAgent = new https_1.default.Agent({ pfx, passphrase, rejectUnauthorized: false });
+        try {
+            // Extract PEM via node-forge (handles legacy PKCS12 algorithms)
+            const pemInfo = opts.certBuffer
+                ? (0, sign_1.readPfxFromBuffer)(pfxBuf, passphrase)
+                : (opts.certPath ? (0, sign_1.readPfx)(opts.certPath, passphrase) : (0, sign_1.readPfx)(cfg.certPath, passphrase));
+            httpsAgent = new https_1.default.Agent({
+                key: pemInfo.privateKeyPem,
+                cert: pemInfo.certPem,
+                rejectUnauthorized: false
+            });
+        }
+        catch (forgeErr) {
+            // Fallback: try raw PFX in case the cert uses modern algorithms
+            // eslint-disable-next-line no-console
+            console.warn('node-forge PFX extraction failed, falling back to raw PFX:', forgeErr.message);
+            httpsAgent = new https_1.default.Agent({ pfx: pfxBuf, passphrase, rejectUnauthorized: false });
+        }
     }
     const headers = {
-        'Content-Type': 'application/soap+xml; charset=utf-8'
+        'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote"'
     };
     const res = await axios_1.default.post(endpoint, envelopeWithHeader, { headers, httpsAgent, timeout: 60000 });
     const text = typeof res.data === 'string' ? res.data : res.data.toString();
@@ -161,6 +181,16 @@ async function sendNFCeToSefaz(signedXml, opts = {}) {
         cStat = infProt.cStat || undefined;
         xMotivo = infProt.xMotivo || infProt.xMotivo || undefined;
     }
+    // If no protocol-level info found, check batch-level rejection (retEnviNFe)
+    if (!cStat) {
+        const retEnvi = findKey(parsed, 'retEnviNFe');
+        if (retEnvi) {
+            cStat = retEnvi.cStat || undefined;
+            xMotivo = retEnvi.xMotivo || undefined;
+        }
+    }
+    // eslint-disable-next-line no-console
+    console.log('[soap] SEFAZ parsed result:', { cStat, xMotivo, protocolo, hasProtNFe: !!protNFe });
     return { raw: text, parsed, protocolo, cStat, xMotivo };
 }
 exports.default = { sendNFCeToSefaz };

@@ -1809,5 +1809,223 @@
     "printerType": "EPSON",
     "paperWidth": 80,
     "includeFullOrder": true
+  },
+  {
+    "id": "1771070772276-808285",
+    "createdAt": 1771070772276,
+    "order": {
+      "id": "9e7ef49f-fce7-4e2a-9f20-510c1d8c3eec",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Balcão",
+      "customerPhone": null,
+      "customerSource": "MANUAL",
+      "customerId": "5e54f9af-ac25-46c7-b23c-41ce08763834",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "36.5",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Crédito",
+          "methodCode": "Crédito",
+          "amount": 36.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Salada Caesar",
+              "quantity": 1,
+              "price": 22,
+              "notes": null,
+              "options": [
+                {
+                  "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+                  "name": "Bacon",
+                  "price": 4.5,
+                  "quantity": 1
+                },
+                {
+                  "id": "123618c9-c034-4907-a6dc-a21979169316",
+                  "name": "Grande",
+                  "price": 10,
+                  "quantity": 1
+                }
+              ]
+            }
+          ],
+          "customer": {
+            "name": "Balcão",
+            "contact": null
+          },
+          "address": null
+        },
+        "computedTotal": 22,
+        "total": 36.5
+      },
+      "createdAt": "2026-02-14T12:06:11.784Z",
+      "updatedAt": "2026-02-14T12:06:11.784Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "23e47aac-af72-44da-a058-5437724c64aa",
+          "orderId": "9e7ef49f-fce7-4e2a-9f20-510c1d8c3eec",
+          "productId": null,
+          "name": "Salada Caesar",
+          "quantity": 1,
+          "price": "22",
+          "notes": null,
+          "options": [
+            {
+              "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+              "name": "Bacon",
+              "price": 4.5,
+              "quantity": 1
+            },
+            {
+              "id": "123618c9-c034-4907-a6dc-a21979169316",
+              "name": "Grande",
+              "price": 10,
+              "quantity": 1
+            }
+          ]
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null,
+      "deliveryAddress": null,
+      "receiptTemplate": "{\"v\":2,\"blocks\":[{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"{{header_name}}\",\"a\":\"center\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"PEDIDO #{{display_id}}\",\"a\":\"center\",\"b\":true,\"s\":\"xl\"},{\"t\":\"text\",\"c\":\"Data: {{data_pedido}}  Hora: {{hora_pedido}}\"},{\"t\":\"cond\",\"key\":\"tipo_pedido\",\"c\":\"Tipo: {{tipo_pedido}}\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"CLIENTE: {{nome_cliente}}\",\"b\":true},{\"t\":\"text\",\"c\":\"Telefone: {{telefone_cliente}}\"},{\"t\":\"text\",\"c\":\"Endereco: {{endereco_cliente}}\"},{\"t\":\"sep\"},{\"t\":\"items\",\"itemBold\":true,\"itemSize\":\"normal\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Qtd itens: {{total_itens_count}}\",\"s\":\"xl\",\"b\":true},{\"t\":\"text\",\"c\":\"Subtotal: R$ {{subtotal}}\"},{\"t\":\"cond\",\"key\":\"taxa_entrega\",\"c\":\"Taxa entrega: R$ {{taxa_entrega}}\"},{\"t\":\"cond\",\"key\":\"desconto\",\"c\":\"Desconto: R$ {{desconto}}\"},{\"t\":\"text\",\"c\":\"TOTAL: R$ {{total}}\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"FORMAS DE PAGAMENTO\",\"b\":true},{\"t\":\"payments\"},{\"t\":\"cond\",\"key\":\"observacoes\",\"c\":\"OBS: {{observacoes}}\"},{\"t\":\"qr\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Obrigado e bom apetite!\",\"a\":\"center\"},{\"t\":\"sep\"}]}",
+      "copies": 1,
+      "printerName": "Print iD2",
+      "headerName": "Minha Loja de Testes",
+      "headerCity": "São Paulo",
+      "printerInterface": "printer:Print iD2",
+      "printerType": "EPSON",
+      "paperWidth": 80
+    },
+    "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x Salada Caesar             R$ 22.00\n  - Bacon — R$4.50\\n  - Grande — R$10.00\n------------------------------\nSub-total = R$ 36.50\n\nTOTAL a cobrar: R$ 36.50\nPagamento: Crédito\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "includeFullOrder": true
+  },
+  {
+    "id": "1771090237497-257654",
+    "createdAt": 1771090237497,
+    "order": {
+      "id": "b0e935df-05cc-4836-a8ae-288093ca6004",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "32.5",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Crédito",
+          "methodCode": "Crédito",
+          "amount": 32.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Salada Caesar",
+              "quantity": 1,
+              "price": 22,
+              "notes": null,
+              "options": [
+                {
+                  "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+                  "name": "Bacon",
+                  "price": 4.5,
+                  "quantity": 1
+                },
+                {
+                  "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+                  "name": "Médio",
+                  "price": 6,
+                  "quantity": 1
+                }
+              ]
+            }
+          ],
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "address": null
+        },
+        "computedTotal": 22,
+        "total": 32.5
+      },
+      "createdAt": "2026-02-14T17:30:37.024Z",
+      "updatedAt": "2026-02-14T17:30:37.024Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "8ca54c0e-685d-493a-907c-40a3912424b7",
+          "orderId": "b0e935df-05cc-4836-a8ae-288093ca6004",
+          "productId": null,
+          "name": "Salada Caesar",
+          "quantity": 1,
+          "price": "22",
+          "notes": null,
+          "options": [
+            {
+              "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+              "name": "Bacon",
+              "price": 4.5,
+              "quantity": 1
+            },
+            {
+              "id": "58e951a2-d588-41d4-b4cd-8dea6b843972",
+              "name": "Médio",
+              "price": 6,
+              "quantity": 1
+            }
+          ]
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null,
+      "deliveryAddress": null,
+      "receiptTemplate": "{\"v\":2,\"blocks\":[{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"{{header_name}}\",\"a\":\"center\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"PEDIDO #{{display_id}}\",\"a\":\"center\",\"b\":true,\"s\":\"xl\"},{\"t\":\"text\",\"c\":\"Data: {{data_pedido}}  Hora: {{hora_pedido}}\"},{\"t\":\"cond\",\"key\":\"tipo_pedido\",\"c\":\"Tipo: {{tipo_pedido}}\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"CLIENTE: {{nome_cliente}}\",\"b\":true},{\"t\":\"text\",\"c\":\"Telefone: {{telefone_cliente}}\"},{\"t\":\"text\",\"c\":\"Endereco: {{endereco_cliente}}\"},{\"t\":\"sep\"},{\"t\":\"items\",\"itemBold\":true,\"itemSize\":\"normal\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Qtd itens: {{total_itens_count}}\",\"s\":\"xl\",\"b\":true},{\"t\":\"text\",\"c\":\"Subtotal: R$ {{subtotal}}\"},{\"t\":\"cond\",\"key\":\"taxa_entrega\",\"c\":\"Taxa entrega: R$ {{taxa_entrega}}\"},{\"t\":\"cond\",\"key\":\"desconto\",\"c\":\"Desconto: R$ {{desconto}}\"},{\"t\":\"text\",\"c\":\"TOTAL: R$ {{total}}\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"FORMAS DE PAGAMENTO\",\"b\":true},{\"t\":\"payments\"},{\"t\":\"cond\",\"key\":\"observacoes\",\"c\":\"OBS: {{observacoes}}\"},{\"t\":\"qr\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Obrigado e bom apetite!\",\"a\":\"center\"},{\"t\":\"sep\"}]}",
+      "copies": 1,
+      "printerName": "Print iD2",
+      "headerName": "Minha Loja de Testes",
+      "headerCity": "São Paulo",
+      "printerInterface": "printer:Print iD2",
+      "printerType": "EPSON",
+      "paperWidth": 80
+    },
+    "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x Salada Caesar             R$ 22.00\n  - Bacon — R$4.50\\n  - Médio — R$6.00\n------------------------------\nSub-total = R$ 32.50\n\nTOTAL a cobrar: R$ 32.50\nPagamento: Crédito\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "includeFullOrder": true
   }
 ]

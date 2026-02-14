@@ -14,12 +14,14 @@
   "sefaz": {
     "ba": {
       "homologation": {
-        "nfe": "https://nfeh.sefaz.ba.gov.br/ws/NFeAutorizacao4",
-        "nfeConsulta": "https://nfeh.sefaz.ba.gov.br/ws/NFeConsulta4"
+        "nfe": "https://hnfe.sefaz.ba.gov.br/webservices/NFeAutorizacao4/NFeAutorizacao4.asmx",
+        "nfeConsulta": "https://hnfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx",
+        "nfeStatusServico": "https://hnfe.sefaz.ba.gov.br/webservices/NFeStatusServico4/NFeStatusServico4.asmx"
       },
       "production": {
-        "nfe": "https://nfe.sefaz.ba.gov.br/ws/NFeAutorizacao4",
-        "nfeConsulta": "https://nfe.sefaz.ba.gov.br/ws/NFeConsulta4"
+        "nfe": "https://nfe.sefaz.ba.gov.br/webservices/NFeAutorizacao4/NFeAutorizacao4.asmx",
+        "nfeConsulta": "https://nfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx",
+        "nfeStatusServico": "https://nfe.sefaz.ba.gov.br/webservices/NFeStatusServico4/NFeStatusServico4.asmx"
       }
     }
   }

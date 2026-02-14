@@ -1,6 +1,12 @@
 <template>
   <div class="container py-4">
-    <button class="btn btn-link mb-3 ps-0" @click="$router.back()">← Voltar</button>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <button class="btn btn-link ps-0" @click="$router.back()">← Voltar</button>
+      <button v-if="order && !order.payload?.nfe?.nProt" class="btn btn-outline-success btn-sm" @click="emitirNfe" :disabled="emitindoNfe">
+        <span v-if="emitindoNfe" class="spinner-border spinner-border-sm me-1"></span>
+        <i v-else class="bi bi-receipt"></i> Emitir NF-e
+      </button>
+    </div>
     <h2 class="mb-4">Detalhes do Pedido</h2>
 
     <div v-if="!order" class="alert alert-secondary">Carregando pedido...</div>
@@ -225,6 +231,30 @@
           </div>
         </div>
       </div>
+      <!-- NF-e Protocolo -->
+      <div v-if="order.payload?.nfe" class="card mb-3 border-success">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3 text-success"><i class="bi bi-check-circle"></i> NF-e Emitida</h6>
+          <div class="row">
+            <div class="col-md-4">
+              <span class="text-muted small d-block">Protocolo</span>
+              <strong>{{ order.payload.nfe.nProt || '-' }}</strong>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted small d-block">Status (cStat)</span>
+              <strong>{{ order.payload.nfe.cStat || '-' }}</strong>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted small d-block">Data Autorização</span>
+              <strong>{{ order.payload.nfe.authorizedAt ? formatDateTime(order.payload.nfe.authorizedAt) : '-' }}</strong>
+            </div>
+          </div>
+          <div v-if="order.payload.nfe.xMotivo" class="mt-2">
+            <span class="text-muted small d-block">Motivo</span>
+            <strong>{{ order.payload.nfe.xMotivo }}</strong>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -232,6 +262,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
+import Swal from 'sweetalert2';
 import api from '../api';
 import { formatDateTime } from '../utils/dates.js';
 
@@ -379,6 +410,43 @@ function getChangeFor(o) {
          o.payload?.payment?.changeFor || 
          o.payload?.rawPayload?.payment?.changeFor || 
          null;
+}
+
+const emitindoNfe = ref(false);
+
+async function emitirNfe() {
+  const r = await Swal.fire({
+    title: 'Emitir NF-e?',
+    text: `Pedido #${formatOrderNumber(order.value)}`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Emitir',
+    cancelButtonText: 'Cancelar'
+  });
+  if (!r.isConfirmed) return;
+  emitindoNfe.value = true;
+  try {
+    const { data } = await api.post('/nfe/emit-from-order', { orderId: id });
+    if (data.success) {
+      Swal.fire({ icon: 'success', title: 'NF-e Autorizada', text: `Protocolo: ${data.nProt}`, toast: true, timer: 4000, position: 'top-end', showConfirmButton: false });
+      load();
+    } else {
+      Swal.fire({ icon: 'error', title: 'Erro NF-e', text: data.xMotivo || data.error });
+    }
+  } catch (e) {
+    const errData = e.response?.data;
+    let errorText = errData?.error || e.message;
+    // Show extra detail in dev
+    if (errData?.detail) {
+      const d = errData.detail;
+      if (d.httpStatus) errorText += `\nHTTP ${d.httpStatus}`;
+      if (d.url) errorText += `\nURL: ${d.url}`;
+      if (d.httpData) errorText += `\nResposta: ${d.httpData.substring(0, 300)}`;
+    }
+    Swal.fire({ icon: 'error', title: 'Erro ao emitir NF-e', text: errorText });
+  } finally {
+    emitindoNfe.value = false;
+  }
 }
 
 async function load(){

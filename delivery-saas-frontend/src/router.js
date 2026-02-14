@@ -86,6 +86,7 @@ import SaasBilling from './views/SaasBilling.vue';
 import SaasModules from './views/SaasModules.vue';
 import SaasAdmin from './views/SaasAdmin.vue';
 import CashbackSettings from './views/cashback/CashbackSettings.vue';
+import NfeEmissao from './views/NfeEmissao.vue';
 import FinancialDashboard from './views/financial/FinancialDashboard.vue';
 import FinancialAccounts from './views/financial/FinancialAccounts.vue';
 import FinancialTransactions from './views/financial/FinancialTransactions.vue';
@@ -204,6 +205,7 @@ const router = createRouter({
   ,{ path: '/saas/billing', component: SaasBilling, meta: { requiresAuth: true, role: ['ADMIN','SUPER_ADMIN'] } }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
     { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true } },
+    { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN' } },
     // ---- Módulo Financeiro ----
     { path: '/financial', component: FinancialDashboard, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/financial/accounts', component: FinancialAccounts, meta: { requiresAuth: true, role: 'ADMIN' } },

@@ -153,8 +153,6 @@ const companyId = route.params.companyId || ''
 import { onMounted } from 'vue'
 import { applyPhoneMask, removePhoneMask } from '../utils/phoneMask.js'
 
-import { defineProps, defineEmits } from 'vue'
-
 const props = defineProps({ embedded: { type: Boolean, default: false }, initialTab: { type: String, default: '' } })
 const emit = defineEmits(['authenticated','logout'])
 

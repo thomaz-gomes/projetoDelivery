@@ -1,11 +1,34 @@
 import http from "http";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { app, attachSocket } from "./index.js";
 import { prisma } from './prisma.js';
 import { sha256 } from './utils.js';
 import { startWatching } from './fileWatcher.js';
 import { startIFoodPollingWorker } from './jobs/ifoodPollWorker.js';
+
+// Ensure CERT_STORE_KEY is available for certificate password encryption.
+// In development, auto-generate a key and persist it to .env so it survives restarts.
+if (!process.env.CERT_STORE_KEY) {
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('⚠️  CERT_STORE_KEY não está definida. Senhas de certificados PFX NÃO serão salvas.');
+    console.warn('   Gere uma chave com: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"');
+  } else {
+    const autoKey = crypto.randomBytes(32).toString('base64');
+    process.env.CERT_STORE_KEY = autoKey;
+    // Persist to .env so the key survives restarts (avoids invalidating stored passwords)
+    try {
+      const envPath = path.join(process.cwd(), '.env');
+      const line = `\nCERT_STORE_KEY=${autoKey}\n`;
+      fs.appendFileSync(envPath, line, 'utf8');
+      console.log('🔑 CERT_STORE_KEY auto-gerada e salva no .env');
+    } catch (e) {
+      console.log('🔑 CERT_STORE_KEY auto-gerada (não foi possível salvar no .env:', e?.message, ')');
+      console.log(`   Adicione manualmente: CERT_STORE_KEY=${autoKey}`);
+    }
+  }
+}
 
 function pickFirstExisting(dir, candidates) {
   for (const c of candidates) {

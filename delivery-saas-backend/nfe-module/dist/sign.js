@@ -17,19 +17,30 @@ function readPfx(pfxPath, password) {
     const p12Asn1 = node_forge_1.default.asn1.fromDer(raw.toString('binary'));
     const p12 = node_forge_1.default.pkcs12.pkcs12FromAsn1(p12Asn1, password);
     let keyObj = null;
-    let certObj = null;
+    const certs = [];
     for (const safeContent of p12.safeContents) {
         for (const safeBag of safeContent.safeBags) {
-            if (safeBag.type === node_forge_1.default.pki.oids.certBag) {
-                certObj = safeBag.cert;
+            if (safeBag.type === node_forge_1.default.pki.oids.certBag && safeBag.cert) {
+                certs.push(safeBag.cert);
             }
             if (safeBag.type === node_forge_1.default.pki.oids.pkcs8ShroudedKeyBag || safeBag.type === node_forge_1.default.pki.oids.keyBag) {
                 keyObj = safeBag.key;
             }
         }
     }
-    if (!keyObj || !certObj)
+    if (!keyObj || certs.length === 0)
         throw new Error('Failed to extract key/cert from PFX');
+    // Pick the certificate whose public key matches the private key (modulus comparison)
+    let certObj = certs[0];
+    if (certs.length > 1) {
+        const privModulus = keyObj.n.toString(16);
+        for (const c of certs) {
+            if (c.publicKey.n.toString(16) === privModulus) {
+                certObj = c;
+                break;
+            }
+        }
+    }
     const privateKeyPem = node_forge_1.default.pki.privateKeyToPem(keyObj);
     const certPem = node_forge_1.default.pki.certificateToPem(certObj);
     // also return base64 cert without headers for KeyInfo
@@ -45,19 +56,30 @@ function readPfxFromBuffer(buffer, password) {
     const p12Asn1 = node_forge_1.default.asn1.fromDer(raw);
     const p12 = node_forge_1.default.pkcs12.pkcs12FromAsn1(p12Asn1, password);
     let keyObj = null;
-    let certObj = null;
+    const certs = [];
     for (const safeContent of p12.safeContents) {
         for (const safeBag of safeContent.safeBags) {
-            if (safeBag.type === node_forge_1.default.pki.oids.certBag) {
-                certObj = safeBag.cert;
+            if (safeBag.type === node_forge_1.default.pki.oids.certBag && safeBag.cert) {
+                certs.push(safeBag.cert);
             }
             if (safeBag.type === node_forge_1.default.pki.oids.pkcs8ShroudedKeyBag || safeBag.type === node_forge_1.default.pki.oids.keyBag) {
                 keyObj = safeBag.key;
             }
         }
     }
-    if (!keyObj || !certObj)
+    if (!keyObj || certs.length === 0)
         throw new Error('Failed to extract key/cert from PFX buffer');
+    // Pick the certificate whose public key matches the private key (modulus comparison)
+    let certObj = certs[0];
+    if (certs.length > 1) {
+        const privModulus = keyObj.n.toString(16);
+        for (const c of certs) {
+            if (c.publicKey.n.toString(16) === privModulus) {
+                certObj = c;
+                break;
+            }
+        }
+    }
     const privateKeyPem = node_forge_1.default.pki.privateKeyToPem(keyObj);
     const certPem = node_forge_1.default.pki.certificateToPem(certObj);
     const certB64 = node_forge_1.default.util.encode64(node_forge_1.default.pem.decode(certPem)[0].body);
@@ -71,7 +93,8 @@ function readPfxFromBuffer(buffer, password) {
 function signXml(xml, privateKeyPem, certB64) {
     const sig = new xml_crypto_1.SignedXml();
     sig.signatureAlgorithm = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1';
-    sig.addReference("//*[local-name(.)='infNFe']", ['http://www.w3.org/2000/09/xmldsig#enveloped-signature', 'http://www.w3.org/2001/10/xml-exc-c14n#'], 'http://www.w3.org/2000/09/xmldsig#sha1');
+    sig.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
+    sig.addReference("//*[local-name(.)='infNFe']", ['http://www.w3.org/2000/09/xmldsig#enveloped-signature', 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'], 'http://www.w3.org/2000/09/xmldsig#sha1');
     sig.signingKey = privateKeyPem;
     sig.keyInfoProvider = {
         getKeyInfo: function () {
