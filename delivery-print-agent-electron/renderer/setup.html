@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline';" />
+<title>Configuração Inicial</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  .card {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 32px;
+    width: 100%;
+    max-width: 460px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  }
+  .logo { text-align: center; margin-bottom: 24px; }
+  .logo h1 { font-size: 20px; color: #4ecca3; font-weight: 700; }
+  .logo p  { font-size: 13px; color: #888; margin-top: 4px; }
+  label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 10px 12px;
+    background: #0f3460; border: 1px solid #1a4a8a;
+    border-radius: 6px; color: #fff; font-size: 14px; outline: none;
+    transition: border-color .2s;
+  }
+  input:focus { border-color: #4ecca3; }
+  .field { margin-bottom: 18px; }
+  .hint { font-size: 11px; color: #666; margin-top: 4px; }
+  .btn-primary {
+    width: 100%; padding: 12px;
+    background: #4ecca3; color: #1a1a2e;
+    border: none; border-radius: 6px; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: opacity .2s;
+  }
+  .btn-primary:hover { opacity: .9; }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .status {
+    margin-top: 16px; padding: 10px 14px;
+    border-radius: 6px; font-size: 13px; display: none;
+  }
+  .status.ok  { background:#0d4a2a; color:#4ecca3; display:block; }
+  .status.err { background:#4a1a1a; color:#ff6b6b; display:block; }
+  .step { font-size: 12px; color: #666; text-align: center; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <h1>Delivery Print Agent</h1>
+    <p>Configure a conexão com o seu servidor</p>
+  </div>
+
+  <p class="step">Passo 1 de 1 — Dados do Servidor</p>
+
+  <div class="field">
+    <label for="serverUrl">URL do Servidor</label>
+    <input id="serverUrl" type="text" placeholder="https://meudelivery.com.br" />
+    <p class="hint">Endereço base da API do seu sistema de delivery</p>
+  </div>
+
+  <div class="field">
+    <label for="token">Token do Agente</label>
+    <input id="token" type="password" placeholder="Token gerado no Painel → Impressoras" />
+    <p class="hint">Gerado em Configurações → Impressoras → Novo Agente</p>
+  </div>
+
+  <button class="btn-primary" id="btnSave">Salvar e Conectar</button>
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+const { electronAPI } = window;
+
+document.getElementById('btnSave').addEventListener('click', async () => {
+  const serverUrl = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+  const token     = document.getElementById('token').value.trim();
+  const st        = document.getElementById('status');
+  const btn       = document.getElementById('btnSave');
+
+  if (!serverUrl || !token) {
+    showStatus('Preencha todos os campos.', 'err');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+
+  try {
+    const existing = await electronAPI.loadConfig();
+    await electronAPI.saveConfig({ ...existing, serverUrl, token });
+    showStatus('Configuração salva! Abrindo painel...', 'ok');
+    setTimeout(() => electronAPI.closeSetup({ serverUrl, token }), 1500);
+  } catch (e) {
+    showStatus('Erro ao salvar: ' + e.message, 'err');
+    btn.disabled = false;
+    btn.textContent = 'Salvar e Conectar';
+  }
+});
+
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+// Pre-preenche se já configurado
+electronAPI.loadConfig().then(cfg => {
+  if (cfg.serverUrl) document.getElementById('serverUrl').value = cfg.serverUrl;
+  if (cfg.token)     document.getElementById('token').value     = cfg.token;
+});
+</script>
+</body>
+</html>

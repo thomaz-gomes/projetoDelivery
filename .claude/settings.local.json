@@ -25,7 +25,8 @@
       "WebFetch(domain:github.com)",
       "Bash(curl:*)",
       "WebFetch(domain:www.projetoacbr.com.br)",
-      "WebFetch(domain:nfce.encat.org)"
+      "WebFetch(domain:nfce.encat.org)",
+      "Bash(echo:*)"
     ]
   }
 }
