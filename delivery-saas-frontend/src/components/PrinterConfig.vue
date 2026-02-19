@@ -37,10 +37,13 @@
                   <div class="small text-muted mb-1">Logs:</div>
                   <div class="log-line" v-for="(l, idx) in logs" :key="idx">{{ l }}</div>
                 </div>
-                <div class="mt-2">
-                  <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="discoverPrinters">Tentar novamente</button>
+                <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" @click="discoverPrinters">Tentar novamente</button>
                   <button type="button" class="btn btn-sm btn-outline-primary" @click="generatePairingCode" :disabled="pairingLoading">
                     {{ pairingLoading ? 'Gerando...' : 'Gerar codigo de pareamento' }}
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-success" @click="showAgentModal = true">
+                    ⬇ Baixar Agente de Impressao
                   </button>
                 </div>
                 <div v-if="pairingCode" class="pairing-code-box mt-3">
@@ -102,11 +105,64 @@
       </div>
     </div>
   </div>
+  <!-- Modal: Baixar Agente de Impressao -->
+  <div v-if="showAgentModal" class="modal-backdrop" style="z-index:3100" @click.self="showAgentModal = false">
+    <div class="modal-dialog modal-centered" style="max-width:520px">
+      <div class="modal-content p-3">
+        <div class="modal-header">
+          <h5 class="modal-title">Agente de Impressao Termica</h5>
+          <button type="button" class="btn-close" @click="showAgentModal = false"></button>
+        </div>
+        <div class="modal-body">
+
+          <p class="small text-muted mb-3">
+            O agente e um programa instalado <strong>no computador da loja</strong> que recebe os pedidos
+            e envia direto para a impressora termica — sem dialogo de impressao.
+          </p>
+
+          <div class="agent-download-box mb-3">
+            <div class="d-flex align-items-center gap-3">
+              <span style="font-size:2rem">🖨️</span>
+              <div>
+                <div class="fw-bold">Delivery Print Agent</div>
+                <div class="small text-muted">Windows 10/11 · x64 · ~50 MB</div>
+              </div>
+              <a :href="agentDownloadUrl" target="_blank" class="btn btn-success ms-auto btn-sm px-3">
+                ⬇ Baixar .exe
+              </a>
+            </div>
+          </div>
+
+          <div class="small fw-bold mb-1">Passos de instalacao:</div>
+          <ol class="small text-muted ps-3" style="line-height:1.9">
+            <li>Baixe e execute o instalador <strong>.exe</strong> acima no computador da loja</li>
+            <li>Na primeira execucao, informe a <strong>URL do servidor</strong>:<br>
+              <code class="user-select-all">{{ currentServerUrl }}</code>
+            </li>
+            <li>Clique em <strong>"Gerar codigo de pareamento"</strong> aqui no painel</li>
+            <li>Digite o codigo de 6 caracteres no agente para concluir a conexao</li>
+            <li>O icone verde na bandeja do Windows confirma que esta conectado</li>
+          </ol>
+
+          <div class="alert alert-info py-2 small mt-3 mb-0">
+            <strong>Impressora USB?</strong> Instale o driver <em>"Generic / Text Only"</em> no Windows
+            antes de configurar — ele aceita dados RAW sem interferencia.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary btn-sm" @click="showAgentModal = false">Fechar</button>
+          <button class="btn btn-primary btn-sm" @click="showAgentModal = false; generatePairingCode()">
+            Gerar Codigo de Pareamento
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
   </teleport>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import api from '../api';
 import ReceiptTemplateEditor from './ReceiptTemplateEditor.vue';
 
@@ -128,6 +184,15 @@ const pairingCountdown = ref(0);
 const pairingLoading = ref(false);
 let pairingTimer = null;
 const logs = ref([]);
+const showAgentModal = ref(false);
+
+// URL base do backend (para mostrar ao usuário e montar link de download)
+const currentServerUrl = computed(() => {
+  const base = api.defaults?.baseURL || '';
+  return base.replace(/\/api\/?$/, '').replace(/\/$/, '') || window.location.origin;
+});
+
+const agentDownloadUrl = computed(() => `${currentServerUrl.value}/downloads/delivery-print-agent-setup.exe`);
 
 function pushLog(msg){
   try{
@@ -301,4 +366,5 @@ function save(){
 .pairing-code-box{ background:#f0f7ff; border:1px solid #b3d4fc; border-radius:8px; padding:12px 16px; }
 .pairing-steps{ margin:0 0 8px 0; padding-left:20px; line-height:1.7; }
 .pairing-code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size:32px; font-weight:700; letter-spacing:6px; color:#1a56db; user-select:all; text-align:center; }
+.agent-download-box{ background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:14px 16px; }
 </style>

@@ -238,6 +238,10 @@ if (process.env.NODE_ENV !== 'production') {
 const publicDir = path.join(process.cwd(), 'public');
 app.use('/public', express.static(publicDir));
 
+// Serve downloads (e.g., delivery-print-agent-setup.exe)
+const downloadsDir = path.join(process.cwd(), 'downloads');
+app.use('/downloads', express.static(downloadsDir, { dotfiles: 'deny' }));
+
 // Serve centralized settings folder so images saved under settings/ are publicly available
 const settingsDir = path.join(process.cwd(), 'settings');
 app.use('/settings', express.static(settingsDir));
