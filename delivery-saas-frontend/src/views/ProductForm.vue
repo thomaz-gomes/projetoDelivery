@@ -45,6 +45,14 @@
                 <div v-else class="text-muted">Preencha o preço para ver o CMV</div>
               </div>
             </div>
+            <div class="col-md-4">
+              <label class="form-label">Dados Fiscais (opcional)</label>
+              <SelectInput v-model="form.dadosFiscaisId" class="form-control">
+                <option :value="null">-- Usar da categoria --</option>
+                <option v-for="d in dadosFiscaisList" :key="d.id" :value="d.id">{{ d.descricao }}</option>
+              </SelectInput>
+              <div class="small text-muted mt-1">Se selecionado, sobrescreve os dados fiscais da categoria</div>
+            </div>
           <div class="col-md-4">
             <label class="form-label">Posição</label>
             <input v-model.number="form.position" type="number" class="form-control" />
@@ -103,12 +111,13 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null, dadosFiscaisId: null })
 const cashbackEnabled = ref(false)
 const groups = ref([])
 const categories = ref([])
 const menus = ref([])
 const technicalSheets = ref([])
+const dadosFiscaisList = ref([])
 const saving = ref(false)
 const error = ref('')
 const uploadProgress = ref(0)
@@ -122,7 +131,7 @@ async function load(){
       const res = await api.get('/menu/products')
       const all = res.data || []
       const p = all.find(x=>x.id===id)
-      if(p){ form.value = { ...p, optionGroupIds: [], categoryId: p.categoryId || (p.category && p.category.id) || null, cashbackPercent: (p.cashbackPercent !== undefined ? p.cashbackPercent : (p.cashback || null)) } }
+      if(p){ form.value = { ...p, optionGroupIds: [], categoryId: p.categoryId || (p.category && p.category.id) || null, cashbackPercent: (p.cashbackPercent !== undefined ? p.cashbackPercent : (p.cashback || null)), dadosFiscaisId: p.dadosFiscaisId || null } }
       // load attached groups
       try{ const att = await api.get(`/menu/products/${id}/option-groups`); form.value.optionGroupIds = att.data.attachedIds || [] }catch(e){}
     }
@@ -147,6 +156,8 @@ async function load(){
       const s = cr.data || null
       cashbackEnabled.value = !!(s && (s.enabled || s.isEnabled))
     }catch(e){ cashbackEnabled.value = false }
+    // load dados fiscais for selector
+    try{ const df = await api.get('/settings/dados-fiscais'); dadosFiscaisList.value = df.data || [] }catch(e){}
   }catch(e){ console.error(e); error.value = 'Falha ao carregar dados' }
 }
 
@@ -166,7 +177,7 @@ async function save(){
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
     if(isEdit){
-      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId }
+      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
       // include cashbackPercent when cashback module is enabled (allow null to clear)
       if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       await api.patch(`/menu/products/${id}`, payload)
@@ -185,7 +196,7 @@ async function save(){
         else { router.push({ path: '/menu/admin' }) }
       }
     } else {
-  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId }
+  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
   if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       const res = await api.post('/menu/products', payload)
       const newId = res.data.id

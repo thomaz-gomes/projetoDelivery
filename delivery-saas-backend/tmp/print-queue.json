@@ -2027,5 +2027,507 @@
     },
     "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x Salada Caesar             R$ 22.00\n  - Bacon — R$4.50\\n  - Médio — R$6.00\n------------------------------\nSub-total = R$ 32.50\n\nTOTAL a cobrar: R$ 32.50\nPagamento: Crédito\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
     "includeFullOrder": true
+  },
+  {
+    "id": "1771467874007-222177",
+    "createdAt": 1771467874007,
+    "order": {
+      "id": "794f8709-bc12-4381-8cf2-d7d120c966b5",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "49",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Crédito",
+          "methodCode": "Crédito",
+          "amount": 49,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Pizza Margherita",
+              "quantity": 1,
+              "price": 34.5,
+              "notes": null,
+              "options": [
+                {
+                  "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+                  "name": "Bacon",
+                  "price": 4.5,
+                  "quantity": 1
+                },
+                {
+                  "id": "123618c9-c034-4907-a6dc-a21979169316",
+                  "name": "Grande",
+                  "price": 10,
+                  "quantity": 1
+                }
+              ]
+            }
+          ],
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "address": null
+        },
+        "computedTotal": 34.5,
+        "total": 49
+      },
+      "createdAt": "2026-02-19T02:24:33.730Z",
+      "updatedAt": "2026-02-19T02:24:33.730Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "c2cbef4d-20b3-4001-a8c8-e1e1f9b7a84a",
+          "orderId": "794f8709-bc12-4381-8cf2-d7d120c966b5",
+          "productId": null,
+          "name": "Pizza Margherita",
+          "quantity": 1,
+          "price": "34.5",
+          "notes": null,
+          "options": [
+            {
+              "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+              "name": "Bacon",
+              "price": 4.5,
+              "quantity": 1
+            },
+            {
+              "id": "123618c9-c034-4907-a6dc-a21979169316",
+              "name": "Grande",
+              "price": 10,
+              "quantity": 1
+            }
+          ]
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null,
+      "deliveryAddress": null,
+      "receiptTemplate": "{\"v\":2,\"blocks\":[{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"{{header_name}}\",\"a\":\"center\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"PEDIDO #{{display_id}}\",\"a\":\"center\",\"b\":true,\"s\":\"xl\"},{\"t\":\"text\",\"c\":\"Data: {{data_pedido}}  Hora: {{hora_pedido}}\"},{\"t\":\"cond\",\"key\":\"tipo_pedido\",\"c\":\"Tipo: {{tipo_pedido}}\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"CLIENTE: {{nome_cliente}}\",\"b\":true},{\"t\":\"text\",\"c\":\"Telefone: {{telefone_cliente}}\"},{\"t\":\"text\",\"c\":\"Endereco: {{endereco_cliente}}\"},{\"t\":\"sep\"},{\"t\":\"items\",\"itemBold\":true,\"itemSize\":\"normal\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Qtd itens: {{total_itens_count}}\",\"s\":\"xl\",\"b\":true},{\"t\":\"text\",\"c\":\"Subtotal: R$ {{subtotal}}\"},{\"t\":\"cond\",\"key\":\"taxa_entrega\",\"c\":\"Taxa entrega: R$ {{taxa_entrega}}\"},{\"t\":\"cond\",\"key\":\"desconto\",\"c\":\"Desconto: R$ {{desconto}}\"},{\"t\":\"text\",\"c\":\"TOTAL: R$ {{total}}\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"FORMAS DE PAGAMENTO\",\"b\":true},{\"t\":\"payments\"},{\"t\":\"cond\",\"key\":\"observacoes\",\"c\":\"OBS: {{observacoes}}\"},{\"t\":\"qr\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Obrigado e bom apetite!\",\"a\":\"center\"},{\"t\":\"sep\"}]}",
+      "copies": 1,
+      "printerName": "Print iD2",
+      "headerName": "Minha Loja de Testes",
+      "headerCity": "São Paulo",
+      "printerInterface": "printer:Print iD2",
+      "printerType": "EPSON",
+      "paperWidth": 80
+    },
+    "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x Pizza Margherita          R$ 34.50\n  - Bacon — R$4.50\\n  - Grande — R$10.00\n------------------------------\nSub-total = R$ 49.00\n\nTOTAL a cobrar: R$ 49.00\nPagamento: Crédito\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "includeFullOrder": true
+  },
+  {
+    "id": "1771495413146-853131",
+    "createdAt": 1771495413146,
+    "order": {
+      "id": "6e623594-7b5e-4814-9261-3f8b192ccbe5",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": null,
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "22",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Pix na maquininha",
+          "methodCode": "Pix na maquininha",
+          "amount": 22,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Suco Natural 500ml",
+              "quantity": 1,
+              "price": 7.5,
+              "notes": null,
+              "options": [
+                {
+                  "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+                  "name": "Bacon",
+                  "price": 4.5,
+                  "quantity": 1
+                },
+                {
+                  "id": "123618c9-c034-4907-a6dc-a21979169316",
+                  "name": "Grande",
+                  "price": 10,
+                  "quantity": 1
+                }
+              ]
+            }
+          ],
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "address": null
+        },
+        "computedTotal": 7.5,
+        "total": 22
+      },
+      "createdAt": "2026-02-19T10:03:32.908Z",
+      "updatedAt": "2026-02-19T10:03:32.908Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "efc83139-accc-412f-9ea0-a574badaa331",
+          "orderId": "6e623594-7b5e-4814-9261-3f8b192ccbe5",
+          "productId": null,
+          "name": "Suco Natural 500ml",
+          "quantity": 1,
+          "price": "7.5",
+          "notes": null,
+          "options": [
+            {
+              "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+              "name": "Bacon",
+              "price": 4.5,
+              "quantity": 1
+            },
+            {
+              "id": "123618c9-c034-4907-a6dc-a21979169316",
+              "name": "Grande",
+              "price": 10,
+              "quantity": 1
+            }
+          ]
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null,
+      "deliveryAddress": null,
+      "receiptTemplate": "{\"v\":2,\"blocks\":[{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"{{header_name}}\",\"a\":\"center\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"PEDIDO #{{display_id}}\",\"a\":\"center\",\"b\":true,\"s\":\"xl\"},{\"t\":\"text\",\"c\":\"Data: {{data_pedido}}  Hora: {{hora_pedido}}\"},{\"t\":\"cond\",\"key\":\"tipo_pedido\",\"c\":\"Tipo: {{tipo_pedido}}\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"CLIENTE: {{nome_cliente}}\",\"b\":true},{\"t\":\"text\",\"c\":\"Telefone: {{telefone_cliente}}\"},{\"t\":\"text\",\"c\":\"Endereco: {{endereco_cliente}}\"},{\"t\":\"sep\"},{\"t\":\"items\",\"itemBold\":true,\"itemSize\":\"normal\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Qtd itens: {{total_itens_count}}\",\"s\":\"xl\",\"b\":true},{\"t\":\"text\",\"c\":\"Subtotal: R$ {{subtotal}}\"},{\"t\":\"cond\",\"key\":\"taxa_entrega\",\"c\":\"Taxa entrega: R$ {{taxa_entrega}}\"},{\"t\":\"cond\",\"key\":\"desconto\",\"c\":\"Desconto: R$ {{desconto}}\"},{\"t\":\"text\",\"c\":\"TOTAL: R$ {{total}}\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"FORMAS DE PAGAMENTO\",\"b\":true},{\"t\":\"payments\"},{\"t\":\"cond\",\"key\":\"observacoes\",\"c\":\"OBS: {{observacoes}}\"},{\"t\":\"qr\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Obrigado e bom apetite!\",\"a\":\"center\"},{\"t\":\"sep\"}]}",
+      "copies": 1,
+      "printerName": "Print iD2",
+      "headerName": "Minha Loja de Testes",
+      "headerCity": "São Paulo",
+      "printerInterface": "printer:Print iD2",
+      "printerType": "EPSON",
+      "paperWidth": 80
+    },
+    "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x Suco Natural 500ml        R$  7.50\n  - Bacon — R$4.50\\n  - Grande — R$10.00\n------------------------------\nSub-total = R$ 22.00\n\nTOTAL a cobrar: R$ 22.00\nPagamento: Pix na maquininha\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "includeFullOrder": true
+  },
+  {
+    "id": "1771496730338-694355",
+    "createdAt": 1771496730338,
+    "order": {
+      "id": "44a65423-44d8-4a61-8101-8da8ebea98f2",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "42.5",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Crédito",
+          "methodCode": "Crédito",
+          "amount": 42.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "X-Burger Especial",
+              "quantity": 1,
+              "price": 28,
+              "notes": null,
+              "options": [
+                {
+                  "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+                  "name": "Bacon",
+                  "price": 4.5,
+                  "quantity": 1
+                },
+                {
+                  "id": "123618c9-c034-4907-a6dc-a21979169316",
+                  "name": "Grande",
+                  "price": 10,
+                  "quantity": 1
+                }
+              ]
+            }
+          ],
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "address": null
+        },
+        "computedTotal": 28,
+        "total": 42.5
+      },
+      "createdAt": "2026-02-19T10:25:29.801Z",
+      "updatedAt": "2026-02-19T10:25:29.801Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "e91af50d-e317-4a47-9354-ce78a8a1d12e",
+          "orderId": "44a65423-44d8-4a61-8101-8da8ebea98f2",
+          "productId": null,
+          "name": "X-Burger Especial",
+          "quantity": 1,
+          "price": "28",
+          "notes": null,
+          "options": [
+            {
+              "id": "9b37601d-761d-47aa-9ad5-23642068926f",
+              "name": "Bacon",
+              "price": 4.5,
+              "quantity": 1
+            },
+            {
+              "id": "123618c9-c034-4907-a6dc-a21979169316",
+              "name": "Grande",
+              "price": 10,
+              "quantity": 1
+            }
+          ]
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null,
+      "deliveryAddress": null,
+      "receiptTemplate": "{\"v\":2,\"blocks\":[{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"{{header_name}}\",\"a\":\"center\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"PEDIDO #{{display_id}}\",\"a\":\"center\",\"b\":true,\"s\":\"xl\"},{\"t\":\"text\",\"c\":\"Data: {{data_pedido}}  Hora: {{hora_pedido}}\"},{\"t\":\"cond\",\"key\":\"tipo_pedido\",\"c\":\"Tipo: {{tipo_pedido}}\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"CLIENTE: {{nome_cliente}}\",\"b\":true},{\"t\":\"text\",\"c\":\"Telefone: {{telefone_cliente}}\"},{\"t\":\"text\",\"c\":\"Endereco: {{endereco_cliente}}\"},{\"t\":\"sep\"},{\"t\":\"items\",\"itemBold\":true,\"itemSize\":\"normal\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Qtd itens: {{total_itens_count}}\",\"s\":\"xl\",\"b\":true},{\"t\":\"text\",\"c\":\"Subtotal: R$ {{subtotal}}\"},{\"t\":\"cond\",\"key\":\"taxa_entrega\",\"c\":\"Taxa entrega: R$ {{taxa_entrega}}\"},{\"t\":\"cond\",\"key\":\"desconto\",\"c\":\"Desconto: R$ {{desconto}}\"},{\"t\":\"text\",\"c\":\"TOTAL: R$ {{total}}\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"FORMAS DE PAGAMENTO\",\"b\":true},{\"t\":\"payments\"},{\"t\":\"cond\",\"key\":\"observacoes\",\"c\":\"OBS: {{observacoes}}\"},{\"t\":\"qr\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Obrigado e bom apetite!\",\"a\":\"center\"},{\"t\":\"sep\"}]}",
+      "copies": 1,
+      "printerName": "Print iD2",
+      "headerName": "Minha Loja de Testes",
+      "headerCity": "São Paulo",
+      "printerInterface": "printer:Print iD2",
+      "printerType": "EPSON",
+      "paperWidth": 80
+    },
+    "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x X-Burger Especial         R$ 28.00\n  - Bacon — R$4.50\\n  - Grande — R$10.00\n------------------------------\nSub-total = R$ 42.50\n\nTOTAL a cobrar: R$ 42.50\nPagamento: Crédito\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "printerInterface": "printer:Print iD2",
+    "printerType": "EPSON",
+    "paperWidth": 80,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1771504606064-842336",
+    "createdAt": 1771504606064,
+    "order": {
+      "id": "4df608b9-74b2-4cab-ab47-0f4acd40862b",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "6.5",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Crédito",
+          "methodCode": "Crédito",
+          "amount": 6.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Coca cola 350ml",
+              "quantity": 1,
+              "price": 6.5,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "address": null
+        },
+        "computedTotal": 6.5,
+        "total": 6.5
+      },
+      "createdAt": "2026-02-19T12:36:45.523Z",
+      "updatedAt": "2026-02-19T12:36:45.523Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "330f0ac7-a404-479f-8c55-95291ed2146d",
+          "orderId": "4df608b9-74b2-4cab-ab47-0f4acd40862b",
+          "productId": null,
+          "name": "Coca cola 350ml",
+          "quantity": 1,
+          "price": "6.5",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null,
+      "deliveryAddress": null,
+      "receiptTemplate": "{\"v\":2,\"blocks\":[{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"{{header_name}}\",\"a\":\"center\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"PEDIDO #{{display_id}}\",\"a\":\"center\",\"b\":true,\"s\":\"xl\"},{\"t\":\"text\",\"c\":\"Data: {{data_pedido}}  Hora: {{hora_pedido}}\"},{\"t\":\"cond\",\"key\":\"tipo_pedido\",\"c\":\"Tipo: {{tipo_pedido}}\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"CLIENTE: {{nome_cliente}}\",\"b\":true},{\"t\":\"text\",\"c\":\"Telefone: {{telefone_cliente}}\"},{\"t\":\"text\",\"c\":\"Endereco: {{endereco_cliente}}\"},{\"t\":\"sep\"},{\"t\":\"items\",\"itemBold\":true,\"itemSize\":\"normal\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Qtd itens: {{total_itens_count}}\",\"s\":\"xl\",\"b\":true},{\"t\":\"text\",\"c\":\"Subtotal: R$ {{subtotal}}\"},{\"t\":\"cond\",\"key\":\"taxa_entrega\",\"c\":\"Taxa entrega: R$ {{taxa_entrega}}\"},{\"t\":\"cond\",\"key\":\"desconto\",\"c\":\"Desconto: R$ {{desconto}}\"},{\"t\":\"text\",\"c\":\"TOTAL: R$ {{total}}\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"FORMAS DE PAGAMENTO\",\"b\":true},{\"t\":\"payments\"},{\"t\":\"cond\",\"key\":\"observacoes\",\"c\":\"OBS: {{observacoes}}\"},{\"t\":\"qr\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Obrigado e bom apetite!\",\"a\":\"center\"},{\"t\":\"sep\"}]}",
+      "copies": 1,
+      "printerName": "Print iD2",
+      "headerName": "Minha Loja de Testes",
+      "headerCity": "São Paulo",
+      "printerInterface": "printer:Print iD2",
+      "printerType": "EPSON",
+      "paperWidth": 80
+    },
+    "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x Coca cola 350ml           R$  6.50\n------------------------------\nSub-total = R$ 6.50\n\nTOTAL a cobrar: R$ 6.50\nPagamento: Crédito\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "printerInterface": "printer:Print iD2",
+    "printerType": "EPSON",
+    "paperWidth": 80,
+    "includeFullOrder": true
+  },
+  {
+    "id": "1771506374645-31960",
+    "createdAt": 1771506374645,
+    "order": {
+      "id": "9e3fdb88-b17e-43cd-8416-0dc5c494eb54",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": null,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "Thomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "d575692c-6c25-4be7-821e-78c90ac9e919",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "6.5",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": "0",
+      "deliveryFee": "0",
+      "payload": {
+        "payment": {
+          "method": "Dinheiro",
+          "methodCode": "Dinheiro",
+          "amount": 6.5,
+          "changeFor": null,
+          "raw": null
+        },
+        "rawPayload": {
+          "source": "PDV",
+          "items": [
+            {
+              "name": "Coca cola 350ml",
+              "quantity": 1,
+              "price": 6.5,
+              "notes": null,
+              "options": []
+            }
+          ],
+          "customer": {
+            "name": "Thomaz",
+            "contact": "73991429676"
+          },
+          "address": null
+        },
+        "computedTotal": 6.5,
+        "total": 6.5
+      },
+      "createdAt": "2026-02-19T13:06:14.445Z",
+      "updatedAt": "2026-02-19T13:06:14.445Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "935837d1-c441-44b5-90fd-7ccc00cdccd6",
+          "orderId": "9e3fdb88-b17e-43cd-8416-0dc5c494eb54",
+          "productId": null,
+          "name": "Coca cola 350ml",
+          "quantity": 1,
+          "price": "6.5",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "qrDataUrl": null,
+      "rasterDataUrl": null,
+      "qrText": null,
+      "deliveryAddress": null,
+      "receiptTemplate": "{\"v\":2,\"blocks\":[{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"{{header_name}}\",\"a\":\"center\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"PEDIDO #{{display_id}}\",\"a\":\"center\",\"b\":true,\"s\":\"xl\"},{\"t\":\"text\",\"c\":\"Data: {{data_pedido}}  Hora: {{hora_pedido}}\"},{\"t\":\"cond\",\"key\":\"tipo_pedido\",\"c\":\"Tipo: {{tipo_pedido}}\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"CLIENTE: {{nome_cliente}}\",\"b\":true},{\"t\":\"text\",\"c\":\"Telefone: {{telefone_cliente}}\"},{\"t\":\"text\",\"c\":\"Endereco: {{endereco_cliente}}\"},{\"t\":\"sep\"},{\"t\":\"items\",\"itemBold\":true,\"itemSize\":\"normal\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Qtd itens: {{total_itens_count}}\",\"s\":\"xl\",\"b\":true},{\"t\":\"text\",\"c\":\"Subtotal: R$ {{subtotal}}\"},{\"t\":\"cond\",\"key\":\"taxa_entrega\",\"c\":\"Taxa entrega: R$ {{taxa_entrega}}\"},{\"t\":\"cond\",\"key\":\"desconto\",\"c\":\"Desconto: R$ {{desconto}}\"},{\"t\":\"text\",\"c\":\"TOTAL: R$ {{total}}\",\"b\":true,\"s\":\"lg\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"FORMAS DE PAGAMENTO\",\"b\":true},{\"t\":\"payments\"},{\"t\":\"cond\",\"key\":\"observacoes\",\"c\":\"OBS: {{observacoes}}\"},{\"t\":\"qr\"},{\"t\":\"sep\"},{\"t\":\"text\",\"c\":\"Obrigado e bom apetite!\",\"a\":\"center\"},{\"t\":\"sep\"}]}",
+      "copies": 1,
+      "printerName": "Print iD2",
+      "headerName": "Minha Loja de Testes",
+      "headerCity": "São Paulo",
+      "printerInterface": "printer:Print iD2",
+      "printerType": "EPSON",
+      "paperWidth": 80
+    },
+    "text": "#PEDIDO - Cliente: Não informado\nEndereço: -\n------------------------------\n 1x Coca cola 350ml           R$  6.50\n------------------------------\nSub-total = R$ 6.50\n\nTOTAL a cobrar: R$ 6.50\nPagamento: Dinheiro\n==============================\nCanal de venda - \nObrigado e bom apetite!\n==============================\n\n\n",
+    "printerInterface": "printer:Print iD2",
+    "printerType": "EPSON",
+    "paperWidth": 80,
+    "includeFullOrder": true
   }
 ]

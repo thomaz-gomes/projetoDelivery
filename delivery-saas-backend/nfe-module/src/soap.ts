@@ -7,28 +7,42 @@ import { loadConfig } from './config'
 import { readPfx, readPfxFromBuffer } from './sign'
 import { SignedXml } from 'xml-crypto'
 
+// Stable WS-Security token id used in BinarySecurityToken and SecurityTokenReference
+const WSSEC_TOKEN_ID = 'X509-Token'
+
 export type SendOptions = {
   certBuffer?: Buffer
   certPath?: string
   certPassword?: string
   environment?: 'homologation' | 'production'
   uf?: string // state code (ex: 'ba')
+  mod?: string // '55' for NF-e, '65' for NFC-e (default: '65')
   wsSecurity?: boolean // include WS-Security header (BinarySecurityToken + Timestamp)
   signSoap?: boolean // attempt to sign the SOAP Body using the provided cert/key
 }
 
 /**
- * Build a SOAP 1.2 envelope for NFe Autorizacao with the signed NFe inside nfeDadosMsg
+ * Build a SOAP 1.2 envelope for NFe/NFC-e Autorizacao.
+ * mod='55' → NFeAutorizacao4 namespace (NF-e)
+ * mod='65' → NfceAutorizacao4 namespace by default, but if the endpoint URL uses
+ *             NFeAutorizacao4 (e.g. SVRS states like BA), that namespace is used instead.
  */
-function buildAutorizacaoEnvelope(signedXml: string, headerXml?: string) {
+function buildAutorizacaoEnvelope(signedXml: string, mod: string = '65', headerXml?: string, endpoint?: string) {
   const lote = Date.now().toString()
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">\n  <soap12:Header>${headerXml || ''}</soap12:Header>\n  <soap12:Body>\n    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">\n      <enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">\n        <idLote>${lote}</idLote>\n        <indSinc>1</indSinc>\n        ${signedXml}\n      </enviNFe>\n    </nfeDadosMsg>\n  </soap12:Body>\n</soap12:Envelope>`
+  const useNfeNs = mod === '55' || (!!endpoint && /NFeAutorizacao/i.test(endpoint))
+  const ns = useNfeNs
+    ? 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4'
+    : 'http://www.portalfiscal.inf.br/nfe/wsdl/NfceAutorizacao4'
+  // Strip XML declaration from signedXml before embedding (SEFAZ rejects it inside SOAP body)
+  const innerXml = signedXml.trim().replace(/^<\?xml[^?]*\?>\s*/i, '')
+  // enviNFe must have NO whitespace between tags (SEFAZ cStat 588 otherwise)
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">\n  <soap12:Header>${headerXml || ''}</soap12:Header>\n  <soap12:Body>\n    <nfeDadosMsg xmlns="${ns}"><enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${lote}</idLote><indSinc>1</indSinc>${innerXml}</enviNFe></nfeDadosMsg>\n  </soap12:Body>\n</soap12:Envelope>`
 }
 
 function buildWsSecurityHeader(certB64: string) {
   const created = new Date().toISOString()
   const expires = new Date(Date.now() + 5 * 60 * 1000).toISOString()
-  return `<wsse:Security xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">\n    <wsu:Timestamp wsu:Id="TS-${Date.now()}">\n      <wsu:Created>${created}</wsu:Created>\n      <wsu:Expires>${expires}</wsu:Expires>\n    </wsu:Timestamp>\n    <wsse:BinarySecurityToken EncodingType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary" ValueType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-x509-token-profile-1.0#X509v3" wsu:Id="X509-${Date.now()}">\n      ${certB64}\n    </wsse:BinarySecurityToken>\n  </wsse:Security>`
+  return `<wsse:Security xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">\n    <wsu:Timestamp wsu:Id="TS-${Date.now()}">\n      <wsu:Created>${created}</wsu:Created>\n      <wsu:Expires>${expires}</wsu:Expires>\n    </wsu:Timestamp>\n    <wsse:BinarySecurityToken EncodingType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary" ValueType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-x509-token-profile-1.0#X509v3" wsu:Id="${WSSEC_TOKEN_ID}">\n      ${certB64}\n    </wsse:BinarySecurityToken>\n  </wsse:Security>`
 }
 
 /**
@@ -39,13 +53,30 @@ export async function sendNFCeToSefaz(signedXml: string, opts: SendOptions = {})
   const cfg = loadConfig()
   const env = opts.environment || cfg.environment || 'homologation'
   const uf = (opts.uf || 'ba').toLowerCase()
+
+  // Auto-detect mod from XML if not provided (look for <mod>65</mod>)
+  let mod = opts.mod || '65'
+  if (!opts.mod) {
+    const modMatch = signedXml.match(/<mod>(\d+)<\/mod>/)
+    if (modMatch) mod = modMatch[1]
+  }
+
   // resolve endpoint from config.sefaz
   const sefazCfg = (cfg.sefaz && cfg.sefaz[uf]) || null
   if (!sefazCfg) throw new Error(`SEFAZ config for UF '${uf}' not found in config.json`)
-  const endpoint = sefazCfg[env] && sefazCfg[env].nfe
-  if (!endpoint) throw new Error(`NFe endpoint for UF '${uf}' environment '${env}' not configured`)
 
-  const envelope = buildAutorizacaoEnvelope(signedXml)
+  // Use NFC-e endpoint (nfce) when mod=65, fallback to NF-e endpoint (nfe)
+  const endpointKey = mod === '55' ? 'nfe' : 'nfce'
+  const endpoint = (sefazCfg[env] && (sefazCfg[env][endpointKey] || sefazCfg[env].nfe))
+  if (!endpoint) throw new Error(`${endpointKey.toUpperCase()} endpoint for UF '${uf}' environment '${env}' not configured`)
+
+  // SOAP action: use NFeAutorizacao4 when endpoint uses that service (e.g. SVRS/BA for NFC-e)
+  const useNfeAction = mod === '55' || /NFeAutorizacao/i.test(endpoint)
+  const soapAction = useNfeAction
+    ? 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote'
+    : 'http://www.portalfiscal.inf.br/nfe/wsdl/NfceAutorizacao4/nfceAutorizacaoLote'
+
+  const envelope = buildAutorizacaoEnvelope(signedXml, mod, undefined, endpoint)
   // optionally build WS-Security header and/or sign SOAP body
   let headerXml: string | undefined
   if (opts.wsSecurity) {
@@ -53,17 +84,17 @@ export async function sendNFCeToSefaz(signedXml: string, opts: SendOptions = {})
     let certB64: string | undefined
     let privateKeyPem: string | undefined
     if (opts.certBuffer) {
-      const info = readPfxFromBuffer(opts.certBuffer, opts.certPassword || '')
+      const info = readPfxFromBuffer(opts.certBuffer, opts.certPassword ?? '')
       certB64 = info.certB64
       privateKeyPem = info.privateKeyPem
     } else if (opts.certPath) {
-      const info = readPfx(opts.certPath, opts.certPassword || '')
+      const info = readPfx(opts.certPath, opts.certPassword ?? '')
       certB64 = info.certB64
       privateKeyPem = info.privateKeyPem
     } else if (cfg.certPath) {
       const p = path.isAbsolute(cfg.certPath) ? cfg.certPath : path.join(process.cwd(), cfg.certPath)
       if (fs.existsSync(p)) {
-        const info = readPfx(p, opts.certPassword || cfg.certPassword || '')
+        const info = readPfx(p, opts.certPassword ?? cfg.certPassword ?? '')
         certB64 = info.certB64
         privateKeyPem = info.privateKeyPem
       }
@@ -76,16 +107,16 @@ export async function sendNFCeToSefaz(signedXml: string, opts: SendOptions = {})
       if (opts.signSoap && privateKeyPem) {
         try {
           // build envelope with header so signature references the Body
-          const envWithHeader = buildAutorizacaoEnvelope(signedXml, headerXml)
+          const envWithHeader = buildAutorizacaoEnvelope(signedXml, mod, headerXml, endpoint)
           const sig = new SignedXml()
           sig.signatureAlgorithm = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1'
           // reference SOAP Body
-          sig.addReference("//*[local-name(.)='Body']", ['http://www.w3.org/2000/09/xmldsig#enveloped-signature', 'http://www.w3.org/2001/10/xml-exc-c14n#'], 'http://www.w3.org/2000/09/xmldsig#sha1')
+          sig.addReference("//*[local-name(.)='Body']", ['http://www.w3.org/2000/09/xmldsig#enveloped-signature', 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'], 'http://www.w3.org/2000/09/xmldsig#sha1')
           sig.signingKey = privateKeyPem
           // include SecurityTokenReference that points to BinarySecurityToken
           sig.keyInfoProvider = {
             getKeyInfo: function () {
-              return `<wsse:SecurityTokenReference xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><wsse:Reference URI="#X509-${Date.now()}" ValueType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-x509-token-profile-1.0#X509v3"/></wsse:SecurityTokenReference>`
+              return `<wsse:SecurityTokenReference xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><wsse:Reference URI="#${WSSEC_TOKEN_ID}" ValueType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-x509-token-profile-1.0#X509v3"/></wsse:SecurityTokenReference>`
             }
           } as any
 
@@ -107,7 +138,7 @@ export async function sendNFCeToSefaz(signedXml: string, opts: SendOptions = {})
     }
   }
 
-  const envelopeWithHeader = buildAutorizacaoEnvelope(signedXml, headerXml)
+  const envelopeWithHeader = buildAutorizacaoEnvelope(signedXml, mod, headerXml, endpoint)
 
   // Build HTTPS agent with client certificate (mutual TLS) if provided.
   // Use node-forge to extract PEM key+cert from PFX instead of passing the raw
@@ -115,7 +146,7 @@ export async function sendNFCeToSefaz(signedXml: string, opts: SendOptions = {})
   // rejects legacy PKCS12 encryption (RC2/DES) commonly used by Brazilian CAs.
   let httpsAgent: https.Agent | undefined
   if (opts.certBuffer || opts.certPath || cfg.certPath) {
-    const passphrase = opts.certPassword || cfg.certPassword || ''
+    const passphrase = opts.certPassword ?? cfg.certPassword ?? ''
     let pfxBuf: Buffer | undefined
     if (opts.certBuffer) pfxBuf = opts.certBuffer
     else {
@@ -143,7 +174,7 @@ export async function sendNFCeToSefaz(signedXml: string, opts: SendOptions = {})
   }
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote"'
+    'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction}"`
   }
 
   const res = await axios.post(endpoint, envelopeWithHeader, { headers, httpsAgent, timeout: 60000 })

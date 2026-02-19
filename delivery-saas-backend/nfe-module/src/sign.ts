@@ -8,7 +8,18 @@ import { SignedXml } from 'xml-crypto'
 export function readPfx(pfxPath: string, password: string) {
   const raw = fs.readFileSync(pfxPath)
   const p12Asn1 = forge.asn1.fromDer(raw.toString('binary'))
-  const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password)
+  let p12: any
+  try {
+    p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password || '')
+  } catch (e1) {
+    // If provided password fails and it wasn't already empty, try empty string
+    // (some certificates have no password; also guards against null/undefined)
+    if (password) {
+      try { p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, '') } catch { throw e1 }
+    } else {
+      throw e1
+    }
+  }
   let keyObj: any = null
   const certs: any[] = []
   for (const safeContent of p12.safeContents) {
@@ -47,7 +58,17 @@ export function readPfxFromBuffer(buffer: Buffer, password: string) {
   // forge expects binary-encoded string
   const raw = buffer.toString('binary')
   const p12Asn1 = forge.asn1.fromDer(raw)
-  const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password)
+  let p12: any
+  try {
+    p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password || '')
+  } catch (e1) {
+    // If provided password fails and it wasn't already empty, try empty string
+    if (password) {
+      try { p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, '') } catch { throw e1 }
+    } else {
+      throw e1
+    }
+  }
   let keyObj: any = null
   const certs: any[] = []
   for (const safeContent of p12.safeContents) {
@@ -101,5 +122,13 @@ export function signXml(xml: string, privateKeyPem: string, certB64: string) {
   } as any
 
   sig.computeSignature(xml)
-  return sig.getSignedXml()
+  let signed = sig.getSignedXml()
+
+  // Ensure default NFe namespace present — some consumers (SEFAZ) reject
+  // documents that don't include the standard namespace on the NFe element.
+  if (!/\<NFe[^>]*xmlns=/.test(signed)) {
+    signed = signed.replace(/<NFe(\s|>)/, `<NFe xmlns="http://www.portalfiscal.inf.br/nfe"$1`)
+  }
+
+  return signed
 }

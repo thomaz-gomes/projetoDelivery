@@ -677,10 +677,9 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         }
       }
       if (!resolvedStore) {
-        const count = await prisma.store.count({ where: { companyId } });
-        if (count === 1) {
-          resolvedStore = await prisma.store.findFirst({ where: { companyId } });
-        }
+        // Fallback: use first store of the company (all orders must have a storeId)
+        resolvedStore = await prisma.store.findFirst({ where: { companyId }, orderBy: { createdAt: 'asc' } });
+        if (resolvedStore) console.log('PDV: storeId não informado, usando primeira loja:', resolvedStore.id);
       }
     } catch (e) { /* ignore */ }
 

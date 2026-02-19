@@ -118,6 +118,13 @@ async function resolveCompanyByMerchant(req, order) {
         }
       }
 
+      if (!resolvedStoreId) {
+        try {
+          const firstStore = await prisma.store.findFirst({ where: { companyId: integ.companyId }, select: { id: true }, orderBy: { createdAt: 'asc' } });
+          resolvedStoreId = firstStore?.id || null;
+          if (resolvedStoreId) console.log('iFood webhook: sem storeId na integração, usando primeira loja:', resolvedStoreId);
+        } catch (e) { /* ignore */ }
+      }
       return { companyId: integ.companyId, merchantId: String(merchantId), storeId: resolvedStoreId || null };
     }
   }

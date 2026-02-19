@@ -59,6 +59,7 @@ import { requireModule } from './modules.js'
 import financialRouter from './routes/financial/index.js'
 import metaPixelRouter from './routes/metaPixel.js'
 import mediaRouter from './routes/media.js'
+import dadosFiscaisRouter from './routes/dadosFiscais.js'
 
 const app = express();
 // When running behind a reverse proxy (EasyPanel / nginx / Cloudflare), enable
@@ -203,6 +204,8 @@ app.use('/cashback', requireModule('CASHBACK'), cashbackRouter);
 app.use('/financial', requireModule('FINANCIAL'), financialRouter);
 app.use('/meta-pixel', metaPixelRouter);
 app.use('/media', mediaRouter);
+app.use('/settings', dadosFiscaisRouter);
+app.use('/fiscal', dadosFiscaisRouter);
 app.use('/checkout', checkoutRouter);
 // Server-side rasterization endpoint (returns PNG data URL)
 app.use('/rasterize', rasterizeRouter);

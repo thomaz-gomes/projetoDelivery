@@ -24,6 +24,7 @@ const nav = [
   { name: 'Relatórios', to: '/reports', icon: 'bi bi-file-earmark-bar-graph', children: [
     { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
     { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
+    { name: 'Notas Fiscais', to: '/relatorios/nfe-emissoes', icon: 'bi bi-receipt' },
     { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat', moduleKey: 'stock' }
   ] },
   { name: 'Clientes', to: '/customers', icon: 'bi bi-person', children: [
@@ -61,6 +62,7 @@ const nav = [
   // Configurações has sub-items
     { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', children: [
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt' },
+    { name: 'Dados Fiscais', to: '/settings/dados-fiscais', icon: 'bi bi-receipt' },
     { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug' },
     { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp' },

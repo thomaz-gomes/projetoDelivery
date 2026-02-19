@@ -87,6 +87,9 @@ import SaasModules from './views/SaasModules.vue';
 import SaasAdmin from './views/SaasAdmin.vue';
 import CashbackSettings from './views/cashback/CashbackSettings.vue';
 import NfeEmissao from './views/NfeEmissao.vue';
+import NfeEmissoesRelatorio from './views/NfeEmissoesRelatorio.vue';
+import DadosFiscaisSettings from './views/DadosFiscaisSettings.vue';
+import DadosFiscaisForm from './views/DadosFiscaisForm.vue';
 import FinancialDashboard from './views/financial/FinancialDashboard.vue';
 import FinancialAccounts from './views/financial/FinancialAccounts.vue';
 import FinancialTransactions from './views/financial/FinancialTransactions.vue';
@@ -119,6 +122,9 @@ const router = createRouter({
   { path: '/riders/:id/account', component: RiderAccountAdmin, meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/rider-adjustments', component: RiderAdjustments, meta: { requiresAuth: true } },
   { path: '/settings/neighborhoods', component: Neighborhoods, meta: { requiresAuth: true } },
+  { path: '/settings/dados-fiscais', component: DadosFiscaisSettings, meta: { requiresAuth: true } },
+  { path: '/settings/dados-fiscais/new', component: DadosFiscaisForm, meta: { requiresAuth: true } },
+  { path: '/settings/dados-fiscais/:id', component: DadosFiscaisForm, meta: { requiresAuth: true } },
   { path: '/ingredient-groups', component: IngredientGroups, meta: { requiresAuth: true } },
   { path: '/ingredient-groups/new', component: IngredientGroupForm, meta: { requiresAuth: true } },
   { path: '/ingredient-groups/:id/edit', component: IngredientGroupForm, meta: { requiresAuth: true } },
@@ -206,6 +212,7 @@ const router = createRouter({
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
     { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true } },
     { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/relatorios/nfe-emissoes', component: NfeEmissoesRelatorio, meta: { requiresAuth: true, role: ['ADMIN', 'SUPER_ADMIN'] } },
     // ---- Módulo Financeiro ----
     { path: '/financial', component: FinancialDashboard, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/financial/accounts', component: FinancialAccounts, meta: { requiresAuth: true, role: 'ADMIN' } },

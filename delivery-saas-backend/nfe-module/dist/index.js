@@ -16,7 +16,9 @@ const soap_1 = require("./soap");
 const axios_1 = __importDefault(require("axios"));
 async function generateAndSignSimpleNFCe(example, options) {
     const cfg = (0, config_1.loadConfig)();
-    const xml = await (0, generate_1.generateNFCeXml)({ ...example });
+    const genResult = await (0, generate_1.generateNFCeXml)({ ...example });
+    const xml = genResult.xml;
+    const { chave44, tpAmb: genTpAmb, cscId: genCscId, csc: genCsc } = genResult;
     // If XSDs dir configured, attempt validation before signing
     try {
         if (cfg.xsdsDir) {
@@ -36,7 +38,7 @@ async function generateAndSignSimpleNFCe(example, options) {
     let privateKeyPem;
     let certPem;
     let certB64;
-    const password = options?.certPassword || cfg.certPassword;
+    const password = options?.certPassword ?? cfg.certPassword;
     if (options?.certBuffer) {
         const r = (0, sign_1.readPfxFromBuffer)(options.certBuffer, password);
         privateKeyPem = r.privateKeyPem;
@@ -51,7 +53,19 @@ async function generateAndSignSimpleNFCe(example, options) {
         certPem = r.certPem;
         certB64 = r.certB64;
     }
-    const signed = (0, sign_1.signXml)(xml, privateKeyPem, certB64);
+    let signed = (0, sign_1.signXml)(xml, privateKeyPem, certB64);
+    // For NFC-e (mod 65), insert infNFeSupl with QR Code after signing
+    const mod = example.mod || '65';
+    if (mod === '65' && genCsc && genCscId) {
+        const uf = example.uf || 'BA';
+        const qrCodeUrl = (0, generate_1.buildNFCeQrCodeUrl)(chave44, genTpAmb, genCscId, genCsc, uf);
+        const urlChave = (0, generate_1.getNFCeUrlChave)(genTpAmb, uf);
+        signed = (0, generate_1.insertInfNFeSupl)(signed, qrCodeUrl, urlChave);
+        console.log('[NFCe] QR Code URL:', qrCodeUrl);
+    }
+    else if (mod === '65') {
+        console.warn('[NFCe] CSC/CSCId not provided - infNFeSupl will be missing. NFC-e may be rejected.');
+    }
     // save signed XML to emitidas dir
     const dir = path_1.default.isAbsolute(cfg.xmlDirs.emitidas) ? cfg.xmlDirs.emitidas : path_1.default.join(process.cwd(), cfg.xmlDirs.emitidas);
     await fs_extra_1.default.mkdirp(dir);
@@ -93,7 +107,10 @@ async function loadCompanyCertBuffer(companyId) {
  * persistPayload: { companyId, orderId? }
  */
 async function sendAndPersist(signedXml, sendOpts, persistenceOpts) {
-    const res = await (0, soap_1.sendNFCeToSefaz)(signedXml, { certBuffer: sendOpts?.certBuffer, certPath: sendOpts?.certPath, certPassword: sendOpts?.certPassword, environment: sendOpts?.environment, uf: sendOpts?.uf, wsSecurity: true });
+    // Auto-detect mod from signed XML if not provided explicitly
+    const modMatch = signedXml.match(/<mod>(\d+)<\/mod>/);
+    const mod = sendOpts?.mod || (modMatch ? modMatch[1] : '65');
+    const res = await (0, soap_1.sendNFCeToSefaz)(signedXml, { certBuffer: sendOpts?.certBuffer, certPath: sendOpts?.certPath, certPassword: sendOpts?.certPassword, environment: sendOpts?.environment, uf: sendOpts?.uf, mod, wsSecurity: true });
     // If persistence URL provided, call backend to save protocol
     if (persistenceOpts?.persistenceUrl && persistenceOpts?.companyId) {
         try {

@@ -1,7 +1,14 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateNFCeXml = generateNFCeXml;
+exports.buildNFCeQrCodeUrl = buildNFCeQrCodeUrl;
+exports.getNFCeUrlChave = getNFCeUrlChave;
+exports.insertInfNFeSupl = insertInfNFeSupl;
 const xml2js_1 = require("xml2js");
+const crypto_1 = __importDefault(require("crypto"));
 /** IBGE state codes for Brazilian UFs */
 const UF_CODES = {
     AC: '12', AL: '27', AP: '16', AM: '13', BA: '29', CE: '23', DF: '53',
@@ -102,7 +109,8 @@ async function generateNFCeXml(payload) {
     const tpEmis = payload.tpEmis || '1';
     const cNF = randomCNF();
     const cUF = ufToCode(uf);
-    const dhEmi = new Date().toISOString().replace(/\.\d{3}Z$/, '-03:00'); // BR timezone placeholder
+    // BRT = UTC-3; subtract 3h from UTC so the timestamp value is correct for the -03:00 offset
+    const dhEmi = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '-03:00');
     const { chave44, cDV } = buildChaveAcesso(cUF, dhEmi, cnpj, mod, serie, nNF, tpEmis, cNF);
     const chaveId = `NFe${chave44}`;
     const vProdTotal = itens.reduce((s, i) => s + Number(i.vProd || 0), 0);
@@ -203,13 +211,20 @@ async function generateNFCeXml(payload) {
             }
         },
         transp: { modFrete: '9' }, // 9=Sem frete
-        pag: {
-            detPag: {
-                tPag: payload.pag?.tPag || '99',
-                vPag: fmtDec2(payload.pag?.vPag || vNF)
-            },
-            vTroco: fmtDec2(payload.pag?.vTroco || '0')
-        }
+        pag: (() => {
+            // Avoid tPag=99 (outros): SVRS rejects xPag in schema despite requiring it (known SVRS bug).
+            // Unknown methods default to 01 (dinheiro), which needs no extra fields.
+            const tPagVal = payload.pag?.tPag || '01';
+            const safeTpag = tPagVal === '99' ? '01' : tPagVal;
+            const detPag = {
+                tPag: safeTpag,
+                vPag: fmtDec2(payload.pag?.vPag || vNF),
+            };
+            // cStat 391: tPag=03/04 (credit/debit) requires <card> with tpIntegra=2 (não integrado)
+            if (safeTpag === '03' || safeTpag === '04')
+                detPag.card = { tpIntegra: '2' };
+            return { detPag, vTroco: fmtDec2(payload.pag?.vTroco || '0') };
+        })()
     };
     if (tpAmb === '2') {
         infNFe.infAdic = { infCpl: 'Documento emitido em ambiente de homologacao - sem valor fiscal' };
@@ -244,7 +259,9 @@ async function generateNFCeXml(payload) {
         };
     }
     else if ((destCPF || destCNPJ) && destXNome) {
-        infNFe.dest.xNome = destXNome;
+        infNFe.dest.xNome = tpAmb === '2'
+            ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
+            : destXNome;
     }
     infNFe.dest.indIEDest = '9'; // 9=Não Contribuinte
     // Debug: log dest to verify CPF is present
@@ -257,5 +274,70 @@ async function generateNFCeXml(payload) {
     };
     const builder = new xml2js_1.Builder({ headless: true, renderOpts: { pretty: false } });
     const xml = builder.buildObject(root);
-    return xml;
+    return { xml, chave44, tpAmb, cscId: payload.cscId || '', csc: payload.csc || '' };
+}
+/* ------------------------------------------------------------------ */
+/*  NFC-e QR Code helpers (infNFeSupl)                                */
+/* ------------------------------------------------------------------ */
+/** QR Code v2 URLs by UF – homologation & production
+ *  Note: qrCode element allows up to 1000 chars (not subject to TUri 85-char limit)
+ *  These must match SEFAZ's registered portal URLs exactly (cStat 395 otherwise) */
+const NFCE_QR_URLS = {
+    BA: {
+        homologation: 'http://hnfe.sefaz.ba.gov.br/servicos/nfce/modulos/geral/NFCEC_consulta_chave_acesso.aspx',
+        production: 'http://nfe.sefaz.ba.gov.br/servicos/nfce/modulos/geral/NFCEC_consulta_chave_acesso.aspx',
+    },
+};
+/** URL consulta por chave – TUri max 85 chars (NT2014.002 ZX03).
+ *  Source: http://nfce.encat.org/consulte-sua-nota-qr-code-versao-2-0/ */
+const NFCE_URL_CHAVE = {
+    BA: {
+        homologation: 'http://hinternet.sefaz.ba.gov.br/nfce/consulta', // 48 chars
+        production: 'http://www.sefaz.ba.gov.br/nfce/consulta', // 41 chars
+    },
+};
+/**
+ * Build the NFC-e QR Code URL (version 2).
+ *
+ * Format: `BASE?p=chNFe|2|tpAmb|cIdToken|cHashQRCode`
+ *   cHashQRCode = SHA256( chNFe|2|tpAmb|cIdToken + CSC )  → uppercase hex
+ */
+function buildNFCeQrCodeUrl(chave44, tpAmb, cscId, csc, uf = 'BA') {
+    const env = tpAmb === '2' ? 'homologation' : 'production';
+    const baseUrl = NFCE_QR_URLS[uf.toUpperCase()]?.[env]
+        || NFCE_QR_URLS['BA'][env];
+    // Concatenation for hash: chNFe|2|tpAmb|cIdToken  +  CSC  (no separator before CSC)
+    // Hash algorithm: SHA1 per NFC-e spec v2 (NT 2013.001) - confirmed by sped-nfe reference
+    const concat = `${chave44}|2|${tpAmb}|${cscId}${csc}`;
+    const hash = crypto_1.default.createHash('sha1').update(concat).digest('hex').toUpperCase();
+    return `${baseUrl}?p=${chave44}|2|${tpAmb}|${cscId}|${hash}`;
+}
+/**
+ * Return the NFC-e "urlChave" (consulta por chave de acesso) for a given UF/environment.
+ */
+function getNFCeUrlChave(tpAmb, uf = 'BA') {
+    const env = tpAmb === '2' ? 'homologation' : 'production';
+    return NFCE_URL_CHAVE[uf.toUpperCase()]?.[env]
+        || NFCE_URL_CHAVE['BA'][env];
+}
+/**
+ * Insert <infNFeSupl> into the signed NFC-e XML, right before </NFe>.
+ *
+ * Position: after <Signature> and before the closing </NFe> tag.
+ * The qrCode value MUST be wrapped in CDATA.
+ */
+function insertInfNFeSupl(signedXml, qrCodeUrl, urlChave) {
+    const infNFeSupl = `<infNFeSupl>` +
+        `<qrCode><![CDATA[${qrCodeUrl}]]></qrCode>` +
+        `<urlChave>${urlChave}</urlChave>` +
+        `</infNFeSupl>`;
+    // Per leiauteNFe_v4.00.xsd the sequence inside <NFe> must be:
+    //   infNFe → infNFeSupl (optional) → Signature
+    // xml-crypto appends <Signature> at the end of the root, so we insert infNFeSupl
+    // immediately BEFORE <Signature to preserve the required schema order.
+    if (/<Signature[\s>]/.test(signedXml)) {
+        return signedXml.replace(/<Signature[\s>]/, `${infNFeSupl}$&`);
+    }
+    // Fallback: no Signature found yet (should not happen in normal flow)
+    return signedXml.replace('</NFe>', `${infNFeSupl}</NFe>`);
 }

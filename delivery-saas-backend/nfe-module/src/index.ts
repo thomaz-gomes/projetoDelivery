@@ -52,7 +52,7 @@ export async function generateAndSignSimpleNFCe(example: {
   let privateKeyPem: string
   let certPem: string
   let certB64: string
-  const password = options?.certPassword || cfg.certPassword
+  const password = options?.certPassword ?? cfg.certPassword
   if (options?.certBuffer) {
     const r = readPfxFromBuffer(options.certBuffer, password)
     privateKeyPem = r.privateKeyPem
@@ -122,8 +122,11 @@ export async function loadCompanyCertBuffer(companyId: string) {
  * persistenceUrl: optional base URL of the delivery-saas-backend (ex: http://localhost:3000)
  * persistPayload: { companyId, orderId? }
  */
-export async function sendAndPersist(signedXml: string, sendOpts?: { certBuffer?: Buffer; certPath?: string; certPassword?: string; environment?: 'homologation'|'production'; uf?: string }, persistenceOpts?: { persistenceUrl?: string; companyId?: string; orderId?: string }) {
-  const res = await sendNFCeToSefaz(signedXml, { certBuffer: sendOpts?.certBuffer, certPath: sendOpts?.certPath, certPassword: sendOpts?.certPassword, environment: sendOpts?.environment, uf: sendOpts?.uf, wsSecurity: true })
+export async function sendAndPersist(signedXml: string, sendOpts?: { certBuffer?: Buffer; certPath?: string; certPassword?: string; environment?: 'homologation'|'production'; uf?: string; mod?: string }, persistenceOpts?: { persistenceUrl?: string; companyId?: string; orderId?: string }) {
+  // Auto-detect mod from signed XML if not provided explicitly
+  const modMatch = signedXml.match(/<mod>(\d+)<\/mod>/)
+  const mod = sendOpts?.mod || (modMatch ? modMatch[1] : '65')
+  const res = await sendNFCeToSefaz(signedXml, { certBuffer: sendOpts?.certBuffer, certPath: sendOpts?.certPath, certPassword: sendOpts?.certPassword, environment: sendOpts?.environment, uf: sendOpts?.uf, mod, wsSecurity: true })
 
   // If persistence URL provided, call backend to save protocol
   if (persistenceOpts?.persistenceUrl && persistenceOpts?.companyId) {

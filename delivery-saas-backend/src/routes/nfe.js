@@ -1,6 +1,7 @@
 import express from 'express'
 import { saveNfeProtocol, getFiscalConfigForOrder, buildNfePayload, signNfeXml, transmitNfe, loadCertConfig, getEmitenteConfig, emitNfeFromOrder } from '../services/nfe.js'
 import { authMiddleware, requireRole } from '../auth.js'
+import { prisma } from '../prisma.js'
 import { decryptText } from '../utils/secretStore.js'
 import fs from 'fs'
 import path from 'path'
@@ -457,6 +458,119 @@ nfeRouter.post('/debug-cert', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'
     : `❌ ${failures.length} erro(s) encontrado(s)`
 
   return res.json({ summary, certInfo, steps })
+})
+
+// ── Relatório de notas emitidas ─────────────────────────────────────────────
+// GET /nfe/emitidas?page=1&limit=20&from=YYYY-MM-DD&to=YYYY-MM-DD&search=nome&status=100
+nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user?.companyId
+    if (!companyId) return res.status(400).json({ error: 'companyId not found in token' })
+
+    const page  = Math.max(1, parseInt(req.query.page)  || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20))
+    const skip  = (page - 1) * limit
+
+    const where = { companyId }
+
+    if (req.query.from || req.query.to) {
+      where.createdAt = {}
+      if (req.query.from) where.createdAt.gte = new Date(req.query.from)
+      if (req.query.to)   { const to = new Date(req.query.to); to.setHours(23,59,59,999); where.createdAt.lte = to }
+    }
+    if (req.query.status) where.cStat = req.query.status
+
+    const [protocols, total] = await Promise.all([
+      prisma.nfeProtocol.findMany({
+        where, skip, take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          order: { select: { id: true, displayId: true, displaySimple: true, customerName: true, total: true, payload: true } },
+          store: { select: { id: true, name: true } }
+        }
+      }),
+      prisma.nfeProtocol.count({ where })
+    ])
+
+    let data = protocols
+    if (req.query.search) {
+      const term = req.query.search.toLowerCase()
+      data = protocols.filter(p =>
+        (p.order?.customerName || '').toLowerCase().includes(term) ||
+        (p.nProt || '').includes(term)
+      )
+    }
+
+    return res.json({ data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } })
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || String(err) })
+  }
+})
+
+// GET /nfe/xml/:id — download raw XML stored for the protocol
+nfeRouter.get('/xml/:id', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user?.companyId
+    const protocol = await prisma.nfeProtocol.findFirst({ where: { id: req.params.id, companyId } })
+    if (!protocol) return res.status(404).json({ error: 'Protocolo não encontrado' })
+    if (!protocol.rawXml) return res.status(404).json({ error: 'XML não disponível para este protocolo' })
+
+    const filename = `nfe-${protocol.nProt || protocol.id}.xml`
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    return res.send(protocol.rawXml)
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || String(err) })
+  }
+})
+
+// POST /nfe/cancelar — local cancellation (SEFAZ NFeRecepcaoEvento: TODO)
+nfeRouter.post('/cancelar', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user?.companyId
+    const { nfeProtocolId, motivo } = req.body
+    if (!nfeProtocolId) return res.status(400).json({ error: 'nfeProtocolId é obrigatório' })
+    if (!motivo || String(motivo).trim().length < 15)
+      return res.status(400).json({ error: 'Motivo deve ter pelo menos 15 caracteres' })
+
+    const protocol = await prisma.nfeProtocol.findFirst({ where: { id: nfeProtocolId, companyId } })
+    if (!protocol) return res.status(404).json({ error: 'Protocolo não encontrado' })
+    if (protocol.cStat === 'CANCELADA') return res.status(400).json({ error: 'NF-e já está cancelada' })
+
+    // TODO: enviar evento de cancelamento (110111) para SEFAZ via NFeRecepcaoEvento
+    const updated = await prisma.nfeProtocol.update({
+      where: { id: nfeProtocolId },
+      data: { cStat: 'CANCELADA', xMotivo: `CANCELADA: ${String(motivo).trim()}` }
+    })
+
+    if (protocol.orderId) {
+      await prisma.order.update({ where: { id: protocol.orderId }, data: { status: 'INVOICE_CANCELLED' } })
+    }
+
+    return res.json({ success: true, record: updated })
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || String(err) })
+  }
+})
+
+// POST /nfe/enviar-email — stub (email service integration: TODO)
+nfeRouter.post('/enviar-email', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user?.companyId
+    const { nfeProtocolId, email } = req.body
+    if (!nfeProtocolId) return res.status(400).json({ error: 'nfeProtocolId é obrigatório' })
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ error: 'E-mail inválido' })
+
+    const protocol = await prisma.nfeProtocol.findFirst({ where: { id: nfeProtocolId, companyId } })
+    if (!protocol) return res.status(404).json({ error: 'Protocolo não encontrado' })
+    if (!protocol.rawXml) return res.status(400).json({ error: 'XML não disponível' })
+
+    // TODO: enviar via nodemailer/SMTP configurado na empresa
+    return res.status(501).json({ error: 'Serviço de e-mail não configurado. Integre SMTP nas configurações.' })
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || String(err) })
+  }
 })
 
 // Código de UF (IBGE) a partir da sigla

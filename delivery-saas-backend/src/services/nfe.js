@@ -122,30 +122,52 @@ export function buildNfePayload(data) {
       CRT: emit.CRT || '1'
     },
     dest: {},
-    det: det.map((item) => ({
-      nItem: item.nItem,
-      prod: {
-        cProd: (item.prod.cProd || String(item.nItem)).slice(0, 60),
-        cEAN: 'SEM GTIN',
-        xProd: tpAmb === '2' ? 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL' : (item.prod.xProd || 'PRODUTO').slice(0, 120),
-        NCM: (item.prod.NCM || '00000000').replace(/\D/g, '').padStart(8, '0').slice(0, 8),
-        CFOP: item.prod.CFOP || '5102',
-        uCom: (item.prod.uCom || 'UN').slice(0, 6),
-        qCom: fmtQCom(item.prod.qCom || '1'),
-        vUnCom: fmtVUnCom(item.prod.vUnCom || '0'),
-        vProd: fmtDec2(item.prod.vProd || '0'),
-        cEANTrib: 'SEM GTIN',
-        uTrib: (item.prod.uTrib || item.prod.uCom || 'UN').slice(0, 6),
-        qTrib: fmtQCom(item.prod.qTrib || item.prod.qCom || '1'),
-        vUnTrib: fmtVUnCom(item.prod.vUnTrib || item.prod.vUnCom || '0'),
-        indTot: '1'
-      },
-      imposto: {
-        ICMS: buildIcmsTag(item.imposto?.pICMS),
-        PIS: { PISNT: { CST: '07' } },
-        COFINS: { COFINSNT: { CST: '07' } }
+    det: det.map((item) => {
+      const eanVal = item.prod._ean || 'SEM GTIN'
+      const pPIS = Number(item.imposto?._pPIS || 0)
+      const pCOFINS = Number(item.imposto?._pCOFINS || 0)
+      const pIPI = Number(item.imposto?._pIPI || 0)
+      const vProdNum = Number(item.prod.vProd || 0)
+
+      const pisTag = pPIS > 0
+        ? { PISAliq: { CST: '01', vBC: fmtDec2(vProdNum), pPIS: pPIS.toFixed(2), vPIS: fmtDec2(vProdNum * pPIS / 100) } }
+        : { PISNT: { CST: '07' } }
+
+      const cofinsTag = pCOFINS > 0
+        ? { COFINSAliq: { CST: '01', vBC: fmtDec2(vProdNum), pCOFINS: pCOFINS.toFixed(2), vCOFINS: fmtDec2(vProdNum * pCOFINS / 100) } }
+        : { COFINSNT: { CST: '07' } }
+
+      const impostoObj = {
+        ICMS: buildIcmsTag(item.imposto?.pICMS, item.imposto?._orig, item.imposto?._modBC),
+        PIS: pisTag,
+        COFINS: cofinsTag
       }
-    })),
+
+      if (pIPI > 0) {
+        impostoObj.IPI = { IPITrib: { CST: '50', vBC: fmtDec2(vProdNum), pIPI: pIPI.toFixed(2), vIPI: fmtDec2(vProdNum * pIPI / 100) } }
+      }
+
+      return {
+        nItem: item.nItem,
+        prod: {
+          cProd: (item.prod.cProd || String(item.nItem)).slice(0, 60),
+          cEAN: eanVal,
+          xProd: tpAmb === '2' ? 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL' : (item.prod.xProd || 'PRODUTO').slice(0, 120),
+          NCM: (item.prod.NCM || '00000000').replace(/\D/g, '').padStart(8, '0').slice(0, 8),
+          CFOP: item.prod.CFOP || '5102',
+          uCom: (item.prod.uCom || 'UN').slice(0, 6),
+          qCom: fmtQCom(item.prod.qCom || '1'),
+          vUnCom: fmtVUnCom(item.prod.vUnCom || '0'),
+          vProd: fmtDec2(item.prod.vProd || '0'),
+          cEANTrib: eanVal,
+          uTrib: (item.prod.uTrib || item.prod.uCom || 'UN').slice(0, 6),
+          qTrib: fmtQCom(item.prod.qTrib || item.prod.qCom || '1'),
+          vUnTrib: fmtVUnCom(item.prod.vUnTrib || item.prod.vUnCom || '0'),
+          indTot: '1'
+        },
+        imposto: impostoObj
+      }
+    }),
     total: {
       ICMSTot: {
         vBC: '0.00',
@@ -221,21 +243,22 @@ export function buildNfePayload(data) {
   return infNFe
 }
 
-function buildIcmsTag(pICMS) {
+function buildIcmsTag(pICMS, orig, modBC) {
   const aliq = Number(pICMS) || 0
+  const origVal = orig != null ? String(orig) : '0'
   if (aliq > 0) {
     return {
       ICMS00: {
-        orig: '0',
+        orig: origVal,
         CST: '00',
-        modBC: '3',
+        modBC: modBC != null ? String(modBC) : '3',
         vBC: '0.00',
         pICMS: aliq.toFixed(2),
         vICMS: '0.00'
       }
     }
   }
-  return { ICMSSN102: { orig: '0', CSOSN: '102' } }
+  return { ICMSSN102: { orig: origVal, CSOSN: '102' } }
 }
 
 export async function signNfeXml(infNFe, certConfig, fiscalOpts = {}) {
@@ -281,7 +304,9 @@ export async function signNfeXml(infNFe, certConfig, fiscalOpts = {}) {
   const options = {}
   if (certConfig.certBuffer) options.certBuffer = certConfig.certBuffer
   else if (certConfig.certPath) options.certPath = certConfig.certPath
-  if (certConfig.certPassword) options.certPassword = certConfig.certPassword
+  // Always pass certPassword explicitly (even as empty string) to prevent fallback
+  // to the placeholder "senhaDoCertificado" from nfe-module/config.json
+  options.certPassword = certConfig.certPassword ?? ''
 
   console.log('[NFe] signNfeXml example.dest:', JSON.stringify(example.dest))
   const result = await generateAndSignSimpleNFCe(example, options)
@@ -296,14 +321,19 @@ export async function transmitNfe(signedXml, certConfig, uf) {
 
   const environment = certConfig.tpAmb === '1' ? 'production' : 'homologation'
 
+  // Auto-detect mod from signed XML (65=NFC-e, 55=NF-e)
+  const modMatch = signedXml.match(/<mod>(\d+)<\/mod>/)
+  const mod = certConfig.mod || (modMatch ? modMatch[1] : '65')
+
   const sendOpts = {
     environment,
     uf: uf || 'ba',
+    mod,
     wsSecurity: true
   }
   if (certConfig.certBuffer) sendOpts.certBuffer = certConfig.certBuffer
   else if (certConfig.certPath) sendOpts.certPath = certConfig.certPath
-  if (certConfig.certPassword) sendOpts.certPassword = certConfig.certPassword
+  sendOpts.certPassword = certConfig.certPassword ?? ''
 
   console.log('[NFe transmit] Enviando para SEFAZ:', { environment, uf: sendOpts.uf, certPath: certConfig.certPath || '(buffer)', hasCertBuffer: !!certConfig.certBuffer, hasPassword: !!certConfig.certPassword })
 
@@ -422,7 +452,9 @@ const PAYMENT_MAP = {
   CREDIT_CARD: '03', 'Crédito': '03',
   DEBIT_CARD: '04', 'Débito': '04',
   PIX: '17',
-  VOUCHER: '05', ONLINE: '99'
+  VOUCHER: '05',
+  // ONLINE/unknown → 01 (dinheiro): tPag=99 causes SVRS schema conflicts
+  ONLINE: '01',
 }
 
 export async function emitNfeFromOrder(orderId) {
@@ -454,34 +486,77 @@ export async function emitNfeFromOrder(orderId) {
   if (!fiscalConfig.cnpj) throw new Error('CNPJ não configurado para esta loja/empresa')
 
   const certConfig = await loadCertConfig(order.companyId)
-  if (order.storeId) {
-    const storeCert = loadStoreCert(order.storeId)
+  // Determine effective storeId: use order.storeId or fall back to first store of company
+  let effectiveStoreId = order.storeId
+  if (!effectiveStoreId) {
+    const firstStore = await prisma.store.findFirst({ where: { companyId: order.companyId }, select: { id: true } })
+    if (firstStore) {
+      effectiveStoreId = firstStore.id
+      console.log('[NFe] order sem storeId, usando primeira loja da empresa:', effectiveStoreId)
+    }
+  }
+  if (effectiveStoreId) {
+    const storeCert = loadStoreCert(effectiveStoreId)
     if (storeCert.certPath) Object.assign(certConfig, storeCert)
   }
   if (!certConfig.certPath && !certConfig.certBuffer) {
     throw new Error('Certificado digital A1 (.pfx) não encontrado')
   }
 
-  const emitenteConfig = order.storeId
-    ? getEmitenteConfig(order.companyId, order.storeId)
+  const emitenteConfig = effectiveStoreId
+    ? getEmitenteConfig(order.companyId, effectiveStoreId)
     : getEmitenteConfig(order.companyId)
 
   const tpAmb = fiscalConfig.nfeEnvironment === 'production' ? '1' : '2'
 
-  const det = order.items.map((item, idx) => ({
-    nItem: idx + 1,
-    prod: {
-      xProd: item.name,
-      cProd: String(item.id || idx + 1),
-      NCM: '00000000',
-      CFOP: '5102',
-      uCom: 'UN',
-      qCom: String(Number(item.quantity).toFixed(4)),
-      vUnCom: Number(item.price).toFixed(2),
-      vProd: (Number(item.quantity) * Number(item.price)).toFixed(2)
-    },
-    imposto: { pICMS: 0 }
-  }))
+  // Load fiscal data for each product (with category as fallback)
+  const productIds = order.items.filter(i => i.productId).map(i => i.productId)
+  const products = productIds.length
+    ? await prisma.product.findMany({
+        where: { id: { in: productIds } },
+        include: { dadosFiscais: true, category: { include: { dadosFiscais: true } } }
+      })
+    : []
+  const productMap = new Map(products.map(p => [p.id, p]))
+
+  const det = order.items.map((item, idx) => {
+    const prod = productMap.get(item.productId)
+    const fiscal = prod?.dadosFiscais || prod?.category?.dadosFiscais || null
+
+    const ncm = fiscal?.ncm ? String(fiscal.ncm).replace(/\D/g, '').padStart(8, '0').slice(0, 8) : '00000000'
+    let cfop = '5102'
+    if (fiscal?.cfops) {
+      try {
+        const cfopArr = typeof fiscal.cfops === 'string' ? JSON.parse(fiscal.cfops) : fiscal.cfops
+        if (Array.isArray(cfopArr) && cfopArr.length > 0) cfop = String(cfopArr[0]).replace('.', '')
+      } catch { /* keep default */ }
+    }
+    const ean = fiscal?.ean ? String(fiscal.ean).replace(/\D/g, '') : null
+    const cEAN = (ean && ean.length >= 8) ? ean : 'SEM GTIN'
+
+    return {
+      nItem: idx + 1,
+      prod: {
+        xProd: item.name,
+        cProd: String(item.id || idx + 1),
+        NCM: ncm,
+        CFOP: cfop,
+        uCom: 'UN',
+        qCom: String(Number(item.quantity).toFixed(4)),
+        vUnCom: Number(item.price).toFixed(2),
+        vProd: (Number(item.quantity) * Number(item.price)).toFixed(2),
+        _ean: cEAN,
+      },
+      imposto: {
+        pICMS: Number(fiscal?.icmsAliq || 0),
+        _orig: String(fiscal?.orig ?? '0'),
+        _modBC: fiscal?.icmsModBC != null ? String(fiscal.icmsModBC) : null,
+        _pPIS: Number(fiscal?.pPIS || 0),
+        _pCOFINS: Number(fiscal?.pCOFINS || 0),
+        _pIPI: Number(fiscal?.pIPI || 0),
+      }
+    }
+  })
 
   const vProd = det.reduce((s, d) => s + Number(d.prod.vProd), 0)
 
@@ -546,7 +621,7 @@ export async function emitNfeFromOrder(orderId) {
 
   const infNFe = buildNfePayload(data)
   const signed = await signNfeXml(infNFe, certConfig, { csc: fiscalConfig.csc, cscId: fiscalConfig.cscId })
-  const uf = (emitenteConfig.enderEmit?.UF || fiscalConfig.source === 'store' ? 'ba' : 'ba').toLowerCase()
+  const uf = (emitenteConfig.enderEmit?.UF || 'BA').toLowerCase()
   const result = await transmitNfe(signed.signedXml, { ...certConfig, tpAmb }, uf)
 
   await saveNfeProtocol({

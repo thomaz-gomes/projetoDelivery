@@ -134,7 +134,7 @@ router.get('/categories/:id', async (req, res) => {
 
 router.post('/categories', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
-  const { name, position = 0, isActive = true, menuId = null } = req.body || {}
+  const { name, position = 0, isActive = true, menuId = null, dadosFiscaisId = null } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
   // if menuId provided, validate it belongs to a menu whose store is in this company
   if (menuId) {
@@ -142,7 +142,7 @@ router.post('/categories', requireRole('ADMIN'), async (req, res) => {
     if (!menu) return res.status(400).json({ message: 'Menu inválido' })
     if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
   }
-  const created = await prisma.menuCategory.create({ data: { companyId, name, position: Number(position || 0), isActive: Boolean(isActive), menuId } })
+  const created = await prisma.menuCategory.create({ data: { companyId, name, position: Number(position || 0), isActive: Boolean(isActive), menuId, dadosFiscaisId: dadosFiscaisId || null } })
   res.status(201).json(created)
 })
 
@@ -151,13 +151,13 @@ router.patch('/categories/:id', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const existing = await prisma.menuCategory.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Categoria não encontrada' })
-  const { name, position, isActive, menuId } = req.body || {}
+  const { name, position, isActive, menuId, dadosFiscaisId } = req.body || {}
   if (menuId) {
     const menu = await prisma.menu.findUnique({ where: { id: menuId }, include: { store: true } })
     if (!menu) return res.status(400).json({ message: 'Menu inválido' })
     if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
   }
-  const updated = await prisma.menuCategory.update({ where: { id }, data: { name: name ?? existing.name, position: position !== undefined ? Number(position) : existing.position, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, menuId: menuId !== undefined ? menuId : existing.menuId } })
+  const updated = await prisma.menuCategory.update({ where: { id }, data: { name: name ?? existing.name, position: position !== undefined ? Number(position) : existing.position, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, menuId: menuId !== undefined ? menuId : existing.menuId, dadosFiscaisId: dadosFiscaisId !== undefined ? (dadosFiscaisId || null) : existing.dadosFiscaisId } })
   res.json(updated)
 })
 
@@ -266,7 +266,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, cashbackPercent = undefined } = body
+  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, cashbackPercent = undefined, dadosFiscaisId = null } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -285,7 +285,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       const sheet = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
       if (!sheet || sheet.companyId !== companyId) return res.status(400).json({ message: 'Ficha técnica inválida' })
     }
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null } })
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -340,7 +340,7 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const existing = await prisma.product.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Produto não encontrado' })
-  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId, cashbackPercent } = req.body || {}
+  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId, cashbackPercent, dadosFiscaisId } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -410,7 +410,8 @@ router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
     technicalSheetId: technicalSheetId !== undefined ? technicalSheetId : existing.technicalSheetId
   ,
     // set cashbackPercent if provided (allow null to clear)
-    cashbackPercent: cashbackPercent !== undefined ? (cashbackPercent === null ? null : Number(cashbackPercent)) : existing.cashbackPercent
+    cashbackPercent: cashbackPercent !== undefined ? (cashbackPercent === null ? null : Number(cashbackPercent)) : existing.cashbackPercent,
+    dadosFiscaisId: dadosFiscaisId !== undefined ? (dadosFiscaisId || null) : existing.dadosFiscaisId
   } })
   res.json(updated)
 })

@@ -93,6 +93,7 @@ model Company {
   // ---- Cash register (PDV) ----
   cashSessions         CashSession[]
   cashBlindCloseDefault Boolean @default(false)
+  dadosFiscais         DadosFiscais[]
 }
 
 model User {
@@ -625,18 +626,20 @@ model AffiliatePayment {
 
 // ---- Menu / Cardápio ----
 model MenuCategory {
-  id        String    @id @default(uuid())
-  companyId String
-  company   Company   @relation(fields: [companyId], references: [id])
+  id             String        @id @default(uuid())
+  companyId      String
+  company        Company       @relation(fields: [companyId], references: [id])
   // optional: associate category to a specific Menu (for multi-menu support)
-  menuId    String?
-  menu      Menu?     @relation(fields: [menuId], references: [id])
-  name      String
-  isActive  Boolean   @default(true)
-  position  Int       @default(0)
-  products  Product[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  menuId         String?
+  menu           Menu?         @relation(fields: [menuId], references: [id])
+  name           String
+  isActive       Boolean       @default(true)
+  position       Int           @default(0)
+  products       Product[]
+  dadosFiscaisId String?
+  dadosFiscais   DadosFiscais? @relation(fields: [dadosFiscaisId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([companyId, name], name: "company_category_name_idx")
 }
@@ -658,6 +661,8 @@ model Product {
   isActive            Boolean              @default(true)
   position            Int                  @default(0)
   cashbackPercent     Decimal?
+  dadosFiscaisId      String?
+  dadosFiscais        DadosFiscais?        @relation(fields: [dadosFiscaisId], references: [id])
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   productOptionGroups ProductOptionGroup[]
@@ -665,6 +670,48 @@ model Product {
   linkedOptions       Option[]
 
   @@index([companyId, name], name: "company_product_name_idx")
+}
+
+model DadosFiscais {
+  id                String         @id @default(uuid())
+  companyId         String
+  company           Company        @relation(fields: [companyId], references: [id])
+  descricao         String
+  ean               String?
+  codBeneficio      String?
+  codCredPresumido  String?
+  percCredPresumido Decimal?
+  // NCM and origin
+  ncm               String?
+  orig              String?        // 0 = Nacional, 1..8 = Estrangeira/mista
+  // ICMS
+  icmsPercBase      Decimal?       @default(100)
+  icmsAliq          Decimal?       @default(0)
+  icmsModBC         String?        // 0..5
+  icmsFCP           Decimal?       @default(0)
+  // ICMS ST
+  icmsStPercBase    Decimal?       @default(100)
+  icmsStAliq        Decimal?       @default(0)
+  icmsStModBCST     String?
+  icmsStMVA         Decimal?       @default(0)
+  icmsStFCP         Decimal?       @default(0)
+  // ICMS Efetivo
+  icmsEfetPercBase  Decimal?
+  icmsEfetAliq      Decimal?
+  // Outros impostos
+  pPIS              Decimal?       @default(0)
+  pCOFINS           Decimal?       @default(0)
+  pIPI              Decimal?       @default(0)
+  // CFOPs – stored as JSON array string: ["5.102","5.405"]
+  cfops             String?
+  // CEST code
+  cest              String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  categories        MenuCategory[]
+  products          Product[]
+
+  @@index([companyId])
 }
 
 enum CashbackTransactionType {

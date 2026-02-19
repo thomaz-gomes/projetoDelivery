@@ -15,7 +15,25 @@ const xml_crypto_1 = require("xml-crypto");
 function readPfx(pfxPath, password) {
     const raw = fs_1.default.readFileSync(pfxPath);
     const p12Asn1 = node_forge_1.default.asn1.fromDer(raw.toString('binary'));
-    const p12 = node_forge_1.default.pkcs12.pkcs12FromAsn1(p12Asn1, password);
+    let p12;
+    try {
+        p12 = node_forge_1.default.pkcs12.pkcs12FromAsn1(p12Asn1, password || '');
+    }
+    catch (e1) {
+        // If provided password fails and it wasn't already empty, try empty string
+        // (some certificates have no password; also guards against null/undefined)
+        if (password) {
+            try {
+                p12 = node_forge_1.default.pkcs12.pkcs12FromAsn1(p12Asn1, '');
+            }
+            catch {
+                throw e1;
+            }
+        }
+        else {
+            throw e1;
+        }
+    }
     let keyObj = null;
     const certs = [];
     for (const safeContent of p12.safeContents) {
@@ -54,7 +72,24 @@ function readPfxFromBuffer(buffer, password) {
     // forge expects binary-encoded string
     const raw = buffer.toString('binary');
     const p12Asn1 = node_forge_1.default.asn1.fromDer(raw);
-    const p12 = node_forge_1.default.pkcs12.pkcs12FromAsn1(p12Asn1, password);
+    let p12;
+    try {
+        p12 = node_forge_1.default.pkcs12.pkcs12FromAsn1(p12Asn1, password || '');
+    }
+    catch (e1) {
+        // If provided password fails and it wasn't already empty, try empty string
+        if (password) {
+            try {
+                p12 = node_forge_1.default.pkcs12.pkcs12FromAsn1(p12Asn1, '');
+            }
+            catch {
+                throw e1;
+            }
+        }
+        else {
+            throw e1;
+        }
+    }
     let keyObj = null;
     const certs = [];
     for (const safeContent of p12.safeContents) {
@@ -102,5 +137,11 @@ function signXml(xml, privateKeyPem, certB64) {
         }
     };
     sig.computeSignature(xml);
-    return sig.getSignedXml();
+    let signed = sig.getSignedXml();
+    // Ensure default NFe namespace present — some consumers (SEFAZ) reject
+    // documents that don't include the standard namespace on the NFe element.
+    if (!/\<NFe[^>]*xmlns=/.test(signed)) {
+        signed = signed.replace(/<NFe(\s|>)/, `<NFe xmlns="http://www.portalfiscal.inf.br/nfe"$1`);
+    }
+    return signed;
 }

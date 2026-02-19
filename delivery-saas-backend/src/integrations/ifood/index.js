@@ -52,7 +52,12 @@ async function upsertIFoodOrder(companyId, orderData) {
 
   // try to detect a store bound to this company's IFOOD integration
   const integration = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, select: { storeId: true }, orderBy: { updatedAt: 'desc' } });
-  const storeId = integration?.storeId || null;
+  let storeId = integration?.storeId || null;
+  if (!storeId) {
+    const firstStore = await prisma.store.findFirst({ where: { companyId }, select: { id: true }, orderBy: { createdAt: 'asc' } });
+    storeId = firstStore?.id || null;
+    if (storeId) console.log('iFood: integração sem storeId, usando primeira loja:', storeId);
+  }
 
   const order = await prisma.order.upsert({
     where: { externalId },

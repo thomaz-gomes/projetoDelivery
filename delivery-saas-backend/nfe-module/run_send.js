@@ -3,7 +3,9 @@
 // Ajuste COMPANY_ID, UF e orderId conforme necessário.
 
 const path = require('path');
-const { generateAndSignSimpleNFCe, sendAndPersist, loadCompanyCertBuffer, loadConfig } = require('./dist/index.js');
+const fs = require('fs');
+const { generateAndSignSimpleNFCe, sendAndPersist, loadCompanyCertBuffer } = require('./dist/index.js');
+const { loadConfig } = require('./dist/config.js');
 
 async function run() {
   const COMPANY_ID = 'bd6a5381-6b90-4cc9-bc8f-24890c491693'; // alterar se precisar
@@ -13,11 +15,19 @@ async function run() {
 
   try {
     const cfg = loadConfig();
+    // allow overriding certificate password via environment variable for local tests
+    if (process.env.CERT_PASSWORD) cfg.certPassword = process.env.CERT_PASSWORD
     console.log('nfe-module config environment:', cfg.environment);
 
-    // carrega PFX da pasta segura (certsDir)
-    const certBuffer = await loadCompanyCertBuffer(COMPANY_ID);
-    if (!certBuffer) throw new Error('PFX não encontrado em certsDir para companyId=' + COMPANY_ID);
+    // carrega PFX da pasta segura (certsDir) ou via variável de ambiente CERT_PATH
+    let certBuffer = await loadCompanyCertBuffer(COMPANY_ID);
+    if (!certBuffer && process.env.CERT_PATH) {
+      const p = process.env.CERT_PATH
+      if (!fs.existsSync(p)) throw new Error('CERT_PATH file not found: ' + p)
+      certBuffer = fs.readFileSync(p)
+      console.log('Loaded PFX from CERT_PATH:', p)
+    }
+    if (!certBuffer) throw new Error('PFX não encontrado em certsDir para companyId=' + COMPANY_ID + ' and CERT_PATH not provided');
 
     // gerar + assinar
     const example = {

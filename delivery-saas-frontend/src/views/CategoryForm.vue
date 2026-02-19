@@ -32,6 +32,15 @@
               </div>
             </div>
 
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Dados Fiscais (opcional)</label>
+              <SelectInput v-model="dadosFiscaisId" class="form-select">
+                <option :value="null">-- Nenhum --</option>
+                <option v-for="d in dadosFiscaisList" :key="d.id" :value="d.id">{{ d.descricao }}</option>
+              </SelectInput>
+              <div class="small text-muted">Aplicado a todos os produtos desta categoria (pode ser sobrescrito por produto)</div>
+            </div>
+
             <div class="d-flex justify-content-between">
               <button class="btn btn-secondary" type="button" @click="cancel">Voltar</button>
               <button class="btn btn-primary" :disabled="saving">{{ saving ? 'Salvando...' : 'Criar categoria' }}</button>
@@ -48,6 +57,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
+import SelectInput from '../components/form/select/SelectInput.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -62,14 +72,20 @@ const isEdit = Boolean(id)
 const menus = ref([])
 const storesMap = {}
 const menuId = ref(null)
+const dadosFiscaisId = ref(null)
+const dadosFiscaisList = ref([])
 
 async function load(){
   if(!isEdit) return
   try{
     const res = await api.get(`/menu/categories/${id}`)
     const c = res.data
-    if(c){ name.value = c.name || ''; description.value = c.description || ''; position.value = c.position || 0; isActive.value = c.isActive ?? true }
+    if(c){ name.value = c.name || ''; description.value = c.description || ''; position.value = c.position || 0; isActive.value = c.isActive ?? true; dadosFiscaisId.value = c.dadosFiscaisId || null }
   }catch(e){ console.error(e); error.value = 'Falha ao carregar categoria' }
+}
+
+async function loadDadosFiscais(){
+  try{ const r = await api.get('/settings/dados-fiscais'); dadosFiscaisList.value = r.data || [] }catch(e){}
 }
 
 async function loadMenus(){
@@ -86,6 +102,7 @@ async function loadMenus(){
 
 onMounted(()=> load())
 onMounted(()=> loadMenus())
+onMounted(()=> loadDadosFiscais())
 
 function cancel(){
   const prevHistory = (typeof window !== 'undefined' && window.history && window.history.length > 1)
@@ -100,7 +117,7 @@ async function save(){
   saving.value = true
   try{
     if(!name.value) { error.value = 'Nome é obrigatório'; return }
-    const payload = { name: name.value, position: position.value, description: description.value, isActive: isActive.value, menuId: menuId.value }
+    const payload = { name: name.value, position: position.value, description: description.value, isActive: isActive.value, menuId: menuId.value, dadosFiscaisId: dadosFiscaisId.value }
     if(isEdit){
       await api.patch(`/menu/categories/${id}`, payload)
       Swal.fire({ icon: 'success', text: 'Categoria atualizada' })

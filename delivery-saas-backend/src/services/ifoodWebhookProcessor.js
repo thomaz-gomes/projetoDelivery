@@ -70,7 +70,16 @@ async function resolveCompanyIdFromPayload(payload) {
     }
   }
 
-  return { companyId: integ.companyId || null, storeId: integ.storeId || null };
+  // Fallback: use first store of the company so all orders have a storeId
+  let resolvedStoreId = integ.storeId || null;
+  if (!resolvedStoreId) {
+    try {
+      const firstStore = await prisma.store.findFirst({ where: { companyId: integ.companyId }, select: { id: true }, orderBy: { createdAt: 'asc' } });
+      resolvedStoreId = firstStore?.id || null;
+      if (resolvedStoreId) console.log('iFood webhook processor: sem storeId na integração, usando primeira loja:', resolvedStoreId);
+    } catch (e) { /* ignore */ }
+  }
+  return { companyId: integ.companyId || null, storeId: resolvedStoreId };
 }
 
 /**
