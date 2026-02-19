@@ -1,4 +1,4 @@
-FROM node:20-bullseye-slim AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install dependencies (including devDeps to allow prisma generate)
@@ -9,10 +9,9 @@ RUN npm ci --silent
 COPY . .
 
 # Install nfe-module dependencies (sub-project with its own package.json)
-# libxmljs2 is a native C++ addon — install build tools before npm ci
+# libxmljs2 is a native C++ addon — install build tools first
 RUN if [ -f nfe-module/package.json ]; then \
-    apt-get update -qq && \
-    apt-get install -y --no-install-recommends python3 make g++ libxml2-dev && \
+    apk add --no-cache python3 make g++ libxml2-dev && \
     cd nfe-module && npm ci --silent --omit=dev && cd ..; \
 fi
 
@@ -26,13 +25,11 @@ RUN if [ -f prisma/schema.prisma ]; then npx prisma generate --schema=prisma/sch
 # Also generate client for Postgres schema (used in production) if present
 RUN if [ -f prisma/schema.postgres.prisma ]; then npx prisma generate --schema=prisma/schema.postgres.prisma; fi
 
-FROM node:20-bullseye-slim AS runtime
+FROM node:20-alpine AS runtime
 WORKDIR /app
 
 # Install runtime utilities required by healthchecks
-RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache curl ca-certificates
 
 # Copy node modules and built app from builder
 COPY --from=builder /app/node_modules ./node_modules
