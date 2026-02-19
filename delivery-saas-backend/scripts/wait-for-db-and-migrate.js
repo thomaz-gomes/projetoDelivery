@@ -99,14 +99,21 @@ async function waitForDb(retries = 120, delay = 3000) {
   const schemaArg = isPostgres ? '--schema=prisma/schema.postgres.prisma' : ''
   console.log('Using schema arg for Prisma:', schemaArg || '<default prisma/schema.prisma>')
 
-  console.log('Running prisma generate...', schemaArg)
-  execSync((`npx prisma generate ${schemaArg}`).trim(), { stdio: 'inherit', env: process.env })
+  // prisma generate was already run during Docker build — run it best-effort at
+  // runtime but do NOT abort db push if it fails (e.g. Alpine write-permission issues).
+  try {
+    console.log('Running prisma generate (best-effort)...', schemaArg)
+    execSync((`npx prisma generate ${schemaArg}`).trim(), { stdio: 'inherit', env: process.env })
+  } catch (genErr) {
+    console.warn('prisma generate failed (non-fatal, using build-time client):', genErr && genErr.message)
+  }
 
-  // Use `db push` instead of `migrate deploy` to sync the database schema.
+  // Use `db push` to sync the database schema.
+  // --skip-generate: use the already-generated build-time client, do not regenerate after push.
   // `db push` compares the Prisma schema to the actual database and adds
   // missing tables/columns without requiring migration files to be up-to-date.
   console.log('Running prisma db push...', schemaArg)
-  execSync((`npx prisma db push ${schemaArg}`).trim(), { stdio: 'inherit', env: process.env })
+  execSync((`npx prisma db push --skip-generate ${schemaArg}`).trim(), { stdio: 'inherit', env: process.env })
 
     console.log('Database schema synced successfully')
     await prisma.$disconnect()

@@ -1398,6 +1398,20 @@ model CashMovement {
   @@index([sessionId], name: "idx_cash_movement_session")
 }
 
+// ======== Media Library ========
+
+model Media {
+  id        String   @id @default(uuid())
+  companyId String
+  filename  String
+  mimeType  String
+  size      Int
+  url       String
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt], name: "idx_media_company_created")
+}
+
 // ======== Dados Fiscais ========
 
 model DadosFiscais {

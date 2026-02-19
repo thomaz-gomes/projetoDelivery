@@ -17,7 +17,9 @@ router.use(authMiddleware)
 router.get('/menus', async (req, res) => {
   try {
     const companyId = req.user.companyId
-    const rows = await prisma.menu.findMany({ where: { store: { companyId } }, orderBy: { position: 'asc' } })
+    // SUPER_ADMIN has companyId = null; avoid passing null into a non-nullable where filter
+    const where = companyId ? { store: { companyId } } : {}
+    const rows = await prisma.menu.findMany({ where, orderBy: { position: 'asc' } })
     res.json(rows)
   } catch (e) {
     console.error('GET /menu/menus failed', e)
