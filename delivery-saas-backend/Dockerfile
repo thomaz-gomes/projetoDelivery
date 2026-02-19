@@ -9,7 +9,12 @@ RUN npm ci --silent
 COPY . .
 
 # Install nfe-module dependencies (sub-project with its own package.json)
-RUN if [ -f nfe-module/package.json ]; then cd nfe-module && npm ci --silent --omit=dev && cd ..; fi
+# libxmljs2 is a native C++ addon — install build tools before npm ci
+RUN if [ -f nfe-module/package.json ]; then \
+    apt-get update -qq && \
+    apt-get install -y --no-install-recommends python3 make g++ libxml2-dev && \
+    cd nfe-module && npm ci --silent --omit=dev && cd ..; \
+fi
 
 # Generate Prisma client (for both sqlite and postgres schemas if present)
 # Ensure migrations are copied explicitly (avoid cases where changes were added after a previous build)
