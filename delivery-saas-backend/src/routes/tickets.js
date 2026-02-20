@@ -58,6 +58,21 @@ ticketsRouter.post('/:token/claim', authMiddleware, requireRole('RIDER'), async 
           ticketFinal = alt;
         }
       }
+      // Last resort: token looks like an orderId but no ticket exists yet — auto-create one
+      if (!ticketFinal) {
+        const orderDirect = await tx.order.findUnique({ where: { id: token } });
+        if (orderDirect) {
+          const { randomToken: rt, sha256: s256 } = await import('../utils.js');
+          const newTokenHash = s256(rt(24));
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const newTicket = await tx.ticket.create({
+            data: { orderId: token, tokenHash: newTokenHash, expiresAt },
+            include: { order: true }
+          });
+          console.log('[tickets.claim] auto-created ticket for orderId', token);
+          ticketFinal = newTicket;
+        }
+      }
       if (!ticketFinal) throw new Error('Token inválido ou expirado');
       console.log('[tickets.claim] ticket lookup result:', !!ticket, ticketFinal && { id: ticketFinal.id, orderId: ticketFinal.orderId, expiresAt: ticketFinal.expiresAt, usedAt: ticketFinal.usedAt });
 
