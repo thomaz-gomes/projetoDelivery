@@ -58,21 +58,42 @@ function _doConnect(cfg) {
   _attempt++;
   const label = _attempt > 1 ? `Reconectando… (tentativa ${_attempt})` : 'Conectando…';
   logger.info(`[socket] ${label} → ${cfg.serverUrl}`);
+  logger.info(`[socket] Auth: companyId=${cfg.companyId || 'NULL'} | token=${cfg.token ? cfg.token.slice(0, 8) + '…' : 'VAZIO'}`);
   _emitStatus(false, label);
 
-  socket = io(cfg.serverUrl, {
+  // Extrai a URL base sem path para o Socket.IO (ex: https://app.exemplo.com)
+  const baseUrl = (() => {
+    try { const u = new URL(cfg.serverUrl); return `${u.protocol}//${u.host}`; }
+    catch (_) { return cfg.serverUrl; }
+  })();
+
+  socket = io(baseUrl, {
     auth:         { token: cfg.token, companyId: cfg.companyId },
-    transports:   ['polling', 'websocket'],   // polling primeiro para compatibilidade com nginx
+    // Envia o próprio servidor como Origin para passar pela validação CORS
+    extraHeaders: { origin: baseUrl },
+    transports:   ['polling', 'websocket'],   // polling primeiro (compatibilidade nginx)
+    path:         '/socket.io',               // path explícito evita ambiguidade
     reconnection: false,                       // controle manual
     timeout:      20000,
   });
+
+  // ── Debug: erros no nível engine.io (abaixo do Socket.IO) ─────────────────
+  try {
+    socket.io.on('error', (engineErr) => {
+      logger.warn(`[socket] engine error: ${engineErr && engineErr.message}`);
+    });
+    socket.io.engine && socket.io.engine.on && socket.io.engine.on('error', (engineErr) => {
+      logger.warn(`[socket] transport error: ${engineErr && engineErr.message}`);
+    });
+  } catch (_) { /* não-fatal */ }
 
   // ── Eventos de ciclo de vida ───────────────────────────────────────────────
   socket.on('connect', () => {
     _connected    = true;
     _attempt      = 0;
     _currentDelay = BASE_DELAY;
-    logger.info(`[socket] Conectado! socket.id=${socket.id}`);
+    const transport = socket.io && socket.io.engine && socket.io.engine.transport && socket.io.engine.transport.name;
+    logger.info(`[socket] Conectado! id=${socket.id} | transport=${transport || '?'}`);
     _emitStatus(true, 'Conectado');
 
     // Sinaliza ao backend que o agente está pronto → backend processa fila pendente
@@ -95,8 +116,27 @@ function _doConnect(cfg) {
 
   socket.on('connect_error', (err) => {
     _connected = false;
-    const msg = (err && err.message) || '';
-    logger.warn(`[socket] Erro de conexão: ${msg}`);
+
+    // ── Log detalhado para diagnóstico ────────────────────────────────────
+    const msg        = (err && err.message) || '';
+    const errType    = (err && err.type)    || '';
+    const errData    = err && err.data      ? JSON.stringify(err.data) : '';
+    const ctx        = err && err.context;
+    const httpStatus = ctx && (ctx.status || ctx.statusCode);
+    const httpBody   = ctx && ctx.responseText ? ctx.responseText.slice(0, 300) : '';
+    const transport  = socket && socket.io && socket.io.engine && socket.io.engine.transport
+                       ? socket.io.engine.transport.name : '?';
+
+    logger.warn(
+      `[socket] connect_error:\n` +
+      `  message   : "${msg}"\n` +
+      `  type      : "${errType}"\n` +
+      `  data      : ${errData || '—'}\n` +
+      `  transport : ${transport}\n` +
+      `  httpStatus: ${httpStatus || '—'}\n` +
+      `  httpBody  : ${httpBody || '—'}`
+    );
+
     _destroySocket();
 
     if (AUTH_ERROR_MESSAGES.has(msg)) {

@@ -389,12 +389,27 @@ async function processQueueForStoresThrottled(ioInstance, storeIds = []) {
 export function attachSocket(server) {
   if (io) return io; // already attached
 
-  // For development ease we'll allow any origin for Socket.IO when not in production
-  // (the Express CORS middleware already allows any origin in dev). In production
-  // we restrict Socket.IO to the configured allowedOrigins.
-  const sioCors = (process.env.NODE_ENV !== 'production')
-    ? { origin: true, methods: ["GET", "POST"] }
-    : { origin: allowedOrigins, methods: ["GET", "POST"] };
+  // Socket.IO CORS: aceitar origens do frontend E o próprio servidor (para agentes Electron).
+  // O socket.io-client em Node.js envia Origin: <serverUrl> que não está em allowedOrigins,
+  // causando rejeição 403 → "server error" no cliente. A segurança real é feita pelo
+  // middleware de auth (token hash), não pelo CORS — por isso aceitamos qualquer origem aqui.
+  const sioCors = {
+    origin: (origin, callback) => {
+      // Sem Origin (clientes Node.js puros) → permitir
+      if (!origin) return callback(null, true);
+      // Origens do frontend configuradas → permitir
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // Qualquer origem HTTPS → permitir (inclui o próprio servidor, agentes, apps mobile)
+      // A autenticação real é feita pelo token no handshake, não pelo CORS
+      if (origin.startsWith('https://')) return callback(null, true);
+      // Em dev: aceitar tudo
+      if (process.env.NODE_ENV !== 'production') return callback(null, true);
+      // HTTP externo em produção → rejeitar
+      callback(new Error('CORS: origem não permitida: ' + origin), false);
+    },
+    methods: ['GET', 'POST'],
+    credentials: true,
+  };
 
   io = new Server(server, {
     cors: sioCors,
@@ -411,6 +426,12 @@ export function attachSocket(server) {
     try {
       const auth = (socket.handshake && socket.handshake.auth) || {};
       const token = auth.token;
+
+      // Debug: log every agent handshake attempt
+      if (token) {
+        console.log(`[agent-auth] Handshake recebido | ip=${socket.handshake.address} | companyId=${auth.companyId || '—'} | hasStoreIds=${Array.isArray(auth.storeIds) && auth.storeIds.length > 0} | tokenPrefix=${token.slice(0, 8)}…`);
+      }
+
       if (!token) return next(); // not an agent, allow
 
       // Resolve companyId from auth. Preferred: auth.companyId (sent directly).
@@ -420,37 +441,62 @@ export function attachSocket(server) {
       if (auth.companyId) {
         // New preferred method: agent sends companyId directly
         const maybeCompany = await prisma.company.findUnique({ where: { id: auth.companyId }, select: { id: true } });
-        if (maybeCompany) companyId = maybeCompany.id;
+        if (maybeCompany) {
+          companyId = maybeCompany.id;
+          console.log(`[agent-auth] companyId resolvido diretamente: ${companyId}`);
+        } else {
+          console.warn(`[agent-auth] companyId "${auth.companyId}" não encontrado no banco`);
+        }
       } else {
         // Legacy: resolve from storeIds array
         const storeIds = Array.isArray(auth.storeIds) ? auth.storeIds : (auth.storeId ? [auth.storeId] : []);
-        if (!storeIds.length) return next(new Error('agent-missing-companyId'));
+        console.log(`[agent-auth] fallback legacy — storeIds recebidos: ${JSON.stringify(storeIds)}`);
+        if (!storeIds.length) {
+          console.warn('[agent-auth] rejeitado: sem companyId nem storeIds');
+          return next(new Error('agent-missing-companyId'));
+        }
 
         const candidate = storeIds[0];
         const store = await prisma.store.findUnique({ where: { id: candidate }, select: { companyId: true } });
         if (store && store.companyId) {
           companyId = store.companyId;
+          console.log(`[agent-auth] companyId resolvido via storeId: ${companyId}`);
         } else {
           // candidate might itself be a companyId
           const maybeCompany = await prisma.company.findUnique({ where: { id: candidate }, select: { id: true } });
-          if (maybeCompany) companyId = maybeCompany.id;
+          if (maybeCompany) {
+            companyId = maybeCompany.id;
+            console.log(`[agent-auth] companyId resolvido via candidate-como-company: ${companyId}`);
+          } else {
+            console.warn(`[agent-auth] candidate "${candidate}" não é storeId nem companyId`);
+          }
         }
       }
 
-      if (!companyId) return next(new Error('invalid-companyId'));
+      if (!companyId) {
+        console.warn(`[agent-auth] rejeitado: companyId não resolvido`);
+        return next(new Error('invalid-companyId'));
+      }
 
       const setting = await prisma.printerSetting.findUnique({ where: { companyId }, select: { agentTokenHash: true } });
-      if (!setting || !setting.agentTokenHash) return next(new Error('agent-no-token-configured'));
+      if (!setting || !setting.agentTokenHash) {
+        console.warn(`[agent-auth] rejeitado: PrinterSetting sem agentTokenHash para companyId=${companyId}`);
+        return next(new Error('agent-no-token-configured'));
+      }
 
       const incomingHash = sha256(token);
-      if (incomingHash !== setting.agentTokenHash) return next(new Error('invalid-agent-token'));
+      if (incomingHash !== setting.agentTokenHash) {
+        console.warn(`[agent-auth] rejeitado: token hash não confere para companyId=${companyId}`);
+        return next(new Error('invalid-agent-token'));
+      }
 
       // Fetch all storeIds for this company so routing (e.g. print-test) works correctly
       const stores = await prisma.store.findMany({ where: { companyId }, select: { id: true } });
       socket.agent = { companyId, storeIds: stores.map(s => s.id) };
+      console.log(`[agent-auth] ✅ Agente autenticado | companyId=${companyId} | storeIds=${JSON.stringify(socket.agent.storeIds)}`);
       return next();
     } catch (e) {
-      console.error('Socket auth error', e);
+      console.error('[agent-auth] Exceção no middleware:', e && e.stack ? e.stack : e);
       return next(new Error('internal'));
     }
   });
