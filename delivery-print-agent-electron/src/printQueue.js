@@ -121,6 +121,10 @@ async function _handleJob(item) {
                    || pl.deliveryAddress
                    || o.deliveryAddress;
       const rawPl = pl.rawPayload || {};
+      // iFood: desempacotar envelope { order: {...} } ou usar payload direto
+      const ifoodPlDbg = pl.order || pl;
+      const localizadorDbg   = ifoodPlDbg.customer?.phones?.[0]?.localizer || ifoodPlDbg.customer?.phone?.localizer || '';
+      const codigoColetaDbg  = ifoodPlDbg.delivery?.pickupCode || '';
       logger.info('[debug] pedido recebido', {
         id:            o.id,
         displayId:     o.displayId,
@@ -138,6 +142,11 @@ async function _handleJob(item) {
         rawPayload_address: rawPl.address,
         deliveryNeighborhood: o.deliveryNeighborhood,
         customerName: o.customerName,
+        // iFood
+        ifood_order_keys:   pl.order ? Object.keys(pl.order) : null,
+        ifood_customer:     ifoodPlDbg.customer,
+        ifood_localizador:  localizadorDbg  || '(vazio)',
+        ifood_pickupCode:   codigoColetaDbg || '(vazio)',
       });
       // ── /DEBUG ───────────────────────────────────────────────────────────────
 

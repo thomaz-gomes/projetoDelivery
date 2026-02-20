@@ -333,7 +333,7 @@ function buildBlockContext(order) {
   // iFood: campos específicos (localizador, código de coleta)
   const _plBc = order.payload || {};
   const _ifBc = _plBc.order || _plBc;
-  const localizador   = _ifBc.customer?.phone?.localizer || '';
+  const localizador   = _ifBc.customer?.phones?.[0]?.localizer || _ifBc.customer?.phone?.localizer || '';
   const codigo_coleta = _ifBc.delivery?.pickupCode || '';
 
   return {
@@ -540,7 +540,7 @@ function buildContext(order, printer) {
     tem_qr:      !!(order.qrText || order.trackingUrl),
 
     // iFood: campos específicos
-    localizador:   ifoodPl.customer?.phone?.localizer || '',
+    localizador:   ifoodPl.customer?.phones?.[0]?.localizer || ifoodPl.customer?.phone?.localizer || '',
     codigo_coleta: ifoodPl.delivery?.pickupCode || '',
 
     impressora_alias: printer?.alias || '',
