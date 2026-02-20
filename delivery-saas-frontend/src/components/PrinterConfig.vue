@@ -50,7 +50,10 @@
                 <div class="fw-bold mb-2">✅ Agente conectado</div>
                 <div class="small text-muted mb-2">Impressoras detectadas:</div>
                 <div class="d-flex flex-wrap gap-2">
-                  <span v-for="p in printers" :key="p" class="printer-chip">{{ p }}</span>
+                  <span v-for="p in printers" :key="typeof p === 'string' ? p : p.name" class="printer-chip">
+                    {{ typeof p === 'string' ? p : p.name }}
+                    <span v-if="p.port" class="ms-1 text-muted" style="font-size:11px">({{ p.port }})</span>
+                  </span>
                 </div>
                 <div class="mt-3">
                   <button class="btn btn-sm btn-outline-secondary" @click="discoverPrinters">

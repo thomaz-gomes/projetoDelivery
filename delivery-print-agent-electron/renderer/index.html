@@ -437,21 +437,27 @@ async function openPrinterModal(id) {
   document.getElementById('modalTitle').textContent = id ? 'Editar Impressora' : 'Nova Impressora';
   document.getElementById('btnTestModal').style.display = id ? 'inline-flex' : 'none';
 
-  // Load system printers for USB dropdown
-  systemPrinters = await api.listSystemPrinters();
-  const sel = document.getElementById('pm-winname');
-  sel.innerHTML = '<option value="">— Selecione —</option>' +
-    systemPrinters.map(p => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.port)})</option>`).join('');
-
+  // Preenche o formulário e exibe o modal ANTES de carregar impressoras do sistema
   if (id) {
     const p = (config.printers || []).find(x => x.id === id);
     if (p) fillPrinterForm(p);
   } else {
     resetPrinterForm();
   }
-
   document.getElementById('printerModal').classList.add('open');
   updateInterfaceFields();
+
+  // Carrega impressoras do Windows em background (PowerShell pode demorar 3-8s)
+  const sel = document.getElementById('pm-winname');
+  sel.innerHTML = '<option value="">Carregando impressoras...</option>';
+  try {
+    systemPrinters = await api.listSystemPrinters();
+    const savedName = id ? ((config.printers || []).find(x => x.id === id) || {}).windowsPrinterName || '' : '';
+    sel.innerHTML = '<option value="">— Selecione —</option>' +
+      systemPrinters.map(p => `<option value="${esc(p.name)}" ${p.name === savedName ? 'selected' : ''}>${esc(p.name)} (${esc(p.port)})</option>`).join('');
+  } catch (e) {
+    sel.innerHTML = '<option value="">Erro ao listar impressoras</option>';
+  }
 }
 
 function closePrinterModal() {
@@ -459,9 +465,8 @@ function closePrinterModal() {
   editingPrinterId = null;
 }
 
-function openPrinterModal_new() { openPrinterModal(null); }
-// alias for onclick
-window.openPrinterModal = openPrinterModal_new;
+// Exposição global para onclick inline
+window.openPrinterModal = function(id) { openPrinterModal(id || null); };
 
 function resetPrinterForm() {
   document.getElementById('pm-alias').value      = '';
