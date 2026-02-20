@@ -402,6 +402,8 @@ export function attachSocket(server) {
       // Qualquer origem HTTPS → permitir (inclui o próprio servidor, agentes, apps mobile)
       // A autenticação real é feita pelo token no handshake, não pelo CORS
       if (origin.startsWith('https://')) return callback(null, true);
+      // Electron/apps locais: localhost em qualquer porta → permitir (agente de impressão Windows)
+      if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       // Em dev: aceitar tudo
       if (process.env.NODE_ENV !== 'production') return callback(null, true);
       // HTTP externo em produção → rejeitar

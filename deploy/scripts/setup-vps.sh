@@ -119,6 +119,9 @@ echo -e "${GREEN}[6/7] Configurando Nginx...${NC}"
 # Remover default site
 rm -f /etc/nginx/sites-enabled/default
 
+# Map WebSocket/polling — necessário para $connection_upgrade nos configs
+cp "$DEPLOY_DIR/nginx/websocket.conf" /etc/nginx/conf.d/websocket.conf
+
 # Copiar configs substituindo os placeholders pelos domínios reais
 sed "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" "$DEPLOY_DIR/nginx/api.conf" > /etc/nginx/sites-available/api.conf
 sed "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" "$DEPLOY_DIR/nginx/app.conf" > /etc/nginx/sites-available/app.conf
