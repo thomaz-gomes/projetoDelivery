@@ -8,6 +8,7 @@
  */
 const logger = require('./logger');
 const templateEngine = require('./templateEngine');
+const configManager  = require('./config');
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5000;
@@ -91,12 +92,25 @@ async function _handleJob(item) {
     return;
   }
 
+  // Ler config local uma vez por job (para injetar template e cabeçalho locais)
+  const cfg = configManager.load();
+
   for (const printer of targets) {
     if (!printer.enabled) continue;
 
     try {
+      // Injetar template local (aba Comanda) se a impressora não tiver template próprio
+      const p = printer.template
+        ? printer
+        : { ...printer, template: cfg.receiptTemplate || printer.template };
+
+      // Injetar cabeçalho local se o pedido não trouxe do backend
+      const o = { ...order };
+      if (!o.headerName && cfg.headerName) o.headerName = cfg.headerName;
+      if (!o.headerCity && cfg.headerCity) o.headerCity = cfg.headerCity;
+
       // Renderizar template em bytes ESC/POS
-      const bytes = templateEngine.render(order, printer);
+      const bytes = templateEngine.render(o, p);
 
       // Enviar para a impressora (uma via por vez; copies em loop)
       const copies = Math.max(1, printer.copies || 1);
@@ -117,25 +131,31 @@ function _jobId(order) {
 }
 
 function _buildTestOrder(data) {
+  const cfg = configManager.load();
+  const loja = cfg.headerName || 'Delivery SaaS';
   return {
     _printerId: data.printerId,
     id: `TEST-${Date.now()}`,
     displayId: 'TESTE',
-    storeName: 'Delivery SaaS',
+    headerName: loja,              // usado como loja_nome pelo templateEngine
+    storeName:  loja,
     createdAt: new Date().toISOString(),
-    customer: { name: 'Cliente Teste', phone: '(71) 99999-9999' },
+    customerName: 'Cliente Teste',
+    customerPhone: '(71) 99999-9999',
+    orderType: 'delivery',          // campo do DB Order
+    type: 'delivery',               // compatibilidade
     deliveryAddress: { street: 'Rua Exemplo', number: '123', neighborhood: 'Centro', city: 'Salvador' },
     items: [
-      { name: 'X-Burguer', quantity: 1, price: 2500, notes: 'Sem cebola' },
-      { name: 'Coca-Cola 350ml', quantity: 2, price: 600 },
+      { name: 'X-Burguer', quantity: 1, price: 25.00, notes: 'Sem cebola' },
+      { name: 'Coca-Cola 350ml', quantity: 2, price: 6.00 },
     ],
-    payments: [{ method: 'Dinheiro', value: 3700 }],
-    subtotal: 3700,
-    deliveryFee: 500,
+    payments: [{ method: 'Dinheiro', value: 42.00 }],
+    subtotal: 37.00,
+    deliveryFee: 5.00,
     discount: 0,
-    total: 4200,
-    type: 'delivery',
+    total: 42.00,
     notes: 'Pedido de teste — ignore',
+    qrText: 'https://app.deliverywl.com.br/orders/test',
   };
 }
 

@@ -99,6 +99,80 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
 #notification { position: fixed; bottom: 20px; right: 20px; padding: 12px 18px; border-radius: 8px; font-size: 13px; display: none; z-index: 999; }
 #notification.ok  { background:#0d4a2a; color:#4ecca3; display:block; }
 #notification.err { background:#4a1a1a; color:#ff6b6b; display:block; }
+
+/* ── Template Editor ──────────────────────────────────────────────── */
+.tpl-hint { font-size: 12px; color: #666; margin-bottom: 12px; }
+
+/* Receipt preview (paper look) */
+.tpl-preview {
+  background: #fff8e7;
+  border: 1px solid #4a4a6a;
+  border-radius: 6px;
+  padding: 12px 16px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  min-height: 220px;
+  max-height: 380px;
+  overflow-y: auto;
+  cursor: default;
+  color: #222;
+}
+.tpl-block {
+  padding: 2px 5px;
+  margin: 1px 0;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  line-height: 1.45;
+  transition: border-color .1s, background .1s;
+}
+.tpl-block:hover  { border-color: #4ecca3; background: rgba(78,204,163,.09); }
+.tpl-block.sel    { border-color: #4ecca3; background: rgba(78,204,163,.2); }
+.tpl-sep-line     { text-align: center; color: #aaa; font-size: 12px; letter-spacing: 2px; user-select: none; }
+.tpl-fixed        { color: #777; font-style: italic; font-size: 12px; }
+.tpl-ph           { background: #fff3cd; color: #856404; border-radius: 3px; padding: 0 3px; font-weight: 600; }
+.tpl-cond-badge   { background: #e8daef; color: #6c3483; border-radius: 3px; padding: 0 4px; font-size: 10px; font-weight: 700; margin-right: 4px; vertical-align: middle; }
+.tpl-fmt-badge    { background: #d6e4f0; color: #2c5282; border-radius: 3px; padding: 0 4px; font-size: 10px; font-weight: 700; margin-left: 3px; }
+
+/* Toolbar */
+.tpl-toolbar {
+  background: #1e1e3a;
+  border: 1px solid #2a2a4a;
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin-top: 8px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tpl-divider { display: inline-block; width: 1px; height: 22px; background: #3a3a5a; margin: 0 3px; flex-shrink: 0; }
+.tpl-ci { min-width: 140px; max-width: 280px; flex: 1; height: 29px; padding: 3px 8px; }
+.tpl-ki { width: 110px; height: 29px; padding: 3px 8px; }
+
+/* Actions row */
+.tpl-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Dropdowns */
+.dd-wrap { position: relative; display: inline-block; }
+.dd-menu {
+  position: absolute; top: 100%; left: 0; z-index: 1050;
+  min-width: 200px;
+  background: #1e1e3a; border: 1px solid #3a3a6a;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.6);
+  padding: 4px 0; margin-top: 2px;
+  list-style: none;
+  display: none;
+}
+.dd-menu.open     { display: block; }
+.dd-menu-ph       { max-height: 300px; overflow-y: auto; min-width: 270px; }
+.dd-item          { display: block; padding: 5px 12px; color: #ccc; text-decoration: none; font-size: 13px; cursor: pointer; }
+.dd-item:hover    { background: #2a2a4a; color: #fff; }
+.dd-item.disabled { color: #555; pointer-events: none; }
+.dd-divider       { margin: 4px 0; border-top: 1px solid #2a2a4a; }
+.dd-cat-header    { padding: 4px 12px 2px; font-size: 11px; font-weight: 700; color: #666; text-transform: uppercase; }
+.dd-ph-code       { font-family: monospace; font-size: 11px; color: #856404; background: #fff3cd; padding: 1px 3px; border-radius: 2px; }
 </style>
 </head>
 <body>
@@ -114,6 +188,7 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
 <!-- ── Tabs ────────────────────────────────────────────────────────────── -->
 <nav>
   <button class="active" data-tab="printers">Impressoras</button>
+  <button data-tab="template">Comanda</button>
   <button data-tab="server">Servidor</button>
   <button data-tab="status">Status</button>
 </nav>
@@ -132,6 +207,68 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
         <button class="btn btn-primary" onclick="openPrinterModal()">+ Adicionar Impressora</button>
       </div>
     </div>
+  </div>
+
+  <!-- TAB: Comanda -->
+  <div id="tab-template" class="tab-panel">
+
+    <div class="card">
+      <h2>Cabeçalho</h2>
+      <div class="form-row">
+        <div class="field">
+          <label>Nome do estabelecimento</label>
+          <input id="headerName" type="text" placeholder="Ex: Burguer House" />
+        </div>
+        <div class="field">
+          <label>Cidade / Estado</label>
+          <input id="headerCity" type="text" placeholder="Ex: Salvador - BA" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Template da Comanda</h2>
+      <p class="tpl-hint">Clique em um bloco para selecioná-lo e editar. A barra abaixo mostra as opções de formatação do bloco selecionado.</p>
+
+      <!-- Receipt preview -->
+      <div id="tpl-preview" class="tpl-preview" onclick="tplDeselect()"></div>
+
+      <!-- Toolbar (shown when block is selected) -->
+      <div id="tpl-toolbar" class="tpl-toolbar" style="display:none"></div>
+
+      <!-- Actions row -->
+      <div class="tpl-actions">
+        <!-- Add block dropdown -->
+        <div class="dd-wrap" id="tpl-add-wrap">
+          <button class="btn btn-sm btn-ghost" onclick="tplToggleAddMenu()">+ Adicionar bloco ▾</button>
+          <ul class="dd-menu" id="tpl-add-menu">
+            <li><a class="dd-item" href="#" onclick="tplAddBlock('text');return false">Texto</a></li>
+            <li><a class="dd-item" href="#" onclick="tplAddBlock('sep');return false">Separador</a></li>
+            <li><a class="dd-item" href="#" onclick="tplAddBlock('cond');return false">Condicional (SE)</a></li>
+            <hr class="dd-divider" />
+            <li><a class="dd-item" id="dd-add-items"    href="#" onclick="tplAddBlock('items');return false">Itens do pedido</a></li>
+            <li><a class="dd-item" id="dd-add-payments" href="#" onclick="tplAddBlock('payments');return false">Formas de pagamento</a></li>
+            <li><a class="dd-item" id="dd-add-qr"       href="#" onclick="tplAddBlock('qr');return false">QR Code</a></li>
+          </ul>
+        </div>
+
+        <!-- Insert placeholder dropdown (visible only when text/cond block selected) -->
+        <div class="dd-wrap" id="tpl-ph-wrap" style="display:none">
+          <button class="btn btn-sm btn-ghost" onclick="tplTogglePhMenu()">Inserir placeholder ▾</button>
+          <ul class="dd-menu dd-menu-ph" id="tpl-ph-menu"></ul>
+        </div>
+
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-sm btn-ghost" onclick="tplRestoreDefault()">&#8635; Restaurar padrão</button>
+          <button class="btn btn-sm btn-ghost" onclick="tplTestPrint()">&#128424; Imprimir teste</button>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="saveTemplate()">Salvar Template</button>
+      </div>
+    </div>
+
   </div>
 
   <!-- TAB: Servidor -->
@@ -289,13 +426,6 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
       </div>
     </div>
 
-    <div class="form-row single">
-      <div class="field">
-        <label>Template personalizado (opcional)</label>
-        <textarea id="pm-template" placeholder="Deixe em branco para usar o template padrão..."></textarea>
-      </div>
-    </div>
-
     <div class="toggle-row">
       <input type="checkbox" id="pm-enabled" class="toggle" checked />
       <label for="pm-enabled">Impressora ativa</label>
@@ -318,22 +448,25 @@ let config = { serverUrl: '', token: '', autoStart: true, printers: [] };
 let editingPrinterId = null;
 let systemPrinters = [];
 
-// ── Init ─────────────────────────────────────────────────────────────────
+window.onerror = function(msg, src, line) {
+  try { notify('JS Error: ' + msg + ' (linha ' + line + ')', 'err'); } catch(_) {}
+};
+
+// ── Init ──────────────────────────────────────────────────────────────────
 async function init() {
   config = await api.loadConfig();
   renderPrinterList();
   loadServerForm();
   refreshStatus();
+  initTemplateEditor();
 
-  // Auto-start
   const as = await api.getAutoStart();
   document.getElementById('autoStart').checked = as;
 
-  // Listen for status updates
   api.onStatusChange(updateStatusBadge);
 }
 
-// ── Tabs ─────────────────────────────────────────────────────────────────
+// ── Tabs ──────────────────────────────────────────────────────────────────
 document.querySelectorAll('nav button').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -353,7 +486,6 @@ function updateStatusBadge(s) {
   } else if (s.authError) {
     el.textContent = '⚠ Token inválido';
     el.className = 'badge disconnected';
-    // Mostra aviso permanente
     showAuthErrorBanner(s.label);
   } else if (s.label && (s.label.includes('Conectando') || s.label.includes('Reconectando'))) {
     el.textContent = s.label.replace('…', '...').split('(')[0].trim();
@@ -433,30 +565,32 @@ function renderPrinterList() {
 
 // ── Printer Modal ─────────────────────────────────────────────────────────
 async function openPrinterModal(id) {
-  editingPrinterId = id || null;
-  document.getElementById('modalTitle').textContent = id ? 'Editar Impressora' : 'Nova Impressora';
-  document.getElementById('btnTestModal').style.display = id ? 'inline-flex' : 'none';
-
-  // Preenche o formulário e exibe o modal ANTES de carregar impressoras do sistema
-  if (id) {
-    const p = (config.printers || []).find(x => x.id === id);
-    if (p) fillPrinterForm(p);
-  } else {
-    resetPrinterForm();
-  }
-  document.getElementById('printerModal').classList.add('open');
-  updateInterfaceFields();
-
-  // Carrega impressoras do Windows em background (PowerShell pode demorar 3-8s)
-  const sel = document.getElementById('pm-winname');
-  sel.innerHTML = '<option value="">Carregando impressoras...</option>';
   try {
-    systemPrinters = await api.listSystemPrinters();
-    const savedName = id ? ((config.printers || []).find(x => x.id === id) || {}).windowsPrinterName || '' : '';
-    sel.innerHTML = '<option value="">— Selecione —</option>' +
-      systemPrinters.map(p => `<option value="${esc(p.name)}" ${p.name === savedName ? 'selected' : ''}>${esc(p.name)} (${esc(p.port)})</option>`).join('');
-  } catch (e) {
-    sel.innerHTML = '<option value="">Erro ao listar impressoras</option>';
+    editingPrinterId = id || null;
+    document.getElementById('modalTitle').textContent = id ? 'Editar Impressora' : 'Nova Impressora';
+    document.getElementById('btnTestModal').style.display = id ? 'inline-flex' : 'none';
+
+    if (id) {
+      const p = (config.printers || []).find(x => x.id === id);
+      if (p) fillPrinterForm(p);
+    } else {
+      resetPrinterForm();
+    }
+    document.getElementById('printerModal').classList.add('open');
+    updateInterfaceFields();
+
+    const sel = document.getElementById('pm-winname');
+    sel.innerHTML = '<option value="">Carregando impressoras...</option>';
+    try {
+      systemPrinters = await api.listSystemPrinters();
+      const savedName = id ? ((config.printers || []).find(x => x.id === id) || {}).windowsPrinterName || '' : '';
+      sel.innerHTML = '<option value="">— Selecione —</option>' +
+        systemPrinters.map(p => `<option value="${esc(p.name)}" ${p.name === savedName ? 'selected' : ''}>${esc(p.name)} (${esc(p.port)})</option>`).join('');
+    } catch (e) {
+      sel.innerHTML = '<option value="">Erro ao listar impressoras</option>';
+    }
+  } catch (outerErr) {
+    notify('Erro ao abrir modal: ' + (outerErr && outerErr.message || String(outerErr)), 'err');
   }
 }
 
@@ -464,9 +598,6 @@ function closePrinterModal() {
   document.getElementById('printerModal').classList.remove('open');
   editingPrinterId = null;
 }
-
-// Exposição global para onclick inline
-window.openPrinterModal = function(id) { openPrinterModal(id || null); };
 
 function resetPrinterForm() {
   document.getElementById('pm-alias').value      = '';
@@ -482,7 +613,6 @@ function resetPrinterForm() {
   document.getElementById('pm-margin').value     = '0';
   document.getElementById('pm-copies').value     = '1';
   document.getElementById('pm-categories').value = 'all';
-  document.getElementById('pm-template').value   = '';
   document.getElementById('pm-enabled').checked  = true;
 }
 
@@ -500,7 +630,6 @@ function fillPrinterForm(p) {
   document.getElementById('pm-margin').value     = p.marginLeft || 0;
   document.getElementById('pm-copies').value     = p.copies || 1;
   document.getElementById('pm-categories').value = (p.categories || ['all']).join(', ');
-  document.getElementById('pm-template').value   = p.template || '';
   document.getElementById('pm-enabled').checked  = p.enabled !== false;
 }
 
@@ -515,7 +644,6 @@ function collectPrinterForm() {
   const iface = document.getElementById('pm-interface').value;
   const categories = document.getElementById('pm-categories').value
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-
   return {
     id: editingPrinterId || crypto.randomUUID(),
     alias:               document.getElementById('pm-alias').value.trim(),
@@ -531,7 +659,6 @@ function collectPrinterForm() {
     marginLeft:          parseInt(document.getElementById('pm-margin').value) || 0,
     copies:              parseInt(document.getElementById('pm-copies').value) || 1,
     categories:          categories.length ? categories : ['all'],
-    template:            document.getElementById('pm-template').value.trim() || null,
     enabled:             document.getElementById('pm-enabled').checked,
   };
 }
@@ -568,7 +695,7 @@ async function testPrinter(id) {
 
 async function testCurrentPrinter() {
   if (!editingPrinterId) return;
-  await savePrinter(); // salva primeiro
+  await savePrinter();
   await testPrinter(editingPrinterId);
 }
 
@@ -590,7 +717,395 @@ function esc(s) {
 async function resetConfig() {
   if (!confirm('Isso vai apagar o token de pareamento e abrir o wizard de configuração novamente.\n\nAs impressoras configuradas serão mantidas.\n\nContinuar?')) return;
   await api.resetConfig();
-  // A janela principal é fechada pelo main process; o wizard abre automaticamente.
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── Template Editor (Comanda tab) ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DEFAULT_BLOCKS = [
+  { t: 'sep' },
+  { t: 'text', c: '{{header_name}}', a: 'center', b: true, s: 'lg' },
+  { t: 'text', c: '{{header_city}}', a: 'center' },
+  { t: 'sep' },
+  { t: 'text', c: 'PEDIDO #{{display_id}}', a: 'center', b: true, s: 'xl' },
+  { t: 'text', c: 'Data: {{data_pedido}}  Hora: {{hora_pedido}}' },
+  { t: 'cond', key: 'tipo_pedido', c: 'Tipo: {{tipo_pedido}}' },
+  { t: 'sep' },
+  { t: 'text', c: 'CLIENTE: {{nome_cliente}}', b: true },
+  { t: 'text', c: 'Telefone: {{telefone_cliente}}' },
+  { t: 'text', c: 'Endereco: {{endereco_cliente}}' },
+  { t: 'sep' },
+  { t: 'items', itemBold: true, itemSize: 'normal' },
+  { t: 'sep' },
+  { t: 'text', c: 'Qtd itens: {{total_itens_count}}' },
+  { t: 'text', c: 'Subtotal: R$ {{subtotal}}' },
+  { t: 'cond', key: 'taxa_entrega', c: 'Taxa entrega: R$ {{taxa_entrega}}' },
+  { t: 'cond', key: 'desconto', c: 'Desconto: R$ {{desconto}}' },
+  { t: 'text', c: 'TOTAL: R$ {{total}}', b: true, s: 'lg' },
+  { t: 'sep' },
+  { t: 'text', c: 'FORMAS DE PAGAMENTO', b: true },
+  { t: 'payments' },
+  { t: 'cond', key: 'observacoes', c: 'OBS: {{observacoes}}' },
+  { t: 'qr' },
+  { t: 'sep' },
+  { t: 'text', c: 'Obrigado e bom apetite!', a: 'center' },
+  { t: 'sep' }
+];
+
+const PLACEHOLDER_CATS = [
+  { label: 'Dados da loja', items: [
+    { key: 'header_name',  label: 'Nome da loja' },
+    { key: 'header_city',  label: 'Cidade' }
+  ]},
+  { label: 'Pedido', items: [
+    { key: 'display_id',   label: 'N. Pedido' },
+    { key: 'data_pedido',  label: 'Data' },
+    { key: 'hora_pedido',  label: 'Hora' },
+    { key: 'tipo_pedido',  label: 'Tipo (DELIVERY/PICKUP)' },
+    { key: 'observacoes',  label: 'Obs. do pedido' }
+  ]},
+  { label: 'Cliente', items: [
+    { key: 'nome_cliente',       label: 'Nome do cliente' },
+    { key: 'telefone_cliente',   label: 'Telefone' },
+    { key: 'endereco_cliente',   label: 'Endereço' }
+  ]},
+  { label: 'Valores', items: [
+    { key: 'total_itens_count',  label: 'Qtd de itens' },
+    { key: 'subtotal',           label: 'Subtotal' },
+    { key: 'taxa_entrega',       label: 'Taxa de entrega' },
+    { key: 'desconto',           label: 'Desconto' },
+    { key: 'total',              label: 'Total' }
+  ]}
+];
+
+let tplBlocks  = JSON.parse(JSON.stringify(DEFAULT_BLOCKS));
+let tplSelIdx  = -1;
+
+// ── Init ──────────────────────────────────────────────────────────────────
+function initTemplateEditor() {
+  // Load saved template from config
+  const saved = config.receiptTemplate;
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.v === 2 && Array.isArray(parsed.blocks)) {
+        tplBlocks = parsed.blocks;
+      }
+    } catch (_) { /* keep default */ }
+  }
+
+  // Load header fields
+  document.getElementById('headerName').value = config.headerName || '';
+  document.getElementById('headerCity').value = config.headerCity || '';
+
+  // Build the (static) placeholder menu
+  buildPhMenu();
+
+  // Initial render
+  renderBlockEditor();
+
+  // Close dropdown menus when clicking outside their wraps
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#tpl-add-wrap')) {
+      document.getElementById('tpl-add-menu').classList.remove('open');
+    }
+    if (!e.target.closest('#tpl-ph-wrap')) {
+      document.getElementById('tpl-ph-menu').classList.remove('open');
+    }
+  });
+}
+
+// ── Render helpers ────────────────────────────────────────────────────────
+function renderBlockEditor() {
+  renderTplPreview();
+  renderTplToolbar();
+  syncAddMenuDisabled();
+  syncPhWrap();
+}
+
+function renderTplPreview() {
+  const container = document.getElementById('tpl-preview');
+  if (!container) return;
+  container.innerHTML = tplBlocks.map((b, i) => renderOneBlock(b, i)).join('');
+}
+
+function renderOneBlock(block, idx) {
+  const selCls = tplSelIdx === idx ? ' sel' : '';
+  let inner = '';
+
+  if (block.t === 'sep') {
+    inner = '<div class="tpl-sep-line">- - - - - - - - - - - - - - - - - -</div>';
+
+  } else if (block.t === 'text' || block.t === 'cond') {
+    let style = '';
+    if (block.a === 'center') style += 'text-align:center;';
+    else if (block.a === 'right') style += 'text-align:right;';
+    if (block.b) style += 'font-weight:bold;';
+    if (block.s === 'sm') style += 'font-size:11px;';
+    else if (block.s === 'lg') style += 'font-size:16px;';
+    else if (block.s === 'xl') style += 'font-size:20px;';
+    const cond = block.t === 'cond' ? '<span class="tpl-cond-badge">SE</span>' : '';
+    inner = `<div style="${style}">${cond}${phHighlight(block.c || '')}</div>`;
+
+  } else if (block.t === 'items') {
+    const boldBadge = block.itemBold ? '<span class="tpl-fmt-badge">N</span>' : '';
+    const sizeBadge = block.itemSize && block.itemSize !== 'normal'
+      ? `<span class="tpl-fmt-badge">${sizeLabel(block.itemSize)}</span>` : '';
+    inner = `<div class="tpl-fixed">&#9776; Itens do pedido${boldBadge}${sizeBadge}</div>`;
+
+  } else if (block.t === 'payments') {
+    inner = '<div class="tpl-fixed">&#9679; Formas de pagamento</div>';
+
+  } else if (block.t === 'qr') {
+    inner = '<div class="tpl-fixed">&#9638; QR Code (despacho)</div>';
+  }
+
+  return `<div class="tpl-block${selCls}" onclick="tplSelect(${idx},event)">${inner}</div>`;
+}
+
+function phHighlight(text) {
+  // Escape HTML first, then wrap {{placeholders}} in a styled span
+  return esc(text).replace(/\{\{(\w+)\}\}/g, '<span class="tpl-ph">{{$1}}</span>');
+}
+
+function sizeLabel(s) {
+  return s === 'sm' ? 'S' : s === 'lg' ? 'A' : s === 'xl' ? 'aA' : 'N';
+}
+
+function renderTplToolbar() {
+  const tb = document.getElementById('tpl-toolbar');
+  if (!tb) return;
+
+  if (tplSelIdx < 0 || tplSelIdx >= tplBlocks.length) {
+    tb.style.display = 'none';
+    return;
+  }
+  tb.style.display = 'flex';
+
+  const block  = tplBlocks[tplSelIdx];
+  const isText = block.t === 'text' || block.t === 'cond';
+  const isItems = block.t === 'items';
+  const a = block.a || 'left', b = !!block.b, s = block.s || 'normal';
+
+  let html = '';
+
+  // ↑ ↓ Move
+  html += `<button class="btn btn-sm btn-ghost" onclick="tplMove(-1)" ${tplSelIdx===0?'disabled':''} title="Mover para cima">&#8593;</button>`;
+  html += `<button class="btn btn-sm btn-ghost" onclick="tplMove(1)"  ${tplSelIdx===tplBlocks.length-1?'disabled':''} title="Mover para baixo">&#8595;</button>`;
+  html += '<span class="tpl-divider"></span>';
+
+  if (isText) {
+    // Align
+    html += `<button class="btn btn-sm ${a==='left'   ?'btn-primary':'btn-ghost'}" onclick="tplSetAlign('left')"   title="Esquerda">&#9664;</button>`;
+    html += `<button class="btn btn-sm ${a==='center' ?'btn-primary':'btn-ghost'}" onclick="tplSetAlign('center')" title="Centro">&#9632;</button>`;
+    html += `<button class="btn btn-sm ${a==='right'  ?'btn-primary':'btn-ghost'}" onclick="tplSetAlign('right')"  title="Direita">&#9654;</button>`;
+    html += '<span class="tpl-divider"></span>';
+
+    // Bold
+    html += `<button class="btn btn-sm ${b?'btn-primary':'btn-ghost'}" onclick="tplToggleBold()" title="Negrito" style="font-weight:700;font-family:serif">N</button>`;
+    html += '<span class="tpl-divider"></span>';
+
+    // Size
+    html += `<button class="btn btn-sm ${s==='normal'?'btn-primary':'btn-ghost'}" onclick="tplSetSize('normal')" title="Normal">N</button>`;
+    html += `<button class="btn btn-sm ${s==='sm'    ?'btn-primary':'btn-ghost'}" onclick="tplSetSize('sm')"     title="Pequeno" style="font-size:10px">S</button>`;
+    html += `<button class="btn btn-sm ${s==='lg'    ?'btn-primary':'btn-ghost'}" onclick="tplSetSize('lg')"     title="Grande"  style="font-size:15px">A</button>`;
+    html += `<button class="btn btn-sm ${s==='xl'    ?'btn-primary':'btn-ghost'}" onclick="tplSetSize('xl')"     title="Extra grande" style="font-size:17px">A</button>`;
+    html += '<span class="tpl-divider"></span>';
+
+    // Content input
+    html += `<input id="tpl-ci" class="tpl-ci" value="${esc(block.c||'')}" oninput="tplSetContent(this.value)" placeholder="Conteudo..." />`;
+
+    // Key input (cond only)
+    if (block.t === 'cond') {
+      html += `<input id="tpl-ki" class="tpl-ki" value="${esc(block.key||'')}" oninput="tplSetKey(this.value)" placeholder="variavel" />`;
+    }
+  }
+
+  if (isItems) {
+    const ib = !!block.itemBold, il = block.itemSize === 'lg';
+    html += `<button class="btn btn-sm ${ib?'btn-primary':'btn-ghost'}" onclick="tplToggleItemBold()" title="Itens em negrito" style="font-weight:700;font-family:serif">N</button>`;
+    html += `<button class="btn btn-sm ${il?'btn-primary':'btn-ghost'}" onclick="tplToggleItemSize()" title="Itens grandes" style="font-size:15px">A</button>`;
+  }
+
+  // Delete (always, pushed right)
+  html += '<button class="btn btn-sm btn-danger" onclick="tplDeleteBlock()" title="Remover bloco" style="margin-left:auto">&#10005;</button>';
+
+  tb.innerHTML = html;
+}
+
+function syncAddMenuDisabled() {
+  const hasItems = tplBlocks.some(b => b.t === 'items');
+  const hasPay   = tplBlocks.some(b => b.t === 'payments');
+  const hasQr    = tplBlocks.some(b => b.t === 'qr');
+  const di = document.getElementById('dd-add-items');
+  const dp = document.getElementById('dd-add-payments');
+  const dq = document.getElementById('dd-add-qr');
+  if (di) di.className = 'dd-item' + (hasItems ? ' disabled' : '');
+  if (dp) dp.className = 'dd-item' + (hasPay   ? ' disabled' : '');
+  if (dq) dq.className = 'dd-item' + (hasQr    ? ' disabled' : '');
+}
+
+function syncPhWrap() {
+  const wrap = document.getElementById('tpl-ph-wrap');
+  if (!wrap) return;
+  const b = tplSelIdx >= 0 ? tplBlocks[tplSelIdx] : null;
+  wrap.style.display = (b && (b.t === 'text' || b.t === 'cond')) ? '' : 'none';
+}
+
+function buildPhMenu() {
+  const menu = document.getElementById('tpl-ph-menu');
+  if (!menu) return;
+  menu.innerHTML = PLACEHOLDER_CATS.map((cat, ci) => {
+    const items = cat.items.map(ph =>
+      `<a class="dd-item" href="#" onclick="tplInsertPh('${ph.key}');return false">
+         <span class="dd-ph-code">{{${ph.key}}}</span>
+         <span style="color:#777;font-size:12px;margin-left:6px">${esc(ph.label)}</span>
+       </a>`
+    ).join('');
+    return (ci > 0 ? '<hr class="dd-divider" />' : '') +
+           `<div class="dd-cat-header">${esc(cat.label)}</div>${items}`;
+  }).join('');
+}
+
+// ── Block actions ─────────────────────────────────────────────────────────
+function tplSelect(idx, event) {
+  event.stopPropagation();
+  tplSelIdx = idx;
+  renderBlockEditor();
+}
+
+function tplDeselect() {
+  tplSelIdx = -1;
+  renderBlockEditor();
+}
+
+function tplMove(dir) {
+  const to = tplSelIdx + dir;
+  if (to < 0 || to >= tplBlocks.length) return;
+  const tmp = tplBlocks[tplSelIdx];
+  tplBlocks[tplSelIdx] = tplBlocks[to];
+  tplBlocks[to] = tmp;
+  tplSelIdx = to;
+  renderBlockEditor();
+}
+
+function tplDeleteBlock() {
+  if (tplSelIdx < 0) return;
+  tplBlocks.splice(tplSelIdx, 1);
+  tplSelIdx = -1;
+  renderBlockEditor();
+}
+
+function tplAddBlock(type) {
+  document.getElementById('tpl-add-menu').classList.remove('open');
+  const already = tplBlocks.some(b => b.t === type);
+  if ((type === 'items' || type === 'payments' || type === 'qr') && already) return;
+
+  let newBlock;
+  switch (type) {
+    case 'text':     newBlock = { t: 'text', c: 'Novo texto' }; break;
+    case 'sep':      newBlock = { t: 'sep' }; break;
+    case 'cond':     newBlock = { t: 'cond', key: 'observacoes', c: '{{observacoes}}' }; break;
+    case 'items':    newBlock = { t: 'items', itemBold: true, itemSize: 'normal' }; break;
+    case 'payments': newBlock = { t: 'payments' }; break;
+    case 'qr':       newBlock = { t: 'qr' }; break;
+    default: return;
+  }
+  const at = tplSelIdx >= 0 ? tplSelIdx + 1 : tplBlocks.length;
+  tplBlocks.splice(at, 0, newBlock);
+  tplSelIdx = at;
+  renderBlockEditor();
+}
+
+// ── Formatting actions (called from toolbar inline handlers) ──────────────
+function tplSetAlign(a) {
+  if (tplSelIdx < 0) return;
+  tplBlocks[tplSelIdx].a = a;
+  renderBlockEditor();
+}
+
+function tplToggleBold() {
+  if (tplSelIdx < 0) return;
+  tplBlocks[tplSelIdx].b = !tplBlocks[tplSelIdx].b;
+  renderBlockEditor();
+}
+
+function tplSetSize(s) {
+  if (tplSelIdx < 0) return;
+  tplBlocks[tplSelIdx].s = s;
+  renderBlockEditor();
+}
+
+// Content/key inputs: update only preview to avoid stealing focus
+function tplSetContent(val) {
+  if (tplSelIdx < 0) return;
+  tplBlocks[tplSelIdx].c = val;
+  renderTplPreview();
+}
+
+function tplSetKey(val) {
+  if (tplSelIdx < 0) return;
+  tplBlocks[tplSelIdx].key = val;
+  renderTplPreview();
+}
+
+function tplToggleItemBold() {
+  if (tplSelIdx < 0) return;
+  tplBlocks[tplSelIdx].itemBold = !tplBlocks[tplSelIdx].itemBold;
+  renderBlockEditor();
+}
+
+function tplToggleItemSize() {
+  if (tplSelIdx < 0) return;
+  const cur = tplBlocks[tplSelIdx].itemSize;
+  tplBlocks[tplSelIdx].itemSize = cur === 'lg' ? 'normal' : 'lg';
+  renderBlockEditor();
+}
+
+function tplInsertPh(key) {
+  document.getElementById('tpl-ph-menu').classList.remove('open');
+  if (tplSelIdx < 0) return;
+  const block = tplBlocks[tplSelIdx];
+  if (block.t !== 'text' && block.t !== 'cond') return;
+  block.c = (block.c || '') + '{{' + key + '}}';
+  renderBlockEditor();
+}
+
+function tplRestoreDefault() {
+  if (!confirm('Restaurar o template padrão? As alterações serão perdidas.')) return;
+  tplBlocks = JSON.parse(JSON.stringify(DEFAULT_BLOCKS));
+  tplSelIdx = -1;
+  renderBlockEditor();
+}
+
+function tplToggleAddMenu() {
+  document.getElementById('tpl-add-menu').classList.toggle('open');
+  document.getElementById('tpl-ph-menu').classList.remove('open');
+}
+
+function tplTogglePhMenu() {
+  document.getElementById('tpl-ph-menu').classList.toggle('open');
+  document.getElementById('tpl-add-menu').classList.remove('open');
+}
+
+async function tplTestPrint() {
+  const printers = (config.printers || []).filter(p => p.enabled);
+  if (printers.length === 0) {
+    notify('Nenhuma impressora ativa configurada.', 'err');
+    return;
+  }
+  const res = await api.testPrint(printers[0].id);
+  notify(res.ok ? 'Impressão de teste enviada!' : 'Falha: ' + (res.error || ''), res.ok ? 'ok' : 'err');
+}
+
+async function saveTemplate() {
+  const headerName      = document.getElementById('headerName').value.trim();
+  const headerCity      = document.getElementById('headerCity').value.trim();
+  const receiptTemplate = JSON.stringify({ v: 2, blocks: tplBlocks });
+  config = { ...config, receiptTemplate, headerName, headerCity };
+  await api.saveConfig(config);
+  notify('Template salvo!', 'ok');
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────

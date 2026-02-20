@@ -113,6 +113,12 @@ function openMainWindow() {
   });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.setMenu(null);
+  // F12 abre DevTools (debug)
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F12') {
+      mainWindow.webContents.toggleDevTools();
+    }
+  });
   mainWindow.on('close', (e) => {
     // Minimize to tray instead of closing
     e.preventDefault();

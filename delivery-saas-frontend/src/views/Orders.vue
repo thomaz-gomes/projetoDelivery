@@ -2128,6 +2128,13 @@ async function viewReceipt(order) {
       console.warn('Falha ao gerar ticket/QR para pré-visualização', e);
     }
 
+    // 2) Fetch printer settings BEFORE opening modal so the component renders immediately
+    let printerSetting = null;
+    try {
+      const { data: agentData } = await api.get('/agent-setup');
+      printerSetting = agentData.printerSetting || null;
+    } catch (_) { /* sem configurações de impressora */ }
+
     // use printService's formatter when available
     const text = (printService && printService.formatOrderText) ? printService.formatOrderText(order) : null;
     const content = text || (`Comanda: ${formatDisplay(order)}\n\n` + JSON.stringify(order, null, 2));
@@ -2147,7 +2154,7 @@ async function viewReceipt(order) {
           try {
             const el = document.getElementById(rootId);
             if (el) {
-              appInstance = createApp(OrderTicketPreview, { order });
+              appInstance = createApp(OrderTicketPreview, { order, printerSetting });
               appInstance.mount(el);
             }
           } catch (err) {

@@ -20,6 +20,9 @@ const DEFAULT_CONFIG = {
   companyId: null,       // ID da empresa
   autoStart: true,
   printers: [],          // Array de PrinterConfig (ver abaixo)
+  receiptTemplate: null, // Template de comanda em formato JSON v2 (editado na aba Comanda)
+  headerName: '',        // Nome do estabelecimento exibido no cabeçalho
+  headerCity: '',        // Cidade/Estado exibido no cabeçalho
 };
 
 /**

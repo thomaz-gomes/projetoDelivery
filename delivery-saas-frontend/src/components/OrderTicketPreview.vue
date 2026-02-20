@@ -1,203 +1,326 @@
 <template>
   <div class="ticket-preview p-3" ref="root">
-      <div class="ticket-text">
-        <pre class="ticket-mono">{{ ticketText }}</pre>
-      </div>
-      <div class="qr-wrap mt-2 text-center"><img :src="qrSrc" alt="qr" style="width:160px; height:160px;"/></div>
-      <div class="text-center small text-muted mt-1">Escaneie para despachar</div>
+    <div class="ticket-text">
+      <pre class="ticket-mono">{{ ticketText }}</pre>
+    </div>
+    <div v-if="qrSrc" class="qr-wrap mt-2 text-center">
+      <img :src="qrSrc" alt="qr" style="width:160px; height:160px;"/>
+      <div class="small text-muted mt-1">Escaneie para despachar</div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import api from '@/api.js'
 
-const props = defineProps({ order: { type: Object, required: true } })
-const root = ref(null)
+const props = defineProps({
+  order: { type: Object, required: true },
+  // Quando passado pelo pai, evita fetch assíncrono (exibe imediatamente)
+  printerSetting: { type: Object, default: null },
+})
 
-function formatCurrency(v){
-  try{ return new Intl.NumberFormat('pt-BR',{ style: 'currency', currency: 'BRL' }).format(Number(v||0)) }catch(e){ return String(v||'0') }
+// ── Configurações do painel ───────────────────────────────────────────────────
+// _fetchedSetting: carregado via /agent-setup quando a prop não foi fornecida
+const _fetchedSetting = ref(null)
+
+onMounted(async () => {
+  if (props.printerSetting) return   // prop já fornecida pelo pai — não precisa buscar
+  try {
+    const { data } = await api.get('/agent-setup')
+    if (data.printerSetting) _fetchedSetting.value = data.printerSetting
+  } catch (_) { /* sem configuração de agente */ }
+})
+
+// Usa a prop se disponível, caso contrário usa o valor buscado assincronamente
+const _ps = computed(() => props.printerSetting || _fetchedSetting.value)
+
+const settingsHeaderName = computed(() => _ps.value?.headerName || '')
+const settingsHeaderCity = computed(() => _ps.value?.headerCity || '')
+const blockTemplate = computed(() => {
+  const tpl = _ps.value?.receiptTemplate
+  if (!tpl) return null
+  try {
+    const parsed = JSON.parse(tpl)
+    if (parsed && parsed.v === 2 && Array.isArray(parsed.blocks)) return parsed.blocks
+  } catch (_) { /* template texto — ignorar */ }
+  return null
+})
+
+// ── QR Code ───────────────────────────────────────────────────────────────────
+const qrSrc = computed(() => {
+  const o = props.order || {}
+  const url = o.qrText || o.trackingUrl || o.externalUrl || o.url || ''
+  if (!url) return ''
+  try { return `https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=${encodeURIComponent(url)}` }
+  catch (_) { return '' }
+})
+
+// ── Helpers numéricos ─────────────────────────────────────────────────────────
+function toNum(v) {
+  if (v == null) return 0
+  const n = Number(v)
+  return isFinite(n) ? n : 0
+}
+function fmtN(v) {
+  return toNum(v).toFixed(2).replace('.', ',')
+}
+function fmtBRL(v) {
+  return 'R$ ' + fmtN(v)
 }
 
-const isIfood = computed(()=> {
-  const o = props.order || {}
-  return String(o.channel||o.source||'').toLowerCase().includes('ifood') || !!o.ifood
-})
+// ── Construção do contexto (chaves do ReceiptTemplateEditor) ──────────────────
+function buildContext(order) {
+  const createdAt = order.createdAt ? new Date(order.createdAt) : new Date()
+  const pad2 = n => String(n).padStart(2, '0')
 
-function padNumber(n) {
-  if (n == null || n === '') return n || '';
-  return String(n).toString().padStart(2, '0');
-}
+  const rawType = String(order.orderType || order.type || '').toLowerCase()
+  const tipo_pedido = rawType === 'delivery' ? 'DELIVERY'
+    : rawType === 'pickup' ? 'RETIRADA'
+    : rawType === 'mesa'   ? 'MESA'
+    : rawType              ? rawType.toUpperCase()
+    : ''
 
-const paddedDisplay = computed(() => {
-  const o = props.order || {}
-  const d = o.displayId ?? o.displaySimple ?? o.display ?? null
-  if (d != null) return padNumber(d)
-  // try short id
-  return String((o.id || '')).slice(0, 6)
-})
-
-const customerName = computed(() => {
-  const o = props.order || {}
-  return o.customer?.name || o.customer?.fullName || o.customerName || o.customer?.email || '-'
-})
-const addressLine = computed(() => {
-  const o = props.order || {}
-  const formatObj = (addr) => {
-    if (!addr) return '';
-    if (addr.formatted) return addr.formatted;
-    const street = addr.street || addr.streetName || '';
-    const number = addr.number || addr.streetNumber || '';
-    const complement = addr.complement || addr.complemento || '';
-    const neighborhood = addr.neighborhood || '';
-    const city = addr.city || '';
-    const reference = addr.reference || addr.ref || '';
-    const obs = addr.observation || addr.observacao || '';
-    const base = [street, number].filter(Boolean).join(' ');
-    const parts = [base, complement, neighborhood, city].filter(Boolean);
-    if (reference) parts.push('Ref: ' + reference);
-    if (obs) parts.push('Obs: ' + obs);
-    return parts.join(' | ') || '-';
-  }
-  // many payload shapes - try prioritized fields
-  if (typeof o.address === 'string') return o.address
-  if (o.address && typeof o.address === 'object') return formatObj(o.address)
-  if (typeof o.customerAddress === 'string') return o.customerAddress
-  if (o.customer && o.customer.address) {
-    const ca = o.customer.address;
-    if (typeof ca === 'string') return ca
-    return formatObj(ca)
-  }
-  // payload fallbacks
-  const maybe = o.payload?.delivery?.deliveryAddress || o.payload?.deliveryAddress || o.deliveryAddress || o.addressFormatted
-  if (maybe) return (typeof maybe === 'string') ? maybe : (maybe.formatted || formatObj(maybe))
-  return '-'
-})
-const phoneLine = computed(() => {
-  const o = props.order || {}
-  return o.customer?.whatsapp || o.customer?.phone || o.customerPhone || o.contact || o.phone || '-'
-})
-
-const ifoodLocator = computed(()=> {
-  const o = props.order || {}
-  return o.ifood?.externalCode || o.externalCode || o.ifoodExternalCode || null
-})
-const pickupCode = computed(()=> {
-  const o = props.order || {}
-  return o.pickupCode || o.pickup_code || o.retrievalCode || null
-})
-
-function sumItems(items){
-  try{
-    let s = 0
-    for(const it of (items||[])){
-      const qty = Number(it.quantity || 1) || 1
-      const unit = Number(it.price || it.unitPrice || 0) || 0
-      let optsSum = 0
-      const opts = it.options || it.selectedOptions || []
-      for(const op of opts) {
-        const p = Number(op.price || op.unitPrice || 0) || 0
-        const oq = Number(op.quantity || op.qty || 1) || 1
-        optsSum += p * oq
+  // Endereço — filtra sentinel "-" do DB
+  let endereco_cliente = ''
+  const addr = order.address
+  if (typeof addr === 'string' && addr && addr !== '-') {
+    endereco_cliente = addr
+  } else {
+    const pl  = order.payload || {}
+    const da  = (pl.delivery && pl.delivery.deliveryAddress) || pl.deliveryAddress || order.deliveryAddress
+    if (da) {
+      if (typeof da === 'string' && da !== '-') {
+        endereco_cliente = da
+      } else if (da && typeof da === 'object') {
+        if (da.formattedAddress) {
+          endereco_cliente = da.formattedAddress
+        } else {
+          endereco_cliente = [
+            da.streetName || da.street || da.logradouro || '',
+            da.streetNumber || da.number || da.numero    || '',
+            da.complement   || da.complemento            || '',
+            da.neighborhood || da.bairro                 || '',
+            da.city         || da.cidade                 || '',
+          ].filter(Boolean).join(', ')
+        }
       }
-      s += (unit * qty) + (optsSum * qty)
     }
-    return s
-  }catch(e){ return 0 }
+  }
+
+  // Pagamentos — tenta vários campos
+  const pl = order.payload || {}
+  const rawPayments = Array.isArray(order.payments)              ? order.payments
+    : Array.isArray(pl.paymentConfirmed)                         ? pl.paymentConfirmed
+    : Array.isArray(pl.payments)                                 ? pl.payments
+    : (pl.payment && typeof pl.payment === 'object')             ? [pl.payment]
+    : []
+
+  // Subtotal — campo não existe no schema, calcular dos itens
+  const items = order.items || []
+  const itemsTotal = items.reduce((s, i) => {
+    const base     = toNum(i.price) * (i.quantity || 1)
+    const optsSum  = Array.isArray(i.options)
+      ? i.options.reduce((os, o) => os + toNum(o.price || 0), 0) * (i.quantity || 1)
+      : 0
+    return s + base + optsSum
+  }, 0)
+
+  const taxaVal     = toNum(order.deliveryFee || 0)
+  const descontoVal = toNum(order.discount || order.couponDiscount || 0)
+  const subtotalVal = toNum(order.subtotal) || itemsTotal
+  const totalVal    = toNum(order.total)
+
+  return {
+    // Placeholders do ReceiptTemplateEditor
+    header_name:       settingsHeaderName.value || order.headerName || order.storeName || order.store?.name || 'Delivery',
+    header_city:       settingsHeaderCity.value || order.headerCity || '',
+    display_id:        String(order.displayId || order.displaySimple || order.id || '---'),
+    data_pedido:       `${pad2(createdAt.getDate())}/${pad2(createdAt.getMonth()+1)}/${createdAt.getFullYear()}`,
+    hora_pedido:       `${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}`,
+    tipo_pedido,
+    nome_cliente:      order.customer?.name || order.customer?.fullName || order.customerName || '',
+    telefone_cliente:  order.customer?.whatsapp || order.customer?.phone || order.customerPhone || '',
+    endereco_cliente,
+    subtotal:          subtotalVal > 0 ? fmtN(subtotalVal) : '0,00',
+    taxa_entrega:      taxaVal > 0     ? fmtN(taxaVal)     : '',
+    desconto:          descontoVal > 0 ? fmtN(descontoVal) : '',
+    total:             totalVal > 0    ? fmtN(totalVal)    : '0,00',
+    observacoes:       order.notes || order.observation || '',
+    total_itens_count: String(items.reduce((s, i) => s + (i.quantity || 1), 0)),
+    // Internos (usados pelo renderizador de blocos, não expostos no template texto)
+    _items:       items,
+    _rawPayments: rawPayments,
+  }
 }
 
-const subtotal = computed(()=> sumItems(props.order?.items))
-const discountAmount = computed(()=> Number(props.order?.discount || props.order?.discountAmount || 0) || 0)
-const totalComputed = computed(()=> Number(props.order?.total || subtotal.value - discountAmount.value) || 0)
-const paymentMethod = computed(()=> props.order?.paymentMethod || props.order?.payment || props.order?.payload?.payment?.method || '—')
-const changeFor = computed(()=> Number(props.order?.changeFor || props.order?.paymentChange || props.order?.change || 0) || 0)
-
-function prettyChannel(raw) {
-  if (!raw) return null;
-  const s = String(raw).trim();
-  const up = s.toUpperCase();
-  const map = {
-    IFOOD: 'iFood',
-    UBER: 'Uber',
-    UBEREATS: 'UberEats',
-    RAPPI: 'Rappi',
-    PDV: 'PDV',
-    POS: 'PDV',
-    PUBLIC: 'Cardápio digital',
-    WEB: 'Cardápio digital',
-    MENU: 'Cardápio digital',
-    'CARDAPIO_DIGITAL': 'Cardápio digital'
-  };
-  if (map[up]) return map[up];
-  const lower = s.toLowerCase();
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
+function substituteVars(str, ctx) {
+  return str.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const val = ctx[key]
+    return (val !== undefined && val !== null) ? String(val) : ''
+  })
 }
 
-const channelLabel = computed(()=> {
-  const o = props.order || {}
-  const raw = o.channel || o.source || o.payload?.integration?.provider || o.payload?.provider || o.payload?.platform || null
-  return prettyChannel(raw) || 'Canal de venda'
-})
+// ── Renderizador de blocos para texto puro (preview no navegador) ─────────────
+const COL = 42   // colunas do preview (browser usa fonte monoespaçada)
 
-const qrSrc = computed(()=>{
-  const o = props.order || {}
-  const url = o.url || o.externalUrl || (window && window.location && window.location.href) || String(o.id || '')
-  try{ return `https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=${encodeURIComponent(url)}` }catch(e){ return '' }
-})
+function renderBlocks(blocks, order) {
+  const ctx   = buildContext(order)
+  const lines = []
 
-function padRight(str, len){
-  str = String(str || '');
-  if (str.length >= len) return str;
-  return str + ' '.repeat(len - str.length);
+  function sep() { lines.push('-'.repeat(COL)) }
+  function center(text) {
+    const t   = String(text || '')
+    const pad = Math.max(0, Math.floor((COL - t.length) / 2))
+    lines.push(' '.repeat(pad) + t)
+  }
+  function padRight(left, right) {
+    const gap = Math.max(1, COL - left.length - right.length)
+    lines.push(left + ' '.repeat(gap) + right)
+  }
+
+  for (const block of blocks) {
+    switch (block.t) {
+
+      case 'sep':
+        sep()
+        break
+
+      case 'text':
+      case 'cond': {
+        if (block.t === 'cond' && !ctx[block.key]) break
+        const content = substituteVars(block.c || '', ctx)
+        if (block.a === 'center') center(content)
+        else lines.push(content)
+        break
+      }
+
+      case 'items': {
+        for (const item of (ctx._items || [])) {
+          const qty      = item.quantity || 1
+          const base     = toNum(item.price)
+          const optsSum  = Array.isArray(item.options)
+            ? item.options.reduce((s, o) => s + toNum(o.price || 0), 0)
+            : 0
+          const unitPrice = base + optsSum
+          const total     = unitPrice * qty
+
+          const nameStr  = `${qty}x ${item.name || ''}`
+          const priceStr = fmtBRL(total)
+          padRight(nameStr, priceStr)
+
+          // Complementos / opções
+          if (Array.isArray(item.options)) {
+            for (const opt of item.options) {
+              const optPrice = toNum(opt.price || 0)
+              lines.push(`   + ${opt.name || ''}${optPrice > 0 ? ': ' + fmtBRL(optPrice) : ''}`)
+            }
+          }
+
+          // Observação do item
+          const obs = item.notes || item.observation || ''
+          if (obs) lines.push(`   Obs: ${obs}`)
+        }
+        break
+      }
+
+      case 'payments': {
+        for (const p of (ctx._rawPayments || [])) {
+          const method = p.method || p.name || p.tipo || p.paymentMethod || ''
+          const value  = toNum(p.value || p.amount || p.valor || 0)
+          lines.push(`${method}: ${fmtBRL(value)}`)
+        }
+        break
+      }
+
+      case 'qr':
+        // QR é renderizado visualmente abaixo do texto; aqui apenas espaço
+        break
+    }
+  }
+
+  return lines.join('\n')
 }
 
+// ── Layout fallback (quando não há template de blocos) ───────────────────────
+function renderFallback(order) {
+  const ctx   = buildContext(order)
+  const lines = []
+
+  function sep() { lines.push('-'.repeat(COL)) }
+  function padRight(left, right) {
+    const gap = Math.max(1, COL - left.length - right.length)
+    lines.push(left + ' '.repeat(gap) + right)
+  }
+
+  lines.push(`#${ctx.display_id}  ${ctx.data_pedido} ${ctx.hora_pedido}`)
+  if (ctx.tipo_pedido) lines.push(`Tipo: ${ctx.tipo_pedido}`)
+  sep()
+  lines.push(`Cliente:   ${ctx.nome_cliente || '—'}`)
+  lines.push(`Telefone:  ${ctx.telefone_cliente || '—'}`)
+  if (ctx.endereco_cliente) lines.push(`Endereço:  ${ctx.endereco_cliente}`)
+  sep()
+  lines.push('ITENS')
+  lines.push('')
+  for (const item of (ctx._items || [])) {
+    const qty      = item.quantity || 1
+    const base     = toNum(item.price)
+    const optsSum  = Array.isArray(item.options)
+      ? item.options.reduce((s, o) => s + toNum(o.price || 0), 0)
+      : 0
+    const unitPrice = base + optsSum
+    padRight(`${qty}x ${item.name || ''}`, fmtBRL(unitPrice * qty))
+    if (Array.isArray(item.options)) {
+      for (const opt of item.options) {
+        const optPrice = toNum(opt.price || 0)
+        lines.push(`   + ${opt.name || ''}${optPrice > 0 ? ': ' + fmtBRL(optPrice) : ''}`)
+      }
+    }
+    const obs = item.notes || item.observation || ''
+    if (obs) lines.push(`   Obs: ${obs}`)
+  }
+  sep()
+  lines.push(`Sub-total: ${fmtBRL(toNum(ctx.subtotal.replace(',', '.')))}`)
+  if (ctx.taxa_entrega) lines.push(`Entrega:   ${fmtBRL(toNum(ctx.taxa_entrega.replace(',', '.')))}`)
+  if (ctx.desconto)     lines.push(`Desconto:  -${fmtBRL(toNum(ctx.desconto.replace(',', '.')))}`)
+  lines.push(`TOTAL:     ${fmtBRL(toNum(ctx.total.replace(',', '.')))}`)
+  sep()
+  if (ctx._rawPayments.length > 0) {
+    for (const p of ctx._rawPayments) {
+      const method = p.method || p.name || p.tipo || p.paymentMethod || ''
+      const value  = toNum(p.value || p.amount || p.valor || 0)
+      lines.push(`${method}: ${fmtBRL(value)}`)
+    }
+    sep()
+  }
+  if (ctx.observacoes) lines.push(`Obs: ${ctx.observacoes}`)
+
+  return lines.join('\n')
+}
+
+// ── ticketText: decide qual renderer usar ─────────────────────────────────────
 const ticketText = computed(() => {
   const o = props.order || {}
-  const lines = []
-  lines.push(`#${paddedDisplay.value} - Cliente: ${customerName.value}`)
-  lines.push(`Endereço: ${addressLine.value}`)
-  lines.push(`Telefone: ${phoneLine.value}`)
-  if (isIfood.value) {
-    lines.push(`Localizador:${ifoodLocator.value || '-'}${pickupCode.value ? `\nCódigo de retirada: ${pickupCode.value}` : ''}`)
+  if (blockTemplate.value) {
+    return renderBlocks(blockTemplate.value, o)
   }
-  lines.push('------------------------------')
-  lines.push('Itens do pedido')
-  lines.push('')
-
-  const nameCol = 30
-  for (const it of (o.items || [])){
-    const qty = Number(it.quantity || 1) || 1
-    const name = `${qty}x ${it.name}`
-    const price = formatCurrency((Number(it.price)||0) * qty)
-    const left = padRight(name, nameCol)
-    lines.push(`${left}${price}`)
-    const opts = it.options || it.selectedOptions || []
-    for (const op of opts){
-      const oq = Number(op.quantity || op.qty || it.quantity || 1) || 1
-      const optPrice = formatCurrency(Number(op.price || op.unitPrice || 0) * oq)
-      lines.push(`-   ${oq}x ${op.name} — ${optPrice}`)
-    }
-    lines.push('')
-  }
-
-  lines.push('------------------------------')
-  lines.push(`Sub-total = ${formatCurrency(subtotal.value)}`)
-  if (discountAmount.value && discountAmount.value > 0) lines.push(`Desconto: ${formatCurrency(discountAmount.value)}`)
-  lines.push('')
-  lines.push(`TOTAL a cobrar: ${formatCurrency(Number(o.total || totalComputed.value) || 0)}`)
-  lines.push(`Pagamento: ${paymentMethod.value}`)
-  if (changeFor.value && changeFor.value > 0) lines.push(`Troco para ${formatCurrency(changeFor.value)}`)
-  lines.push('==============================')
-  lines.push(`${channelLabel.value} - ${o.storeName || o.companyName || ''}`)
-  lines.push('Obrigado e bom apetite!')
-  lines.push('==============================')
-  return lines.join('\n')
+  return renderFallback(o)
 })
 </script>
 
 <style scoped>
-.ticket-preview{ font-family: 'Courier New', monospace; max-width:380px; border:1px dashed #ccc; background:#fff }
-.ticket-mono { font-family: 'Courier New', monospace; font-size:13px; line-height:1.2; }
-.ticket-preview{ font-family: 'Courier New', monospace; max-width:520px; border:0; background:transparent }
-.ticket-summary div { padding:2px 0 }
-.qr-wrap img{ border:0 }
+.ticket-preview {
+  font-family: 'Courier New', Courier, monospace;
+  max-width: 520px;
+  border: 0;
+  background: transparent;
+}
+.ticket-mono {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre;
+  margin: 0;
+}
+.qr-wrap img { border: 0; }
 </style>

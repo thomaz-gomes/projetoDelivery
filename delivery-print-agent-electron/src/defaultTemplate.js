@@ -3,17 +3,29 @@
  * Template padrão de cupom para 80mm e 58mm.
  *
  * Sintaxe:
- *  {{var}}            → variável simples
- *  {{#each items}}    → loop
- *  {{#if chave}}      → condicional
- *  [SEP]              → linha tracejada
- *  [SEP:=]            → linha dupla (===)
- *  [BOLD:on/off]      → negrito
- *  [SIZE:2]           → dobrar tamanho (reset com [SIZE:1])
- *  [ALIGN:center]     → centralizar
- *  [FEED:n]           → avançar n linhas
- *  [QR:url]           → QR Code
- *  [CUT]              → cortar papel
+ *  {{var}}              → variável simples
+ *  {{#each items}}      → loop
+ *  {{#if chave}}        → condicional (suporta aninhamento)
+ *  [SEP]                → linha tracejada
+ *  [SEP:=]              → linha dupla (===)
+ *  [BOLD:on/off]        → negrito
+ *  [SIZE:2]             → dobrar tamanho (reset com [SIZE:1])
+ *  [ALIGN:center]       → centralizar
+ *  [FEED:n]             → avançar n linhas
+ *  [QR:url]             → QR Code
+ *  [CUT]                → cortar papel
+ *
+ * Variáveis disponíveis no contexto:
+ *  loja_nome, display_id, data, hora, tipo
+ *  tipo_delivery         → true somente para DELIVERY
+ *  cliente_nome, cliente_tel
+ *  endereco_rua, endereco_num, endereco_comp, endereco_bairro, endereco_cidade, endereco_ref
+ *  endereco_completo     → endereço como string única (fallback)
+ *  items[].qtd, .nome, .obs, .preco, .subtotal
+ *  pagamentos[].metodo, .valor
+ *  subtotal, taxa, desconto, total
+ *  tem_taxa, tem_desconto, tem_obs, obs_pedido
+ *  link_pedido, tem_qr
  */
 
 // ─── 80mm (48 colunas) ────────────────────────────────────────────────────────
@@ -34,12 +46,12 @@ CLIENTE
 [BOLD:off]
 Nome: {{cliente_nome}}
 Tel:  {{cliente_tel}}
-{{#if tipo}}
+{{#if tipo_delivery}}
 End:  {{endereco_rua}}, {{endereco_num}} {{endereco_comp}}
       {{endereco_bairro}} - {{endereco_cidade}}
+{{/if}}
 {{#if endereco_ref}}
 Ref:  {{endereco_ref}}
-{{/if}}
 {{/if}}
 [SEP]
 [BOLD:on]
@@ -47,6 +59,9 @@ ITENS
 [BOLD:off]
 {{#each items}}
 {{qtd}}x {{nome}}
+{{#if tem_opcoes}}
+{{opcoes}}
+{{/if}}
 {{#if obs}}
    Obs: {{obs}}
 {{/if}}
@@ -98,14 +113,19 @@ Pedido #{{display_id}}
 [SEP]
 {{cliente_nome}}
 {{cliente_tel}}
+{{#if tipo_delivery}}
 {{endereco_rua}}, {{endereco_num}}
 {{endereco_bairro}}
+{{/if}}
 [SEP]
 [BOLD:on]
 ITENS
 [BOLD:off]
 {{#each items}}
 {{qtd}}x {{nome}}
+{{#if tem_opcoes}}
+{{opcoes}}
+{{/if}}
 {{#if obs}}
  -> {{obs}}
 {{/if}}
