@@ -46,16 +46,32 @@
                     ⬇ Baixar Agente de Impressao
                   </button>
                 </div>
-                <div v-if="pairingCode" class="pairing-code-box mt-3">
-                  <div class="small fw-bold mb-2">Como conectar o agente de impressao:</div>
+                <!-- Banner: agente conectou! -->
+                <div v-if="agentConnected" class="agent-connected-box mt-3">
+                  <div class="fw-bold">✅ Agente conectado com sucesso!</div>
+                  <div class="small mt-1">
+                    Impressora detectada: <strong>{{ printerName }}</strong>.
+                    Selecione-a no campo acima e clique em <strong>"Salvar e usar"</strong>.
+                  </div>
+                </div>
+
+                <!-- Código de pareamento aguardando agente -->
+                <div v-else-if="pairingCode" class="pairing-code-box mt-3">
+                  <div class="small fw-bold mb-2">Aguardando o agente de impressao...</div>
                   <ol class="pairing-steps small text-muted">
                     <li>Execute o <strong>agente de impressao</strong> no computador da loja</li>
-                    <li>Quando pedir a <strong>URL do servidor</strong>, informe o endereco do sistema</li>
-                    <li>Quando pedir o <strong>codigo de pareamento</strong>, digite:</li>
+                    <li>Informe a <strong>URL do servidor</strong> quando solicitado</li>
+                    <li>Digite o codigo abaixo no campo de pareamento do agente:</li>
                   </ol>
                   <div class="pairing-code">{{ pairingCode }}</div>
-                  <div class="small mt-1" :class="pairingCountdown <= 60 ? 'text-danger' : 'text-muted'">
-                    Expira em {{ formatCountdown(pairingCountdown) }}
+                  <div class="d-flex justify-content-between align-items-center mt-2">
+                    <div class="small" :class="pairingCountdown <= 60 ? 'text-danger' : 'text-muted'">
+                      Expira em {{ formatCountdown(pairingCountdown) }}
+                    </div>
+                    <div class="small text-muted fst-italic">
+                      <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                      Aguardando conexao...
+                    </div>
                   </div>
                 </div>
               </div>
@@ -96,7 +112,11 @@
         </div>
         <div class="modal-footer">
           <div class="me-auto text-start">
-            <div v-if="pairingCode" class="small text-success">Codigo de pareamento ativo — informe no agente de impressao.</div>
+            <div v-if="agentConnected" class="small text-success fw-bold">✅ Agente conectado! Selecione a impressora e salve.</div>
+            <div v-else-if="pairingCode" class="small text-primary">
+              <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+              Codigo ativo — aguardando o agente digitar o codigo...
+            </div>
             <div v-else class="small text-muted">Clique em "Gerar codigo de pareamento" para conectar o agente.</div>
           </div>
           <button class="btn btn-secondary" @click="close">Cancelar</button>
@@ -185,6 +205,8 @@ const pairingLoading = ref(false);
 let pairingTimer = null;
 const logs = ref([]);
 const showAgentModal = ref(false);
+const agentConnected = ref(false);   // true quando agente parear e aparecer
+let pairingPollTimer = null;         // polling periódico durante pareamento
 
 // URL base do backend (para mostrar ao usuário e montar link de download)
 const currentServerUrl = computed(() => {
@@ -209,13 +231,39 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (pairingTimer) { clearInterval(pairingTimer); pairingTimer = null; }
+  stopPairingPoll();
 });
 
 // watch prop changes
 watch(() => props.visible, (v) => { visible.value = v; if (v) { discoverPrinters(); } });
 
 function close(){
+  stopPairingPoll();
   emit('update:visible', false);
+}
+
+// ── Polling enquanto aguarda agente conectar ──────────────────────────────────
+function startPairingPoll() {
+  stopPairingPoll();
+  agentConnected.value = false;
+  // Aguarda 4s antes do primeiro poll (agente precisa de tempo para parear)
+  pairingPollTimer = setInterval(async () => {
+    if (!pairingCode.value) { stopPairingPoll(); return; } // código expirou
+    try {
+      const { data } = await api.get('/agent-print/printers');
+      if (data?.ok && Array.isArray(data.printers) && data.printers.length > 0) {
+        printers.value = data.printers;
+        if (!printerName.value) printerName.value = printers.value[0];
+        agentConnected.value = true;
+        pushLog('Agente conectado com sucesso!');
+        stopPairingPoll();
+      }
+    } catch (_) { /* silencioso — tentará novamente */ }
+  }, 4000);
+}
+
+function stopPairingPoll() {
+  if (pairingPollTimer) { clearInterval(pairingPollTimer); pairingPollTimer = null; }
 }
 
 function loadSaved(){
@@ -284,7 +332,9 @@ async function generatePairingCode(){
     const { data } = await api.post('/agent-setup/generate-code');
     if (data && data.code) {
       pairingCode.value = data.code;
+      agentConnected.value = false;
       startPairingTimer(data.expiresAt);
+      startPairingPoll();
       pushLog('Codigo de pareamento gerado: ' + data.code);
     } else {
       pushLog('generatePairingCode: resposta inesperada');
@@ -367,4 +417,5 @@ function save(){
 .pairing-steps{ margin:0 0 8px 0; padding-left:20px; line-height:1.7; }
 .pairing-code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size:32px; font-weight:700; letter-spacing:6px; color:#1a56db; user-select:all; text-align:center; }
 .agent-download-box{ background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:14px 16px; }
+.agent-connected-box{ background:#f0fdf4; border:2px solid #22c55e; border-radius:8px; padding:12px 16px; color:#15803d; }
 </style>

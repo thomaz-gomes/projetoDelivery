@@ -10,23 +10,37 @@
     font-family: 'Segoe UI', sans-serif;
     background: #1a1a2e;
     color: #e0e0e0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    padding: 24px;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px;
   }
   .card {
-    background: #16213e;
-    border-radius: 12px;
-    padding: 32px;
-    width: 100%;
-    max-width: 460px;
+    background: #16213e; border-radius: 12px; padding: 32px;
+    width: 100%; max-width: 460px;
     box-shadow: 0 8px 32px rgba(0,0,0,.4);
   }
-  .logo { text-align: center; margin-bottom: 24px; }
+  .logo { text-align: center; margin-bottom: 28px; }
   .logo h1 { font-size: 20px; color: #4ecca3; font-weight: 700; }
   .logo p  { font-size: 13px; color: #888; margin-top: 4px; }
+
+  /* Indicador de passos */
+  .steps-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .step-dot {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid #2a3a5a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #555; flex-shrink: 0;
+    transition: all .3s;
+  }
+  .step-dot.active { border-color: #4ecca3; color: #4ecca3; }
+  .step-dot.done   { background: #4ecca3; border-color: #4ecca3; color: #1a1a2e; }
+  .step-line { flex: 1; height: 2px; background: #2a3a5a; transition: background .3s; }
+  .step-line.done { background: #4ecca3; }
+  .steps-labels {
+    display: flex; justify-content: space-between;
+    margin-bottom: 28px;
+  }
+  .step-label { font-size: 11px; color: #666; }
+
   label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
   input {
     width: 100%; padding: 10px 12px;
@@ -35,8 +49,14 @@
     transition: border-color .2s;
   }
   input:focus { border-color: #4ecca3; }
+  input.code-input {
+    font-family: 'Consolas', monospace; font-size: 28px; font-weight: 700;
+    letter-spacing: 10px; text-align: center; text-transform: uppercase;
+    color: #4ecca3;
+  }
   .field { margin-bottom: 18px; }
-  .hint { font-size: 11px; color: #666; margin-top: 4px; }
+  .hint { font-size: 11px; color: #666; margin-top: 5px; line-height: 1.6; }
+
   .btn-primary {
     width: 100%; padding: 12px;
     background: #4ecca3; color: #1a1a2e;
@@ -45,79 +65,201 @@
   }
   .btn-primary:hover { opacity: .9; }
   .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-  .status {
-    margin-top: 16px; padding: 10px 14px;
-    border-radius: 6px; font-size: 13px; display: none;
+  .btn-ghost {
+    width: 100%; padding: 10px; margin-top: 8px;
+    background: transparent; border: 1px solid #2a3a5a;
+    border-radius: 6px; color: #777; font-size: 13px; cursor: pointer;
+    transition: all .2s;
   }
-  .status.ok  { background:#0d4a2a; color:#4ecca3; display:block; }
-  .status.err { background:#4a1a1a; color:#ff6b6b; display:block; }
-  .step { font-size: 12px; color: #666; text-align: center; margin-bottom: 20px; }
+  .btn-ghost:hover { border-color: #4ecca3; color: #4ecca3; }
+
+  .status {
+    margin-top: 14px; padding: 11px 14px;
+    border-radius: 6px; font-size: 13px; display: none; line-height: 1.5;
+  }
+  .status.ok   { background:#0d4a2a; color:#4ecca3; display:block; }
+  .status.err  { background:#4a1a1a; color:#ff6b6b; display:block; }
+  .status.info { background:#0f3460; color:#88ccff; display:block; }
+
+  .server-badge {
+    background: #0f3460; border-radius: 6px; padding: 8px 12px;
+    font-size: 12px; color: #88ccff; margin-bottom: 20px; word-break: break-all;
+    border: 1px solid #1a4a8a;
+  }
+  .server-badge .badge-label { color: #555; font-size: 11px; display: block; margin-bottom: 2px; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
 </style>
 </head>
 <body>
 <div class="card">
   <div class="logo">
-    <h1>Delivery Print Agent</h1>
-    <p>Configure a conexão com o seu servidor</p>
+    <h1>🖨 Delivery Print Agent</h1>
+    <p>Configuração inicial em 2 passos</p>
   </div>
 
-  <p class="step">Passo 1 de 1 — Dados do Servidor</p>
-
-  <div class="field">
-    <label for="serverUrl">URL do Servidor</label>
-    <input id="serverUrl" type="text" placeholder="https://meudelivery.com.br" />
-    <p class="hint">Endereço base da API do seu sistema de delivery</p>
+  <!-- Indicador de passos -->
+  <div class="steps-row">
+    <div class="step-dot active" id="dot1">1</div>
+    <div class="step-line" id="line1"></div>
+    <div class="step-dot" id="dot2">2</div>
+  </div>
+  <div class="steps-labels">
+    <span class="step-label">URL do Servidor</span>
+    <span class="step-label">Código de Pareamento</span>
   </div>
 
-  <div class="field">
-    <label for="token">Token do Agente</label>
-    <input id="token" type="password" placeholder="Token gerado no Painel → Impressoras" />
-    <p class="hint">Gerado em Configurações → Impressoras → Novo Agente</p>
+  <!-- ── Passo 1: URL do servidor ─────────────────────────────────────────── -->
+  <div id="step1" class="panel active">
+    <div class="field">
+      <label for="serverUrl">URL do Servidor</label>
+      <input id="serverUrl" type="text" placeholder="https://meudelivery.com.br" autocomplete="off" />
+      <p class="hint">
+        Endereço base do sistema de delivery (sem barra no final).<br>
+        Ex: <code style="color:#4ecca3">https://meudelivery.com.br</code>
+      </p>
+    </div>
+    <button class="btn-primary" id="btnStep1">Continuar →</button>
+    <div class="status" id="status1"></div>
   </div>
 
-  <button class="btn-primary" id="btnSave">Salvar e Conectar</button>
-  <div class="status" id="status"></div>
+  <!-- ── Passo 2: Código de pareamento ────────────────────────────────────── -->
+  <div id="step2" class="panel">
+    <div class="server-badge">
+      <span class="badge-label">Servidor</span>
+      <span id="badgeUrl"></span>
+    </div>
+
+    <div class="field">
+      <label>Código de Pareamento</label>
+      <input
+        id="pairingCode"
+        class="code-input"
+        type="text"
+        maxlength="6"
+        placeholder="XXXXXX"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <p class="hint">
+        No painel do delivery: <strong>Configurações → Impressoras</strong><br>
+        → Clique em <strong>"Gerar código de pareamento"</strong><br>
+        → Digite aqui o código de 6 letras. Válido por 10 minutos.
+      </p>
+    </div>
+
+    <button class="btn-primary" id="btnPair">🔗 Conectar Agente</button>
+    <button class="btn-ghost" id="btnBack">← Voltar</button>
+    <div class="status" id="status2"></div>
+  </div>
 </div>
 
 <script>
-const { electronAPI } = window;
+const api = window.electronAPI;
+let _serverUrl = '';
 
-document.getElementById('btnSave').addEventListener('click', async () => {
-  const serverUrl = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
-  const token     = document.getElementById('token').value.trim();
-  const st        = document.getElementById('status');
-  const btn       = document.getElementById('btnSave');
-
-  if (!serverUrl || !token) {
-    showStatus('Preencha todos os campos.', 'err');
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'Salvando...';
-
-  try {
-    const existing = await electronAPI.loadConfig();
-    await electronAPI.saveConfig({ ...existing, serverUrl, token });
-    showStatus('Configuração salva! Abrindo painel...', 'ok');
-    setTimeout(() => electronAPI.closeSetup({ serverUrl, token }), 1500);
-  } catch (e) {
-    showStatus('Erro ao salvar: ' + e.message, 'err');
-    btn.disabled = false;
-    btn.textContent = 'Salvar e Conectar';
-  }
-});
-
-function showStatus(msg, type) {
-  const el = document.getElementById('status');
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function showStatus(id, msg, type) {
+  const el = document.getElementById(id);
   el.textContent = msg;
   el.className = 'status ' + type;
 }
 
-// Pre-preenche se já configurado
-electronAPI.loadConfig().then(cfg => {
+function setStep(n) {
+  document.getElementById('step1').classList.toggle('active', n === 1);
+  document.getElementById('step2').classList.toggle('active', n === 2);
+  document.getElementById('dot1').className = 'step-dot ' + (n >= 2 ? 'done' : 'active');
+  document.getElementById('line1').className = 'step-line ' + (n >= 2 ? 'done' : '');
+  document.getElementById('dot2').className = 'step-dot ' + (n === 2 ? 'active' : '');
+}
+
+// ── Passo 1 — validar URL ────────────────────────────────────────────────────
+document.getElementById('btnStep1').addEventListener('click', () => {
+  const raw = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+  if (!raw) {
+    showStatus('status1', 'Informe a URL do servidor.', 'err');
+    return;
+  }
+  if (!raw.startsWith('http')) {
+    showStatus('status1', 'URL deve começar com http:// ou https://', 'err');
+    return;
+  }
+  _serverUrl = raw;
+  document.getElementById('badgeUrl').textContent = _serverUrl;
+  document.getElementById('status1').className = 'status'; // esconde erro
+  setStep(2);
+  setTimeout(() => document.getElementById('pairingCode').focus(), 100);
+});
+
+document.getElementById('serverUrl').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btnStep1').click();
+});
+
+// ── Passo 2 — parear ─────────────────────────────────────────────────────────
+document.getElementById('btnPair').addEventListener('click', async () => {
+  const code = document.getElementById('pairingCode').value.trim().toUpperCase();
+  if (code.length < 4) {
+    showStatus('status2', 'Digite o código de 6 caracteres.', 'err');
+    return;
+  }
+
+  const btn = document.getElementById('btnPair');
+  btn.disabled = true;
+  btn.textContent = 'Conectando...';
+  showStatus('status2', 'Enviando código ao servidor...', 'info');
+
+  try {
+    const result = await api.pairWithCode(_serverUrl, code);
+
+    if (!result.ok) {
+      showStatus('status2', '✗ ' + result.error, 'err');
+      btn.disabled = false;
+      btn.textContent = '🔗 Conectar Agente';
+      return;
+    }
+
+    // Sucesso: salva config e fecha o wizard
+    showStatus('status2', '✓ Pareamento concluído! Iniciando agente...', 'ok');
+    btn.textContent = '✓ Conectado!';
+
+    const existing = await api.loadConfig();
+    const newCfg = {
+      ...existing,
+      serverUrl: result.socketUrl || _serverUrl,
+      token: result.token,
+    };
+
+    setTimeout(() => api.closeSetup(newCfg), 1800);
+
+  } catch (e) {
+    showStatus('status2', 'Erro inesperado: ' + e.message, 'err');
+    btn.disabled = false;
+    btn.textContent = '🔗 Conectar Agente';
+  }
+});
+
+document.getElementById('pairingCode').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btnPair').click();
+});
+
+// Filtra input: apenas letras e números, maiúsculo, max 6 chars
+document.getElementById('pairingCode').addEventListener('input', (e) => {
+  e.target.value = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6);
+});
+
+document.getElementById('btnBack').addEventListener('click', () => {
+  setStep(1);
+  document.getElementById('status2').className = 'status';
+  document.getElementById('pairingCode').value = '';
+  const btn = document.getElementById('btnPair');
+  btn.disabled = false;
+  btn.textContent = '🔗 Conectar Agente';
+});
+
+// Pré-preenche se já houver URL salva
+api.loadConfig().then(cfg => {
   if (cfg.serverUrl) document.getElementById('serverUrl').value = cfg.serverUrl;
-  if (cfg.token)     document.getElementById('token').value     = cfg.token;
 });
 </script>
 </body>

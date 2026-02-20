@@ -188,6 +188,33 @@ function setupIpcHandlers() {
     shell.openPath(logPath);
   });
 
+  // Pairing: troca código de 6 chars por token
+  ipcMain.handle('agent:pair', async (event, { serverUrl, code }) => {
+    const url = `${serverUrl.replace(/\/$/, '')}/api/agent-setup/pair`;
+    logger.info(`[pair] POST ${url} code=${code}`);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim().toUpperCase() }),
+        signal: AbortSignal.timeout(12000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        logger.warn(`[pair] Falha HTTP ${res.status}: ${JSON.stringify(data)}`);
+        return { ok: false, error: data.message || `Servidor retornou ${res.status}` };
+      }
+      if (!data.token) {
+        return { ok: false, error: 'Resposta inválida — token não recebido' };
+      }
+      logger.info('[pair] Pareamento bem-sucedido!');
+      return { ok: true, token: data.token, socketUrl: data.socketUrl || serverUrl };
+    } catch (err) {
+      logger.error('[pair] Erro de rede:', err.message);
+      return { ok: false, error: `Erro de rede: ${err.message}` };
+    }
+  });
+
   // Window management from tray / renderer
   ipcMain.on('window:open-config', () => openMainWindow());
   ipcMain.on('window:close-setup', async (event, savedConfig) => {

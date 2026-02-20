@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAutoStart: () => ipcRenderer.invoke('autostart:get'),
   setAutoStart: (enabled) => ipcRenderer.invoke('autostart:set', enabled),
 
+  // ── Pairing ─────────────────────────────────────────────────────────────
+  // Troca código de 6 chars por token via backend /api/agent-setup/pair
+  pairWithCode: (serverUrl, code) => ipcRenderer.invoke('agent:pair', { serverUrl, code }),
+
   // ── Logs ────────────────────────────────────────────────────────────────
   openLogs: () => ipcRenderer.invoke('logs:open'),
 
