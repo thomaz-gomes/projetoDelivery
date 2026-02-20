@@ -69,9 +69,10 @@ function _doConnect(cfg) {
 
   socket = io(baseUrl, {
     auth:         { token: cfg.token, companyId: cfg.companyId },
-    // Envia o próprio servidor como Origin para passar pela validação CORS
-    extraHeaders: { origin: baseUrl },
-    transports:   ['polling', 'websocket'],   // polling primeiro (compatibilidade nginx)
+    // Não enviamos Origin explícito: em Node.js o header Origin não é enviado por padrão,
+    // e o cors do servidor aceita requisições sem Origin. Enviar Origin explícito pode
+    // causar rejeição CORS em servidores com lista restrita de origens.
+    transports:   ['websocket', 'polling'],   // WebSocket primeiro; polling como fallback
     path:         '/socket.io',               // path explícito evita ambiguidade
     reconnection: false,                       // controle manual
     timeout:      20000,
@@ -120,7 +121,9 @@ function _doConnect(cfg) {
     // ── Log detalhado para diagnóstico ────────────────────────────────────
     const msg        = (err && err.message) || '';
     const errType    = (err && err.type)    || '';
-    const errData    = err && err.data      ? JSON.stringify(err.data) : '';
+    // err.code is set by engine.io-client for PacketType.ERROR packets ("server error")
+    // err.data is the socket.io namespace error data; err.description is transport error status
+    const errData    = err && (err.data || err.code || err.description) ? JSON.stringify(err.data || err.code || err.description) : '';
     const ctx        = err && err.context;
     const httpStatus = ctx && (ctx.status || ctx.statusCode);
     const httpBody   = ctx && ctx.responseText ? ctx.responseText.slice(0, 300) : '';

@@ -613,8 +613,23 @@ export function attachSocket(server) {
     // Allow agents to explicitly signal readiness after connect (agent may emit this)
     socket.on('agent-ready', (payload) => {
       try {
-        const storeIds = (payload && Array.isArray(payload.storeIds) && payload.storeIds.length) ? payload.storeIds : (payload && payload.storeId ? [payload.storeId] : null);
-        if (!storeIds || !storeIds.length) return;
+        // Prefer storeIds already resolved during auth (socket.agent) over payload
+        let storeIds = socket.agent && Array.isArray(socket.agent.storeIds) && socket.agent.storeIds.length
+          ? socket.agent.storeIds
+          : null;
+
+        // Fallback to payload (legacy agents send storeIds in payload)
+        if (!storeIds) {
+          storeIds = (payload && Array.isArray(payload.storeIds) && payload.storeIds.length)
+            ? payload.storeIds
+            : (payload && payload.storeId ? [payload.storeId] : null);
+        }
+
+        if (!storeIds || !storeIds.length) {
+          console.log('[agent-ready] nenhum storeId resolvido — payload:', JSON.stringify(payload), '| socket.agent:', JSON.stringify(socket.agent));
+          return;
+        }
+        console.log('[agent-ready] processando fila para lojas:', storeIds);
         try {
           processQueueForStoresThrottled(io, storeIds).then(r => {
             if (r && r.ok) console.log('Processed print queue for agent-ready stores', storeIds, 'results:', r.results)
