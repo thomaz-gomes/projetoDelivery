@@ -109,6 +109,38 @@ async function _handleJob(item) {
       if (!o.headerName && cfg.headerName) o.headerName = cfg.headerName;
       if (!o.headerCity && cfg.headerCity) o.headerCity = cfg.headerCity;
 
+      // Gerar qrText de fallback a partir do serverUrl configurado
+      if (!o.qrText && o.id && cfg.serverUrl) {
+        const base = cfg.serverUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+        if (base) o.qrText = `${base}/orders/${o.id}`;
+      }
+
+      // ── DEBUG: loga campos relevantes para diagnóstico ───────────────────────
+      const pl = o.payload || {};
+      const daDebug = (pl.delivery && pl.delivery.deliveryAddress)
+                   || pl.deliveryAddress
+                   || o.deliveryAddress;
+      const rawPl = pl.rawPayload || {};
+      logger.info('[debug] pedido recebido', {
+        id:            o.id,
+        displayId:     o.displayId,
+        displaySimple: o.displaySimple,
+        orderType:     o.orderType || o.type,
+        address:       o.address,
+        qrText:        o.qrText,
+        headerName:    o.headerName,
+        orderKeys:     Object.keys(o).filter(k => k !== 'payload' && k !== 'items'),
+        payloadKeys:   Object.keys(pl),
+        deliveryAddress: daDebug,
+        rawPayload_keys: Object.keys(rawPl),
+        rawPayload_customer: rawPl.customer,
+        rawPayload_delivery: rawPl.delivery,
+        rawPayload_address: rawPl.address,
+        deliveryNeighborhood: o.deliveryNeighborhood,
+        customerName: o.customerName,
+      });
+      // ── /DEBUG ───────────────────────────────────────────────────────────────
+
       // Renderizar template em bytes ESC/POS
       const bytes = templateEngine.render(o, p);
 

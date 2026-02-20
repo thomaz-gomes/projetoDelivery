@@ -16,6 +16,7 @@
  */
 const ESCPos = require('./printing/escpos');
 const { DEFAULT_TEMPLATE_80, DEFAULT_TEMPLATE_58 } = require('./defaultTemplate');
+const logger = require('./logger');
 
 // ─── Ponto de entrada ─────────────────────────────────────────────────────────
 function render(order, printer) {
@@ -114,9 +115,10 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         parts.push(ESCPos.align(align));
 
         if (block.b) parts.push(ESCPos.bold(true));
-        // lg e xl → SIZE:2 (igual ao template texto)
-        if (block.s === 'xl' || block.s === 'lg') parts.push(ESCPos.charSize(2, 2));
-        else                                       parts.push(ESCPos.charSize(1, 1));
+        // xl → duplo (largura + altura); lg → apenas altura (evita quebra de linha)
+        if (block.s === 'xl')      parts.push(ESCPos.charSize(2, 2));
+        else if (block.s === 'lg') parts.push(ESCPos.charSize(1, 2));
+        else                       parts.push(ESCPos.charSize(1, 1));
 
         const content = substituteVars(block.c || '', ctx);
         if (margin > 0) parts.push(ESCPos.marginLeft(margin));
@@ -146,8 +148,9 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
           if (itemBold) parts.push(ESCPos.bold(false));
           if (itemBig)  parts.push(ESCPos.charSize(1, 1));
 
-          // Complementos / opções do item
+          // Complementos / opções do item — altura dupla (maior que texto normal, menor que nome do item)
           if (Array.isArray(item.options) && item.options.length > 0) {
+            parts.push(ESCPos.charSize(1, 2));
             for (const opt of item.options) {
               const optName  = opt.name || '';
               const optPrice = _toNum(opt.price || 0);
@@ -157,6 +160,7 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
               if (margin > 0) parts.push(ESCPos.marginLeft(margin));
               parts.push(ESCPos.text(optLine, charset));
             }
+            parts.push(ESCPos.charSize(1, 1));
           }
 
           const obs = item.notes || item.observation || '';
@@ -195,7 +199,7 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         const url = order.qrText || order.trackingUrl || '';
         if (url) {
           parts.push(ESCPos.align('center'));
-          parts.push(ESCPos.qrCode(url, 4, 1));
+          parts.push(ESCPos.qrCode(url, 7, 1));
           parts.push(ESCPos.align('left'));
         }
         break;
@@ -231,13 +235,17 @@ function buildBlockContext(order) {
 
   // ── Endereço ─────────────────────────────────────────────────────────────────
   // O enrichOrderForAgent já resolve order.address como string flat.
-  // Fallback: tentar payload.delivery.deliveryAddress se order.address estiver vazio.
-  let endereco_cliente = order.address || '';
+  // Filtrar sentinel "-" e tentar múltiplos fallbacks.
+  let endereco_cliente = (typeof order.address === 'string' && order.address && order.address !== '-') ? order.address : '';
   if (!endereco_cliente) {
     try {
       const pl = order.payload || {};
-      const da = (pl.delivery && pl.delivery.deliveryAddress) || pl.deliveryAddress;
-      if (da && typeof da === 'object') {
+      const da = (pl.delivery && pl.delivery.deliveryAddress)
+              || pl.deliveryAddress
+              || order.deliveryAddress;    // campo direto no order (pedidos legados)
+      if (da && typeof da === 'string' && da !== '-') {
+        endereco_cliente = da;
+      } else if (da && typeof da === 'object') {
         if (da.formattedAddress) {
           endereco_cliente = da.formattedAddress;
         } else {
@@ -251,8 +259,40 @@ function buildBlockContext(order) {
           endereco_cliente = parts.join(', ');
         }
       }
+
+      // Fallback: deliveryNeighborhood (coluna desnormalizada do DB — tem pelo menos o bairro)
+      if (!endereco_cliente && order.deliveryNeighborhood) {
+        endereco_cliente = order.deliveryNeighborhood;
+      }
+
+      // Fallback adicional: rawPayload.address (mesmo caminho que enrichOrderForAgent usa)
+      if (!endereco_cliente) {
+        const raw = pl.rawPayload && pl.rawPayload.address;
+        if (raw && typeof raw === 'string' && raw !== '-') {
+          endereco_cliente = raw;
+        } else if (raw && typeof raw === 'object') {
+          if (raw.formattedAddress) {
+            endereco_cliente = raw.formattedAddress;
+          } else {
+            const rp = [
+              raw.streetName || raw.street || raw.logradouro || '',
+              raw.streetNumber || raw.number || raw.numero || '',
+              raw.complement || raw.complemento || '',
+              raw.neighborhood || raw.bairro || '',
+              raw.city || raw.cidade || '',
+            ].filter(Boolean);
+            if (rp.length) endereco_cliente = rp.join(', ');
+          }
+        }
+      }
     } catch (_) { /* ignore */ }
   }
+
+  logger.info('[tpl] endereço resolvido', {
+    'order.address':  order.address,
+    'order.deliveryAddress': order.deliveryAddress,
+    endereco_cliente,
+  });
 
   // ── Subtotal ─────────────────────────────────────────────────────────────────
   // Order não tem campo subtotal no schema — calcular da soma dos itens.
@@ -274,7 +314,7 @@ function buildBlockContext(order) {
   return {
     header_name:       order.headerName || order.store?.name || order.storeName || 'Delivery',
     header_city:       order.headerCity || '',
-    display_id:        String(order.displayId || order.id || '---'),
+    display_id:        String(order.displayId || order.displaySimple || order.id || '---'),
     data_pedido:       `${pad2(createdAt.getDate())}/${pad2(createdAt.getMonth()+1)}/${createdAt.getFullYear()}`,
     hora_pedido:       `${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}`,
     tipo_pedido,

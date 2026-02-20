@@ -566,15 +566,23 @@ ordersRouter.get('/:id', async (req, res) => {
 ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
   try {
-    const { items = [], address = {}, coupon, payment, type, customerPhone, customerName, requestedStoreId } = req.body || {};
+    // Aceitar tanto `type` (legado) quanto `orderType` (frontend atual)
+    const { items = [], address: _rawAddress = {}, coupon, payment, type: _type, orderType: _orderType, customerPhone, customerName, requestedStoreId } = req.body || {};
+    const type = _type || _orderType;
+    // address pode chegar como objeto {street,number,...} ou como string formatada (finalize envia string quando persiste no cliente)
+    const address = typeof _rawAddress === 'string'
+      ? { formatted: _rawAddress }
+      : (_rawAddress || {});
 
     // Dev: log a compact summary to help debug PDV create 500s (safe, non-sensitive fields)
     try { console.log('PDV create payload summary:', { type, customerPhone, customerName, itemsCount: Array.isArray(items) ? items.length : 0, addressProvided: address && Object.keys(address).length > 0 }); } catch (e) {}
 
     const orderType = String(type || '').toUpperCase();
     const neigh = String(address?.neighborhood || address?.neigh || '').trim();
-    const street = String(address?.street || '').trim();
-    if (orderType === 'DELIVERY' && (!neigh || !street)) return res.status(400).json({ message: 'Endereço (rua e bairro) obrigatório para entrega' });
+    const street = String(address?.street || address?.formatted || '').trim();
+    // Validar apenas se não houver nenhum dado de endereço (formatted também é aceito)
+    const hasAddress = street || neigh || address?.formatted;
+    if (orderType === 'DELIVERY' && !hasAddress) return res.status(400).json({ message: 'Endereço obrigatório para entrega' });
 
     // sanitize items
     const cleanItems = items.map(it => ({
@@ -706,7 +714,7 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         payload: {
           payment: paymentPayload,
           orderType: type,
-          rawPayload: { source: 'PDV', items: cleanItems, customer: { name: customerName || null, contact: customerPhone || null }, address },
+          rawPayload: { source: 'PDV', items: cleanItems, customer: { name: customerName || null, contact: customerPhone || null }, address: (orderType === 'DELIVERY' && address && Object.keys(address).length > 0) ? address : null },
           // persist normalized delivery address for consistency across flows
           delivery: normalizedDelivery ? { deliveryAddress: normalizedDelivery } : (address && Object.keys(address).length ? { deliveryAddress: normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: address } }) } : undefined),
           // persist computed and chosen totals for clarity

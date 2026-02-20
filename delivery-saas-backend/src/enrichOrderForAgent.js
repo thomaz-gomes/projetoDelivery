@@ -43,6 +43,57 @@ export async function enrichOrderForAgent(order) {
       }
     }
 
+    // 1b. Fetch slim do DB para campos que o emitObj mínimo do PDV não inclui.
+    //     Roda mesmo que items já esteja presente (step 1 pode ter sido pulado).
+    if (order.id && (order.displaySimple == null || !order.address || !order.orderType)) {
+      try {
+        const slim = await prisma.order.findUnique({
+          where: { id: order.id },
+          select: {
+            displaySimple:        true,
+            address:              true,
+            deliveryNeighborhood: true,
+            orderType:            true,
+            customerName:         true,
+            customerPhone:        true,
+            companyId:            true,
+            createdAt:            true,
+          }
+        })
+        if (slim) {
+          if (slim.address && typeof slim.address === 'string' && (!order.address || typeof order.address !== 'string' || order.address === '-'))
+            order.address = slim.address
+          if (slim.deliveryNeighborhood && !order.deliveryNeighborhood)
+            order.deliveryNeighborhood = slim.deliveryNeighborhood
+          if (slim.orderType && !order.orderType)
+            order.orderType = slim.orderType
+          if (slim.customerName && !order.customerName)
+            order.customerName = slim.customerName
+          if (slim.customerPhone && !order.customerPhone)
+            order.customerPhone = slim.customerPhone
+
+          // displaySimple: se persistido no DB, usar. Caso nulo, calcular (mesma lógica do GET /orders).
+          if (slim.displaySimple != null) {
+            order.displaySimple = String(slim.displaySimple).padStart(2, '0')
+          } else if (order.displaySimple == null) {
+            try {
+              const d = new Date(slim.createdAt || order.createdAt || Date.now())
+              const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+              const cid = slim.companyId || order.companyId
+              if (cid) {
+                const count = await prisma.order.count({
+                  where: { companyId: cid, createdAt: { gte: startOfDay, lte: d } }
+                })
+                order.displaySimple = String(count).padStart(2, '0')
+              }
+            } catch (e) { /* ignore */ }
+          }
+        }
+      } catch (e) {
+        console.warn('enrichOrderForAgent: slim fetch failed:', e && e.message)
+      }
+    }
+
     // 2. Resolver companyId
     let companyId = order.companyId || (order.payload && order.payload.companyId) || null
 
@@ -71,8 +122,8 @@ export async function enrichOrderForAgent(order) {
       }
     }
 
-    // 4. Resolver address se ausente - buscar de payload.delivery.deliveryAddress
-    if (!order.address || order.address === '-') {
+    // 4. Resolver address se ausente ou inválido (objeto vazio vindo do PDV) - buscar de payload.delivery.deliveryAddress
+    if (!order.address || typeof order.address !== 'string' || order.address === '-') {
       try {
         const p = order.payload || {}
         const da = (p.delivery && p.delivery.deliveryAddress) || p.deliveryAddress || null
