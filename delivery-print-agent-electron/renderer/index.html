@@ -181,6 +181,7 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
       <div class="btn-row" style="margin-top:16px">
         <button class="btn btn-ghost" onclick="refreshStatus()">Atualizar</button>
         <button class="btn btn-ghost" onclick="window.electronAPI.openLogs()">Abrir Log</button>
+        <button class="btn btn-danger btn-sm" onclick="resetConfig()" style="margin-left:auto">Resetar / Reconectar</button>
       </div>
     </div>
   </div>
@@ -349,13 +350,29 @@ function updateStatusBadge(s) {
   if (s.connected) {
     el.textContent = 'Conectado';
     el.className = 'badge connected';
-  } else if (s.label && s.label.includes('Conectando')) {
-    el.textContent = 'Conectando...';
+  } else if (s.authError) {
+    el.textContent = '⚠ Token inválido';
+    el.className = 'badge disconnected';
+    // Mostra aviso permanente
+    showAuthErrorBanner(s.label);
+  } else if (s.label && (s.label.includes('Conectando') || s.label.includes('Reconectando'))) {
+    el.textContent = s.label.replace('…', '...').split('(')[0].trim();
     el.className = 'badge connecting';
   } else {
     el.textContent = s.label || 'Desconectado';
     el.className = 'badge disconnected';
   }
+}
+
+function showAuthErrorBanner(msg) {
+  let banner = document.getElementById('authErrorBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'authErrorBanner';
+    banner.style.cssText = 'background:#4a1a1a;color:#ff6b6b;padding:10px 24px;font-size:13px;text-align:center;';
+    document.querySelector('main').prepend(banner);
+  }
+  banner.textContent = msg || 'Token inválido — use "Resetar / Reconectar" na aba Status para refazer o pareamento.';
 }
 
 async function refreshStatus() {
@@ -562,6 +579,13 @@ function notify(msg, type) {
 
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────
+async function resetConfig() {
+  if (!confirm('Isso vai apagar o token de pareamento e abrir o wizard de configuração novamente.\n\nAs impressoras configuradas serão mantidas.\n\nContinuar?')) return;
+  await api.resetConfig();
+  // A janela principal é fechada pelo main process; o wizard abre automaticamente.
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────

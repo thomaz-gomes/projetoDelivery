@@ -236,6 +236,16 @@ function setupIpcHandlers() {
     }
   });
 
+  // Reset: apaga token/companyId e reabre o wizard de configuração
+  ipcMain.handle('config:reset', async () => {
+    if (socketClient) socketClient.disconnect();
+    const empty = { serverUrl: '', token: '', storeIds: [], companyId: null, autoStart: true, printers: config.load().printers || [] };
+    config.save(empty);
+    if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
+    openSetupWindow();
+    return { ok: true };
+  });
+
   // Window management from tray / renderer
   ipcMain.on('window:open-config', () => openMainWindow());
   ipcMain.on('window:close-setup', async (event, savedConfig) => {

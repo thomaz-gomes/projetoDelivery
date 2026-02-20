@@ -287,16 +287,16 @@ agentSetupRouter.post('/print-test', requireRole('ADMIN'), async (req, res) => {
     const companyId = req.user && req.user.companyId
     if (!companyId) return res.status(400).json({ message: 'companyId ausente no token' })
 
-    const { storeId, printerName, text, printerType, dryRun, printerInterface, printerCodepage,
+    const { printerName, text, printerType, dryRun, printerInterface, printerCodepage,
             receiptTemplate, headerName, headerCity, copies } = req.body || {}
-    if (!storeId) return res.status(400).json({ message: 'storeId é obrigatório' })
 
     const io = req.app && req.app.locals && req.app.locals.io
     if (!io) return res.status(500).json({ message: 'Socket.IO não inicializado' })
 
-    // find connected agent sockets that service this storeId, prefer newest first
-    const sockets = Array.from(io.sockets.sockets.values()).slice().reverse().filter(s => s.agent && Array.isArray(s.agent.storeIds) && s.agent.storeIds.includes(storeId))
-    if (!sockets || sockets.length === 0) return res.status(404).json({ message: 'Nenhum agente conectado para esse storeId' })
+    // Busca agentes conectados para esta empresa (autenticados por companyId)
+    const sockets = Array.from(io.sockets.sockets.values()).slice().reverse()
+      .filter(s => s.agent && s.agent.companyId === companyId)
+    if (!sockets || sockets.length === 0) return res.status(404).json({ message: 'Nenhum agente conectado para esta empresa. Verifique se o Delivery Print Agent está em execução.' })
 
     // Buscar configurações de impressão do banco para incluir template e headers
     let dbSettings = {}

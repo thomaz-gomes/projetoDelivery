@@ -36,4 +36,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Window ──────────────────────────────────────────────────────────────
   closeSetup: (savedConfig) => ipcRenderer.send('window:close-setup', savedConfig),
   openConfig: () => ipcRenderer.send('window:open-config'),
+
+  // ── Reset ────────────────────────────────────────────────────────────────
+  resetConfig: () => ipcRenderer.invoke('config:reset'),
 });
