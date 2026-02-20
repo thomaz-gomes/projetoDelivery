@@ -228,6 +228,8 @@ document.getElementById('btnPair').addEventListener('click', async () => {
       ...existing,
       serverUrl: result.socketUrl || _serverUrl,
       token: result.token,
+      storeIds: result.storeIds || [],
+      companyId: result.companyId || null,
     };
 
     setTimeout(() => api.closeSetup(newCfg), 1800);

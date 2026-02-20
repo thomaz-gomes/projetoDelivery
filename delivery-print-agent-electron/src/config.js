@@ -15,7 +15,9 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 const DEFAULT_CONFIG = {
   serverUrl: '',         // Ex: https://meudelivery.com
-  token: '',             // Token JWT do agente (gerado no painel)
+  token: '',             // Token JWT do agente (recebido no pareamento)
+  storeIds: [],          // IDs das lojas (obrigatório no auth Socket.IO)
+  companyId: null,       // ID da empresa
   autoStart: true,
   printers: [],          // Array de PrinterConfig (ver abaixo)
 };

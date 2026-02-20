@@ -41,10 +41,11 @@ function _doConnect(cfg) {
   _emitStatus(false, 'Conectando...');
 
   socket = io(cfg.serverUrl, {
-    auth: { token: cfg.token },
-    transports: ['websocket'],
+    auth: { token: cfg.token, companyId: cfg.companyId },
+    // polling primeiro (mais compatível com proxies/nginx), depois upgrade para WebSocket
+    transports: ['polling', 'websocket'],
     reconnection: false,      // Controle manual de reconexão
-    timeout: 10000,
+    timeout: 15000,
   });
 
   socket.on('connect', () => {

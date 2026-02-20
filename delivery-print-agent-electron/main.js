@@ -222,8 +222,14 @@ function setupIpcHandlers() {
       if (!data.token) {
         return { ok: false, error: 'Resposta inválida — token não recebido' };
       }
-      logger.info('[pair] Pareamento bem-sucedido!');
-      return { ok: true, token: data.token, socketUrl: data.socketUrl || serverUrl };
+      logger.info(`[pair] Pareamento bem-sucedido! storeIds=${JSON.stringify(data.storeIds)}`);
+      return {
+        ok: true,
+        token: data.token,
+        socketUrl: data.socketUrl || serverUrl,
+        storeIds: data.storeIds || [],
+        companyId: data.companyId || null,
+      };
     } catch (err) {
       logger.error('[pair] Erro de rede:', err.message);
       return { ok: false, error: `Erro de rede: ${err.message}` };

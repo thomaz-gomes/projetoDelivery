@@ -413,28 +413,31 @@ export function attachSocket(server) {
       const token = auth.token;
       if (!token) return next(); // not an agent, allow
 
-      const storeIds = Array.isArray(auth.storeIds) ? auth.storeIds : (auth.storeId ? [auth.storeId] : []);
-      if (!storeIds.length) return next(new Error('agent-missing-storeId'));
-
-      // Resolve company from first storeId. If no store exists with that id,
-      // as a developer convenience allow the client to send a company id
-      // directly (i.e., the provided id belongs to `company.id`). This
-      // enables dev setups where stores are not created but a company exists
-      // (or was auto-created via .print-agent-company).
+      // Resolve companyId from auth. Preferred: auth.companyId (sent directly).
+      // Legacy fallback: auth.storeIds[0] which may be a storeId or companyId.
       let companyId = null;
-      const storeIdCandidate = storeIds[0];
-      const store = await prisma.store.findUnique({ where: { id: storeIdCandidate }, select: { companyId: true } });
-      if (store && store.companyId) {
-        companyId = store.companyId;
+
+      if (auth.companyId) {
+        // New preferred method: agent sends companyId directly
+        const maybeCompany = await prisma.company.findUnique({ where: { id: auth.companyId }, select: { id: true } });
+        if (maybeCompany) companyId = maybeCompany.id;
       } else {
-        // try interpreting the provided id as a company id
-        const maybeCompany = await prisma.company.findUnique({ where: { id: storeIdCandidate }, select: { id: true } });
-        if (maybeCompany && maybeCompany.id) {
-          companyId = maybeCompany.id;
+        // Legacy: resolve from storeIds array
+        const storeIds = Array.isArray(auth.storeIds) ? auth.storeIds : (auth.storeId ? [auth.storeId] : []);
+        if (!storeIds.length) return next(new Error('agent-missing-companyId'));
+
+        const candidate = storeIds[0];
+        const store = await prisma.store.findUnique({ where: { id: candidate }, select: { companyId: true } });
+        if (store && store.companyId) {
+          companyId = store.companyId;
+        } else {
+          // candidate might itself be a companyId
+          const maybeCompany = await prisma.company.findUnique({ where: { id: candidate }, select: { id: true } });
+          if (maybeCompany) companyId = maybeCompany.id;
         }
       }
 
-      if (!companyId) return next(new Error('invalid-storeId'));
+      if (!companyId) return next(new Error('invalid-companyId'));
 
       const setting = await prisma.printerSetting.findUnique({ where: { companyId }, select: { agentTokenHash: true } });
       if (!setting || !setting.agentTokenHash) return next(new Error('agent-no-token-configured'));
@@ -442,8 +445,9 @@ export function attachSocket(server) {
       const incomingHash = sha256(token);
       if (incomingHash !== setting.agentTokenHash) return next(new Error('invalid-agent-token'));
 
-      // attach agent metadata to socket for later use
-      socket.agent = { companyId: store.companyId, storeIds };
+      // Fetch all storeIds for this company so routing (e.g. print-test) works correctly
+      const stores = await prisma.store.findMany({ where: { companyId }, select: { id: true } });
+      socket.agent = { companyId, storeIds: stores.map(s => s.id) };
       return next();
     } catch (e) {
       console.error('Socket auth error', e);
