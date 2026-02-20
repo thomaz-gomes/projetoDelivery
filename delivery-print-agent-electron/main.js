@@ -205,35 +205,54 @@ function setupIpcHandlers() {
 
   // Pairing: troca código de 6 chars por token
   ipcMain.handle('agent:pair', async (event, { serverUrl, code }) => {
-    const url = `${serverUrl.replace(/\/$/, '')}/api/agent-setup/pair`;
-    logger.info(`[pair] POST ${url} code=${code}`);
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: code.trim().toUpperCase() }),
-        signal: AbortSignal.timeout(12000),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        logger.warn(`[pair] Falha HTTP ${res.status}: ${JSON.stringify(data)}`);
-        return { ok: false, error: data.message || `Servidor retornou ${res.status}` };
+    const base = serverUrl.replace(/\/$/, '');
+
+    // Tenta sem /api/ primeiro (URL do domínio da API — rota direta)
+    // Depois tenta com /api/ (URL do frontend — nginx proxy que strip /api/)
+    const candidates = [
+      `${base}/agent-setup/pair`,
+      `${base}/api/agent-setup/pair`,
+    ];
+
+    for (const url of candidates) {
+      logger.info(`[pair] POST ${url} code=${code}`);
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code.trim().toUpperCase() }),
+          signal: AbortSignal.timeout(12000),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.status === 404) {
+          logger.warn(`[pair] 404 em ${url}, tentando próximo candidato...`);
+          continue; // tenta o próximo candidato
+        }
+
+        if (!res.ok) {
+          logger.warn(`[pair] Falha HTTP ${res.status}: ${JSON.stringify(data)}`);
+          return { ok: false, error: data.message || `Servidor retornou ${res.status}` };
+        }
+        if (!data.token) {
+          return { ok: false, error: 'Resposta inválida — token não recebido' };
+        }
+
+        logger.info(`[pair] Pareamento bem-sucedido via ${url}! storeIds=${JSON.stringify(data.storeIds)}`);
+        return {
+          ok: true,
+          token: data.token,
+          socketUrl: data.socketUrl || serverUrl,
+          storeIds: data.storeIds || [],
+          companyId: data.companyId || null,
+        };
+      } catch (err) {
+        logger.error(`[pair] Erro de rede em ${url}:`, err.message);
+        return { ok: false, error: `Erro de rede: ${err.message}` };
       }
-      if (!data.token) {
-        return { ok: false, error: 'Resposta inválida — token não recebido' };
-      }
-      logger.info(`[pair] Pareamento bem-sucedido! storeIds=${JSON.stringify(data.storeIds)}`);
-      return {
-        ok: true,
-        token: data.token,
-        socketUrl: data.socketUrl || serverUrl,
-        storeIds: data.storeIds || [],
-        companyId: data.companyId || null,
-      };
-    } catch (err) {
-      logger.error('[pair] Erro de rede:', err.message);
-      return { ok: false, error: `Erro de rede: ${err.message}` };
     }
+
+    return { ok: false, error: 'Nenhum endpoint de pareamento encontrado no servidor.' };
   });
 
   // Reset: apaga token/companyId e reabre o wizard de configuração
