@@ -59,9 +59,7 @@ ticketsRouter.post('/:token/claim', authMiddleware, requireRole('RIDER'), async 
         }
       }
       if (!ticketFinal) throw new Error('Token inválido ou expirado');
-      console.log('[tickets.claim] ticket lookup result:', !!ticket, ticket && { id: ticket.id, orderId: ticket.orderId, expiresAt: ticket.expiresAt, usedAt: ticket.usedAt });
-
-      if (!ticket) throw new Error('Token inválido ou expirado');
+      console.log('[tickets.claim] ticket lookup result:', !!ticket, ticketFinal && { id: ticketFinal.id, orderId: ticketFinal.orderId, expiresAt: ticketFinal.expiresAt, usedAt: ticketFinal.usedAt });
 
       if (ticketFinal.order.companyId !== rider.companyId) {
         throw new Error('Empresa não corresponde');

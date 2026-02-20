@@ -119,6 +119,21 @@ export async function enrichOrderForAgent(order) {
       if (orderType === 'DELIVERY' || (order.payload && (order.payload.delivery || order.payload.deliveryAddress))) {
         const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')
         order.qrText = `${frontend}/orders/${order.id}`
+        // Auto-criar ticket para que o fallback por orderId funcione quando o motoboy escanear o QR
+        try {
+          const now = new Date()
+          const existing = await prisma.ticket.findFirst({
+            where: { orderId: order.id, usedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }
+          })
+          if (!existing) {
+            const { randomToken, sha256 } = await import('./utils.js')
+            const tokenHash = sha256(randomToken(24))
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
+            await prisma.ticket.create({ data: { orderId: order.id, tokenHash, expiresAt } })
+          }
+        } catch (e) {
+          console.warn('enrichOrderForAgent: failed to auto-create ticket:', e && e.message)
+        }
       }
     }
 
