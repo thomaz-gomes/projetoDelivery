@@ -8,7 +8,7 @@
     "start": "node index.js",
     "dev": "node index.js",
     "detect-printer": "node detect-printer.js",
-    "build": "pkg . --targets node18-win-x64 --output dist/delivery-print-agent.exe"
+    "build": "pkg index.js --targets node18-win-x64 --output dist/delivery-print-agent.exe"
   },
   "dependencies": {
     "dotenv": "^16.3.1",

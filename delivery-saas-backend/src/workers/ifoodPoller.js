@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { prisma } from '../prisma.js';
 import { pollIFood } from '../integrations/ifood/index.js';
 
-const INTERVAL_MS = Number(process.env.IFOOD_POLL_INTERVAL_MS || 8000);
+const INTERVAL_MS = Number(process.env.IFOOD_POLL_INTERVAL_MS || 30000); // iFood spec: poll every 30s
 const MAX_CONCURRENCY = Number(process.env.IFOOD_POLL_MAX_CONCURRENCY || 3);
 
 let timer = null;

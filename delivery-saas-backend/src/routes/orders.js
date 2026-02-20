@@ -308,7 +308,7 @@ ordersRouter.patch('/:id', requireRole('ADMIN', 'STORE'), async (req, res) => {
 // allow ADMIN and store-level users to change status from the admin panel / PDV
 ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body || {};
+  const { status, cancellationCode } = req.body || {};
   const companyId = req.user.companyId;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
 
@@ -389,7 +389,7 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res
           const target = mapLocalToIFood(status, updated);
           if (target) {
             try {
-              await updateIFoodOrderStatus(updated.companyId, orderExternalId, target, { merchantId: integ.merchantUuid || integ.merchantId });
+              await updateIFoodOrderStatus(updated.companyId, orderExternalId, target, { merchantId: integ.merchantUuid || integ.merchantId, cancellationCode: cancellationCode || null });
               console.log('Notified iFood of status change for order', orderExternalId, '->', target);
             } catch (eNotify) {
               console.warn('Failed to notify iFood of status change for', orderExternalId, eNotify && eNotify.message);
@@ -560,6 +560,34 @@ ordersRouter.get('/:id', async (req, res) => {
     console.warn('Failed to compute displaySimple for order detail', e?.message || e);
   }
   return res.json(order);
+});
+
+// POST /orders/:id/refresh-ifood — busca detalhes frescos do iFood e atualiza o payload do pedido
+ordersRouter.post('/:id/refresh-ifood', async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  try {
+    const order = await prisma.order.findFirst({ where: { id, companyId } });
+    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+
+    const ifoodId = order.externalId || order.payload?.orderId || order.payload?.order?.id || null;
+    if (!ifoodId) return res.status(400).json({ message: 'Pedido sem ID do iFood' });
+
+    const { getIFoodOrderDetails } = await import('../integrations/ifood/orders.js');
+    const details = await getIFoodOrderDetails(companyId, ifoodId);
+    if (!details) return res.status(502).json({ message: 'iFood não retornou detalhes do pedido' });
+
+    const updatedPayload = Object.assign({}, order.payload || {}, { order: details });
+    const updated = await prisma.order.update({
+      where: { id },
+      data: { payload: updatedPayload },
+      include: { items: true, rider: true, company: true, store: true },
+    });
+    return res.json(updated);
+  } catch (e) {
+    console.error('[refresh-ifood] erro:', e?.message || e);
+    return res.status(500).json({ message: 'Erro ao buscar dados do iFood', error: e?.message });
+  }
 });
 
 // PDV create route (previously the opening wrapper was missing)

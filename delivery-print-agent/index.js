@@ -297,7 +297,9 @@ async function main() {
         if (!incoming.address || incoming.address === '-') {
           try {
             const p = incoming.payload || {};
-            const da = (p.delivery && p.delivery.deliveryAddress) || p.deliveryAddress || null;
+            // iFood: payload pode ser envelope { order: { delivery: {...} } } ou direto
+            const ip = p.order || p;
+            const da = (ip.delivery && ip.delivery.deliveryAddress) || p.deliveryAddress || null;
             if (da && typeof da === 'object') {
               if (da.formattedAddress) {
                 incoming.address = da.formattedAddress;

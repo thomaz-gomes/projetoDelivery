@@ -18,6 +18,8 @@
  *   {{total}}             - Total do pedido
  *   {{observacoes}}       - Observações
  *   {{qr_url}}           - URL do QR code (despacho)
+ *   {{codigo_coleta}}    - Código de coleta iFood (pickupCode)
+ *   {{localizador}}      - Localizador do pedido iFood (phone.localizer)
  *
  * QR Code:
  *   Use [QR:{{qr_url}}] em uma linha isolada para imprimir
@@ -53,7 +55,13 @@ Tipo: {{tipo_pedido}}
 ------------------------------------------------
 CLIENTE: {{nome_cliente}}
 Telefone: {{telefone_cliente}}
+{{#if localizador}}
+Localizador: {{localizador}}
+{{/if}}
 Endereco: {{endereco_cliente}}
+{{#if codigo_coleta}}
+Cod. Coleta: {{codigo_coleta}}
+{{/if}}
 ------------------------------------------------
 
 QT  Descricao                        Valor
@@ -107,7 +115,9 @@ const DEFAULT_TEMPLATE_V2 = {
     { t: 'sep' },
     { t: 'text', c: 'CLIENTE: {{nome_cliente}}', b: true },
     { t: 'text', c: 'Telefone: {{telefone_cliente}}' },
+    { t: 'cond', key: 'localizador', c: 'Localizador: {{localizador}}' },
     { t: 'text', c: 'Endereco: {{endereco_cliente}}' },
+    { t: 'cond', key: 'codigo_coleta', c: 'Cod. Coleta: {{codigo_coleta}}' },
     { t: 'sep' },
     { t: 'items', itemBold: true, itemSize: 'normal' },
     { t: 'sep' },

@@ -88,12 +88,16 @@ function render(order, printer) {
 function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
   const ctx = buildBlockContext(order, printer);
   const pl  = order.payload || {};
+  // iFood: desempacotar envelope { order: { ... } } ou usar payload direto
+  const ifoodPl = pl.order || pl;
 
-  // Extrai pagamentos (mesma lógica do buildContext)
-  const rawPayments = Array.isArray(order.payments)              ? order.payments
-    : Array.isArray(pl.paymentConfirmed)                         ? pl.paymentConfirmed
-    : Array.isArray(pl.payments)                                 ? pl.payments
-    : (pl.payment && typeof pl.payment === 'object')             ? [pl.payment]
+  // Extrai pagamentos — iFood usa { methods: [], prepaid } dentro de ifoodPl.payments
+  const ifoodPmts = ifoodPl.payments || null;
+  const rawPayments = Array.isArray(order.payments)                                   ? order.payments
+    : (ifoodPmts && ifoodPmts.methods && Array.isArray(ifoodPmts.methods))            ? ifoodPmts.methods
+    : Array.isArray(ifoodPmts)                                                        ? ifoodPmts
+    : Array.isArray(pl.paymentConfirmed)                                              ? pl.paymentConfirmed
+    : (pl.payment && typeof pl.payment === 'object')                                  ? [pl.payment]
     : [];
 
   const parts = [...header];
@@ -132,7 +136,20 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
       }
 
       case 'items': {
-        const items    = order.items || [];
+        // Preferir itens ricos do iFood (têm subitems/opções) sobre itens do DB (sem complementos)
+        const ifoodRawItems = (ifoodPl.items && ifoodPl.items.length > 0) ? ifoodPl.items : null;
+        const items = ifoodRawItems
+          ? ifoodRawItems.map(it => ({
+              name:     it.name || it.productName || '',
+              quantity: Number(it.quantity || 1),
+              price:    Number(it.unitPrice || it.price || 0),
+              notes:    it.observations || it.notes || '',
+              options:  (it.subitems || it.garnishItems || it.options || []).map(s => ({
+                name:  s.name || s.description || '',
+                price: Number(s.unitPrice || s.price || 0),
+              })),
+            }))
+          : (order.items || []);
         const itemBold = block.itemBold;
         const itemBig  = block.itemSize === 'lg';
 
@@ -240,7 +257,9 @@ function buildBlockContext(order) {
   if (!endereco_cliente) {
     try {
       const pl = order.payload || {};
-      const da = (pl.delivery && pl.delivery.deliveryAddress)
+      // iFood: desempacotar envelope { order: { delivery: {...} } } ou usar payload direto
+      const _ip = pl.order || pl;
+      const da = (_ip.delivery && _ip.delivery.deliveryAddress)
               || pl.deliveryAddress
               || order.deliveryAddress;    // campo direto no order (pedidos legados)
       if (da && typeof da === 'string' && da !== '-') {
@@ -311,6 +330,12 @@ function buildBlockContext(order) {
   const subtotalVal = _toNum(order.subtotal) || itemsTotal;
   const totalVal    = _toNum(order.total);
 
+  // iFood: campos específicos (localizador, código de coleta)
+  const _plBc = order.payload || {};
+  const _ifBc = _plBc.order || _plBc;
+  const localizador   = _ifBc.customer?.phone?.localizer || '';
+  const codigo_coleta = _ifBc.delivery?.pickupCode || '';
+
   return {
     header_name:       order.headerName || order.store?.name || order.storeName || 'Delivery',
     header_city:       order.headerCity || '',
@@ -327,6 +352,8 @@ function buildBlockContext(order) {
     total:             totalVal > 0     ? _fmtN(totalVal)     : '0,00',
     observacoes:       order.notes || order.observation || '',
     total_itens_count: String((order.items || []).reduce((s, i) => s + (i.quantity || 1), 0)),
+    localizador,
+    codigo_coleta,
   };
 }
 
@@ -429,10 +456,15 @@ function buildContext(order, printer) {
   const flatAddress  = order.address || '';
 
   const pl = order.payload || {};
-  const rawPayments = Array.isArray(order.payments)              ? order.payments
-    : Array.isArray(pl.paymentConfirmed)                         ? pl.paymentConfirmed
-    : Array.isArray(pl.payments)                                 ? pl.payments
-    : (pl.payment && typeof pl.payment === 'object')             ? [pl.payment]
+  // iFood: desempacotar envelope { order: { ... } } ou usar payload direto
+  const ifoodPl = pl.order || pl;
+  // iFood pagamentos: { methods: [], prepaid }
+  const ifoodPmtsBc = ifoodPl.payments || null;
+  const rawPayments = Array.isArray(order.payments)                                        ? order.payments
+    : (ifoodPmtsBc && ifoodPmtsBc.methods && Array.isArray(ifoodPmtsBc.methods))           ? ifoodPmtsBc.methods
+    : Array.isArray(ifoodPmtsBc)                                                           ? ifoodPmtsBc
+    : Array.isArray(pl.paymentConfirmed)                                                   ? pl.paymentConfirmed
+    : (pl.payment && typeof pl.payment === 'object')                                       ? [pl.payment]
     : [];
 
   const loja_nome = order.headerName || order.store?.name || order.storeName
@@ -506,6 +538,10 @@ function buildContext(order, printer) {
 
     link_pedido: order.qrText || order.trackingUrl || '',
     tem_qr:      !!(order.qrText || order.trackingUrl),
+
+    // iFood: campos específicos
+    localizador:   ifoodPl.customer?.phone?.localizer || '',
+    codigo_coleta: ifoodPl.delivery?.pickupCode || '',
 
     impressora_alias: printer?.alias || '',
   };

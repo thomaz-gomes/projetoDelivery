@@ -36,6 +36,16 @@ function padNumber(n) {
   return String(n).toString().padStart(2, '0');
 }
 
+function isIfoodOrder(o) {
+  if (!o) return false;
+  return (
+    o.payload?.provider === 'IFOOD' ||
+    o.payload?.order?.salesChannel === 'IFOOD' ||
+    o.payload?.salesChannel === 'IFOOD' ||
+    Boolean(o.payload?.order?.merchant || o.payload?.merchant)
+  );
+}
+
 function formatDisplay(o) {
   if (!o) return '';
   if (o.displaySimple) return o.displaySimple;
@@ -644,22 +654,33 @@ function getStatusStartDurationDisplay(o) {
   return `Desde ${formatTime(start)} (${humanDuration(now.value - start.getTime())})`;
 }
 
+// Helper: resolve iFood payments object from the payload (handles both event-envelope and flat shapes)
+function resolveIfoodPayments(o) {
+  // iFood event payload wraps order: { order: { payments: { methods: [] } } }
+  const fromOrder = o.payload?.order?.payments;
+  if (fromOrder) return fromOrder;
+  // Direct order payload (fetched via GET /orders/:id): { payments: { methods: [] } }
+  const direct = o.payload?.payments;
+  if (direct && !Array.isArray(direct)) return direct;
+  return null;
+}
+
 function getPaymentMethod(o) {
-  const p = o.payload?.payments;
-  if (!p) return '—';
-  // try structured methods
-  const m = p.methods && p.methods[0];
-  if (m) {
-    if (m.method) return m.method + (m.card?.brand ? ` (${m.card.brand})` : '');
-    if (m.type) return m.type;
+  const p = resolveIfoodPayments(o);
+  if (p) {
+    const m = p.methods && p.methods[0];
+    if (m) {
+      if (m.method) return m.method + (m.card?.brand ? ` (${m.card.brand})` : '');
+      if (m.type) return m.type;
+    }
+    if (p.prepaid) return 'Pré-pago';
   }
-  // fallback: prepaid flag
-  if (p.prepaid) return 'Pré-pago';
   return '—';
 }
 
 function getOrderNotes(o) {
-  return o.payload?.notes || o.payload?.observations || o.payload?.additionalInfo?.notes || '';
+  return o.payload?.order?.additionalInfo?.notes ||
+    o.payload?.notes || o.payload?.observations || o.payload?.additionalInfo?.notes || '';
 }
 
 // Normalize items from different integration payload shapes to a common structure
@@ -672,31 +693,61 @@ function normalizeOrder(o){
 
   const items = normalizeOrderItems(o);
   // payment method: try common places
+  // Priority: own payment field → iFood payments object (handles event-envelope and flat) → legacy array → PDV
   let paymentMethod = '—';
   if (o.payment && (o.payment.methodCode || o.payment.method)) {
     paymentMethod = o.payment.methodCode || o.payment.method || String(o.payment.amount || '');
   } else if (o.payload && o.payload.payment) {
     paymentMethod = o.payload.payment.methodCode || o.payload.payment.method || o.payload.payment.type || paymentMethod;
-  } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0]) {
-    const m = o.payload.payments[0];
-    paymentMethod = m.method || m.type || paymentMethod;
   } else {
-    // fallback to existing helper
-    try { paymentMethod = getPaymentMethod(o); } catch(e) {}
+    // iFood: payments is an object { methods: [], prepaid } at payload.order.payments or payload.payments
+    try {
+      const ifoodPay = resolveIfoodPayments(o);
+      if (ifoodPay) {
+        const methods = ifoodPay.methods || [];
+        if (methods.length > 0) {
+          paymentMethod = methods.map(m => {
+            let label = m.method || m.type || '';
+            if (m.card?.brand) label += ` (${m.card.brand})`;
+            return label;
+          }).filter(Boolean).join(' + ') || paymentMethod;
+        } else if (ifoodPay.prepaid) {
+          paymentMethod = 'Pré-pago';
+        }
+      } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0]) {
+        // Legacy: payments as an array
+        const m = o.payload.payments[0];
+        paymentMethod = m.method || m.type || paymentMethod;
+      }
+    } catch(e) {}
   }
 
   // coupon
-  const couponCode = o.couponCode || (o.coupon && (o.coupon.code || o.couponId)) || (o.payload && o.payload.coupon && (o.payload.coupon.code || o.payload.couponId)) || null;
-  const couponDiscount = Number(o.couponDiscount ?? o.coupon?.discountAmount ?? o.discountAmount ?? o.discount ?? o.payload?.coupon?.discountAmount ?? 0) || 0;
-  // capture any customer-provided 'troco' (change) from common payload locations
+  const couponCode = o.couponCode || (o.coupon && (o.coupon.code || o.couponId)) || (o.payload && o.payload.coupon && (o.payload.coupon.code || o.payload.couponId)) ||
+    o.payload?.order?.coupon?.code || null;
+  const couponDiscount = Number(o.couponDiscount ?? o.coupon?.discountAmount ?? o.discountAmount ?? o.discount ?? o.payload?.coupon?.discountAmount ?? o.payload?.order?.total?.benefits ?? 0) || 0;
+
+  // troco (change): iFood puts changeFor in payments.methods[i].changeFor (for CASH method)
   let paymentChange = null;
   try {
     if (o.payment && (o.payment.changeFor || o.payment.change_for || o.payment.change)) {
       paymentChange = Number((o.payment.changeFor ?? o.payment.change_for ?? o.payment.change) || 0) || null;
     } else if (o.payload && o.payload.payment && (o.payload.payment.changeFor || o.payload.payment.change_for || o.payload.payment.change)) {
       paymentChange = Number((o.payload.payment.changeFor ?? o.payload.payment.change_for ?? o.payload.payment.change) || 0) || null;
-    } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0] && (o.payload.payments[0].changeFor || o.payload.payments[0].change_for || o.payload.payments[0].change)) {
-      paymentChange = Number((o.payload.payments[0].changeFor ?? o.payload.payments[0].change_for ?? o.payload.payments[0].change) || 0) || null;
+    } else {
+      // iFood: changeFor is in payments.methods[].changeFor (cash method)
+      const ifoodPay = resolveIfoodPayments(o);
+      if (ifoodPay) {
+        const cashMethod = (ifoodPay.methods || []).find(m =>
+          (m.method || '').toUpperCase() === 'CASH' ||
+          (m.method || '').toUpperCase() === 'DINHEIRO' ||
+          (m.type || '').toUpperCase() === 'OFFLINE'
+        );
+        if (cashMethod?.changeFor) paymentChange = Number(cashMethod.changeFor) || null;
+      } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0] &&
+        (o.payload.payments[0].changeFor || o.payload.payments[0].change_for || o.payload.payments[0].change)) {
+        paymentChange = Number((o.payload.payments[0].changeFor ?? o.payload.payments[0].change_for ?? o.payload.payments[0].change) || 0) || null;
+      }
     }
   } catch (e) { /* ignore */ }
 
@@ -798,7 +849,7 @@ function normalizeOrder(o){
     })(),
     channelLabel: (function() {
       // try common locations for integration/channel/provider
-      const raw = o.payload?.integration?.provider || o.payload?.provider || o.payload?.adapter || o.payload?.platform || o.payload?.source?.provider || o.payload?.channel || o.integration?.provider || o.adapter || o.payload?.source || null;
+      const raw = o.payload?.integration?.provider || o.payload?.provider || o.payload?.adapter || o.payload?.platform || o.payload?.source?.provider || o.payload?.channel || o.integration?.provider || o.adapter || o.payload?.source || o.payload?.order?.salesChannel || o.payload?.salesChannel || null;
 
       function prettyChannel(p) {
         if (!p) return null;
@@ -836,7 +887,56 @@ function normalizeOrder(o){
     couponCode,
     couponDiscount,
     paymentChange,
-    items
+    items,
+    // iFood-specific fields
+    pickupCode: (function() {
+      try {
+        return o.payload?.order?.delivery?.pickupCode || o.payload?.delivery?.pickupCode || null;
+      } catch (e) { return null; }
+    })(),
+    scheduledTime: (function() {
+      try {
+        const timing = o.payload?.order?.orderTiming || o.payload?.orderTiming || null;
+        if (timing !== 'SCHEDULED') return null;
+        const dt = o.payload?.order?.scheduledDateTimeStart || o.payload?.scheduledDateTimeStart || o.payload?.order?.scheduledDeliveryDateTime || null;
+        return dt ? new Date(dt) : null;
+      } catch (e) { return null; }
+    })(),
+    documentNumber: (function() {
+      try {
+        return o.payload?.order?.customer?.documentNumber || o.payload?.customer?.documentNumber || null;
+      } catch (e) { return null; }
+    })(),
+    deliveryObservations: (function() {
+      try {
+        return o.payload?.order?.delivery?.observations || o.payload?.delivery?.observations || null;
+      } catch (e) { return null; }
+    })(),
+    couponSponsor: (function() {
+      // Extract who subsidizes the discount: "IFOOD", "MERCHANT" or both
+      try {
+        const discounts = o.payload?.order?.benefits || o.payload?.order?.discounts || o.payload?.discounts || [];
+        if (!Array.isArray(discounts) || discounts.length === 0) return null;
+        const sponsors = new Set();
+        discounts.forEach(d => {
+          if (Array.isArray(d.sponsorshipValues)) {
+            d.sponsorshipValues.forEach(sv => {
+              if (sv.amount > 0 && sv.name) sponsors.add(String(sv.name).toUpperCase() === 'MERCHANT' ? 'Loja' : 'iFood');
+            });
+          } else if (d.source) {
+            sponsors.add(String(d.source).toUpperCase() === 'MERCHANT' ? 'Loja' : 'iFood');
+          }
+        });
+        return sponsors.size > 0 ? Array.from(sponsors).join(' + ') : null;
+      } catch (e) { return null; }
+    })(),
+    // iFood phone localizer: virtual extension code for customer→merchant calls
+    phoneLocalizer: (function() {
+      try {
+        return o.payload?.order?.customer?.phone?.localizer ||
+               o.payload?.customer?.phone?.localizer || null;
+      } catch (e) { return null; }
+    })(),
   };
 
   // Do not cache normalization on the order object here because orders may be
@@ -1940,20 +2040,68 @@ async function cancelOrderFromDetails() {
   const o = selectedOrder.value;
   if (o.status === 'CONCLUIDO' || o.status === 'CANCELADO') return;
 
-  const conf = await Swal.fire({
-    title: 'Cancelar pedido?',
-    text: `Tem certeza que deseja cancelar o pedido #${formatDisplay(o)}?`,
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: 'Sim, cancelar',
-    cancelButtonText: 'Manter',
-    confirmButtonColor: '#dc3545'
-  });
-  if (!conf.isConfirmed) return;
+  // For iFood orders, fetch available cancellation reasons (required for homologation)
+  const externalId = o.externalId || o.payload?.orderId || o.payload?.order?.id || null;
+  const isIfood = Boolean(externalId && (
+    o.payload?.merchant || o.payload?.order?.merchant ||
+    o.payload?.salesChannel === 'IFOOD' ||
+    o.payload?.order?.salesChannel === 'IFOOD'
+  ));
+  let cancellationCode = null;
+
+  if (isIfood && externalId) {
+    let reasons = [];
+    try {
+      const { data } = await api.get(`/integrations/ifood/orders/${encodeURIComponent(externalId)}/cancellationReasons`);
+      reasons = Array.isArray(data) ? data : [];
+    } catch (e) {
+      console.warn('Não foi possível carregar motivos de cancelamento iFood:', e?.response?.data || e?.message);
+    }
+
+    if (reasons.length > 0) {
+      const options = reasons.map(r => `<option value="${r.cancelCode || r.code}">${r.description || r.cancelCode || r.code}</option>`).join('');
+      const result = await Swal.fire({
+        title: 'Motivo do cancelamento',
+        html: `<p class="text-muted small mb-2">Selecione o motivo para cancelar o pedido iFood #${formatDisplay(o)}:</p><select id="swal-cancel-reason" class="form-select">${options}</select>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Cancelar pedido',
+        cancelButtonText: 'Manter',
+        confirmButtonColor: '#dc3545',
+        preConfirm: () => document.getElementById('swal-cancel-reason')?.value || null,
+      });
+      if (!result.isConfirmed) return;
+      cancellationCode = result.value || null;
+    } else {
+      // Fallback: simple confirm if reasons couldn't be loaded
+      const conf = await Swal.fire({
+        title: 'Cancelar pedido iFood?',
+        text: `Tem certeza que deseja cancelar o pedido #${formatDisplay(o)}?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, cancelar',
+        cancelButtonText: 'Manter',
+        confirmButtonColor: '#dc3545',
+      });
+      if (!conf.isConfirmed) return;
+    }
+  } else {
+    const conf = await Swal.fire({
+      title: 'Cancelar pedido?',
+      text: `Tem certeza que deseja cancelar o pedido #${formatDisplay(o)}?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sim, cancelar',
+      cancelButtonText: 'Manter',
+      confirmButtonColor: '#dc3545'
+    });
+    if (!conf.isConfirmed) return;
+  }
 
   try {
     loading.value = true;
-    await store.updateStatus(o.id, 'CANCELADO');
+    const extra = cancellationCode ? { cancellationCode } : {};
+    await store.updateStatus(o.id, 'CANCELADO', extra);
     await store.fetch();
     closeDetails();
     Swal.fire({ icon: 'success', title: 'Pedido cancelado', timer: 2000, toast: true, position: 'top-end', showConfirmButton: false });
@@ -2116,11 +2264,29 @@ function escapeHtml(unsafe) {
 
 async function viewReceipt(order) {
   try {
+    // 0) Fetch fresh order from backend to ensure latest payload data (including iFood details)
+    try {
+      const { data: freshOrder } = await api.get(`/orders/${order.id}`);
+      if (freshOrder && freshOrder.id) order = freshOrder;
+    } catch (_) { /* non-fatal: proceed with cached order */ }
+
+    // 0b) Se o payload do iFood está incompleto (sem order.details), busca do iFood agora
+    const hasIfoodId = order.externalId || order.payload?.orderId;
+    const missingIfoodDetails = hasIfoodId && !order.payload?.order;
+    if (missingIfoodDetails) {
+      try {
+        const { data: enriched } = await api.post(`/orders/${order.id}/refresh-ifood`);
+        if (enriched && enriched.id) order = enriched;
+      } catch (_) { /* non-fatal: continue with available data */ }
+    }
+
     // 1) generate ticket QR on the server so token is fresh/unique
     let qrDataUrl = null;
+    let ticketQrUrl = null;
     try {
       const { data: t } = await api.post(`/orders/${order.id}/tickets`);
       if (t && t.qrUrl) {
+        ticketQrUrl = t.qrUrl;
         qrDataUrl = await QRCode.toDataURL(t.qrUrl, { width: 220, margin: 2 });
       }
     } catch (e) {
@@ -2142,7 +2308,7 @@ async function viewReceipt(order) {
     // show QR and receipt using the Vue ticket component mounted inside the Swal modal
     try {
       // if server returned an explicit QR URL token, attach to order so component can build QR
-      if (qrDataUrl && t && t.qrUrl) order.url = t.qrUrl;
+      if (ticketQrUrl) order.url = ticketQrUrl;
       const rootId = `ticket-root-${Date.now()}`;
       let appInstance = null;
       await Swal.fire({
@@ -2723,6 +2889,10 @@ function pulseButton() {
                 <div class="oc-address" :title="normalizeOrder(o).address || '-'">{{ normalizeOrder(o).address || '-' }}</div>
                 <!-- Row 4: time + total + actions -->
                 <div class="oc-footer">
+                  <span v-if="isIfoodOrder(o)" class="oc-ifood-badge" title="Pedido iFood">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-1px"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>
+                    iFood
+                  </span>
                   <span class="oc-time">{{ getCreatedDurationDisplay(o) }}</span>
                   <span class="oc-total">{{ formatCurrency(computeDisplayedTotal(o)) }}</span>
                   <div class="oc-actions">
@@ -2804,7 +2974,9 @@ function pulseButton() {
             <div class="od-order-badge">#{{ selectedNormalized ? (selectedNormalized.display || selectedOrder?.displaySimple || selectedOrder?.id?.slice?.(0,6)) : '' }}</div>
             <div>
               <div class="od-customer-name">{{ selectedNormalized ? selectedNormalized.customerName : (selectedOrder && (selectedOrder.customerName || selectedOrder.name)) || '—' }}</div>
-              <div class="od-customer-phone">{{ selectedNormalized ? (selectedNormalized.customerPhone || '') : (selectedOrder && (selectedOrder.customerPhone || selectedOrder.contact)) || '' }}</div>
+              <div class="od-customer-phone">{{ selectedNormalized ? (selectedNormalized.customerPhone || '') : (selectedOrder && (selectedOrder.customerPhone || selectedOrder.contact)) || '' }}
+                <span v-if="selectedNormalized?.phoneLocalizer" class="ms-2 badge bg-light text-dark border" title="Localizador de chamada iFood">Localizador {{ selectedNormalized.phoneLocalizer }}</span>
+              </div>
             </div>
             <button v-if="orderEditable" class="btn btn-sm btn-outline-secondary od-edit-btn" @click="editCustomer" title="Editar cliente">
               <i class="bi bi-pencil"></i>
@@ -2839,6 +3011,12 @@ function pulseButton() {
             </div>
           </div>
 
+          <!-- iFood: Scheduled order banner -->
+          <div v-if="selectedNormalized?.scheduledTime" class="od-section" style="background:#fff3cd;border-left:4px solid #ffc107">
+            <div class="od-section-title"><i class="bi bi-calendar-event"></i> Pedido Agendado</div>
+            <div class="fw-semibold">{{ formatDate(selectedNormalized.scheduledTime) }} às {{ formatTime(selectedNormalized.scheduledTime) }}</div>
+          </div>
+
           <!-- Address section -->
           <div class="od-section">
             <div class="od-section-header">
@@ -2846,6 +3024,21 @@ function pulseButton() {
               <button v-if="orderEditable" class="btn btn-sm btn-outline-secondary od-edit-btn" @click="editAddress" title="Editar endereço"><i class="bi bi-pencil"></i></button>
             </div>
             <div class="od-address-text">{{ selectedNormalized ? (selectedNormalized.address || '—') : (selectedOrder ? normalizeOrder(selectedOrder).address : '—') || '—' }}</div>
+            <div v-if="selectedNormalized?.deliveryObservations" class="od-notes mt-1">
+              <i class="bi bi-info-circle"></i> <strong>Obs. entrega:</strong> {{ selectedNormalized.deliveryObservations }}
+            </div>
+          </div>
+
+          <!-- iFood: Pickup/collect code -->
+          <div v-if="selectedNormalized?.pickupCode" class="od-section">
+            <div class="od-section-title"><i class="bi bi-qr-code"></i> Código de Coleta</div>
+            <div class="fs-4 fw-bold font-monospace">{{ selectedNormalized.pickupCode }}</div>
+          </div>
+
+          <!-- iFood: Customer CPF/CNPJ -->
+          <div v-if="selectedNormalized?.documentNumber" class="od-section">
+            <div class="od-section-title"><i class="bi bi-person-vcard"></i> CPF/CNPJ do Cliente</div>
+            <div class="fw-semibold">{{ selectedNormalized.documentNumber }}</div>
           </div>
 
           <!-- Items section -->
@@ -2865,6 +3058,9 @@ function pulseButton() {
                   <div v-for="(opt, i) in extractItemOptions(it)" :key="(opt.name||i)+'opt'" class="od-item-option">
                     <span v-if="opt.quantity">{{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }}x </span>{{ opt.name }}<span v-if="opt.price" class="od-opt-price"> {{ formatCurrency(opt.price) }}</span>
                   </div>
+                </div>
+                <div v-if="it.notes || it.observations" class="od-item-notes text-muted small fst-italic ps-3">
+                  <i class="bi bi-chat-left-dots"></i> {{ it.notes || it.observations }}
                 </div>
               </div>
             </div>
@@ -2890,7 +3086,10 @@ function pulseButton() {
               </div>
               <div class="od-pay-row" v-if="selectedNormalized?.couponDiscount">
                 <span class="od-pay-label">Desconto</span>
-                <span class="od-pay-value text-danger">-{{ formatCurrency(selectedNormalized.couponDiscount) }}</span>
+                <span class="od-pay-value text-danger">
+                  -{{ formatCurrency(selectedNormalized.couponDiscount) }}
+                  <span v-if="selectedNormalized.couponSponsor" class="text-muted small ms-1">({{ selectedNormalized.couponSponsor }})</span>
+                </span>
               </div>
               <div class="od-pay-row" v-if="selectedNormalized?.paymentChange">
                 <span class="od-pay-label">Troco</span>
@@ -3103,6 +3302,19 @@ function pulseButton() {
 .oc-time {
   font-size: 0.7rem;
   color: #888;
+  white-space: nowrap;
+}
+.oc-ifood-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #EA1D2C;
+  color: #fff;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 .oc-total {

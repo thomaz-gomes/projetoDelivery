@@ -26,7 +26,10 @@
       "Bash(curl:*)",
       "WebFetch(domain:www.projetoacbr.com.br)",
       "WebFetch(domain:nfce.encat.org)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "WebFetch(domain:developer.ifood.com.br)",
+      "Bash(python3:*)",
+      "Bash(npx pkg:*)"
     ]
   }
 }

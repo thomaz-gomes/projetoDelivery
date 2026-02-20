@@ -63,10 +63,40 @@ function getOrderChannelLabel(order) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// iFood: payload pode ser envelope { order: {...} } ou objeto direto
+function resolveIfoodPayload(order) {
+  const p = order?.payload || {};
+  // envelope: { provider: "IFOOD", order: { payments, items, customer, delivery } }
+  return p.order || p;
+}
+
+// Itens ricos do payload (têm subitems/options/observations)
+const richItems = computed(() => {
+  if (!order.value) return [];
+  const ip = resolveIfoodPayload(order.value);
+  const payloadItems = ip.items || null;
+  if (payloadItems && payloadItems.length > 0) return payloadItems;
+  return order.value.items || [];
+});
+
+// Campos iFood
+const ifoodPickupCode = computed(() => {
+  if (!order.value) return null;
+  const ip = resolveIfoodPayload(order.value);
+  return ip.delivery?.pickupCode || null;
+});
+
+const ifoodLocalizer = computed(() => {
+  if (!order.value) return null;
+  const ip = resolveIfoodPayload(order.value);
+  return ip.customer?.phone?.localizer || null;
+});
+
 const totals = computed(() => {
   if (!order.value) return null;
   const payload = order.value.payload || {};
-  const totalBlock = payload.total || {};
+  const ip = resolveIfoodPayload(order.value); // unwrap iFood envelope
+  const totalBlock = ip.total || payload.total || {};
 
   const itemsTotal = sum((order.value.items || []).map(i => i.price));
   const subTotal = Number(totalBlock.subTotal ?? itemsTotal);
@@ -78,9 +108,10 @@ const totals = computed(() => {
     order.value.total ??
     (subTotal + deliveryFee + additionalFees - benefits)
   );
-  const qtyItems = sum((order.value.items || []).map(i => i.quantity ?? 1));
+  const qtyItems = sum(richItems.value.map(i => i.quantity ?? 1));
 
-  const payments = payload.payments || {};
+  // payments: tenta envelope iFood e fallback para payload direto
+  const payments = ip.payments || payload.payments || {};
   const methods = payments.methods || [];
   const cash = sum(methods.filter(m => m.method === 'CASH').map(m => m.value));
   const prepaid = Number(payments.prepaid ?? sum(methods.filter(m => m.prepaid).map(m => m.value)));
@@ -203,6 +234,7 @@ async function associateCustomer() {
             <button @click="associateCustomer" :disabled="assocLoading">{{ assocLoading ? 'Associando...' : 'Associar cliente' }}</button>
           </div>
         </div>
+        <div v-if="ifoodLocalizer" class="small muted">Localizador: <b>{{ ifoodLocalizer }}</b></div>
         <div class="small">
           <b>Endereço:</b>
           <div>{{ getMainAddress(order) || '-' }}</div>
@@ -212,17 +244,23 @@ async function associateCustomer() {
           <div v-if="getAddressObj(order) && (getAddressObj(order).observation || getAddressObj(order).observacao)" class="muted">Obs.: {{ getAddressObj(order).observation || getAddressObj(order).observacao }}</div>
           <div v-if="getAddressObj(order) && getAddressObj(order).neighborhood" class="muted">{{ getAddressObj(order).neighborhood }}</div>
         </div>
+        <div v-if="ifoodPickupCode" class="pickup-code">
+          <span class="muted small">Cód. Coleta:</span> <b>{{ ifoodPickupCode }}</b>
+        </div>
       </section>
 
       <section class="sec">
         <div class="row head"><div>Qt.</div><div class="grow">Descrição</div><div>Valor</div></div>
-        <div v-for="it in order.items" :key="it.id" class="row">
+        <div v-for="(it, idx) in richItems" :key="it.id || idx" class="row">
           <div>{{ it.quantity || 1 }}</div>
           <div class="grow">
             <div>{{ it.name }}</div>
-            <div v-if="it.notes" class="notes">Obs: {{ it.notes }}</div>
+            <div v-for="(sub, si) in (it.subitems || it.garnishItems || it.options || it.addons || [])" :key="si" class="notes">
+              + {{ sub.quantity > 1 ? sub.quantity + 'x ' : '' }}{{ sub.name || sub.description }}
+            </div>
+            <div v-if="it.notes || it.observations || it.observation" class="notes">Obs: {{ it.notes || it.observations || it.observation }}</div>
           </div>
-          <div>{{ fmt(it.price) }}</div>
+          <div>{{ fmt(it.totalPrice || it.price || (it.unitPrice * (it.quantity || 1))) }}</div>
         </div>
         <div class="muted small">Quantidade de itens: {{ totals.qtyItems }}</div>
       </section>
@@ -270,6 +308,7 @@ async function associateCustomer() {
 .row { display:flex; gap:8px; margin:4px 0; }
 .row .grow { flex:1; }
 .row .notes { color:#444; font-size:12px; }
+.pickup-code { margin-top:4px; font-size:14px; letter-spacing:1px; }
 .row.head { font-weight:600; border-bottom:1px solid #eee; padding-bottom:4px; }
 .totals .line { display:flex; justify-content:space-between; margin:2px 0; }
 .totals .total { font-weight:700; border-top:1px solid #000; padding-top:4px; }

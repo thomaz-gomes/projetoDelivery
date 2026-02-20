@@ -81,14 +81,17 @@ function buildContext(order) {
     : rawType              ? rawType.toUpperCase()
     : ''
 
+  const pl = order.payload || {}
+  // iFood: payload pode ser envelope { order: {...} } ou objeto direto
+  const ip = pl.order || pl
+
   // Endereço — filtra sentinel "-" do DB
   let endereco_cliente = ''
   const addr = order.address
   if (typeof addr === 'string' && addr && addr !== '-') {
     endereco_cliente = addr
   } else {
-    const pl  = order.payload || {}
-    const da  = (pl.delivery && pl.delivery.deliveryAddress) || pl.deliveryAddress || order.deliveryAddress
+    const da = (ip.delivery && ip.delivery.deliveryAddress) || (pl.delivery && pl.delivery.deliveryAddress) || pl.deliveryAddress || order.deliveryAddress
     if (da) {
       if (typeof da === 'string' && da !== '-') {
         endereco_cliente = da
@@ -108,22 +111,29 @@ function buildContext(order) {
     }
   }
 
-  // Pagamentos — tenta vários campos
-  const pl = order.payload || {}
-  const rawPayments = Array.isArray(order.payments)              ? order.payments
+  // iFood: campos específicos
+  const codigo_coleta = ip.delivery?.pickupCode || pl.delivery?.pickupCode || ''
+  const localizador   = ip.customer?.phone?.localizer || pl.customer?.phone?.localizer || ''
+
+  // Pagamentos — iFood usa { methods: [], prepaid }, outros usam array direto
+  const resolvedPayments = ip.payments || pl.payments || null
+  const rawPayments = Array.isArray(order.payments) ? order.payments
+    : (resolvedPayments?.methods && Array.isArray(resolvedPayments.methods)) ? resolvedPayments.methods
     : Array.isArray(pl.paymentConfirmed)                         ? pl.paymentConfirmed
     : Array.isArray(pl.payments)                                 ? pl.payments
     : (pl.payment && typeof pl.payment === 'object')             ? [pl.payment]
     : []
 
-  // Subtotal — campo não existe no schema, calcular dos itens
-  const items = order.items || []
+  // Itens — preferir payload rico (iFood: tem subitems/observations) sobre itens do DB
+  const payloadItems = ip.items || pl.items || null
+  const items = (payloadItems && payloadItems.length > 0) ? payloadItems : (order.items || [])
+
+  // Subtotal — calcular dos itens
   const itemsTotal = items.reduce((s, i) => {
-    const base     = toNum(i.price) * (i.quantity || 1)
-    const optsSum  = Array.isArray(i.options)
-      ? i.options.reduce((os, o) => os + toNum(o.price || 0), 0) * (i.quantity || 1)
-      : 0
-    return s + base + optsSum
+    const qty  = i.quantity || 1
+    const base = toNum(i.price ?? i.unitPrice ?? 0) * qty
+    const subs = (i.subitems || i.options || []).reduce((ss, o) => ss + toNum(o.unitPrice ?? o.price ?? 0), 0) * qty
+    return s + base + subs
   }, 0)
 
   const taxaVal     = toNum(order.deliveryFee || 0)
@@ -142,6 +152,8 @@ function buildContext(order) {
     nome_cliente:      order.customer?.name || order.customer?.fullName || order.customerName || '',
     telefone_cliente:  order.customer?.whatsapp || order.customer?.phone || order.customerPhone || '',
     endereco_cliente,
+    codigo_coleta,
+    localizador,
     subtotal:          subtotalVal > 0 ? fmtN(subtotalVal) : '0,00',
     taxa_entrega:      taxaVal > 0     ? fmtN(taxaVal)     : '',
     desconto:          descontoVal > 0 ? fmtN(descontoVal) : '',
@@ -198,27 +210,29 @@ function renderBlocks(blocks, order) {
       case 'items': {
         for (const item of (ctx._items || [])) {
           const qty      = item.quantity || 1
-          const base     = toNum(item.price)
-          const optsSum  = Array.isArray(item.options)
-            ? item.options.reduce((s, o) => s + toNum(o.price || 0), 0)
+          const base     = toNum(item.price ?? item.unitPrice ?? 0)
+          // subitems (iFood) ou options (outros)
+          const subs     = item.subitems || item.garnishItems || item.options || item.addons || []
+          const optsSum  = Array.isArray(subs)
+            ? subs.reduce((s, o) => s + toNum(o.unitPrice ?? o.price ?? 0), 0)
             : 0
           const unitPrice = base + optsSum
-          const total     = unitPrice * qty
+          const itemTotal = toNum(item.totalPrice ?? (unitPrice * qty))
 
           const nameStr  = `${qty}x ${item.name || ''}`
-          const priceStr = fmtBRL(total)
+          const priceStr = fmtBRL(itemTotal)
           padRight(nameStr, priceStr)
 
-          // Complementos / opções
-          if (Array.isArray(item.options)) {
-            for (const opt of item.options) {
-              const optPrice = toNum(opt.price || 0)
-              lines.push(`   + ${opt.name || ''}${optPrice > 0 ? ': ' + fmtBRL(optPrice) : ''}`)
+          // Complementos / subitems
+          if (Array.isArray(subs)) {
+            for (const opt of subs) {
+              const optPrice = toNum(opt.unitPrice ?? opt.price ?? 0)
+              lines.push(`   + ${opt.name || opt.description || ''}${optPrice > 0 ? ': ' + fmtBRL(optPrice) : ''}`)
             }
           }
 
           // Observação do item
-          const obs = item.notes || item.observation || ''
+          const obs = item.notes || item.observations || item.observation || ''
           if (obs) lines.push(`   Obs: ${obs}`)
         }
         break
@@ -258,25 +272,26 @@ function renderFallback(order) {
   sep()
   lines.push(`Cliente:   ${ctx.nome_cliente || '—'}`)
   lines.push(`Telefone:  ${ctx.telefone_cliente || '—'}`)
+  if (ctx.localizador)     lines.push(`Localizador: ${ctx.localizador}`)
   if (ctx.endereco_cliente) lines.push(`Endereço:  ${ctx.endereco_cliente}`)
+  if (ctx.codigo_coleta)   lines.push(`Cod. Coleta: ${ctx.codigo_coleta}`)
   sep()
   lines.push('ITENS')
   lines.push('')
   for (const item of (ctx._items || [])) {
-    const qty      = item.quantity || 1
-    const base     = toNum(item.price)
-    const optsSum  = Array.isArray(item.options)
-      ? item.options.reduce((s, o) => s + toNum(o.price || 0), 0)
-      : 0
-    const unitPrice = base + optsSum
-    padRight(`${qty}x ${item.name || ''}`, fmtBRL(unitPrice * qty))
-    if (Array.isArray(item.options)) {
-      for (const opt of item.options) {
-        const optPrice = toNum(opt.price || 0)
-        lines.push(`   + ${opt.name || ''}${optPrice > 0 ? ': ' + fmtBRL(optPrice) : ''}`)
+    const qty   = item.quantity || 1
+    const base  = toNum(item.price ?? item.unitPrice ?? 0)
+    const subs  = item.subitems || item.garnishItems || item.options || item.addons || []
+    const optsSum = Array.isArray(subs) ? subs.reduce((s, o) => s + toNum(o.unitPrice ?? o.price ?? 0), 0) : 0
+    const itemTotal = toNum(item.totalPrice ?? ((base + optsSum) * qty))
+    padRight(`${qty}x ${item.name || ''}`, fmtBRL(itemTotal))
+    if (Array.isArray(subs)) {
+      for (const opt of subs) {
+        const optPrice = toNum(opt.unitPrice ?? opt.price ?? 0)
+        lines.push(`   + ${opt.name || opt.description || ''}${optPrice > 0 ? ': ' + fmtBRL(optPrice) : ''}`)
       }
     }
-    const obs = item.notes || item.observation || ''
+    const obs = item.notes || item.observations || item.observation || ''
     if (obs) lines.push(`   Obs: ${obs}`)
   }
   sep()

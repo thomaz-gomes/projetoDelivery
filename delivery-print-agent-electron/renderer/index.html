@@ -734,6 +734,8 @@ const DEFAULT_BLOCKS = [
   { t: 'sep' },
   { t: 'text', c: 'CLIENTE: {{nome_cliente}}', b: true },
   { t: 'text', c: 'Telefone: {{telefone_cliente}}' },
+  { t: 'cond', key: 'localizador',   c: 'Localizador: {{localizador}}' },
+  { t: 'cond', key: 'codigo_coleta', c: 'Cod. Coleta: {{codigo_coleta}}' },
   { t: 'text', c: 'Endereco: {{endereco_cliente}}' },
   { t: 'sep' },
   { t: 'items', itemBold: true, itemSize: 'normal' },
@@ -776,6 +778,10 @@ const PLACEHOLDER_CATS = [
     { key: 'taxa_entrega',       label: 'Taxa de entrega' },
     { key: 'desconto',           label: 'Desconto' },
     { key: 'total',              label: 'Total' }
+  ]},
+  { label: 'iFood', items: [
+    { key: 'localizador',        label: 'Localizador (phone.localizer)' },
+    { key: 'codigo_coleta',      label: 'Código de coleta (pickupCode)' }
   ]}
 ];
 
@@ -791,6 +797,20 @@ function initTemplateEditor() {
       const parsed = JSON.parse(saved);
       if (parsed && parsed.v === 2 && Array.isArray(parsed.blocks)) {
         tplBlocks = parsed.blocks;
+        // Migration: add missing iFood cond blocks if not present
+        const ifoodKeys = ['localizador', 'codigo_coleta'];
+        const existingKeys = tplBlocks.filter(b => b.t === 'cond').map(b => b.key);
+        const missing = ifoodKeys.filter(k => !existingKeys.includes(k));
+        if (missing.length > 0) {
+          // Insert after telefone_cliente text block
+          const telIdx = tplBlocks.findIndex(b => b.t === 'text' && b.c && b.c.includes('telefone_cliente'));
+          const insertAt = telIdx >= 0 ? telIdx + 1 : tplBlocks.length;
+          const newBlocks = missing.map(k => k === 'localizador'
+            ? { t: 'cond', key: 'localizador',   c: 'Localizador: {{localizador}}' }
+            : { t: 'cond', key: 'codigo_coleta', c: 'Cod. Coleta: {{codigo_coleta}}' }
+          );
+          tplBlocks.splice(insertAt, 0, ...newBlocks);
+        }
       }
     } catch (_) { /* keep default */ }
   }

@@ -143,6 +143,9 @@ function buildContext(order, settings = {}) {
   const nomeCliente = (o.customerName || o.name || 'CLIENTE').toUpperCase();
   const telefoneCliente = o.customerPhone || o.phone || (Array.isArray(o.phones) ? o.phones.join(' / ') : '') || '';
 
+  // iFood: desempacota envelope { order: { ... } } ou usa payload direto
+  const ifoodPayload = payload.order || payload;
+
   // Endereço - resolver de múltiplas fontes
   const endereco = (() => {
     // 1. String direta no topo
@@ -150,7 +153,8 @@ function buildContext(order, settings = {}) {
     if (o.addressFull) return o.addressFull;
     if (o.addressString) return o.addressString;
     // 2. Objeto estruturado (payload.delivery.deliveryAddress)
-    const da = (payload.delivery && payload.delivery.deliveryAddress) || payload.deliveryAddress || o.deliveryAddress || null;
+    // iFood: usa ifoodPayload para suportar envelope { order: {...} } e formato direto
+    const da = (ifoodPayload.delivery && ifoodPayload.delivery.deliveryAddress) || payload.deliveryAddress || o.deliveryAddress || null;
     if (da && typeof da === 'object') {
       if (da.formattedAddress) return da.formattedAddress;
       if (da.formatted) return da.formatted;
@@ -181,22 +185,28 @@ function buildContext(order, settings = {}) {
     return '-';
   })();
 
-  // Itens
-  const rawItems = Array.isArray(o.items) ? o.items : [];
+  // Itens - preferir items do payload (iFood rich: tem subitems/options/observations)
+  // sobre items do DB (OrderItem: só tem name/qty/price sem opcionais)
+  const payloadItems = ifoodPayload.items || null;
+  const rawItems = (payloadItems && payloadItems.length > 0)
+    ? payloadItems
+    : (Array.isArray(o.items) ? o.items : []);
   let subtotal = 0;
   let totalItensCount = 0;
 
   const items = rawItems.map(it => {
     const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
     totalItensCount += qty;
-    const price = Number(it.price ?? it.unitPrice ?? it.amount ?? 0) || 0;
+    const price = Number(it.price ?? it.unitPrice ?? it.unit_price ?? it.amount ?? 0) || 0;
     subtotal += price * qty;
 
-    const rawOptions = it.options || it.extras || it.modifiers || it.addons || it.subItems || [];
+    // iFood usa "subitems" para complementos/adicionais; outros usam options/extras
+    const rawOptions = it.subitems || it.garnishItems || it.garnishes
+      || it.options || it.extras || it.modifiers || it.addons || it.subItems || [];
     const itemOptions = Array.isArray(rawOptions) ? rawOptions.map(ex => {
       const inner = ex && ex.option ? ex.option : ex;
       const optQty = Number(inner.quantity ?? inner.qty ?? ex.quantity ?? ex.qty ?? 1) || 1;
-      const optPrice = Number(inner.price ?? inner.amount ?? ex.price ?? ex.amount ?? 0) || 0;
+      const optPrice = Number(inner.unitPrice ?? inner.price ?? inner.amount ?? ex.unitPrice ?? ex.price ?? ex.amount ?? 0) || 0;
       const totalOptQty = optQty * qty;
       subtotal += optPrice * optQty * qty;
       return {
@@ -212,7 +222,7 @@ function buildContext(order, settings = {}) {
       item_price: (price * qty).toFixed(2),
       item_unit_price: price.toFixed(2),
       item_options: itemOptions,
-      notes: it.notes || it.observation || ''
+      notes: it.notes || it.observations || it.observation || ''
     };
   });
 
@@ -221,12 +231,14 @@ function buildContext(order, settings = {}) {
   const desconto = Number(o.couponDiscount ?? o.discount ?? o.discountAmount ?? 0) || 0;
   const total = Number(o.total ?? o.amount ?? o.orderAmount ?? (subtotal + taxaEntrega - desconto)) || 0;
 
-  // Pagamentos
+  // Pagamentos — iFood usa { methods: [], prepaid } (envelope ou direto)
+  const ifoodPayments = ifoodPayload.payments || null;
   const paymentsList = Array.isArray(o.payments) ? o.payments
-    : (payload.payments ? payload.payments
+    : (ifoodPayments?.methods && Array.isArray(ifoodPayments.methods)) ? ifoodPayments.methods
+    : Array.isArray(ifoodPayments) ? ifoodPayments
     : (payload.payment ? [payload.payment]
     : (o.paymentMethod ? [{ method: o.paymentMethod, amount: total }]
-    : [])));
+    : []));
 
   const pagamentos = paymentsList.map(p => ({
     payment_method: (p.method || p.type || p.name || p.paymentMethod || 'Pagamento').toUpperCase(),
@@ -241,6 +253,10 @@ function buildContext(order, settings = {}) {
 
   // QR Code URL (para despacho pelo motoboy)
   const qrUrl = o.qrText || o.qrUrl || (payload.qrText) || '';
+
+  // iFood: campos específicos (ifoodPayload já desembrulhou o envelope)
+  const codigoColeta = ifoodPayload.delivery?.pickupCode || '';
+  const localizador = ifoodPayload.customer?.phone?.localizer || '';
 
   return {
     header_name: settings.headerName || 'Minha Loja',
@@ -260,7 +276,9 @@ function buildContext(order, settings = {}) {
     pagamentos,
     observacoes,
     tipo_pedido: tipoPedido,
-    qr_url: qrUrl
+    qr_url: qrUrl,
+    codigo_coleta: codigoColeta,
+    localizador,
   };
 }
 

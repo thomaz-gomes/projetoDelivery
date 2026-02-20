@@ -154,9 +154,23 @@ function _doConnect(cfg) {
   });
 
   // ── Eventos de negócio ────────────────────────────────────────────────────
-  socket.on('novo-pedido', (order) => {
+  socket.on('novo-pedido', (rawOrder, ack) => {
+    let order = rawOrder || {};
+    // agentPrint.js envia wrapper { order: dbRecord, text, printerInterface, ... }
+    // Desempacotar para que o templateEngine receba o pedido completo do DB
+    if (order.order && typeof order.order === 'object') {
+      const wrapper = order;
+      order = { ...order.order };
+      // Preservar campos do wrapper que podem não estar no registro do DB
+      const preserve = ['printerInterface', 'printerType', 'paperWidth', 'receiptTemplate',
+                        'copies', 'printerName', 'headerName', 'headerCity', 'qrText'];
+      for (const f of preserve) {
+        if (wrapper[f] != null && !order[f]) order[f] = wrapper[f];
+      }
+    }
     logger.info(`[socket] Novo pedido: #${order.displayId || order.id}`);
     if (handlers.onOrder) handlers.onOrder(order);
+    if (typeof ack === 'function') ack(null, { ok: true });
   });
 
   socket.on('test-print', (data) => {

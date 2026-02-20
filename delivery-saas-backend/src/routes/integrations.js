@@ -270,6 +270,28 @@ integrationsRouter.get('/ifood/orders/:id', requireRole('ADMIN'), async (req, re
 });
 
 /**
+ *  ❌ Buscar motivos de cancelamento disponíveis para um pedido (obrigatório pela homologação)
+ */
+integrationsRouter.get('/ifood/orders/:id/cancellationReasons', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const orderId = req.params.id;
+    const { getIFoodAccessToken } = await import('../integrations/ifood/oauth.js');
+    const axios = (await import('axios')).default;
+    const token = await getIFoodAccessToken(companyId);
+    const base = process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br';
+    const { data } = await axios.get(`${base}/order/v1.0/orders/${encodeURIComponent(orderId)}/cancellationReasons`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      timeout: 10000,
+    });
+    res.json(data);
+  } catch (e) {
+    console.error('Erro ao buscar motivos de cancelamento iFood:', e.response?.data || e.message);
+    res.status(e.response?.status || 500).json({ message: 'Falha ao buscar motivos de cancelamento', error: e.response?.data || e.message });
+  }
+});
+
+/**
  *  ✅ Confirmar eventos processados
  */
 integrationsRouter.post('/ifood/ack', requireRole('ADMIN'), async (req, res) => {

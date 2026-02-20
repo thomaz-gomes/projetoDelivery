@@ -121,7 +121,11 @@ export async function updateIFoodOrderStatus(companyId, orderId, statusCode, ext
   if (actionEndpoint) {
     attempts.push(async () => {
       const url = actionEndpoint.replace('{id}', encodeURIComponent(orderId));
-      const payload = extra.metadata || {};
+      const payload = { ...(extra.metadata || {}) };
+      // For cancellation, include cancellationCode when provided (required by iFood API)
+      if (shortCode === 'CAN' && extra.cancellationCode) {
+        payload.cancellationCode = extra.cancellationCode;
+      }
       console.log('[iFood update] ACTION POST', url, 'payload:', JSON.stringify(payload));
       return api.post(url, payload);
     });

@@ -126,7 +126,9 @@ export async function enrichOrderForAgent(order) {
     if (!order.address || typeof order.address !== 'string' || order.address === '-') {
       try {
         const p = order.payload || {}
-        const da = (p.delivery && p.delivery.deliveryAddress) || p.deliveryAddress || null
+        // iFood: payload pode ser envelope { order: { delivery: {...} } } ou direto { delivery: {...} }
+        const ip = p.order || p
+        const da = (ip.delivery && ip.delivery.deliveryAddress) || p.deliveryAddress || null
         if (da && typeof da === 'object') {
           if (da.formattedAddress) {
             order.address = da.formattedAddress

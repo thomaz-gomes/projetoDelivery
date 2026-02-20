@@ -216,7 +216,9 @@ const DEFAULT_BLOCKS = [
   { t: 'sep' },
   { t: 'text', c: 'CLIENTE: {{nome_cliente}}', b: true },
   { t: 'text', c: 'Telefone: {{telefone_cliente}}' },
+  { t: 'cond', key: 'localizador', c: 'Localizador: {{localizador}}' },
   { t: 'text', c: 'Endereco: {{endereco_cliente}}' },
+  { t: 'cond', key: 'codigo_coleta', c: 'Cod. Coleta: {{codigo_coleta}}' },
   { t: 'sep' },
   { t: 'items', itemBold: true, itemSize: 'normal' },
   { t: 'sep' },
@@ -270,18 +272,43 @@ const placeholderCategories = [
       { key: 'desconto', label: 'Desconto' },
       { key: 'total', label: 'Total' }
     ]
+  },
+  {
+    label: 'iFood',
+    items: [
+      { key: 'codigo_coleta', label: 'Código de coleta (pickupCode)' },
+      { key: 'localizador', label: 'Localizador (phone.localizer)' }
+    ]
   }
 ];
 
 // Parse initial value
 const blocks = ref(parseModelValue(props.modelValue));
 
+// Migrates v2 blocks to add missing iFood fields (localizador, codigo_coleta)
+// so existing saved templates are silently upgraded on load.
+function migrateBlocks(blks) {
+  const result = JSON.parse(JSON.stringify(blks));
+  const hasLocalizador = result.some(b => b.t === 'cond' && b.key === 'localizador');
+  const hasCodigoColeta = result.some(b => b.t === 'cond' && b.key === 'codigo_coleta');
+  if (hasLocalizador && hasCodigoColeta) return result;
+  // Insert after the telefone_cliente line, or after nome_cliente as fallback
+  const telIdx = result.findIndex(b => b.c && b.c.includes('telefone_cliente'));
+  const nameIdx = result.findIndex(b => b.c && b.c.includes('nome_cliente'));
+  const insertAfter = telIdx >= 0 ? telIdx : nameIdx >= 0 ? nameIdx : result.length - 1;
+  const toInsert = [];
+  if (!hasLocalizador) toInsert.push({ t: 'cond', key: 'localizador', c: 'Localizador: {{localizador}}' });
+  if (!hasCodigoColeta) toInsert.push({ t: 'cond', key: 'codigo_coleta', c: 'Cod. Coleta: {{codigo_coleta}}' });
+  result.splice(insertAfter + 1, 0, ...toInsert);
+  return result;
+}
+
 function parseModelValue(val) {
   if (!val) return JSON.parse(JSON.stringify(DEFAULT_BLOCKS));
   try {
     const parsed = JSON.parse(val);
     if (parsed && parsed.v === 2 && Array.isArray(parsed.blocks)) {
-      return parsed.blocks;
+      return migrateBlocks(parsed.blocks);
     }
   } catch (e) { /* not JSON */ }
   // Plain text template - return default blocks

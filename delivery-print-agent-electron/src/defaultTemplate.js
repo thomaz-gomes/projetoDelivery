@@ -46,12 +46,18 @@ CLIENTE
 [BOLD:off]
 Nome: {{cliente_nome}}
 Tel:  {{cliente_tel}}
+{{#if localizador}}
+Loc:  {{localizador}}
+{{/if}}
 {{#if tipo_delivery}}
 End:  {{endereco_rua}}, {{endereco_num}} {{endereco_comp}}
       {{endereco_bairro}} - {{endereco_cidade}}
 {{/if}}
 {{#if endereco_ref}}
 Ref:  {{endereco_ref}}
+{{/if}}
+{{#if codigo_coleta}}
+Coleta: {{codigo_coleta}}
 {{/if}}
 [SEP]
 [BOLD:on]
@@ -113,10 +119,12 @@ Pedido #{{display_id}}
 [SEP]
 {{cliente_nome}}
 {{cliente_tel}}
+{{#if localizador}}Loc: {{localizador}}{{/if}}
 {{#if tipo_delivery}}
 {{endereco_rua}}, {{endereco_num}}
 {{endereco_bairro}}
 {{/if}}
+{{#if codigo_coleta}}Coleta: {{codigo_coleta}}{{/if}}
 [SEP]
 [BOLD:on]
 ITENS
