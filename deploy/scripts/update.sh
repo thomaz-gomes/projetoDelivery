@@ -26,16 +26,18 @@ if [ ! -f "$DEPLOY_DIR/.env" ]; then
     exit 1
 fi
 
+source "$DEPLOY_DIR/.env"
+
 # =========================================
 # 1. Backup do banco antes de atualizar
 # =========================================
-echo -e "${YELLOW}[1/5] Fazendo backup do banco...${NC}"
+echo -e "${YELLOW}[1/6] Fazendo backup do banco...${NC}"
 bash "$SCRIPT_DIR/backup-db.sh" || echo -e "${YELLOW}Aviso: backup falhou, continuando...${NC}"
 
 # =========================================
 # 2. Puxar código novo
 # =========================================
-echo -e "${YELLOW}[2/5] Atualizando código (git pull)...${NC}"
+echo -e "${YELLOW}[2/6] Atualizando código (git pull)...${NC}"
 cd "$PROJECT_DIR"
 
 # Limpar qualquer merge/stash pendente
@@ -83,22 +85,62 @@ fi
 rm -rf "$TEMP_BACKUP"
 
 # =========================================
-# 3. Rebuild dos containers
+# 3. Atualizar Nginx (se configurado)
 # =========================================
-echo -e "${YELLOW}[3/5] Reconstruindo imagens Docker...${NC}"
+echo -e "${YELLOW}[3/6] Atualizando configuração do Nginx...${NC}"
+
+if [ -n "$API_DOMAIN" ] && [ -n "$APP_DOMAIN" ] && command -v nginx &> /dev/null; then
+    # Map WebSocket/polling — necessário para $connection_upgrade
+    cp "$DEPLOY_DIR/nginx/websocket.conf" /etc/nginx/conf.d/websocket.conf
+
+    # Reescrever configs com domínios reais (sobrescreve versão anterior incluindo as do Certbot)
+    sed "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" \
+        "$DEPLOY_DIR/nginx/api.conf" > /etc/nginx/sites-available/api.conf
+    sed "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" \
+        "$DEPLOY_DIR/nginx/app.conf" > /etc/nginx/sites-available/app.conf
+
+    # Garantir symlinks
+    ln -sf /etc/nginx/sites-available/api.conf /etc/nginx/sites-enabled/api.conf
+    ln -sf /etc/nginx/sites-available/app.conf /etc/nginx/sites-enabled/app.conf
+
+    # Reaplicar SSL do Certbot (usa cert existente, não emite novo — sem rate limit)
+    if command -v certbot &> /dev/null && [ -d "/etc/letsencrypt/live" ]; then
+        echo -e "${YELLOW}Reaplicando SSL com Certbot...${NC}"
+        certbot --nginx -d "${API_DOMAIN}" -d "${APP_DOMAIN}" \
+            --non-interactive --quiet \
+            --keep-until-expiring 2>/dev/null \
+            || echo -e "${YELLOW}Certbot: usando cert existente sem alterações${NC}"
+    fi
+
+    # Testar e recarregar
+    if nginx -t 2>/dev/null; then
+        systemctl reload nginx
+        echo -e "${GREEN}Nginx atualizado e recarregado!${NC}"
+    else
+        echo -e "${RED}Erro na config do Nginx — verifique: nginx -t${NC}"
+        nginx -t
+    fi
+else
+    echo -e "${YELLOW}Nginx não encontrado ou API_DOMAIN/APP_DOMAIN não definidos — pulando.${NC}"
+fi
+
+# =========================================
+# 4. Rebuild dos containers
+# =========================================
+echo -e "${YELLOW}[4/6] Reconstruindo imagens Docker...${NC}"
 cd "$PROJECT_DIR"
 docker compose -f "$COMPOSE_FILE" build
 
 # =========================================
-# 4. Reiniciar containers (zero downtime: up recria apenas o que mudou)
+# 5. Reiniciar containers (zero downtime: up recria apenas o que mudou)
 # =========================================
-echo -e "${YELLOW}[4/5] Reiniciando containers...${NC}"
+echo -e "${YELLOW}[5/6] Reiniciando containers...${NC}"
 docker compose -f "$COMPOSE_FILE" up -d
 
 # =========================================
-# 5. Limpeza de imagens antigas
+# 6. Limpeza de imagens antigas
 # =========================================
-echo -e "${YELLOW}[5/5] Limpando imagens antigas...${NC}"
+echo -e "${YELLOW}[6/6] Limpando imagens antigas...${NC}"
 docker image prune -f
 
 # =========================================
