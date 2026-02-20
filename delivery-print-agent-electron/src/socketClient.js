@@ -81,11 +81,14 @@ function _doConnect(cfg) {
     if (handlers.onTestPrint) handlers.onTestPrint(data);
   });
 
-  socket.on('list-printers', (cb) => {
+  // Backend emits: emit('list-printers', { storeId }, ackFn)
+  // So we receive (data, ack) — the second arg is the Socket.IO acknowledgement function
+  socket.on('list-printers', (data, ack) => {
+    const replyFn = typeof ack === 'function' ? ack : (typeof data === 'function' ? data : null);
     if (handlers.onListPrinters) {
-      handlers.onListPrinters(cb);
-    } else {
-      cb([]);
+      handlers.onListPrinters(replyFn);
+    } else if (replyFn) {
+      replyFn([]);
     }
   });
 

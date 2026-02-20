@@ -389,12 +389,11 @@ router.get('/printers', async (req, res) => {
             const timeout = 5000;
             let settled = false;
             const timer = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, timeout);
-            // use a safe emit with acknowledgement callback without relying on candidate.timeout
-            candidate.emit('list-printers', { storeId }, (err, result) => {
+            // Agent receives (data, ackFn) and calls ackFn(printersList)
+            candidate.emit('list-printers', { storeId }, (printers) => {
               if (settled) return;
               settled = true; clearTimeout(timer);
-              if (err) return resolve(null);
-              return resolve(result);
+              return resolve(Array.isArray(printers) ? printers : null);
             });
           } catch (e) {
             // if emit fails synchronously resolve null
