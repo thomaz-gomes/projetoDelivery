@@ -213,15 +213,18 @@ function setupIpcHandlers() {
   ipcMain.handle('agent:pair', async (event, { serverUrl, code }) => {
     const base = serverUrl.replace(/\/$/, '');
 
-    // Tenta sem /api/ primeiro (URL do domínio da API — rota direta)
-    // Depois tenta com /api/ (URL do frontend — nginx proxy que strip /api/)
+    // Tenta sem /api/ primeiro (URL do domínio da API — rota direta no backend)
+    // Depois tenta com /api/ (URL do frontend — nginx strip /api/ antes de repassar)
     const candidates = [
       `${base}/agent-setup/pair`,
       `${base}/api/agent-setup/pair`,
     ];
 
-    for (const url of candidates) {
-      logger.info(`[pair] POST ${url} code=${code}`);
+    logger.info(`[pair] Iniciando pareamento | serverUrl=${serverUrl} | candidatos=${candidates.length}`);
+
+    for (let i = 0; i < candidates.length; i++) {
+      const url = candidates[i];
+      logger.info(`[pair] Tentativa ${i + 1}/${candidates.length}: POST ${url}`);
       try {
         const res = await fetch(url, {
           method: 'POST',
@@ -229,22 +232,36 @@ function setupIpcHandlers() {
           body: JSON.stringify({ code: code.trim().toUpperCase() }),
           signal: AbortSignal.timeout(12000),
         });
-        const data = await res.json().catch(() => ({}));
+
+        // Ler body como texto primeiro para logar independente do tipo
+        const bodyText = await res.text().catch(() => '');
+        let data = {};
+        try { data = bodyText ? JSON.parse(bodyText) : {}; } catch (_) { /* não é JSON */ }
+
+        // Log detalhado da resposta
+        const contentType = res.headers.get('content-type') || '';
+        const server      = res.headers.get('server') || '';
+        logger.info(
+          `[pair] Resposta ${i + 1}: status=${res.status} | ` +
+          `server="${server}" | content-type="${contentType}" | ` +
+          `body="${bodyText.slice(0, 200)}"`
+        );
 
         if (res.status === 404) {
-          logger.warn(`[pair] 404 em ${url}, tentando próximo candidato...`);
-          continue; // tenta o próximo candidato
+          logger.warn(`[pair] 404 em ${url} — tentando próximo candidato...`);
+          continue;
         }
 
         if (!res.ok) {
-          logger.warn(`[pair] Falha HTTP ${res.status}: ${JSON.stringify(data)}`);
+          logger.warn(`[pair] Falha HTTP ${res.status} em ${url}: ${JSON.stringify(data)}`);
           return { ok: false, error: data.message || `Servidor retornou ${res.status}` };
         }
         if (!data.token) {
+          logger.warn(`[pair] Resposta sem token em ${url}: ${bodyText.slice(0, 200)}`);
           return { ok: false, error: 'Resposta inválida — token não recebido' };
         }
 
-        logger.info(`[pair] Pareamento bem-sucedido via ${url}! storeIds=${JSON.stringify(data.storeIds)}`);
+        logger.info(`[pair] Pareamento OK via ${url} | storeIds=${JSON.stringify(data.storeIds)}`);
         return {
           ok: true,
           token: data.token,
@@ -253,12 +270,16 @@ function setupIpcHandlers() {
           companyId: data.companyId || null,
         };
       } catch (err) {
-        logger.error(`[pair] Erro de rede em ${url}:`, err.message);
-        return { ok: false, error: `Erro de rede: ${err.message}` };
+        logger.error(`[pair] Erro de rede em ${url}: ${err.name} — ${err.message}`);
+        if (i === candidates.length - 1) {
+          return { ok: false, error: `Erro de rede: ${err.message}` };
+        }
+        logger.warn(`[pair] Tentando próximo candidato após erro de rede...`);
       }
     }
 
-    return { ok: false, error: 'Nenhum endpoint de pareamento encontrado no servidor.' };
+    logger.error('[pair] Todos os candidatos falharam com 404. Verifique o nginx/backend na VPS.');
+    return { ok: false, error: 'Servidor não encontrado (404). Verifique se o endereço está correto e o servidor está rodando.' };
   });
 
   // Reset: apaga token/companyId e reabre o wizard de configuração
