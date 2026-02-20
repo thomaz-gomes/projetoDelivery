@@ -1,8 +1,23 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, session } = require('electron');
 const path = require('path');
 const os = require('os');
+
+// Libera scripts inline nas janelas locais (file://)
+// Sem isso, o Chromium bloqueia <script> tags pela CSP padrão do Electron.
+app.on('ready', () => {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+        ],
+      },
+    });
+  });
+});
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
