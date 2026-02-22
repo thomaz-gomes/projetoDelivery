@@ -75,6 +75,18 @@ const now = ref(Date.now());
 // connection state for a dev-friendly badge (moved to module scope so computed can access it)
 const connectionState = ref({ status: 'idle', since: Date.now(), url: null });
 const showPrinterConfig = ref(false);
+// printer connectivity state for UI
+const printerConnected = ref(false);
+async function updatePrinterConnected(){
+  try{
+    if(printService && printService.checkConnectivity) {
+      const ok = await printService.checkConnectivity();
+      printerConnected.value = !!ok;
+    } else {
+      printerConnected.value = !!(printService && printService.isConnected && printService.isConnected());
+    }
+  }catch(e){ printerConnected.value = false }
+}
 // compute module gating flags
 const printingEnabled = computed(() => modules.has('printing'));
 const ridersEnabled = computed(() => {
@@ -87,6 +99,7 @@ const pdvPreset = ref(null);
 // atualiza 'now' a cada 30s para que durações sejam atualizadas na interface
 let nowTimer = null;
 let resizeHandler = null;
+let printerCheckInterval = null;
 
 // =============================
 // 🎧 Som de novo pedido
@@ -147,6 +160,10 @@ onMounted(async () => {
   await requestNotificationPermission();
   // load enabled modules for this company to gate features
   try { await modules.fetchEnabled(); } catch (e) { /* ignore */ }
+
+  // initialize printer connectivity state for the UI
+  try { await updatePrinterConnected(); } catch(e){}
+  try { printerCheckInterval = setInterval(() => { updatePrinterConnected().catch(()=>{}); }, 30000); } catch(e){}
 
   // If this is a SaaS Super Admin session, do not initialize restaurant listeners or fetching —
   // redirect the admin to the SaaS dashboard instead.
@@ -487,6 +504,7 @@ onUnmounted(() => {
   try { window.removeEventListener('app:user-logged-in', onAppUserLoggedIn); } catch (e) {}
   try { if (resizeHandler) window.removeEventListener('resize', resizeHandler); } catch (e) {}
   clearInterval(nowTimer);
+  try { clearInterval(printerCheckInterval); } catch(e){}
   // destroy Sortable instances
   for (const s of sortableInstances) {
     try { s.destroy(); } catch (e) {}
@@ -2282,11 +2300,9 @@ async function viewReceipt(order) {
 
     // 1) generate ticket QR on the server so token is fresh/unique
     let qrDataUrl = null;
-    let ticketQrUrl = null;
     try {
       const { data: t } = await api.post(`/orders/${order.id}/tickets`);
       if (t && t.qrUrl) {
-        ticketQrUrl = t.qrUrl;
         qrDataUrl = await QRCode.toDataURL(t.qrUrl, { width: 220, margin: 2 });
       }
     } catch (e) {
@@ -2308,7 +2324,7 @@ async function viewReceipt(order) {
     // show QR and receipt using the Vue ticket component mounted inside the Swal modal
     try {
       // if server returned an explicit QR URL token, attach to order so component can build QR
-      if (ticketQrUrl) order.url = ticketQrUrl;
+      if (qrDataUrl && t && t.qrUrl) order.url = t.qrUrl;
       const rootId = `ticket-root-${Date.now()}`;
       let appInstance = null;
       await Swal.fire({
@@ -2724,20 +2740,21 @@ function pulseButton() {
   <div class="container-fluid p-4">
     <header class="d-flex flex-wrap align-items-center justify-content-between mb-4 gap-3">
       <div class="d-flex align-items-center">
-        <h2 class="fs-4 fw-semibold m-0">Pedidos</h2>
+        <h2 class="fs-4 fw-semibold m-0" style="position:relative;">Pedidos
         <!-- dev-only socket status badge -->
-        <span v-if="socketConnection" class="ms-3 badge" :class="{
+        <div style="position: absolute;width: 12px;height: 12px;border: 2px solid rgb(255, 255, 255);padding: 0px !important;right: -10px;bottom: 4px;" v-if="socketConnection" class="ms-3 badge" :class="{
           'bg-success': socketConnection.status === 'connected',
           'bg-warning text-dark': socketConnection.status === 'reconnecting',
           'bg-danger': socketConnection.status === 'error' || socketConnection.status === 'disconnected',
           'bg-secondary': socketConnection.status === 'connecting' || socketConnection.status === 'idle'
         }">
-          {{ 'Socket: ' + socketStatusLabel }}
-          <small v-if="socketConnection.url" class="d-block text-truncate" style="max-width:200px;">{{ socketConnection.url.replace(/^https?:\/\//, '') }}</small>
-        </span>
+         <!-- {{ 'Socket: ' + socketStatusLabel }}
+          <small v-if="socketConnection.url" class="d-block text-truncate" style="max-width:200px;">{{ socketConnection.url.replace(/^https?:\/\//, '') }}</small> -->
+          <small v-if="socketConnection.url" class="d-block text-truncate" ></small>
+          
+      </div></h2>
       </div>
-      <PrinterWatcher />
-      <PrinterStatus v-if="printingEnabled" />
+      
       <!-- Dev: quick test print button -->
       <div class="ms-2 d-flex gap-2 align-items-center">
         
@@ -2745,7 +2762,7 @@ function pulseButton() {
         <button
           ref="soundButton"
           type="button"
-          class="btn btn-sm"
+          class="btn btn-sm d-none d-sm-flex"
           :class="playSound ? 'btn-primary' : 'btn-outline-secondary'"
           @click="toggleSound"
           title="Som de novos pedidos"
@@ -2756,8 +2773,9 @@ function pulseButton() {
           ></i>
         </button>
 
-        <button type="button" class="btn btn-sm btn-outline-primary" @click="showPrinterConfig = true" title="Configurar impressora">
-          <i class="bi bi-gear"></i>&nbsp;Configurar Impressora
+        <button type="button" :class="['btn btn-sm', printerConnected ? 'btn-primary' : 'btn-outline-primary']" @click="showPrinterConfig = true" title="Configurar impressora">
+          <i class="bi bi-printer"></i>&nbsp;Impressora
+          <span v-if="printerConnected" class="badge bg-success ms-2" style="font-size:0.65rem; vertical-align:middle">Conectada</span>
         </button>
         <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
           <i class="bi bi-printer"></i>&nbsp;Teste Impressão
@@ -2780,22 +2798,21 @@ function pulseButton() {
             
           </div>
         </div>
-        <div class="d-flex gap-2 align-items-center">
-         
-          <div class="flex-grow-1" style="max-width: 500px;">
-            <TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control" />
-          </div>
-          <button type="button" class="btn btn-primary" @click="openPdv">
-            <i class="bi bi-arrow-right-circle"></i>
-            Criar Pedido
-          </button>
+          <div class="row">
+            <div class="col-12 col-sm-6"><TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control mb-2" /></div>
+            <div class="col-6 col-sm-3">
+              <button type="button" class="btn btn-primary  w-100" @click="openPdv">
+                <i class="bi bi-plus-lg"></i>&nbsp;Entrega
+                </button>
+            </div>
+            <div class="col-6 col-sm-3">
+            <button type="button" class="btn btn-outline-primary  w-100" @click="openBalcao" title="Pedido balcão">
+            <i class="bi bi-plus-lg"></i> &nbsp;Balcão
+            </button>
 
-           <button type="button" class="btn btn-outline-primary ms-2" @click="openBalcao" title="Pedido balcão">
-            <i class="bi bi-shop"></i>
-            &nbsp;Pedido balcão
-          </button>
-          
-        </div>
+            </div>
+          </div>           
+         
         </div>
       </div>
     </div>
@@ -2803,7 +2820,7 @@ function pulseButton() {
           <div class="col-sm-6">
 
               <div class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;">
-    <div class="card-body">
+    <div class="card-body w-100">
       <div class="d-flex align-items-center justify-content-between">
           <div>
             <h5 class="card-title mb-1">
@@ -2813,7 +2830,7 @@ function pulseButton() {
           </div>
         </div>
   <!-- Filtros de status (visível apenas em dispositivos pequenos) -->
-  <div class="d-flex flex-wrap gap-2 d-md-none mb-2">
+  <div class="d-inline-flex gap-2 d-md-none pb-2 w-100 overflow-auto mb-3">
         <button
           v-for="s in statusFiltersMobile"
           :key="s.value"
@@ -2863,7 +2880,7 @@ function pulseButton() {
             <div><span class="badge bg-secondary">{{ columnOrders(col.key).length }}</span></div>
           </div>
           <div class="list mt-2  p-2" style="min-height:120px">
-            <div v-for="o in columnOrders(col.key)" :key="o.id" class="card mb-2 order-card" :class="{ 'fade-in': o._isNew, 'selected': isOrderSelected(o) }" :data-order-id="o.id">
+            <div v-for="o in columnOrders(col.key)" :key="o.id" class="card card-body w-100 mb-2 order-card" :class="{ 'fade-in': o._isNew, 'selected': isOrderSelected(o) }" :data-order-id="o.id">
               <div class="card-body p-2">
                 <!-- Row 1: checkbox + name + channel badge -->
                 <div class="oc-header">
@@ -3341,7 +3358,7 @@ button.btn.advance {
 
 /* responsive: horizontal scroll on small screens */
 @media (max-width: 768px) {
-  .orders-column { min-width: 260px; flex: 0 0 260px; }
+  .orders-column { min-width: 100%; flex: 0 0 260px; }
   .orders-board .boards { padding-bottom: 12px; }
 }
 

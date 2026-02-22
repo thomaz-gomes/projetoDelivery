@@ -48,7 +48,7 @@
           "to": "22:00"
         }
       ],
-      "forceOpen": true,
+      "forceOpen": false,
       "banner": "/public/uploads/store/8433873c-5512-47aa-8847-c2f7282d9788/menus/f1c84643-92a8-427e-a099-f8e846fa176b/banner.jpg",
       "allowDelivery": true,
       "allowPickup": true,

@@ -81,7 +81,7 @@ function onWhatsappInput(e) {
     <div class="card login-card">
       <div class="card-body">
         <div class="text-center mb-4">
-          <div class="login-logo mb-2"><i class="bi bi-box-seam"></i></div>
+          <div class="login-logo mb-2"><img src="../../public/core.png" alt="Logo" class="logo"></div>
           <h4 class="card-title mb-1">Delivery SaaS</h4>
           <p class="text-muted small mb-0">Acesse sua conta</p>
         </div>
@@ -178,7 +178,7 @@ function onWhatsappInput(e) {
 <style scoped>
 /* Login page background */
 .login-page {
-  background: linear-gradient(135deg, #105784 0%, #0B3D5E 60%, #083350 100%);
+  background: linear-gradient(135deg, #8cbe1f 0%, #89d136 60%, #8cbe1f 100%);
   min-height: 100vh;
 }
 .login-card {
@@ -189,11 +189,7 @@ function onWhatsappInput(e) {
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.2);
 }
 .login-logo {
-  width: 56px;
-  height: 56px;
   margin: 0 auto;
-  border-radius: var(--border-radius, 0.75rem);
-  background: linear-gradient(135deg, #105784, #1A6FA8);
   display: flex;
   align-items: center;
   justify-content: center;

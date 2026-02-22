@@ -3,6 +3,7 @@ import { computed, reactive, ref, onMounted, onUpdated, nextTick, onUnmounted, w
 import { useModulesStore } from '../stores/modules'
 import api from '../api'
 import { useSaasStore } from '../stores/saas'
+import { buildVisibleNav } from '../utils/navVisibility.js'
 import { assetUrl } from '../utils/assetUrl.js'
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -33,68 +34,8 @@ const userInitials = computed(() => {
 });
 const userRoleLabel = computed(() => { try{ return auth.user && auth.user.role ? String(auth.user.role).toUpperCase() : '' }catch(e){ return '' } });
 
-// Menu lateral (use Bootstrap Icons classes in `icon`)
-const nav = [
-  { name: 'Pedidos', to: '/orders', icon: 'bi bi-box-seam' },
-  { name: 'Relatórios', to: '/reports', icon: 'bi bi-file-earmark-bar-graph', children: [
-    { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
-    { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
-    { name: 'Produtos mais vendidos', to: '/reports/products', icon: 'bi bi-bar-chart-line' },
-    { name: 'Notas Fiscais', to: '/relatorios/nfe-emissoes', icon: 'bi bi-receipt' },
-    { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat', moduleKey: 'stock' }
-  ] },
-  { name: 'Clientes', to: '/customers', icon: 'bi bi-person', children: [
-    { name: 'Listar clientes', to: '/customers', icon: 'bi bi-people' },
-    { name: 'Grupos de clientes', to: '/customer-groups', icon: 'bi bi-people-fill' }
-  ] },
-  { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', moduleKey: 'riders', children: [
-    { name: 'Lista', to: '/riders', icon: 'bi bi-people' },
-    { name: 'Créditos/Débitos', to: '/rider-adjustments', icon: 'bi bi-credit-card' },
-  ] },
-  { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', children: [
-    { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill', moduleKey: 'affiliates' },
-    { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated', moduleKey: 'coupons' },
-    { name: 'Cashback', to: '/settings/cashback', icon: 'bi bi-cash-stack', moduleKey: 'cashback' },
-    { name: 'Meta Pixel', to: '/settings/meta-pixel', icon: 'bi bi-bullseye' },
-  ] },
-  { name: 'Ingredientes', to: '/ingredient-groups', icon: 'bi bi-box', moduleKey: 'stock', children: [
-    { name: 'Grupos de Ingredientes', to: '/ingredient-groups', icon: 'bi bi-list' },
-    { name: 'Ingredientes', to: '/ingredients', icon: 'bi bi-basket' },
-    { name: 'Fichas Técnicas', to: '/technical-sheets', icon: 'bi bi-file-earmark-text' }
-  ] },
-    { name: 'Financeiro', to: '/financial', icon: 'bi bi-cash-coin', moduleKey: 'financial', children: [
-      { name: 'Dashboard', to: '/financial', icon: 'bi bi-speedometer2' },
-      { name: 'Contas a Pagar/Receber', to: '/financial/transactions', icon: 'bi bi-receipt' },
-      { name: 'Fluxo de Caixa', to: '/financial/cash-flow', icon: 'bi bi-graph-up' },
-      { name: 'DRE', to: '/financial/dre', icon: 'bi bi-file-earmark-bar-graph' },
-      { name: 'Contas Bancárias', to: '/financial/accounts', icon: 'bi bi-bank' },
-      { name: 'Taxas e Operadoras', to: '/financial/gateways', icon: 'bi bi-percent' },
-      { name: 'Conciliação OFX', to: '/financial/ofx', icon: 'bi bi-file-earmark-arrow-up' },
-      { name: 'Centros de Custo', to: '/financial/cost-centers', icon: 'bi bi-diagram-3' },
-    ] },
-    { name: 'Lista de cardápios', to: '/menu/menus', icon: 'bi bi-list' },
- 
-  
-  // Configurações has sub-items
-    { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', children: [
-    { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt' },
-    { name: 'Dados Fiscais', to: '/settings/dados-fiscais', icon: 'bi bi-receipt' },
-    { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug' },
-    { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
-    { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp' },
-    { name: 'Dev Tools', to: '/settings/devtools', icon: 'bi bi-tools' },
-    { name: 'Formas de pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card-2-front' },
-    { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' },
-    { name: 'Gestão de Acessos', to: '/settings/access-control', icon: 'bi bi-shield-lock' },
-  ] },
-  // SaaS admin area (parent with CRUD children for SUPER_ADMIN)
-  { name: 'SaaS', to: '/saas', icon: 'bi bi-grid-3x3-gap', role: 'SUPER_ADMIN', children: [
-    { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
-    { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },
-    { name: 'Empresas', to: '/saas/companies', icon: 'bi bi-building' },
-    { name: 'Mensalidades', to: '/saas/billing', icon: 'bi bi-receipt' }
-  ] }
-];
+// Menu lateral (shared nav structure)
+import { nav } from '../config/nav.js'
 
 // collapsed state for parent items with children (true = collapsed)
 const parentsCollapsed = reactive({})
@@ -275,41 +216,7 @@ onUnmounted(() => { try{ document.removeEventListener('click', onDocumentClick);
 
 const isActive = (to) => computed(() => route.path.startsWith(to));
 
-const visibleNav = computed(() => {
-  try{
-    const role = auth.user && auth.user.role ? String(auth.user.role).toUpperCase() : null;
-    // For SaaS Super Admin, show a flat list of admin links (no submenus)
-    if (role === 'SUPER_ADMIN') {
-      return [
-        { name: 'SaaS Dashboard', to: '/saas', icon: 'bi bi-grid-3x3-gap' },
-        { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
-        { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },
-        { name: 'Empresas', to: '/saas/companies', icon: 'bi bi-building' },
-        { name: 'Mensalidades', to: '/saas/billing', icon: 'bi bi-receipt' }
-      ]
-    }
-
-    // Default: hide items that explicitly require a role the user doesn't have
-    const enabled = (saas.enabledModules || []).map(k => String(k).toLowerCase())
-    const isModuleEnabled = (key) => !key || enabled.includes(String(key).toLowerCase())
-    return nav.map((item) => {
-      if(item.role && role !== String(item.role).toUpperCase()) return null;
-      // Module gating at parent level: hide entire section if moduleKey not enabled
-      if(item.moduleKey && !isModuleEnabled(item.moduleKey)) return null;
-      const copy = { ...item };
-      if(Array.isArray(copy.children)){
-        copy.children = copy.children.filter(c => {
-          if(c.role && String(c.role).toUpperCase() !== role) return false;
-          if(c.moduleKey && !isModuleEnabled(c.moduleKey)) return false;
-          return true;
-        });
-        // Hide parent if all children were filtered out
-        if(copy.children.length === 0) return null;
-      }
-      return copy;
-    }).filter(Boolean);
-  }catch(e){ return nav }
-});
+const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules, nav));
 
 
 const planBadge = computed(() => {
@@ -782,7 +689,7 @@ function selectMenuOption(opt){
 </script>
 <template>
   <div v-if="showSidebar">
-    <header class="top-navbar d-flex align-items-center justify-content-between px-3 py-2 w-100">
+    <header class="top-navbar d-none d-sm-flex align-items-center justify-content-between px-3 py-2 w-100">
       <div class="d-flex align-items-center">
         <button class="btn me-3" @click="offCanvasOpen = true" aria-label="Abrir menu">
           <i class="bi bi-list" style="font-size:2rem"></i>
@@ -796,7 +703,7 @@ function selectMenuOption(opt){
       </div>
 
       <div class="d-flex align-items-center">
-        <div class="quick-shortcuts d-flex align-items-center justify-content-end">
+        <div class="quick-shortcuts d-none d-sm-flex align-items-center justify-content-end">
           <template v-if="!hasAnyShortcut">
             <button class="btn btn-light p-2 shortcut-btn" title="Configurar atalhos" @click.prevent="openManageShortcuts()">
               <i class="bi bi-plus" style="font-size:1.1rem;"></i>
@@ -822,7 +729,7 @@ function selectMenuOption(opt){
 
         
 
-        <div class="dropdown ms-3">
+        <div class="d-none d-sm-block dropdown ms-3">
           <button ref="quickMenuBtn" class="btn btn-light dropdown-toggle" type="button" id="quickMenuDropdown" @click.prevent="quickMenuOpen = !quickMenuOpen" :aria-expanded="quickMenuOpen">
            <div v-if="auth.user" class="d-flex align-items-center user-info" style="gap: 16px; padding: 1px 4px;">
           <div class="d-flex">
@@ -1137,13 +1044,13 @@ aside nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) trans
 }
 .quick-shortcuts .shortcut-btn {
   background: #f8f9fa;
-  border-radius: 50%;
+  border-radius: 50% 50% 50% 10% !important;
   border: none;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   transition: background 0.15s;
   padding: 4px 10px !important;
 }
-.quick-shortcuts .shortcut-btn:hover { background: #e9ecef; }
+.quick-shortcuts .shortcut-btn:hover { background: #89d136; }
 .shortcut-actions .btn { line-height: 1; }
 .modal-backdrop-custom {
   position: fixed;

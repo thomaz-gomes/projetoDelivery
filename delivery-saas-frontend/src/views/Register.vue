@@ -45,7 +45,7 @@ async function onSubmit() {
     <div class="card register-card">
       <div class="card-body">
         <div class="text-center mb-4">
-          <div class="register-logo mb-2"><i class="bi bi-person-plus"></i></div>
+          <div class="register-logo mb-2"><img src="../../public/core.png" alt="Logo" class="logo"></div>
           <h4 class="card-title mb-1">Criar Conta</h4>
           <p class="text-muted small mb-0">Preencha seus dados para começar</p>
         </div>
@@ -124,7 +124,7 @@ async function onSubmit() {
 
 <style scoped>
 .register-page {
-  background: linear-gradient(135deg, #105784 0%, #0B3D5E 60%, #083350 100%);
+  background: linear-gradient(135deg, #8cbe1f 0%, #89d136 60%, #8cbe1f 100%);
   min-height: 100vh;
 }
 .register-card {
@@ -135,11 +135,7 @@ async function onSubmit() {
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.2);
 }
 .register-logo {
-  width: 56px;
-  height: 56px;
   margin: 0 auto;
-  border-radius: var(--border-radius, 0.75rem);
-  background: linear-gradient(135deg, #105784, #1A6FA8);
   display: flex;
   align-items: center;
   justify-content: center;

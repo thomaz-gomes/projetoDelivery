@@ -1,10 +1,34 @@
 /* Variáveis legadas mantidas para componentes que ainda referenciam --brand-* */
 :root {
-  --brand: #8bbf62;
+  --brand: #8cbe1f;
   --brand-dark: rgb(66, 114, 26);
   --brand-light: #d6ffb3;
   --brand-lightest: #B3EE7F;
   --button-text-color: #000;
+
+      --primary: #8cbe1f;
+    --primary-dark: rgb(66, 114, 26);
+    --primary-light: #d6ffb3;
+    --success: #89D136;
+    --success-dark: #6DAE1E;
+    --success-light: #A8E866;
+    --bg-app: #EEFFED;
+    --bg-card: #FFFFFF;
+    --bg-hover: #F0F0F0;
+    --bg-zebra: #FAFAFA;
+    --text-primary: #212529;
+    --text-secondary: #6C757D;
+    --text-muted: #ADB5BD;
+    --border-color: #E6E6E6;
+    --border-radius: 0.75rem;
+    --border-radius-sm: 0.5rem;
+    --border-radius-pill: 2rem;
+    --shadow-card: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    --shadow-dropdown: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+    --shadow-hover: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+    --transition-base: all 0.2s ease-in-out;
+    --media-thumb-size: 4rem;
+    --media-grid-gap: 0.75rem;
 }
 
 body {

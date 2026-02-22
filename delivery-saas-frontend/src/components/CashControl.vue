@@ -1,9 +1,8 @@
 <template>
   <div class="cash-control d-inline-block ms-2" ref="container">
     <template v-if="currentSession">
-      <div class="btn-group">
-        <button type="button" class="btn btn-outline-secondary btn-sm" @click="toggleDropdown" :aria-expanded="showDropdown">
-          Caixa aberto
+        <button type="button" class="btn btn-secondary btn-sm" @click="toggleDropdown" :aria-expanded="showDropdown">
+          <i class="bi bi-cash-coin"></i> <span class="d-none d-sm-inline">Caixa aberto</span>
         </button>
         <ul v-show="showDropdown" class="dropdown-menu show" style="position:absolute;">
           <li><button class="dropdown-item" type="button" @click="onPartialSummary">Resumo Parcial</button></li>
@@ -11,7 +10,6 @@
           <li><hr class="dropdown-divider"></li>
           <li><button class="dropdown-item text-danger" type="button" @click="onCloseCash">Fechar Caixa</button></li>
         </ul>
-      </div>
     </template>
     <template v-else>
       <button type="button" class="btn btn-outline-secondary btn-sm" @click="openCash">Abrir Caixa</button>
