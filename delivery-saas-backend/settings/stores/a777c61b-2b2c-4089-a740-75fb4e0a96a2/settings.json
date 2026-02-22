@@ -2,7 +2,8 @@
   "menus": {
     "ab48749b-3ece-4d18-94d0-4d925f812d3f": {
       "logo": "/public/uploads/store/a777c61b-2b2c-4089-a740-75fb4e0a96a2/menus/ab48749b-3ece-4d18-94d0-4d925f812d3f/logo.png",
-      "open24Hours": true
+      "open24Hours": true,
+      "forceOpen": false
     }
   }
 }

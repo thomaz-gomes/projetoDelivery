@@ -60,6 +60,7 @@ import financialRouter from './routes/financial/index.js'
 import metaPixelRouter from './routes/metaPixel.js'
 import mediaRouter from './routes/media.js'
 import dadosFiscaisRouter from './routes/dadosFiscais.js'
+import productReportsRouter from './routes/reports/products.js'
 
 const app = express();
 // When running behind a reverse proxy (EasyPanel / nginx / Cloudflare), enable
@@ -202,6 +203,7 @@ app.use('/customer-groups', customerGroupsRouter);
 app.use('/qr-action', qrActionRouter);
 app.use('/cashback', requireModule('CASHBACK'), cashbackRouter);
 app.use('/financial', requireModule('FINANCIAL'), financialRouter);
+app.use('/reports/products', productReportsRouter);
 app.use('/meta-pixel', metaPixelRouter);
 app.use('/media', mediaRouter);
 app.use('/settings', dadosFiscaisRouter);

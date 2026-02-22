@@ -48,7 +48,7 @@ const showMobileHeader = computed(() => {
       </header>
 
       <!-- Layout principal -->
-      <div class="container-fluid d-flex p-0">
+      <div class="container-fluid d-flex p-0 flex-column">
         <!-- Sidebar desktop -->
         <Sidebar />
 

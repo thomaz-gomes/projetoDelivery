@@ -12,11 +12,26 @@ const props = defineProps({
   embedded: { type: Boolean, default: false }
 });
 
-const route = useRoute();
-const router = useRouter();
-const auth = useAuthStore();
+      const route = useRoute();
+      const router = useRouter();
+    const auth = useAuthStore();
 const saas = useSaasStore();
 const modules = useModulesStore();
+
+// user helpers
+const userName = computed(() => {
+  try{ return auth.user && (auth.user.name || auth.user.fullName || auth.user.email) ? String(auth.user.name || auth.user.fullName || auth.user.email) : '' }catch(e){ return '' }
+});
+const userInitials = computed(() => {
+  try{
+    const n = userName.value || (auth.user && auth.user.email) || '';
+    const parts = String(n).trim().split(/\s+/).filter(Boolean);
+    if(parts.length === 0) return '';
+    if(parts.length === 1) return parts[0].slice(0,2).toUpperCase();
+    return (String(parts[0][0] || '') + String(parts[1][0] || '')).toUpperCase();
+  }catch(e){ return '' }
+});
+const userRoleLabel = computed(() => { try{ return auth.user && auth.user.role ? String(auth.user.role).toUpperCase() : '' }catch(e){ return '' } });
 
 // Menu lateral (use Bootstrap Icons classes in `icon`)
 const nav = [
@@ -24,6 +39,7 @@ const nav = [
   { name: 'Relatórios', to: '/reports', icon: 'bi bi-file-earmark-bar-graph', children: [
     { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
     { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
+    { name: 'Produtos mais vendidos', to: '/reports/products', icon: 'bi bi-bar-chart-line' },
     { name: 'Notas Fiscais', to: '/relatorios/nfe-emissoes', icon: 'bi bi-receipt' },
     { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat', moduleKey: 'stock' }
   ] },
@@ -159,6 +175,20 @@ function onDocumentClick(ev){
         }
       }
     }catch(e){}
+    // handle quickMenu (three-dots) dropdown similarly
+    try{
+      if (quickMenuOpen.value) {
+        const btn = quickMenuBtn.value
+        const dd = quickMenuMenu.value
+        if (dd && (dd === ev.target || dd.contains && dd.contains(ev.target))) {
+          // clicked inside quick menu — keep open
+        } else if (btn && (btn === ev.target || btn.contains && btn.contains(ev.target))) {
+          // clicked the quick toggle — let its handler manage
+        } else {
+          quickMenuOpen.value = false
+        }
+      }
+    }catch(e){}
   }catch(e){}
 }
 
@@ -192,7 +222,14 @@ function toggleMenusDropdown(ev){
 
 function toggleParent(to){
   if(!to) return
-  parentsCollapsed[to] = !parentsCollapsed[to]
+  const newState = !parentsCollapsed[to]
+  // when opening a parent (newState === false), collapse all other parents
+  if (newState === false) {
+    for (const k in parentsCollapsed) {
+      if (k !== to) parentsCollapsed[k] = true
+    }
+  }
+  parentsCollapsed[to] = newState
 }
 
 // mini sidebar (icons-only) state — persisted in localStorage
@@ -279,14 +316,11 @@ const planBadge = computed(() => {
   try {
     if (!saas.subscription || !saas.subscription.plan) return null
     const p = saas.subscription.plan
-    const parts = []
-    if (p.unlimitedStores) parts.push('Lojas: ilimitado')
-    else if (p.storeLimit !== null && p.storeLimit !== undefined) parts.push(`Lojas: ${p.storeLimit}`)
-    if (p.unlimitedMenus) parts.push('Cardápios: ilimitado')
-    else if (p.menuLimit !== null && p.menuLimit !== undefined) parts.push(`Cardápios: ${p.menuLimit}`)
-    return { name: p.name, parts }
+    return { name: p.name, plan: p }
   } catch (e) { return null }
 })
+
+const storeCount = computed(() => new Set((menusList.value || []).map(m => m.storeId).filter(Boolean)).size)
 
 // menus widget state (cardápios are the storefronts)
 const menusList = ref([])
@@ -294,6 +328,10 @@ const menusList = ref([])
 const dropdownOpen = ref(false)
 const menuToggleBtn = ref(null)
 const menusDropdownEl = ref(null)
+// quick menu (three-dots) state
+const quickMenuOpen = ref(false)
+const quickMenuBtn = ref(null)
+const quickMenuMenu = ref(null)
 
 // detect small screens (mobile) to change dropdown behavior/style
 const isMobile = ref(typeof window !== 'undefined' ? (window.innerWidth <= 576) : false)
@@ -563,223 +601,403 @@ function logout() {
   auth.logout();
   router.replace('/login');
 }
+
+// UI state for off-canvas, quick shortcuts and add-link modal
+const offCanvasOpen = ref(false);
+const SHORTCUTS_KEY = 'sidebar-quick-shortcuts';
+const defaultShortcuts = [
+  { icon: 'bi bi-lightning-charge', title: 'Atalho 1', to: null },
+  { icon: 'bi bi-star', title: 'Atalho 2', to: null },
+  { icon: 'bi bi-gear', title: 'Atalho 3', to: null },
+  { icon: 'bi bi-plus-circle', title: 'Atalho 4', to: null },
+  { icon: 'bi bi-plus-circle', title: 'Atalho 5', to: null },
+];
+const quickShortcuts = ref([]);
+const showAddLinkModal = ref(false);
+const showManageShortcuts = ref(false);
+const manageSelected = ref('');
+const manageList = ref([]);
+
+function openManageShortcuts(){
+  // prefill modal with current configured shortcuts so user edits persist
+  try{
+    manageList.value = (quickShortcuts.value || []).filter(s => s && s.to).map(s => ({ icon: s.icon || 'bi bi-link', title: s.title || 'Atalho', to: s.to }));
+  }catch(e){ manageList.value = [] }
+  manageSelected.value = '';
+  showManageShortcuts.value = true;
+}
+
+function addSelectedToManage(){
+  try{
+    // prevent adding beyond the 5-link limit
+    if((manageList.value || []).length >= 5) return;
+    if(!manageSelected.value) return;
+    const opt = (menuOptions.value || []).find(m => m.to === manageSelected.value) || { name: manageSelected.value, to: manageSelected.value, icon: 'bi bi-link' };
+    manageList.value.push({ icon: opt.icon || 'bi bi-link', title: opt.name || 'Atalho', to: opt.to || manageSelected.value });
+    manageSelected.value = '';
+  }catch(e){ console.error('addSelectedToManage', e) }
+}
+
+function removeFromManage(idx){ if(typeof idx === 'number') manageList.value.splice(idx,1); }
+
+function saveManageList(){
+  try{
+    const items = manageList.value.slice(0,5).map(s => ({ icon: s.icon || 'bi bi-link', title: s.title || 'Atalho', to: s.to || null, action: null }));
+    while(items.length < 5) items.push({ icon: 'bi bi-plus-circle', title: 'Atalho', to: null, action: null });
+    quickShortcuts.value = items;
+    attachShortcutActions();
+    persistShortcuts();
+    showManageShortcuts.value = false;
+  }catch(e){ console.error('saveManageList', e) }
+}
+
+function loadShortcuts(){
+  try{
+    const raw = localStorage.getItem(SHORTCUTS_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      // ensure it's array of length 5
+      const arr = Array.isArray(parsed) ? parsed.slice(0,5) : [];
+      while(arr.length < 5) arr.push({ icon: 'bi bi-plus-circle', title: 'Atalho', to: null });
+      quickShortcuts.value = arr.map(s => ({ icon: s.icon || 'bi bi-link', title: s.title || 'Atalho', to: s.to || null, action: null }));
+    } else {
+      quickShortcuts.value = defaultShortcuts.map(s => ({ ...s, action: null }));
+    }
+  }catch(e){ quickShortcuts.value = defaultShortcuts.map(s => ({ ...s, action: null })); }
+  // attach actions
+  attachShortcutActions();
+}
+
+function persistShortcuts(){
+  try{
+    const toStore = quickShortcuts.value.map(s => ({ icon: s.icon, title: s.title, to: s.to || null }));
+    localStorage.setItem(SHORTCUTS_KEY, JSON.stringify(toStore));
+  }catch(e){ console.warn('Failed to persist shortcuts', e) }
+}
+
+function attachShortcutActions(){
+  try{
+    quickShortcuts.value.forEach(s => {
+      s.action = s.to ? (() => { try{ router.push(s.to) }catch(e){} }) : null;
+    });
+  }catch(e){}
+}
+
+function shortcutClick(s){
+  if(s && s.to){ try{ router.push(s.to) } catch(e){} }
+}
+
+function addShortcutFromMenu(item){
+  try{
+    // item: { name, to, icon }
+    const idx = quickShortcuts.value.findIndex(s => !s.to);
+    const targetIdx = idx >= 0 ? idx : 0; // overwrite first if none empty
+    quickShortcuts.value[targetIdx] = { icon: item.icon || 'bi bi-link', title: item.name || 'Atalho', to: item.to || null, action: null };
+    attachShortcutActions();
+    persistShortcuts();
+    showAddLinkModal.value = false;
+  }catch(e){ console.error('addShortcutFromMenu failed', e) }
+}
+
+// persist when shortcuts change
+watch(quickShortcuts, () => persistShortcuts(), { deep: true });
+
+// load initially
+onMounted(() => { loadShortcuts(); });
+
+// Edit/remove shortcuts UI state
+const editingIndex = ref(-1);
+const editForm = ref({ icon: '', title: '', to: '' });
+
+function openEditModal(index){
+  const s = quickShortcuts.value[index] || { icon: '', title: '', to: null };
+  editingIndex.value = index;
+  editForm.value = { icon: s.icon || '', title: s.title || '', to: s.to || '' };
+}
+
+function saveEditedShortcut(){
+  try{
+    const idx = Number(editingIndex.value);
+    if(idx < 0 || idx >= quickShortcuts.value.length) return;
+    quickShortcuts.value[idx] = { icon: editForm.value.icon || 'bi bi-link', title: editForm.value.title || 'Atalho', to: editForm.value.to || null, action: null };
+    attachShortcutActions();
+    persistShortcuts();
+    editingIndex.value = -1;
+  }catch(e){ console.error('saveEditedShortcut', e) }
+}
+
+function addIconNow(){
+  try{
+    const idx = Number(editingIndex.value);
+    if(idx < 0 || idx >= quickShortcuts.value.length) return;
+    // apply the selected icon immediately to the shortcut (keeps title/to unchanged)
+    const cur = quickShortcuts.value[idx] || { title: 'Atalho', to: null };
+    quickShortcuts.value[idx] = { icon: editForm.value.icon || 'bi bi-link', title: cur.title || editForm.value.title || 'Atalho', to: cur.to || editForm.value.to || null, action: null };
+    attachShortcutActions();
+    persistShortcuts();
+  }catch(e){ console.error('addIconNow', e) }
+}
+
+function removeShortcut(idx){
+  try{
+    if(idx < 0 || idx >= quickShortcuts.value.length) return;
+    quickShortcuts.value[idx] = { icon: 'bi bi-plus-circle', title: 'Atalho', to: null, action: null };
+    attachShortcutActions();
+    persistShortcuts();
+  }catch(e){ console.error('removeShortcut', e) }
+}
+
+// Icon selection options and menu options for edit modal
+const ICON_OPTIONS = [
+  'bi bi-house', 'bi bi-box-seam', 'bi bi-file-earmark', 'bi bi-person', 'bi bi-bicycle',
+  'bi bi-megaphone', 'bi bi-gear', 'bi bi-list', 'bi bi-star', 'bi bi-plus-circle', 'bi bi-lightning-charge'
+];
+
+const menuOptions = computed(() => {
+  try{
+    const out = [];
+    (visibleNav.value || []).forEach(i => {
+      out.push({ name: i.name, to: i.to, icon: i.icon });
+      if(Array.isArray(i.children)){
+        i.children.forEach(c => out.push({ name: (i.name + ' → ' + c.name), to: c.to, icon: c.icon }));
+      }
+    });
+    return out;
+  }catch(e){ return [] }
+});
+
+const hasAnyShortcut = computed(() => {
+  try{ return (quickShortcuts.value || []).some(s => !!s && !!s.to); }catch(e){ return false }
+});
+
+function selectMenuOption(opt){
+  try{
+    if(!opt) return;
+    editForm.value.to = opt.to || '';
+    // if title empty or placeholder, fill with selected name
+    if(!editForm.value.title || editForm.value.title.startsWith('Atalho')) editForm.value.title = opt.name || '';
+    if(!editForm.value.icon) editForm.value.icon = opt.icon || '';
+  }catch(e){}
+}
 </script>
 <template>
-  <aside ref="asideEl" v-if="showSidebar" :class="[embedded ? 'd-flex flex-column' : 'd-none d-md-flex flex-column border-end', { 'sidebar-mini': mini && !embedded }]" :style="embedded ? {} : (mini ? { width: '72px', minHeight: '100vh' } : { width: '240px', minHeight: '100vh' })">
-    <!-- Header -->
-    <div class="border-bottom p-3 header-wrap">
+  <div v-if="showSidebar">
+    <header class="top-navbar d-flex align-items-center justify-content-between px-3 py-2 w-100">
       <div class="d-flex align-items-center">
-        <div class="me-auto d-flex align-items-center header-content">
+        <button class="btn me-3" @click="offCanvasOpen = true" aria-label="Abrir menu">
+          <i class="bi bi-list" style="font-size:2rem"></i>
+        </button>
+        <div class="d-flex align-items-center header-content">
           <i v-if="mini" class="bi bi-shop logo-compact-icon" aria-hidden="true" :title="'Delivery SaaS'" aria-label="Delivery SaaS"></i>
           <div v-else>
-            <h5 class="mb-0">Delivery SaaS</h5>
-            <small class="text-muted">Painel Administrativo</small>
+            <img src="../../public/core.png" alt="" class="log">
           </div>
-        </div>
-        <div class="ms-2 text-end">
-          <div v-if="planBadge && planBadge.name && !mini" class="small text-white">
-            <div>{{ planBadge.name }}</div>
-            <div class="small text-light-50" v-if="planBadge.parts && planBadge.parts.length">
-              <span v-for="(p,i) in planBadge.parts" :key="i" class="badge bg-white bg-opacity-10 text-white me-1">{{ p }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="d-none d-md-block">
-          <button type="button" class="btn btn-sm  btn-toggle-mini" @click="toggleMini" :aria-pressed="mini">
-            <i :class="mini ? 'bi bi-chevron-right' : 'bi bi-chevron-left'"></i>
-          </button>
         </div>
       </div>
-    </div>
 
-    <!-- Menus dropdown: shows closed count and expands to list cardápios -->
-    <div class="border-bottom p-2 stores-widget w-100" v-if="menusList.length" style="position:relative">
-      <div class="d-flex align-items-center justify-content-between w-100">
-        <div class="d-flex align-items-center position-relative w-100">
-          <div class=" w-100" v-if="!mini">
-            <button ref="menuToggleBtn" type="button" class="btn btn-sm btn-light d-flex  justify-content-between align-items-center text-dark w-100 p-2" @click="toggleMenusDropdown" :aria-expanded="dropdownOpen">
-              <span class="small d-flex">
-          <div class="me-2 small text-muted" v-show="!mini">Cardápios</div>
-          
-              (
-                <template v-if="openCount > 0">{{ openCount }} {{ openCount === 1 ? 'aberta' : 'abertas' }}</template>
-                <template v-else>{{ closedCount }} {{ closedCount === 1 ? 'fechada' : 'fechadas' }}</template>)
-              </span>
-              <i  class="bi bi-chevron-down ms-2 chevron" aria-hidden="true" style=""></i>
+      <div class="d-flex align-items-center">
+        <div class="quick-shortcuts d-flex align-items-center justify-content-end">
+          <template v-if="!hasAnyShortcut">
+            <button class="btn btn-light p-2 shortcut-btn" title="Configurar atalhos" @click.prevent="openManageShortcuts()">
+              <i class="bi bi-plus" style="font-size:1.1rem;"></i>
             </button>
-          </div>
-          <div v-else class="d-flex align-items-center  w-100" role="button" ref="menuToggleBtn" @click="toggleMenusDropdown">
-            <div class="thumb-wrap">
-              <img v-if="menusList[0] && menusList[0]._thumb" :src="menusList[0]._thumb" class="store-thumb" />
-              <div :class="['status-dot', closedCount > 0 ? 'closed' : 'open', 'thumb-badge']"></div>
+          </template>
+          <template v-else>
+            <div v-for="(shortcut, idx) in quickShortcuts.slice().reverse()" :key="idx" class="position-relative d-inline-block mx-1">
+              <template v-if="shortcut && shortcut.to">
+                <button class="btn btn-light p-2 shortcut-btn" :title="shortcut.title" @click.prevent="shortcutClick(shortcut)">
+                  <i :class="shortcut.icon" style="font-size:1.3rem;"></i>
+                </button>
+              </template>
+              <template v-else>
+                <!-- empty slot placeholder (no per-slot add button to avoid duplicate edit icons) -->
+                <span style="display:inline-block;width:40px;height:40px;margin-right:0.25rem"></span>
+              </template>
             </div>
-          </div>
+            <button v-if="hasAnyShortcut" class="shortcut-edit-fixed btn btn-light p-2 ms-2" title="Configurar atalhos" @click.prevent="openManageShortcuts()" aria-label="Configurar atalhos">
+              <i class="bi bi-plus" style="font-size:1.1rem;"></i>
+            </button>
+          </template>
         </div>
-      </div>
 
-      <!-- Inline dropdown for expanded sidebar (pushes content down) -->
-      <transition name="slide">
-        <div v-if="!mini && dropdownOpen" class="menus-dropdown-inline mt-2 p-2">
-          <div class="small text-muted mb-2">status</div>
-          <ul class="list-unstyled m-0">
-            <li v-for="m in menusList" :key="m.id" class="d-flex align-items-center justify-content-between py-1">
-              <div class="d-flex align-items-center gap-2">
-                <div class="thumb-wrap">
-                  <img v-if="m._thumb" :src="m._thumb" class="store-thumb" />
-                  <div :class="['status-dot', m._status && m._status.isOpen ? 'open' : 'closed', 'thumb-badge']"></div>
-                </div>
-                <div>
-                  <div class="store-name">{{ m.name }}</div>
-                  <div class="small text-muted store-sub">{{ m._meta && (m._meta.name || m._meta.city) ? (m._meta.name || m._meta.city) : '' }}</div>
+        
+
+        <div class="dropdown ms-3">
+          <button ref="quickMenuBtn" class="btn btn-light dropdown-toggle" type="button" id="quickMenuDropdown" @click.prevent="quickMenuOpen = !quickMenuOpen" :aria-expanded="quickMenuOpen">
+           <div v-if="auth.user" class="d-flex align-items-center user-info" style="gap: 16px; padding: 1px 4px;">
+          <div class="d-flex">
+            <div class="user-initials rounded-circle d-flex align-items-center justify-content-center me-2">{{ userInitials }}</div>
+          <div class="user-text mr-3">
+            <div class="user-name">{{ userName }}</div>
+            <div class="user-role small text-muted">{{ userRoleLabel }}</div>
+          </div>
+          </div>
+          <i class="bi bi-chevron-down"></i>
+        </div>
+          </button>
+          <ul ref="quickMenuMenu" :class="['dropdown-menu','dropdown-menu-end',{ show: quickMenuOpen }]" aria-labelledby="quickMenuDropdown" v-show="quickMenuOpen">
+            
+            <li v-if="(menusList || []).length === 0" class="dropdown-item text-muted">Nenhum cardápio disponível</li>
+            <li v-for="m in menusList" :key="m.id" class="dropdown-item d-flex align-items-center justify-content-between py-2">
+              <div class="d-flex align-items-center">
+                <img v-if="m._thumb" :src="m._thumb" alt="" style="width:28px;height:28px;object-fit:cover;border-radius:6px;margin-right:8px" />
+                <div style="min-width:120px">
+                  <div style="font-weight:600">{{ m.name }}</div>
+                  <small class="text-muted">{{ (m._status && m._status.isOpen) ? 'Aberto' : 'Fechado' }}</small>
                 </div>
               </div>
-              <div class="d-flex align-items-center gap-2">
+              <div>
                 <div class="form-check form-switch m-0">
-                  <input class="form-check-input" type="checkbox" role="switch"
-                    :checked="m._status && m._status.forced !== undefined ? m._status.forced : false"
-                    @change="onToggleForce(m, $event)"
-                    :disabled="!auth.user"
-                    :title="auth.user ? '' : 'Faça login para alterar'" />
+                  <input class="form-check-input" type="checkbox" :checked="(m._meta && (m._meta.forceOpen !== undefined)) ? m._meta.forceOpen : (m._status && m._status.isOpen)" @change.prevent="onToggleForce(m, $event)" />
                 </div>
               </div>
             </li>
-          </ul>
-        </div>
-      </transition>
-
-      <!-- Floating dropdown for mini sidebar (to the side) -->
-      <div v-if="mini">
-        <div v-show="dropdownOpen" ref="menusDropdownEl" :class="['menus-dropdown', { 'menus-dropdown-mobile': isMobile }, 'mt-2', 'p-2']" :style="isMobile ? { position: 'absolute', top: subMenuPos.top + 'px', left: subMenuPos.left + 'px', zIndex: 1050 } : {}">
-          <div class="small text-muted mb-2">status</div>
-          <ul class="list-unstyled m-0">
-            <li v-for="m in menusList" :key="m.id" class="d-flex align-items-center justify-content-between py-1">
-              <div class="d-flex align-items-center gap-2">
-                <div class="thumb-wrap">
-                  <img v-if="m._thumb" :src="m._thumb" class="store-thumb" />
-                  <div :class="['status-dot', m._status && m._status.isOpen ? 'open' : 'closed', 'thumb-badge']"></div>
-                </div>
-                <div>
-                  <div class="store-name">{{ m.name }}</div>
-                  <div class="small text-muted store-sub">{{ m._meta && (m._meta.name || m._meta.city) ? (m._meta.name || m._meta.city) : '' }}</div>
-                </div>
-              </div>
-              <div class="d-flex align-items-center gap-2">
-                <div class="form-check form-switch m-0">
-                  <input class="form-check-input" type="checkbox" role="switch"
-                    :checked="m._status && m._status.forced !== undefined ? m._status.forced : false"
-                    @change="onToggleForce(m, $event)"
-                    :disabled="!auth.user"
-                    :title="auth.user ? '' : 'Faça login para alterar'" />
-                </div>
-              </div>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <button class="dropdown-item" @click.prevent="logout()">Sair</button>
             </li>
           </ul>
         </div>
       </div>
-    </div>
+    </header>
 
-    <!-- Navegação -->
-    <nav class="flex-grow-1 p-2">
-        <ul class="nav flex-column">
-        <li v-for="item in visibleNav" :key="item.to" class="nav-item mb-1">
-          <div class="d-flex flex-column">
-            <template v-if="!item.children">
-              <router-link
-                :to="item.to"
-                class="nav-link d-flex align-items-center px-3 py-2 rounded text-white"
-                :class="{ active: isActive(item.to).value }"
-              >
-                <i
-                  :class="item.icon + ' me-2'"
-                  aria-hidden="true"
-                  :title="mini ? item.name : null"
-                  :aria-label="item.name"
-                  v-bind:data-bs-toggle="mini ? 'tooltip' : null"
-                  v-bind:data-bs-placement="mini ? 'right' : null"
-                ></i>
-                <span v-show="!mini">{{ item.name }}</span>
-              </router-link>
-            </template>
-
-            <template v-else>
-              <div class="nav-link d-flex align-items-center px-3 py-2 rounded parent-link" role="button" tabindex="0" @click="mini ? showMiniSubMenu(item, $event) : toggleParent(item.to)" @keydown.enter.prevent="mini ? showMiniSubMenu(item, $event) : toggleParent(item.to)" :aria-expanded="!parentsCollapsed[item.to]">
-                <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
-                <span class="flex-grow-1" v-show="!mini">{{ item.name }}</span>
-                <i v-show="!mini" :class="['bi bi-chevron-down ms-2 chevron', { rotated: parentsCollapsed[item.to] }]" aria-hidden="true"></i>
-              </div>
-
-              <transition name="slide">
-                <ul class="nav flex-column ms-3 mt-1" v-show="!mini && !parentsCollapsed[item.to]">
-                <li v-for="child in item.children" :key="child.to" class="nav-item mb-1">
-                  <router-link
-                    :to="child.to"
-                    class="nav-link px-3 py-1 rounded text-white child-link"
-                    :class="{ active: isActive(child.to).value }"
-                  >
-                      <i
-                        :class="child.icon + ' me-2'"
-                        aria-hidden="true"
-                        :title="mini ? child.name : null"
-                        :aria-label="child.name"
-                        v-bind:data-bs-toggle="mini ? 'tooltip' : null"
-                        v-bind:data-bs-placement="mini ? 'right' : null"
-                      ></i>
-                      <span v-show="!mini">{{ child.name }}</span>
-                  </router-link>
-                </li>
-                </ul>
-              </transition>
-            </template>
-          </div>
-        </li>
-      </ul>
-    </nav>
-
-    <!-- Floating submenu for mini mode -->
-    <div v-if="mini && openSub" id="sidebar-mini-popup" :style="{ position: 'absolute', top: subMenuPos.top + 'px', left: subMenuPos.left + 'px', zIndex: 1050 }">
-      <div style="background:#0B3D5E; border:1px solid rgba(255,255,255,0.08); padding:8px; border-radius:6px; min-width:180px; box-shadow:0 6px 18px rgba(0,0,0,0.18)">
-        <ul class="nav flex-column">
-          <li v-for="p in visibleNav.filter(n=>n.to===openSub)" :key="p.to">
-            <template v-for="child in (p.children||[])">
-              <li class="nav-item"><router-link :to="child.to" class="nav-link px-2 py-1 text-white" @click.native="closeMiniSub"> <i :class="child.icon + ' me-2'"></i> <span>{{ child.name }}</span></router-link></li>
-            </template>
+    <!-- Off-canvas menu com toda a navegação -->
+    <div v-if="offCanvasOpen" class="offcanvas-backdrop" @click.self="offCanvasOpen = false">
+      <nav class="offcanvas-menu p-4">
+        <div class="d-flex justify-content-between align-items-start">
+        <img src="../../public/core-neg.png" alt="" class="logo-neg">
+        <button class="btn btn-close mb-4" @click="offCanvasOpen = false" aria-label="Fechar menu"></button>
+      </div>
+        <ul class="nav flex-column" style="height:100vh;">
+          <li v-for="item in visibleNav" :key="item.to" class="nav-item mb-2">
+            <router-link :to="item.to" class="nav-link title d-flex align-items-center" @click="offCanvasOpen = false">
+              <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
+              <span>{{ item.name }}</span>
+            </router-link>
+            <ul v-if="item.children" class="nav flex-column ms-3">
+              <li v-for="child in item.children" :key="child.to" class="nav-item mb-1">
+                <router-link :to="child.to" class="nav-link d-flex align-items-center" @click="offCanvasOpen = false">
+                  <i :class="child.icon + ' me-2'" aria-hidden="true"></i>
+                  <span>{{ child.name }}</span>
+                </router-link>
+              </li>
+            </ul>
           </li>
         </ul>
+      </nav>
+    </div>
+
+    <!-- Modal para adicionar link (placeholder) -->
+    <div v-if="showAddLinkModal" class="modal-backdrop-custom" @click.self="showAddLinkModal = false">
+      <div class="modal-dialog-custom">
+        <div class="modal-content p-4">
+          <h5 class="mb-3">Escolher link do menu principal</h5>
+          <p class="text-muted">Selecione um item do menu para adicioná-lo aos atalhos rápidos.</p>
+          <ul class="list-unstyled">
+            <li v-for="item in visibleNav" :key="item.to" class="mb-2">
+              <button class="btn btn-sm btn-outline-secondary w-100 text-start" @click.prevent="addShortcutFromMenu(item)">
+                <i :class="item.icon + ' me-2'"></i>{{ item.name }}
+              </button>
+            </li>
+          </ul>
+          <div class="text-end">
+            <button class="btn btn-secondary" @click="showAddLinkModal = false">Fechar</button>
+          </div>
+        </div>
       </div>
     </div>
+  </div>
+  
+    <!-- removed global fixed edit button (moved inline next to shortcuts) -->
 
-    <!-- Logout -->
-    <div class="border-top p-3">
-      <button type="button" class="btn btn-sm btn-outline-secondary w-100 text-white border-white" @click="logout">
-        Sair
-      </button>
+    <!-- Modal de gerenciar atalhos -->
+    <div v-if="showManageShortcuts" class="modal-backdrop-custom" @click.self="showManageShortcuts = false">
+      <div class="modal-dialog-custom">
+        <div class="modal-content p-4">
+          <h5 class="mb-3">Gerenciar atalhos</h5>
+
+          <div class="mb-3 d-flex gap-2 flex-column">
+            <div class="d-flex gap-2 flex-row w-100">
+            <select class="form-select" v-model="manageSelected" :disabled="manageList.length >= 5">
+              <option value="">Selecionar link</option>
+              <option v-for="opt in menuOptions" :key="opt.to" :value="opt.to">{{ opt.name }} — {{ opt.to }}</option>
+            </select>
+            <button class="btn btn-primary" @click.prevent="addSelectedToManage" :disabled="manageList.length >= 5">Adicionar</button>
+            </div>
+
+            <span v-if="manageList.length >= 5" class="ms-2 text-muted small align-self-center w-100">Máximo 5</span>
+          </div>
+
+          <ul class="list-group mb-3">
+            <li v-for="(m, idx) in manageList" :key="idx" class="list-group-item d-flex justify-content-between align-items-center">
+              <div><i :class="m.icon + ' me-2'"></i>{{ m.title }} <small class="text-muted">({{ m.to }})</small></div>
+              <button class="btn btn-sm btn-outline-danger" @click.prevent="removeFromManage(idx)">Remover</button>
+            </li>
+            <li v-if="manageList.length === 0" class="list-group-item text-muted">Nenhum link adicionado.</li>
+          </ul>
+
+          <div class="d-flex justify-content-end gap-2">
+            <button class="btn btn-secondary" @click="showManageShortcuts = false">Cancelar</button>
+            <button class="btn btn-primary" @click.prevent="saveManageList">Salvar</button>
+          </div>
+        </div>
+      </div>
     </div>
-  </aside>
 </template>
 
+
 <style scoped>
+*, html {
+  transition: all 0.3s ease;
+}
+.log, .logo-neg {
+    max-width: 180px;
+}
 .nav-link {
   transition: background-color 0.12s, color 0.12s;
-  color: #fff;
+  color: #000435;
 }
-.nav-link i { color: #fff; }
+.nav-link i { color: #000435 !important}
+.nav-link.title{
+  font-size: 1rem;
+    font-weight: bold;
+    color: #000435;
+    border-radius: 50px !important;
+}
 .nav-link:hover, .nav-link:focus {
-  background-color: rgba(255,255,255,0.06);
-  color: #fff;
+  color: #89D136;
 }
 .parent-link { cursor: pointer; }
 .child-link { font-size: .95rem; }
 .child-link i { font-size: 1rem }
 
 /* diagonal gradient background */
-aside { background-color: #0B3D5E; background-image: linear-gradient(180deg, #105784 0%, #0B3D5E 100%); }
-
+/*aside { background-color: #0B3D5E; background-image: linear-gradient(180deg, #105784 0%, #0B3D5E 100%); }*/
+aside { background-color: #FFF; }
 /* active state: primary accent */
-.nav-link.active { background-color: rgba(255,255,255,0.12); font-weight:600; border-left: 3px solid #89D136; }
 
+
+
+.nav-link{ color: #000435 !important; }
+.nav-link.active { color: #89D136 !important; }
+
+.nav-item ul.nav {
+  background-color: #89D136 !important;
+  border-radius: 0px 0px 20px 0;
+  z-index: 999;
+}
+/*.nav-item ul.nav .nav-item {background-color: #89D136 !important;}*/
+.nav-item div > .nav-link[aria-expanded="true"] {
+    background-color: #89D136;
+    color: #000435 !important;
+    border-radius: 20px 0px 0px 0px !important; 
+  }
+.nav-item ul.nav .nav-item .nav-link{color:#000435 !important; z-index:999;}
+
+.nav-item ul.nav .nav-item .nav-link.active { color: #000435 !important; }
 /* chevron rotate on toggle */
-.chevron { transition: transform 180ms ease; transform-origin: 50% 50%; }
-.chevron.rotated { transform: rotate(-90deg); }
+.chevron { transition: transform 180ms ease; transform-origin: 50% 50%; color:#105784 !important;     transform: rotate(-180deg);}
+.chevron.rotated { transform: rotate(0deg); }
 
 /* menus dropdown styling */
 .menus-dropdown {
@@ -827,21 +1045,9 @@ aside { background-color: #0B3D5E; background-image: linear-gradient(180deg, #10
 .menus-dropdown .store-name { font-weight:600 }
 .menus-dropdown .store-sub { opacity:0.8 }
 
-/* slide transition for child lists */
-.slide-enter-active, .slide-leave-active {
-  transition: max-height 220ms ease, opacity 160ms ease;
-  overflow: hidden;
-}
-.slide-enter-from, .slide-leave-to {
-  max-height: 0;
-  opacity: 0;
-}
-.slide-enter-to, .slide-leave-from {
-  max-height: 400px; /* large enough for lists */
-  opacity: 1;
-}
 
-/* Mini (icons-only) sidebar styles */
+
+/* Mini (icons-only) sidebar styles 
 .sidebar-mini { transition: width 220ms ease; }
 .sidebar-mini .nav-link { justify-content: center; padding-left: 0.4rem; padding-right: 0.4rem; }
 .sidebar-mini .nav-link i { margin-right: 0; font-size: 1.15rem }
@@ -855,7 +1061,7 @@ aside { transition: width 220ms ease; }
 .btn-toggle-mini { border-color: rgba(255,255,255,0.15); color: #fff; margin-right: -35px;
   background-color: rgba(255,255,255,0.1);}
 .btn-toggle-mini:hover { background-color: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.2); color: #fff; }
-.btn-toggle-mini i { font-size: 0.92rem }
+.btn-toggle-mini i { font-size: 0.92rem }*/
 
 /* Stores widget styles */
 .stores-widget { background: rgba(255,255,255,0.03); }
@@ -869,10 +1075,24 @@ aside { transition: width 220ms ease; }
 /* Smooth labels opacity transition when expanding/collapsing */
 .nav-link span { transition: opacity 180ms ease; }
 .header-wrap { transition: padding 220ms ease; }
+
+/* Prevent menu items from wrapping and reduce size when space is constrained */
+/* Allow wrapping by default to avoid horizontal overflow; only enforce nowrap in compact widths */
+ul.nav.flex-row { flex-wrap: wrap; overflow: hidden; max-width: 100%; }
+ul.nav.flex-row > li.nav-item { flex: 0 0 auto; }
+.nav-link span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 160px; vertical-align: middle; }
+.child-link { font-size: 0.82rem }
+
+@media (max-width: 1120px) {
+  ul.nav.flex-row { flex-wrap: nowrap; overflow: visible; }
+  .nav-link.title { font-size: 0.82rem }
+  .nav-link span { max-width: 120px }
+}
+
 /* Ensure sidebar never exceeds viewport height and make nav scrollable with themed scrollbar */
-aside { max-height: 100vh; height: 100vh; display: flex; flex-direction: column; }
-/* make the main nav area scrollable */
-aside nav { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+aside { height: 70px; display: flex; flex-direction: column; }
+/* make the main nav area scrollable 
+aside nav { overflow-y: auto; -webkit-overflow-scrolling: touch; }*/
 
 /* Themed custom scrollbar for WebKit browsers */
 aside nav::-webkit-scrollbar { width: 10px; }
@@ -882,4 +1102,131 @@ aside nav::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
 
 /* Firefox scrollbar styling */
 aside nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
+
+/* Top navbar and off-canvas styles */
+.top-navbar {
+  background: #fff;
+  border-bottom: 1px solid #e5e5e5;
+  min-height: 64px;
+  z-index: 1020;
+}
+.offcanvas-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.32);
+  z-index: 2000;
+  display: flex;
+  align-items: flex-start;
+}
+.offcanvas-menu {
+  background: #89d136;
+  min-width: 280px;
+  max-width: 90vw;
+  min-height: 100vh;
+  box-shadow: 2px 0 16px rgba(0,0,0,0.08);
+  border-radius: 0 12px 12px 0;
+  animation: slideInLeft 0.22s cubic-bezier(.4,1.3,.6,1) both;
+  text-align:right;
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.quick-shortcuts .shortcut-btn {
+  background: #f8f9fa;
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  transition: background 0.15s;
+  padding: 4px 10px !important;
+}
+.quick-shortcuts .shortcut-btn:hover { background: #e9ecef; }
+.shortcut-actions .btn { line-height: 1; }
+.modal-backdrop-custom {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.32);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-dialog-custom { background: #fff; border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); min-width: 320px; max-width: 90vw; }
+/* Fixed edit button shown while scrolling */
+.shortcut-edit-fixed {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(15,30,60,0.08);
+  background: #f8f9fa;
+  border: none;
+}
+.shortcut-edit-fixed i { color: #333 }
+
+/* Keep a fixed-position variant available if needed */
+.shortcut-edit-fixed--fixed {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 5500;
+}
+
+.user-info .user-initials {
+    width: 36px;
+    height: 36px;
+    background: #FFF;
+    color: #263238;
+    font-weight: 700;
+    border-radius: 50%;
+    font-size: 0.75rem;
+}
+.user-info .user-name { font-weight:600; font-size:0.75rem }
+.user-info .user-role { font-size:0.65rem; font-style: italic;}
+/* Truncate long user names with ellipsis */
+.user-info { max-width: 220px; }
+.user-info .user-text { max-width: 160px; overflow: hidden; text-align: left;}
+.user-info .user-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-info .user-role { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button#quickMenuDropdown {
+        background: #f8f9fa;
+    padding: 2px 4px;
+}
+button#quickMenuDropdown[aria-expanded="true"], .btn:first-child:active {
+  background: #89d136 !important;
+  border-color: #89d136 !important;
+  border-radius: 16px 16px 0px 0px;
+}
+
+/* animated open/close for quick menu dropdown */
+.dropdown .dropdown-menu {
+  transform-origin: top right;
+  transform: translateY(-6px) scale(0.98);
+  opacity: 0;
+  transition: transform 180ms cubic-bezier(.2,.9,.2,1), opacity 320ms ease;
+  will-change: transform, opacity;
+}
+.dropdown .dropdown-menu.show {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  right: 0px;
+  position: absolute;
+  background: #89d136;
+  border-color: #89d136;
+  border-radius: 16px 0px 16px 16px;
+  box-shadow: none;
+}
+#quickMenuDropdown::after { display:none; }
+.form-switch .form-check-input:checked {
+    background-color: #000000;
+    border-color: var(--success);
+}
 </style>

@@ -98,6 +98,7 @@ import FinancialDRE from './views/financial/FinancialDRE.vue';
 import FinancialGateways from './views/financial/FinancialGateways.vue';
 import FinancialOFX from './views/financial/FinancialOFX.vue';
 import FinancialCostCenters from './views/financial/FinancialCostCenters.vue';
+import ProductsReport from './views/reports/ProductsReport.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -203,6 +204,7 @@ const router = createRouter({
   ,{ path: '/sales', component: SalesHistory, meta: { requiresAuth: true } }
   ,{ path: '/sales/:id', component: SaleDetails, meta: { requiresAuth: true } }
   ,{ path: '/reports/cash-fronts', component: CashFronts, meta: { requiresAuth: true } }
+  ,{ path: '/reports/products', component: ProductsReport, meta: { requiresAuth: true } }
   ,{ path: '/saas/plans', component: SaasPlans, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies', component: SaasCompanies, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies/new', component: SaasCompanyNew, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }

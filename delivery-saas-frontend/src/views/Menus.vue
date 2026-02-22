@@ -2,9 +2,17 @@
   <div>
     <ListCard title="Cardápios" icon="bi bi-list-ul" :subtitle="menus.length ? `${menus.length} itens` : ''">
       <template #actions>
-        <div class="d-flex" style="gap:8px">
-          <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Novo cardápio</button>
-          <button class="btn btn-outline-secondary" @click="goOptions"><i class="bi bi-list-check me-1"></i> Opções</button>
+        <div class="d-flex align-items-center" style="gap:8px">
+          <div class="d-flex" style="gap:8px">
+            <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Novo cardápio</button>
+            <button class="btn btn-outline-secondary" @click="goOptions"><i class="bi bi-list-check me-1"></i> Opções</button>
+          </div>
+          <div class="ms-2 d-flex align-items-center" style="gap:8px">
+            <span class="small text-muted">Total:</span>
+            <span class="badge bg-secondary">{{ totalCount }}</span>
+            <span class="small text-muted ms-2">Ativos:</span>
+            <span class="badge bg-success">{{ activeCount }}</span>
+          </div>
         </div>
       </template>
 
@@ -108,6 +116,9 @@ const filtered = computed(() => {
   if (!q) return menus.value
   return menus.value.filter(m => (m.name || '').toLowerCase().includes(q))
 })
+
+const totalCount = computed(() => menus.value.length)
+const activeCount = computed(() => (menus.value || []).filter(m => (m.isActive === undefined ? true : !!m.isActive)).length)
 
 async function load(){
   loading.value = true
