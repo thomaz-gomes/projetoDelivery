@@ -81,7 +81,7 @@ function onWhatsappInput(e) {
     <div class="card login-card">
       <div class="card-body">
         <div class="text-center mb-4">
-          <div class="login-logo mb-2"><img src="../../public/core.png" alt="Logo" class="logo"></div>
+          <div class="login-logo mb-2"><img src="/core.png" alt="Logo" class="logo"></div>
           <h4 class="card-title mb-1">Delivery SaaS</h4>
           <p class="text-muted small mb-0">Acesse sua conta</p>
         </div>

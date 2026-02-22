@@ -45,7 +45,7 @@ async function onSubmit() {
     <div class="card register-card">
       <div class="card-body">
         <div class="text-center mb-4">
-          <div class="register-logo mb-2"><img src="../../public/core.png" alt="Logo" class="logo"></div>
+          <div class="register-logo mb-2"><img src="/core.png" alt="Logo" class="logo"></div>
           <h4 class="card-title mb-1">Criar Conta</h4>
           <p class="text-muted small mb-0">Preencha seus dados para começar</p>
         </div>

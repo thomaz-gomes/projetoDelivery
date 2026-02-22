@@ -694,10 +694,10 @@ function selectMenuOption(opt){
         <button class="btn me-3" @click="offCanvasOpen = true" aria-label="Abrir menu">
           <i class="bi bi-list" style="font-size:2rem"></i>
         </button>
-        <div class="d-flex align-items-center header-content">
+          <div class="d-flex align-items-center header-content">
           <i v-if="mini" class="bi bi-shop logo-compact-icon" aria-hidden="true" :title="'Delivery SaaS'" aria-label="Delivery SaaS"></i>
           <div v-else>
-            <img src="../../public/core.png" alt="" class="log">
+            <img src="/core.png" alt="" class="log">
           </div>
         </div>
       </div>
@@ -772,7 +772,7 @@ function selectMenuOption(opt){
     <div v-if="offCanvasOpen" class="offcanvas-backdrop" @click.self="offCanvasOpen = false">
       <nav class="offcanvas-menu p-4">
         <div class="d-flex justify-content-between align-items-start">
-        <img src="../../public/core-neg.png" alt="" class="logo-neg">
+        <img src="/core-neg.png" alt="" class="logo-neg">
         <button class="btn btn-close mb-4" @click="offCanvasOpen = false" aria-label="Fechar menu"></button>
       </div>
         <ul class="nav flex-column" style="height:100vh;">

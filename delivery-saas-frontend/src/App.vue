@@ -113,7 +113,7 @@ const showMobileHeader = computed(() => {
         >
           <i class="bi bi-list" style="font-size:1.5rem"></i>
         </button>
-        <span class="mobile-topbar-title"><img src="../../public/core.png" alt="" class="log" style="max-width:125px"></span>
+        <span class="mobile-topbar-title"><img src="/core.png" alt="" class="log" style="max-width:125px"></span>
       
           <div class="d-block d-sm-none dropdown ms-3">
           <button ref="quickMenuBtn" class="btn btn-light dropdown-toggle" type="button" id="quickMenuDropdown" @click.prevent="quickMenuOpen = !quickMenuOpen" :aria-expanded="quickMenuOpen">
@@ -169,7 +169,7 @@ const showMobileHeader = computed(() => {
         >
           <div class="offcanvas-header border-bottom border-secondary py-2">
             
-        <img src="../../public/core-neg.png" alt="" class="logo-neg" style="max-width: 125px; margin:8px;">
+        <img src="/core-neg.png" alt="" class="logo-neg" style="max-width: 125px; margin:8px;">
             <button
               type="button"
               class="btn-close btn-close-white"
