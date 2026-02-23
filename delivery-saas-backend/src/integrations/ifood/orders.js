@@ -143,6 +143,11 @@ export async function updateIFoodOrderStatus(companyId, orderId, statusCode, ext
       // For cancellation, include cancellationCode when provided (required by iFood API)
       if (shortCode === 'CAN' && extra.cancellationCode) {
         payload.cancellationCode = extra.cancellationCode;
+        // iFood expects a top-level 'reason' field for some cancellation codes
+        try {
+          const reasonFromMeta = extra && extra.metadata && extra.metadata.cancellationReason ? extra.metadata.cancellationReason : (extra && (extra.reason || extra.cancellationReason) ? (extra.reason || extra.cancellationReason) : null);
+          if (reasonFromMeta) payload.reason = reasonFromMeta;
+        } catch (e) { /* ignore */ }
       }
       try {
         const fullUrl = (api.defaults?.baseURL || process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br').replace(/\/+$/, '') + url;

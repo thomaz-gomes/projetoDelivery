@@ -389,7 +389,40 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res
           const target = mapLocalToIFood(status, updated);
           if (target) {
             try {
-              const resp = await updateIFoodOrderStatus(updated.companyId, orderExternalId, target, { merchantId: integ.merchantUuid || integ.merchantId, cancellationCode: cancellationCode || null });
+              // iFood requires a valid cancellationCode for cancellation requests.
+              // Normalize incoming cancellationCode (accept numeric or reason string) and
+              // send both `cancellationCode` (numeric) and `metadata.cancellationReason`.
+              let cancellationPayload = {};
+              if (target === 'CANCELLED') {
+                try {
+                  const { normalizeCancellationCode } = await import('../integrations/ifood/cancellationCodes.js');
+                  const normalized = normalizeCancellationCode(cancellationCode || null);
+                  let safeCode = null;
+                  let reason = null;
+                  if (normalized) {
+                    safeCode = normalized.code;
+                    reason = normalized.reason;
+                  } else {
+                    const raw = cancellationCode == null ? null : String(cancellationCode).trim();
+                    const low = raw ? raw.toLowerCase() : '';
+                    // treat literal 'undefined'/'null'/'nan' and empty as missing
+                    if (raw && !['undefined', 'null', 'nan', ''].includes(low)) {
+                      safeCode = raw;
+                    }
+                  }
+                  // Fallback default when nothing provided: use 501 (PROBLEMAS DE SISTEMA)
+                  if (!safeCode) {
+                    safeCode = '501';
+                    reason = reason || 'PROBLEMAS DE SISTEMA';
+                    console.log('[orders.patch.status] no valid cancellationCode provided; defaulting to', safeCode);
+                  }
+                  cancellationPayload.cancellationCode = safeCode;
+                  if (reason) cancellationPayload.metadata = { ...(cancellationPayload.metadata || {}), cancellationReason: reason };
+                } catch (eNorm) {
+                  console.warn('[orders.patch.status] failed to normalize cancellationCode', eNorm && eNorm.message);
+                }
+              }
+              const resp = await updateIFoodOrderStatus(updated.companyId, orderExternalId, target, { merchantId: integ.merchantUuid || integ.merchantId, ...cancellationPayload });
               console.log('Notified iFood of status change for order', orderExternalId, '->', target, 'response:', resp && (resp.ok ? 'ok' : resp));
             } catch (eNotify) {
               console.warn('Failed to notify iFood of status change for', orderExternalId, { message: eNotify?.message || String(eNotify), status: eNotify?.response?.status || null, providerResponse: eNotify?.response?.data || null });
