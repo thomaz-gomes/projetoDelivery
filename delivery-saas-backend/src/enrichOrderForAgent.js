@@ -113,6 +113,50 @@ export async function enrichOrderForAgent(order) {
       order.qrText = p.qrText || p.qr_text || null
     }
 
+    // 3c. Extrair informações de takeout/retirada (quando presente no payload iFood)
+    try {
+      const p = order.payload || {}
+      const ip = p.order || p
+      const takeout = ip.takeout || p.takeout || null
+      if (takeout && typeof takeout === 'object') {
+        const mode = takeout.mode || takeout.type || null
+        const dt = takeout.takeoutDateTime || takeout.pickupDateTime || takeout.takeout_date_time || null
+        order.takeout = {};
+        if (mode) order.takeout.mode = String(mode).toUpperCase()
+        if (dt) {
+          try { order.takeout.takeoutDateTime = new Date(dt).toISOString() } catch (e) { order.takeout.takeoutDateTime = dt }
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+
+    // 3d. Extrair informações de pagamento (troco/changeFor) quando presente no payload iFood
+    try {
+      const p = order.payload || {}
+      const ip = p.order || p
+      // iFood may include payments.methods = [{ method, type, value, changeFor }]
+      const paymentsBlock = ip.payments || ip.payment || (ip.payments && ip.payments.methods ? ip.payments : null) || null
+      let found = null
+      if (paymentsBlock) {
+        const methods = Array.isArray(paymentsBlock.methods) ? paymentsBlock.methods : (Array.isArray(paymentsBlock) ? paymentsBlock : null)
+        if (methods && Array.isArray(methods)) {
+          // prefer CASH/offline entries
+          found = methods.find(m => String(m.method || m.type || '').toUpperCase().includes('CASH')) || methods[0]
+        }
+      }
+      if (found) {
+        // support nested cash.changeFor as iFood places troco under payments.methods[].cash
+        let changeFor = null;
+        if (found.changeFor != null) changeFor = Number(found.changeFor);
+        else if (found.change_for != null) changeFor = Number(found.change_for);
+        else if (found.cash && (found.cash.changeFor != null || found.cash.change_for != null)) changeFor = Number(found.cash.changeFor ?? found.cash.change_for);
+        const amount = (found.value != null ? Number(found.value) : (found.amount != null ? Number(found.amount) : null))
+        order.payment = order.payment || {}
+        if (changeFor != null && !Number.isNaN(changeFor)) order.payment.changeFor = changeFor
+        if (amount != null && !Number.isNaN(amount)) order.payment.amount = amount
+        if (found.method) order.payment.method = found.method
+      }
+    } catch (e) { /* ignore */ }
+
     // 3b. Fallback: gerar qrText se ainda vazio e pedido for DELIVERY
     if (!order.qrText && order.id) {
       const orderType = String(order.orderType || (order.payload && (order.payload.orderType || order.payload.order_type)) || '').toUpperCase()

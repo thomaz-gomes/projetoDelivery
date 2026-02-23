@@ -375,9 +375,13 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res
               if (t === 'CANCELADO') return 'CANCELLED';
             }
             // Pickup mapping
-            if (type === 'PICKUP' || type === 'TAKEOUT' || type === 'TAKE-OUT') {
-              if (t === 'EM_PREPARO' || t === 'PRONTO') return 'PLACED';
-              if (t === 'CONFIRMACAO_PAGAMENTO' || t === 'CONCLUIDO') return 'READY_TO_PICKUP';
+            if (type === 'PICKUP' || type === 'TAKEOUT' || type === 'TAKE-OUT' || type === 'TAKEOUT' ) {
+              if (t === 'EM_PREPARO') return 'PLACED';
+              // For pickup orders, when the PDV marks the order as PRONTO,
+              // notify iFood with READY_TO_PICKUP so the customer is informed.
+              if (t === 'PRONTO') return 'READY_TO_PICKUP';
+              // Payment-confirmation / concluded still map to CONCLUDED
+              if (t === 'CONFIRMACAO_PAGAMENTO' || t === 'CONCLUIDO') return 'CONCLUDED';
               if (t === 'SAIU_PARA_ENTREGA' || t === 'DESPACHADO') return 'DISPATCHED';
               if (t === 'CANCELADO') return 'CANCELLED';
             }

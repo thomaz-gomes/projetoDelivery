@@ -90,10 +90,14 @@ async function resolveCompanyIdFromPayload(payload) {
 function mapIFoodOrder(payload) {
   const order = payload?.order || payload; // alguns provedores envelopam em "order"
 
-  // Coordenadas (se vierem no payload)
-  const coords = order?.delivery?.deliveryAddress?.coordinates || {};
-  const latitude = Number(coords.latitude ?? order?.latitude ?? 0) || null;
-  const longitude = Number(coords.longitude ?? order?.longitude ?? 0) || null;
+  // Coordenadas (se vierem no payload). Support multiple possible key names
+  const coords = order?.delivery?.deliveryAddress?.coordinates || order?.delivery?.deliveryAddress || order?.delivery || order || {};
+  function toNum(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  const latitude = toNum(coords.latitude ?? coords.lat ?? order?.latitude ?? order?.delivery?.latitude ?? null);
+  const longitude = toNum(coords.longitude ?? coords.lng ?? coords.lon ?? order?.longitude ?? order?.delivery?.longitude ?? null);
 
   // Endereço formatado
   const addr = order?.delivery?.deliveryAddress || {};
@@ -137,11 +141,33 @@ function mapIFoodOrder(payload) {
     customerName,
     customerPhone,
     address: formattedAddress,
+    orderType: (order && (order.orderType || order.type)) || null,
     latitude,
     longitude,
     total,
     deliveryFee: Number(order?.total?.deliveryFee || 0) || null,
     items,
+    // payment troco (changeFor) extraction — prefer payments.methods[*].changeFor (iFood)
+    payment: (function(){
+      try {
+        const p = order?.payments || order?.payment || null;
+        const methods = p && Array.isArray(p.methods) ? p.methods : (Array.isArray(p) ? p : null);
+        let cand = null;
+        if (methods && methods.length) {
+          cand = methods.find(m => String(m.method || m.type || '').toUpperCase().includes('CASH')) || methods[0];
+        }
+        if (cand) {
+          // support nested cash.changeFor (iFood samples use payments.methods[].cash.changeFor)
+          let changeFor = null;
+          if (cand.changeFor != null) changeFor = Number(cand.changeFor);
+          else if (cand.change_for != null) changeFor = Number(cand.change_for);
+          else if (cand.cash && (cand.cash.changeFor != null || cand.cash.change_for != null)) changeFor = Number(cand.cash.changeFor ?? cand.cash.change_for);
+          const amount = (cand.value != null ? Number(cand.value) : (cand.amount != null ? Number(cand.amount) : null));
+          return { method: cand.method || cand.type || null, changeFor: !Number.isNaN(changeFor) ? changeFor : null, amount: !Number.isNaN(amount) ? amount : null };
+        }
+      } catch (e) {}
+      return null;
+    })(),
     raw: payload,
   };
 }
@@ -176,6 +202,14 @@ export function determineStatusFromIFoodEvent(payload, orderObj) {
     return isPaymentOnline(orderObj) ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
   }
   if (code === 'READY_TO_PICKUP' || code === 'RTP') {
+    // If this is a TAKEOUT/PICKUP order, READY_TO_PICKUP means the order is
+    // ready for pickup (map to internal 'PRONTO'). For delivery flows, keep
+    // previous behavior regarding payment confirmation / conclusion.
+    try {
+      const ot = orderObj && (orderObj.orderType || orderObj.type || (orderObj.payload && (orderObj.payload.orderType || orderObj.payload.type)));
+      const upto = ot ? String(ot).toUpperCase() : null;
+      if (upto === 'TAKEOUT' || upto === 'PICKUP' || upto === 'TAKE-OUT' || upto === 'PICK-UP') return 'PRONTO';
+    } catch (e) {}
     return isPaymentOnline(orderObj) ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
   }
   if (code === 'CANCELLED' || code === 'CANCEL' || code === 'CAN') return 'CANCELADO';
@@ -343,6 +377,16 @@ export async function processIFoodWebhook(eventId) {
 
       // Mapeia e upsert (propaga storeId quando disponível)
       const mapped = mapIFoodOrder(payload);
+      // Persist extracted payment info (troco) inside payload JSON so it's stored
+      try {
+        if (mapped && mapped.payment) {
+          mapped.raw = mapped.raw || {};
+          // Persist under a safe, non-conflicting key for debugging
+          mapped.raw._extractedPayment = mapped.payment;
+          // Also ensure frontend-friendly shape exists so PDV views find troco at payload.payment.changeFor
+          mapped.raw.payment = mapped.raw.payment || mapped.payment;
+        }
+      } catch (e) { /* non-fatal */ }
       // If payload contains an iFood event code, prefer mapping its status
       let inferred = null;
       try {

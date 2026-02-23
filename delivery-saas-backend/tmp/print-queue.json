@@ -1050,5 +1050,788 @@
       ]
     },
     "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
+  },
+  {
+    "id": "1771819377504-422312",
+    "createdAt": 1771819377504,
+    "order": {
+      "id": "4dcd4603-7918-4890-a991-2510d9acf654",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": "f0ebe516-7281-47d3-9a52-a56efa49448e",
+      "displayId": "1406",
+      "displaySimple": 7,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Thomaz Campos Gomes",
+      "customerPhone": "0800 705 4050",
+      "customerSource": "MANUAL",
+      "customerId": null,
+      "address": "Rua TESTE, 999999",
+      "latitude": null,
+      "longitude": null,
+      "total": "32.39",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "8.9",
+      "payload": {
+        "id": "1325b9f7-39de-4403-ac1b-ba18b4611edb",
+        "code": "PLC",
+        "fullCode": "PLACED",
+        "orderId": "f0ebe516-7281-47d3-9a52-a56efa49448e",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "createdAt": "2026-02-23T04:03:52.003Z",
+        "salesChannel": "IFOOD",
+        "order": {
+          "id": "f0ebe516-7281-47d3-9a52-a56efa49448e",
+          "displayId": "1406",
+          "createdAt": "2026-02-23T04:03:51.283Z",
+          "category": "FOOD",
+          "orderTiming": "IMMEDIATE",
+          "orderType": "DELIVERY",
+          "delivery": {
+            "mode": "DEFAULT",
+            "description": "Padrão",
+            "deliveredBy": "MERCHANT",
+            "deliveryDateTime": "2026-02-23T04:43:51.283Z",
+            "deliveryAddress": {
+              "streetName": "Rua TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999",
+              "neighborhood": "Bairro TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              }
+            },
+            "pickupCode": "2505"
+          },
+          "preparationStartDateTime": "2026-02-23T04:03:51.283Z",
+          "isTest": true,
+          "salesChannel": "IFOOD",
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Thomaz Campos Gomes",
+            "phone": {
+              "number": "0800 705 4050",
+              "localizer": "69029993",
+              "localizerExpiration": "2026-02-23T08:03:51.283Z"
+            },
+            "ordersCountOnMerchant": 0,
+            "segmentation": "Cliente"
+          },
+          "items": [
+            {
+              "index": 1,
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "uniqueId": "fa8c92a7-9a77-451e-a328-4e62938b111a",
+              "name": "PEDIDO DE TESTE - Pro",
+              "type": "DEFAULT",
+              "ean": "",
+              "quantity": 1,
+              "unit": "UN",
+              "unitPrice": 22.5,
+              "optionsPrice": 0,
+              "customizationPrice": 0,
+              "totalPrice": 22.5,
+              "price": 22.5,
+              "observations": "",
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg"
+            }
+          ],
+          "total": {
+            "additionalFees": 0.99,
+            "subTotal": 22.5,
+            "deliveryFee": 8.9,
+            "benefits": 0,
+            "orderAmount": 32.39
+          },
+          "payments": {
+            "prepaid": 0,
+            "pending": 32.39,
+            "methods": [
+              {
+                "value": 32.39,
+                "currency": "BRL",
+                "method": "CASH",
+                "prepaid": false,
+                "type": "OFFLINE",
+                "cash": {
+                  "changeFor": 100
+                }
+              }
+            ]
+          },
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "description": "Taxa de serviço",
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação.",
+              "value": 0.99,
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ]
+            }
+          ],
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "additionalInfo": {
+            "metadata": {
+              "deliveryProduct": "SELF_DELIVERY",
+              "cartId": "61cdb0af-1eb4-4a4d-83c2-b3df583a53d4",
+              "logisticProvider": "MERCHANT"
+            }
+          }
+        }
+      },
+      "createdAt": "2026-02-23T04:02:57.290Z",
+      "updatedAt": "2026-02-23T04:02:57.290Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "285a2254-1d4d-4fb3-b3f0-5262902ffa66",
+          "orderId": "4dcd4603-7918-4890-a991-2510d9acf654",
+          "productId": null,
+          "name": "PEDIDO DE TESTE - Pro",
+          "quantity": 1,
+          "price": "22.5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "96837a3f-5bb9-4c2a-b911-70fd6c8332de",
+          "orderId": "4dcd4603-7918-4890-a991-2510d9acf654",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-02-23T04:02:57.290Z"
+        }
+      ]
+    },
+    "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
+  },
+  {
+    "id": "1771820107388-34333",
+    "createdAt": 1771820107388,
+    "order": {
+      "id": "57833870-8eec-46d6-9d3d-9d1c557739e2",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": "4e64666b-2337-4de5-b3f3-c7752ef464cc",
+      "displayId": "2832",
+      "displaySimple": 8,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Thomaz Campos Gomes",
+      "customerPhone": "0800 200 5011",
+      "customerSource": "MANUAL",
+      "customerId": null,
+      "address": "Rua TESTE, 999999",
+      "latitude": null,
+      "longitude": null,
+      "total": "32.39",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "8.9",
+      "payload": {
+        "id": "582f053c-8d16-4f64-92a8-2784fa2a5d47",
+        "code": "PLC",
+        "fullCode": "PLACED",
+        "orderId": "4e64666b-2337-4de5-b3f3-c7752ef464cc",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "createdAt": "2026-02-23T04:16:02.284Z",
+        "salesChannel": "IFOOD",
+        "order": {
+          "id": "4e64666b-2337-4de5-b3f3-c7752ef464cc",
+          "displayId": "2832",
+          "createdAt": "2026-02-23T04:16:01.566Z",
+          "category": "FOOD",
+          "orderTiming": "IMMEDIATE",
+          "orderType": "DELIVERY",
+          "delivery": {
+            "mode": "DEFAULT",
+            "description": "Padrão",
+            "deliveredBy": "MERCHANT",
+            "deliveryDateTime": "2026-02-23T04:56:01.566Z",
+            "deliveryAddress": {
+              "streetName": "Rua TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999",
+              "neighborhood": "Bairro TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              }
+            },
+            "pickupCode": "8279"
+          },
+          "preparationStartDateTime": "2026-02-23T04:16:01.566Z",
+          "isTest": true,
+          "salesChannel": "IFOOD",
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Thomaz Campos Gomes",
+            "phone": {
+              "number": "0800 200 5011",
+              "localizer": "41611995",
+              "localizerExpiration": "2026-02-23T08:16:01.566Z"
+            },
+            "ordersCountOnMerchant": 0,
+            "segmentation": "Cliente"
+          },
+          "items": [
+            {
+              "index": 1,
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "uniqueId": "bc7887a6-2735-4bfb-be29-581fc265cf89",
+              "name": "PEDIDO DE TESTE - Pro",
+              "type": "DEFAULT",
+              "ean": "",
+              "quantity": 1,
+              "unit": "UN",
+              "unitPrice": 22.5,
+              "optionsPrice": 0,
+              "customizationPrice": 0,
+              "totalPrice": 22.5,
+              "price": 22.5,
+              "observations": "",
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg"
+            }
+          ],
+          "total": {
+            "additionalFees": 0.99,
+            "subTotal": 22.5,
+            "deliveryFee": 8.9,
+            "benefits": 0,
+            "orderAmount": 32.39
+          },
+          "payments": {
+            "prepaid": 0,
+            "pending": 32.39,
+            "methods": [
+              {
+                "value": 32.39,
+                "currency": "BRL",
+                "method": "CASH",
+                "prepaid": false,
+                "type": "OFFLINE",
+                "cash": {
+                  "changeFor": 50
+                }
+              }
+            ]
+          },
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "description": "Taxa de serviço",
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação.",
+              "value": 0.99,
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ]
+            }
+          ],
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "additionalInfo": {
+            "metadata": {
+              "deliveryProduct": "SELF_DELIVERY",
+              "cartId": "5c8e3c47-d6da-4ebf-ab07-c16cab808c4e",
+              "logisticProvider": "MERCHANT"
+            }
+          }
+        },
+        "_extractedPayment": {
+          "method": "CASH",
+          "changeFor": null,
+          "amount": 32.39
+        }
+      },
+      "createdAt": "2026-02-23T04:15:07.208Z",
+      "updatedAt": "2026-02-23T04:15:07.208Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "528bab29-216e-48a4-b6e2-acd274e94839",
+          "orderId": "57833870-8eec-46d6-9d3d-9d1c557739e2",
+          "productId": null,
+          "name": "PEDIDO DE TESTE - Pro",
+          "quantity": 1,
+          "price": "22.5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "a8b85837-0265-4016-a020-ed9d375970fe",
+          "orderId": "57833870-8eec-46d6-9d3d-9d1c557739e2",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-02-23T04:15:07.208Z"
+        }
+      ]
+    },
+    "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
+  },
+  {
+    "id": "1771820568191-899226",
+    "createdAt": 1771820568191,
+    "order": {
+      "id": "734b92eb-d0c9-4b03-bf55-d94489e47245",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": "4ebdcf23-4bc6-4158-9b99-5c486e8b31e8",
+      "displayId": "5970",
+      "displaySimple": 9,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Thomaz Campos Gomes",
+      "customerPhone": "0800 007 0110",
+      "customerSource": "MANUAL",
+      "customerId": null,
+      "address": "Rua TESTE, 999999",
+      "latitude": null,
+      "longitude": null,
+      "total": "45.39",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "8.9",
+      "payload": {
+        "id": "60fd9a7c-7a95-4dde-b07d-bb1e3ea60bce",
+        "code": "PLC",
+        "fullCode": "PLACED",
+        "orderId": "4ebdcf23-4bc6-4158-9b99-5c486e8b31e8",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "createdAt": "2026-02-23T04:23:26.541Z",
+        "salesChannel": "IFOOD",
+        "order": {
+          "id": "4ebdcf23-4bc6-4158-9b99-5c486e8b31e8",
+          "displayId": "5970",
+          "createdAt": "2026-02-23T04:23:25.963Z",
+          "category": "FOOD",
+          "orderTiming": "IMMEDIATE",
+          "orderType": "DELIVERY",
+          "delivery": {
+            "mode": "DEFAULT",
+            "description": "Padrão",
+            "deliveredBy": "MERCHANT",
+            "deliveryDateTime": "2026-02-23T05:03:25.963Z",
+            "deliveryAddress": {
+              "streetName": "Rua TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999",
+              "neighborhood": "Bairro TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              }
+            },
+            "pickupCode": "7119"
+          },
+          "preparationStartDateTime": "2026-02-23T04:23:25.963Z",
+          "isTest": true,
+          "salesChannel": "IFOOD",
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Thomaz Campos Gomes",
+            "phone": {
+              "number": "0800 007 0110",
+              "localizer": "22697079",
+              "localizerExpiration": "2026-02-23T08:23:25.963Z"
+            },
+            "ordersCountOnMerchant": 0,
+            "segmentation": "Cliente"
+          },
+          "items": [
+            {
+              "index": 1,
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "uniqueId": "9c07086a-ded9-4402-9973-4d47a4e7c863",
+              "name": "PEDIDO DE TESTE - Pro",
+              "type": "DEFAULT",
+              "ean": "",
+              "quantity": 1,
+              "unit": "UN",
+              "unitPrice": 22.5,
+              "optionsPrice": 13,
+              "customizationPrice": 0,
+              "totalPrice": 35.5,
+              "price": 22.5,
+              "observations": "",
+              "options": [
+                {
+                  "index": 2,
+                  "id": "96330c49-ae45-43bc-83a5-1ee1ba9a7cd4",
+                  "name": "Arroz",
+                  "type": "INGREDIENTS",
+                  "groupName": "Adicional",
+                  "externalCode": "",
+                  "ean": "",
+                  "quantity": 1,
+                  "unit": "UN",
+                  "unitPrice": 3,
+                  "addition": 0,
+                  "price": 3
+                },
+                {
+                  "index": 3,
+                  "id": "94e53c74-bfbf-4d88-bc0a-1c686160d73b",
+                  "name": "Fritas",
+                  "type": "INGREDIENTS",
+                  "groupName": "Adicional",
+                  "externalCode": "",
+                  "ean": "",
+                  "quantity": 1,
+                  "unit": "UN",
+                  "unitPrice": 10,
+                  "addition": 0,
+                  "price": 10
+                }
+              ],
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg"
+            }
+          ],
+          "total": {
+            "additionalFees": 0.99,
+            "subTotal": 35.5,
+            "deliveryFee": 8.9,
+            "benefits": 0,
+            "orderAmount": 45.39
+          },
+          "payments": {
+            "prepaid": 0,
+            "pending": 45.39,
+            "methods": [
+              {
+                "value": 45.39,
+                "currency": "BRL",
+                "method": "CASH",
+                "prepaid": false,
+                "type": "OFFLINE",
+                "cash": {
+                  "changeFor": 50
+                }
+              }
+            ]
+          },
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "description": "Taxa de serviço",
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação.",
+              "value": 0.99,
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ]
+            }
+          ],
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "additionalInfo": {
+            "metadata": {
+              "deliveryProduct": "SELF_DELIVERY",
+              "cartId": "34e8df08-dcec-4432-a6b0-8734f56a2c01",
+              "logisticProvider": "MERCHANT"
+            }
+          }
+        },
+        "_extractedPayment": {
+          "method": "CASH",
+          "changeFor": null,
+          "amount": 45.39
+        },
+        "payment": {
+          "method": "CASH",
+          "changeFor": null,
+          "amount": 45.39
+        }
+      },
+      "createdAt": "2026-02-23T04:22:47.990Z",
+      "updatedAt": "2026-02-23T04:22:47.990Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "de586c52-f251-4bf6-beed-ebc61633040a",
+          "orderId": "734b92eb-d0c9-4b03-bf55-d94489e47245",
+          "productId": null,
+          "name": "PEDIDO DE TESTE - Pro",
+          "quantity": 1,
+          "price": "22.5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "17cbee8a-20c3-4bf4-9ac8-989364cbab45",
+          "orderId": "734b92eb-d0c9-4b03-bf55-d94489e47245",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-02-23T04:22:47.990Z"
+        }
+      ]
+    },
+    "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
+  },
+  {
+    "id": "1771820970554-379824",
+    "createdAt": 1771820970554,
+    "order": {
+      "id": "79659527-3a5b-47a0-ace0-3075b5984c54",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": "0b0bcbdb-620d-4393-8ad9-54b12d46c662",
+      "displayId": "0120",
+      "displaySimple": 10,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Thomaz Campos Gomes",
+      "customerPhone": "0800 705 1020",
+      "customerSource": "MANUAL",
+      "customerId": null,
+      "address": "Rua TESTE, 999999",
+      "latitude": 0,
+      "longitude": 0,
+      "total": "35.39",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "8.9",
+      "payload": {
+        "id": "c34f5349-2e2d-4ad9-8161-8af1479d9254",
+        "code": "PLC",
+        "fullCode": "PLACED",
+        "orderId": "0b0bcbdb-620d-4393-8ad9-54b12d46c662",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "createdAt": "2026-02-23T04:30:31.405Z",
+        "salesChannel": "IFOOD",
+        "order": {
+          "id": "0b0bcbdb-620d-4393-8ad9-54b12d46c662",
+          "displayId": "0120",
+          "createdAt": "2026-02-23T04:30:30.740Z",
+          "category": "FOOD",
+          "orderTiming": "IMMEDIATE",
+          "orderType": "DELIVERY",
+          "delivery": {
+            "mode": "DEFAULT",
+            "description": "Padrão",
+            "deliveredBy": "MERCHANT",
+            "deliveryDateTime": "2026-02-23T05:10:30.740Z",
+            "deliveryAddress": {
+              "streetName": "Rua TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999",
+              "neighborhood": "Bairro TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              }
+            },
+            "pickupCode": "9129"
+          },
+          "preparationStartDateTime": "2026-02-23T04:30:30.740Z",
+          "isTest": true,
+          "salesChannel": "IFOOD",
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Thomaz Campos Gomes",
+            "phone": {
+              "number": "0800 705 1020",
+              "localizer": "58587026",
+              "localizerExpiration": "2026-02-23T08:30:30.740Z"
+            },
+            "ordersCountOnMerchant": 0,
+            "segmentation": "Cliente"
+          },
+          "items": [
+            {
+              "index": 1,
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "uniqueId": "35856b97-b6d3-4a68-b411-8aa31d564a46",
+              "name": "PEDIDO DE TESTE - Pro",
+              "type": "DEFAULT",
+              "ean": "",
+              "quantity": 1,
+              "unit": "UN",
+              "unitPrice": 22.5,
+              "optionsPrice": 3,
+              "customizationPrice": 0,
+              "totalPrice": 25.5,
+              "price": 22.5,
+              "observations": "",
+              "options": [
+                {
+                  "index": 2,
+                  "id": "96330c49-ae45-43bc-83a5-1ee1ba9a7cd4",
+                  "name": "Arroz",
+                  "type": "INGREDIENTS",
+                  "groupName": "Adicional",
+                  "externalCode": "",
+                  "ean": "",
+                  "quantity": 1,
+                  "unit": "UN",
+                  "unitPrice": 3,
+                  "addition": 0,
+                  "price": 3
+                }
+              ],
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg"
+            }
+          ],
+          "total": {
+            "additionalFees": 0.99,
+            "subTotal": 25.5,
+            "deliveryFee": 8.9,
+            "benefits": 0,
+            "orderAmount": 35.39
+          },
+          "payments": {
+            "prepaid": 0,
+            "pending": 35.39,
+            "methods": [
+              {
+                "value": 35.39,
+                "currency": "BRL",
+                "method": "CASH",
+                "prepaid": false,
+                "type": "OFFLINE",
+                "cash": {
+                  "changeFor": 100
+                }
+              }
+            ]
+          },
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "description": "Taxa de serviço",
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação.",
+              "value": 0.99,
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ]
+            }
+          ],
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "additionalInfo": {
+            "metadata": {
+              "deliveryProduct": "SELF_DELIVERY",
+              "cartId": "dba0d3bb-2207-49ff-a837-5d839f4a66a7",
+              "logisticProvider": "MERCHANT"
+            }
+          }
+        },
+        "_extractedPayment": {
+          "method": "CASH",
+          "changeFor": 100,
+          "amount": 35.39
+        },
+        "payment": {
+          "method": "CASH",
+          "changeFor": 100,
+          "amount": 35.39
+        }
+      },
+      "createdAt": "2026-02-23T04:29:30.356Z",
+      "updatedAt": "2026-02-23T04:29:30.356Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "418fba0e-1c94-40b9-949e-a8edfc5f14cf",
+          "orderId": "79659527-3a5b-47a0-ace0-3075b5984c54",
+          "productId": null,
+          "name": "PEDIDO DE TESTE - Pro",
+          "quantity": 1,
+          "price": "22.5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "9c80cd5b-7957-4290-956e-9af9297858be",
+          "orderId": "79659527-3a5b-47a0-ace0-3075b5984c54",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-02-23T04:29:30.356Z"
+        }
+      ]
+    },
+    "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
   }
 ]

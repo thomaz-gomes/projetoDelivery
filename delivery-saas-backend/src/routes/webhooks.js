@@ -274,6 +274,7 @@ webhooksRouter.post("/ifood", async (req, res) => {
       storeId: storeId || null,
       externalId,
       displayId,
+      orderType: order && (order.orderType || order.type) || null,
       status: inferredStatus2 || "EM_PREPARO",
       customerId: persistedCustomer ? persistedCustomer.id : undefined,
       customerSource: 'IFOOD',
