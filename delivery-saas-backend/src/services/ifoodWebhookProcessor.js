@@ -1,9 +1,10 @@
 // src/services/ifoodWebhookProcessor.js
 import { prisma } from '../prisma.js';
 import { getIFoodOrderDetails } from '../integrations/ifood/orders.js';
-import { emitirNovoPedido, emitirPedidoAtualizado } from '../index.js';
+import { emitirNovoPedido, emitirPedidoAtualizado, app } from '../index.js';
 import buildAndPersistStockMovementFromOrderItems from './stockFromOrder.js';
 import { canTransition } from '../stateMachine.js';
+import printQueue from '../printQueue.js'
 
 /**
  * Extrai companyId a partir do merchantId do payload
@@ -369,6 +370,37 @@ export async function processIFoodWebhook(eventId) {
         if (res && res.created) {
           console.log('[iFood Processor] emitting novo-pedido for created order', savedOrder && savedOrder.id);
           emitirNovoPedido(savedOrder);
+          // Auto-print: if enabled, enqueue and attempt immediate delivery to connected agents
+          try {
+            const ENABLE_AUTO_PRINT = String(process.env.ENABLE_AUTO_PRINT || '').toLowerCase() === '1';
+            if (ENABLE_AUTO_PRINT) {
+              try {
+                const queued = printQueue.enqueue({ order: savedOrder, storeId: savedOrder.storeId || null });
+                console.log('[iFood Processor] Auto-print: job enqueued', queued.id);
+                const io = app && app.locals && app.locals.io;
+                if (io) {
+                  // try storeId first
+                  const toTry = savedOrder.storeId ? [savedOrder.storeId] : (function(){
+                    const hs = new Set();
+                    Array.from(io.sockets.sockets.values()).forEach(s => {
+                      try {
+                        const ha = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+                        const handshakeStoreIds = ha ? (Array.isArray(ha.storeIds) ? ha.storeIds : (ha.storeId ? [ha.storeId] : null)) : null;
+                        if (Array.isArray(handshakeStoreIds)) handshakeStoreIds.forEach(id => hs.add(id));
+                      } catch(e) {}
+                    });
+                    return Array.from(hs).length ? Array.from(hs) : null;
+                  })();
+                  if (toTry && toTry.length) {
+                    try {
+                      const r = await printQueue.processForStores(io, toTry);
+                      if (r && r.ok) console.log('[iFood Processor] Auto-print: processed queue results:', r.results);
+                    } catch (e) { console.warn('[iFood Processor] Auto-print: processForStores failed', e && e.message); }
+                  }
+                }
+              } catch (e) { console.warn('[iFood Processor] Auto-print enqueue failed', e && e.message); }
+            }
+          } catch (e) { /* ignore auto-print errors */ }
         } else if (res && res.statusChanged) {
           console.log('[iFood Processor] status changed by webhook:', res.from, '->', res.to, 'orderId:', savedOrder && savedOrder.id);
           emitirPedidoAtualizado(savedOrder);
