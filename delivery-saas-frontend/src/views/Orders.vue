@@ -3,6 +3,7 @@ import { onMounted, ref, computed, onUnmounted, nextTick, watch } from 'vue';
 import { normalizeOrderItems } from '../utils/orderUtils.js';
 import { useOrdersStore } from '../stores/orders';
 import { useAuthStore } from '../stores/auth';
+import { useCustomersStore } from '../stores/customers';
 import { useRouter } from 'vue-router';
 import Swal from 'sweetalert2';
 import { io } from 'socket.io-client';
@@ -27,6 +28,7 @@ import Sortable from 'sortablejs';
 import ListGroup from '../components/form/list-group/ListGroup.vue';
 const store = useOrdersStore();
 const auth = useAuthStore();
+const customersStore = useCustomersStore();
 const modules = useModulesStore();
 const router = useRouter();
 
@@ -34,6 +36,49 @@ const router = useRouter();
 function padNumber(n) {
   if (n == null || n === '') return null;
   return String(n).toString().padStart(2, '0');
+}
+
+const tierColors = {
+  em_risco: '#dc3545',
+  regular: '#ffc107',
+  fiel: '#0d6efd',
+  vip: '#198754',
+};
+
+const tierBgColors = {
+  em_risco: 'rgba(220,53,69,0.1)',
+  regular: 'rgba(255,193,7,0.1)',
+  fiel: 'rgba(13,110,253,0.1)',
+  vip: 'rgba(25,135,84,0.1)',
+};
+
+function starsHtml(stars) {
+  try { return '★'.repeat(stars||0) + '☆'.repeat(Math.max(0, 4 - (stars||0))); } catch(e) { return ''; }
+}
+
+function getCustomerStats(o) {
+  try {
+    if (!o) return null;
+    // try direct customer id first
+    const cid = o.customerId || o.customer?.id || o.customerIdString || null;
+    if (cid) {
+      const found = (customersStore.list || []).find(c => String(c.id) === String(cid));
+      if (found && found.stats) return found.stats;
+    }
+    // try by phone
+    const phone = (o.customerPhone || o.contact || o.payload?.customer?.phone || '').replace(/\D/g,'');
+    if (phone) {
+      const found = (customersStore.list || []).find(c => (c.whatsapp||c.phone||'').replace(/\D/g,'') === phone);
+      if (found && found.stats) return found.stats;
+    }
+    // fallback by exact name match
+    const name = (o.customerName || o.name || '').trim();
+    if (name) {
+      const found = (customersStore.list || []).find(c => (c.fullName||'').trim() === name);
+      if (found && found.stats) return found.stats;
+    }
+    return null;
+  } catch (e) { return null; }
 }
 
 function isIfoodOrder(o) {
@@ -181,6 +226,8 @@ onMounted(async () => {
     // ensure store names are hydrated when backend omitted the relation
     await hydrateMissingStores();
     if (ridersEnabled.value) await store.fetchRiders();
+    // fetch customers list if empty so we can show customer classification badges
+    try { if (!customersStore.list || customersStore.list.length === 0) { customersStore.fetch().catch(()=>{}); } } catch(e) {}
     // load company payment methods (admin endpoint)
     try {
       const cid = auth?.user?.companyId || null;
@@ -2888,7 +2935,12 @@ function pulseButton() {
                     <input type="checkbox" :checked="isOrderSelected(o)" @change="toggleOrderSelection(o)" />
                     <span class="order-checkbox-mark"></span>
                   </label>
-                  <span class="oc-title">#{{ formatDisplay(o) }} - {{ o.customerName || 'Cliente' }}</span>
+                  <span class="oc-title">#{{ formatDisplay(o) }} - <span class="oc-customer-name">{{ o.customerName || 'Cliente' }}</span>
+                    <span v-if="getCustomerStats(o)" class="ms-2">
+                  
+                      <span class="badge tier-badge" :style="{ background: tierBgColors[getCustomerStats(o).tier], color: tierColors[getCustomerStats(o).tier] }">{{ getCustomerStats(o).label }}</span>
+                    </span>
+                  </span>
                   <span class="oc-channel">{{ normalizeOrder(o).storeName ? (normalizeOrder(o).storeName + (normalizeOrder(o).channelLabel ? ' | ' + normalizeOrder(o).channelLabel : '')) : (normalizeOrder(o).channelLabel || '—') }}</span>
                 </div>
                 <!-- Row 2: info chips -->
@@ -3561,5 +3613,20 @@ button.btn.advance {
   border: 2px solid #0d6efd !important;
   background: #f0f7ff !important;
   box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.18);
+}
+
+.tier-stars {
+  font-size: 1rem;
+  letter-spacing: 1px;
+  margin-left: 6px;
+}
+.tier-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: middle;
 }
 </style>

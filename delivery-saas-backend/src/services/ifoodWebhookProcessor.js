@@ -1,7 +1,7 @@
 // src/services/ifoodWebhookProcessor.js
 import { prisma } from '../prisma.js';
 import { getIFoodOrderDetails } from '../integrations/ifood/orders.js';
-import { emitirNovoPedido } from '../index.js';
+import { emitirNovoPedido, emitirPedidoAtualizado } from '../index.js';
 import buildAndPersistStockMovementFromOrderItems from './stockFromOrder.js';
 import { canTransition } from '../stateMachine.js';
 
@@ -148,7 +148,7 @@ function mapIFoodOrder(payload) {
 /**
  * Determina o status interno a partir de um evento/estado iFood
  */
-function determineStatusFromIFoodEvent(payload, orderObj) {
+export function determineStatusFromIFoodEvent(payload, orderObj) {
   const code = (payload && (payload.fullCode || payload.code || payload.name)) ? String(payload.fullCode || payload.code || payload.name).toUpperCase() : null;
   if (!code) return null;
 
@@ -215,7 +215,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     const existingCount = await prisma.order.count({ where: { companyId, createdAt: { gte: startOfDay } } });
     const displaySimple = existingCount + 1;
 
-    return prisma.order.create({
+    const created = await prisma.order.create({
       data: {
         ...baseData,
         storeId: storeId || null,
@@ -232,8 +232,9 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
           create: [{ from: null, to: 'EM_PREPARO', reason: 'iFood webhook' }],
         },
       },
-      include: { items: true },
+      include: { items: true, histories: true },
     });
+    return { order: created, created: true, statusChanged: true, from: null, to: 'EM_PREPARO' };
   }
 
   // se já existe, atualizamos campos principais — mas NÃO sobrescrevemos o
@@ -245,18 +246,22 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     // Determine whether we should change the status
     const incomingStatus = mapped.status || null;
     const currentStatus = exists.status || null;
+    let statusChanged = false;
+    let from = null;
+    let to = null;
     if (incomingStatus && incomingStatus !== currentStatus) {
-      // Only set status when a valid forward transition exists
       if (canTransition(currentStatus, incomingStatus)) {
         updateData.status = incomingStatus;
-        // record history entry for status change
         updateData.histories = { create: { from: currentStatus, to: incomingStatus, reason: 'iFood webhook (update)' } };
+        statusChanged = true;
+        from = currentStatus;
+        to = incomingStatus;
+        console.log('[iFood Processor] status change allowed:', exists.id, currentStatus, '->', incomingStatus);
       } else {
-        // Do not overwrite status; keep existing
+        console.warn('[iFood Processor] status transition NOT allowed:', exists.id, currentStatus, '->', incomingStatus);
         delete updateData.status;
       }
     } else {
-      // Ensure we don't unset status unintentionally
       delete updateData.status;
     }
 
@@ -265,7 +270,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
       data: updateData,
       include: { items: true, histories: true },
     });
-    return updated;
+    return { order: updated, created: false, statusChanged, from, to };
   } catch (e) {
     // Fallback: if update fails, log and rethrow
     console.error('[iFood Processor] failed to update existing order:', e?.message || e);
@@ -338,26 +343,41 @@ export async function processIFoodWebhook(eventId) {
       // Mapeia e upsert (propaga storeId quando disponível)
       const mapped = mapIFoodOrder(payload);
       // If payload contains an iFood event code, prefer mapping its status
+      let inferred = null;
       try {
-        const inferred = determineStatusFromIFoodEvent(payload, payload.order || payload);
+        const codeRaw = payload && (payload.fullCode || payload.code || (payload.order && (payload.order.fullCode || payload.order.code)));
+        const eventCode = codeRaw ? String(codeRaw).toUpperCase() : null;
+        inferred = determineStatusFromIFoodEvent(payload, payload.order || payload);
         if (inferred) mapped.status = inferred;
-      } catch (e) { /* ignore */ }
-      const saved = await upsertOrder({ companyId, mapped, storeId });
+        console.log('[iFood Processor] eventCode:', eventCode, '-> inferred status:', inferred, 'mapped.status:', mapped.status);
+      } catch (e) {
+        console.warn('[iFood Processor] failed to infer status from payload:', e?.message || e);
+      }
+
+      const res = await upsertOrder({ companyId, mapped, storeId });
+      const savedOrder = res && res.order ? res.order : res;
 
       // attempt to decrement stock for items that reference technical sheets (best-effort)
       try {
-        await buildAndPersistStockMovementFromOrderItems(prisma, saved);
+        await buildAndPersistStockMovementFromOrderItems(prisma, savedOrder);
       } catch (e) {
-        console.warn('[iFood Processor] failed to create stock movement for order', saved && saved.id, e && e.message);
+        console.warn('[iFood Processor] failed to create stock movement for order', savedOrder && savedOrder.id, e && e.message);
       }
 
-      // Emite o novo pedido ao painel (Socket.IO) para evitar necessidade de refresh
+      // Emit socket events depending on create vs update
       try {
-        if (saved) {
-          emitirNovoPedido(saved);
+        if (res && res.created) {
+          console.log('[iFood Processor] emitting novo-pedido for created order', savedOrder && savedOrder.id);
+          emitirNovoPedido(savedOrder);
+        } else if (res && res.statusChanged) {
+          console.log('[iFood Processor] status changed by webhook:', res.from, '->', res.to, 'orderId:', savedOrder && savedOrder.id);
+          emitirPedidoAtualizado(savedOrder);
+        } else {
+          // No status change; still optionally emit a generic update for visibility
+          console.log('[iFood Processor] no status change for order', savedOrder && savedOrder.id, 'current status:', savedOrder && savedOrder.status);
         }
       } catch (eEmit) {
-        console.warn('[iFood Processor] emitirNovoPedido failed:', eEmit && eEmit.message);
+        console.warn('[iFood Processor] emitir socket event failed:', eEmit && eEmit.message);
       }
 
     // Marca como processado (limpa eventual erro anterior)

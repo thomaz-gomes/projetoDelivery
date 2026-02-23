@@ -60,6 +60,24 @@ export async function updateIFoodOrderStatus(companyId, orderId, statusCode, ext
   const token = await getIFoodAccessToken(companyId);
   const api = ifoodHttp(token);
 
+  // Helper to mask sensitive headers when logging
+  function maskHeaders(h) {
+    try {
+      if (!h) return h;
+      const copy = Object.assign({}, h);
+      if (copy.Authorization) {
+        try {
+          const s = String(copy.Authorization);
+          // show only the prefix and trailing 4 chars
+          if (s.length > 20) copy.Authorization = s.slice(0, 15) + '...' + s.slice(-6);
+          else copy.Authorization = s.replace(/.(?=.{4})/g, '*');
+        } catch (e) { copy.Authorization = '***'; }
+      }
+      if (copy['x-claims-aud']) copy['x-claims-aud'] = String(copy['x-claims-aud']).slice(0, 60);
+      return copy;
+    } catch (e) { return '<mask-error>'; }
+  }
+
   // Build x-claims-aud candidates (try merchantId from extra, merchantUuid/merchantId from integration, then client_id)
   let audCandidates = [];
   try {
@@ -126,7 +144,10 @@ export async function updateIFoodOrderStatus(companyId, orderId, statusCode, ext
       if (shortCode === 'CAN' && extra.cancellationCode) {
         payload.cancellationCode = extra.cancellationCode;
       }
-      console.log('[iFood update] ACTION POST', url, 'payload:', JSON.stringify(payload));
+      try {
+        const fullUrl = (api.defaults?.baseURL || process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br').replace(/\/+$/, '') + url;
+        console.log('[iFood update][verbose] ACTION POST', { url: fullUrl, headers: maskHeaders(api.defaults && api.defaults.headers), payload });
+      } catch (e) { console.log('[iFood update][verbose] ACTION POST (failed to build verbose log)', e && e.message); }
       return api.post(url, payload);
     });
     attemptMeta.push({ method: 'POST', url: actionEndpoint.replace('{id}', encodeURIComponent(orderId)) });
@@ -135,7 +156,11 @@ export async function updateIFoodOrderStatus(companyId, orderId, statusCode, ext
     attempts.push(async () => {
       const path = `/order/v1.0/orders/${orderId}/status`;
       const payload = { code: shortCode, fullCode: statusCode, metadata: extra.metadata || {} };
-      console.log('[iFood update] POST', path, 'payload:', JSON.stringify(payload));
+      try {
+        const base = api.defaults?.baseURL || process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br';
+        const fullUrl = base.replace(/\/+$/, '') + path;
+        console.log('[iFood update][verbose] POST', { url: fullUrl, headers: maskHeaders(api.defaults && api.defaults.headers), payload });
+      } catch (e) { console.log('[iFood update][verbose] POST (failed to build verbose log)', e && e.message); }
       return api.post(path, payload);
     });
     attemptMeta.push({ method: 'POST', url: `/order/v1.0/orders/${orderId}/status` });
@@ -179,11 +204,12 @@ export async function updateIFoodOrderStatus(companyId, orderId, statusCode, ext
           try {
             const respStatus = e?.response?.status || null;
             const respData = e?.response?.data || null;
+            const respHeaders = e?.response?.headers || null;
             const meta = attemptMeta[i] || null;
             const base = api.defaults?.baseURL || process.env.IFOOD_BASE_URL || process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br';
             const baseClean = base.replace(/\/+$/, '');
             const fullUrl = meta ? ((meta.url && meta.url.startsWith('http')) ? meta.url : `${baseClean}${meta.url.startsWith('/') ? '' : '/'}${meta.url}`) : null;
-            console.error('[iFood update] attempt error', { audTried: aud, attempt: i, endpoint: meta || null, fullUrl, message: e.message, responseStatus: respStatus, responseData: respData });
+            console.error('[iFood update] attempt error', { audTried: aud, attempt: i, endpoint: meta || null, fullUrl, message: e.message, responseStatus: respStatus, responseData: respData, responseHeaders: maskHeaders(respHeaders) });
           } catch (ee) {
             console.error('[iFood update] attempt error (no response info)', { audTried: aud, attempt: i, endpoint: attemptMeta[i] || null, message: e?.message });
           }

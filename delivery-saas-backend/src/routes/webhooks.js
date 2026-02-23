@@ -4,9 +4,11 @@ import fs from "fs";
 import path from "path";
 import { prisma } from "../prisma.js";
 import { upsertCustomerFromIfood, normalizeDeliveryAddressFromPayload } from "../services/customers.js";
-import { emitirNovoPedido } from "../index.js"; // envia o pedido ao front via Socket.IO
+import { emitirNovoPedido, emitirPedidoAtualizado } from "../index.js"; // envia o pedido ao front via Socket.IO
 import printQueue from '../printQueue.js'
 import { enrichOrderForAgent } from '../enrichOrderForAgent.js'
+import { determineStatusFromIFoodEvent } from '../services/ifoodWebhookProcessor.js';
+import { canTransition } from '../stateMachine.js';
 
 // Helper: try to process the print queue for the provided storeIds with a
 // small retry/backoff strategy. Returns the final result from processForStores.
@@ -240,6 +242,18 @@ webhooksRouter.post("/ifood", async (req, res) => {
       create: { provider: "IFOOD", eventId, payload: body, status: "RECEIVED" },
     });
 
+    // 🛒 Checa pedido existente para decidir mudança de status e logs
+    const existingOrder = await prisma.order.findUnique({ where: { externalId } }).catch(() => null);
+    try {
+      const codeRaw = body && (body.fullCode || body.code || (body.order && (body.order.fullCode || body.order.code)));
+      const eventCode = codeRaw ? String(codeRaw).toUpperCase() : null;
+      const inferredStatus = determineStatusFromIFoodEvent(body, body.order || body) || null;
+      console.log('[iFood Webhook] eventCode:', eventCode, '-> inferred status:', inferredStatus, 'externalId:', externalId);
+      // Decide create/update status behavior below
+    } catch (e) {
+      console.warn('[iFood Webhook] failed to infer status:', e?.message || e);
+    }
+
     // 🛒 Cria ou atualiza o pedido
     // Compute a per-day sequential number to persist as displaySimple for new orders.
     // We compute the number based on how many orders already exist today for this company.
@@ -250,52 +264,79 @@ webhooksRouter.post("/ifood", async (req, res) => {
     });
     const displaySimpleForCreate = existingTodayCount + 1;
 
+    // Build dynamic create/update objects to allow status transitions when valid
+    const codeRaw2 = body && (body.fullCode || body.code || (body.order && (body.order.fullCode || body.order.code)));
+    const eventCode2 = codeRaw2 ? String(codeRaw2).toUpperCase() : null;
+    const inferredStatus2 = (function() { try { return determineStatusFromIFoodEvent(body, body.order || body); } catch (e) { return null } })();
+
+    const createObj = {
+      companyId,
+      storeId: storeId || null,
+      externalId,
+      displayId,
+      status: inferredStatus2 || "EM_PREPARO",
+      customerId: persistedCustomer ? persistedCustomer.id : undefined,
+      customerSource: 'IFOOD',
+      customerName,
+      customerPhone,
+      address,
+      latitude,
+      longitude,
+      total,
+      deliveryFee,
+      payload: order,
+      displaySimple: displaySimpleForCreate,
+      histories: {
+        create: [{ from: null, to: (inferredStatus2 || 'EM_PREPARO'), reason: "Webhook iFood" }],
+      },
+      items: {
+        create: (order.items || []).map((it) => ({
+          name: it.name || "Item",
+          quantity: Number(it.quantity || 1),
+          price: Number(it.totalPrice || it.price || 0),
+        })),
+      },
+    };
+
+    // update object mirrors previous update but only sets status when transition allowed
+    const updateObj = {
+      companyId,
+      storeId: storeId || undefined,
+      displayId,
+      customerId: persistedCustomer ? persistedCustomer.id : undefined,
+      customerSource: 'IFOOD',
+      customerName,
+      customerPhone,
+      address,
+      latitude,
+      longitude,
+      total,
+      deliveryFee,
+      payload: order,
+    };
+
+    // If we have an existing order and an inferred status, decide whether to apply it
+    let willChangeStatus = false;
+    if (existingOrder && inferredStatus2 && existingOrder.status !== inferredStatus2) {
+      try {
+        if (canTransition(existingOrder.status, inferredStatus2)) {
+          updateObj.status = inferredStatus2;
+          updateObj.histories = { create: { from: existingOrder.status, to: inferredStatus2, reason: 'Webhook iFood (update)' } };
+          willChangeStatus = true;
+          console.log('[iFood Webhook] status transition allowed:', existingOrder.id, existingOrder.status, '->', inferredStatus2);
+        } else {
+          console.warn('[iFood Webhook] status transition NOT allowed:', existingOrder.id, existingOrder.status, '->', inferredStatus2);
+        }
+      } catch (e) {
+        console.warn('[iFood Webhook] error while deciding status transition:', e?.message || e);
+      }
+    }
+
     const saved = await prisma.order.upsert({
       where: { externalId },
-      update: {
-        companyId,
-        storeId: storeId || undefined,
-        displayId,
-        customerId: persistedCustomer ? persistedCustomer.id : undefined,
-        customerSource: 'IFOOD',
-        customerName,
-        customerPhone,
-        address,
-        latitude,
-        longitude,
-        total,
-        deliveryFee,
-        payload: order,
-      },
-      create: {
-        companyId,
-        storeId: storeId || null,
-        externalId,
-        displayId,
-        status: "EM_PREPARO",
-  customerId: persistedCustomer ? persistedCustomer.id : undefined,
-  customerSource: 'IFOOD',
-        customerName,
-        customerPhone,
-        address,
-        latitude,
-        longitude,
-        total,
-        deliveryFee,
-        payload: order,
-        displaySimple: displaySimpleForCreate,
-        histories: {
-          create: [{ from: null, to: "EM_PREPARO", reason: "Webhook iFood" }],
-        },
-        items: {
-          create: (order.items || []).map((it) => ({
-            name: it.name || "Item",
-            quantity: Number(it.quantity || 1),
-            price: Number(it.totalPrice || it.price || 0),
-          })),
-        },
-      },
-      include: { items: true },
+      update: updateObj,
+      create: createObj,
+      include: { items: true, histories: true },
     });
 
     // ✅ Atualiza evento
@@ -366,23 +407,30 @@ webhooksRouter.post("/ifood", async (req, res) => {
     } catch (e) { /* ignore QR generation errors */ }
 
     // 🔊 Envia o pedido para o painel via Socket.IO
-    // Ensure emitted object has required fields so agents always receive id + QR info
     try {
-      const emitObj = {
-        id: saved.id,
-        companyId: saved.companyId || saved.company || null,
-        storeId: saved.storeId || (saved.payload && saved.payload.storeId) || null,
-        qrDataUrl: saved.qrDataUrl || (saved.payload && saved.payload.qrDataUrl) || null,
-        rasterDataUrl: saved.rasterDataUrl || (saved.payload && saved.payload.rasterDataUrl) || null,
-        qrText: saved.qrText || (saved.payload && saved.payload.qrText) || null,
-        payload: saved.payload || null
-      };
-      emitirNovoPedido(emitObj);
+      // If we created the order (no existingOrder) -> novo-pedido
+      if (!existingOrder) {
+        const emitObj = {
+          id: saved.id,
+          companyId: saved.companyId || saved.company || null,
+          storeId: saved.storeId || (saved.payload && saved.payload.storeId) || null,
+          qrDataUrl: saved.qrDataUrl || (saved.payload && saved.payload.qrDataUrl) || null,
+          rasterDataUrl: saved.rasterDataUrl || (saved.payload && saved.payload.rasterDataUrl) || null,
+          qrText: saved.qrText || (saved.payload && saved.payload.qrText) || null,
+          payload: saved.payload || null
+        };
+        console.log('[iFood Webhook] emitting novo-pedido for created order', saved.id);
+        emitirNovoPedido(emitObj);
+      } else if (willChangeStatus && existingOrder.status !== saved.status) {
+        console.log('[iFood Webhook] status changed by webhook:', existingOrder.status, '->', saved.status, 'orderId:', saved.id);
+        emitirPedidoAtualizado(saved);
+      } else {
+        console.log('[iFood Webhook] no status change for order', saved.id, 'status:', saved.status);
+      }
     } catch (eEmit) {
-      console.warn('emitirNovoPedido failed for saved order', saved && saved.id, eEmit && eEmit.message);
-      emitirNovoPedido(saved);
+      console.warn('emitir socket event failed for saved order', saved && saved.id, eEmit && eEmit.message);
     }
-    console.log(`📦 Pedido salvo e emitido ao painel: ${displayId} (simple:${saved.displaySimple || 'N/A'})`);
+    console.log(`📦 Pedido salvo (upsert) no webhook: ${displayId} (simple:${saved.displaySimple || 'N/A'})`);
     // Auto-print behavior can be toggled via `ENABLE_AUTO_PRINT` env var.
     if (!ENABLE_AUTO_PRINT) {
       console.log('Auto-print disabled (ENABLE_AUTO_PRINT not set to 1) — skipping enqueue/delivery logic');

@@ -131,10 +131,10 @@ ordersRouter.post('/:id/assign', requireRole('ADMIN','STORE'), async (req, res) 
         }
         const { updateIFoodOrderStatus } = await import('../integrations/ifood/orders.js');
         try {
-          await updateIFoodOrderStatus(order.companyId, orderExternalId, 'DISPATCHED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'DISPATCHED' });
-          console.log('[orders.assign] notified iFood of dispatch for order', orderExternalId);
+          const resp = await updateIFoodOrderStatus(order.companyId, orderExternalId, 'DISPATCHED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'DISPATCHED' });
+          console.log('[orders.assign] notified iFood of dispatch for order', orderExternalId, 'response:', resp && (resp.ok ? 'ok' : resp));
         } catch (e) {
-          console.warn('[orders.assign] failed to notify iFood of dispatch', { orderExternalId, err: e?.message || e });
+          console.warn('[orders.assign] failed to notify iFood of dispatch', { orderExternalId, message: e?.message || String(e), status: e?.response?.status || null, providerResponse: e?.response?.data || null });
         }
       } catch (e) {
         console.error('[orders.assign] error while attempting iFood notify', e?.message || e);
@@ -182,10 +182,10 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
         }
         const { updateIFoodOrderStatus } = await import('../integrations/ifood/orders.js');
         try {
-          await updateIFoodOrderStatus(updated.companyId, orderExternalId, 'CONCLUDED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'CONCLUDED' });
-          console.log('[orders.complete] notified iFood of conclusion for order', orderExternalId);
+          const resp = await updateIFoodOrderStatus(updated.companyId, orderExternalId, 'CONCLUDED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'CONCLUDED' });
+          console.log('[orders.complete] notified iFood of conclusion for order', orderExternalId, 'response:', resp && (resp.ok ? 'ok' : resp));
         } catch (e) {
-          console.warn('[orders.complete] failed to notify iFood of conclusion', { orderExternalId, err: e?.message || e });
+          console.warn('[orders.complete] failed to notify iFood of conclusion', { orderExternalId, message: e?.message || String(e), status: e?.response?.status || null, providerResponse: e?.response?.data || null });
         }
       } catch (e) {
         console.error('[orders.complete] error while attempting iFood notify', e?.message || e);
@@ -389,10 +389,10 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res
           const target = mapLocalToIFood(status, updated);
           if (target) {
             try {
-              await updateIFoodOrderStatus(updated.companyId, orderExternalId, target, { merchantId: integ.merchantUuid || integ.merchantId, cancellationCode: cancellationCode || null });
-              console.log('Notified iFood of status change for order', orderExternalId, '->', target);
+              const resp = await updateIFoodOrderStatus(updated.companyId, orderExternalId, target, { merchantId: integ.merchantUuid || integ.merchantId, cancellationCode: cancellationCode || null });
+              console.log('Notified iFood of status change for order', orderExternalId, '->', target, 'response:', resp && (resp.ok ? 'ok' : resp));
             } catch (eNotify) {
-              console.warn('Failed to notify iFood of status change for', orderExternalId, eNotify && eNotify.message);
+              console.warn('Failed to notify iFood of status change for', orderExternalId, { message: eNotify?.message || String(eNotify), status: eNotify?.response?.status || null, providerResponse: eNotify?.response?.data || null });
             }
           }
         } catch (eImp) {

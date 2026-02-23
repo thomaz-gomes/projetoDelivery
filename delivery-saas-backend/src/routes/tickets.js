@@ -127,10 +127,10 @@ ticketsRouter.post('/:token/claim', authMiddleware, requireRole('RIDER'), async 
       }
       const { updateIFoodOrderStatus } = await import('../integrations/ifood/orders.js');
       try {
-        await updateIFoodOrderStatus(result.companyId, orderExternalId, 'DISPATCHED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'DISPATCHED' });
-        console.log('[tickets.claim] notified iFood of dispatch for order', orderExternalId);
+        const resp = await updateIFoodOrderStatus(result.companyId, orderExternalId, 'DISPATCHED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'DISPATCHED' });
+        console.log('[tickets.claim] notified iFood of dispatch for order', orderExternalId, 'response:', resp && (resp.ok ? 'ok' : resp));
       } catch (e) {
-        console.warn('[tickets.claim] failed to notify iFood of dispatch', { orderExternalId, err: e?.message || e });
+        console.warn('[tickets.claim] failed to notify iFood of dispatch', { orderExternalId, message: e?.message || String(e), status: e?.response?.status || null, providerResponse: e?.response?.data || null });
       }
     } catch (e) {
       console.error('[tickets.claim] error while attempting iFood notify', e?.message || e);
