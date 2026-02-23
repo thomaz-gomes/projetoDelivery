@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -83,17 +83,21 @@ model Company {
   postalCode           String?
 
   // ---- Financial module relations ----
-  financialAccounts    FinancialAccount[]
-  costCenters          CostCenter[]
-  gatewayConfigs       PaymentGatewayConfig[]
+  financialAccounts     FinancialAccount[]
+  costCenters           CostCenter[]
+  gatewayConfigs        PaymentGatewayConfig[]
   financialTransactions FinancialTransaction[]
-  cashFlowEntries      CashFlowEntry[]
-  ofxImports           OfxImport[]
+  cashFlowEntries       CashFlowEntry[]
+  ofxImports            OfxImport[]
 
   // ---- Cash register (PDV) ----
-  cashSessions         CashSession[]
-  cashBlindCloseDefault Boolean @default(false)
-  dadosFiscais         DadosFiscais[]
+  cashSessions          CashSession[]
+  cashBlindCloseDefault Boolean        @default(false)
+  // ---- Dados Fiscais ----
+  dadosFiscais          DadosFiscais[]
+
+  // ---- Meta Pixel ----
+  metaPixels MetaPixel[]
 }
 
 model User {
@@ -259,7 +263,7 @@ model Customer {
   companyId        String
   company          Company               @relation(fields: [companyId], references: [id])
   // optional iFood customer identifier (integration-specific)
-  ifoodCustomerId   String?
+  ifoodCustomerId  String?
   fullName         String
   cpf              String?
   whatsapp         String? // telefone principal normalizado (somente dígitos e com DDI)
@@ -487,25 +491,25 @@ model FileSource {
 }
 
 model PrinterSetting {
-  id                  String    @id @default(cuid())
-  companyId           String    @unique
-  interface           String    @default("printer:EPSON")
-  type                String    @default("EPSON")
-  width               Int       @default(48)
-  headerName          String?   @default("Minha Loja")
-  headerCity          String?   @default("Cidade")
+  id                   String    @id @default(cuid())
+  companyId            String    @unique
+  interface            String    @default("printer:EPSON")
+  type                 String    @default("EPSON")
+  width                Int       @default(48)
+  headerName           String?   @default("Minha Loja")
+  headerCity           String?   @default("Cidade")
   // Agent token (hashed) used by delivery-print-agent for authentication
-  agentTokenHash      String?
-  agentTokenCreatedAt DateTime?
+  agentTokenHash       String?
+  agentTokenCreatedAt  DateTime?
   // Pairing code for simplified agent setup (short-lived, single-use)
   pairingCode          String?
   pairingCodeExpiresAt DateTime?
   // Receipt customization
-  receiptTemplate     String?   // Custom receipt template with {{placeholders}}. Null = use default.
-  copies              Int       @default(1) // Number of copies to print per order
-  printerName         String?   // Actual system printer name (e.g., "EPSON TM-T20II Receipt")
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  receiptTemplate      String? // Custom receipt template with {{placeholders}}. Null = use default.
+  copies               Int       @default(1) // Number of copies to print per order
+  printerName          String? // Actual system printer name (e.g., "EPSON TM-T20II Receipt")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 // ---- Neighborhoods (Bairros) ----
@@ -686,11 +690,11 @@ model DadosFiscais {
   percCredPresumido Decimal?
   // NCM and origin
   ncm               String?
-  orig              String?        // 0 = Nacional, 1..8 = Estrangeira/mista
+  orig              String? // 0 = Nacional, 1..8 = Estrangeira/mista
   // ICMS
   icmsPercBase      Decimal?       @default(100)
   icmsAliq          Decimal?       @default(0)
-  icmsModBC         String?        // 0..5
+  icmsModBC         String? // 0..5
   icmsFCP           Decimal?       @default(0)
   // ICMS ST
   icmsStPercBase    Decimal?       @default(100)
@@ -1052,9 +1056,9 @@ model StockMovementItem {
 
 // Tipo de conta financeira
 enum FinancialAccountType {
-  CHECKING    // Conta Corrente
-  SAVINGS     // Poupança
-  CASH        // Caixa físico
+  CHECKING // Conta Corrente
+  SAVINGS // Poupança
+  CASH // Caixa físico
   CREDIT_CARD // Cartão de crédito
   MARKETPLACE // Conta em marketplace (iFood, Rappi)
   OTHER
@@ -1062,33 +1066,33 @@ enum FinancialAccountType {
 
 // Tipo de transação financeira
 enum FinancialTransactionType {
-  PAYABLE     // Conta a Pagar
-  RECEIVABLE  // Conta a Receber
+  PAYABLE // Conta a Pagar
+  RECEIVABLE // Conta a Receber
 }
 
 // Status de uma transação financeira (título)
 enum FinancialTransactionStatus {
-  PENDING     // Agendada / em aberto
-  CONFIRMED   // Confirmada (prevista no fluxo)
-  PAID        // Paga / Recebida (realizada)
-  OVERDUE     // Vencida
-  CANCELED    // Cancelada
-  PARTIALLY   // Parcialmente paga
+  PENDING // Agendada / em aberto
+  CONFIRMED // Confirmada (prevista no fluxo)
+  PAID // Paga / Recebida (realizada)
+  OVERDUE // Vencida
+  CANCELED // Cancelada
+  PARTIALLY // Parcialmente paga
 }
 
 // Tipo da movimentação real de dinheiro
 enum CashFlowEntryType {
-  INFLOW      // Entrada
-  OUTFLOW     // Saída
+  INFLOW // Entrada
+  OUTFLOW // Saída
 }
 
 // Status de conciliação OFX
 enum OfxMatchStatus {
-  PENDING     // Aguardando match
-  MATCHED     // Conciliado automaticamente
-  MANUAL      // Conciliado manualmente
-  IGNORED     // Ignorado pelo operador
-  UNMATCHED   // Sem correspondência
+  PENDING // Aguardando match
+  MATCHED // Conciliado automaticamente
+  MANUAL // Conciliado manualmente
+  IGNORED // Ignorado pelo operador
+  UNMATCHED // Sem correspondência
 }
 
 // Recorrência para transações financeiras
@@ -1104,27 +1108,27 @@ enum RecurrenceType {
 
 // ---- Contas Financeiras (caixas, contas bancárias, marketplaces) ----
 model FinancialAccount {
-  id          String               @id @default(uuid())
-  companyId   String
-  company     Company              @relation(fields: [companyId], references: [id])
-  name        String               // Ex: "Caixa Loja Centro", "Banco do Brasil CC", "iFood"
-  type        FinancialAccountType @default(CHECKING)
+  id             String               @id @default(uuid())
+  companyId      String
+  company        Company              @relation(fields: [companyId], references: [id])
+  name           String // Ex: "Caixa Loja Centro", "Banco do Brasil CC", "iFood"
+  type           FinancialAccountType @default(CHECKING)
   // dados bancários opcionais
-  bankCode    String?              // código do banco (ex: "001")
-  agency      String?
-  accountNumber String?
+  bankCode       String? // código do banco (ex: "001")
+  agency         String?
+  accountNumber  String?
   // saldo atual (atualizado por trigger/serviço ao registrar CashFlowEntry)
-  currentBalance Decimal           @default(0)
-  isActive    Boolean              @default(true)
-  isDefault   Boolean              @default(false) // conta padrão para novas transações
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  currentBalance Decimal              @default(0)
+  isActive       Boolean              @default(true)
+  isDefault      Boolean              @default(false) // conta padrão para novas transações
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   // relações
-  transactions  FinancialTransaction[]
+  transactions    FinancialTransaction[]
   cashFlowEntries CashFlowEntry[]
-  ofxImports    OfxImport[]
-  cashMovements CashMovement[]
+  ofxImports      OfxImport[]
+  cashMovements   CashMovement[]
 
   @@unique([companyId, name], name: "company_fin_account_name")
   @@index([companyId], name: "idx_fin_account_company")
@@ -1132,19 +1136,19 @@ model FinancialAccount {
 
 // ---- Centros de Custo (para DRE) ----
 model CostCenter {
-  id          String   @id @default(uuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id])
-  code        String   // Ex: "1.01", "2.03.01"
-  name        String   // Ex: "Receita de Vendas", "CMV", "Marketing"
-  parentId    String?
-  parent      CostCenter?  @relation("CostCenterParent", fields: [parentId], references: [id])
-  children    CostCenter[] @relation("CostCenterParent")
+  id        String       @id @default(uuid())
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id])
+  code      String // Ex: "1.01", "2.03.01"
+  name      String // Ex: "Receita de Vendas", "CMV", "Marketing"
+  parentId  String?
+  parent    CostCenter?  @relation("CostCenterParent", fields: [parentId], references: [id])
+  children  CostCenter[] @relation("CostCenterParent")
   // DRE classification: REVENUE, COGS, OPEX, TAX, OTHER
-  dreGroup    String?      // Grupo no DRE (receita bruta, deduções, CMV, despesas operacionais, etc.)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  dreGroup  String? // Grupo no DRE (receita bruta, deduções, CMV, despesas operacionais, etc.)
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
   transactions FinancialTransaction[]
 
@@ -1154,27 +1158,27 @@ model CostCenter {
 
 // ---- Configurações de Taxas de Gateways / Operadoras / Marketplaces ----
 model PaymentGatewayConfig {
-  id          String   @id @default(uuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id])
+  id                     String   @id @default(uuid())
+  companyId              String
+  company                Company  @relation(fields: [companyId], references: [id])
   // Identificação da operadora
-  provider    String   // Ex: "IFOOD", "RAPPI", "STONE", "CIELO", "PAGSEGURO", "PIX_MANUAL"
-  label       String?  // Nome amigável: "iFood Entrega", "Stone Crédito"
+  provider               String // Ex: "IFOOD", "RAPPI", "STONE", "CIELO", "PAGSEGURO", "PIX_MANUAL"
+  label                  String? // Nome amigável: "iFood Entrega", "Stone Crédito"
   // Tipo de taxa
-  feeType     String   @default("PERCENTAGE") // PERCENTAGE | FIXED | MIXED
+  feeType                String   @default("PERCENTAGE") // PERCENTAGE | FIXED | MIXED
   // Taxa percentual (ex: 0.12 = 12%)
-  feePercent  Decimal  @default(0)
+  feePercent             Decimal  @default(0)
   // Taxa fixa por transação (em R$)
-  feeFixed    Decimal  @default(0)
+  feeFixed               Decimal  @default(0)
   // Prazo de recebimento em dias (D+N)
-  settlementDays Int   @default(0) // Ex: 30 para iFood, 1 para PIX
+  settlementDays         Int      @default(0) // Ex: 30 para iFood, 1 para PIX
   // Antecipação automática (se habilitada, recalcular taxa)
   anticipationFeePercent Decimal? // taxa adicional se antecipar
   // Regras adicionais em JSON (faixas de volume, taxa mínima, etc.)
-  rules       Json?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  rules                  Json?
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   // relações com transações que usaram esta config
   transactions FinancialTransaction[]
@@ -1185,56 +1189,56 @@ model PaymentGatewayConfig {
 
 // ---- Transações Financeiras (Título Financeiro: Contas a Pagar / Receber) ----
 model FinancialTransaction {
-  id            String                     @id @default(uuid())
-  companyId     String
-  company       Company                    @relation(fields: [companyId], references: [id])
+  id              String                     @id @default(uuid())
+  companyId       String
+  company         Company                    @relation(fields: [companyId], references: [id])
   // Tipo: PAYABLE (pagar) ou RECEIVABLE (receber)
-  type          FinancialTransactionType
-  status        FinancialTransactionStatus @default(PENDING)
+  type            FinancialTransactionType
+  status          FinancialTransactionStatus @default(PENDING)
   // Descrição legível
-  description   String
+  description     String
   // Conta financeira vinculada (onde o dinheiro entra/sai)
-  accountId     String?
-  account       FinancialAccount?          @relation(fields: [accountId], references: [id])
+  accountId       String?
+  account         FinancialAccount?          @relation(fields: [accountId], references: [id])
   // Centro de custo (para DRE)
-  costCenterId  String?
-  costCenter    CostCenter?                @relation(fields: [costCenterId], references: [id])
+  costCenterId    String?
+  costCenter      CostCenter?                @relation(fields: [costCenterId], references: [id])
   // Gateway/operadora (para cálculo automático de taxas)
   gatewayConfigId String?
-  gatewayConfig   PaymentGatewayConfig?    @relation(fields: [gatewayConfigId], references: [id])
+  gatewayConfig   PaymentGatewayConfig?      @relation(fields: [gatewayConfigId], references: [id])
 
   // ---- Valores ----
-  grossAmount   Decimal                    // Valor bruto
-  feeAmount     Decimal   @default(0)      // Total de taxas calculadas
-  netAmount     Decimal                    // Valor líquido (grossAmount - feeAmount)
-  paidAmount    Decimal   @default(0)      // Valor efetivamente pago/recebido até agora
+  grossAmount Decimal // Valor bruto
+  feeAmount   Decimal @default(0) // Total de taxas calculadas
+  netAmount   Decimal // Valor líquido (grossAmount - feeAmount)
+  paidAmount  Decimal @default(0) // Valor efetivamente pago/recebido até agora
 
   // ---- Datas ----
-  issueDate     DateTime  @default(now())  // Data de emissão/competência
-  dueDate       DateTime                   // Data de vencimento
-  paidAt        DateTime?                  // Data de pagamento/recebimento efetivo
-  expectedDate  DateTime?                  // Data prevista de recebimento (D+N)
+  issueDate    DateTime  @default(now()) // Data de emissão/competência
+  dueDate      DateTime // Data de vencimento
+  paidAt       DateTime? // Data de pagamento/recebimento efetivo
+  expectedDate DateTime? // Data prevista de recebimento (D+N)
 
   // ---- Rastreabilidade (Polimórfica) ----
   // Vincula esta transação ao registro de origem (Order, RiderTransaction, AffiliateSale, Coupon, StockMovement, etc.)
-  sourceType    String?                    // Ex: "ORDER", "RIDER", "AFFILIATE", "COUPON", "STOCK_PURCHASE", "MANUAL"
-  sourceId      String?                    // ID do registro de origem
+  sourceType String? // Ex: "ORDER", "RIDER", "AFFILIATE", "COUPON", "STOCK_PURCHASE", "MANUAL"
+  sourceId   String? // ID do registro de origem
 
   // ---- Recorrência ----
-  recurrence    RecurrenceType @default(NONE)
-  parentTransactionId String?              // referência à transação original se for parcela/recorrência
-  installmentNumber   Int?                 // número da parcela (1, 2, 3...)
-  totalInstallments   Int?                 // total de parcelas
+  recurrence          RecurrenceType @default(NONE)
+  parentTransactionId String? // referência à transação original se for parcela/recorrência
+  installmentNumber   Int? // número da parcela (1, 2, 3...)
+  totalInstallments   Int? // total de parcelas
 
   // ---- Metadados ----
   notes         String?
-  attachmentUrl String?                    // URL de comprovante/nota fiscal
-  createdBy     String?                    // userId que criou
-  updatedBy     String?                    // userId que alterou por último
-  metadata      Json?                      // dados extras flexíveis
+  attachmentUrl String? // URL de comprovante/nota fiscal
+  createdBy     String? // userId que criou
+  updatedBy     String? // userId que alterou por último
+  metadata      Json? // dados extras flexíveis
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // ---- Vínculo com sessão de caixa (quebras/sobras) ----
   cashSessionId String?
@@ -1255,33 +1259,33 @@ model FinancialTransaction {
 
 // ---- Movimentação Real de Dinheiro (Fluxo de Caixa Realizado) ----
 model CashFlowEntry {
-  id            String          @id @default(uuid())
+  id            String                @id @default(uuid())
   companyId     String
-  company       Company         @relation(fields: [companyId], references: [id])
+  company       Company               @relation(fields: [companyId], references: [id])
   // Conta financeira onde ocorreu a movimentação
   accountId     String
-  account       FinancialAccount @relation(fields: [accountId], references: [id])
+  account       FinancialAccount      @relation(fields: [accountId], references: [id])
   // Transação financeira que originou esta movimentação (pode ser nulo para ajustes manuais)
   transactionId String?
   transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id])
   // Tipo: INFLOW (entrada) ou OUTFLOW (saída)
   type          CashFlowEntryType
-  amount        Decimal                // Valor movimentado (sempre positivo)
+  amount        Decimal // Valor movimentado (sempre positivo)
   // Saldo da conta após esta movimentação (para auditoria)
   balanceAfter  Decimal?
   // Data efetiva da movimentação
-  entryDate     DateTime @default(now())
+  entryDate     DateTime              @default(now())
   description   String?
   // Conciliação
-  reconciled    Boolean  @default(false) // marcado como conciliado via OFX ou manual
+  reconciled    Boolean               @default(false) // marcado como conciliado via OFX ou manual
   reconciledAt  DateTime?
   // Metadados
-  createdBy     String?                 // userId
+  createdBy     String? // userId
   notes         String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime              @default(now())
 
   // Itens OFX vinculados
-  ofxMatches    OfxReconciliationItem[]
+  ofxMatches OfxReconciliationItem[]
 
   @@index([companyId, entryDate], name: "idx_cashflow_company_date")
   @@index([companyId, accountId], name: "idx_cashflow_company_account")
@@ -1290,29 +1294,29 @@ model CashFlowEntry {
 
 // ---- Importação OFX ----
 model OfxImport {
-  id          String   @id @default(uuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id])
+  id             String           @id @default(uuid())
+  companyId      String
+  company        Company          @relation(fields: [companyId], references: [id])
   // Conta financeira associada à importação
-  accountId   String
-  account     FinancialAccount @relation(fields: [accountId], references: [id])
+  accountId      String
+  account        FinancialAccount @relation(fields: [accountId], references: [id])
   // Metadados do arquivo
-  fileName    String
+  fileName       String
   // Período coberto pelo extrato
-  periodStart DateTime?
-  periodEnd   DateTime?
+  periodStart    DateTime?
+  periodEnd      DateTime?
   // Totais importados
-  totalItems  Int      @default(0)
-  matchedItems Int     @default(0)
-  unmatchedItems Int   @default(0)
+  totalItems     Int              @default(0)
+  matchedItems   Int              @default(0)
+  unmatchedItems Int              @default(0)
   // Status geral: PROCESSING, COMPLETED, FAILED
-  status      String   @default("PROCESSING")
-  errorMessage String?
-  importedBy  String?  // userId
-  createdAt   DateTime @default(now())
+  status         String           @default("PROCESSING")
+  errorMessage   String?
+  importedBy     String? // userId
+  createdAt      DateTime         @default(now())
 
   // Itens do extrato
-  items       OfxReconciliationItem[]
+  items OfxReconciliationItem[]
 
   @@index([companyId], name: "idx_ofx_import_company")
   @@index([companyId, accountId], name: "idx_ofx_import_account")
@@ -1320,33 +1324,33 @@ model OfxImport {
 
 // ---- Fila de Conciliação OFX (cada linha do extrato) ----
 model OfxReconciliationItem {
-  id            String          @id @default(uuid())
-  importId      String
-  import_       OfxImport       @relation(fields: [importId], references: [id])
+  id       String    @id @default(uuid())
+  importId String
+  import_  OfxImport @relation(fields: [importId], references: [id])
   // Dados vindos do OFX
-  fitId         String?         // ID único da transação no banco (FITID)
-  ofxType       String?         // DEBIT, CREDIT, etc.
-  amount        Decimal         // Valor (positivo ou negativo conforme OFX)
-  ofxDate       DateTime        // Data da transação no extrato
-  memo          String?         // Descrição/memo do OFX
-  checkNum      String?         // Número do cheque/doc
-  refNum        String?         // Referência adicional
+  fitId    String? // ID único da transação no banco (FITID)
+  ofxType  String? // DEBIT, CREDIT, etc.
+  amount   Decimal // Valor (positivo ou negativo conforme OFX)
+  ofxDate  DateTime // Data da transação no extrato
+  memo     String? // Descrição/memo do OFX
+  checkNum String? // Número do cheque/doc
+  refNum   String? // Referência adicional
 
   // ---- Match ----
-  matchStatus   OfxMatchStatus  @default(PENDING)
+  matchStatus     OfxMatchStatus        @default(PENDING)
   // Transação financeira vinculada (match)
-  transactionId String?
-  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id])
+  transactionId   String?
+  transaction     FinancialTransaction? @relation(fields: [transactionId], references: [id])
   // Movimentação real vinculada (match)
   cashFlowEntryId String?
-  cashFlowEntry   CashFlowEntry? @relation(fields: [cashFlowEntryId], references: [id])
+  cashFlowEntry   CashFlowEntry?        @relation(fields: [cashFlowEntryId], references: [id])
   // Confiança do match automático (0.0 a 1.0)
   matchConfidence Decimal?
   // Motivo do match ou rejeição
-  matchNotes    String?
-  resolvedBy    String?         // userId que resolveu manualmente
-  resolvedAt    DateTime?
-  createdAt     DateTime @default(now())
+  matchNotes      String?
+  resolvedBy      String? // userId que resolveu manualmente
+  resolvedAt      DateTime?
+  createdAt       DateTime              @default(now())
 
   @@index([importId], name: "idx_ofx_recon_import")
   @@index([importId, matchStatus], name: "idx_ofx_recon_status")
@@ -1355,23 +1359,24 @@ model OfxReconciliationItem {
 
 // ---- Meta Pixel (Facebook) integration per Menu ----
 model MetaPixel {
-  id        String   @id @default(uuid())
-  companyId String
-  menuId    String
-  pixelId   String   // Facebook Pixel ID (e.g. "123456789012345")
-  enabled   Boolean  @default(true)
+  id                    String   @id @default(uuid())
+  companyId             String
+  menuId                String
+  pixelId               String // Facebook Pixel ID (e.g. "123456789012345")
+  enabled               Boolean  @default(true)
   // Track specific event categories
-  trackPageView       Boolean @default(true)
-  trackViewContent    Boolean @default(true)
-  trackAddToCart       Boolean @default(true)
-  trackInitiateCheckout Boolean @default(true)
-  trackAddPaymentInfo Boolean @default(true)
-  trackPurchase       Boolean @default(true)
-  trackSearch         Boolean @default(true)
-  trackLead           Boolean @default(true)  // customer registration
-  trackContact        Boolean @default(true)  // WhatsApp/phone click
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  trackPageView         Boolean  @default(true)
+  trackViewContent      Boolean  @default(true)
+  trackAddToCart        Boolean  @default(true)
+  trackInitiateCheckout Boolean  @default(true)
+  trackAddPaymentInfo   Boolean  @default(true)
+  trackPurchase         Boolean  @default(true)
+  trackSearch           Boolean  @default(true)
+  trackLead             Boolean  @default(true) // customer registration
+  trackContact          Boolean  @default(true) // WhatsApp/phone click
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  company               Company  @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, menuId], name: "company_menu_pixel")
   @@index([companyId], name: "idx_metapixel_company")
@@ -1380,13 +1385,13 @@ model MetaPixel {
 
 // ---- Media Library ----
 model Media {
-  id         String   @id @default(uuid())
-  companyId  String
-  filename   String
-  mimeType   String
-  size       Int
-  url        String
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  companyId String
+  filename  String
+  mimeType  String
+  size      Int
+  url       String
+  createdAt DateTime @default(now())
 
   @@index([companyId, createdAt], name: "idx_media_company_created")
 }
@@ -1418,60 +1423,60 @@ enum CashMovementType {
 }
 
 model CashSession {
-  id               String            @id @default(uuid())
-  companyId        String
-  company          Company           @relation(fields: [companyId], references: [id])
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
 
   // Abertura
-  openedAt         DateTime          @default(now())
-  openedBy         String
-  openingAmount    Decimal           @default(0)
-  openingNote      String?
+  openedAt      DateTime @default(now())
+  openedBy      String
+  openingAmount Decimal  @default(0)
+  openingNote   String?
 
   // Saldo corrente (atualizado por movimentos)
-  currentBalance   Decimal           @default(0)
+  currentBalance Decimal @default(0)
 
   // Status e fechamento
-  status           CashSessionStatus @default(OPEN)
-  closedAt         DateTime?
-  closedBy         String?
-  closingNote      String?
+  status      CashSessionStatus @default(OPEN)
+  closedAt    DateTime?
+  closedBy    String?
+  closingNote String?
 
   // Contagem cega
-  blindClose       Boolean           @default(false)
+  blindClose Boolean @default(false)
 
   // Valores de fechamento (JSON por forma de pagamento)
-  declaredValues   Json?             // { "Dinheiro": 100.50, "PIX": 50.00 }
-  expectedValues   Json?             // Calculado pelo sistema
-  differences      Json?             // declared - expected
+  declaredValues Json? // { "Dinheiro": 100.50, "PIX": 50.00 }
+  expectedValues Json? // Calculado pelo sistema
+  differences    Json? // declared - expected
 
   // Relações
-  movements        CashMovement[]
+  movements             CashMovement[]
   financialTransactions FinancialTransaction[]
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([companyId, status], name: "idx_cash_session_company_status")
   @@index([companyId, openedAt], name: "idx_cash_session_company_opened")
 }
 
 model CashMovement {
-  id              String           @id @default(uuid())
-  sessionId       String
-  session         CashSession      @relation(fields: [sessionId], references: [id])
+  id        String      @id @default(uuid())
+  sessionId String
+  session   CashSession @relation(fields: [sessionId], references: [id])
 
-  type            CashMovementType
-  amount          Decimal
+  type   CashMovementType
+  amount Decimal
 
   // Conta financeira opcional (para integração)
-  accountId       String?
-  account         FinancialAccount? @relation(fields: [accountId], references: [id])
+  accountId String?
+  account   FinancialAccount? @relation(fields: [accountId], references: [id])
 
-  note            String?
+  note String?
 
-  createdAt       DateTime         @default(now())
-  createdBy       String?
+  createdAt DateTime @default(now())
+  createdBy String?
 
   @@index([sessionId], name: "idx_cash_movement_session")
 }
