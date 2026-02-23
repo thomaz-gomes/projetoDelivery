@@ -421,3 +421,214 @@ customersRouter.post('/import', requireRole('ADMIN'), upload.single('file'), asy
     res.status(500).json({ message: 'Falha ao importar', error: e.message });
   }
 });
+
+
+
+// Merge customers: transfer orders/addresses/accounts/members to primary and delete merged records
+customersRouter.post('/merge', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  const { primaryId, mergeIds = [], overwrite = {} } = req.body || {};
+  if (!primaryId || !Array.isArray(mergeIds) || mergeIds.length === 0) return res.status(400).json({ message: 'primaryId e mergeIds são obrigatórios' });
+
+  // ensure primary exists and belongs to company
+  const primary = await prisma.customer.findFirst({ where: { id: primaryId, companyId } });
+  if (!primary) return res.status(404).json({ message: 'Conta principal não encontrada' });
+
+  // filter valid merge ids (exclude primary and ensure company)
+  const validMerge = await prisma.customer.findMany({ where: { id: { in: mergeIds }, companyId } });
+  const validIds = validMerge.map(c => c.id).filter(id => id !== primaryId);
+  if (validIds.length === 0) return res.status(400).json({ message: 'Nenhuma conta válida para mesclar' });
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // transfer orders
+      await tx.order.updateMany({ where: { customerId: { in: validIds } }, data: { customerId: primaryId } });
+
+      // transfer addresses: try to avoid duplicates
+      const addrs = await tx.customerAddress.findMany({ where: { customerId: { in: validIds } } });
+      for (const a of addrs) {
+        const exists = await tx.customerAddress.findFirst({ where: {
+          customerId: primaryId,
+          OR: [ { formatted: a.formatted }, { AND: [{ street: a.street }, { number: a.number }] } ].filter(Boolean)
+        } });
+        if (exists) {
+          // remove duplicate address
+          try { await tx.customerAddress.delete({ where: { id: a.id } }); } catch(e){}
+        } else {
+          // reassign
+          await tx.customerAddress.update({ where: { id: a.id }, data: { customerId: primaryId } });
+        }
+      }
+
+      // transfer customer accounts (avoid duplicate emails)
+      const accounts = await tx.customerAccount.findMany({ where: { customerId: { in: validIds } } });
+      for (const acc of accounts) {
+        if (!acc.email) { await tx.customerAccount.update({ where: { id: acc.id }, data: { customerId: primaryId } }); continue }
+        const exists = await tx.customerAccount.findFirst({ where: { companyId, email: acc.email } });
+        if (exists) {
+          // delete duplicate
+          try { await tx.customerAccount.delete({ where: { id: acc.id } }); } catch(e){}
+        } else {
+          await tx.customerAccount.update({ where: { id: acc.id }, data: { customerId: primaryId } });
+        }
+      }
+
+      // transfer customer group memberships (avoid duplicate member rows)
+      const members = await tx.customerGroupMember.findMany({ where: { customerId: { in: validIds } } });
+      for (const m of members) {
+        const exists = await tx.customerGroupMember.findFirst({ where: { groupId: m.groupId, customerId: primaryId } });
+        if (exists) {
+          try { await tx.customerGroupMember.delete({ where: { id: m.id } }); } catch(e){}
+        } else {
+          await tx.customerGroupMember.update({ where: { id: m.id }, data: { customerId: primaryId } });
+        }
+      }
+
+      // transfer cashback wallets if any (cashback wallet uses clientId)
+      try {
+        await tx.cashbackWallet.updateMany({ where: { clientId: { in: validIds } }, data: { clientId: primaryId } });
+      } catch(e) { /* ignore if no table or constraint issues */ }
+
+      // Update primary fields according to overwrite flags: prefer first non-empty from merged customers
+      const mergedCustomers = await tx.customer.findMany({ where: { id: { in: validIds } } });
+      const patch = {};
+      if (overwrite.fullName) {
+        const val = mergedCustomers.map(c => c.fullName).find(v => v && v.trim())
+        if (val) patch.fullName = val
+      }
+      if (overwrite.cpf) {
+        const val = mergedCustomers.map(c => c.cpf).find(v => v && v.trim())
+        if (val) patch.cpf = String(val).replace(/\D+/g, '')
+      }
+      if (overwrite.whatsapp) {
+        const val = mergedCustomers.map(c => c.whatsapp).find(v => v && v.trim())
+        if (val) patch.whatsapp = val
+      }
+      if (overwrite.phone) {
+        const val = mergedCustomers.map(c => c.phone).find(v => v && v.trim())
+        if (val) patch.phone = val
+      }
+      if (overwrite.ifoodCustomerId) {
+        const val = mergedCustomers.map(c => c.ifoodCustomerId).find(v => v && String(v).trim())
+        if (val) patch.ifoodCustomerId = val
+      }
+      // normalize cpf/phones
+      if (patch.cpf) patch.cpf = String(patch.cpf).replace(/\D+/g, '');
+      if (patch.whatsapp) patch.whatsapp = normalizePhone(patch.whatsapp);
+      if (patch.phone) patch.phone = normalizePhone(patch.phone);
+
+      // Reconcile remaining child records to avoid FK violations
+      // 1) Ensure any leftover addresses point to primary
+      try {
+        await tx.customerAddress.updateMany({ where: { customerId: { in: validIds } }, data: { customerId: primaryId } });
+      } catch (e) { /* ignore */ }
+
+      // 2) Reconcile customer accounts (handle email uniqueness)
+      const remainingAccounts = await tx.customerAccount.findMany({ where: { customerId: { in: validIds } } });
+      for (const acc of remainingAccounts) {
+        if (!acc.email) {
+          try { await tx.customerAccount.update({ where: { id: acc.id }, data: { customerId: primaryId } }); } catch(e){}
+          continue;
+        }
+        const exists = await tx.customerAccount.findFirst({ where: { companyId, email: acc.email, customerId: primaryId } });
+        if (exists) {
+          try { await tx.customerAccount.delete({ where: { id: acc.id } }); } catch(e){}
+        } else {
+          try { await tx.customerAccount.update({ where: { id: acc.id }, data: { customerId: primaryId } }); } catch(e){}
+        }
+      }
+
+      // 3) Reconcile group members
+      const remainingMembers = await tx.customerGroupMember.findMany({ where: { customerId: { in: validIds } } });
+      for (const m of remainingMembers) {
+        const exists = await tx.customerGroupMember.findFirst({ where: { groupId: m.groupId, customerId: primaryId } });
+        if (exists) {
+          try { await tx.customerGroupMember.delete({ where: { id: m.id } }); } catch(e){}
+        } else {
+          try { await tx.customerGroupMember.update({ where: { id: m.id }, data: { customerId: primaryId } }); } catch(e){}
+        }
+      }
+
+      // 4) Reconcile cashback wallets: if primary already has a wallet, merge balances and transactions
+      try {
+        const sourceWallets = await tx.cashbackWallet.findMany({ where: { clientId: { in: validIds } } });
+        const primaryWallet = await tx.cashbackWallet.findFirst({ where: { companyId, clientId: primaryId } });
+        for (const w of sourceWallets) {
+          if (primaryWallet && primaryWallet.id !== w.id) {
+            // move transactions to primary wallet
+            try {
+              await tx.cashbackTransaction.updateMany({ where: { walletId: w.id }, data: { walletId: primaryWallet.id } });
+            } catch (err) {}
+            // add balance to primary wallet
+            try {
+              await tx.cashbackWallet.update({ where: { id: primaryWallet.id }, data: { balance: { increment: w.balance } } });
+            } catch (err) {}
+            // delete source wallet
+            try { await tx.cashbackWallet.delete({ where: { id: w.id } }); } catch(e){}
+          } else {
+            // no primary wallet yet (or this is primary), just reassign clientId
+            try { await tx.cashbackWallet.update({ where: { id: w.id }, data: { clientId: primaryId } }); } catch(e){}
+          }
+        }
+      } catch(e) { /* ignore if no table or other issues */ }
+
+      // Diagnostic: check for any remaining FK references before delete
+      const tables = await tx.$queryRawUnsafe("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+      const fkProblems = [];
+      for (const trow of tables) {
+        const table = trow.name;
+        try {
+          const cols = await tx.$queryRawUnsafe(`PRAGMA table_info('${table}')`);
+          const candidateCols = cols.filter(c => /customerid|clientid|customer_id|client_id/i.test(String(c.name))).map(c => c.name);
+          for (const col of candidateCols) {
+            const placeholders = validIds.map(() => '?').join(',');
+            const q = `SELECT count(*) as cnt FROM "${table}" WHERE \"${col}\" IN (${placeholders})`;
+            const cntRow = await tx.$queryRawUnsafe(q, ...validIds);
+            const cnt = Number(cntRow?.[0]?.cnt ?? cntRow?.cnt ?? 0);
+            if (cnt > 0) fkProblems.push({ table, column: col, count: cnt });
+          }
+        } catch (e) {
+          // ignore inspection errors
+        }
+      }
+
+      if (fkProblems.length) {
+        console.error('FK problems detected before deleting merged customers:', fkProblems);
+        throw new Error('FK references still exist: ' + JSON.stringify(fkProblems));
+      }
+
+      // Finally delete merged customers
+      try {
+        await tx.customer.deleteMany({ where: { id: { in: validIds }, companyId } });
+      } catch (err) {
+        console.error('Failed to delete merged customers', validIds, err?.message || err);
+        throw err;
+      }
+
+      // Ensure uniqueness: don't set CPF/WhatsApp if another remaining customer already has it
+      if (patch.whatsapp) {
+        const conflict = await tx.customer.findFirst({ where: { companyId, whatsapp: patch.whatsapp, id: { notIn: [primaryId] } } });
+        if (conflict) {
+          delete patch.whatsapp;
+          console.warn('Merge skip: whatsapp conflict, not overwriting primary', patch.whatsapp);
+        }
+      }
+      if (patch.cpf) {
+        const conflict = await tx.customer.findFirst({ where: { companyId, cpf: patch.cpf, id: { notIn: [primaryId] } } });
+        if (conflict) {
+          delete patch.cpf;
+          console.warn('Merge skip: cpf conflict, not overwriting primary', patch.cpf);
+        }
+      }
+
+      if (Object.keys(patch).length) {
+        await tx.customer.update({ where: { id: primaryId }, data: patch });
+      }
+    });
+
+    res.json({ ok: true, merged: validIds.length });
+  } catch (e) {
+    console.error('Merge error:', e);
+    res.status(500).json({ message: 'Falha ao combinar clientes', error: e?.message });
+  }
+});

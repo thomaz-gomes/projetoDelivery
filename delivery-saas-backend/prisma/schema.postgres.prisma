@@ -263,6 +263,8 @@ model Customer {
   id               String                @id @default(uuid())
   companyId        String
   company          Company               @relation(fields: [companyId], references: [id])
+  // optional iFood customer identifier (integration-specific)
+  ifoodCustomerId   String?
   fullName         String
   cpf              String?
   whatsapp         String? // telefone principal normalizado (somente dígitos e com DDI)
@@ -277,6 +279,7 @@ model Customer {
 
   @@unique([companyId, cpf], name: "company_cpf")
   @@unique([companyId, whatsapp], name: "company_whatsapp")
+  @@index([companyId, ifoodCustomerId], name: "idx_customer_company_ifoodid")
 }
 
 // Customer-facing accounts for public users (optional, per-company)

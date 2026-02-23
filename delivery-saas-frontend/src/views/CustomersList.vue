@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
 import BaseButton from '../components/BaseButton.vue';
 import ListCard from '../components/ListCard.vue';
+import api from '../api';
 import Swal from 'sweetalert2'
 
 const store = useCustomersStore();
@@ -80,6 +81,62 @@ const tierBgColors = {
 function starsHtml(stars) {
   return '★'.repeat(stars) + '☆'.repeat(4 - stars)
 }
+
+// Merge modal state
+const showMerge = ref(false)
+const mergeStep = ref(1)
+const primaryId = ref(null)
+const mergeQuery = ref('')
+const selectedMerge = ref(new Set())
+const overwrite = ref({ fullName: false, cpf: false, whatsapp: false, phone: false, ifoodCustomerId: false })
+
+const primaryObj = computed(() => {
+  if(!primaryId.value) return null
+  return (store.list || []).find(c => c.id === primaryId.value) || null
+})
+
+const selectedList = computed(() => {
+  const s = Array.from(selectedMerge.value || [])
+  return (store.list || []).filter(c => s.includes(c.id) && c.id !== primaryId.value)
+})
+
+function candidateFor(field){
+  for(const c of selectedList.value){
+    const v = c[field]
+    if(v !== undefined && v !== null && String(v).trim() !== '') return v
+  }
+  return null
+}
+
+function openMergeModal(){
+  // ensure store data loaded
+  if(!store.list || store.list.length === 0) load()
+  showMerge.value = true
+  mergeStep.value = 1
+  primaryId.value = null
+  selectedMerge.value = new Set()
+  mergeQuery.value = ''
+}
+
+function closeMergeModal(){ showMerge.value = false }
+
+function toggleSelect(id){ if(selectedMerge.value.has(id)) selectedMerge.value.delete(id); else selectedMerge.value.add(id) }
+
+function nextMergeStep(){ if(mergeStep.value === 1 && !primaryId.value){ Swal.fire({ icon:'warning', text:'Selecione a conta principal' }); return } mergeStep.value++ }
+function prevMergeStep(){ if(mergeStep.value>1) mergeStep.value-- }
+
+async function performMerge(){
+  if(!primaryId.value){ Swal.fire({ icon:'error', text:'Conta principal inválida' }); return }
+  const merges = Array.from(selectedMerge.value).filter(id => id !== primaryId.value)
+  if(merges.length === 0){ Swal.fire({ icon:'warning', text:'Selecione ao menos uma conta para mesclar' }); return }
+  try{
+    const payload = { primaryId: primaryId.value, mergeIds: merges, overwrite: overwrite.value }
+    const res = await api.post('/customers/merge', payload)
+    await load()
+    Swal.fire({ icon:'success', text:'Clientes combinados com sucesso' })
+    closeMergeModal()
+  }catch(e){ console.error(e); Swal.fire({ icon:'error', text: String(e?.message || e || 'Falha ao combinar clientes') }) }
+}
 </script>
 
 <template>
@@ -91,6 +148,7 @@ function starsHtml(stars) {
           <input type="file" accept=".csv,.xlsx,.xls" class="d-none" @change="onImport" />
         </label>
         <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Novo cliente</button>
+        <button class="btn btn-outline-secondary" @click.stop="openMergeModal"><i class="bi bi-git-merge me-1"></i> Combinar</button>
       </div>
     </template>
 
@@ -123,6 +181,7 @@ function starsHtml(stars) {
                     <div>
                       <div class="fw-semibold">{{ c.fullName }}</div>
                       <div class="text-muted small">{{ c.cpf || '' }}</div>
+                      <div v-if="c.ifoodCustomerId" class="text-muted small">iFood ID: <strong>{{ c.ifoodCustomerId }}</strong></div>
                     </div>
                   </div>
                 </td>
@@ -186,6 +245,66 @@ function starsHtml(stars) {
       </div>
     </template>
   </ListCard>
+
+  <!-- Merge Modal -->
+  <div v-if="showMerge" class="merge-modal-backdrop">
+    <div class="merge-modal card p-3">
+      <h5>Combinar clientes — Etapa {{ mergeStep }} de 3</h5>
+
+      <div v-if="mergeStep === 1" class="mt-3">
+        <p class="text-muted small">Selecione a conta principal que receberá os dados</p>
+        <select class="form-select" v-model="primaryId">
+          <option :value="null">-- Selecione --</option>
+          <option v-for="c in store.list" :key="c.id" :value="c.id">
+            {{ c.fullName }} — {{ c.cpf || '-' }} — {{ c.whatsapp || c.phone || '—' }} — {{ c.stats?.totalOrders || 0 }} pedidos
+          </option>
+        </select>
+      </div>
+
+      <div v-if="mergeStep === 2" class="mt-3">
+        <p class="text-muted small">Buscar e marcar contas para mesclar</p>
+        <input class="form-control mb-2" placeholder="Buscar por nome/CPF/WhatsApp" v-model="mergeQuery" />
+        <div style="max-height:240px;overflow:auto">
+          <div v-for="c in (store.list || []).filter(i => !mergeQuery || (i.fullName||'').toLowerCase().includes(mergeQuery.toLowerCase()) || (i.whatsapp||'').includes(mergeQuery) || (i.cpf||'').includes(mergeQuery))" :key="c.id" class="form-check">
+            <input class="form-check-input" type="checkbox" :id="'m-'+c.id" :checked="selectedMerge.has(c.id)" @change.prevent="toggleSelect(c.id)" />
+            <label class="form-check-label" :for="'m-'+c.id">{{ c.fullName }} — {{ c.cpf || '-' }} — {{ c.whatsapp || c.phone || '—' }} ({{ c.stats?.totalOrders || 0 }} pedidos)</label>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="mergeStep === 3" class="mt-3">
+        <p class="text-muted small">Quais campos devem ser atualizados no cadastro principal?</p>
+        <div v-if="!primaryObj">
+          <div class="text-warning">Selecione a conta principal na etapa 1.</div>
+        </div>
+        <div v-else>
+          <div v-if="selectedList.length === 0" class="text-muted small">Selecione contas na etapa anterior para que valores candidatos apareçam.</div>
+          <div v-else>
+            <div v-for="(meta, idx) in [{k:'fullName',label:'Nome completo'},{k:'cpf',label:'CPF'},{k:'whatsapp',label:'WhatsApp'},{k:'phone',label:'Telefone'},{k:'ifoodCustomerId',label:'iFood ID'}]" :key="meta.k">
+              <template v-if="(!(primaryObj[meta.k]) || primaryObj[meta.k] === null || String(primaryObj[meta.k]).trim() === '')">
+                <template v-if="candidateFor(meta.k)">
+                  <div class="form-check d-flex justify-content-between align-items-center">
+                    <div>
+                      <input class="form-check-input me-2" type="checkbox" :id="'ov-'+meta.k" v-model="overwrite[meta.k]" />
+                      <label class="form-check-label" :for="'ov-'+meta.k">{{ meta.label }}</label>
+                    </div>
+                    <div class="text-muted small">Será: <strong>{{ candidateFor(meta.k) }}</strong></div>
+                  </div>
+                </template>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-3 d-flex justify-content-end gap-2">
+        <button class="btn btn-outline-secondary" @click="closeMergeModal">Cancelar</button>
+        <button v-if="mergeStep>1" class="btn btn-light" @click="prevMergeStep">Voltar</button>
+        <button v-if="mergeStep<3" class="btn btn-primary" @click="nextMergeStep">Próximo</button>
+        <button v-else class="btn btn-success" @click="performMerge">Confirmar e mesclar</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -231,4 +350,6 @@ function starsHtml(stars) {
   margin-top: 2px;
   display: inline-block;
 }
+.merge-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:1050}
+.merge-modal{width:720px;max-width:95%;}
 </style>

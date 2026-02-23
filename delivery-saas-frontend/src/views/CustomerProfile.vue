@@ -283,17 +283,21 @@ async function manualDebit() {
             </div>
             <div class="card-body">
               <div class="row g-3">
-                <div class="col-sm-4">
+                <div class="col-sm-3">
                   <div class="info-label">CPF</div>
                   <div class="info-value">{{ store.current.cpf || '—' }}</div>
                 </div>
-                <div class="col-sm-4">
+                <div class="col-sm-3">
                   <div class="info-label">WhatsApp</div>
                   <div class="info-value">{{ store.current.whatsapp || '—' }}</div>
                 </div>
-                <div class="col-sm-4">
+                <div class="col-sm-3">
                   <div class="info-label">Telefone</div>
                   <div class="info-value">{{ store.current.phone || '—' }}</div>
+                </div>
+                <div class="col-sm-3">
+                  <div class="info-label">iFood ID</div>
+                  <div class="info-value">{{ store.current.ifoodCustomerId || '—' }}</div>
                 </div>
               </div>
             </div>

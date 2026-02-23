@@ -42,10 +42,11 @@ function mapAddressFromPayload(payload) {
  * Encontra cliente por CPF, senão por WhatsApp. Se não existir, cria.
  * Sempre dentro da mesma empresa (companyId).
  */
-export async function findOrCreateCustomer({ companyId, fullName, cpf, whatsapp, phone, addressPayload }) {
+export async function findOrCreateCustomer({ companyId, fullName, cpf, whatsapp, phone, addressPayload, persistPhone = true, ifoodCustomerId = null }) {
   const cpfClean = cpf ? String(cpf).replace(/\D+/g, '') : null;
   const whatsappClean = normalizePhone(whatsapp);
   const phoneClean = normalizePhone(phone);
+  const ifoodId = ifoodCustomerId ? String(ifoodCustomerId).trim() : null;
 
   async function getOrCreateBalcao() {
     // Return or create a default 'Balcão' customer for this company.
@@ -69,12 +70,21 @@ export async function findOrCreateCustomer({ companyId, fullName, cpf, whatsapp,
     return ['balcão', 'balcao', 'balcao', 'balcao'].includes(s) || s === 'balcao' || s === 'balcão';
   }
 
-  // 1) tenta CPF
+  // Matching priority: 1) CPF 2) iFood customer id 3) Name 4) WhatsApp/phone
   let customer = null;
   if (cpfClean) {
     customer = await prisma.customer.findFirst({ where: { companyId, cpf: cpfClean } });
   }
-  // 2) tenta WhatsApp
+  // 2) ifoodCustomerId
+  if (!customer && ifoodId) {
+    customer = await prisma.customer.findFirst({ where: { companyId, ifoodCustomerId: ifoodId } });
+  }
+  // 3) name
+  if (!customer && fullName) {
+    const nameTrim = String(fullName).trim();
+    customer = await prisma.customer.findFirst({ where: { companyId, fullName: nameTrim } });
+  }
+  // 4) whatsapp/phone
   if (!customer && whatsappClean) {
     customer = await prisma.customer.findFirst({ where: { companyId, whatsapp: whatsappClean } });
   }
@@ -94,15 +104,16 @@ export async function findOrCreateCustomer({ companyId, fullName, cpf, whatsapp,
           companyId,
           fullName: fullName || 'Cliente',
           cpf: cpfClean || null,
-          whatsapp: whatsappClean || null,
-          phone: phoneClean || null,
+          ifoodCustomerId: ifoodId || null,
+          whatsapp: persistPhone ? (whatsappClean || null) : null,
+          phone: persistPhone ? (phoneClean || null) : null,
         },
       });
     } catch (err) {
       // handle unique constraint races (Prisma P2002). If another transaction created the
       // same customer concurrently, try to find it and return that instead of failing.
       if (err?.code === 'P2002') {
-        const existing = await prisma.customer.findFirst({ where: { companyId, OR: [ { whatsapp: whatsappClean }, { cpf: cpfClean } ] } });
+        const existing = await prisma.customer.findFirst({ where: { companyId, OR: [ { whatsapp: whatsappClean }, { cpf: cpfClean }, { ifoodCustomerId: ifoodId } ] } });
         if (existing) customer = existing;
         else throw err;
       } else throw err;
@@ -110,12 +121,20 @@ export async function findOrCreateCustomer({ companyId, fullName, cpf, whatsapp,
   } else {
     // atualiza dados básicos se vierem (sem sobrescrever agressivamente)
     const patch = {};
-    if (fullName && !customer.fullName) patch.fullName = fullName;
-    if (cpfClean && !customer.cpf) patch.cpf = cpfClean;
-    if (whatsappClean && !customer.whatsapp) patch.whatsapp = whatsappClean;
-    if (phoneClean && !customer.phone) patch.phone = phoneClean;
+    // Merge incoming info: prefer non-empty incoming values and update when different
+    if (fullName && String(fullName).trim() && String(fullName).trim() !== String(customer.fullName || '').trim()) patch.fullName = String(fullName).trim();
+    if (cpfClean && cpfClean !== customer.cpf) patch.cpf = cpfClean;
+    // do not overwrite whatsapp/phone when persistPhone=false (e.g., iFood temporary numbers)
+    if (persistPhone && whatsappClean && whatsappClean !== customer.whatsapp) patch.whatsapp = whatsappClean;
+    if (persistPhone && phoneClean && phoneClean !== customer.phone) patch.phone = phoneClean;
+    // ensure ifoodCustomerId is stored when available
+    if (ifoodId && (!customer.ifoodCustomerId || customer.ifoodCustomerId !== ifoodId)) patch.ifoodCustomerId = ifoodId;
     if (Object.keys(patch).length) {
-      customer = await prisma.customer.update({ where: { id: customer.id }, data: patch });
+      try {
+        customer = await prisma.customer.update({ where: { id: customer.id }, data: patch });
+      } catch (e) {
+        console.warn('Failed to merge customer data:', e?.message || e);
+      }
     }
   }
 
@@ -149,7 +168,9 @@ export async function findOrCreateCustomer({ companyId, fullName, cpf, whatsapp,
 export async function upsertCustomerFromIfood({ companyId, payload }) {
   const fullName = payload?.customer?.name || null;
   const cpf = payload?.customer?.documentNumber || null;
+  // iFood provides temporary phone numbers; use for matching but do NOT persist
   const whatsapp = payload?.customer?.phone?.number || null;
+  const ifoodCustomerId = payload?.customer?.id || null;
   const addressPayload = payload; // inteiro (mapAddress usa delivery.deliveryAddress)
 
   const customer = await findOrCreateCustomer({
@@ -159,6 +180,8 @@ export async function upsertCustomerFromIfood({ companyId, payload }) {
     whatsapp,
     phone: whatsapp,
     addressPayload,
+    persistPhone: false, // do not persist iFood phone on customer record
+    ifoodCustomerId: ifoodCustomerId,
   });
 
   if (!customer) return { customer: null, addressId: null };

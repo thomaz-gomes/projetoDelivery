@@ -1,6 +1,7 @@
 // src/services/ifoodWebhookProcessor.js
 import { prisma } from '../prisma.js';
 import { getIFoodOrderDetails } from '../integrations/ifood/orders.js';
+import { upsertCustomerFromIfood } from '../services/customers.js';
 import { emitirNovoPedido, emitirPedidoAtualizado, app } from '../index.js';
 import buildAndPersistStockMovementFromOrderItems from './stockFromOrder.js';
 import { canTransition } from '../stateMachine.js';
@@ -233,6 +234,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     displayId: mapped.displayId,
     status: mapped.status,
     customerName: mapped.customerName,
+    customerId: mapped.customerId || null,
     customerPhone: mapped.customerPhone,
     address: buildConcatenatedAddress(mapped.raw) || mapped.address,
     deliveryNeighborhood: (mapped.raw && (mapped.raw.delivery && mapped.raw.delivery.deliveryAddress && mapped.raw.delivery.deliveryAddress.neighborhood)) || (normalizeDeliveryAddressFromPayload(mapped.raw || {})?.neighborhood) || mapped.raw?.neighborhood || null,
@@ -375,8 +377,24 @@ export async function processIFoodWebhook(eventId) {
         console.warn('[iFood Processor] dedupe check failed (continuing):', e?.message || e);
       }
 
+      // Upsert customer from payload so we link orders to customers
+      try {
+        const orderForCustomer = payload?.order || payload;
+        const up = await upsertCustomerFromIfood({ companyId, payload: orderForCustomer });
+        if (up && up.customer) {
+          try {
+            payload._upsertedCustomer = { id: up.customer.id, whatsapp: up.customer.whatsapp || up.customer.phone, fullName: up.customer.fullName };
+            console.log('[iFood Processor] upsertCustomerFromIfood created/found customer:', payload._upsertedCustomer);
+          } catch (e) {}
+        }
+      } catch (e) {
+        console.warn('[iFood Processor] upsertCustomerFromIfood failed:', e?.message || e);
+      }
+
       // Mapeia e upsert (propaga storeId quando disponível)
       const mapped = mapIFoodOrder(payload);
+      // if we persisted a customer on payload, copy it to mapped so upsertOrder links it
+      try { if (payload && payload._upsertedCustomer && payload._upsertedCustomer.id) mapped.customerId = payload._upsertedCustomer.id; } catch(e){}
       // Persist extracted payment info (troco) inside payload JSON so it's stored
       try {
         if (mapped && mapped.payment) {
