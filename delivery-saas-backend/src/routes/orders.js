@@ -8,7 +8,7 @@ import { upsertCustomerFromIfood, findOrCreateCustomer, normalizeDeliveryAddress
 import { trackAffiliateSale } from '../services/affiliates.js';
 import * as cashbackSvc from '../services/cashback.js';
 import { canTransition } from '../stateMachine.js';
-import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
+import { notifyRiderAssigned, notifyCustomerStatus, notifyCustomerOrderSummary } from '../services/notify.js';
 import riderAccountService from '../services/riderAccount.js';
 import { buildAndPersistStockMovementFromOrderItems } from '../services/stockFromOrder.js';
 import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
@@ -854,7 +854,10 @@ ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         try { const idx = await import('../index.js'); idx.emitirNovoPedido(created); } catch (e) { console.warn('emitirNovoPedido failed for created order', created && created.id, e && e.message); }
       }
     } catch (e) { console.warn('Emitir novo pedido falhou:', e && e.message); }
-    try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(created); } catch (e) { /* ignore */ }
+      try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(created); } catch (e) { /* ignore */ }
+
+    // Send order summary to customer (best-effort, non-blocking)
+    try { notifyCustomerOrderSummary(created.id).catch(() => {}); } catch (e) { /* ignore */ }
 
     // attempt to decrement stock for items that reference technical sheets (best-effort)
     (async () => {

@@ -12,7 +12,11 @@ customersRouter.use(authMiddleware);
 function computeCustomerTier(orders) {
   const now = Date.now();
   const d30 = now - 30 * 24 * 60 * 60 * 1000;
-  const completed = (orders || []).filter(o => o.status === 'CONCLUIDO');
+  const all = orders || [];
+  // If the customer has exactly one order (any status), classify as NOVO
+  if (all.length === 1) return { tier: 'novo', stars: 1, label: 'NOVO' };
+
+  const completed = all.filter(o => o.status === 'CONCLUIDO');
   if (!completed.length) return { tier: 'em_risco', stars: 1, label: 'Em Risco' };
 
   const last = new Date(completed[0].createdAt).getTime(); // orders are desc
@@ -28,7 +32,7 @@ function computeCustomerTier(orders) {
 function computeCustomerStats(orders) {
   const completed = (orders || []).filter(o => o.status === 'CONCLUIDO');
   const totalSpent = completed.reduce((sum, o) => sum + Number(o.total || 0), 0);
-  const totalOrders = completed.length;
+  const totalOrders = (orders || []).length;
   const lastOrderDate = orders?.length ? orders[0].createdAt : null;
 
   // Item favorito: agrupa por nome e soma quantidades
@@ -94,11 +98,12 @@ customersRouter.get('/', async (req, res) => {
 
   // Enriquece cada customer com tier e stats resumidos
   const enriched = rows.map(c => {
-    const completed = (c.orders || []).filter(o => o.status === 'CONCLUIDO');
+    const all = (c.orders || []);
+    const completed = all.filter(o => o.status === 'CONCLUIDO');
     const totalSpent = completed.reduce((sum, o) => sum + Number(o.total || 0), 0);
-    const lastOrderDate = c.orders?.length ? c.orders[0].createdAt : null;
+    const lastOrderDate = all.length ? all[0].createdAt : null;
     const tierInfo = computeCustomerTier(c.orders);
-    return { ...c, stats: { totalSpent, lastOrderDate, totalOrders: completed.length, ...tierInfo } };
+    return { ...c, stats: { totalSpent, lastOrderDate, totalOrders: all.length, ...tierInfo } };
   });
 
   res.json({ total, rows: enriched });

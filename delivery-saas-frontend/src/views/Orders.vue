@@ -43,6 +43,7 @@ const tierColors = {
   regular: '#ffc107',
   fiel: '#0d6efd',
   vip: '#198754',
+  novo: '#0d6efd',
 };
 
 const tierBgColors = {
@@ -50,6 +51,7 @@ const tierBgColors = {
   regular: 'rgba(255,193,7,0.1)',
   fiel: 'rgba(13,110,253,0.1)',
   vip: 'rgba(25,135,84,0.1)',
+  novo: 'rgba(13,110,253,0.06)',
 };
 
 function starsHtml(stars) {
@@ -2956,13 +2958,15 @@ function pulseButton() {
                 </div>
                 <!-- Row 3: address (truncated) -->
                 <div class="oc-address" :title="normalizeOrder(o).address || '-'">{{ normalizeOrder(o).address || '-' }}</div>
+
                 <!-- Row 4: time + total + actions -->
-                <div class="oc-footer">
-                  <span v-if="isIfoodOrder(o)" class="oc-ifood-badge" title="Pedido iFood">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-1px"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>
-                    iFood
-                  </span>
+                 
                   <span class="oc-time">{{ getCreatedDurationDisplay(o) }}</span>
+                <div class="oc-footer">
+                  <span v-if="isIfoodOrder(o)"  title="Pedido iFood">
+                    <img src="https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png" alt="iFood" style="width:24px;height:24px;object-fit:contain;margin-right:4px;vertical-align:-2px;" />
+                    
+                  </span>
                   <span class="oc-total">{{ formatCurrency(computeDisplayedTotal(o)) }}</span>
                   <div class="oc-actions">
                     <button class="btn btn-sm btn-outline-secondary" @click.stop="openDetails(o)" title="Detalhes"><i class="bi bi-list-ul"></i></button>
@@ -3357,7 +3361,6 @@ function pulseButton() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 6px;
 }
 
 /* Footer: time + total + actions */

@@ -132,12 +132,30 @@ function menuName(id){
 
 onMounted(()=> load())
 
+const whatsappEnabled = (import.meta.env.VITE_ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS === 'true' || import.meta.env.VITE_ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS === '1');
+
+function showToggleHelp() {
+  Swal.fire({
+    title: 'Ativar notificações WhatsApp',
+    html: `Para ativar as notificações WhatsApp para eventos do iFood você deve habilitar a variável de ambiente <b>ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS</b> no backend e reiniciar o serviço.<br><br>Exemplo (PowerShell):<br><code>cd delivery-saas-backend\n$env:ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS=1\nnpm run dev:local</code>`,
+    icon: 'info',
+    confirmButtonText: 'Ok',
+  });
+}
+
 </script>
 
 <template>
   <ListCard title="Integrações" icon="bi bi-plug" :subtitle="total ? `${total} itens` : ''">
     <template #actions>
-      <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Nova integração</button>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Nova integração</button>
+        <div class="d-flex align-items-center">
+          <small class="me-2 text-muted">WhatsApp (iFood):</small>
+          <span :class="['badge', whatsappEnabled ? 'bg-success' : 'bg-secondary']">{{ whatsappEnabled ? 'Ativado' : 'Desativado' }}</span>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" @click="showToggleHelp">Como ativar</button>
+      </div>
     </template>
 
     <template #filters>

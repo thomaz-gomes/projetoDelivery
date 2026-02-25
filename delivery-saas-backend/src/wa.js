@@ -3,10 +3,17 @@ import axios from 'axios';
 const baseURL = process.env.EVOLUTION_API_BASE_URL;
 const apiKey  = process.env.EVOLUTION_API_API_KEY;
 
+if (!baseURL) {
+  console.warn('EVOLUTION_API_BASE_URL is not set. Evolution API calls will fail.');
+}
+if (!apiKey) {
+  console.warn('EVOLUTION_API_API_KEY is not set. Evolution API calls may be unauthorized.');
+}
+
 const http = axios.create({
-  baseURL,
+  baseURL: baseURL || undefined,
   timeout: 60000, // ⏱️ 60 segundos para conexões lentas
-  headers: { apikey: apiKey, 'Content-Type': 'application/json' },
+  headers: { apikey: apiKey || '', 'Content-Type': 'application/json' },
 });
 
 function normalizeStatus(input) {
@@ -39,8 +46,16 @@ export async function evoCreateInstance(payload) {
     alwaysOnline: true,
     ...payload,
   };
-  const { data } = await http.post('/instance/create', body);
-  return data;
+  try {
+    const { data } = await http.post('/instance/create', body);
+    return data;
+  } catch (e) {
+    // Normalize error to include useful message
+    const err = new Error('Falha ao criar instância na Evolution API');
+    err.cause = e;
+    err.response = e.response?.data || e.response?.statusText || e.message;
+    throw err;
+  }
 }
 
 // ✅ usa /instance/connectionState/{instance} e lê instance.state
@@ -92,12 +107,13 @@ export async function evoSendText({ instanceName, to, text }) {
   let last;
   for (const a of attempts) {
     try {
+      console.log(`evoSendText -> trying ${a.url} instance=${instanceName} to=${number} text=${String(text).slice(0,120)}`);
       const { data } = await http.post(a.url, a.body);
+      console.log(`evoSendText -> success ${a.url} instance=${instanceName} to=${number}`);
       return data;
     } catch (e) {
       last = e;
-      // habilite logs se precisar:
-      // console.error('evoSendText fail @', a.url, e.response?.status, e.response?.data || e.message);
+      console.warn(`evoSendText -> attempt failed ${a.url} instance=${instanceName} to=${number} status=${e.response?.status || 'no-status'} error=${e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : e.message}`);
       continue;
     }
   }
@@ -126,9 +142,11 @@ export async function evoSendLocation({ instanceName, to, latitude, longitude, a
   let last;
   for (const a of attempts) {
     try {
+      console.log(`evoSendLocation -> trying ${a.url} instance=${instanceName} to=${number} lat=${lat} lng=${lng}`);
       const { data } = await http.post(a.url, a.body);
+      console.log(`evoSendLocation -> success ${a.url} instance=${instanceName} to=${number}`);
       return data;
-    } catch (e) { last = e; }
+    } catch (e) { last = e; console.warn(`evoSendLocation -> failed ${a.url} ${e.response?.status || e.message}`); }
   }
   throw last || new Error('Falha ao enviar localização (Evolution)');
 }
@@ -150,11 +168,11 @@ export async function evoSendDocument({ instanceName, to, base64, filename = 'fi
   for (const a of attempts) {
     try {
       // try endpoint
-      console.log('evoSendDocument try', a.url);
+      console.log(`evoSendDocument -> trying ${a.url} instance=${instanceName} to=${number} filename=${filename}`);
       const { data } = await http.post(a.url, a.body);
-      console.log('evoSendDocument success', a.url);
+      console.log(`evoSendDocument -> success ${a.url} instance=${instanceName} to=${number}`);
       return data;
-    } catch (e) { last = e; }
+    } catch (e) { last = e; console.warn(`evoSendDocument -> failed ${a.url} ${e.response?.status || e.message}`); }
   }
   throw last || new Error('Falha ao enviar documento (Evolution)');
 }
@@ -175,11 +193,11 @@ export async function evoSendMediaUrl({ instanceName, to, mediaUrl, filename = '
   let last;
   for (const a of attempts) {
     try {
-      console.log('evoSendMediaUrl try', a.url);
+      console.log(`evoSendMediaUrl -> trying ${a.url} instance=${instanceName} to=${number} media=${String(mediaUrl).slice(0,120)}`);
       const { data } = await http.post(a.url, a.body);
-      console.log('evoSendMediaUrl success', a.url);
+      console.log(`evoSendMediaUrl -> success ${a.url} instance=${instanceName} to=${number}`);
       return data;
-    } catch (e) { last = e; }
+    } catch (e) { last = e; console.warn(`evoSendMediaUrl -> failed ${a.url} ${e.response?.status || e.message}`); }
   }
   throw last || new Error('Falha ao enviar mídia por URL (Evolution)');
 }

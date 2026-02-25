@@ -203,7 +203,7 @@ const showMobileHeader = computed(() => {
         </div>
 
         <!-- Conteúdo -->
-        <main class="flex-grow-1 min-vh-100 main-content" style="max-height: 100vh; overflow-y: auto;">
+        <main class="flex-grow-1 min-vh-100 main-content" style="max-height: 100%; overflow-y: auto;">
           <router-view />
         </main>
       </div>

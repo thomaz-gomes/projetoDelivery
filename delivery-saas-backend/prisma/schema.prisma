@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -62,6 +62,8 @@ model Company {
   stockMovements       StockMovement[]
   // operating hours: if alwaysOpen is true the store accepts orders anytime
   alwaysOpen           Boolean               @default(true)
+  // Toggle per-company to enable/disable Evolution (WhatsApp) integration
+  evolutionEnabled     Boolean               @default(false)
   // IANA timezone string (ex: "America/Sao_Paulo"). If null, server timezone is used.
   timezone             String?
   // optional per-week schedule: array of { day: 0..6, enabled: boolean, from: "HH:MM"?, to: "HH:MM"? }
@@ -256,6 +258,8 @@ model WhatsAppInstance {
   status       String   @default("DISCONNECTED") // CONNECTED / QRCODE / etc.
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  // stores assigned to this WhatsApp instance (one instance -> many stores)
+  stores       Store[]
 }
 
 model Customer {
@@ -442,6 +446,9 @@ model Store {
   menus           Menu[]
   // integrations that are bound to this store
   apiIntegrations ApiIntegration[]
+  // optional WhatsApp instance assigned to this store (a store may have at most one instance)
+  whatsappInstanceId String?
+  whatsappInstance   WhatsAppInstance? @relation(fields: [whatsappInstanceId], references: [id])
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 

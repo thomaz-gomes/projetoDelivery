@@ -54,6 +54,10 @@ services:
       # WhatsApp / Evolution API
       EVOLUTION_API_BASE_URL: ${EVOLUTION_API_BASE_URL:-}
       EVOLUTION_API_API_KEY: ${EVOLUTION_API_API_KEY:-}
+      # Toggle to enable/disable Evolution integration without changing compose files
+      EVOLUTION_ENABLED: ${EVOLUTION_ENABLED:-false}
+      # Enable sending WhatsApp messages for iFood events (true|1 to enable)
+      ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS: ${ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS:-false}
       # AI Parser
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       USE_AI_PARSER: ${USE_AI_PARSER:-false}

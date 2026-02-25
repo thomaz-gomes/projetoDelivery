@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import http from "http";
 import fs from "fs";
 import path from "path";
@@ -48,6 +49,14 @@ let options = {};
 let usedPfx = false;
 
 const DEFAULT_PORT = Number(process.env.PORT) || 3000;
+
+// Debug: report whether Evolution API env vars are present (do not log the raw key)
+try {
+  const evoUrl = process.env.EVOLUTION_API_BASE_URL;
+  const hasKey = !!process.env.EVOLUTION_API_API_KEY;
+  console.log('EVOLUTION_API_BASE_URL present:', !!evoUrl);
+  console.log('EVOLUTION_API_API_KEY present:', hasKey);
+} catch (e) {}
 
 // If a developer/operator created a `.print-agent-token` file in the project root
 // we will use it to automatically create/update a PrinterSetting for the first

@@ -1164,5 +1164,791 @@
       ]
     },
     "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
+  },
+  {
+    "id": "1771990367535-250536",
+    "createdAt": 1771990367535,
+    "order": {
+      "id": "b4721e70-0f0e-414d-8675-8f4345c2a594",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": "d8562188-b287-4635-8a54-47979424474f",
+      "displayId": "9883",
+      "displaySimple": 6,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Flávia queiroz menezes",
+      "customerPhone": "0800 711 8080",
+      "customerSource": "MANUAL",
+      "customerId": "7eda60e3-8623-46fd-8f47-73f3f5a70c1e",
+      "address": "Rua TESTE, 999999",
+      "latitude": 0,
+      "longitude": 0,
+      "total": "32.39",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "8.9",
+      "payload": {
+        "id": "869db156-93cd-4bdb-aa00-eeace93085a5",
+        "code": "PLC",
+        "fullCode": "PLACED",
+        "orderId": "d8562188-b287-4635-8a54-47979424474f",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "createdAt": "2026-02-25T03:33:47.878Z",
+        "salesChannel": "IFOOD",
+        "order": {
+          "id": "d8562188-b287-4635-8a54-47979424474f",
+          "displayId": "9883",
+          "createdAt": "2026-02-25T03:33:47.274Z",
+          "category": "FOOD",
+          "orderTiming": "IMMEDIATE",
+          "orderType": "DELIVERY",
+          "delivery": {
+            "mode": "DEFAULT",
+            "description": "Padrão",
+            "deliveredBy": "MERCHANT",
+            "deliveryDateTime": "2026-02-25T04:13:47.274Z",
+            "deliveryAddress": {
+              "streetName": "Rua TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999",
+              "neighborhood": "Bairro TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              }
+            },
+            "pickupCode": "5022"
+          },
+          "preparationStartDateTime": "2026-02-25T03:33:47.274Z",
+          "isTest": true,
+          "salesChannel": "IFOOD",
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Flávia queiroz menezes",
+            "documentNumber": "02900213592",
+            "documentType": "CPF",
+            "phone": {
+              "number": "0800 711 8080",
+              "localizer": "71356897",
+              "localizerExpiration": "2026-02-25T07:33:47.274Z"
+            },
+            "ordersCountOnMerchant": 0,
+            "segmentation": "Cliente"
+          },
+          "items": [
+            {
+              "index": 1,
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "uniqueId": "75f40d22-830c-40d3-8f7a-80b7d4668c05",
+              "name": "PEDIDO DE TESTE - Pro",
+              "type": "DEFAULT",
+              "ean": "",
+              "quantity": 1,
+              "unit": "UN",
+              "unitPrice": 22.5,
+              "optionsPrice": 0,
+              "customizationPrice": 0,
+              "totalPrice": 22.5,
+              "price": 22.5,
+              "observations": "",
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg"
+            }
+          ],
+          "total": {
+            "additionalFees": 0.99,
+            "subTotal": 22.5,
+            "deliveryFee": 8.9,
+            "benefits": 0,
+            "orderAmount": 32.39
+          },
+          "payments": {
+            "prepaid": 0,
+            "pending": 32.39,
+            "methods": [
+              {
+                "value": 32.39,
+                "currency": "BRL",
+                "method": "DEBIT",
+                "prepaid": false,
+                "type": "OFFLINE",
+                "card": {
+                  "brand": "MASTERCARD"
+                }
+              }
+            ]
+          },
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "description": "Taxa de serviço",
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação.",
+              "value": 0.99,
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ]
+            }
+          ],
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "additionalInfo": {
+            "metadata": {
+              "deliveryProduct": "SELF_DELIVERY",
+              "cartId": "c8b266f5-db75-406d-871f-c65ad4943549",
+              "logisticProvider": "MERCHANT"
+            }
+          }
+        },
+        "_upsertedCustomer": {
+          "id": "7eda60e3-8623-46fd-8f47-73f3f5a70c1e",
+          "whatsapp": "73991429676",
+          "fullName": "PEDIDO DE TESTE - Flávia queiroz menezes"
+        },
+        "_extractedPayment": {
+          "method": "DEBIT",
+          "changeFor": null,
+          "amount": 32.39
+        },
+        "payment": {
+          "method": "DEBIT",
+          "changeFor": null,
+          "amount": 32.39
+        }
+      },
+      "createdAt": "2026-02-25T03:32:47.051Z",
+      "updatedAt": "2026-02-25T03:32:47.051Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "51f013e8-a1c5-4cd8-954f-ee919df47a33",
+          "orderId": "b4721e70-0f0e-414d-8675-8f4345c2a594",
+          "productId": null,
+          "name": "PEDIDO DE TESTE - Pro",
+          "quantity": 1,
+          "price": "22.5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "0b4f1809-71c3-419a-9693-22cc56bc8013",
+          "orderId": "b4721e70-0f0e-414d-8675-8f4345c2a594",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-02-25T03:32:47.051Z"
+        }
+      ]
+    },
+    "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
+  },
+  {
+    "id": "1771992611130-458065",
+    "createdAt": 1771992611131,
+    "order": {
+      "id": "6449c6ba-5b70-4d52-a376-90a08a33419b",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": "c35c0bb9-cea8-41af-b31d-56d1a3015775",
+      "displayId": "3413",
+      "displaySimple": 13,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Flávia queiroz menezes",
+      "customerPhone": "0800 200 5011",
+      "customerSource": "MANUAL",
+      "customerId": "7eda60e3-8623-46fd-8f47-73f3f5a70c1e",
+      "address": "Rua TESTE, 999999",
+      "latitude": 0,
+      "longitude": 0,
+      "total": "32.39",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "8.9",
+      "payload": {
+        "id": "8630d83a-0b59-4e73-8523-c269ba017188",
+        "code": "CFM",
+        "fullCode": "CONFIRMED",
+        "orderId": "c35c0bb9-cea8-41af-b31d-56d1a3015775",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "createdAt": "2026-02-25T04:10:55.246Z",
+        "salesChannel": "IFOOD",
+        "metadata": {
+          "CLIENT_ID": "ifood:iconnect_v3_homologation",
+          "ORIGIN": "ORDER_API",
+          "appName": "iconnect_v3_homologation",
+          "ownerName": "ifood"
+        },
+        "order": {
+          "id": "c35c0bb9-cea8-41af-b31d-56d1a3015775",
+          "displayId": "3413",
+          "createdAt": "2026-02-25T04:10:53.071Z",
+          "category": "FOOD",
+          "orderTiming": "IMMEDIATE",
+          "orderType": "DELIVERY",
+          "delivery": {
+            "mode": "DEFAULT",
+            "description": "Padrão",
+            "deliveredBy": "MERCHANT",
+            "deliveryDateTime": "2026-02-25T04:50:53.071Z",
+            "deliveryAddress": {
+              "streetName": "Rua TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999",
+              "neighborhood": "Bairro TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              }
+            },
+            "pickupCode": "3262"
+          },
+          "preparationStartDateTime": "2026-02-25T04:10:53.071Z",
+          "isTest": true,
+          "salesChannel": "IFOOD",
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Flávia queiroz menezes",
+            "documentNumber": "02900213592",
+            "documentType": "CPF",
+            "phone": {
+              "number": "0800 200 5011",
+              "localizer": "23822737",
+              "localizerExpiration": "2026-02-25T08:10:53.071Z"
+            },
+            "ordersCountOnMerchant": 0,
+            "segmentation": "Cliente"
+          },
+          "items": [
+            {
+              "index": 1,
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "uniqueId": "96ac265a-0f04-4d23-a7db-8fb08c727365",
+              "name": "PEDIDO DE TESTE - Pro",
+              "type": "DEFAULT",
+              "ean": "",
+              "quantity": 1,
+              "unit": "UN",
+              "unitPrice": 22.5,
+              "optionsPrice": 0,
+              "customizationPrice": 0,
+              "totalPrice": 22.5,
+              "price": 22.5,
+              "observations": "",
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg"
+            }
+          ],
+          "total": {
+            "additionalFees": 0.99,
+            "subTotal": 22.5,
+            "deliveryFee": 8.9,
+            "benefits": 0,
+            "orderAmount": 32.39
+          },
+          "payments": {
+            "prepaid": 0,
+            "pending": 32.39,
+            "methods": [
+              {
+                "value": 32.39,
+                "currency": "BRL",
+                "method": "DEBIT",
+                "prepaid": false,
+                "type": "OFFLINE",
+                "card": {
+                  "brand": "VISA"
+                }
+              }
+            ]
+          },
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "description": "Taxa de serviço",
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação.",
+              "value": 0.99,
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ]
+            }
+          ],
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "additionalInfo": {
+            "metadata": {
+              "deliveryProduct": "SELF_DELIVERY",
+              "cartId": "ed612070-44f7-490b-bc8c-6e089703c178",
+              "logisticProvider": "MERCHANT"
+            }
+          }
+        },
+        "_upsertedCustomer": {
+          "id": "7eda60e3-8623-46fd-8f47-73f3f5a70c1e",
+          "whatsapp": "73991429676",
+          "fullName": "PEDIDO DE TESTE - Flávia queiroz menezes"
+        },
+        "_extractedPayment": {
+          "method": "DEBIT",
+          "changeFor": null,
+          "amount": 32.39
+        },
+        "payment": {
+          "method": "DEBIT",
+          "changeFor": null,
+          "amount": 32.39
+        }
+      },
+      "createdAt": "2026-02-25T04:10:10.699Z",
+      "updatedAt": "2026-02-25T04:10:10.699Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "b5c2ed32-d5c5-41bb-9178-4ea108d7c419",
+          "orderId": "6449c6ba-5b70-4d52-a376-90a08a33419b",
+          "productId": null,
+          "name": "PEDIDO DE TESTE - Pro",
+          "quantity": 1,
+          "price": "22.5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "f71041b3-e078-4821-bb3d-e6a86d67c214",
+          "orderId": "6449c6ba-5b70-4d52-a376-90a08a33419b",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-02-25T04:10:10.699Z"
+        }
+      ]
+    },
+    "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
+  },
+  {
+    "id": "1771993589438-65310",
+    "createdAt": 1771993589438,
+    "order": {
+      "id": "ceb7b829-56c5-4d01-a367-1041410cc2a9",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": "29367ffd-d11c-4a35-982c-d45c17ed7e0c",
+      "displayId": "0194",
+      "displaySimple": 14,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Flávia queiroz menezes",
+      "customerPhone": "0800 200 5011",
+      "customerSource": "MANUAL",
+      "customerId": "7eda60e3-8623-46fd-8f47-73f3f5a70c1e",
+      "address": "Rua TESTE, 999999",
+      "latitude": 0,
+      "longitude": 0,
+      "total": "32.39",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "8.9",
+      "payload": {
+        "id": "277d88d0-9cf7-4bbc-ac4d-fff910ac0a32",
+        "code": "PLC",
+        "fullCode": "PLACED",
+        "orderId": "29367ffd-d11c-4a35-982c-d45c17ed7e0c",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "createdAt": "2026-02-25T04:27:27.548Z",
+        "salesChannel": "IFOOD",
+        "order": {
+          "id": "29367ffd-d11c-4a35-982c-d45c17ed7e0c",
+          "displayId": "0194",
+          "createdAt": "2026-02-25T04:27:26.868Z",
+          "category": "FOOD",
+          "orderTiming": "IMMEDIATE",
+          "orderType": "DELIVERY",
+          "delivery": {
+            "mode": "DEFAULT",
+            "description": "Padrão",
+            "deliveredBy": "MERCHANT",
+            "deliveryDateTime": "2026-02-25T05:07:26.868Z",
+            "deliveryAddress": {
+              "streetName": "Rua TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999",
+              "neighborhood": "Bairro TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              }
+            },
+            "pickupCode": "7130"
+          },
+          "preparationStartDateTime": "2026-02-25T04:27:26.868Z",
+          "isTest": true,
+          "salesChannel": "IFOOD",
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Flávia queiroz menezes",
+            "documentNumber": "02900213592",
+            "documentType": "CPF",
+            "phone": {
+              "number": "0800 200 5011",
+              "localizer": "70345760",
+              "localizerExpiration": "2026-02-25T08:27:26.868Z"
+            },
+            "ordersCountOnMerchant": 0,
+            "segmentation": "Cliente"
+          },
+          "items": [
+            {
+              "index": 1,
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "uniqueId": "8fa55b5c-2a07-4231-860b-4c55a6c1ace5",
+              "name": "PEDIDO DE TESTE - Pro",
+              "type": "DEFAULT",
+              "ean": "",
+              "quantity": 1,
+              "unit": "UN",
+              "unitPrice": 22.5,
+              "optionsPrice": 0,
+              "customizationPrice": 0,
+              "totalPrice": 22.5,
+              "price": 22.5,
+              "observations": "",
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg"
+            }
+          ],
+          "total": {
+            "additionalFees": 0.99,
+            "subTotal": 22.5,
+            "deliveryFee": 8.9,
+            "benefits": 0,
+            "orderAmount": 32.39
+          },
+          "payments": {
+            "prepaid": 0,
+            "pending": 32.39,
+            "methods": [
+              {
+                "value": 32.39,
+                "currency": "BRL",
+                "method": "DEBIT",
+                "prepaid": false,
+                "type": "OFFLINE",
+                "card": {
+                  "brand": "ELO"
+                }
+              }
+            ]
+          },
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "description": "Taxa de serviço",
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação.",
+              "value": 0.99,
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ]
+            }
+          ],
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "additionalInfo": {
+            "metadata": {
+              "deliveryProduct": "SELF_DELIVERY",
+              "cartId": "4fdc6c51-0775-4bd1-91cb-5a3865116d45",
+              "logisticProvider": "MERCHANT"
+            }
+          }
+        },
+        "_upsertedCustomer": {
+          "id": "7eda60e3-8623-46fd-8f47-73f3f5a70c1e",
+          "whatsapp": "73991429676",
+          "fullName": "PEDIDO DE TESTE - Flávia queiroz menezes"
+        },
+        "_extractedPayment": {
+          "method": "DEBIT",
+          "changeFor": null,
+          "amount": 32.39
+        },
+        "payment": {
+          "method": "DEBIT",
+          "changeFor": null,
+          "amount": 32.39
+        }
+      },
+      "createdAt": "2026-02-25T04:26:28.998Z",
+      "updatedAt": "2026-02-25T04:26:28.998Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "f9de9b1a-068f-498b-805b-b4a14a032bed",
+          "orderId": "ceb7b829-56c5-4d01-a367-1041410cc2a9",
+          "productId": null,
+          "name": "PEDIDO DE TESTE - Pro",
+          "quantity": 1,
+          "price": "22.5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "b9131303-ae1f-4c4e-80a7-901a4c4ef1bc",
+          "orderId": "ceb7b829-56c5-4d01-a367-1041410cc2a9",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-02-25T04:26:28.998Z"
+        }
+      ]
+    },
+    "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
+  },
+  {
+    "id": "1771994134348-560154",
+    "createdAt": 1771994134348,
+    "order": {
+      "id": "716ac4ac-6d31-4a8c-aa9f-717cdad243e8",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "8433873c-5512-47aa-8847-c2f7282d9788",
+      "externalId": "5de67c91-a5a7-4df6-b9b9-2c4cb7eadf3e",
+      "displayId": "9985",
+      "displaySimple": 15,
+      "orderType": null,
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Flávia queiroz menezes",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "7eda60e3-8623-46fd-8f47-73f3f5a70c1e",
+      "address": "Rua TESTE, 999999",
+      "latitude": 0,
+      "longitude": 0,
+      "total": "32.39",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": "8.9",
+      "payload": {
+        "id": "96529817-ab3b-4d64-8a17-bf4fa1ffb9cb",
+        "code": "PLC",
+        "fullCode": "PLACED",
+        "orderId": "5de67c91-a5a7-4df6-b9b9-2c4cb7eadf3e",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "createdAt": "2026-02-25T04:36:28.875Z",
+        "salesChannel": "IFOOD",
+        "order": {
+          "id": "5de67c91-a5a7-4df6-b9b9-2c4cb7eadf3e",
+          "displayId": "9985",
+          "createdAt": "2026-02-25T04:36:28.324Z",
+          "category": "FOOD",
+          "orderTiming": "IMMEDIATE",
+          "orderType": "DELIVERY",
+          "delivery": {
+            "mode": "DEFAULT",
+            "description": "Padrão",
+            "deliveredBy": "MERCHANT",
+            "deliveryDateTime": "2026-02-25T05:16:28.324Z",
+            "deliveryAddress": {
+              "streetName": "Rua TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999",
+              "neighborhood": "Bairro TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              }
+            },
+            "pickupCode": "9544"
+          },
+          "preparationStartDateTime": "2026-02-25T04:36:28.324Z",
+          "isTest": true,
+          "salesChannel": "IFOOD",
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Flávia queiroz menezes",
+            "documentNumber": "02900213592",
+            "documentType": "CPF",
+            "phone": {
+              "number": "0800 705 3040",
+              "localizer": "87021502",
+              "localizerExpiration": "2026-02-25T08:36:28.324Z"
+            },
+            "ordersCountOnMerchant": 0,
+            "segmentation": "Cliente"
+          },
+          "items": [
+            {
+              "index": 1,
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "uniqueId": "cc2d8861-a8bd-4257-9ef9-0efd3597eaa1",
+              "name": "PEDIDO DE TESTE - Pro",
+              "type": "DEFAULT",
+              "ean": "",
+              "quantity": 1,
+              "unit": "UN",
+              "unitPrice": 22.5,
+              "optionsPrice": 0,
+              "customizationPrice": 0,
+              "totalPrice": 22.5,
+              "price": 22.5,
+              "observations": "",
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg"
+            }
+          ],
+          "total": {
+            "additionalFees": 0.99,
+            "subTotal": 22.5,
+            "deliveryFee": 8.9,
+            "benefits": 0,
+            "orderAmount": 32.39
+          },
+          "payments": {
+            "prepaid": 0,
+            "pending": 32.39,
+            "methods": [
+              {
+                "value": 32.39,
+                "currency": "BRL",
+                "method": "DEBIT",
+                "prepaid": false,
+                "type": "OFFLINE",
+                "card": {
+                  "brand": "ELO"
+                }
+              }
+            ]
+          },
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "description": "Taxa de serviço",
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação.",
+              "value": 0.99,
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ]
+            }
+          ],
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "additionalInfo": {
+            "metadata": {
+              "deliveryProduct": "SELF_DELIVERY",
+              "cartId": "64fb4a8f-0e8c-428c-8eed-d0bd9d416ebb",
+              "logisticProvider": "MERCHANT"
+            }
+          }
+        },
+        "_upsertedCustomer": {
+          "id": "7eda60e3-8623-46fd-8f47-73f3f5a70c1e",
+          "whatsapp": "73991429676",
+          "fullName": "PEDIDO DE TESTE - Flávia queiroz menezes"
+        },
+        "_extractedPayment": {
+          "method": "DEBIT",
+          "changeFor": null,
+          "amount": 32.39
+        },
+        "payment": {
+          "method": "DEBIT",
+          "changeFor": null,
+          "amount": 32.39
+        }
+      },
+      "createdAt": "2026-02-25T04:35:33.124Z",
+      "updatedAt": "2026-02-25T04:35:33.124Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "ea90a630-4cc7-402b-a831-1cdc174c3dca",
+          "orderId": "716ac4ac-6d31-4a8c-aa9f-717cdad243e8",
+          "productId": null,
+          "name": "PEDIDO DE TESTE - Pro",
+          "quantity": 1,
+          "price": "22.5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "73c23382-c85f-4f2a-8892-17795f44ffb6",
+          "orderId": "716ac4ac-6d31-4a8c-aa9f-717cdad243e8",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-02-25T04:35:33.124Z"
+        }
+      ]
+    },
+    "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
   }
 ]

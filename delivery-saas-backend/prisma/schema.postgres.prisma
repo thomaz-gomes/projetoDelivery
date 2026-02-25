@@ -257,6 +257,8 @@ model WhatsAppInstance {
   status       String   @default("DISCONNECTED") // CONNECTED / QRCODE / etc.
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  // stores assigned to this WhatsApp instance (one instance -> many stores)
+  stores       Store[]
 }
 
 model Customer {
@@ -443,6 +445,9 @@ model Store {
   menus           Menu[]
   // integrations that are bound to this store
   apiIntegrations ApiIntegration[]
+  // optional WhatsApp instance assigned to this store (a store may have at most one instance)
+  whatsappInstanceId String?
+  whatsappInstance   WhatsAppInstance? @relation(fields: [whatsappInstanceId], references: [id])
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 

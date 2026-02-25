@@ -3,6 +3,16 @@
     <h2>{{ isEdit ? 'Editar produto' : 'Novo produto' }}</h2>
     <div class="card p-4 mt-3">
       <form @submit.prevent="save">
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button :class="['nav-link', { active: activeTab === 'general' }]" id="tab-general" type="button" @click="activeTab = 'general'">Geral</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button :class="['nav-link', { active: activeTab === 'marketplace' }]" id="tab-marketplace" type="button" @click="activeTab = 'marketplace'">MARKETPLACE</button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div :class="['tab-pane', activeTab === 'general' ? 'show active' : '']" id="general" role="tabpanel" aria-labelledby="tab-general">
         <div class="mb-3">
           <TextInput label="Nome do Produto" labelClass="form-label" v-model="form.name" placeholder="Ex: Coxinha" required maxlength="80" />
         </div>
@@ -80,6 +90,13 @@
           <MediaField v-model="form.image" label="Imagem do produto" field-id="product-image" />
         </div>
 
+        </div>
+
+          <div :class="['tab-pane', activeTab === 'marketplace' ? 'show active' : '']" id="marketplace" role="tabpanel" aria-labelledby="tab-marketplace">
+            <MarketplaceTab :cmv="sheetCost" :initial="form.marketplace" @change="onMarketplaceChange" />
+          </div>
+        </div>
+
         <div class="d-flex justify-content-between align-items-center">
           <div>
             <button class="btn btn-secondary" type="button" @click="cancel">Voltar</button>
@@ -105,13 +122,15 @@ import TextInput from '../components/form/input/TextInput.vue'
 import TextareaInput from '../components/form/input/TextareaInput.vue'
 import CurrencyInput from '../components/form/input/CurrencyInput.vue'
 import SelectInput from '../components/form/select/SelectInput.vue'
+import MarketplaceTab from '../components/MarketplaceTab.vue'
 
 const route = useRoute()
 const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null, dadosFiscaisId: null })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null })
+const activeTab = ref('general')
 const cashbackEnabled = ref(false)
 const groups = ref([])
 const categories = ref([])
@@ -178,6 +197,7 @@ async function save(){
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
     if(isEdit){
       const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
+      if(form.value.marketplace) payload.marketplace = form.value.marketplace
       // include cashbackPercent when cashback module is enabled (allow null to clear)
       if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       await api.patch(`/menu/products/${id}`, payload)
@@ -197,6 +217,7 @@ async function save(){
       }
     } else {
   const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
+  if(form.value.marketplace) payload.marketplace = form.value.marketplace
   if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       const res = await api.post('/menu/products', payload)
       const newId = res.data.id
@@ -223,6 +244,11 @@ async function save(){
 }
 
 onMounted(()=> load())
+
+function onMarketplaceChange(dto, calc){
+  form.value.marketplace = dto
+  form.value.marketplaceCalc = calc
+}
 
 // computed helpers for CMV
 const selectedTechnicalSheet = computed(() => {

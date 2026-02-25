@@ -3,6 +3,7 @@ import { prisma } from '../prisma.js';
 import { getIFoodOrderDetails } from '../integrations/ifood/orders.js';
 import { upsertCustomerFromIfood } from '../services/customers.js';
 import { emitirNovoPedido, emitirPedidoAtualizado, app } from '../index.js';
+import { notifyCustomerStatus, notifyCustomerOrderSummary } from './notify.js';
 import buildAndPersistStockMovementFromOrderItems from './stockFromOrder.js';
 import { canTransition } from '../stateMachine.js';
 import printQueue from '../printQueue.js'
@@ -245,6 +246,52 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     payload: mapped.raw,
   };
 
+  // If the order is linked to an existing customer and the payload contains
+  // a delivery address, ensure the customer's addresses include this exact
+  // address. If not present, create it and mark it as default so the
+  // incoming order address will prevail for printing and views.
+  try {
+    if (mapped.customerId && mapped.raw) {
+      const normalized = normalizeDeliveryAddressFromPayload(mapped.raw || {});
+      if (normalized && (normalized.formattedAddress || normalized.streetName)) {
+        // try to detect an existing customerAddress matching formatted or street+number+postalCode
+        const whereOr = [];
+        if (normalized.formattedAddress) whereOr.push({ formatted: normalized.formattedAddress });
+        if (normalized.postalCode) whereOr.push({ postalCode: normalized.postalCode });
+        if (normalized.streetName && normalized.streetNumber) whereOr.push({ AND: [{ street: normalized.streetName }, { number: normalized.streetNumber }] });
+
+        const existsAddr = whereOr.length ? await prisma.customerAddress.findFirst({ where: { customerId: mapped.customerId, OR: whereOr } }) : null;
+        if (!existsAddr) {
+          // unset previous default(s) and create a new default address for this customer
+          try {
+            await prisma.customerAddress.updateMany({ where: { customerId: mapped.customerId, isDefault: true }, data: { isDefault: false } }).catch(() => {});
+            await prisma.customerAddress.create({ data: {
+              customerId: mapped.customerId,
+              formatted: normalized.formattedAddress || null,
+              street: normalized.streetName || null,
+              number: normalized.streetNumber || null,
+              complement: normalized.complement || null,
+              neighborhood: normalized.neighborhood || null,
+              reference: normalized.reference || null,
+              observation: normalized.observation || null,
+              city: normalized.city || null,
+              state: normalized.state || null,
+              postalCode: normalized.postalCode || null,
+              country: normalized.country || null,
+              latitude: normalized.latitude ?? null,
+              longitude: normalized.longitude ?? null,
+              isDefault: true,
+            } }).catch((e) => { console.warn('[iFood Processor] failed to create customerAddress:', e && e.message); });
+          } catch (e) {
+            console.warn('[iFood Processor] ensure-customer-address failed:', e && e.message);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[iFood Processor] address persistence check failed:', e && e.message);
+  }
+
   if (!exists) {
     // compute displaySimple for today's orders for this company
     const now = new Date();
@@ -395,6 +442,15 @@ export async function processIFoodWebhook(eventId) {
       const mapped = mapIFoodOrder(payload);
       // if we persisted a customer on payload, copy it to mapped so upsertOrder links it
       try { if (payload && payload._upsertedCustomer && payload._upsertedCustomer.id) mapped.customerId = payload._upsertedCustomer.id; } catch(e){}
+      // If we upserted/located a customer and that customer has a whatsapp stored,
+      // prefer using that whatsapp as the order contact so customer notifications
+      // are delivered to the stored WhatsApp number rather than a temporary
+      // channel-provided phone.
+      try {
+        if (mapped.customerId && payload && payload._upsertedCustomer && payload._upsertedCustomer.whatsapp) {
+          mapped.customerPhone = payload._upsertedCustomer.whatsapp;
+        }
+      } catch (e) { /* non-fatal */ }
       // Persist extracted payment info (troco) inside payload JSON so it's stored
       try {
         if (mapped && mapped.payment) {
@@ -432,6 +488,8 @@ export async function processIFoodWebhook(eventId) {
         if (res && res.created) {
           console.log('[iFood Processor] emitting novo-pedido for created order', savedOrder && savedOrder.id);
           emitirNovoPedido(savedOrder);
+          // Notify customer with order summary on new orders
+          try { await notifyCustomerOrderSummary(savedOrder.id); } catch (e) { console.warn('[iFood Processor] notifyCustomerOrderSummary failed', e && e.message); }
           // Auto-print: if enabled, enqueue and attempt immediate delivery to connected agents
           try {
             const ENABLE_AUTO_PRINT = String(process.env.ENABLE_AUTO_PRINT || '').toLowerCase() === '1';
@@ -466,6 +524,8 @@ export async function processIFoodWebhook(eventId) {
         } else if (res && res.statusChanged) {
           console.log('[iFood Processor] status changed by webhook:', res.from, '->', res.to, 'orderId:', savedOrder && savedOrder.id);
           emitirPedidoAtualizado(savedOrder);
+          // Notify customer about status change for relevant statuses
+          try { await notifyCustomerStatus(savedOrder.id, res.to); } catch (e) { console.warn('[iFood Processor] notifyCustomerStatus failed', e && e.message); }
         } else {
           // No status change; still optionally emit a generic update for visibility
           console.log('[iFood Processor] no status change for order', savedOrder && savedOrder.id, 'current status:', savedOrder && savedOrder.status);

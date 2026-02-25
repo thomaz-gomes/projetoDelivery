@@ -69,6 +69,7 @@ const tierColors = {
   regular: '#ffc107',
   fiel: '#0d6efd',
   vip: '#198754',
+  novo: '#0d6efd',
 }
 
 const tierBgColors = {
@@ -76,6 +77,7 @@ const tierBgColors = {
   regular: 'rgba(255,193,7,0.1)',
   fiel: 'rgba(13,110,253,0.1)',
   vip: 'rgba(25,135,84,0.1)',
+  novo: 'rgba(13,110,253,0.06)',
 }
 
 function starsHtml(stars) {
