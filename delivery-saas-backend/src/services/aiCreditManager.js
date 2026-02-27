@@ -39,6 +39,10 @@ export const AI_SERVICE_COSTS = {
 
 /**
  * Retorna o saldo atual de créditos e o limite mensal do plano da empresa.
+ *
+ * Auto-inicialização: se a empresa nunca teve um reset (aiCreditsLastReset = null),
+ * o saldo é imediatamente definido como o limite mensal do plano. Isso resolve
+ * o caso de empresas criadas antes da implantação do sistema de créditos.
  */
 export async function getBalance(companyId) {
   const company = await prisma.company.findUnique({
@@ -55,11 +59,29 @@ export async function getBalance(companyId) {
   const plan = company?.saasSubscription?.plan
   const monthlyLimit = plan?.aiCreditsMonthlyLimit ?? 100
   const unlimitedAiCredits = plan?.unlimitedAiCredits ?? false
+  let balance = company?.aiCreditsBalance ?? 0
+  let lastReset = company?.aiCreditsLastReset ?? null
+
+  // Auto-inicializar: empresa que nunca teve reset recebe o limite do plano imediatamente.
+  // Acontece com empresas existentes após a migração do sistema de créditos.
+  if (!lastReset && !unlimitedAiCredits && company) {
+    try {
+      await prisma.company.update({
+        where: { id: companyId },
+        data: { aiCreditsBalance: monthlyLimit, aiCreditsLastReset: new Date() },
+      })
+      balance = monthlyLimit
+      lastReset = new Date()
+    } catch {
+      // Silencioso: na pior das hipóteses, o saldo permanece em 0 nesta chamada
+    }
+  }
+
   return {
-    balance: company?.aiCreditsBalance ?? 0,
+    balance,
     monthlyLimit,
     unlimitedAiCredits,
-    lastReset: company?.aiCreditsLastReset ?? null,
+    lastReset,
   }
 }
 

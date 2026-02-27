@@ -43,6 +43,20 @@ const recentInvoices = computed(() => invoices.value.slice(0, 8))
 
 function go(path){ router.push(path) }
 
+const resettingCredits = ref(false)
+async function resetAllCredits() {
+  if (!confirm(`Resetar créditos de IA de todas as ${companies.value.length} empresa(s) ao limite dos seus planos?`)) return
+  resettingCredits.value = true
+  try {
+    const { data } = await api.post('/ai-credits/admin/reset-all')
+    alert(`Créditos resetados com sucesso! ${data.resetCount} empresa(s) atualizadas.`)
+  } catch (e) {
+    alert('Erro ao resetar créditos: ' + (e?.response?.data?.message || e.message))
+  } finally {
+    resettingCredits.value = false
+  }
+}
+
 function statusClass(s) {
   if (s === 'PAID') return 'bg-success'
   if (s === 'OVERDUE') return 'bg-danger'
@@ -134,6 +148,10 @@ function statusLabel(s) {
                 </button>
                 <button class="btn btn-outline-secondary text-start" @click="go('/saas/settings')">
                   <i class="bi bi-gear me-2"></i>Configurações do Sistema
+                </button>
+                <button class="btn btn-outline-warning text-start" @click="resetAllCredits" :disabled="resettingCredits">
+                  <span v-if="resettingCredits" class="spinner-border spinner-border-sm me-2"></span>
+                  <i v-else class="bi bi-arrow-clockwise me-2"></i>Resetar Créditos de IA
                 </button>
               </div>
             </div>
