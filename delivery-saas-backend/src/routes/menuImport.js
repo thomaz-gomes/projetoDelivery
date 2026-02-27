@@ -17,6 +17,7 @@ import { fileURLToPath } from 'url';
 import { prisma } from '../prisma.js';
 import { authMiddleware } from '../auth.js';
 import { checkCredits, debitCredits, AI_SERVICE_COSTS } from '../services/aiCreditManager.js';
+import { getSetting } from '../services/systemSettings.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -45,8 +46,9 @@ Regras obrigatórias:
 - Remova apenas caracteres especiais que não sejam letras, números, pontuação padrão`;
 
 async function callOpenAI(messages) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error('OPENAI_API_KEY não configurado no servidor');
+  const key = await getSetting('openai_api_key', 'OPENAI_API_KEY');
+  if (!key) throw new Error('Chave da API OpenAI não configurada. Acesse Painel SaaS → Configurações para inserir sua chave.');
+  const model = await getSetting('openai_model', 'OPENAI_IMPORT_MODEL') || OPENAI_MODEL;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 100_000); // 100s timeout
@@ -57,7 +59,7 @@ async function callOpenAI(messages) {
       method: 'POST',
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model: OPENAI_MODEL, temperature: 0, max_tokens: 8192, messages }),
+      body: JSON.stringify({ model, temperature: 0, max_tokens: 8192, messages }),
     });
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('Timeout: OpenAI não respondeu em 100 segundos');
@@ -778,7 +780,7 @@ router.post('/ai-import/apply', async (req, res) => {
         totalProducts++;
 
         if (item.imageUrl?.startsWith('http')) {
-          downloadAndSaveProductImage(newProd.id, item.imageUrl, baseUrl);
+          downloadAndSaveProductImage(newProd.id, item.imageUrl, baseUrl, companyId, name);
         }
 
         // Criar/linkar option groups
@@ -805,7 +807,7 @@ router.post('/ai-import/apply', async (req, res) => {
 
 // ─── Image downloader (fire-and-forget) ──────────────────────────────────────
 
-async function downloadAndSaveProductImage(productId, imageUrl, baseUrl) {
+async function downloadAndSaveProductImage(productId, imageUrl, baseUrl, companyId, productName) {
   try {
     let origin = '';
     try { origin = new URL(imageUrl).origin; } catch (_) {}
@@ -825,8 +827,27 @@ async function downloadAndSaveProductImage(productId, imageUrl, baseUrl) {
     const uploadsDir = path.join(__dirname, '../../public/uploads/products');
     fs.mkdirSync(uploadsDir, { recursive: true });
     const fileName = `${productId}.${ext}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), resp.data);
-    await prisma.product.update({ where: { id: productId }, data: { image: `${baseUrl}/public/uploads/products/${fileName}` } });
+    const filePath = path.join(uploadsDir, fileName);
+    fs.writeFileSync(filePath, resp.data);
+    const imagePublicUrl = `${baseUrl}/public/uploads/products/${fileName}`;
+    await prisma.product.update({ where: { id: productId }, data: { image: imagePublicUrl } });
+
+    // Registrar na biblioteca de mídia da empresa
+    if (companyId) {
+      const mimeType = contentType.split(';')[0].trim();
+      const displayName = productName ? `${productName}.${ext}` : fileName;
+      await prisma.media.create({
+        data: {
+          id: randomUUID(),
+          companyId,
+          filename: displayName,
+          mimeType,
+          size: resp.data.byteLength,
+          url: imagePublicUrl,
+        },
+      });
+    }
+
     console.log(`[menuImport] Imagem salva: ${fileName} (${Math.round(resp.data.byteLength / 1024)}KB)`);
   } catch (e) {
     console.warn(`[menuImport] image download failed for ${productId}: ${e.message}`);

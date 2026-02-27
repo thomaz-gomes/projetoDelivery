@@ -46,10 +46,10 @@ saasRouter.get('/plans', requireRole('SUPER_ADMIN'), async (_req, res) => {
 })
 
 saasRouter.post('/plans', requireRole('SUPER_ADMIN'), async (req, res) => {
-  const { name, price = 0, menuLimit = null, storeLimit = null, unlimitedMenus = false, unlimitedStores = false, moduleIds = [] } = req.body || {}
+  const { name, price = 0, menuLimit = null, storeLimit = null, unlimitedMenus = false, unlimitedStores = false, aiCreditsMonthlyLimit = 100, unlimitedAiCredits = false, moduleIds = [] } = req.body || {}
   if (!name) return res.status(400).json({ message: 'name é obrigatório' })
   try {
-    const plan = await prisma.saasPlan.create({ data: { name, price: Number(price || 0), menuLimit, storeLimit, unlimitedMenus: Boolean(unlimitedMenus), unlimitedStores: Boolean(unlimitedStores) } })
+    const plan = await prisma.saasPlan.create({ data: { name, price: Number(price || 0), menuLimit, storeLimit, unlimitedMenus: Boolean(unlimitedMenus), unlimitedStores: Boolean(unlimitedStores), aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit || 100), unlimitedAiCredits: Boolean(unlimitedAiCredits) } })
     if (Array.isArray(moduleIds) && moduleIds.length) {
       const data = moduleIds.map(mid => ({ planId: plan.id, moduleId: String(mid) }))
       await prisma.saasPlanModule.createMany({ data })
@@ -68,9 +68,9 @@ saasRouter.post('/plans', requireRole('SUPER_ADMIN'), async (req, res) => {
 
 saasRouter.put('/plans/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
-  const { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, moduleIds } = req.body || {}
+  const { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, aiCreditsMonthlyLimit, unlimitedAiCredits, moduleIds } = req.body || {}
   try {
-    const updated = await prisma.saasPlan.update({ where: { id }, data: { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores } })
+    const updated = await prisma.saasPlan.update({ where: { id }, data: { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, ...(aiCreditsMonthlyLimit !== undefined && { aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit) }), ...(unlimitedAiCredits !== undefined && { unlimitedAiCredits: Boolean(unlimitedAiCredits) }) } })
     if (Array.isArray(moduleIds)) {
       // replace module assignments
       await prisma.saasPlanModule.deleteMany({ where: { planId: id } })
@@ -198,11 +198,13 @@ saasRouter.get('/modules/me', requireRole('ADMIN'), async (req, res) => {
 saasRouter.get('/invoices', async (req, res) => {
   try {
     const qCompanyId = req.query.companyId || null
+    let authorized = false
     if (qCompanyId) {
-      await requireRole('SUPER_ADMIN')(req, res, async () => {})
+      await requireRole('SUPER_ADMIN')(req, res, () => { authorized = true })
     } else {
-      await requireRole('ADMIN')(req, res, async () => {})
+      await requireRole('ADMIN')(req, res, () => { authorized = true })
     }
+    if (!authorized) return
     const companyId = qCompanyId || req.user.companyId
     // pagination and filters
     const page = Math.max(1, parseInt(req.query.page || '1', 10))
@@ -466,6 +468,75 @@ saasRouter.post('/companies/:id/suspend', requireRole('SUPER_ADMIN'), async (req
 // DELETE company is intentionally disabled — companies must never be deleted
 saasRouter.delete('/companies/:id', requireRole('SUPER_ADMIN'), async (_req, res) => {
   return res.status(403).json({ message: 'Empresas não podem ser excluídas. Use a opção de suspender.' })
+})
+
+// -------- System Settings (SUPER_ADMIN) --------
+
+// Chaves expostas na API (whitelist). Valores de chaves *_key são mascarados na leitura.
+const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model']
+const SENSITIVE_KEYS = new Set(['openai_api_key'])
+
+function maskValue(key, value) {
+  if (!value) return ''
+  if (SENSITIVE_KEYS.has(key)) {
+    // Mostra apenas os últimos 4 caracteres
+    return value.length > 4 ? '•'.repeat(value.length - 4) + value.slice(-4) : '•'.repeat(value.length)
+  }
+  return value
+}
+
+/**
+ * GET /saas/settings
+ * Retorna as configurações do sistema. Valores sensíveis são mascarados.
+ * Body extra: { raw: true } — apenas para uso interno, não exposto ao frontend.
+ */
+saasRouter.get('/settings', requireRole('SUPER_ADMIN'), async (_req, res) => {
+  try {
+    const rows = await prisma.systemSetting.findMany({ where: { key: { in: SETTINGS_WHITELIST } } })
+    const result = SETTINGS_WHITELIST.map(key => {
+      const row = rows.find(r => r.key === key)
+      return {
+        key,
+        value: row ? maskValue(key, row.value) : '',
+        isSet: !!row?.value,
+        updatedAt: row?.updatedAt ?? null,
+      }
+    })
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao carregar configurações' })
+  }
+})
+
+/**
+ * PUT /saas/settings
+ * Salva uma ou mais configurações. Body: [{ key, value }] ou { key, value }.
+ * Enviar value vazio ("") remove a configuração.
+ */
+saasRouter.put('/settings', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const userId = req.user?.id ?? null
+    const items = Array.isArray(req.body) ? req.body : [req.body]
+
+    for (const { key, value } of items) {
+      if (!SETTINGS_WHITELIST.includes(key)) continue
+      const val = String(value ?? '').trim()
+      if (!val) {
+        await prisma.systemSetting.deleteMany({ where: { key } })
+      } else {
+        await prisma.systemSetting.upsert({
+          where: { key },
+          update: { value: val, updatedBy: userId },
+          create: { key, value: val, updatedBy: userId },
+        })
+      }
+    }
+
+    res.json({ message: 'Configurações salvas com sucesso' })
+  } catch (e) {
+    console.error('[PUT /saas/settings]', e)
+    res.status(500).json({ message: 'Erro ao salvar configurações' })
+  }
 })
 
 export default saasRouter

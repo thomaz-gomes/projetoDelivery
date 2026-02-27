@@ -132,6 +132,9 @@ function statusLabel(s) {
                 <button class="btn btn-outline-primary text-start" @click="go('/saas/billing')">
                   <i class="bi bi-receipt me-2"></i>Mensalidades
                 </button>
+                <button class="btn btn-outline-secondary text-start" @click="go('/saas/settings')">
+                  <i class="bi bi-gear me-2"></i>Configurações do Sistema
+                </button>
               </div>
             </div>
           </div>

@@ -762,7 +762,7 @@ function selectMenuOption(opt){
             </li>
             <li><hr class="dropdown-divider"></li>
             <li class="px-1 py-1">
-              <AiCreditsWidget compact />
+              <AiCreditsWidget compact v-if="auth.user?.companyId" />
             </li>
             <li><hr class="dropdown-divider"></li>
             <li>
@@ -797,7 +797,7 @@ function selectMenuOption(opt){
           </li>
           <li class="mt-auto pt-2">
             <hr class="text-white opacity-25">
-            <AiCreditsWidget compact />
+            <AiCreditsWidget compact v-if="auth.user?.companyId" />
           </li>
         </ul>
       </nav>

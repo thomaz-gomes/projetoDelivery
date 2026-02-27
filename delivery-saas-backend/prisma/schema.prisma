@@ -845,6 +845,7 @@ model SaasPlan {
   unlimitedMenus        Boolean  @default(false)
   unlimitedStores       Boolean  @default(false)
   aiCreditsMonthlyLimit Int      @default(100)
+  unlimitedAiCredits    Boolean  @default(false)
   isActive              Boolean  @default(true)
   createdAt             DateTime @default(now())
 
@@ -1536,4 +1537,14 @@ model CashMovement {
   createdBy String?
 
   @@index([sessionId], name: "idx_cash_movement_session")
+}
+
+// =============================
+// Configurações globais do sistema (SUPER_ADMIN)
+// =============================
+model SystemSetting {
+  key       String   @id          // ex: "openai_api_key", "openai_model"
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?               // userId de quem fez a última alteração
 }

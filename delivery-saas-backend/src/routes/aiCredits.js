@@ -35,7 +35,11 @@ router.use(authMiddleware)
 router.get('/balance', async (req, res) => {
   try {
     const companyId = req.user?.companyId
-    if (!companyId) return res.status(401).json({ message: 'Não autenticado' })
+    if (!companyId) {
+      // SUPER_ADMIN has no company — return a neutral response so the
+      // widget renders gracefully without triggering the 401 session-expiry interceptor
+      return res.json({ balance: null, monthlyLimit: null, unlimitedAiCredits: true, lastReset: null, nextReset: null })
+    }
 
     const { balance, monthlyLimit, lastReset } = await getBalance(companyId)
 
@@ -57,7 +61,7 @@ router.get('/balance', async (req, res) => {
 router.get('/transactions', async (req, res) => {
   try {
     const companyId = req.user?.companyId
-    if (!companyId) return res.status(401).json({ message: 'Não autenticado' })
+    if (!companyId) return res.json({ rows: [], total: 0, page: 1, limit: 20 })
 
     const page = Math.max(1, parseInt(req.query.page) || 1)
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20))

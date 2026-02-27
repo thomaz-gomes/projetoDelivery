@@ -71,7 +71,8 @@ authRouter.post('/login', async (req, res) => {
     if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' });
 
     // Check if user needs email verification or company setup
-    const needsVerification = user.emailVerified === false;
+    // SUPER_ADMIN bypasses email verification requirement
+    const needsVerification = user.emailVerified === false && user.role !== 'SUPER_ADMIN';
     const needsSetup = !user.companyId && user.role !== 'SUPER_ADMIN';
 
     const token = signToken({ id: user.id, role: user.role, companyId: user.companyId ?? null, riderId: user.rider?.id ?? null, name: user.name });

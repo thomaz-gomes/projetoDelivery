@@ -26,7 +26,7 @@ const loading = ref(true)
 const showForm = ref(false)
 const editingId = ref(null)
 
-const emptyForm = () => ({ name: '', price: 0, menuLimit: null, storeLimit: null, unlimitedMenus: false, unlimitedStores: false, moduleIds: [], prices: [] })
+const emptyForm = () => ({ name: '', price: 0, menuLimit: null, storeLimit: null, unlimitedMenus: false, unlimitedStores: false, aiCreditsMonthlyLimit: 100, unlimitedAiCredits: false, moduleIds: [], prices: [] })
 const form = ref(emptyForm())
 
 async function loadAll(){
@@ -58,6 +58,8 @@ function openEdit(p) {
     storeLimit: p.storeLimit,
     unlimitedMenus: p.unlimitedMenus || false,
     unlimitedStores: p.unlimitedStores || false,
+    aiCreditsMonthlyLimit: p.aiCreditsMonthlyLimit ?? 100,
+    unlimitedAiCredits: p.unlimitedAiCredits || false,
     moduleIds: (p.modules || []).map(pm => pm.moduleId),
     prices: (p.prices || []).map(pr => ({ period: pr.period, price: String(Number(pr.price || 0)) }))
   }
@@ -181,6 +183,20 @@ function periodLabel(v) {
           </div>
         </div>
 
+        <!-- Créditos de IA -->
+        <div class="row g-3 mt-2">
+          <div class="col-md-3">
+            <label class="form-label">Créditos de IA / mês</label>
+            <input v-model.number="form.aiCreditsMonthlyLimit" type="number" min="0" class="form-control" :disabled="form.unlimitedAiCredits" />
+          </div>
+          <div class="col-md-6 d-flex align-items-end">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" v-model="form.unlimitedAiCredits" id="chkAiCredits" />
+              <label class="form-check-label" for="chkAiCredits">Créditos IA ilimitados</label>
+            </div>
+          </div>
+        </div>
+
         <!-- Módulos -->
         <div class="mt-3">
           <label class="form-label">Módulos incluídos</label>
@@ -232,9 +248,10 @@ function periodLabel(v) {
             </div>
 
             <!-- Limites -->
-            <div class="d-flex gap-3 mb-2 small text-muted">
+            <div class="d-flex gap-3 mb-2 small text-muted flex-wrap">
               <span><i class="bi bi-journal-text me-1"></i>Cardápios: {{ p.unlimitedMenus ? 'Ilimitado' : (p.menuLimit ?? '—') }}</span>
               <span><i class="bi bi-shop me-1"></i>Lojas: {{ p.unlimitedStores ? 'Ilimitado' : (p.storeLimit ?? '—') }}</span>
+              <span><i class="bi bi-stars me-1"></i>IA: {{ p.unlimitedAiCredits ? 'Ilimitado' : ((p.aiCreditsMonthlyLimit ?? 100) + ' créditos/mês') }}</span>
             </div>
 
             <!-- Preços por período -->

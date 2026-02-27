@@ -8,9 +8,19 @@
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
+let _getSetting = null;
+async function getSettingFn() {
+  if (!_getSetting) {
+    const mod = await import('./services/systemSettings.js');
+    _getSetting = mod.getSetting;
+  }
+  return _getSetting;
+}
+
 async function parseSaiposWithAI(content, filename = 'unknown') {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error('OPENAI_API_KEY not set');
+  const getSetting = await getSettingFn();
+  const key = await getSetting('openai_api_key', 'OPENAI_API_KEY');
+  if (!key) throw new Error('Chave da API OpenAI não configurada. Acesse Painel SaaS → Configurações.');
 
   // system prompt: instruct model to return strict JSON only and provide a concrete example
   const system = `You are a parser that receives raw content exported from a POS (Saipos) file
@@ -73,7 +83,7 @@ Example expected JSON output for the 'printRows' excerpt above (ONLY the JSON ob
 
   const user = `Filename: ${filename}\n---BEGIN CONTENT---\n${String(content).slice(0, 20000)}\n---END CONTENT---\n\nPlease parse the content and return the JSON object described in the system prompt.`;
 
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const model = await getSetting('openai_model', 'OPENAI_MODEL') || 'gpt-4o-mini';
   const body = {
     model,
     messages: [

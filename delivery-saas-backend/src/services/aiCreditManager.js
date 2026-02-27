@@ -47,15 +47,18 @@ export async function getBalance(companyId) {
       aiCreditsBalance: true,
       aiCreditsLastReset: true,
       saasSubscription: {
-        select: { plan: { select: { aiCreditsMonthlyLimit: true } } },
+        select: { plan: { select: { aiCreditsMonthlyLimit: true, unlimitedAiCredits: true } } },
       },
     },
   })
 
-  const monthlyLimit = company?.saasSubscription?.plan?.aiCreditsMonthlyLimit ?? 100
+  const plan = company?.saasSubscription?.plan
+  const monthlyLimit = plan?.aiCreditsMonthlyLimit ?? 100
+  const unlimitedAiCredits = plan?.unlimitedAiCredits ?? false
   return {
     balance: company?.aiCreditsBalance ?? 0,
     monthlyLimit,
+    unlimitedAiCredits,
     lastReset: company?.aiCreditsLastReset ?? null,
   }
 }
@@ -67,12 +70,18 @@ export async function getBalance(companyId) {
 export async function checkCredits(companyId, serviceKey, quantity = 1) {
   const costPerUnit = AI_SERVICE_COSTS[serviceKey] ?? 1
   const totalCost = costPerUnit * Math.max(1, quantity)
-  const { balance, monthlyLimit, lastReset } = await getBalance(companyId)
+  const { balance, monthlyLimit, unlimitedAiCredits, lastReset } = await getBalance(companyId)
+
+  // Planos com créditos ilimitados sempre aprovam sem verificar saldo
+  if (unlimitedAiCredits) {
+    return { ok: true, balance, monthlyLimit, unlimitedAiCredits: true, lastReset, totalCost, costPerUnit, serviceKey, quantity }
+  }
 
   return {
     ok: balance >= totalCost,
     balance,
     monthlyLimit,
+    unlimitedAiCredits: false,
     lastReset,
     totalCost,
     costPerUnit,
@@ -94,6 +103,21 @@ export async function checkCredits(companyId, serviceKey, quantity = 1) {
 export async function debitCredits(companyId, serviceKey, quantity = 1, metadata = {}, userId = null) {
   const costPerUnit = AI_SERVICE_COSTS[serviceKey] ?? 1
   const totalCost = costPerUnit * Math.max(1, quantity)
+
+  // Verificar se o plano tem créditos ilimitados — registra uso sem debitar saldo
+  const { unlimitedAiCredits, balance: currentBalance } = await getBalance(companyId)
+  if (unlimitedAiCredits) {
+    await prisma.aiCreditTransaction.create({
+      data: {
+        companyId, userId, serviceKey,
+        creditsSpent: 0,          // sem débito real
+        balanceBefore: currentBalance,
+        balanceAfter: currentBalance,
+        metadata: { ...metadata, unlimited: true },
+      },
+    })
+    return { newBalance: currentBalance, spent: 0 }
+  }
 
   // Operação atômica: verifica e debita no mesmo bloco de transação
   const [updatedCompany] = await prisma.$transaction(async (tx) => {
@@ -171,16 +195,19 @@ export async function resetAllDueCredits() {
   const companies = await prisma.company.findMany({
     select: {
       id: true,
-      saasSubscription: { select: { plan: { select: { aiCreditsMonthlyLimit: true } } } },
+      saasSubscription: { select: { plan: { select: { aiCreditsMonthlyLimit: true, unlimitedAiCredits: true } } } },
     },
   })
 
   let resetCount = 0
   for (const company of companies) {
-    const limit = company.saasSubscription?.plan?.aiCreditsMonthlyLimit ?? 100
+    const plan = company.saasSubscription?.plan
+    const limit = plan?.aiCreditsMonthlyLimit ?? 100
+    const unlimited = plan?.unlimitedAiCredits ?? false
     await prisma.company.update({
       where: { id: company.id },
-      data: { aiCreditsBalance: limit, aiCreditsLastReset: new Date() },
+      // Empresas com plano ilimitado mantêm saldo em 0 (irrelevante); as demais são restauradas
+      data: { aiCreditsBalance: unlimited ? 0 : limit, aiCreditsLastReset: new Date() },
     })
     resetCount++
   }

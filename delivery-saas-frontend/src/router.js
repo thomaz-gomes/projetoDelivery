@@ -85,6 +85,7 @@ import SaasCompanyEdit from './views/SaasCompanyEdit.vue';
 import SaasBilling from './views/SaasBilling.vue';
 import SaasModules from './views/SaasModules.vue';
 import SaasAdmin from './views/SaasAdmin.vue';
+import SaasSettings from './views/SaasSettings.vue';
 import CashbackSettings from './views/cashback/CashbackSettings.vue';
 import NfeEmissao from './views/NfeEmissao.vue';
 import NfeEmissoesRelatorio from './views/NfeEmissoesRelatorio.vue';
@@ -211,6 +212,7 @@ const router = createRouter({
   ,{ path: '/saas/companies/:id/edit', component: SaasCompanyEdit, meta: { requiresAuth: true, role: ['ADMIN', 'SUPER_ADMIN'] } }
   ,{ path: '/saas/modules', component: SaasModules, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/billing', component: SaasBilling, meta: { requiresAuth: true, role: ['ADMIN','SUPER_ADMIN'] } }
+  ,{ path: '/saas/settings', component: SaasSettings, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
     { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true } },
     { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN' } },
