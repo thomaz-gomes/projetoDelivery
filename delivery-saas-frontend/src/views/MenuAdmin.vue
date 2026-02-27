@@ -9,9 +9,12 @@
             <TextInput v-model="search" placeholder="Buscar um item" inputClass="form-control me-2" />
             <button class="btn btn-sm btn-outline-secondary me-2" :class="{ active: compactMode }" @click="toggleCompact"><i class="bi bi-list"></i> {{ compactMode ? 'Denso' : 'Normal' }}</button>
           </div>
-          <div>
-            <button class="btn btn-outline-secondary me-2" @click="goNewCategory">Adicionar categoria</button>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" @click="goNewCategory">Adicionar categoria</button>
             <button class="btn btn-primary" @click="goNewProduct">Adicionar produto</button>
+            <button v-if="menuId" class="btn btn-outline-warning" @click="showImportModal = true" title="Importar cardápio com IA">
+              <i class="bi bi-stars me-1"></i><span class="d-none d-sm-inline">Importar com IA</span><span class="d-inline d-sm-none">IA</span>
+            </button>
           </div>
         </div>
 
@@ -103,6 +106,15 @@
     </div>
 
 
+    <!-- AI Import Modal -->
+    <MenuAiImportModal
+      v-if="showImportModal && menuId"
+      :menuId="menuId"
+      :menuName="menuInfo?.name || ''"
+      @close="showImportModal = false"
+      @imported="onImported"
+    />
+
   </div>
 </template>
 
@@ -113,6 +125,7 @@ import api from '../api'
 import { assetUrl } from '../utils/assetUrl.js'
 import { bindLoading } from '../state/globalLoading.js'
 import { useMediaLibrary } from '../composables/useMediaLibrary.js'
+import MenuAiImportModal from '../components/MenuAiImportModal.vue'
 
 const loading = ref(false)
 bindLoading(loading)
@@ -128,6 +141,13 @@ const error = ref('')
 const route = useRoute()
 const menuId = computed(() => route.query.menuId || null)
 const menuInfo = ref(null)
+
+// AI Import
+const showImportModal = ref(false)
+function onImported() {
+  showImportModal.value = false
+  load()
+}
 
 // Media Library for product image selection
 const { openFor } = useMediaLibrary()

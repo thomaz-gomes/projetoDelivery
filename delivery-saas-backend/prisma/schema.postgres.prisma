@@ -265,12 +265,25 @@ model Customer {
   id               String                @id @default(uuid())
   companyId        String
   company          Company               @relation(fields: [companyId], references: [id])
-  // optional iFood customer identifier (integration-specific)
-  ifoodCustomerId   String?
-  fullName         String
-  cpf              String?
-  whatsapp         String? // telefone principal normalizado (somente dígitos e com DDI)
-  phone            String? // opcional (outro telefone)
+  // iFood integration fields
+  ifoodCustomerId       String?
+  ifoodCode             String? // código do cliente iFood (importado via planilha, coluna "Código ifood")
+  ifoodConfirmationCode String? // código de confirmação do pedido iFood (ex: 1234)
+  fullName             String
+  cpf                  String?
+  email                String? // e-mail de contato
+  birthday             DateTime? // data de aniversário
+  whatsapp             String? // telefone principal normalizado (somente dígitos e com DDI)
+  phone                String? // opcional (outro telefone)
+  // Valor total acumulado gasto pelo cliente na loja (calculado via pedidos ou importado)
+  totalSpent           Decimal? @db.Decimal(12, 2)
+  // Campos importados (valores financeiros/totais) provenientes de planilhas
+  importedTotalOrders       Int?
+  importedTotalSpent        Float?
+  importedAvgTicket         Float?
+  importedLastPurchase      DateTime?
+  importedFinancialBalanceTotal  Float?
+  importedFinancialBalancePeriod Float?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
   addresses        CustomerAddress[]

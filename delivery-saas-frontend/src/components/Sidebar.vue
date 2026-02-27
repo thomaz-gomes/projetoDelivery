@@ -8,6 +8,7 @@ import { assetUrl } from '../utils/assetUrl.js'
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import * as bootstrap from 'bootstrap';
+import AiCreditsWidget from './AiCreditsWidget.vue';
 
 const props = defineProps({
   embedded: { type: Boolean, default: false }
@@ -760,6 +761,10 @@ function selectMenuOption(opt){
               </div>
             </li>
             <li><hr class="dropdown-divider"></li>
+            <li class="px-1 py-1">
+              <AiCreditsWidget compact />
+            </li>
+            <li><hr class="dropdown-divider"></li>
             <li>
               <button class="dropdown-item" @click.prevent="logout()">Sair</button>
             </li>
@@ -789,6 +794,10 @@ function selectMenuOption(opt){
                 </router-link>
               </li>
             </ul>
+          </li>
+          <li class="mt-auto pt-2">
+            <hr class="text-white opacity-25">
+            <AiCreditsWidget compact />
           </li>
         </ul>
       </nav>

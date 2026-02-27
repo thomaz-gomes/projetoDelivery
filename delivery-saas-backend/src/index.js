@@ -28,6 +28,7 @@ import publicMenuRouter from './routes/publicMenu.js'
 import publicCartRouter from './routes/publicCart.js'
 import menuAdminRouter from './routes/menu.js'
 import menuOptionsRouter from './routes/menuOptions.js'
+import menuImportRouter from './routes/menuImport.js'
 import { nfeRouter } from './routes/nfe.js'
 import companiesRouter from './routes/companies.js'
 import storesRouter from './routes/stores.js'
@@ -61,6 +62,8 @@ import metaPixelRouter from './routes/metaPixel.js'
 import mediaRouter from './routes/media.js'
 import dadosFiscaisRouter from './routes/dadosFiscais.js'
 import productReportsRouter from './routes/reports/products.js'
+import aiCreditsRouter from './routes/aiCredits.js'
+import './cron.js'
 
 const app = express();
 // When running behind a reverse proxy (EasyPanel / nginx / Cloudflare), enable
@@ -175,6 +178,7 @@ app.use('/public', publicMenuRouter);
 app.use('/public/:companyId/cart', publicCartRouter);
 app.use('/menu', menuAdminRouter);
 app.use('/menu/options', menuOptionsRouter);
+app.use('/menu', menuImportRouter);
 app.use('/nfe', requireModule('nfe'), nfeRouter);
 app.use('/settings', companiesRouter);
 // Mount menu admin router also under /settings to provide backward-compatible
@@ -196,6 +200,8 @@ app.use('/agent-setup', agentSetupRouter);
 app.use('/agent-print', requireModule('printing'), agentPrintRouter);
 // SaaS management (plans, modules, subscriptions, invoices)
 app.use('/saas', saasRouter);
+// AI Credits: saldo, histórico e gestão de créditos de IA por empresa
+app.use('/ai-credits', aiCreditsRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);

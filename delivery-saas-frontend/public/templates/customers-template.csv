@@ -1,0 +1,4 @@
+﻿Nome;CPF/CNPJ;Data Aniversário;Email;Telefone;Endereço;Complemento;Qtd. Pedidos;Valor Total;Ticket Medio;Última Compra;Saldo Financeiro Total;Saldo Financeiro do Período;Código ifood;Código Confirmação iFood
+Dinah borges;123.456.789-00;12/05/1990;dinah@example.com;+5511999999999;Rua das Flores 123;Apto 12;3;150,00;50,00;2026-02-01;0,00;0,00;IF12345;1234
+Jardins de Eunapolis;22.333.444/0001-55;;cliente2@example.com;+5511988888888;Rua Central 45;;5;275,50;55,10;2026-01-20;10,00;5,00;;
+Centauro;99988877766;30/11/1975;centauro@example.com;;Av. Brasil 1000;;1;25,00;25,00;2026-02-10;0,00;0,00;IF67890;

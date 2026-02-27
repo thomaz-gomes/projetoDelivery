@@ -1,0 +1,11 @@
+{
+  "menus": {
+    "e1cebb27-486f-4bbf-b0ce-a842ddaba377": {
+      "open24Hours": true,
+      "allowDelivery": true,
+      "allowPickup": true,
+      "timezone": "America/Sao_Paulo",
+      "forceOpen": true
+    }
+  }
+}

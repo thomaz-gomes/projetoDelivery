@@ -70,6 +70,8 @@
                       <button class="btn btn-sm btn-outline-secondary me-2" @click="copyPublicLink(m)" title="Copiar link público"><i class="bi bi-link-45deg"></i></button>
 
                       <button class="btn btn-sm btn-outline-danger" @click="remove(m)" title="Remover"><i class="bi bi-trash"></i></button>
+
+                      <button class="btn btn-sm btn-outline-warning ms-2" @click="openImport(m)" title="Importar cardápio com IA"><i class="bi bi-stars"></i></button>
                     </div>
                   </td>
                 </tr>
@@ -86,6 +88,15 @@
     </ListCard>
 
     <!-- Edit inline removed: use separate edit screen -->
+
+    <!-- AI Import Modal -->
+    <MenuAiImportModal
+      v-if="showImportModal"
+      :menuId="importMenuId"
+      :menuName="importMenuName"
+      @close="showImportModal = false"
+      @imported="onImported"
+    />
   </div>
 </template>
 
@@ -96,6 +107,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ListCard from '@/components/ListCard.vue'
 import { bindLoading } from '../state/globalLoading.js'
 import Swal from 'sweetalert2'
+import MenuAiImportModal from '@/components/MenuAiImportModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -110,6 +122,22 @@ const stores = ref([])
 const storesMap = {}
 const search = ref('')
 const togglingMenus = ref([])
+
+// AI Import
+const showImportModal = ref(false)
+const importMenuId = ref('')
+const importMenuName = ref('')
+
+function openImport(m) {
+  importMenuId.value = m.id
+  importMenuName.value = m.name || ''
+  showImportModal.value = true
+}
+
+function onImported() {
+  showImportModal.value = false
+  load()
+}
 
 const filtered = computed(() => {
   const q = (search.value || '').toLowerCase().trim()

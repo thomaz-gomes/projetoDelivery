@@ -171,11 +171,12 @@ const cashbackEnabled = ref(false)
 const tokenPresent = ref(false)
 
 const COMPANY_CUSTOMER_KEY = `public_customer_${companyId}`
+const PUBLIC_TOKEN_KEY = `public_token_${companyId}`
 
 onMounted(()=>{
   // fetch cashback settings to decide whether to show wallet section
   fetchCashbackSettings()
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem(PUBLIC_TOKEN_KEY)
   const stored = JSON.parse(localStorage.getItem(COMPANY_CUSTOMER_KEY) || 'null')
   if(token && stored){
     profile.value = stored
@@ -277,7 +278,7 @@ async function doRegister(){
     const payload = { name: reg.value.name, whatsapp: clean, email: reg.value.email || null, password: reg.value.password }
     const res = await api.post(`/public/${companyId}/register`, payload)
     if (res && res.data && res.data.token){
-      localStorage.setItem('token', res.data.token)
+      localStorage.setItem(PUBLIC_TOKEN_KEY, res.data.token)
       if(res.data.customer) localStorage.setItem(COMPANY_CUSTOMER_KEY, JSON.stringify(res.data.customer))
       setMsg('Conta criada com sucesso', 'alert-success')
       if(res.data.customer) profile.value = res.data.customer
@@ -321,7 +322,7 @@ async function doLogin(){
     }
 
     if (res && res.data && res.data.token){
-      localStorage.setItem('token', res.data.token)
+      localStorage.setItem(PUBLIC_TOKEN_KEY, res.data.token)
       if(res.data.customer) localStorage.setItem(COMPANY_CUSTOMER_KEY, JSON.stringify(res.data.customer))
       setMsg('Login efetuado', 'alert-success')
       if(res.data.customer) profile.value = res.data.customer
@@ -349,7 +350,7 @@ function useWhatsapp(){
 }
 
 function doLogout(){
-  localStorage.removeItem('token')
+  localStorage.removeItem(PUBLIC_TOKEN_KEY)
   localStorage.removeItem(COMPANY_CUSTOMER_KEY)
   profile.value = null
   if(props.embedded){

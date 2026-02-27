@@ -12,6 +12,7 @@ import { nav } from './config/nav.js'
 import PrinterWatcher from "./components/PrinterWatcher.vue";
 import MobileBottomNav from './components/MobileBottomNav.vue';
 import MediaLibraryModal from './components/MediaLibrary/MediaLibraryModal.vue';
+import ImportProgressBar from './components/ImportProgressBar.vue';
 
 const mobileOpen = ref(false);
 const auth = useAuthStore();
@@ -214,6 +215,7 @@ const showMobileHeader = computed(() => {
       <router-view />
     </template>
     <MediaLibraryModal />
+    <ImportProgressBar />
   </div>
 </template>
 

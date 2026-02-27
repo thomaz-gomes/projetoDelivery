@@ -365,8 +365,8 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
     try {
       let m = null
       if (menuId) {
-        m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, name: true, description: true, logoUrl: true, address: true, phone: true, whatsapp: true, timezone: true, weeklySchedule: true, open24Hours: true, allowDelivery: true, allowPickup: true, catalogMode: true } })
-        if (m) menuObj = { id: m.id, name: m.name, description: m.description, logo: m.logoUrl || null, address: m.address || null, phone: m.phone || null, whatsapp: m.whatsapp || null, timezone: m.timezone || null, weeklySchedule: m.weeklySchedule || null, open24Hours: !!m.open24Hours, allowDelivery: m.allowDelivery !== undefined ? !!m.allowDelivery : true, allowPickup: m.allowPickup !== undefined ? !!m.allowPickup : true, catalogMode: !!m.catalogMode }
+        m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, name: true, description: true, logoUrl: true, address: true, phone: true, whatsapp: true, timezone: true, weeklySchedule: true, open24Hours: true, allowDelivery: true, allowPickup: true, catalogMode: true, isActive: true } })
+        if (m) menuObj = { id: m.id, name: m.name, description: m.description, logo: m.logoUrl || null, address: m.address || null, phone: m.phone || null, whatsapp: m.whatsapp || null, timezone: m.timezone || null, weeklySchedule: m.weeklySchedule || null, open24Hours: !!m.open24Hours, allowDelivery: m.allowDelivery !== undefined ? !!m.allowDelivery : true, allowPickup: m.allowPickup !== undefined ? !!m.allowPickup : true, catalogMode: !!m.catalogMode, isActive: m.isActive !== undefined ? !!m.isActive : true }
       }
       // load menu-level settings from the store's settings file (settings/stores/<storeId>/settings.json)
       if (menuObj && menuObj.id) {

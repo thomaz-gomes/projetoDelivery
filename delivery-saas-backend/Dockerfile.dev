@@ -1,0 +1,21 @@
+# Dockerfile.dev — Backend com Chromium para scraping headless (Puppeteer)
+# Build uma vez com: docker compose -f docker-compose.dev.yml build backend
+FROM node:20-bookworm-slim
+
+# Instala Chromium e as dependências de sistema necessárias para o Puppeteer
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+    chromium \
+    ca-certificates \
+    fonts-liberation \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libgbm1 \
+    libasound2 \
+    libgtk-3-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Puppeteer: usa o Chromium do sistema, não baixa o próprio
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+WORKDIR /app

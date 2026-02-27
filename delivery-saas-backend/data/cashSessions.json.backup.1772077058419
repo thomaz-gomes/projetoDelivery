@@ -1,0 +1,168 @@
+{
+  "sessions": [
+    {
+      "id": "ca8dcced-879b-42dd-8006-73212f1890df",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2025-12-01T03:21:59.441Z",
+      "openedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "openingAmount": 100,
+      "balance": 79.6,
+      "note": null,
+      "movements": [
+        {
+          "id": "e88fcd73-e7eb-4d34-8ebe-9ac7998dd402",
+          "type": "reforco",
+          "amount": 79.6,
+          "account": null,
+          "note": "Reconciliação automática (esperado 79.60 vs registrado)",
+          "at": "2025-12-01T18:19:45.695Z",
+          "by": "119b4731-0f4a-4c98-8259-d9e9dd3f99af"
+        },
+        {
+          "id": "be675674-0e99-48d9-93f3-68132b4af0c6",
+          "type": "retirada",
+          "amount": 100,
+          "account": null,
+          "note": "Fechamento: ",
+          "at": "2025-12-01T18:58:00.492Z",
+          "by": "119b4731-0f4a-4c98-8259-d9e9dd3f99af"
+        }
+      ],
+      "closedAt": "2025-12-01T18:58:00.516Z",
+      "closedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "closingSummary": {
+        "note": "",
+        "counted": {
+          "PIX": 60,
+          "Dinheiro": 79.6
+        }
+      }
+    },
+    {
+      "id": "8349df14-93f9-4396-9120-87c4f4886daf",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2025-12-01T23:00:25.298Z",
+      "openedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "openingAmount": 10,
+      "balance": 10,
+      "note": null,
+      "movements": [],
+      "closedAt": "2025-12-01T23:08:43.997Z",
+      "closedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "closingSummary": {
+        "note": "",
+        "counted": {
+          "Dinheiro": 10
+        }
+      }
+    },
+    {
+      "id": "c85ff3a5-3464-40d0-8fe3-69153d22d7e4",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2025-12-02T02:26:38.182Z",
+      "openedBy": "119b4731-0f4a-4c98-8259-d9e9dd3f99af",
+      "openingAmount": 10,
+      "balance": 10,
+      "note": null,
+      "movements": [],
+      "closedAt": "2025-12-04T22:54:38.836Z",
+      "closedBy": "27521843-af5b-44c8-a2c8-d1415184ba53",
+      "closingSummary": {
+        "note": "",
+        "counted": {
+          "Dinheiro": 10
+        }
+      }
+    },
+    {
+      "id": "f6b9aa7c-6e29-4a85-95f7-b799303d3013",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2025-12-04T22:54:47.958Z",
+      "openedBy": "27521843-af5b-44c8-a2c8-d1415184ba53",
+      "openingAmount": 10,
+      "balance": 1075.2,
+      "note": null,
+      "movements": [
+        {
+          "id": "2cb8e789-ab50-4eac-82af-95246cc76bbc",
+          "type": "retirada",
+          "amount": 50,
+          "account": null,
+          "note": "teste",
+          "at": "2025-12-04T23:24:14.864Z",
+          "by": "27521843-af5b-44c8-a2c8-d1415184ba53"
+        },
+        {
+          "id": "258b2760-95a5-4b2a-bed7-8c5adbf72acf",
+          "type": "reforco",
+          "amount": 1115.2,
+          "account": null,
+          "note": "Fechamento: ",
+          "at": "2026-02-13T00:24:13.206Z",
+          "by": "a1d148f8-5347-4d64-8fee-c9a304a8caff"
+        }
+      ],
+      "closedAt": "2026-02-13T00:24:13.223Z",
+      "closedBy": "a1d148f8-5347-4d64-8fee-c9a304a8caff",
+      "closingSummary": {
+        "note": "",
+        "counted": {
+          "Dinheiro": 1075.2,
+          "PIX": 85
+        }
+      }
+    },
+    {
+      "id": "7197e297-422d-464b-a6e5-0fc838c2314d",
+      "companyId": "a114f704-6c82-4fcb-9021-271ef756846e",
+      "openedAt": "2025-12-26T01:12:23.065Z",
+      "openedBy": "40e66635-fdc2-44ce-a7eb-b6f2da8de819",
+      "openingAmount": 0.01,
+      "balance": 0.01,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
+    },
+    {
+      "id": "d3fc6be4-d725-4dcf-b6c9-94f2615601bc",
+      "companyId": "a968e497-f928-490f-854f-3d7cf9ef3dbc",
+      "openedAt": "2026-01-02T00:11:57.368Z",
+      "openedBy": "0e5e5338-ed98-40f8-b455-fc7cfc54250f",
+      "openingAmount": 100,
+      "balance": 100,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
+    },
+    {
+      "id": "8ac92523-b682-447e-a8fd-a49a2af3f648",
+      "companyId": "877421c2-fe39-4ac2-ad3e-98f22c4339cb",
+      "openedAt": "2026-01-04T21:46:05.822Z",
+      "openedBy": "d37d7d9e-e174-4380-8416-2d021ff6473b",
+      "openingAmount": 1,
+      "balance": 1,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
+    },
+    {
+      "id": "66376521-446b-4d9e-9b6c-d2fa299553b7",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "openedAt": "2026-02-13T00:24:48.813Z",
+      "openedBy": "a1d148f8-5347-4d64-8fee-c9a304a8caff",
+      "openingAmount": 1.08,
+      "balance": 1.08,
+      "note": null,
+      "movements": [],
+      "closedAt": null,
+      "closedBy": null,
+      "closingSummary": null
+    }
+  ]
+}

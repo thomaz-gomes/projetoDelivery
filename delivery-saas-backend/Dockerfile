@@ -15,21 +15,25 @@ RUN if [ -f nfe-module/package.json ]; then \
     cd nfe-module && npm ci --silent --omit=dev && cd ..; \
 fi
 
-# Generate Prisma client (for both sqlite and postgres schemas if present)
-# Ensure migrations are copied explicitly (avoid cases where changes were added after a previous build)
-# This guarantees `/app/prisma/migrations` exists in the image even if .dockerignore or build context
-# behaved unexpectedly. The build context already includes the repo root, so this is idempotent.
-COPY prisma/migrations ./prisma/migrations
-# Generate client for default schema (sqlite) if present
-RUN if [ -f prisma/schema.prisma ]; then npx prisma generate --schema=prisma/schema.prisma; fi
-# Also generate client for Postgres schema (used in production) if present
-RUN if [ -f prisma/schema.postgres.prisma ]; then npx prisma generate --schema=prisma/schema.postgres.prisma; fi
+# Gera Prisma Client (schema unificado — schema.prisma = PostgreSQL)
+RUN npx prisma generate
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
-# Install runtime utilities required by healthchecks
-RUN apk add --no-cache curl ca-certificates
+# Install runtime utilities + Chromium para Puppeteer (scraping headless)
+RUN apk add --no-cache \
+    curl \
+    ca-certificates \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ttf-freefont
+
+# Puppeteer usa o Chromium do Alpine, não o bundled
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy node modules and built app from builder
 COPY --from=builder /app/node_modules ./node_modules

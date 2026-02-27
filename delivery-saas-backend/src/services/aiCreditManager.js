@@ -1,0 +1,208 @@
+/**
+ * aiCreditManager.js — Serviço centralizado de gestão de créditos de IA
+ *
+ * Uso em qualquer rota/módulo que consuma IA:
+ *
+ *   import { checkCredits, debitCredits } from '../services/aiCreditManager.js'
+ *
+ *   // 1. Verificar saldo antes de chamar a IA
+ *   const check = await checkCredits(companyId, 'MEU_SERVICO', quantity)
+ *   if (!check.ok) return res.status(402).json({ message: 'Créditos insuficientes', ...check })
+ *
+ *   // 2. Chamar a IA normalmente...
+ *
+ *   // 3. Debitar os créditos
+ *   await debitCredits(companyId, 'MEU_SERVICO', quantity, { contexto: '...' }, userId)
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * COMO REGISTRAR UM NOVO SERVIÇO DE IA:
+ *
+ *   1. Adicione a constante de custo abaixo (AI_SERVICE_COSTS)
+ *   2. (Opcional) Insira um registro em AiCreditService no banco via seed/admin
+ *   3. Use checkCredits() + debitCredits() no seu route/service
+ *   4. O frontend lê o saldo via useAiCreditsStore().fetch() — sem mudanças necessárias
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+import { prisma } from '../prisma.js'
+
+/**
+ * Custo padrão por serviço (créditos por unidade).
+ * Usado como fallback se o serviço não estiver cadastrado em AiCreditService no banco.
+ */
+export const AI_SERVICE_COSTS = {
+  MENU_IMPORT_ITEM:    1, // por item de cardápio aplicado
+  MENU_IMPORT_PHOTO:   5, // por foto analisada (visão/OCR)
+  GENERATE_DESCRIPTION: 2, // por descrição gerada por IA
+  OCR_PHOTO:           5, // por foto processada via OCR
+}
+
+/**
+ * Retorna o saldo atual de créditos e o limite mensal do plano da empresa.
+ */
+export async function getBalance(companyId) {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: {
+      aiCreditsBalance: true,
+      aiCreditsLastReset: true,
+      saasSubscription: {
+        select: { plan: { select: { aiCreditsMonthlyLimit: true } } },
+      },
+    },
+  })
+
+  const monthlyLimit = company?.saasSubscription?.plan?.aiCreditsMonthlyLimit ?? 100
+  return {
+    balance: company?.aiCreditsBalance ?? 0,
+    monthlyLimit,
+    lastReset: company?.aiCreditsLastReset ?? null,
+  }
+}
+
+/**
+ * Verifica se a empresa tem saldo suficiente para o serviço solicitado.
+ * Não realiza débito.
+ */
+export async function checkCredits(companyId, serviceKey, quantity = 1) {
+  const costPerUnit = AI_SERVICE_COSTS[serviceKey] ?? 1
+  const totalCost = costPerUnit * Math.max(1, quantity)
+  const { balance, monthlyLimit, lastReset } = await getBalance(companyId)
+
+  return {
+    ok: balance >= totalCost,
+    balance,
+    monthlyLimit,
+    lastReset,
+    totalCost,
+    costPerUnit,
+    serviceKey,
+    quantity,
+  }
+}
+
+/**
+ * Debita créditos da empresa de forma atômica.
+ * Lança erro HTTP 402 se saldo insuficiente.
+ *
+ * @param {string} companyId
+ * @param {string} serviceKey  - chave do serviço (ex: "MENU_IMPORT_ITEM")
+ * @param {number} quantity    - quantidade de unidades consumidas
+ * @param {object} metadata    - dados extras para auditoria (ex: { menuId, source })
+ * @param {string} [userId]    - ID do usuário que disparou a ação (opcional)
+ */
+export async function debitCredits(companyId, serviceKey, quantity = 1, metadata = {}, userId = null) {
+  const costPerUnit = AI_SERVICE_COSTS[serviceKey] ?? 1
+  const totalCost = costPerUnit * Math.max(1, quantity)
+
+  // Operação atômica: verifica e debita no mesmo bloco de transação
+  const [updatedCompany] = await prisma.$transaction(async (tx) => {
+    const company = await tx.company.findUnique({
+      where: { id: companyId },
+      select: { aiCreditsBalance: true },
+    })
+
+    if (!company) {
+      const err = new Error('Empresa não encontrada')
+      err.statusCode = 404
+      throw err
+    }
+
+    if (company.aiCreditsBalance < totalCost) {
+      const err = new Error(
+        `Créditos de IA insuficientes. Necessário: ${totalCost}, Disponível: ${company.aiCreditsBalance}`,
+      )
+      err.statusCode = 402
+      err.balance = company.aiCreditsBalance
+      err.required = totalCost
+      throw err
+    }
+
+    const updated = await tx.company.update({
+      where: { id: companyId },
+      data: { aiCreditsBalance: { decrement: totalCost } },
+      select: { aiCreditsBalance: true },
+    })
+
+    await tx.aiCreditTransaction.create({
+      data: {
+        companyId,
+        userId,
+        serviceKey,
+        creditsSpent: totalCost,
+        balanceBefore: company.aiCreditsBalance,
+        balanceAfter: updated.aiCreditsBalance,
+        metadata,
+      },
+    })
+
+    return [updated]
+  })
+
+  return {
+    newBalance: updatedCompany.aiCreditsBalance,
+    spent: totalCost,
+  }
+}
+
+/**
+ * Restaura os créditos de uma empresa ao limite mensal do seu plano.
+ * Atualiza a data do último reset.
+ */
+export async function resetCompanyCredits(companyId) {
+  const { monthlyLimit } = await getBalance(companyId)
+
+  await prisma.company.update({
+    where: { id: companyId },
+    data: {
+      aiCreditsBalance: monthlyLimit,
+      aiCreditsLastReset: new Date(),
+    },
+  })
+
+  return { monthlyLimit }
+}
+
+/**
+ * Restaura os créditos de TODAS as empresas para seus limites de plano.
+ * Chamado pelo cron mensal.
+ */
+export async function resetAllDueCredits() {
+  const companies = await prisma.company.findMany({
+    select: {
+      id: true,
+      saasSubscription: { select: { plan: { select: { aiCreditsMonthlyLimit: true } } } },
+    },
+  })
+
+  let resetCount = 0
+  for (const company of companies) {
+    const limit = company.saasSubscription?.plan?.aiCreditsMonthlyLimit ?? 100
+    await prisma.company.update({
+      where: { id: company.id },
+      data: { aiCreditsBalance: limit, aiCreditsLastReset: new Date() },
+    })
+    resetCount++
+  }
+
+  console.log(`[AiCreditManager] Reset mensal concluído: ${resetCount} empresa(s) atualizadas`)
+  return { resetCount }
+}
+
+/**
+ * Retorna o histórico de transações de crédito paginado.
+ */
+export async function getTransactions(companyId, page = 1, limit = 20) {
+  const skip = (page - 1) * limit
+  const [transactions, total] = await Promise.all([
+    prisma.aiCreditTransaction.findMany({
+      where: { companyId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.aiCreditTransaction.count({ where: { companyId } }),
+  ])
+
+  return { transactions, total, page, limit, pages: Math.ceil(total / limit) }
+}

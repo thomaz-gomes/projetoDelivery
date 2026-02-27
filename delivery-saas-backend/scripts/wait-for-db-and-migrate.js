@@ -3,8 +3,6 @@ import 'dotenv/config'
 import ensureDatabaseUrl from '../src/configureDatabaseEnv.js'
 import { PrismaClient } from '@prisma/client'
 import { execSync } from 'child_process'
-import fs from 'fs'
-import path from 'path'
 
 // construct DATABASE_URL from parts if needed before creating PrismaClient
 ensureDatabaseUrl()
@@ -13,7 +11,6 @@ const prisma = new PrismaClient()
 async function waitForDb(retries = 120, delay = 3000) {
   for (let i = 0; i < retries; i++) {
     try {
-      // simple query to test connection
       await prisma.$queryRaw`SELECT 1`
       console.log('Database reachable')
       return true
@@ -26,7 +23,7 @@ async function waitForDb(retries = 120, delay = 3000) {
   return false
 }
 
-(async () => {
+;(async () => {
   try {
     const ok = await waitForDb()
     if (!ok) {
@@ -34,86 +31,8 @@ async function waitForDb(retries = 120, delay = 3000) {
       process.exit(1)
     }
 
-    // If migrations were generated for a different provider (e.g. sqlite)
-    // and we switched to Postgres, Prisma will refuse to deploy. For
-    // local/dev/testing we detect that situation and remove the old
-    // migration history so we can create a new one against Postgres.
-    // Prisma sometimes keeps migration_lock.toml inside prisma/migrations
-    const lockFileCandidates = [
-      path.join(process.cwd(), 'prisma', 'migration_lock.toml'),
-      path.join(process.cwd(), 'prisma', 'migrations', 'migration_lock.toml'),
-      path.join(process.cwd(), 'prisma', 'migrations', 'migration-lock.toml')
-    ]
-    let lockFile = null
-    for (const candidate of lockFileCandidates) {
-      if (fs.existsSync(candidate)) {
-        lockFile = candidate
-        break
-      }
-    }
-    if (lockFile) {
-      try {
-        const lock = fs.readFileSync(lockFile, 'utf8')
-        const providerMatch = lock.match(/provider\s*=\s*"([^"]+)"/)
-        if (providerMatch && providerMatch[1] !== 'postgresql') {
-          // Be conservative in production: do not auto-remove migrations there.
-          if ((process.env.NODE_ENV || '').toLowerCase() === 'production') {
-            console.error(`Detected migration_lock provider=${providerMatch[1]} != postgresql while in production. Aborting automated cleanup to avoid data loss. Please inspect prisma/migration_lock and migrations directory manually.`)
-            process.exit(1)
-          }
-
-          console.log(`Detected migration_lock provider=${providerMatch[1]} != postgresql. Removing old migrations and lock file for fresh migration (non-production).`)
-          const migrationsDir = path.join(process.cwd(), 'prisma', 'migrations')
-          if (fs.existsSync(migrationsDir)) {
-            fs.rmSync(migrationsDir, { recursive: true, force: true })
-            console.log('Removed prisma/migrations directory')
-          }
-          fs.rmSync(lockFile, { force: true })
-          console.log('Removed prisma migration lock file:', lockFile)
-        }
-      } catch (err) {
-        console.warn('Could not inspect migration_lock.toml:', err && err.message)
-      }
-    }
-
-  // Choose Prisma schema file depending on database type.
-  // Use `prisma/schema.postgres.prisma` when running against Postgres (DB_* envs present
-  // or DATABASE_URL indicates Postgres), otherwise default to schema.prisma (sqlite).
-  const dbUrl = (process.env.DATABASE_URL || '').toString().trim()
-
-  // Robust detection: try parsing the URL to detect the protocol, fall back to string checks
-  let isPostgres = false
-  try {
-    if (dbUrl) {
-      const u = new URL(dbUrl)
-      const proto = (u.protocol || '').toString().replace(':', '').toLowerCase()
-      if (proto.startsWith('postgres')) isPostgres = true
-    }
-  } catch (e) {
-    // ignore parse errors and fall back
-  }
-  if (!isPostgres) {
-    isPostgres = dbUrl.toLowerCase().startsWith('postgres') || dbUrl.toLowerCase().startsWith('postgresql') || !!(process.env.DB_HOST || process.env.POSTGRES_HOST || process.env.PGHOST)
-  }
-
-  const schemaArg = isPostgres ? '--schema=prisma/schema.postgres.prisma' : ''
-  console.log('Using schema arg for Prisma:', schemaArg || '<default prisma/schema.prisma>')
-
-  // prisma generate was already run during Docker build — run it best-effort at
-  // runtime but do NOT abort db push if it fails (e.g. Alpine write-permission issues).
-  try {
-    console.log('Running prisma generate (best-effort)...', schemaArg)
-    execSync((`npx prisma generate ${schemaArg}`).trim(), { stdio: 'inherit', env: process.env })
-  } catch (genErr) {
-    console.warn('prisma generate failed (non-fatal, using build-time client):', genErr && genErr.message)
-  }
-
-  // Use `db push` to sync the database schema.
-  // --skip-generate: use the already-generated build-time client, do not regenerate after push.
-  // `db push` compares the Prisma schema to the actual database and adds
-  // missing tables/columns without requiring migration files to be up-to-date.
-  console.log('Running prisma db push...', schemaArg)
-  execSync((`npx prisma db push --skip-generate ${schemaArg}`).trim(), { stdio: 'inherit', env: process.env })
+    console.log('Running prisma db push...')
+    execSync('npx prisma db push --skip-generate', { stdio: 'inherit', env: process.env })
 
     console.log('Database schema synced successfully')
     await prisma.$disconnect()

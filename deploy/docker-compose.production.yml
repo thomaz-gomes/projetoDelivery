@@ -15,18 +15,24 @@ services:
     ports:
       - "5432:5432"
     # Porta exposta para acesso externo (DBeaver, etc.) — remover se não necessário
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   migrate:
     build:
       context: ../delivery-saas-backend
       dockerfile: Dockerfile
-    command: >
-      sh -c "npx prisma db push --skip-generate --schema=prisma/schema.postgres.prisma"
+    command: node scripts/wait-for-db-and-migrate.js
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      NODE_ENV: production
     depends_on:
       delivery_db:
-        condition: service_started
+        condition: service_healthy
     restart: "no"
 
   backend:

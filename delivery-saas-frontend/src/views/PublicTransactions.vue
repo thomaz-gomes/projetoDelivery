@@ -39,6 +39,7 @@ import api from '../api'
 const route = useRoute()
 const router = useRouter()
 const companyId = route.params.companyId || ''
+const PUBLIC_TOKEN_KEY = `public_token_${companyId}`
 
 const loading = ref(false)
 const cashbackEnabled = ref(true)
@@ -60,7 +61,7 @@ onMounted(async ()=>{
     const clientId = stored && (stored.id || stored.clientId || stored.customerId) ? (stored.id || stored.clientId || stored.customerId) : null
     if(!clientId){
       // if there's a token, try backend to resolve current customer
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem(PUBLIC_TOKEN_KEY)
       if(token){
         try{ const me = await api.get('/auth/me'); if(me?.data?.user) { /* nothing */ } }catch(e){}
       }

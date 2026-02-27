@@ -96,6 +96,18 @@ router.patch('/menus/:id', requireRole('ADMIN'), async (req, res) => {
   }
 
   const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule, open24Hours: open24Hours !== undefined ? !!open24Hours : existing.open24Hours, allowDelivery: allowDelivery !== undefined ? !!allowDelivery : existing.allowDelivery, allowPickup: allowPickup !== undefined ? !!allowPickup : existing.allowPickup, catalogMode: catalogMode !== undefined ? !!catalogMode : existing.catalogMode } })
+
+  // Emit real-time socket event so public menus react immediately when a menu is toggled
+  try {
+    const io = req && req.app && req.app.locals && req.app.locals.io ? req.app.locals.io : null
+    if (io) {
+      const resolvedStoreId = updated.storeId || existing.storeId
+      const meta = { isActive: updated.isActive, menuId: updated.id }
+      const payload = { storeId: resolvedStoreId, companyId: companyId, menuId: updated.id, changedKeys: Object.keys(req.body || {}), meta }
+      io.to(`company_${companyId}`).emit('store-settings-updated', payload)
+    }
+  } catch (e) { /* non-fatal */ }
+
   res.json(updated)
 })
 

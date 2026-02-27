@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useCustomersStore } from '../stores/customers';
+import { useImportProgressStore } from '../stores/importProgress';
 import { useRouter } from 'vue-router';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
 import BaseButton from '../components/BaseButton.vue';
@@ -9,11 +10,19 @@ import api from '../api';
 import Swal from 'sweetalert2'
 
 const store = useCustomersStore();
+const imp = useImportProgressStore();
 const router = useRouter();
 
 const q = ref('');
 const error = ref('');
 const loading = ref(false)
+const importing = ref(false)
+const fileInputRef = ref(null)
+
+// Recarrega a lista quando o import de fundo terminar (sem erro)
+watch(() => imp.done, (isDone) => {
+  if (isDone && !imp.error) load();
+})
 
 const limit = ref(20)
 const offset = ref(0)
@@ -25,10 +34,8 @@ const load = async () => {
   try{
     const token = localStorage.getItem('token')
     if(!token){ router.push({ path: '/login', query: { redirect: '/customers' } }); return }
-    await store.fetch()
-    let list = store.list || []
-    if(q.value) list = list.filter(c => (c.fullName||'').toLowerCase().includes(q.value.toLowerCase()) || (c.whatsapp||'').includes(q.value) || (c.cpf||'').includes(q.value))
-    total.value = list.length
+    await store.fetch({ q: q.value, skip: offset.value, take: limit.value })
+    total.value = store.total
   }catch(e){ console.error('Failed to fetch customers', e); error.value = e?.response?.data?.message || 'Falha ao carregar clientes' }
   finally{ loading.value = false }
 }
@@ -44,23 +51,25 @@ function onQuickClear(){ resetFilters() }
 async function onImport(e){
   const file = e.target.files?.[0]
   if(!file) return
+  if(fileInputRef.value) fileInputRef.value.value = ''
+  importing.value = true
   try{
     const res = await store.importFile(file)
-    await load()
-    Swal.fire({ icon:'success', text: `Importação: criados ${res.created}, atualizados ${res.updated}.` })
-  }catch(e){ console.error(e); Swal.fire({ icon:'error', text: 'Falha ao importar' }) }
+    // Backend retorna imediatamente com jobId; polling via importProgress store
+    imp.start(res.jobId, res.total, file.name)
+  }catch(e){
+    console.error(e)
+    Swal.fire({ icon:'error', title: 'Falha ao enviar arquivo', text: e?.response?.data?.message || e?.message || 'Erro desconhecido' })
+  }finally{
+    importing.value = false
+  }
 }
 
 const resetFilters = () => { q.value=''; offset.value=0; load() }
-const nextPage = () => { if(offset.value + limit.value < total.value) offset.value += limit.value }
-const prevPage = () => { offset.value = Math.max(0, offset.value - limit.value) }
+const nextPage = () => { if(offset.value + limit.value < total.value){ offset.value += limit.value; load() } }
+const prevPage = () => { if(offset.value > 0){ offset.value = Math.max(0, offset.value - limit.value); load() } }
 
-const displayed = computed(()=>{
-  let list = store.list || []
-  if(q.value) list = list.filter(c => (c.fullName||'').toLowerCase().includes(q.value.toLowerCase()) || (c.whatsapp||'').includes(q.value) || (c.cpf||'').includes(q.value))
-  total.value = list.length
-  return list.slice(offset.value, offset.value + limit.value)
-})
+const displayed = computed(() => store.list || [])
 
 function editCustomer(id){ router.push(`/customers/${id}/edit`) }
 
@@ -145,10 +154,12 @@ async function performMerge(){
   <ListCard :title="`Clientes (${total || store.list.length})`" icon="bi bi-people" :subtitle="total ? `${total} clientes cadastrados` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome, CPF, WhatsApp" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
     <template #actions>
       <div class="d-flex align-items-center gap-2">
-        <label class="btn btn-outline-secondary btn-sm mb-0">
-          <i class="bi bi-upload me-1"></i> Importar
-          <input type="file" accept=".csv,.xlsx,.xls" class="d-none" @change="onImport" />
+        <label class="btn btn-outline-secondary btn-sm mb-0" :class="{ disabled: importing }">
+          <span v-if="importing"><span class="spinner-border spinner-border-sm me-1"></span> Importando...</span>
+          <span v-else><i class="bi bi-upload me-1"></i> Importar</span>
+          <input ref="fileInputRef" type="file" accept=".csv,.xlsx,.xls" class="d-none" @change="onImport" :disabled="importing" />
         </label>
+        <a class="btn btn-link btn-sm p-0" href="/templates/customers-template.csv" download>Baixar planilha modelo</a>
         <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Novo cliente</button>
         <button class="btn btn-outline-secondary" @click.stop="openMergeModal"><i class="bi bi-git-merge me-1"></i> Combinar</button>
       </div>

@@ -25,6 +25,8 @@ const testText = ref('');
 const testing = ref(false);
 const matchResult = ref(null);
 const auth = useAuthStore();
+const importing = ref(false);
+const importProgress = ref({ total: 0, done: 0, errors: [] });
 
 async function fetchList() {
   loading.value = true;
@@ -109,6 +111,88 @@ async function testMatch() {
     testing.value = false;
   }
 }
+
+function parseCsv(text) {
+  if (!text) return [];
+  // remove BOM
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const lines = text.split(/\r?\n/);
+  // drop empty lines but preserve lines that have separators
+  const nonEmpty = lines.filter(l => l.trim() !== '');
+  if (!nonEmpty.length) return [];
+
+  // Detect best separator from first non-empty line
+  const first = nonEmpty[0];
+  const candidates = [',', ';', '\t', '|'];
+  let sep = ',';
+  let maxCount = -1;
+  for (const s of candidates) {
+    const cnt = first.split(s).length - 1;
+    if (cnt > maxCount) { maxCount = cnt; sep = s; }
+  }
+
+  const parseLine = (line) => {
+    const res = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; continue; }
+        inQuotes = !inQuotes;
+        continue;
+      }
+      if (!inQuotes && ch === sep) { res.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    res.push(cur);
+    return res.map(c => c.trim());
+  };
+
+  const header = parseLine(nonEmpty.shift()).map(h => h.replace(/^"|"$/g, ''));
+  const rows = nonEmpty.map(line => {
+    const cols = parseLine(line);
+    const obj = {};
+    header.forEach((h, i) => { obj[h] = (cols[i] ?? '').replace(/^"|"$/g, ''); });
+    return obj;
+  });
+  return rows;
+}
+
+async function handleFileImport(file) {
+  if (!file) return;
+  importing.value = true;
+  importProgress.value = { total: 0, done: 0, errors: [] };
+  try {
+    const txt = await file.text();
+    const rows = parseCsv(txt);
+    importProgress.value.total = rows.length;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const payload = {
+        name: (r.name || '').trim(),
+        aliases: (r.aliases || '').split(',').map(s => s.trim()).filter(Boolean),
+        deliveryFee: parseFloat((r.deliveryFee || '0').replace(/[,]/g, '.')) || 0,
+        riderFee: parseFloat((r.riderFee || '0').replace(/[,]/g, '.')) || 0,
+      };
+      if (!payload.name) {
+        importProgress.value.errors.push({ row: i + 1, message: 'Nome vazio' });
+        continue;
+      }
+      try {
+        await api.post('/neighborhoods', payload);
+        importProgress.value.done++;
+      } catch (e) {
+        importProgress.value.errors.push({ row: i + 1, message: e?.response?.data?.message || String(e) });
+      }
+    }
+    await fetchList();
+  } catch (e) {
+    importProgress.value.errors.push({ row: 0, message: String(e) });
+  } finally {
+    importing.value = false;
+  }
+}
 </script>
 
 <template>
@@ -133,11 +217,23 @@ async function testMatch() {
             <CurrencyInput label="Taxa motoboy" labelClass="form-label" v-model="form.riderFee" inputClass="form-control" placeholder="Taxa motoboy" />
           </div>
           <div class="col-12 mt-2">
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 align-items-center">
               <button class="btn btn-primary" :disabled="saving">Salvar</button>
               <button type="button" class="btn btn-outline-secondary" @click="resetForm">Limpar</button>
+              <label class="btn btn-outline-secondary mb-0" style="cursor:pointer;">
+                Importar CSV
+                <input type="file" accept=".csv" style="display:none" @change="e => handleFileImport(e.target.files[0])" />
+              </label>
+              <a class="btn btn-link" :href="'/templates/neighborhoods-template.csv'" download>Baixar planilha modelo</a>
             </div>
             <div v-if="error" class="text-danger small mt-2">{{ error }}</div>
+            <div v-if="importing" class="small mt-2">Importando... {{ importProgress.done }} / {{ importProgress.total }} processados</div>
+            <div v-if="importProgress.errors && importProgress.errors.length" class="mt-2">
+              <div class="small text-danger">Erros durante importação:</div>
+              <ul class="small text-danger mb-0">
+                <li v-for="(er, idx) in importProgress.errors" :key="idx">Linha {{ er.row }}: {{ er.message }}</li>
+              </ul>
+            </div>
           </div>
         </form>
       </div>

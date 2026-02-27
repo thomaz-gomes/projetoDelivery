@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import xlsx from 'xlsx';
+import { randomUUID } from 'crypto';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { normalizePhone, findOrCreateCustomer } from '../services/customers.js';
@@ -342,89 +343,198 @@ customersRouter.delete('/:id/addresses/:addressId', requireRole('ADMIN'), async 
   res.json({ ok: true });
 });
 
-// Importação CSV/XLSX (colunas suportadas: fullName, cpf, whatsapp, phone, street, number, complement, neighborhood, city, state, postalCode, latitude, longitude, formatted)
+// ─── Import em segundo plano ────────────────────────────────────────────────
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Mapa de jobs em memória: jobId → { processed, total, created, updated, errors, done, error }
+const importJobs = new Map();
+
+function parseImportRows(buffer, originalname, mimetype) {
+  const xlsxOptions = { type: 'buffer' };
+  const fileName = (originalname || '').toLowerCase();
+  const isCsv = fileName.endsWith('.csv') || mimetype === 'text/csv';
+  if (isCsv) {
+    const firstLine = buffer.toString('utf8').replace(/^\uFEFF/, '').split('\n')[0] || '';
+    const semiCount = (firstLine.match(/;/g) || []).length;
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    if (semiCount > commaCount) xlsxOptions.FS = ';';
+  }
+  const wb = xlsx.read(buffer, xlsxOptions);
+  // raw: false → preserva "150,00" e "+5511..." como strings em vez de auto-converter
+  return xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: false });
+}
+
+async function processOneImportRow(r, companyId) {
+  const fullName = r.fullName || r.nome || r.Nome || 'Cliente';
+  const cpf = r['CPF/CNPJ'] || r.cpf || r.CPF || r.cnpj || '';
+  // Telefone (coluna da planilha) vai SOMENTE para whatsapp; phone fica para colunas explícitas
+  const whatsapp = r.whatsapp || r.WhatsApp || r.Telefone || r.telefone || r.phone || '';
+  const phone = r.phone || r.phone_alt || '';
+  const email = r.email || r.Email || r['E-mail'] || r['e-mail'] || '';
+  // Birthday: aceita ISO (1990-05-12) ou formatos BR (12/05/1990)
+  const birthdayRaw = r['Data Aniversário'] || r['Data de Aniversário'] || r.birthday || r.aniversario || r.Aniversário || '';
+  const qtdPedidos = r['Qtd. Pedidos'] || r['Qtd Pedidos'] || r.qtdPedidos || r.qtd_pedidos || r.totalOrders || r.total_orders || r.totalPedidos || '';
+  const valorTotal = r['Valor Total'] || r.valorTotal || r.total_spent || '';
+  const ticketMedio = r['Ticket Medio'] || r['Ticket Médio'] || r.ticketMedio || r.avgTicket || r.ticket_medio || '';
+  const ultimaCompra = r['Última Compra'] || r['Ultima Compra'] || r.ultimaCompra || r.lastPurchase || r.last_order_date || '';
+  const saldoTotal = r['Saldo Financeiro Total'] || r.saldoTotal || r.balanceTotal || '';
+  const saldoPeriodo = r['Saldo Financeiro do Período'] || r.saldoPeriodo || r.balancePeriod || '';
+  // "Código ifood" → ifoodCode (identificador do cliente no iFood, separado do ifoodCustomerId da integração)
+  const ifoodCode = r['Código ifood'] || r.ifoodCode || '';
+  const codigoConfirmacaoIfood = r['Código Confirmação iFood'] || r['Codigo Confirmacao iFood'] || r.ifoodConfirmationCode || '';
+  const enderecoLivre = r['Endereço'] || r.Endereço || r.endereco || '';
+  const complementoLivre = r['Complemento'] || r.complemento || r.complement || '';
+
+  const address = {
+    label: r.label || r.rótulo || null,
+    street: r.street || r.logradouro || r.rua || enderecoLivre,
+    number: r.number || r.numero || '',
+    complement: r.complement || r.complemento || r.Complemento || complementoLivre,
+    neighborhood: r.neighborhood || r.bairro || '',
+    reference: r.reference || r.referencia || r.referência || '',
+    observation: r.observation || r.observacao || r.observação || r.note || r.notes || '',
+    city: r.city || r.cidade || '',
+    state: r.state || r.estado || '',
+    postalCode: r.postalCode || r.cep || '',
+    latitude: r.latitude ? (parseFloat(String(r.latitude)) || null) : null,
+    longitude: r.longitude ? (parseFloat(String(r.longitude)) || null) : null,
+    formatted: r.formatted || enderecoLivre,
+    isDefault: true,
+  };
+
+  const parseBRL = (v) => v !== '' ? (parseFloat(String(v).replace(/\./g, '').replace(/,/g, '.')) || 0) : null;
+  const parseDate = (v) => {
+    if (!v) return null;
+    const s = String(v).trim();
+    // Tenta ISO direto
+    let d = new Date(s);
+    if (!isNaN(d.getTime())) return d;
+    // Tenta formato BR: DD/MM/YYYY ou DD/MM/YY
+    const brMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (brMatch) {
+      const year = brMatch[3].length === 2 ? `19${brMatch[3]}` : brMatch[3];
+      d = new Date(`${year}-${brMatch[2].padStart(2,'0')}-${brMatch[1].padStart(2,'0')}`);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return null;
+  };
+  const parsedTotalOrders = qtdPedidos !== '' ? (Number(String(qtdPedidos).replace(/\./g, '').replace(/,/g, '.')) || 0) : null;
+  const parsedTotalSpent = parseBRL(valorTotal);
+  const parsedAvgTicket = parseBRL(ticketMedio);
+  const parsedBalanceTotal = parseBRL(saldoTotal);
+  const parsedBalancePeriod = parseBRL(saldoPeriodo);
+  const parsedLastPurchase = parseDate(ultimaCompra);
+  const parsedBirthday = parseDate(birthdayRaw);
+
+  const orClauses = [
+    cpf ? { cpf: String(cpf).replace(/\D+/g, '') } : null,
+    whatsapp ? { whatsapp: normalizePhone(whatsapp) } : null,
+  ].filter(Boolean);
+
+  const before = orClauses.length
+    ? await prisma.customer.findFirst({ where: { companyId, OR: orClauses } })
+    : null;
+
+  if (!before) {
+    await prisma.customer.create({
+      data: {
+        companyId, fullName,
+        cpf: cpf ? String(cpf).replace(/\D+/g, '') : null,
+        email: email || null,
+        birthday: parsedBirthday,
+        whatsapp: whatsapp ? normalizePhone(whatsapp) : null,
+        phone: phone ? normalizePhone(phone) : null,
+        ifoodCode: ifoodCode || null,
+        ifoodConfirmationCode: codigoConfirmacaoIfood || null,
+        totalSpent: parsedTotalSpent !== null ? parsedTotalSpent : undefined,
+        addresses: { create: [address] },
+        importedTotalOrders: parsedTotalOrders,
+        importedTotalSpent: parsedTotalSpent,
+        importedAvgTicket: parsedAvgTicket,
+        importedLastPurchase: parsedLastPurchase,
+        importedFinancialBalanceTotal: parsedBalanceTotal,
+        importedFinancialBalancePeriod: parsedBalancePeriod,
+      },
+    });
+    return 'created';
+  } else {
+    const updateData = {
+      fullName: before.fullName || fullName,
+      cpf: before.cpf || (cpf ? String(cpf).replace(/\D+/g, '') : null),
+      whatsapp: before.whatsapp || (whatsapp ? normalizePhone(whatsapp) : null),
+      phone: before.phone || (phone ? normalizePhone(phone) : null),
+    };
+    if (email && !before.email) updateData.email = email;
+    if (parsedBirthday && !before.birthday) updateData.birthday = parsedBirthday;
+    if (ifoodCode) updateData.ifoodCode = ifoodCode;
+    if (codigoConfirmacaoIfood) updateData.ifoodConfirmationCode = codigoConfirmacaoIfood;
+    if (parsedTotalOrders !== null) updateData.importedTotalOrders = parsedTotalOrders;
+    if (parsedTotalSpent !== null) { updateData.importedTotalSpent = parsedTotalSpent; updateData.totalSpent = parsedTotalSpent; }
+    if (parsedAvgTicket !== null) updateData.importedAvgTicket = parsedAvgTicket;
+    if (parsedLastPurchase !== null) updateData.importedLastPurchase = parsedLastPurchase;
+    if (parsedBalanceTotal !== null) updateData.importedFinancialBalanceTotal = parsedBalanceTotal;
+    if (parsedBalancePeriod !== null) updateData.importedFinancialBalancePeriod = parsedBalancePeriod;
+
+    try {
+      await prisma.customer.update({ where: { id: before.id }, data: updateData });
+    } catch (e) {
+      if (e.code === 'P2002') {
+        const conflictFields = e.meta?.target || [];
+        if (conflictFields.includes('whatsapp')) delete updateData.whatsapp;
+        if (conflictFields.includes('cpf')) delete updateData.cpf;
+        await prisma.customer.update({ where: { id: before.id }, data: updateData });
+      } else { throw e; }
+    }
+    const hasAddr = await prisma.customerAddress.findFirst({ where: { customerId: before.id } });
+    if (!hasAddr) await prisma.customerAddress.create({ data: { customerId: before.id, ...address } });
+    return 'updated';
+  }
+}
+
+async function processImportBackground(jobId, rows, companyId) {
+  const job = importJobs.get(jobId);
+  const BATCH = 50; // cede o event loop a cada 50 linhas
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      const result = await processOneImportRow(rows[i], companyId);
+      if (result === 'created') job.created++; else job.updated++;
+    } catch (e) {
+      job.errors++;
+      console.warn(`Import row ${i} error:`, e?.message || e);
+    }
+    job.processed++;
+    if (i % BATCH === BATCH - 1) await new Promise(res => setImmediate(res));
+  }
+  job.done = true;
+  setTimeout(() => importJobs.delete(jobId), 10 * 60 * 1000); // limpa após 10 min
+}
+
+// POST /customers/import — responde imediatamente, processa em segundo plano
 customersRouter.post('/import', requireRole('ADMIN'), upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Arquivo é obrigatório' });
   const companyId = req.user.companyId;
-
   try {
-    const wb = xlsx.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = wb.SheetNames[0];
-    const rows = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
-
-    let created = 0, updated = 0;
-    for (const r of rows) {
-      const fullName = r.fullName || r.nome || r.Nome || 'Cliente';
-      const cpf = r.cpf || r.CPF || '';
-      const whatsapp = r.whatsapp || r.WhatsApp || r.telefone || r.phone || '';
-      const phone = r.phone || r.telefone || '';
-      const address = {
-        label: r.label || r.rótulo || null,
-        street: r.street || r.logradouro || r.rua || '',
-        number: r.number || r.numero || '',
-        complement: r.complement || r.complemento || '',
-        neighborhood: r.neighborhood || r.bairro || '',
-        reference: r.reference || r.referencia || r.referência || '',
-        observation: r.observation || r.observacao || r.observação || r.note || r.notes || '',
-        city: r.city || r.cidade || '',
-        state: r.state || r.estado || '',
-        postalCode: r.postalCode || r.cep || '',
-        latitude: r.latitude || '',
-        longitude: r.longitude || '',
-        formatted: r.formatted || '',
-        isDefault: true,
-      };
-
-      const before = await prisma.customer.findFirst({
-        where: {
-          companyId,
-          OR: [
-            cpf ? { cpf: String(cpf).replace(/\D+/g, '') } : undefined,
-            whatsapp ? { whatsapp: normalizePhone(whatsapp) } : undefined,
-          ].filter(Boolean),
-        },
-      });
-
-      if (!before) {
-        await prisma.customer.create({
-          data: {
-            companyId,
-            fullName,
-            cpf: cpf ? String(cpf).replace(/\D+/g, '') : null,
-            whatsapp: whatsapp ? normalizePhone(whatsapp) : null,
-            phone: phone ? normalizePhone(phone) : null,
-            addresses: {
-              create: [address],
-            },
-          },
-        });
-        created++;
-      } else {
-        await prisma.customer.update({
-          where: { id: before.id },
-          data: {
-            fullName: before.fullName || fullName,
-            cpf: before.cpf || (cpf ? String(cpf).replace(/\D+/g, '') : null),
-            whatsapp: before.whatsapp || (whatsapp ? normalizePhone(whatsapp) : null),
-            phone: before.phone || (phone ? normalizePhone(phone) : null),
-          },
-        });
-        // cria endereço default se não tiver
-        const hasAddr = await prisma.customerAddress.findFirst({ where: { customerId: before.id } });
-        if (!hasAddr) {
-          await prisma.customerAddress.create({ data: { customerId: before.id, ...address } });
-        }
-        updated++;
-      }
-    }
-
-    res.json({ ok: true, created, updated, total: rows.length });
+    const rows = parseImportRows(req.file.buffer, req.file.originalname, req.file.mimetype);
+    if (!rows.length) return res.status(400).json({ message: 'Arquivo sem linhas de dados' });
+    const jobId = randomUUID();
+    importJobs.set(jobId, { processed: 0, total: rows.length, created: 0, updated: 0, errors: 0, done: false, error: null });
+    res.json({ ok: true, jobId, total: rows.length });
+    processImportBackground(jobId, rows, companyId).catch(e => {
+      const job = importJobs.get(jobId);
+      if (job) { job.done = true; job.error = e.message; }
+      console.error('Import background fatal:', e);
+    });
   } catch (e) {
-    console.error('Import error:', e);
-    res.status(500).json({ message: 'Falha ao importar', error: e.message });
+    console.error('Import parse error:', e);
+    res.status(500).json({ message: 'Falha ao ler arquivo', error: e.message });
   }
+});
+
+// GET /customers/import/:jobId/status — consulta progresso do job
+customersRouter.get('/import/:jobId/status', requireRole('ADMIN'), (req, res) => {
+  const job = importJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ message: 'Job não encontrado ou expirado' });
+  res.json(job);
 });
 
 

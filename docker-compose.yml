@@ -1,66 +1,59 @@
 services:
-  delivery_db:
-    image: postgres:17
+  db:
+    image: postgres:15
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: tomgomes
-      POSTGRES_PASSWORD: 03t01F007TF
-      POSTGRES_DB: tomgomes
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: projetodelivery
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - prisma_dev_db:/var/lib/postgresql/data
     ports:
-      # bind Postgres to localhost only for safety
-      - '127.0.0.1:5432:5432'
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d projetodelivery"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   backend:
     build:
       context: ./delivery-saas-backend
-    # Optionally load environment variables from a local .env file for development
-    # (do NOT commit your real .env to git). Docker Compose will read this file
-    # and pass variables to the container. If you prefer other secret managers,
-    # keep using platform env config instead.
-    env_file:
-      - ./delivery-saas-backend/.env
-    environment:
-      DATABASE_URL: postgres://tomgomes:03t01F007TF@delivery_db:5432/tomgomes
-      PRISMA_PROVIDER: postgresql
-      # Allow the frontend (production) domain to access the API
-      FRONTEND_ORIGINS: https://deliverywl.com.br
-      NODE_ENV: production
-      PORT: 3000
-    depends_on:
-      - migrate
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    volumes:
+      - ./delivery-saas-backend:/app:delegated
+      - /app/node_modules
+    command: sh scripts/dev-start.sh
     ports:
-      # backend listens on 3000 inside the container; map to host 3001 to avoid EasyPanel conflict
-      - '127.0.0.1:3001:3000'
-    restart: unless-stopped
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/projetodelivery
+      - JWT_SECRET=dev-jwt-secret
+      - DISABLE_SSL=1
+      - FRONTEND_ORIGIN=http://localhost:5173
+      - NODE_ENV=development
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_IMPORT_MODEL=${OPENAI_IMPORT_MODEL:-gpt-4o}
+    depends_on:
+      db:
+        condition: service_healthy
 
   frontend:
-    build:
-      context: ./delivery-saas-frontend
-      # Allow build-time override of VITE_API_URL via build-arg in CI / deploy
-      args:
-        - VITE_API_URL
-    # When running the frontend container locally via docker compose you can
-    # provide runtime env values by creating a `.env.production` file and
-    # referencing it here. The file should NOT be committed with secrets.
-    env_file:
-      - ./delivery-saas-frontend/.env.production
-    depends_on:
-      - backend
+    image: node:20
+    working_dir: /app
+    volumes:
+      - ./delivery-saas-frontend:/app:delegated
+      - /app/node_modules
+    command: sh -c "npm ci --silent && npm run dev -- --host 0.0.0.0"
     ports:
-      - '127.0.0.1:5173:80'
-    restart: unless-stopped
-
-  migrate:
-    build:
-      context: ./delivery-saas-backend
-    command: node scripts/wait-for-db-and-migrate.js
+      - "5173:5173"
     environment:
-      DATABASE_URL: postgres://tomgomes:03t01F007TF@delivery_db:5432/tomgomes
-      PRISMA_PROVIDER: postgresql
-    depends_on:
-      - delivery_db
-    restart: 'no'
+      - VITE_API_URL=http://localhost:3000
 
 volumes:
-  db_data:
+  prisma_dev_db:
+    name: projeto_prisma_dev_db

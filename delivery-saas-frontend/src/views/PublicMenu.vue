@@ -990,6 +990,11 @@ const paymentMethods = ref([]);
 const company = ref(null)
 const menu = ref(null)
 const isCatalogMode = computed(() => !!(menu.value && menu.value.catalogMode))
+
+// Reactive clock tick — updated every minute so schedule-based open/close computeds
+// re-evaluate automatically without the user needing to refresh the page.
+const _scheduleTick = ref(Date.now())
+let _scheduleTickInterval = null
 const orderType = ref('DELIVERY') // 'DELIVERY' or 'PICKUP'
 const productSearchTerm = ref('')
 const searchExpanded = ref(false)
@@ -1023,6 +1028,9 @@ const displayPickup = computed(() => {
 // Helper: produce an effective settings object that prefers menu-level meta
 function effectiveSettings(){
   try{
+    // reference _scheduleTick so any computed that calls effectiveSettings()
+    // re-evaluates automatically when the minute ticker fires
+    void _scheduleTick.value
     // prefer top-level company fields but also include nested `store` settings
     // (some API versions store schedule fields under company.store)
     const base = company.value ? { ...company.value, ...(company.value.store || {}) } : {}
@@ -1134,7 +1142,7 @@ onMounted(()=>{
   window.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onScroll)
     // listen for login events so we can fetch server-side customer data when token is set
-    const onAppUserLoggedIn = (ev) => { try{ tokenRef.value = (ev && ev.detail && ev.detail.token) ? ev.detail.token : (localStorage.getItem('token') || null); fetchProfileAndAddresses() }catch(e){} }
+    const onAppUserLoggedIn = (ev) => { try{ tokenRef.value = (ev && ev.detail && ev.detail.token) ? ev.detail.token : (localStorage.getItem(PUBLIC_TOKEN_KEY) || null); fetchProfileAndAddresses() }catch(e){} }
     try{ window.addEventListener('app:user-logged-in', onAppUserLoggedIn) }catch(e){}
     // listen for addresses updates from other views (e.g., PublicAddresses) and refresh local addresses
     const onAddressesUpdated = (ev) => {
@@ -1222,12 +1230,15 @@ function closeInfoModal(){ infoModalOpen.value = false }
 const PUBLIC_NS = [companyId, storeId.value || '', menuId.value || ''].filter(Boolean).join('_') || companyId
 const LOCAL_CUSTOMER_KEY = `public_customer_${PUBLIC_NS}`
 const LOCAL_ADDR_KEY = `public_addresses_${companyId}`
+// Namespaced token key for public customers — kept separate from the admin 'token'
+// to avoid destroying the admin session when the public menu is opened while logged in.
+const PUBLIC_TOKEN_KEY = `public_token_${companyId}`
 // load persisted customer/address
 const addresses = ref(JSON.parse(localStorage.getItem(LOCAL_ADDR_KEY) || '[]'))
 const selectedAddressId = ref(addresses.value.length ? addresses.value[0].id : null)
   // if user is authenticated via public profile, prefill addresses and select first
   try{
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem(PUBLIC_TOKEN_KEY)
     const stored = JSON.parse(localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || 'null')
     if(token && stored && stored.addresses && Array.isArray(stored.addresses) && stored.addresses.length){
       addresses.value = stored.addresses.map(a => ({
@@ -1264,7 +1275,7 @@ async function openCheckout(){
   try{ trackInitiateCheckout(cart.value, subtotal.value) }catch(e){}
   // if a public customer is already authenticated (token + stored customer), skip customer step
   try{
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem(PUBLIC_TOKEN_KEY)
     // ensure we try to fetch server-side profile/addresses when opening checkout
     if(token){
       try{
@@ -1406,7 +1417,7 @@ async function fetchProfileAndAddresses(){
       }
     } catch (err) {
       try{
-        if (err && err.response && err.response.status === 403) localStorage.removeItem('token')
+        if (err && err.response && err.response.status === 403) localStorage.removeItem(PUBLIC_TOKEN_KEY)
       }catch(e){}
       prof = null
     }
@@ -1537,7 +1548,7 @@ try{
 }catch(e){ console.warn('restore cart from localStorage failed', e) }
 const customer = ref({ name: '', contact: '', address: { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', latitude: null, longitude: null, fullDisplay: '' } });
 // reactive token so UI recomputes when login sets/removes token
-const tokenRef = ref(localStorage.getItem('token') || null)
+const tokenRef = ref(localStorage.getItem(PUBLIC_TOKEN_KEY) || null)
 const accountExists = ref(false)
 const accountHasPassword = ref(false)
 const customerPassword = ref('')
@@ -1662,7 +1673,7 @@ const isDev = typeof import.meta !== 'undefined' && import.meta.env && import.me
 // compute whether a public customer is connected (token + stored customer)
 const publicCustomerConnected = computed(() => {
   try{
-    const token = tokenRef.value || localStorage.getItem('token')
+    const token = tokenRef.value || localStorage.getItem(PUBLIC_TOKEN_KEY)
     if(!token) return null
     if(!customer.value) return null
     return { name: customer.value.name || null, contact: customer.value.contact || null }
@@ -1671,7 +1682,7 @@ const publicCustomerConnected = computed(() => {
 
 function logoutPublicCustomer(){
   try{
-    localStorage.removeItem('token')
+    localStorage.removeItem(PUBLIC_TOKEN_KEY)
     tokenRef.value = null
     localStorage.removeItem(LOCAL_CUSTOMER_KEY)
     localStorage.removeItem(`public_customer_${companyId}`)
@@ -3067,7 +3078,7 @@ async function nextFromCustomer(){
         const body = { whatsapp: digits, password: customerPassword.value }
         const res = await api.post(`/public/${companyId}/login`, body, { headers: { 'x-no-redirect': '1' } })
         if(res && res.data && res.data.token){
-          try{ localStorage.setItem('token', res.data.token) }catch(e){}
+          try{ localStorage.setItem(PUBLIC_TOKEN_KEY, res.data.token) }catch(e){}
           try{ tokenRef.value = res.data.token }catch(e){}
           if(res.data.customer) {
             try{ localStorage.setItem(LOCAL_CUSTOMER_KEY, JSON.stringify(res.data.customer)) }catch(e){}
@@ -3506,6 +3517,13 @@ function onStorageEvent(ev){
 onMounted(()=>{ try{ window.addEventListener('storage', onStorageEvent); }catch(e){} })
 onBeforeUnmount(()=>{ try{ window.removeEventListener('storage', onStorageEvent); }catch(e){} })
 
+// Schedule ticker: update every 30 s so open/close state reflects the current time
+// without requiring a page refresh when a schedule boundary is crossed.
+onMounted(() => {
+  _scheduleTickInterval = setInterval(() => { _scheduleTick.value = Date.now() }, 30000)
+})
+onBeforeUnmount(() => { if (_scheduleTickInterval) { clearInterval(_scheduleTickInterval); _scheduleTickInterval = null } })
+
 // Socket listener to receive server-side broadcasts when store settings change.
 let _publicMenuSocket = null
 onMounted(() => {
@@ -3528,12 +3546,22 @@ onMounted(() => {
         // If the server provided a `meta` snapshot, apply it immediately to the in-memory
         // company/store objects so open/close UI updates instantly while we refresh.
         const meta = payload && payload.meta ? payload.meta : null
+        const payloadMenuId = payload && payload.menuId ? String(payload.menuId) : null
         if (meta) {
           try {
+            // Menu-scoped update: when the event targets a specific menu that is currently
+            // loaded, apply isActive directly to menu.value so isOpen reacts instantly.
+            // This covers the admin toggle switch in the menu list (Menus.vue).
+            if (payloadMenuId && menu.value && String(menu.value.id) === payloadMenuId) {
+              if (typeof meta.isActive !== 'undefined') {
+                menu.value = { ...(menu.value || {}), isActive: meta.isActive }
+                try{ console.log('[PublicMenu] applied menu isActive from socket', { menuId: payloadMenuId, isActive: meta.isActive }) }catch(e){}
+              }
+            }
             // prefer store-scoped merge
             if (company.value && company.value.store && String(company.value.store.id) === String(sid)) {
               const storeObj = company.value.store
-              if (typeof meta.isActive !== 'undefined') storeObj.isActive = meta.isActive
+              if (!payloadMenuId && typeof meta.isActive !== 'undefined') storeObj.isActive = meta.isActive
               if (typeof meta.open24Hours !== 'undefined') storeObj.open24Hours = meta.open24Hours
               if (meta.pauseUntil) storeObj.pauseUntil = meta.pauseUntil
               if (meta.pausedUntil) storeObj.pauseUntil = meta.pausedUntil
@@ -3544,7 +3572,7 @@ onMounted(() => {
               if (meta.forceOpenExpiresAt) storeObj.forceOpenExpiresAt = meta.forceOpenExpiresAt
               // reflect back to company.value so effectiveSettings() picks it up
               company.value = { ...(company.value || {}), store: storeObj }
-            } else if (meta && typeof meta.isActive !== 'undefined') {
+            } else if (meta && !payloadMenuId && typeof meta.isActive !== 'undefined') {
               // if store info not yet present, apply to company top-level as fallback
               company.value = { ...(company.value || {}), isActive: meta.isActive }
             }
@@ -3631,7 +3659,7 @@ async function fetchCashbackSettingsAndWallet(){
       let storedClientId = stored && (stored.id || stored.clientId || stored.customerId) ? (stored.id || stored.clientId || stored.customerId) : null
 
       // If we have a token but no stored client id, try to fetch the profile (server-resolved) to obtain id
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem(PUBLIC_TOKEN_KEY)
       if(!storedClientId && token){
         try{
           const p = await api.get(`/public/${companyId}/profile`)
