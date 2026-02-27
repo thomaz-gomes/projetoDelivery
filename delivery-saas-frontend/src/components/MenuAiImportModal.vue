@@ -109,11 +109,21 @@
             <!-- Photo -->
             <div v-if="method === 'photo'">
               <label class="form-label fw-semibold">Fotos do cardápio</label>
+              <!-- Galeria: seleção múltipla -->
               <input
                 ref="photoInput"
                 type="file"
                 accept="image/*"
                 multiple
+                class="d-none"
+                @change="handleFileChange($event, 'photo')"
+              />
+              <!-- Câmera: captura direta (mobile) -->
+              <input
+                ref="cameraInput"
+                type="file"
+                accept="image/*"
+                capture="environment"
                 class="d-none"
                 @change="handleFileChange($event, 'photo')"
               />
@@ -125,15 +135,19 @@
                 @dragover.prevent="dragging = true"
                 @dragleave="dragging = false"
                 @drop.prevent="handleDrop($event, 'photo')"
-                @click="$refs.photoInput.click()"
-                role="button"
-                tabindex="0"
-                @keydown.enter="$refs.photoInput.click()"
               >
                 <div class="dropzone-inner">
                   <i class="bi bi-images dropzone-icon text-muted"></i>
-                  <div class="dropzone-text">Arraste as fotos aqui ou toque para selecionar</div>
-                  <div class="small text-muted mt-1">JPG, PNG, WEBP — várias imagens aceitas</div>
+                  <div class="dropzone-text mb-3">Selecione as fotos do cardápio</div>
+                  <div class="d-flex gap-2 justify-content-center flex-wrap">
+                    <button type="button" class="btn btn-outline-primary btn-sm px-3" @click="$refs.photoInput.click()">
+                      <i class="bi bi-folder2-open me-1"></i>Galeria
+                    </button>
+                    <button type="button" class="btn btn-outline-success btn-sm px-3" @click="$refs.cameraInput.click()">
+                      <i class="bi bi-camera me-1"></i>Câmera
+                    </button>
+                  </div>
+                  <div class="small text-muted mt-2">Ou arraste as fotos aqui · JPG, PNG, WEBP</div>
                 </div>
               </div>
               <!-- Com fotos: grid de miniaturas -->
@@ -151,19 +165,31 @@
                     <i class="bi bi-x-lg"></i>
                   </button>
                 </div>
+                <!-- Adicionar da galeria -->
                 <div
                   class="photo-add-btn"
                   @click="$refs.photoInput.click()"
                   role="button"
                   tabindex="0"
                   @keydown.enter="$refs.photoInput.click()"
-                  title="Adicionar mais fotos"
+                  title="Adicionar da galeria"
                 >
                   <i class="bi bi-plus-lg"></i>
                 </div>
+                <!-- Tirar foto com câmera -->
+                <div
+                  class="photo-add-btn photo-add-btn--camera"
+                  @click="$refs.cameraInput.click()"
+                  role="button"
+                  tabindex="0"
+                  @keydown.enter="$refs.cameraInput.click()"
+                  title="Tirar foto"
+                >
+                  <i class="bi bi-camera"></i>
+                </div>
               </div>
               <div class="form-text mt-2">
-                {{ photoPreviews.length ? `${photoPreviews.length} foto(s) selecionada(s) — arraste mais ou clique em + para adicionar` : 'Adicione fotos de diferentes páginas do cardápio' }}
+                {{ photoPreviews.length ? `${photoPreviews.length} foto(s) selecionada(s) — adicione mais pela galeria ou câmera` : 'Adicione fotos de diferentes páginas do cardápio' }}
               </div>
             </div>
 
@@ -943,6 +969,11 @@ function handleBackdropClick() {
   border-color: #0d6efd;
   color: #0d6efd;
   background: #f0f5ff;
+}
+.photo-add-btn--camera:hover {
+  border-color: #198754;
+  color: #198754;
+  background: #f0fff4;
 }
 
 /* Review */
