@@ -39,4 +39,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── Reset ────────────────────────────────────────────────────────────────
   resetConfig: () => ipcRenderer.invoke('config:reset'),
+
+  // ── Reconnect ────────────────────────────────────────────────────────────
+  // Força nova tentativa de conexão sem resetar configurações.
+  reconnect: () => ipcRenderer.invoke('socket:reconnect'),
 });

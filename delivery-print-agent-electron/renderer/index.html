@@ -318,7 +318,8 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
       <div class="btn-row" style="margin-top:16px">
         <button class="btn btn-ghost" onclick="refreshStatus()">Atualizar</button>
         <button class="btn btn-ghost" onclick="window.electronAPI.openLogs()">Abrir Log</button>
-        <button class="btn btn-danger btn-sm" onclick="resetConfig()" style="margin-left:auto">Resetar / Reconectar</button>
+        <button class="btn btn-primary btn-sm" onclick="reconnect()">&#8635; Reconectar</button>
+        <button class="btn btn-danger btn-sm" onclick="resetConfig()" style="margin-left:auto">Resetar Pareamento</button>
       </div>
     </div>
   </div>
@@ -713,9 +714,16 @@ function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Reconnect ─────────────────────────────────────────────────────────────
+async function reconnect() {
+  const res = await api.reconnect();
+  notify(res.ok ? 'Reconectando…' : ('Falha: ' + (res.error || 'serviço não iniciado')), res.ok ? 'ok' : 'err');
+  if (res.ok) setTimeout(refreshStatus, 2000);
+}
+
 // ── Reset ─────────────────────────────────────────────────────────────────
 async function resetConfig() {
-  if (!confirm('Isso vai apagar o token de pareamento e abrir o wizard de configuração novamente.\n\nAs impressoras configuradas serão mantidas.\n\nContinuar?')) return;
+  if (!confirm('Isso vai apagar o token de pareamento e abrir o wizard de configuração novamente.\n\nAs impressoras e o template da comanda serão mantidos.\n\nContinuar?')) return;
   await api.resetConfig();
 }
 
@@ -726,33 +734,40 @@ async function resetConfig() {
 const DEFAULT_BLOCKS = [
   { t: 'sep' },
   { t: 'text', c: '{{header_name}}', a: 'center', b: true, s: 'lg' },
-  { t: 'text', c: '{{header_city}}', a: 'center' },
+  { t: 'cond', key: 'header_city', c: '{{header_city}}', a: 'center' },
   { t: 'sep' },
-  { t: 'text', c: 'PEDIDO #{{display_id}}', a: 'center', b: true, s: 'xl' },
-  { t: 'text', c: 'Data: {{data_pedido}}  Hora: {{hora_pedido}}' },
-  { t: 'cond', key: 'tipo_pedido', c: 'Tipo: {{tipo_pedido}}' },
+  // Tipo do pedido em destaque (ENTREGA / RETIRADA / MESA)
+  { t: 'text', c: '{{tipo_pedido}}', a: 'center', b: true, s: 'xl' },
+  { t: 'text', c: '{{data_pedido}}  {{hora_pedido}}', a: 'center' },
   { t: 'sep' },
-  { t: 'text', c: 'CLIENTE: {{nome_cliente}}', b: true },
-  { t: 'text', c: 'Telefone: {{telefone_cliente}}' },
+  { t: 'text', c: 'Pedido #{{display_id}}', b: true },
+  { t: 'sep' },
+  // Dados do cliente
+  { t: 'text', c: '{{nome_cliente}}' },
+  { t: 'text', c: 'Tel: {{telefone_cliente}}' },
   { t: 'cond', key: 'localizador',   c: 'Localizador: {{localizador}}' },
-  { t: 'cond', key: 'codigo_coleta', c: 'Cod. Coleta: {{codigo_coleta}}' },
-  { t: 'text', c: 'Endereco: {{endereco_cliente}}' },
+  { t: 'text', c: '{{endereco_cliente}}' },
+  // Observações do pedido (inclui desconto iFood, obs especiais, etc.)
+  { t: 'cond', key: 'observacoes', c: 'Obs: {{observacoes}}' },
+  // iFood: código de coleta
+  { t: 'cond', key: 'codigo_coleta', c: 'Codigo Coleta: {{codigo_coleta}}' },
   { t: 'sep' },
+  // Itens — opções aparecem como "-1x Nome" (formato iFood)
   { t: 'items', itemBold: true, itemSize: 'normal' },
   { t: 'sep' },
-  { t: 'text', c: 'Qtd itens: {{total_itens_count}}' },
-  { t: 'text', c: 'Subtotal: R$ {{subtotal}}' },
-  { t: 'cond', key: 'taxa_entrega', c: 'Taxa entrega: R$ {{taxa_entrega}}' },
-  { t: 'cond', key: 'desconto', c: 'Desconto: R$ {{desconto}}' },
-  { t: 'text', c: 'TOTAL: R$ {{total}}', b: true, s: 'lg' },
+  { t: 'text', c: 'Quantidade de itens:    {{total_itens_count}}' },
   { t: 'sep' },
-  { t: 'text', c: 'FORMAS DE PAGAMENTO', b: true },
+  { t: 'text', c: 'Total itens(=):    R$ {{subtotal}}' },
+  { t: 'cond', key: 'taxa_entrega', c: 'Taxa entrega(+):   R$ {{taxa_entrega}}' },
+  { t: 'cond', key: 'desconto',     c: 'Desconto(-):       R$ {{desconto}}' },
+  { t: 'sep' },
+  { t: 'text', c: 'TOTAL(=):          R$ {{total}}', b: true, s: 'lg' },
+  { t: 'sep' },
+  { t: 'text', c: 'FORMA DE PAGAMENTO', b: true, a: 'center' },
   { t: 'payments' },
-  { t: 'cond', key: 'observacoes', c: 'OBS: {{observacoes}}' },
-  { t: 'qr' },
   { t: 'sep' },
-  { t: 'text', c: 'Obrigado e bom apetite!', a: 'center' },
-  { t: 'sep' }
+  { t: 'cond', key: 'canal', c: 'Op: {{canal}}', a: 'center' },
+  { t: 'sep' },
 ];
 
 const PLACEHOLDER_CATS = [

@@ -237,6 +237,25 @@ function disconnect() {
   _connected = false;
 }
 
+/**
+ * Força reconexão imediata, resetando qualquer estado de erro de autenticação.
+ * Útil quando o backend reinicia e a conexão é perdida por erro transitório.
+ */
+function reconnect() {
+  if (!_currentCfg) {
+    logger.warn('[socket] reconnect() chamado sem configuração — ignorado.');
+    return false;
+  }
+  logger.info('[socket] Reconectando manualmente…');
+  _authError    = false;
+  _attempt      = 0;
+  _currentDelay = BASE_DELAY;
+  _cancelReconnect();
+  _destroySocket();
+  _doConnect(_currentCfg);
+  return true;
+}
+
 function isConnected() { return _connected; }
 
-module.exports = { connect, disconnect, isConnected };
+module.exports = { connect, disconnect, reconnect, isConnected };

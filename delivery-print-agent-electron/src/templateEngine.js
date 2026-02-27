@@ -144,9 +144,11 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
               quantity: Number(it.quantity || 1),
               price:    Number(it.unitPrice || it.price || 0),
               notes:    it.observations || it.notes || '',
+              // Preserva quantity do subitem para renderizar como "-Nx Nome" (formato iFood)
               options:  (it.subitems || it.garnishItems || it.options || []).map(s => ({
-                name:  s.name || s.description || '',
-                price: Number(s.unitPrice || s.price || 0),
+                name:     s.name || s.description || '',
+                price:    Number(s.unitPrice || s.price || 0),
+                quantity: s.quantity != null ? Number(s.quantity) : null,
               })),
             }))
           : (order.items || []);
@@ -171,9 +173,19 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
             for (const opt of item.options) {
               const optName  = opt.name || '';
               const optPrice = _toNum(opt.price || 0);
-              const optLine  = optPrice > 0
-                ? `   + ${optName}: R$ ${_fmtN(optPrice)}`
-                : `   + ${optName}`;
+              let optLine;
+              if (opt.quantity != null) {
+                // iFood subitems/garnish: formato "-Nx Nome" (quantity vem do payload)
+                const oqty = Number(opt.quantity) || 1;
+                optLine = optPrice > 0
+                  ? `   -${oqty}x ${optName}: R$ ${_fmtN(optPrice)}`
+                  : `   -${oqty}x ${optName}`;
+              } else {
+                // Opções do sistema interno: formato "+ Nome"
+                optLine = optPrice > 0
+                  ? `   + ${optName}: R$ ${_fmtN(optPrice)}`
+                  : `   + ${optName}`;
+              }
               if (margin > 0) parts.push(ESCPos.marginLeft(margin));
               parts.push(ESCPos.text(optLine, charset));
             }
@@ -470,6 +482,9 @@ function buildContext(order, printer) {
   const loja_nome = order.headerName || order.store?.name || order.storeName
     || pl.storeName || 'Delivery';
 
+  // Cálculo de total de itens (contagem de unidades)
+  const totalItensCount = (order.items || []).reduce((s, i) => s + (i.quantity || 1), 0);
+
   return {
     loja_nome,
     loja_cnpj:    order.store?.cnpj || pl.storeCnpj || '',
@@ -502,7 +517,13 @@ function buildContext(order, printer) {
       const unit    = base + optsSum;
       const optLines = Array.isArray(item.options) && item.options.length > 0
         ? item.options.map(o => {
-            const op = _toNum(o.price || 0);
+            const op  = _toNum(o.price || 0);
+            // Se a opção tem quantidade explícita (iFood garnish/subitem), usa formato "-Nx Nome"
+            // Caso contrário, usa "+ Nome" (opções do sistema interno)
+            if (o.quantity != null) {
+              const oqty = Number(o.quantity) || 1;
+              return `   -${oqty}x ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}`;
+            }
             return `   + ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}`;
           }).join('\n')
         : '';
@@ -542,6 +563,12 @@ function buildContext(order, printer) {
     // iFood: campos específicos
     localizador:   ifoodPl.customer?.phones?.[0]?.localizer || ifoodPl.customer?.phone?.localizer || '',
     codigo_coleta: ifoodPl.delivery?.pickupCode || '',
+
+    // Canal/operador (ex: IFOOD, WHATSAPP, SISTEMA)
+    canal: order.source || order.channel || order.canal || pl.source || '',
+
+    // Contagem total de itens (unidades)
+    total_itens_count: String(totalItensCount),
 
     impressora_alias: printer?.alias || '',
   };

@@ -33,36 +33,38 @@ const DEFAULT_TEMPLATE_80 = `
 [ALIGN:center]
 [BOLD:on]
 [SIZE:2]
-{{loja_nome}}
+{{tipo}}
 [SIZE:1]
 [BOLD:off]
+{{data}}  {{hora}}
 [SEP:=]
 [ALIGN:left]
-Pedido #{{display_id}}       {{data}} {{hora}}
-Tipo: {{tipo}}
-[SEP]
 [BOLD:on]
-CLIENTE
+{{loja_nome}}
 [BOLD:off]
-Nome: {{cliente_nome}}
-Tel:  {{cliente_tel}}
+Pedido #{{display_id}}
+[SEP]
+{{cliente_nome}}
+Tel: {{cliente_tel}}
 {{#if localizador}}
-Loc:  {{localizador}}
+Loc: {{localizador}}
 {{/if}}
 {{#if tipo_delivery}}
-End:  {{endereco_rua}}, {{endereco_num}} {{endereco_comp}}
-      {{endereco_bairro}} - {{endereco_cidade}}
+{{endereco_rua}}, {{endereco_num}} {{endereco_comp}}
+{{endereco_bairro}} - {{endereco_cidade}}
 {{/if}}
 {{#if endereco_ref}}
-Ref:  {{endereco_ref}}
+Ref: {{endereco_ref}}
+{{/if}}
+{{#if tem_obs}}
+[SEP]
+Obs: {{obs_pedido}}
 {{/if}}
 {{#if codigo_coleta}}
-Coleta: {{codigo_coleta}}
+[SEP]
+Codigo Coleta: {{codigo_coleta}}
 {{/if}}
 [SEP]
-[BOLD:on]
-ITENS
-[BOLD:off]
 {{#each items}}
 {{qtd}}x {{nome}}
 {{#if tem_opcoes}}
@@ -74,26 +76,33 @@ ITENS
    {{preco}}
 {{/each}}
 [SEP]
+Quantidade de itens:    {{total_itens_count}}
+[SEP:=]
+Total itens(=):         {{subtotal}}
 {{#if tem_taxa}}
-Taxa de Entrega:         {{taxa}}
+Taxa entrega(+):        {{taxa}}
 {{/if}}
 {{#if tem_desconto}}
-Desconto:               -{{desconto}}
+Desconto(-):           -{{desconto}}
 {{/if}}
 [SEP:=]
 [BOLD:on]
-TOTAL:                  {{total}}
+TOTAL(=):               {{total}}
 [BOLD:off]
 [SEP]
+[ALIGN:center]
 [BOLD:on]
-PAGAMENTO
+FORMA DE PAGAMENTO
 [BOLD:off]
+[ALIGN:left]
 {{#each pagamentos}}
 {{metodo}}:             {{valor}}
 {{/each}}
-{{#if tem_obs}}
+{{#if canal}}
 [SEP]
-Obs: {{obs_pedido}}
+[ALIGN:center]
+Op: {{canal}}
+[ALIGN:left]
 {{/if}}
 {{#if tem_qr}}
 [SEP]
@@ -110,12 +119,15 @@ Rastreie seu pedido:
 const DEFAULT_TEMPLATE_58 = `
 [ALIGN:center]
 [BOLD:on]
-{{loja_nome}}
+[SIZE:2]
+{{tipo}}
+[SIZE:1]
 [BOLD:off]
+{{data}} {{hora}}
 [SEP:=]
 [ALIGN:left]
+[BOLD:on]{{loja_nome}}[BOLD:off]
 Pedido #{{display_id}}
-{{data}} {{hora}} | {{tipo}}
 [SEP]
 {{cliente_nome}}
 {{cliente_tel}}
@@ -124,11 +136,11 @@ Pedido #{{display_id}}
 {{endereco_rua}}, {{endereco_num}}
 {{endereco_bairro}}
 {{/if}}
+{{#if tem_obs}}
+Obs: {{obs_pedido}}
+{{/if}}
 {{#if codigo_coleta}}Coleta: {{codigo_coleta}}{{/if}}
 [SEP]
-[BOLD:on]
-ITENS
-[BOLD:off]
 {{#each items}}
 {{qtd}}x {{nome}}
 {{#if tem_opcoes}}
@@ -137,16 +149,24 @@ ITENS
 {{#if obs}}
  -> {{obs}}
 {{/if}}
-{{preco}}
+   {{preco}}
 {{/each}}
 [SEP]
+Qtd: {{total_itens_count}}
+[SEP:=]
+Total: {{subtotal}}
 {{#if tem_taxa}}
-Entrega: {{taxa}}
+Entrega(+): {{taxa}}
 {{/if}}
+{{#if tem_desconto}}
+Desc(-): {{desconto}}
+{{/if}}
+[SEP:=]
 [BOLD:on]
 TOTAL: {{total}}
 [BOLD:off]
 [SEP]
+[BOLD:on]PAGAMENTO[BOLD:off]
 {{#each pagamentos}}
 {{metodo}}: {{valor}}
 {{/each}}

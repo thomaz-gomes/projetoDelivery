@@ -283,12 +283,29 @@ function setupIpcHandlers() {
   });
 
   // Reset: apaga token/companyId e reabre o wizard de configuração
+  // Preserva printers, receiptTemplate, headerName e headerCity para não perder configurações de comanda
   ipcMain.handle('config:reset', async () => {
     if (socketClient) socketClient.disconnect();
-    const empty = { serverUrl: '', token: '', storeIds: [], companyId: null, autoStart: true, printers: config.load().printers || [] };
+    const current = config.load();
+    const empty = {
+      serverUrl: '', token: '', storeIds: [], companyId: null, autoStart: true,
+      printers: current.printers || [],
+      receiptTemplate: current.receiptTemplate || null,
+      headerName: current.headerName || '',
+      headerCity: current.headerCity || '',
+    };
     config.save(empty);
     if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
     openSetupWindow();
+    return { ok: true };
+  });
+
+  // Reconectar: força nova tentativa de conexão sem resetar configurações
+  ipcMain.handle('socket:reconnect', async () => {
+    if (!socketClient) return { ok: false, error: 'Serviço não iniciado' };
+    const cfg = config.load();
+    if (!cfg.serverUrl || !cfg.token) return { ok: false, error: 'Não configurado' };
+    socketClient.reconnect();
     return { ok: true };
   });
 
