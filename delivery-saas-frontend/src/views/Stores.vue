@@ -51,7 +51,6 @@ onMounted(load);
             <button class="btn btn-primary" @click="$router.push('/settings/stores/new')">
               <i class="bi bi-plus-lg me-1"></i> Nova Loja
             </button>
-            <button class="btn btn-outline-secondary" @click="load">Recarregar</button>
           </div>
           <div class="ms-2 d-flex align-items-center" style="gap:8px">
             <span class="small text-muted">Total:</span>
@@ -67,9 +66,7 @@ onMounted(load);
           <div class="col-md-6">
             <input v-model="search" type="text" class="form-control" placeholder="Buscar loja por nome" />
           </div>
-          <div class="col-md-6 d-flex justify-content-end align-items-start">
-            <button class="btn btn-outline-secondary" @click="resetFilters">Limpar</button>
-          </div>
+         
         </div>
       </template>
 

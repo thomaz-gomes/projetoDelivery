@@ -75,7 +75,7 @@
           </div>
         </div>
 
-        <div class="mb-3">
+        <div class="mb-3" v-if="!saas.isCardapioSimplesOnly">
           <label class="form-label">Grupos de complementos</label>
           <div v-if="groups.length===0" class="small text-muted">Nenhum grupo cadastrado.</div>
           <div v-else>
@@ -117,12 +117,15 @@ import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
+import { useSaasStore } from '../stores/saas'
 import MediaField from '../components/MediaLibrary/MediaField.vue'
 import TextInput from '../components/form/input/TextInput.vue'
 import TextareaInput from '../components/form/input/TextareaInput.vue'
 import CurrencyInput from '../components/form/input/CurrencyInput.vue'
 import SelectInput from '../components/form/select/SelectInput.vue'
 import MarketplaceTab from '../components/MarketplaceTab.vue'
+
+const saas = useSaasStore()
 
 const route = useRoute()
 const router = useRouter()

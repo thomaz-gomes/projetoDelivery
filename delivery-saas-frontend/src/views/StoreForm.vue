@@ -9,7 +9,7 @@
         <div v-else>
           <ul class="nav nav-tabs mb-3">
                   <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='geral'}" href="#" @click.prevent="setActiveTab('geral')">Geral</a></li>
-                  <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='fiscal'}" href="#" @click.prevent="setActiveTab('fiscal')">Fiscal</a></li>
+                  <li v-if="hasFiscal" class="nav-item"><a class="nav-link" :class="{active: activeTab==='fiscal'}" href="#" @click.prevent="setActiveTab('fiscal')">Fiscal</a></li>
                 </ul>
 
                 <div v-show="activeTab==='geral'">
@@ -28,6 +28,7 @@
             <div class="mb-3"><TextInput label="Endereço" labelClass="form-label" v-model="form.address" inputClass="form-control" /></div>
             <div class="mb-3"><TextInput label="Telefone" labelClass="form-label" v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
             <div class="mb-3"><TextInput label="WhatsApp" labelClass="form-label" v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
+            <div class="mb-3"><TextInput label="CNPJ" labelClass="form-label" v-model="form.cnpj" placeholder="00.000.000/0000-00" inputClass="form-control" /></div>
             <div class="row">
               <div class="col-md-6 mb-3">
                 <MediaField v-model="form.bannerUrl" label="Banner" field-id="store-banner" />
@@ -47,13 +48,10 @@
               <div class="card-header"><h6 class="mb-0"><i class="bi bi-building me-2"></i>Dados do Emitente</h6></div>
               <div class="card-body">
                 <div class="row g-3">
-                  <div class="col-md-4">
-                    <TextInput label="CNPJ" labelClass="form-label fw-semibold" v-model="form.cnpj" placeholder="00.000.000/0000-00" inputClass="form-control" />
-                  </div>
-                  <div class="col-md-4">
+                  <div class="col-md-6">
                     <TextInput label="Inscrição Estadual (IE)" labelClass="form-label fw-semibold" v-model="form.ie" placeholder="ISENTO ou número" inputClass="form-control" />
                   </div>
-                  <div class="col-md-4">
+                  <div class="col-md-6">
                     <label class="form-label fw-semibold">Timezone</label>
                     <select class="form-select" v-model="form.timezone">
                       <option v-for="tz in TIMEZONES" :key="tz" :value="tz">{{ tz }}</option>
@@ -275,9 +273,12 @@ import { assetUrl } from '../utils/assetUrl.js'
 import MediaField from '../components/MediaLibrary/MediaField.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { applyPhoneMask } from '../utils/phoneMask'
+import { useModulesStore } from '../stores/modules'
 
 const route = useRoute()
 const router = useRouter()
+const modulesStore = useModulesStore()
+const hasFiscal = computed(() => modulesStore.has('fiscal'))
 const id = route.params.id || null
 const isNew = !id
 

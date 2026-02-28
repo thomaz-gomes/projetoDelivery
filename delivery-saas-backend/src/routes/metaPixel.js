@@ -2,9 +2,11 @@
 import express from 'express';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
+import { requireModuleStrict } from '../modules.js';
 
 const metaPixelRouter = express.Router();
 metaPixelRouter.use(authMiddleware);
+metaPixelRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
 
 // List all Meta Pixels for the company
 metaPixelRouter.get('/', requireRole('ADMIN'), async (req, res) => {

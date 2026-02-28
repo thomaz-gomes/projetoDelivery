@@ -13,6 +13,23 @@ const require = createRequire(import.meta.url)
 
 export const nfeRouter = express.Router()
 
+// Middleware: verifica se a empresa tem o Módulo Fiscal habilitado no plano
+async function requireFiscalModule(req, res, next) {
+  try {
+    const companyId = req.user?.companyId
+    if (!companyId) return res.status(401).json({ error: 'Não autenticado' })
+    const sub = await prisma.saasSubscription.findUnique({
+      where: { companyId },
+      include: { plan: { include: { modules: { include: { module: true } } } } }
+    })
+    const hasFiscal = sub?.plan?.modules?.some(pm => pm.module?.key === 'FISCAL' && pm.module?.isActive !== false)
+    if (!hasFiscal) return res.status(403).json({ error: 'Módulo Fiscal não habilitado no seu plano.' })
+    next()
+  } catch (err) {
+    res.status(500).json({ error: err?.message || String(err) })
+  }
+}
+
 // Persist SEFAZ authorization/protocol returned by SEFAZ
 // Expected body: { companyId, orderId?, nProt?, cStat?, xMotivo?, rawXml? }
 nfeRouter.post('/protocol', async (req, res) => {
@@ -47,7 +64,7 @@ nfeRouter.get('/config/:orderId', async (req, res) => {
   }
 })
 
-nfeRouter.get('/emitente-config', authMiddleware, async (req, res) => {
+nfeRouter.get('/emitente-config', authMiddleware, requireFiscalModule, async (req, res) => {
   try {
     const companyId = req.user?.companyId
     if (!companyId) return res.status(400).json({ error: 'companyId not found in token' })
@@ -58,7 +75,7 @@ nfeRouter.get('/emitente-config', authMiddleware, async (req, res) => {
   }
 })
 
-nfeRouter.post('/emit', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+nfeRouter.post('/emit', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
   try {
     const { ide, emit, dest, det, total, pag, orderId } = req.body
     const companyId = req.user?.companyId
@@ -105,7 +122,7 @@ nfeRouter.post('/emit', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), asy
   }
 })
 
-nfeRouter.post('/emit-from-order', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+nfeRouter.post('/emit-from-order', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
   try {
     const { orderId, orderIds } = req.body
 
@@ -152,7 +169,7 @@ nfeRouter.post('/emit-from-order', authMiddleware, requireRole('ADMIN', 'SUPER_A
 // Retorna checklist detalhado de cada etapa: cert encontrado, senha, leitura PFX,
 // dados do certificado, e teste de Status Serviço na SEFAZ (homologação).
 // ══════════════════════════════════════════════════════════════════════════════
-nfeRouter.post('/debug-cert', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+nfeRouter.post('/debug-cert', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
   const steps = []
   const addStep = (name, status, detail) => { steps.push({ step: name, status, detail }); return status === 'ok' }
   const companyId = req.user?.companyId
@@ -462,7 +479,7 @@ nfeRouter.post('/debug-cert', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'
 
 // ── Relatório de notas emitidas ─────────────────────────────────────────────
 // GET /nfe/emitidas?page=1&limit=20&from=YYYY-MM-DD&to=YYYY-MM-DD&search=nome&status=100
-nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
   try {
     const companyId = req.user?.companyId
     if (!companyId) return res.status(400).json({ error: 'companyId not found in token' })
@@ -508,7 +525,7 @@ nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), 
 })
 
 // GET /nfe/xml/:id — download raw XML stored for the protocol
-nfeRouter.get('/xml/:id', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+nfeRouter.get('/xml/:id', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
   try {
     const companyId = req.user?.companyId
     const protocol = await prisma.nfeProtocol.findFirst({ where: { id: req.params.id, companyId } })
@@ -525,7 +542,7 @@ nfeRouter.get('/xml/:id', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), a
 })
 
 // POST /nfe/cancelar — local cancellation (SEFAZ NFeRecepcaoEvento: TODO)
-nfeRouter.post('/cancelar', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+nfeRouter.post('/cancelar', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
   try {
     const companyId = req.user?.companyId
     const { nfeProtocolId, motivo } = req.body
@@ -554,7 +571,7 @@ nfeRouter.post('/cancelar', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'),
 })
 
 // POST /nfe/enviar-email — stub (email service integration: TODO)
-nfeRouter.post('/enviar-email', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+nfeRouter.post('/enviar-email', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
   try {
     const companyId = req.user?.companyId
     const { nfeProtocolId, email } = req.body

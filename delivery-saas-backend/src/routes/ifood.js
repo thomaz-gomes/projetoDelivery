@@ -1,11 +1,13 @@
 import express from 'express';
 import { authMiddleware, requireRole } from '../auth.js';
+import { requireModuleStrict } from '../modules.js';
 import { ifoodPoll } from '../integrations/ifood/client.js';
 
 export const ifoodRouter = express.Router();
 
 // 🔒 Todas as rotas protegidas
 ifoodRouter.use(authMiddleware);
+ifoodRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
 
 /**
  * POST /ifood/poll

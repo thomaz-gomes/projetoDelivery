@@ -1,9 +1,11 @@
 import express from 'express';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
+import { requireModuleStrict } from '../modules.js';
 
 export const neighborhoodsRouter = express.Router();
 neighborhoodsRouter.use(authMiddleware);
+neighborhoodsRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
 
 // list neighborhoods for company
 neighborhoodsRouter.get('/', async (req, res) => {

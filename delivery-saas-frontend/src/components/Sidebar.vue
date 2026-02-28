@@ -782,18 +782,44 @@ function selectMenuOption(opt){
       </div>
         <ul class="nav flex-column" style="height:100vh;">
           <li v-for="item in visibleNav" :key="item.to" class="nav-item mb-2">
-            <router-link :to="item.to" class="nav-link title d-flex align-items-center" @click="offCanvasOpen = false">
-              <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
-              <span>{{ item.name }}</span>
-            </router-link>
-            <ul v-if="item.children" class="nav flex-column ms-3">
-              <li v-for="child in item.children" :key="child.to" class="nav-item mb-1">
-                <router-link :to="child.to" class="nav-link d-flex align-items-center" @click="offCanvasOpen = false">
-                  <i :class="child.icon + ' me-2'" aria-hidden="true"></i>
-                  <span>{{ child.name }}</span>
-                </router-link>
-              </li>
-            </ul>
+            <!-- Item bloqueado (upgrade necessário) -->
+            <template v-if="item.locked">
+              <span class="nav-link title d-flex align-items-center text-muted" style="cursor:default;opacity:0.55;">
+                <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
+                <span>{{ item.name }}</span>
+                <span class="badge bg-warning text-dark ms-auto d-flex align-items-center gap-1" style="font-size:0.6rem;white-space:nowrap;">
+                  <i class="bi bi-lock-fill"></i> Upgrade
+                </span>
+              </span>
+            </template>
+            <!-- Item normal -->
+            <template v-else>
+              <router-link :to="item.to" class="nav-link title d-flex align-items-center" @click="offCanvasOpen = false">
+                <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
+                <span>{{ item.name }}</span>
+              </router-link>
+              <ul v-if="item.children" class="nav flex-column ms-3">
+                <li v-for="child in item.children" :key="child.to" class="nav-item mb-1">
+                  <!-- Filho bloqueado -->
+                  <template v-if="child.locked">
+                    <span class="nav-link d-flex align-items-center text-muted" style="cursor:default;opacity:0.55;">
+                      <i :class="child.icon + ' me-2'" aria-hidden="true"></i>
+                      <span>{{ child.name }}</span>
+                      <span class="badge bg-warning text-dark ms-auto d-flex align-items-center gap-1" style="font-size:0.6rem;white-space:nowrap;">
+                        <i class="bi bi-lock-fill"></i> Upgrade
+                      </span>
+                    </span>
+                  </template>
+                  <!-- Filho normal -->
+                  <template v-else>
+                    <router-link :to="child.to" class="nav-link d-flex align-items-center" @click="offCanvasOpen = false">
+                      <i :class="child.icon + ' me-2'" aria-hidden="true"></i>
+                      <span>{{ child.name }}</span>
+                    </router-link>
+                  </template>
+                </li>
+              </ul>
+            </template>
           </li>
           <li class="mt-auto pt-2">
             <hr class="text-white opacity-25">

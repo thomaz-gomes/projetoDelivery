@@ -300,3 +300,135 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ── AI Studio: botão e badge dentro dos itens da grade ── */
+.media-library-grid__item .ai-studio-trigger {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  background: linear-gradient(135deg, #1a1a2e, #0f3460);
+  color: #ffd700;
+  border: none;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 2;
+  cursor: pointer;
+}
+.media-library-grid__item:hover .ai-studio-trigger {
+  opacity: 1;
+  transform: translateY(0);
+}
+.media-library-grid__item .ai-studio-trigger:hover {
+  background: linear-gradient(135deg, #ffd700, #ff8c00);
+  color: #000;
+}
+
+/* ── Criar com IA Tab ─────────────────────────────────────────── */
+
+/* Grid de estilos (2x2) */
+.ml-gen-style-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+}
+
+.ml-gen-style-card {
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem 0.4rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  transition: var(--transition-base);
+  text-align: center;
+  user-select: none;
+  background: var(--bg-card);
+}
+.ml-gen-style-card:hover { border-color: #ffc107; box-shadow: 0 2px 6px rgba(255,193,7,.15); }
+.ml-gen-style-card.active { border-color: #ffc107; background: #fffbeb; }
+.ml-gen-style-icon  { font-size: 1.1rem; line-height: 1; }
+.ml-gen-style-name  { font-size: 0.72rem; font-weight: 700; color: var(--text-primary); }
+.ml-gen-style-desc  { font-size: 0.62rem; color: var(--text-muted); }
+
+/* Grid de ângulos (3 colunas) */
+.ml-gen-angle-grid {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.ml-gen-angle-card {
+  flex: 1;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem 0.4rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  transition: var(--transition-base);
+  text-align: center;
+  user-select: none;
+  background: var(--bg-card);
+}
+.ml-gen-angle-card:hover { border-color: var(--primary); }
+.ml-gen-angle-card.active { border-color: var(--primary); background: #eff6ff; }
+.ml-gen-angle-icon { font-size: 1rem; line-height: 1; }
+.ml-gen-angle-name { font-size: 0.7rem; font-weight: 700; color: var(--text-primary); }
+.ml-gen-angle-sub  { font-size: 0.62rem; color: var(--text-muted); }
+
+/* Preview da imagem gerada */
+.ml-gen-preview {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #a3cfbb;
+  background: var(--bg-zebra);
+}
+.ml-gen-preview img {
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+  display: block;
+}
+.ml-gen-preview-info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.4rem 0.75rem;
+  background: #d1e7dd;
+  font-size: 0.78rem;
+  color: #0a3622;
+}
+
+@media (max-width: 480px) {
+  .ml-gen-style-grid { grid-template-columns: repeat(2, 1fr); }
+  .ml-gen-angle-grid { flex-direction: column; }
+}
+
+/* Badge para imagens já editadas por IA */
+.media-library-grid__item .ai-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: linear-gradient(135deg, #ffd700, #ff8c00);
+  color: #000;
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}

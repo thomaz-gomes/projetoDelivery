@@ -4,6 +4,7 @@ import { prisma } from '../prisma.js';
 // When we need to emit socket events, use dynamic import inside async handlers:
 // const { emitirPedidoAtualizado } = await import('../index.js');
 import { authMiddleware, requireRole } from '../auth.js';
+import { requireModuleStrict } from '../modules.js';
 import { upsertCustomerFromIfood, findOrCreateCustomer, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js';
 import { trackAffiliateSale } from '../services/affiliates.js';
 import * as cashbackSvc from '../services/cashback.js';
@@ -16,6 +17,7 @@ import { createFinancialEntriesForOrder } from '../services/financial/orderFinan
 export const ordersRouter = express.Router();
 
 ordersRouter.use(authMiddleware);
+ordersRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
 
 ordersRouter.get('/', async (req, res) => {
   const companyId = req.user.companyId;

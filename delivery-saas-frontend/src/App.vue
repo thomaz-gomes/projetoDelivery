@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from './api'
 import { assetUrl } from './utils/assetUrl.js'
@@ -13,6 +13,8 @@ import PrinterWatcher from "./components/PrinterWatcher.vue";
 import MobileBottomNav from './components/MobileBottomNav.vue';
 import MediaLibraryModal from './components/MediaLibrary/MediaLibraryModal.vue';
 import ImportProgressBar from './components/ImportProgressBar.vue';
+import AiStudioModal from './components/AiStudio/AiStudioModal.vue';
+import OnboardingWizard from './components/OnboardingWizard.vue';
 
 const mobileOpen = ref(false);
 const auth = useAuthStore();
@@ -74,6 +76,51 @@ async function onToggleForce(item, ev){
   }catch(e){ console.error('onToggleForce', e); alert('Falha ao mudar status') }
 }
 
+// ── Onboarding: show wizard on first access until user has at least one product ──
+const showOnboarding = ref(false)
+const onboardingInitialStep = ref(0)
+const onboardingStoreId = ref(null)
+const onboardingMenuId = ref(null)
+let _onboardingChecked = false
+
+async function checkOnboarding(user) {
+  if (_onboardingChecked) return
+  if (!user || String(user.role).toUpperCase() !== 'ADMIN' || !user.companyId) return
+  try { if (sessionStorage.getItem('onboarding_skipped') === '1') return } catch {}
+  _onboardingChecked = true
+  try {
+    const [storesRes, menusRes, productsRes] = await Promise.all([
+      api.get('/stores'),
+      api.get('/menu/menus'),
+      api.get('/menu/products'),
+    ])
+    const stores   = Array.isArray(storesRes.data)   ? storesRes.data   : []
+    const menus    = Array.isArray(menusRes.data)    ? menusRes.data    : []
+    const products = Array.isArray(productsRes.data) ? productsRes.data : []
+
+    if (stores.length === 0) {
+      onboardingInitialStep.value = 0
+      showOnboarding.value = true
+    } else if (menus.length === 0) {
+      onboardingInitialStep.value = 1
+      onboardingStoreId.value = stores[0].id
+      showOnboarding.value = true
+    } else if (products.length === 0) {
+      onboardingInitialStep.value = 2
+      onboardingStoreId.value = stores[0].id
+      onboardingMenuId.value = menus[0].id
+      showOnboarding.value = true
+    }
+  } catch {}
+}
+
+async function onOnboardingDone() {
+  showOnboarding.value = false
+  await loadMenusWidget().catch(() => {})
+}
+
+watch(() => auth.user, (user) => { checkOnboarding(user) }, { immediate: true })
+
 onMounted(() => { loadMenusWidget().catch(()=>{}); });
 
 // compute visible nav applying same filters as Sidebar.vue (role + enabled modules)
@@ -84,7 +131,7 @@ const route = useRoute();
 const showLayout = computed(() => {
   // hide layout for login, register, verify, setup and for any public routes (start with /public)
   if(!route || !route.path) return true
-  if(route.path === '/login') return false
+  if(route.path.startsWith('/login')) return false
   if(route.path === '/register') return false
   if(route.path === '/verify-email') return false
   if(route.path === '/setup') return false
@@ -215,7 +262,16 @@ const showMobileHeader = computed(() => {
       <router-view />
     </template>
     <MediaLibraryModal />
+    <AiStudioModal />
     <ImportProgressBar />
+    <OnboardingWizard
+      :visible="showOnboarding"
+      :initial-step="onboardingInitialStep"
+      :initial-store-id="onboardingStoreId"
+      :initial-menu-id="onboardingMenuId"
+      @done="onOnboardingDone"
+      @skip="showOnboarding = false"
+    />
   </div>
 </template>
 

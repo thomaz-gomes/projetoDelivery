@@ -46,6 +46,29 @@ async function ensureAgentTokenForCompany(companyId) {
   }
 }
 
+// GET /auth/login-options — endpoint público que informa quais tipos de login estão disponíveis
+// Verifica se alguma empresa ativa tem o módulo RIDERS habilitado em seu plano
+authRouter.get('/login-options', async (_req, res) => {
+  try {
+    const ridersCount = await prisma.saasSubscription.count({
+      where: {
+        status: 'ACTIVE',
+        plan: { modules: { some: { module: { key: 'RIDERS', isActive: true } } } }
+      }
+    })
+    const affiliatesCount = await prisma.saasSubscription.count({
+      where: {
+        status: 'ACTIVE',
+        plan: { modules: { some: { module: { key: 'AFFILIATES', isActive: true } } } }
+      }
+    })
+    res.json({ rider: ridersCount > 0, affiliate: affiliatesCount > 0 })
+  } catch (e) {
+    // Em caso de erro (ex: sem subscription configurada), libera todas as opções
+    res.json({ rider: true, affiliate: true })
+  }
+})
+
 // GET /auth/me — return current user from JWT (used by router guards)
 authRouter.get('/me', authMiddleware, async (req, res) => {
   try {

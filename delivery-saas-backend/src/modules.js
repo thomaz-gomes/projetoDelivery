@@ -48,3 +48,35 @@ export async function getEnabledModules(companyId){
   const keys = await fetchEnabledModuleKeys(companyId)
   return Array.from(keys.values())
 }
+
+// Middleware que SEMPRE força verificação (ignora ENFORCE_MODULES),
+// mas permite companies sem subscription (legado/não restrito).
+export function requireModuleStrict(moduleKey){
+  const need = String(moduleKey || '').toLowerCase()
+  return async (req, res, next) => {
+    try {
+      const user = req.user
+      if (!user || !user.companyId) return res.status(401).json({ message: 'Não autenticado' })
+      // Companies sem subscription têm acesso irrestrito (backward-compat)
+      const sub = await prisma.saasSubscription.findUnique({ where: { companyId: user.companyId }, select: { id: true } })
+      if (!sub) return next()
+      const enabled = await fetchEnabledModuleKeys(user.companyId)
+      if (!enabled.has(need)) {
+        return res.status(403).json({ message: 'Módulo não habilitado para seu plano', module: moduleKey })
+      }
+      return next()
+    } catch (e) {
+      return res.status(500).json({ message: 'Falha ao validar módulo', error: e?.message || String(e) })
+    }
+  }
+}
+
+// Retorna true se a empresa tem CARDAPIO_SIMPLES mas NÃO tem CARDAPIO_COMPLETO.
+// false se não houver subscription (sem restrições).
+export async function isCardapioSimplesOnly(companyId){
+  if (!companyId) return false
+  const sub = await prisma.saasSubscription.findUnique({ where: { companyId }, select: { id: true } })
+  if (!sub) return false
+  const enabled = await fetchEnabledModuleKeys(companyId)
+  return enabled.has('cardapio_simples') && !enabled.has('cardapio_completo')
+}

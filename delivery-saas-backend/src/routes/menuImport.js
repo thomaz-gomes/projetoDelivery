@@ -16,11 +16,13 @@ import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import { prisma } from '../prisma.js';
 import { authMiddleware } from '../auth.js';
+import { requireModuleStrict } from '../modules.js';
 import { checkCredits, debitCredits, AI_SERVICE_COSTS } from '../services/aiCreditManager.js';
 import { getSetting } from '../services/systemSettings.js';
 
 const router = express.Router();
 router.use(authMiddleware);
+router.use(requireModuleStrict('CARDAPIO_SIMPLES'));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';

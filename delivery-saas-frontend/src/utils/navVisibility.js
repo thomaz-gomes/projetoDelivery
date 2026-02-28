@@ -16,14 +16,22 @@ export function buildVisibleNav(user, enabledModules, nav) {
 
     return (nav || []).map((item) => {
       if (item.role && role !== String(item.role).toUpperCase()) return null;
-      if (item.moduleKey && !isModuleEnabled(item.moduleKey)) return null;
+
+      // Module guard: inaccessible items show with locked:true (upgrade badge)
+      if (item.moduleKey && !isModuleEnabled(item.moduleKey)) {
+        return { ...item, locked: true, children: [] };
+      }
+
       const copy = { ...item };
       if (Array.isArray(copy.children)) {
-        copy.children = copy.children.filter(c => {
-          if (c.role && String(c.role).toUpperCase() !== role) return false;
-          if (c.moduleKey && !isModuleEnabled(c.moduleKey)) return false;
-          return true;
-        });
+        copy.children = copy.children.map(c => {
+          if (c.role && String(c.role).toUpperCase() !== role) return null;
+          if (c.moduleKey && !isModuleEnabled(c.moduleKey)) {
+            return { ...c, locked: true };
+          }
+          return c;
+        }).filter(Boolean);
+        // If parent has no accessible/lockable children, hide the parent
         if (copy.children.length === 0) return null;
       }
       return copy;

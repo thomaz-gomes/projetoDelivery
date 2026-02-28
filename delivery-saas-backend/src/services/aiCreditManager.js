@@ -31,10 +31,46 @@ import { prisma } from '../prisma.js'
  * Usado como fallback se o serviço não estiver cadastrado em AiCreditService no banco.
  */
 export const AI_SERVICE_COSTS = {
-  MENU_IMPORT_ITEM:    1, // por item de cardápio aplicado
-  MENU_IMPORT_PHOTO:   5, // por foto analisada (visão/OCR)
-  GENERATE_DESCRIPTION: 2, // por descrição gerada por IA
-  OCR_PHOTO:           5, // por foto processada via OCR
+  MENU_IMPORT_ITEM:      1, // por item de cardápio aplicado
+  MENU_IMPORT_LINK:      5, // por importação de cardápio via link/URL com IA
+  MENU_IMPORT_PHOTO:     5, // por foto analisada (visão/OCR)
+  MENU_IMPORT_PLANILHA:  2, // por importação de cardápio via planilha (Excel/CSV)
+  GENERATE_DESCRIPTION:  2, // por descrição gerada por IA
+  OCR_PHOTO:             5, // por foto processada via OCR
+  AI_STUDIO_ENHANCE:    10, // por aprimoramento de imagem no AI Studio (visão + geração)
+}
+
+// ─── Cache de custos de serviços lidos do banco ────────────────────────────────
+let _serviceCostCache = null
+let _serviceCostCacheTs = 0
+const SERVICE_COST_CACHE_TTL = 60_000 // 60s
+
+export function clearServiceCostCache() {
+  _serviceCostCache = null
+  _serviceCostCacheTs = 0
+}
+
+async function getServiceCostMap() {
+  const now = Date.now()
+  if (_serviceCostCache && now - _serviceCostCacheTs < SERVICE_COST_CACHE_TTL) {
+    return _serviceCostCache
+  }
+  try {
+    const rows = await prisma.aiCreditService.findMany({ where: { isActive: true } })
+    const map = {}
+    for (const row of rows) map[row.key] = row.creditsPerUnit
+    _serviceCostCache = map
+    _serviceCostCacheTs = now
+    return map
+  } catch {
+    return {}
+  }
+}
+
+async function getServiceCost(serviceKey) {
+  const dbMap = await getServiceCostMap()
+  if (dbMap[serviceKey] !== undefined) return dbMap[serviceKey]
+  return AI_SERVICE_COSTS[serviceKey] ?? 1
 }
 
 /**
@@ -90,7 +126,7 @@ export async function getBalance(companyId) {
  * Não realiza débito.
  */
 export async function checkCredits(companyId, serviceKey, quantity = 1) {
-  const costPerUnit = AI_SERVICE_COSTS[serviceKey] ?? 1
+  const costPerUnit = await getServiceCost(serviceKey)
   const totalCost = costPerUnit * Math.max(1, quantity)
   const { balance, monthlyLimit, unlimitedAiCredits, lastReset } = await getBalance(companyId)
 
@@ -123,7 +159,7 @@ export async function checkCredits(companyId, serviceKey, quantity = 1) {
  * @param {string} [userId]    - ID do usuário que disparou a ação (opcional)
  */
 export async function debitCredits(companyId, serviceKey, quantity = 1, metadata = {}, userId = null) {
-  const costPerUnit = AI_SERVICE_COSTS[serviceKey] ?? 1
+  const costPerUnit = await getServiceCost(serviceKey)
   const totalCost = costPerUnit * Math.max(1, quantity)
 
   // Verificar se o plano tem créditos ilimitados — registra uso sem debitar saldo

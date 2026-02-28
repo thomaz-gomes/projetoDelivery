@@ -14,6 +14,12 @@ export const useSaasStore = defineStore('saas', {
     enabledModules: (s) => {
       if (!s.subscription || !s.subscription.plan) return []
       return (s.subscription.plan.modules || []).map(pm => pm.module?.key || pm.moduleId)
+    },
+    // true se o tenant possui CARDAPIO_SIMPLES mas NÃO possui CARDAPIO_COMPLETO
+    isCardapioSimplesOnly: (s) => {
+      if (!s.subscription || !s.subscription.plan) return false
+      const mods = (s.subscription.plan.modules || []).map(pm => String(pm.module?.key || '').toUpperCase())
+      return mods.includes('CARDAPIO_SIMPLES') && !mods.includes('CARDAPIO_COMPLETO')
     }
   },
   actions: {

@@ -2,6 +2,7 @@
 import express from 'express';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
+import { requireModuleStrict } from '../modules.js';
 
 import {
   startDistributedAuth,          // novo: userCode + verificationUrlComplete
@@ -21,6 +22,7 @@ import { processIFoodWebhook } from '../services/ifoodWebhookProcessor.js';
 
 export const integrationsRouter = express.Router();
 integrationsRouter.use(authMiddleware);
+integrationsRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
 
 // Salvar credenciais de um provider (ex.: IFOOD)
 // Create a new integration for a provider (allow multiple per provider)

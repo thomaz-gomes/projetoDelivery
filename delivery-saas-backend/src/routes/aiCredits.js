@@ -14,6 +14,7 @@
 
 import express from 'express'
 import { authMiddleware, requireRole } from '../auth.js'
+import { requireModuleStrict } from '../modules.js'
 import { prisma } from '../prisma.js'
 import {
   getBalance,
@@ -25,6 +26,7 @@ import {
 
 const router = express.Router()
 router.use(authMiddleware)
+router.use(requireModuleStrict('CARDAPIO_SIMPLES'))
 
 // ─── ADMIN: consultas do próprio tenant ───────────────────────────────────────
 

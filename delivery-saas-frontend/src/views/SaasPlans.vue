@@ -11,12 +11,15 @@ const PERIOD_OPTIONS = [
 ]
 
 const MODULE_KEYS = {
-  RIDERS: { label: 'Entregadores', icon: 'bi-bicycle', color: 'primary' },
-  AFFILIATES: { label: 'Afiliados', icon: 'bi-people-fill', color: 'success' },
-  STOCK: { label: 'Controle de Estoque', icon: 'bi-box-seam', color: 'warning' },
-  CASHBACK: { label: 'Cashback', icon: 'bi-cash-stack', color: 'info' },
-  COUPONS: { label: 'Cupons', icon: 'bi-ticket-perforated', color: 'danger' },
-  WHATSAPP: { label: 'WhatsApp', icon: 'bi-whatsapp', color: 'success' },
+  CARDAPIO_SIMPLES:  { label: 'Cardápio Simples (Base)',  icon: 'bi-list',              color: 'primary' },
+  CARDAPIO_COMPLETO: { label: 'Cardápio Completo',        icon: 'bi-list-check',        color: 'success' },
+  RIDERS:            { label: 'Entregadores',             icon: 'bi-bicycle',           color: 'primary' },
+  AFFILIATES:        { label: 'Afiliados',                icon: 'bi-people-fill',       color: 'success' },
+  STOCK:             { label: 'Controle de Estoque',      icon: 'bi-box-seam',          color: 'warning' },
+  CASHBACK:          { label: 'Cashback',                 icon: 'bi-cash-stack',        color: 'info' },
+  COUPONS:           { label: 'Cupons',                   icon: 'bi-ticket-perforated', color: 'danger' },
+  WHATSAPP:          { label: 'WhatsApp',                 icon: 'bi-whatsapp',          color: 'success' },
+  FINANCIAL:         { label: 'Financeiro',               icon: 'bi-cash-coin',         color: 'warning' },
 }
 const keyMeta = (key) => MODULE_KEYS[key] || { label: key, icon: 'bi-box', color: 'secondary' }
 

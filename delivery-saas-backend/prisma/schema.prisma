@@ -135,6 +135,7 @@ model Rider {
   orders       Order[]
   account      RiderAccount?
   transactions RiderTransaction[]
+  position     RiderPosition?
 }
 
 model Order {
@@ -533,8 +534,21 @@ model PrinterSetting {
   receiptTemplate      String? // Custom receipt template with {{placeholders}}. Null = use default.
   copies               Int       @default(1) // Number of copies to print per order
   printerName          String? // Actual system printer name (e.g., "EPSON TM-T20II Receipt")
+  // Real-time rider tracking feature toggle (company-wide)
+  trackingEnabled      Boolean   @default(false)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+}
+
+model RiderPosition {
+  id        String   @id @default(uuid())
+  riderId   String   @unique
+  orderId   String?
+  lat       Float
+  lng       Float
+  heading   Float?
+  updatedAt DateTime @updatedAt
+  rider     Rider    @relation(fields: [riderId], references: [id])
 }
 
 // ---- Neighborhoods (Bairros) ----
@@ -813,6 +827,8 @@ model CashbackTransaction {
 // =============================
 
 enum ModuleKey {
+  CARDAPIO_SIMPLES
+  CARDAPIO_COMPLETO
   RIDERS
   AFFILIATES
   STOCK
@@ -820,6 +836,7 @@ enum ModuleKey {
   COUPONS
   WHATSAPP
   FINANCIAL
+  FISCAL
 }
 
 // Feature module that plans can enable/disable
@@ -1443,13 +1460,14 @@ model MetaPixel {
 
 // ---- Media Library ----
 model Media {
-  id        String   @id @default(uuid())
-  companyId String
-  filename  String
-  mimeType  String
-  size      Int
-  url       String
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  companyId   String
+  filename    String
+  mimeType    String
+  size        Int
+  url         String
+  aiEnhanced  Boolean  @default(false)
+  createdAt   DateTime @default(now())
 
   @@index([companyId, createdAt], name: "idx_media_company_created")
 }

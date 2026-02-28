@@ -1,9 +1,23 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
+import { AI_SERVICE_COSTS, clearServiceCostCache } from '../services/aiCreditManager.js'
 
 export const saasRouter = express.Router()
 saasRouter.use(authMiddleware)
+
+// Helper: garante que CARDAPIO_SIMPLES está incluído se CARDAPIO_COMPLETO estiver no array de módulos
+async function ensureCardapioSimplesIncluded(moduleIds) {
+  const ids = [...moduleIds].map(String)
+  const mods = await prisma.saasModule.findMany({ where: { id: { in: ids } }, select: { id: true, key: true } })
+  const hasCompleto = mods.some(m => m.key === 'CARDAPIO_COMPLETO')
+  if (!hasCompleto) return ids
+  const alreadyHasSimples = mods.some(m => m.key === 'CARDAPIO_SIMPLES')
+  if (alreadyHasSimples) return ids
+  const simplesModule = await prisma.saasModule.findFirst({ where: { key: 'CARDAPIO_SIMPLES' } })
+  if (simplesModule) ids.push(simplesModule.id)
+  return ids
+}
 
 // -------- Modules CRUD (SUPER_ADMIN) --------
 saasRouter.get('/modules', requireRole('SUPER_ADMIN'), async (_req, res) => {
@@ -51,7 +65,8 @@ saasRouter.post('/plans', requireRole('SUPER_ADMIN'), async (req, res) => {
   try {
     const plan = await prisma.saasPlan.create({ data: { name, price: Number(price || 0), menuLimit, storeLimit, unlimitedMenus: Boolean(unlimitedMenus), unlimitedStores: Boolean(unlimitedStores), aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit || 100), unlimitedAiCredits: Boolean(unlimitedAiCredits) } })
     if (Array.isArray(moduleIds) && moduleIds.length) {
-      const data = moduleIds.map(mid => ({ planId: plan.id, moduleId: String(mid) }))
+      const effectiveModuleIds = await ensureCardapioSimplesIncluded(moduleIds)
+      const data = effectiveModuleIds.map(mid => ({ planId: plan.id, moduleId: String(mid) }))
       await prisma.saasPlanModule.createMany({ data })
     }
     // prices: optional array of { period, price }
@@ -75,7 +90,8 @@ saasRouter.put('/plans/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
       // replace module assignments
       await prisma.saasPlanModule.deleteMany({ where: { planId: id } })
       if (moduleIds.length) {
-        const data = moduleIds.map(mid => ({ planId: id, moduleId: String(mid) }))
+        const effectiveModuleIds = await ensureCardapioSimplesIncluded(moduleIds)
+        const data = effectiveModuleIds.map(mid => ({ planId: id, moduleId: String(mid) }))
         await prisma.saasPlanModule.createMany({ data })
       }
     }
@@ -473,7 +489,7 @@ saasRouter.delete('/companies/:id', requireRole('SUPER_ADMIN'), async (_req, res
 // -------- System Settings (SUPER_ADMIN) --------
 
 // Chaves expostas na API (whitelist). Valores de chaves *_key são mascarados na leitura.
-const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model']
+const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price']
 const SENSITIVE_KEYS = new Set(['openai_api_key'])
 
 function maskValue(key, value) {
@@ -536,6 +552,75 @@ saasRouter.put('/settings', requireRole('SUPER_ADMIN'), async (req, res) => {
   } catch (e) {
     console.error('[PUT /saas/settings]', e)
     res.status(500).json({ message: 'Erro ao salvar configurações' })
+  }
+})
+
+// -------- AI Credit Services (custo por operação) --------
+
+// Rótulos amigáveis para exibição no painel
+const CREDIT_SERVICE_LABELS = {
+  AI_STUDIO_ENHANCE:    'Gerar / aprimorar imagem no AI Studio',
+  MENU_IMPORT_LINK:     'Importar cardápio via link com IA',
+  MENU_IMPORT_PHOTO:    'Importar cardápio via foto com IA',
+  MENU_IMPORT_PLANILHA: 'Importar cardápio via planilha (Excel/CSV)',
+  MENU_IMPORT_ITEM:     'Por item importado via IA (cardápio aplicado)',
+  GENERATE_DESCRIPTION: 'Gerar descrição de produto com IA',
+  OCR_PHOTO:            'Processar foto via OCR',
+}
+
+/**
+ * GET /saas/credit-services
+ * Lista todos os serviços de crédito de IA (banco + constantes de fallback).
+ */
+saasRouter.get('/credit-services', requireRole('SUPER_ADMIN'), async (_req, res) => {
+  try {
+    const dbServices = await prisma.aiCreditService.findMany({ orderBy: { key: 'asc' } })
+    const dbKeys = new Set(dbServices.map(s => s.key))
+
+    // Inclui serviços definidos nas constantes que ainda não estão no banco
+    const fallbacks = Object.entries(AI_SERVICE_COSTS)
+      .filter(([key]) => !dbKeys.has(key))
+      .map(([key, creditsPerUnit]) => ({
+        id: null,
+        key,
+        name: CREDIT_SERVICE_LABELS[key] || key,
+        creditsPerUnit,
+        description: null,
+        isActive: true,
+      }))
+
+    const result = [...dbServices, ...fallbacks].map(s => ({
+      ...s,
+      label: CREDIT_SERVICE_LABELS[s.key] || s.name || s.key,
+    }))
+
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao listar serviços de crédito', error: e?.message })
+  }
+})
+
+/**
+ * PUT /saas/credit-services
+ * Atualiza/cria custos de serviços em lote.
+ * Body: [{ key, creditsPerUnit, name?, description? }]
+ */
+saasRouter.put('/credit-services', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const items = Array.isArray(req.body) ? req.body : [req.body]
+    for (const { key, creditsPerUnit, name, description } of items) {
+      if (!key || creditsPerUnit === undefined) continue
+      const credits = Math.max(0, Math.round(Number(creditsPerUnit)))
+      await prisma.aiCreditService.upsert({
+        where: { key },
+        update: { creditsPerUnit: credits, name: name || CREDIT_SERVICE_LABELS[key] || key, description: description ?? null },
+        create: { key, creditsPerUnit: credits, name: name || CREDIT_SERVICE_LABELS[key] || key, description: description ?? null, isActive: true },
+      })
+    }
+    clearServiceCostCache()
+    res.json({ message: 'Custos de serviços atualizados com sucesso' })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao atualizar custos de serviços', error: e?.message })
   }
 })
 

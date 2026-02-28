@@ -1,6 +1,7 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
+import { isCardapioSimplesOnly } from '../modules.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -39,6 +40,10 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
   const { name, min = 0, max = null, position = 0, isActive = true } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
   try {
+    // CARDAPIO_SIMPLES: opcionais não disponíveis
+    if (await isCardapioSimplesOnly(companyId)) {
+      return res.status(403).json({ message: 'Opcionais não disponíveis no plano Cardápio Simples. Faça upgrade para Cardápio Completo.' })
+    }
     const created = await prisma.optionGroup.create({ data: { companyId, name, min: Number(min || 0), max: max !== null ? Number(max) : null, position: Number(position || 0), isActive: Boolean(isActive) } })
     res.status(201).json(created)
   } catch (e) {

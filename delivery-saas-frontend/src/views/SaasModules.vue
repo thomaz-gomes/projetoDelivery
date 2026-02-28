@@ -4,12 +4,16 @@ import api from '../api'
 import Swal from 'sweetalert2'
 
 const MODULE_KEYS = [
-  { value: 'RIDERS', label: 'Entregadores', icon: 'bi-bicycle', color: 'primary' },
-  { value: 'AFFILIATES', label: 'Afiliados', icon: 'bi-people-fill', color: 'success' },
-  { value: 'STOCK', label: 'Controle de Estoque', icon: 'bi-box-seam', color: 'warning' },
-  { value: 'CASHBACK', label: 'Cashback', icon: 'bi-cash-stack', color: 'info' },
-  { value: 'COUPONS', label: 'Cupons', icon: 'bi-ticket-perforated', color: 'danger' },
-  { value: 'WHATSAPP', label: 'WhatsApp', icon: 'bi-whatsapp', color: 'success' },
+  { value: 'CARDAPIO_SIMPLES',  label: 'Cardápio Simples (Base)',  icon: 'bi-list',              color: 'primary' },
+  { value: 'CARDAPIO_COMPLETO', label: 'Cardápio Completo',        icon: 'bi-list-check',        color: 'success' },
+  { value: 'RIDERS',            label: 'Entregadores',             icon: 'bi-bicycle',           color: 'primary' },
+  { value: 'AFFILIATES',        label: 'Afiliados',                icon: 'bi-people-fill',       color: 'success' },
+  { value: 'STOCK',             label: 'Controle de Estoque',      icon: 'bi-box-seam',          color: 'warning' },
+  { value: 'CASHBACK',          label: 'Cashback',                 icon: 'bi-cash-stack',        color: 'info' },
+  { value: 'COUPONS',           label: 'Cupons',                   icon: 'bi-ticket-perforated', color: 'danger' },
+  { value: 'WHATSAPP',          label: 'WhatsApp',                 icon: 'bi-whatsapp',          color: 'success' },
+  { value: 'FINANCIAL',         label: 'Financeiro',               icon: 'bi-cash-coin',         color: 'warning' },
+  { value: 'FISCAL',            label: 'Módulo Fiscal (NF-e/NFC-e)', icon: 'bi-receipt',         color: 'danger' },
 ]
 
 const modules = ref([])

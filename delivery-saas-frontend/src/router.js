@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Login from './views/Login.vue';
+import LoginRider from './views/LoginRider.vue';
+import LoginAffiliate from './views/LoginAffiliate.vue';
 import Register from './views/Register.vue';
 import VerifyEmail from './views/VerifyEmail.vue';
 import SetupCompany from './views/SetupCompany.vue';
@@ -105,6 +107,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', component: Login },
+    { path: '/login/rider', component: LoginRider },
+    { path: '/login/affiliate', component: LoginAffiliate },
     { path: '/register', component: Register },
     { path: '/verify-email', component: VerifyEmail },
     { path: '/setup', component: SetupCompany, meta: { requiresAuth: true, noSidebar: true } },
@@ -196,6 +200,8 @@ const router = createRouter({
   ,{ path: '/rider/home', component: RiderQrCode, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/rider/account', component: RiderAccountSelf, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/rider', component: RiderDashboard, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
+  ,{ path: '/riders/map', component: () => import('./views/RiderMap.vue'), meta: { requiresAuth: true } }
+  ,{ path: '/settings/rider-tracking', component: () => import('./views/RiderTracking.vue'), meta: { requiresAuth: true } }
   ,{ path: '/affiliate', component: AffiliateHome, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/affiliate/statement', component: AffiliateStatementSelf, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/menu/products/new', component: ProductForm, meta: { requiresAuth: true } }

@@ -1,9 +1,11 @@
 import express from 'express';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
+import { requireModuleStrict } from '../modules.js';
 
 export const customerGroupsRouter = express.Router();
 customerGroupsRouter.use(authMiddleware);
+customerGroupsRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
 
 // List groups for company
 customerGroupsRouter.get('/', async (req, res) => {

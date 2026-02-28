@@ -63,6 +63,7 @@ import mediaRouter from './routes/media.js'
 import dadosFiscaisRouter from './routes/dadosFiscais.js'
 import productReportsRouter from './routes/reports/products.js'
 import aiCreditsRouter from './routes/aiCredits.js'
+import aiStudioRouter from './routes/aiStudio.js'
 import './cron.js'
 
 const app = express();
@@ -202,6 +203,7 @@ app.use('/agent-print', requireModule('printing'), agentPrintRouter);
 app.use('/saas', saasRouter);
 // AI Credits: saldo, histórico e gestão de créditos de IA por empresa
 app.use('/ai-credits', aiCreditsRouter);
+app.use('/ai-studio', aiStudioRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
@@ -725,6 +727,23 @@ export function emitirPedidoAtualizado(pedido) {
     console.log('📢 Atualização de pedido emitida:', payload);
   } catch (e) {
     console.warn('Falha ao emitir atualização de pedido:', e?.message || e);
+  }
+}
+
+export function emitirPosicaoEntregador(companyId, payload) {
+  if (!io) return;
+  try {
+    const sockets = Array.from(io.sockets.sockets.values());
+    let sent = 0;
+    for (const s of sockets) {
+      if (s.agent) continue;
+      // Only send to sockets of the same company (if companyId is tracked on socket)
+      if (s.companyId && s.companyId !== companyId) continue;
+      try { s.emit('rider-position', payload); sent++; } catch (e) { /* ignore per-socket */ }
+    }
+    if (sent > 0) console.log(`📡 Posição do entregador emitida para ${sent} sockets — riderId: ${payload.riderId}`);
+  } catch (e) {
+    console.warn('Falha ao emitir posição do entregador:', e?.message || e);
   }
 }
 

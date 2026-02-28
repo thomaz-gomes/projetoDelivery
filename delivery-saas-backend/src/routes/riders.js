@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { assertModuleEnabled } from '../utils/saas.js';
 import { createFinancialEntryForRider } from '../services/financial/orderFinancialBridge.js';
+import { emitirPosicaoEntregador } from '../index.js';
 
 export const ridersRouter = express.Router();
 ridersRouter.use(authMiddleware);
@@ -29,6 +30,106 @@ ridersRouter.get('/', async (req, res) => {
     select: { id: true, name: true, whatsapp: true }
   });
   res.json(riders);
+});
+
+// ---- Real-time Rider Tracking ----
+// These must be defined BEFORE /:id to avoid being swallowed by the wildcard route.
+
+// GET /riders/tracking-status — any authenticated user (rider or admin)
+ridersRouter.get('/tracking-status', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const setting = await prisma.printerSetting.findUnique({ where: { companyId } });
+    return res.json({ enabled: setting?.trackingEnabled ?? false });
+  } catch (e) {
+    console.error('tracking-status error:', e);
+    return res.json({ enabled: false });
+  }
+});
+
+// PUT /riders/tracking-toggle — ADMIN only
+ridersRouter.put('/tracking-toggle', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') return res.status(400).json({ message: 'Campo enabled (boolean) obrigatório' });
+    await prisma.printerSetting.upsert({
+      where: { companyId },
+      update: { trackingEnabled: enabled },
+      create: { companyId, trackingEnabled: enabled },
+    });
+    return res.json({ ok: true, enabled });
+  } catch (e) {
+    console.error('tracking-toggle error:', e);
+    return res.status(500).json({ message: 'Erro ao salvar configuração de rastreamento' });
+  }
+});
+
+// POST /riders/me/position — RIDER only
+ridersRouter.post('/me/position', requireRole('RIDER'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const riderId = req.user.riderId;
+    if (!riderId) return res.status(400).json({ message: 'riderId não encontrado no token' });
+
+    const { lat, lng, heading, orderId } = req.body;
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      return res.status(400).json({ message: 'lat e lng (number) são obrigatórios' });
+    }
+
+    // Verify tracking is enabled for this company
+    const setting = await prisma.printerSetting.findUnique({ where: { companyId } });
+    if (!setting?.trackingEnabled) return res.json({ ok: false, reason: 'tracking_disabled' });
+
+    // Upsert rider position
+    const position = await prisma.riderPosition.upsert({
+      where: { riderId },
+      update: { lat, lng, heading: heading ?? null, orderId: orderId ?? null },
+      create: { riderId, lat, lng, heading: heading ?? null, orderId: orderId ?? null },
+    });
+
+    // Get rider name for the socket payload
+    const rider = await prisma.rider.findUnique({ where: { id: riderId }, select: { name: true } });
+
+    // Emit to admin dashboard sockets of this company
+    try {
+      emitirPosicaoEntregador(companyId, {
+        riderId,
+        riderName: rider?.name || 'Entregador',
+        lat,
+        lng,
+        heading: heading ?? null,
+        orderId: orderId ?? null,
+        updatedAt: position.updatedAt,
+      });
+    } catch (e) { /* non-blocking */ }
+
+    // Async cleanup: delete positions not updated in last 24h
+    prisma.riderPosition.deleteMany({
+      where: { updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    }).catch(() => {});
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('me/position error:', e);
+    return res.status(500).json({ message: 'Erro ao salvar posição' });
+  }
+});
+
+// GET /riders/map/positions — ADMIN only
+ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const positions = await prisma.riderPosition.findMany({
+      where: { rider: { companyId } },
+      include: { rider: { select: { id: true, name: true } } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return res.json(positions);
+  } catch (e) {
+    console.error('map/positions error:', e);
+    return res.status(500).json({ message: 'Erro ao buscar posições' });
+  }
 });
 
 ridersRouter.get('/:id', async (req, res) => {
@@ -666,3 +767,4 @@ ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => 
 
   return res.json({ ok: true, message: 'Pagamento registrado', total: sum, tx: paymentTx });
 });
+

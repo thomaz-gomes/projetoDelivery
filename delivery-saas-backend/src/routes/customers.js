@@ -4,10 +4,12 @@ import xlsx from 'xlsx';
 import { randomUUID } from 'crypto';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
+import { requireModuleStrict } from '../modules.js';
 import { normalizePhone, findOrCreateCustomer } from '../services/customers.js';
 
 export const customersRouter = express.Router();
 customersRouter.use(authMiddleware);
+customersRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
 
 // Helper: calcula tier de fidelidade baseado nos pedidos concluídos
 function computeCustomerTier(orders) {

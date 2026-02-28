@@ -5,6 +5,7 @@ import { authMiddleware, requireRole } from '../auth.js'
 import fs from 'fs'
 import path from 'path'
 import { assertLimit } from '../utils/saas.js'
+import { isCardapioSimplesOnly } from '../modules.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -53,7 +54,13 @@ router.post('/menus', requireRole('ADMIN'), async (req, res) => {
     return res.status(status).json({ message: e?.message || 'Limite de cardápios atingido para seu plano' })
   }
 
-  const created = await prisma.menu.create({ data: { name, description, storeId, logoUrl, position: Number(position || 0), isActive: Boolean(isActive), slug: normalized, address: address || null, phone: phone || null, whatsapp: whatsapp || null, timezone: timezone || null, weeklySchedule: weeklySchedule || null, open24Hours: !!open24Hours, allowDelivery: !!allowDelivery, allowPickup: !!allowPickup, catalogMode: !!catalogMode } })
+  // CARDAPIO_SIMPLES: forçar modo catálogo (sem entrega/retirada)
+  const simplesOnly = await isCardapioSimplesOnly(companyId)
+  const effectiveAllowDelivery = simplesOnly ? false : !!allowDelivery
+  const effectiveAllowPickup   = simplesOnly ? false : !!allowPickup
+  const effectiveCatalogMode   = simplesOnly ? true  : !!catalogMode
+
+  const created = await prisma.menu.create({ data: { name, description, storeId, logoUrl, position: Number(position || 0), isActive: Boolean(isActive), slug: normalized, address: address || null, phone: phone || null, whatsapp: whatsapp || null, timezone: timezone || null, weeklySchedule: weeklySchedule || null, open24Hours: !!open24Hours, allowDelivery: effectiveAllowDelivery, allowPickup: effectiveAllowPickup, catalogMode: effectiveCatalogMode } })
   res.status(201).json(created)
 })
 
@@ -95,7 +102,13 @@ router.patch('/menus/:id', requireRole('ADMIN'), async (req, res) => {
     }
   }
 
-  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule, open24Hours: open24Hours !== undefined ? !!open24Hours : existing.open24Hours, allowDelivery: allowDelivery !== undefined ? !!allowDelivery : existing.allowDelivery, allowPickup: allowPickup !== undefined ? !!allowPickup : existing.allowPickup, catalogMode: catalogMode !== undefined ? !!catalogMode : existing.catalogMode } })
+  // CARDAPIO_SIMPLES: forçar modo catálogo (sem entrega/retirada)
+  const simplesOnly = await isCardapioSimplesOnly(companyId)
+  const finalAllowDelivery = simplesOnly ? false : (allowDelivery !== undefined ? !!allowDelivery : existing.allowDelivery)
+  const finalAllowPickup   = simplesOnly ? false : (allowPickup   !== undefined ? !!allowPickup   : existing.allowPickup)
+  const finalCatalogMode   = simplesOnly ? true  : (catalogMode   !== undefined ? !!catalogMode   : existing.catalogMode)
+
+  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule, open24Hours: open24Hours !== undefined ? !!open24Hours : existing.open24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
 
   // Emit real-time socket event so public menus react immediately when a menu is toggled
   try {

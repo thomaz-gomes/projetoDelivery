@@ -2,8 +2,14 @@
   <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4>Meus Pedidos</h4>
-      <div>
-        <button class="btn btn-outline-secondary" @click="load">Recarregar</button>
+      <div class="d-flex align-items-center gap-2">
+        <span v-if="trackingEnabled && activeOrderForTracking" class="badge bg-success px-2 py-1">
+          📡 GPS Ativo
+        </span>
+        <span v-else-if="!trackingEnabled" class="badge bg-secondary px-2 py-1">
+          📡 Rastreamento Desligado pelo Admin
+        </span>
+        <button class="btn btn-outline-secondary btn-sm" @click="load">Recarregar</button>
       </div>
     </div>
 
@@ -91,6 +97,11 @@ import Swal from 'sweetalert2'
 const orders = ref([])
 const loading = ref(false)
 let socket = null
+
+// GPS Tracking state
+const trackingEnabled = ref(false)
+const activeOrderForTracking = ref(null)
+let watchId = null
 
 // QR Scanner state
 const scanning = ref(false)
@@ -314,6 +325,49 @@ function formatAddress(o){
   }
 }
 
+function startTracking(orderId) {
+  if (!navigator.geolocation) return
+  if (watchId !== null) return // already watching
+  activeOrderForTracking.value = orderId
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude: lat, longitude: lng, heading } = pos.coords
+      api.post('/riders/me/position', { lat, lng, heading: heading ?? null, orderId })
+        .catch((e) => console.warn('GPS position update failed:', e?.message))
+    },
+    (err) => console.warn('GPS watchPosition error:', err?.message),
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+  )
+}
+
+function stopTracking() {
+  if (watchId !== null) {
+    try { navigator.geolocation.clearWatch(watchId) } catch (e) {}
+    watchId = null
+  }
+  activeOrderForTracking.value = null
+}
+
+async function checkTrackingStatus() {
+  try {
+    const { data } = await api.get('/riders/tracking-status')
+    trackingEnabled.value = data.enabled ?? false
+  } catch (e) { /* non-blocking */ }
+}
+
+function syncTrackingWithOrders(orderList) {
+  if (!trackingEnabled.value) { stopTracking(); return }
+  const activeOrder = orderList.find(o => o.status === 'SAIU_PARA_ENTREGA')
+  if (activeOrder) {
+    if (activeOrderForTracking.value !== activeOrder.id) {
+      stopTracking()
+      startTracking(activeOrder.id)
+    }
+  } else {
+    stopTracking()
+  }
+}
+
 async function load(){
   loading.value = true
   try{
@@ -336,6 +390,7 @@ async function load(){
     } catch (e) {
       orders.value = (list || []).filter(d => d && d.status !== 'CONCLUIDO');
     }
+    syncTrackingWithOrders(orders.value)
   }catch(e){ console.error(e); alert(e?.response?.data?.message || 'Erro') }
   finally{ loading.value = false }
 }
@@ -383,18 +438,21 @@ function ensureSocket(){
             orders.value.splice(idx, 1, data);
           }catch(e){ console.warn('Failed to refresh order after update', e); }
         }
+        syncTrackingWithOrders(orders.value);
       }catch(e){ console.warn('order-updated handler error', e) }
     });
   }catch(e){ console.warn('Failed to init socket in RiderOrders', e) }
 }
 
-onMounted(()=>{ 
-  load(); 
-  ensureSocket(); 
+onMounted(async ()=>{
+  await checkTrackingStatus()
+  load();
+  ensureSocket();
   try{ window.addEventListener('open-rider-scanner', externalOpenScannerHandler) }catch(e){}
 })
-onUnmounted(()=>{ 
-  try{ socket && socket.disconnect(); }catch(e){} 
+onUnmounted(()=>{
+  stopTracking()
+  try{ socket && socket.disconnect(); }catch(e){}
   try{ window.removeEventListener('open-rider-scanner', externalOpenScannerHandler) }catch(e){}
   stopScanner();
 })
