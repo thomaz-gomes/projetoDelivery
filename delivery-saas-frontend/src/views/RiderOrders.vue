@@ -102,6 +102,7 @@ let socket = null
 const trackingEnabled = ref(false)
 const activeOrderForTracking = ref(null)
 let watchId = null
+let trackingIntervalId = null
 
 // QR Scanner state
 const scanning = ref(false)
@@ -329,21 +330,39 @@ function startTracking(orderId) {
   if (!navigator.geolocation) return
   if (watchId !== null) return // already watching
   activeOrderForTracking.value = orderId
+
+  const sendPosition = (pos) => {
+    const { latitude: lat, longitude: lng, heading } = pos.coords
+    api.post('/riders/me/position', { lat, lng, heading: heading ?? null, orderId })
+      .catch((e) => console.warn('GPS position update failed:', e?.message))
+  }
+
   watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const { latitude: lat, longitude: lng, heading } = pos.coords
-      api.post('/riders/me/position', { lat, lng, heading: heading ?? null, orderId })
-        .catch((e) => console.warn('GPS position update failed:', e?.message))
-    },
+    sendPosition,
     (err) => console.warn('GPS watchPosition error:', err?.message),
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
   )
+
+  // Fallback periódico: garante envio a cada 30s mesmo que watchPosition seja
+  // suspenso pelo browser em segundo plano ou com tela apagada (mobile).
+  trackingIntervalId = setInterval(() => {
+    if (watchId === null) return
+    navigator.geolocation.getCurrentPosition(
+      sendPosition,
+      (err) => console.warn('GPS fallback getCurrentPosition error:', err?.message),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    )
+  }, 30000)
 }
 
 function stopTracking() {
   if (watchId !== null) {
     try { navigator.geolocation.clearWatch(watchId) } catch (e) {}
     watchId = null
+  }
+  if (trackingIntervalId !== null) {
+    clearInterval(trackingIntervalId)
+    trackingIntervalId = null
   }
   activeOrderForTracking.value = null
 }
@@ -444,16 +463,33 @@ function ensureSocket(){
   }catch(e){ console.warn('Failed to init socket in RiderOrders', e) }
 }
 
+// Reinicia o tracking quando a página volta ao foco (tela desbloqueada, app ativo)
+// Isso resolve o problema de watchPosition ser suspenso em segundo plano no mobile.
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible' && trackingEnabled.value) {
+    const currentOrderId = activeOrderForTracking.value
+    if (currentOrderId) {
+      // Reinicia o watch — pode ter sido pausado pelo browser enquanto em bg
+      stopTracking()
+      startTracking(currentOrderId)
+    } else {
+      syncTrackingWithOrders(orders.value)
+    }
+  }
+}
+
 onMounted(async ()=>{
   await checkTrackingStatus()
   load();
   ensureSocket();
   try{ window.addEventListener('open-rider-scanner', externalOpenScannerHandler) }catch(e){}
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 onUnmounted(()=>{
   stopTracking()
   try{ socket && socket.disconnect(); }catch(e){}
   try{ window.removeEventListener('open-rider-scanner', externalOpenScannerHandler) }catch(e){}
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   stopScanner();
 })
 </script>
