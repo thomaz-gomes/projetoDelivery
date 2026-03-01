@@ -172,6 +172,14 @@ async function loadPositions() {
   }
 }
 
+function removeMarker(riderId) {
+  if (markersMap[riderId] && map) {
+    map.removeLayer(markersMap[riderId])
+    delete markersMap[riderId]
+  }
+  positions.value = positions.value.filter(p => (p.riderId || p.rider?.id) !== riderId)
+}
+
 function ensureSocket() {
   try {
     socket = io(SOCKET_URL, { transports: ['websocket'] })
@@ -185,6 +193,9 @@ function ensureSocket() {
         positions.value.push({ riderId: payload.riderId, rider: { id: riderId, name: payload.riderName }, ...payload })
       }
       updateMarker(payload)
+    })
+    socket.on('rider-offline', (payload) => {
+      if (payload?.riderId) removeMarker(payload.riderId)
     })
   } catch (e) {
     console.warn('Socket init failed in RiderMap:', e)

@@ -33,6 +33,7 @@
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { computed } from 'vue';
+import api from '../api';
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
@@ -49,7 +50,11 @@ function goStatement(){
   router.push('/rider/account')
 }
 
-function logout(){
+async function logout(){
+  // Remove a posição do mapa antes de limpar o token (token ainda válido aqui)
+  if (auth.user?.role === 'RIDER') {
+    try { await api.delete('/riders/me/position') } catch (e) { console.warn('clearPosition on logout failed:', e?.message) }
+  }
   try{ auth.logout(); }catch(e){ console.warn('logout failed', e) }
   router.replace('/login')
 }

@@ -747,4 +747,18 @@ export function emitirPosicaoEntregador(companyId, payload) {
   }
 }
 
+export function emitirEntregadorOffline(companyId, riderId) {
+  if (!io) return;
+  try {
+    const sockets = Array.from(io.sockets.sockets.values());
+    for (const s of sockets) {
+      if (s.agent) continue;
+      if (s.companyId && s.companyId !== companyId) continue;
+      try { s.emit('rider-offline', { riderId }); } catch (e) { /* ignore */ }
+    }
+  } catch (e) {
+    console.warn('Falha ao emitir rider-offline:', e?.message || e);
+  }
+}
+
 export { app };

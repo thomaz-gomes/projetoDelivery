@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { assertModuleEnabled } from '../utils/saas.js';
 import { createFinancialEntryForRider } from '../services/financial/orderFinancialBridge.js';
-import { emitirPosicaoEntregador } from '../index.js';
+import { emitirPosicaoEntregador, emitirEntregadorOffline } from '../index.js';
 
 export const ridersRouter = express.Router();
 ridersRouter.use(authMiddleware);
@@ -113,6 +113,24 @@ ridersRouter.post('/me/position', requireRole('RIDER'), async (req, res) => {
   } catch (e) {
     console.error('me/position error:', e);
     return res.status(500).json({ message: 'Erro ao salvar posição' });
+  }
+});
+
+// DELETE /riders/me/position — RIDER only (called on logout to clear position from map)
+ridersRouter.delete('/me/position', requireRole('RIDER'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const riderId = req.user.riderId;
+    if (!riderId) return res.status(400).json({ message: 'riderId não encontrado no token' });
+
+    await prisma.riderPosition.deleteMany({ where: { riderId } });
+
+    emitirEntregadorOffline(companyId, riderId);
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE me/position error:', e);
+    return res.status(500).json({ message: 'Erro ao remover posição' });
   }
 });
 
