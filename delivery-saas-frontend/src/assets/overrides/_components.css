@@ -2,6 +2,19 @@
    Componentes Customizados — Flat Moderno
    ================================================================ */
 
+/* ── .ai-photo-cta ── Chamada de ação após campo de foto de produto */
+.ai-photo-cta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: #7c3aed;
+  background: linear-gradient(90deg, rgba(124,58,237,.07), rgba(139,92,246,.04));
+  border-left: 3px solid #7c3aed;
+  border-radius: 0 6px 6px 0;
+  padding: 0.35rem 0.65rem;
+}
+
 /* ── .stat-card ──
    Card de KPI / estatística com ícone, valor e variação.
    Uso: <div class="stat-card"> ... </div>

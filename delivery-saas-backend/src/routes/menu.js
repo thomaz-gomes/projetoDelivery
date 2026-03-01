@@ -76,6 +76,20 @@ router.post('/menus', requireRole('ADMIN'), async (req, res) => {
   res.status(201).json(created)
 })
 
+// GET /menu/menus/check-slug?slug=xxx - check if a menu slug is available
+router.get('/menus/check-slug', async (req, res) => {
+  try {
+    const raw = String(req.query.slug || '').trim()
+    if (!raw) return res.json({ available: false, reason: 'empty' })
+    const slug = normalizeSlug(raw)
+    if (!isValidSlug(slug) || isReservedSlug(slug)) return res.json({ available: false, reason: 'invalid', slug })
+    const exists = await prisma.menu.findFirst({ where: { slug }, select: { id: true } })
+    res.json({ available: !exists, slug })
+  } catch (e) {
+    res.status(500).json({ available: false, reason: 'error' })
+  }
+})
+
 // GET /menu/menus/:id
 router.get('/menus/:id', async (req, res) => {
   const { id } = req.params

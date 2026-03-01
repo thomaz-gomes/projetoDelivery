@@ -101,6 +101,10 @@
 
         <div class="mb-3">
           <MediaField v-model="form.image" label="Imagem do produto" field-id="product-image" />
+          <div v-if="form.image" class="ai-photo-cta mt-2">
+            <i class="bi bi-stars me-1"></i>
+            Otimize sua foto com IA — cardápios com fotos chamativas convertem até 60% a mais
+          </div>
         </div>
 
         </div>

@@ -457,30 +457,39 @@ authRouter.post('/setup-company', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
     if (user.companyId) return res.status(400).json({ message: 'Você já possui uma empresa cadastrada' });
 
-    const { name, slug, street, addressNumber, addressNeighborhood, city, state, postalCode } = req.body || {};
+    const { name, slug, address, street, addressNumber, addressNeighborhood, city, state, postalCode } = req.body || {};
     if (!name) return res.status(400).json({ message: 'Nome da empresa é obrigatório' });
-    if (!street || !city || !state) return res.status(400).json({ message: 'Endereço da empresa é obrigatório (rua, cidade, estado)' });
+
+    // Support both simple address string and structured address fields
+    const simpleAddress = address ? String(address).trim() : null;
+    const hasStructured = street && city && state;
+    if (!simpleAddress && !hasStructured) {
+      // address is optional — proceed without it
+    }
 
     // Create company with address
     const companyData = {
       name: String(name).trim(),
       slug: slug ? String(slug).trim().toLowerCase().replace(/[^a-z0-9-]/g, '') : null,
-      street: String(street).trim(),
+      street: street ? String(street).trim() : (simpleAddress || null),
       addressNumber: addressNumber ? String(addressNumber).trim() : null,
       addressNeighborhood: addressNeighborhood ? String(addressNeighborhood).trim() : null,
-      city: String(city).trim(),
-      state: String(state).trim().toUpperCase(),
+      city: city ? String(city).trim() : null,
+      state: state ? String(state).trim().toUpperCase() : null,
       postalCode: postalCode ? String(postalCode).replace(/\D/g, '') : null,
     };
 
     const company = await prisma.company.create({ data: companyData });
+
+    // Store address: prefer simple address string, fallback to structured fields
+    const storeAddress = simpleAddress || [companyData.street, companyData.addressNumber, companyData.addressNeighborhood, companyData.city, companyData.state].filter(Boolean).join(', ') || null;
 
     // Create default store
     const store = await prisma.store.create({
       data: {
         companyId: company.id,
         name: company.name,
-        address: [companyData.street, companyData.addressNumber, companyData.addressNeighborhood, companyData.city, companyData.state].filter(Boolean).join(', '),
+        address: storeAddress,
       },
     });
 

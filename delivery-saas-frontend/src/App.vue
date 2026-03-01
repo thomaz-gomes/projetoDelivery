@@ -100,12 +100,8 @@ async function checkOnboarding(user) {
     const stores = Array.isArray(storesRes.data) ? storesRes.data : []
     const menus  = Array.isArray(menusRes.data)  ? menusRes.data  : []
 
-    if (stores.length === 0) {
+    if (stores.length === 0 || menus.length === 0) {
       onboardingInitialStep.value = 0
-      showOnboarding.value = true
-    } else if (menus.length === 0) {
-      onboardingInitialStep.value = 1
-      onboardingStoreId.value = stores[0].id
       showOnboarding.value = true
     }
   } catch {}
