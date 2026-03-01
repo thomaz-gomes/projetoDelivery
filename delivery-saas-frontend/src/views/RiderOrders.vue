@@ -340,7 +340,7 @@ function startTracking(orderId) {
   watchId = navigator.geolocation.watchPosition(
     sendPosition,
     (err) => console.warn('GPS watchPosition error:', err?.message),
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
   )
 
   // Fallback periódico: garante envio a cada 30s mesmo que watchPosition seja
@@ -350,7 +350,7 @@ function startTracking(orderId) {
     navigator.geolocation.getCurrentPosition(
       sendPosition,
       (err) => console.warn('GPS fallback getCurrentPosition error:', err?.message),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     )
   }, 30000)
 }
