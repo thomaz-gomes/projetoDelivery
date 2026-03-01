@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
+import { useSaasStore } from '../stores/saas';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 
@@ -21,6 +22,7 @@ onMounted(async () => {
 });
 
 const auth = useAuthStore();
+const saas = useSaasStore();
 const route = useRoute();
 const router = useRouter();
 
@@ -41,6 +43,10 @@ async function onSubmit() {
     if (auth.user?.affiliateId) destination = '/affiliate';
     else if (auth.user?.role === 'RIDER') destination = '/rider';
     else if (auth.user?.role === 'SUPER_ADMIN') destination = '/saas';
+    else if (auth.user?.role === 'ADMIN') {
+      await saas.fetchMySubscription();
+      if (saas.isCardapioSimplesOnly) destination = '/menu/menus';
+    }
     router.push(destination);
   } catch (e) {
     error.value = e?.response?.data?.message || 'Falha ao entrar';

@@ -17,7 +17,20 @@
           <TextInput label="Nome do Produto" labelClass="form-label" v-model="form.name" placeholder="Ex: Coxinha" required maxlength="80" />
         </div>
         <div class="mb-3">
-          <label class="form-label">Descrição</label>
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <label class="form-label mb-0">Descrição</label>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-primary py-0 px-2"
+              :disabled="!canGenerateDesc || generatingDesc"
+              :title="canGenerateDesc ? 'Descrever com IA' : 'Preencha o nome e a imagem para usar a IA'"
+              @click="generateDescription"
+            >
+              <span v-if="generatingDesc" class="spinner-border spinner-border-sm me-1" role="status"></span>
+              <i v-else class="bi bi-stars me-1"></i>
+              {{ generatingDesc ? 'Gerando...' : 'Descrever com IA' }}
+            </button>
+          </div>
           <TextareaInput v-model="form.description" placeholder="Descrição" rows="4" maxlength="1000" />
         </div>
         <div class="row mb-3">
@@ -144,6 +157,26 @@ const saving = ref(false)
 const error = ref('')
 const uploadProgress = ref(0)
 const isUploading = ref(false)
+const generatingDesc = ref(false)
+
+const canGenerateDesc = computed(() => !!form.value.name?.trim() && !!form.value.image)
+
+async function generateDescription() {
+  if (!canGenerateDesc.value || generatingDesc.value) return
+  generatingDesc.value = true
+  try {
+    const { data } = await api.post('/ai-studio/generate-description', {
+      name: form.value.name,
+      imageUrl: form.value.image,
+    })
+    form.value.description = data.description
+  } catch (e) {
+    const msg = e?.response?.data?.message || e.message || 'Erro ao gerar descrição'
+    Swal.fire({ icon: 'error', title: 'Erro', text: msg })
+  } finally {
+    generatingDesc.value = false
+  }
+}
 
 async function load(){
   try{

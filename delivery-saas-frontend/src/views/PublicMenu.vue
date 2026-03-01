@@ -10,13 +10,13 @@
           <div class="col-12">
 
               <div class="nav-actions d-flex align-items-center gap-3 text-white">
-                <a href="#" class="d-none d-md-inline text-white small me-3" @click.prevent="openRegister">Entre ou Cadastre-se</a>
-                <button class="btn btn-link text-white p-0 d-flex align-items-center" @click.prevent="goProfile" aria-label="Perfil"><i class="bi bi-person" aria-hidden="true"></i></button>
+                <a v-if="!isCatalogMode" href="#" class="d-none d-md-inline text-white small me-3" @click.prevent="openRegister">Entre ou Cadastre-se</a>
+                <button v-if="!isCatalogMode" class="btn btn-link text-white p-0 d-flex align-items-center" @click.prevent="goProfile" aria-label="Perfil"><i class="bi bi-person" aria-hidden="true"></i></button>
                 <button v-if="!isCatalogMode" class="btn btn-link text-white p-0 d-flex align-items-center position-relative" @click.prevent="openCartModal" aria-label="Carrinho">
                   <i class="bi bi-cart-fill" aria-hidden="true"></i>
                   <span v-if="cart.length>0" class="cart-badge-top badge bg-danger rounded-pill">{{ cart.length }}</span>
                 </button>
-                <button class="btn btn-link text-white p-0 d-lg-none" @click.prevent="toggleMobileMenu" aria-label="Menu"><i class="bi bi-list"></i></button>
+                <button v-if="!isCatalogMode" class="btn btn-link text-white p-0 d-lg-none" @click.prevent="toggleMobileMenu" aria-label="Menu"><i class="bi bi-list"></i></button>
               </div>
 
 
@@ -29,8 +29,8 @@
     </div>
 
     <!-- Mobile Offcanvas Menu -->
-    <div class="offcanvas-backdrop" :class="{ show: mobileMenuOpen }" @click="toggleMobileMenu"></div>
-    <div class="offcanvas offcanvas-end" :class="{ show: mobileMenuOpen }" tabindex="-1" aria-labelledby="mobileMenuLabel">
+    <div v-if="!isCatalogMode" class="offcanvas-backdrop" :class="{ show: mobileMenuOpen }" @click="toggleMobileMenu"></div>
+    <div v-if="!isCatalogMode" class="offcanvas offcanvas-end" :class="{ show: mobileMenuOpen }" tabindex="-1" aria-labelledby="mobileMenuLabel">
       <div class="offcanvas-header">
         <h5 class="offcanvas-title" id="mobileMenuLabel">Menu</h5>
         <button type="button" class="btn-close" @click="toggleMobileMenu" aria-label="Fechar"></button>
@@ -90,6 +90,13 @@
       </div>
       
     </div>
+    <!-- Catalog mode: fixed WhatsApp bar (mobile) -->
+  <div v-if="isCatalogMode && !modalOpen" class="mobile-cart-bar d-lg-none d-flex justify-content-center align-items-center px-3 py-2" style="background:#fff; border-top:1px solid rgba(0,0,0,0.06); z-index:1070; bottom:0">
+    <button class="btn btn-success w-100 catalog-whatsapp-btn" @click="openCatalogWhatsapp()">
+      <i class="bi bi-whatsapp me-2"></i>Pedir pelo WhatsApp
+    </button>
+  </div>
+
     <!-- Mobile compact cart bar (visible on small screens) -->
   <div v-if="!isCatalogMode && cart.length > 0 && !cartModalOpen && !modalOpen && !checkoutModalOpen" class="mobile-cart-bar d-lg-none d-flex justify-content-between align-items-center px-3 py-2" style="background:#fff; border-top:1px solid rgba(0,0,0,0.06); z-index:1070">
       <div>
@@ -107,7 +114,7 @@
     </div>
 
   <!-- Mobile bottom navigation (fixed) -->
-  <nav class="mobile-bottom-nav d-lg-none" v-show="!modalOpen && !cartModalOpen && !checkoutModalOpen">
+  <nav v-if="!isCatalogMode" class="mobile-bottom-nav d-lg-none" v-show="!modalOpen && !cartModalOpen && !checkoutModalOpen">
       <button class="nav-item" @click.prevent="goProfile" aria-label="Perfil">
         <i class="bi bi-person nav-icon" aria-hidden="true"></i>
         <div class="nav-label">Perfil</div>
@@ -116,7 +123,7 @@
         <i class="bi bi-journal-text nav-icon" aria-hidden="true"></i>
         <div class="nav-label">Histórico</div>
       </button>
-      <button v-if="!isCatalogMode" class="nav-item" @click.prevent="openCartModal" aria-label="Carrinho">
+      <button class="nav-item" @click.prevent="openCartModal" aria-label="Carrinho">
         <div style="position:relative;display:inline-flex;align-items:center;">
           <i class="bi bi-cart-fill nav-icon" aria-hidden="true"></i>
           <span v-if="cart.length>0" class="cart-badge">{{ cart.length }}</span>
@@ -237,6 +244,13 @@
         </div>
 
         <!-- mobile compact cart removed (we show a mobile cart bar above the bottom nav) -->
+
+        <!-- Catalog mode: fixed WhatsApp bar (desktop) -->
+  <div v-if="isCatalogMode" class="desktop-cart-bar d-none d-lg-flex justify-content-center align-items-center">
+    <button class="btn btn-success px-5 catalog-whatsapp-btn" @click="openCatalogWhatsapp()">
+      <i class="bi bi-whatsapp me-2"></i>Pedir pelo WhatsApp
+    </button>
+  </div>
 
         <!-- desktop sticky bottom cart bar when there are items -->
   <div v-if="!isCatalogMode && cart.length > 0 && !cartModalOpen" class="desktop-cart-bar d-none d-lg-flex justify-content-between align-items-center">
@@ -366,6 +380,11 @@
                     <span class="add-price">{{ formatCurrency(modalTotal) }}</span>
                   </button>
                 </div>
+              </div>
+              <div v-if="isCatalogMode" class="w-100">
+                <button class="btn btn-success w-100 catalog-whatsapp-btn" @click="openCatalogWhatsapp(selectedProduct)">
+                  <i class="bi bi-whatsapp me-2"></i>Pedir pelo WhatsApp
+                </button>
               </div>
             </div>
               </div>
@@ -990,6 +1009,27 @@ const paymentMethods = ref([]);
 const company = ref(null)
 const menu = ref(null)
 const isCatalogMode = computed(() => !!(menu.value && menu.value.catalogMode))
+
+// Catalog mode: WhatsApp contact number (menu > company phone fallback), digits only with BR prefix
+const catalogWhatsappNumber = computed(() => {
+  const raw = menu.value?.whatsapp || menu.value?.phone || company.value?.phone || ''
+  const digits = String(raw).replace(/\D/g, '')
+  if (!digits) return ''
+  return digits.startsWith('55') ? digits : '55' + digits
+})
+
+function openCatalogWhatsapp(product = null) {
+  const num = catalogWhatsappNumber.value
+  if (!num) return
+  let msg = 'Olá! Gostaria de fazer um pedido.'
+  if (product) {
+    msg = `Olá! Gostaria de pedir: *${product.name}*`
+    if (product.price && Number(product.price) > 0) {
+      msg += ` (${formatCurrency(product.price)})`
+    }
+  }
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank')
+}
 
 // Reactive clock tick — updated every minute so schedule-based open/close computeds
 // re-evaluate automatically without the user needing to refresh the page.
@@ -2420,8 +2460,9 @@ function addToCartWithOptions(p, selections, qty=1){
 }
 
 function openProductModal(p, force = false){
-  // If there are no option groups and not forcing the modal, quick-add directly to cart
-  if(!force && (!p.optionGroups || !p.optionGroups.length)){
+  // In catalog mode always open the modal — never quick-add to cart.
+  // Outside catalog mode: if no option groups and not forcing, quick-add directly.
+  if(!isCatalogMode.value && !force && (!p.optionGroups || !p.optionGroups.length)){
     addToCartWithOptions(p, {}, 1)
     return
   }
@@ -4097,6 +4138,8 @@ li.list-group-item.selected, .payment-method.selected {
 .desktop-cart-bar .cart-action { display:flex; align-items:center }
 .btn-advance { background: linear-gradient(180deg,#d81b1b,#b81616); color: #fff; border: none; min-width: 300px; padding: 12px 28px; font-weight: 700; border-radius: 8px; box-shadow: 0 6px 18px rgba(216,27,27,0.16); }
 .btn-advance:hover { filter: brightness(0.95); }
+.catalog-whatsapp-btn { font-weight: 700; font-size: 1rem; padding: 12px 28px; border-radius: 8px; box-shadow: 0 6px 18px rgba(37,211,102,0.22); }
+.catalog-whatsapp-btn:hover { filter: brightness(0.95); }
 
 /* Close X button styling (match mocks) */
 .close-x { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; color: #444; border-radius: 8px; border-color: rgba(0,0,0,0.08); }

@@ -4,7 +4,7 @@
       <template #actions>
         <div class="d-flex align-items-center" style="gap:8px">
           <div class="d-flex" style="gap:8px">
-            <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Novo cardápio</button>
+            <button class="btn btn-primary" @click="goNew" :disabled="atMenuLimit" :title="atMenuLimit ? `Limite do plano atingido (${menus.length}/${saas.menuLimit} cardápios)` : ''"><i class="bi bi-plus-lg me-1"></i> Novo cardápio</button>
             <button class="btn btn-outline-secondary" @click="goOptions"><i class="bi bi-list-check me-1"></i> Opções</button>
           </div>
           <div class="ms-2 d-flex align-items-center" style="gap:8px">
@@ -104,6 +104,7 @@
 import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 import { useRoute, useRouter } from 'vue-router'
+import { useSaasStore } from '../stores/saas'
 import ListCard from '@/components/ListCard.vue'
 import { bindLoading } from '../state/globalLoading.js'
 import Swal from 'sweetalert2'
@@ -111,6 +112,7 @@ import MenuAiImportModal from '@/components/MenuAiImportModal.vue'
 
 const route = useRoute()
 const router = useRouter()
+const saas = useSaasStore()
 const companyId = localStorage.getItem('companyId') || ''
 
 const loading = ref(false)
@@ -148,6 +150,12 @@ const filtered = computed(() => {
 const totalCount = computed(() => menus.value.length)
 const activeCount = computed(() => (menus.value || []).filter(m => (m.isActive === undefined ? true : !!m.isActive)).length)
 
+const atMenuLimit = computed(() => {
+  const limit = saas.menuLimit
+  if (limit === null || limit === undefined || limit === Infinity) return false
+  return menus.value.length >= limit
+})
+
 async function load(){
   loading.value = true
   try{
@@ -162,7 +170,7 @@ async function load(){
   }catch(e){ console.error(e); error.value = e.response?.data?.message || 'Erro ao carregar cardápios' }finally{ loading.value = false }
 }
 
-function goNew(){ router.push({ path: '/menu/menus/new' }) }
+function goNew(){ if (atMenuLimit.value) return; router.push({ path: '/menu/menus/new' }) }
 function edit(m){ router.push({ path: `/menu/menus/${m.id}` }) }
 
 function openProductNew(m){ router.push({ path: '/menu/products/new', query: { menuId: m.id } }) }
@@ -237,7 +245,7 @@ async function remove(m){
 
 function resetFilters(){ search.value = ''; load() }
 
-onMounted(load)
+onMounted(() => { load(); saas.fetchMySubscription().catch(() => {}) })
 </script>
 
 <style scoped>

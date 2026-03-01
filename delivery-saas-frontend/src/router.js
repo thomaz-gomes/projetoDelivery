@@ -24,6 +24,7 @@ import RiderAccount from './views/RiderAccount.vue';
 import RiderAccountAdmin from './views/RiderAccountAdmin.vue';
 import api from './api';
 import { useAuthStore } from './stores/auth';
+import { useSaasStore } from './stores/saas';
 import RiderAdjustments from './views/RiderAdjustments.vue';
 import CustomersList from './views/CustomersList.vue';
 import CustomerForm from './views/CustomerForm.vue';
@@ -274,6 +275,28 @@ router.beforeEach(async (to) => {
       // if rider trying to access admin route, send them to rider self page
       if (userRole === 'RIDER') return { path: '/rider/account' };
       return { path: '/' };
+    }
+  }
+
+  // CARDAPIO_SIMPLES guard: bloqueia rotas que exigem plano completo
+  const SIMPLES_BLOCKED_PREFIXES = [
+    '/orders', '/reports', '/customers', '/integrations',
+    '/settings/neighborhoods', '/settings/meta-pixel',
+    '/financial', '/riders', '/affiliates', '/coupons',
+    '/stock-movements', '/ingredient-groups', '/settings/cashback',
+  ]
+  if (token) {
+    const isBlocked = SIMPLES_BLOCKED_PREFIXES.some(p => to.path === p || to.path.startsWith(p + '/'))
+    if (isBlocked) {
+      const auth = useAuthStore()
+      const userRole = String(auth.user?.role || '').toUpperCase()
+      if (userRole === 'ADMIN') {
+        const saas = useSaasStore()
+        if (!saas.subscription) {
+          try { await saas.fetchMySubscription() } catch {}
+        }
+        if (saas.isCardapioSimplesOnly) return { path: '/menu/menus' }
+      }
     }
   }
 });

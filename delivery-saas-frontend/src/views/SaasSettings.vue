@@ -6,6 +6,7 @@ const settings = ref({
   openai_api_key: '',
   openai_model: '',
   credit_brl_price: '',
+  google_ai_api_key: '',
 })
 const settingsMeta = ref([])  // { key, isSet, updatedAt }
 const loading = ref(true)
@@ -13,6 +14,7 @@ const saving = ref(false)
 const saved = ref(false)
 const error = ref(null)
 const showKey = ref(false)
+const showGoogleKey = ref(false)
 
 // ── Créditos de IA ──────────────────────────────────────────────────────────
 // Definições exibidas no formulário (label + ícone + padrão de fallback)
@@ -119,11 +121,16 @@ async function save() {
       payload.push({ key: 'openai_api_key', value: settings.value.openai_api_key.trim() })
     }
     payload.push({ key: 'openai_model', value: settings.value.openai_model.trim() })
+    if (settings.value.google_ai_api_key.trim()) {
+      payload.push({ key: 'google_ai_api_key', value: settings.value.google_ai_api_key.trim() })
+    }
 
     await api.put('/saas/settings', payload)
     saved.value = true
     settings.value.openai_api_key = ''
+    settings.value.google_ai_api_key = ''
     showKey.value = false
+    showGoogleKey.value = false
     await load()
     setTimeout(() => { saved.value = false }, 3000)
   } catch (e) {
@@ -140,6 +147,21 @@ async function clearKey() {
   try {
     await api.put('/saas/settings', [{ key: 'openai_api_key', value: '' }])
     settings.value.openai_api_key = ''
+    await load()
+  } catch (e) {
+    error.value = e?.response?.data?.message || 'Erro ao remover chave'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function clearGoogleKey() {
+  if (!confirm('Tem certeza que deseja remover a chave da API Google AI?')) return
+  saving.value = true
+  error.value = null
+  try {
+    await api.put('/saas/settings', [{ key: 'google_ai_api_key', value: '' }])
+    settings.value.google_ai_api_key = ''
     await load()
   } catch (e) {
     error.value = e?.response?.data?.message || 'Erro ao remover chave'
@@ -232,6 +254,63 @@ onMounted(async () => {
             <div class="form-text">
               Modelos recomendados: <code>gpt-4o</code> (mais preciso), <code>gpt-4o-mini</code> (mais rápido e barato).
               Deixe vazio para usar o padrão.
+            </div>
+          </div>
+
+          <button class="btn btn-primary" @click="save" :disabled="saving">
+            <span v-if="saving" class="spinner-border spinner-border-sm me-2"></span>
+            <i v-else class="bi bi-floppy me-2"></i>
+            Salvar configurações
+          </button>
+        </div>
+      </div>
+
+      <!-- Google AI Studio -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h5 class="card-title mb-1">
+            <i class="bi bi-google me-2 text-danger"></i>Google AI Studio
+          </h5>
+          <p class="text-muted small mb-4">
+            Chave usada para geração e aprimoramento de fotos no AI Studio
+            (Gemini Flash para análise de imagens + Imagen 3 para geração).
+            Não é compartilhada com empresas clientes.
+          </p>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Chave da API (API Key)</label>
+
+            <div v-if="metaFor('google_ai_api_key').isSet" class="mb-2">
+              <span class="badge bg-success me-2"><i class="bi bi-check-circle me-1"></i>Configurada</span>
+              <small class="text-muted">
+                Atualizada em
+                {{ metaFor('google_ai_api_key').updatedAt
+                    ? new Date(metaFor('google_ai_api_key').updatedAt).toLocaleDateString('pt-BR')
+                    : '—' }}
+              </small>
+              <button class="btn btn-outline-danger btn-sm ms-3" @click="clearGoogleKey" :disabled="saving">
+                <i class="bi bi-trash me-1"></i>Remover
+              </button>
+            </div>
+            <div v-else class="mb-2">
+              <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Não configurada</span>
+            </div>
+
+            <div class="input-group">
+              <input
+                :type="showGoogleKey ? 'text' : 'password'"
+                class="form-control font-monospace"
+                v-model="settings.google_ai_api_key"
+                placeholder="AIzaSy... (deixe vazio para manter a chave atual)"
+                autocomplete="new-password"
+              />
+              <button class="btn btn-outline-secondary" type="button" @click="showGoogleKey = !showGoogleKey" :title="showGoogleKey ? 'Ocultar' : 'Mostrar'">
+                <i :class="showGoogleKey ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+              </button>
+            </div>
+            <div class="form-text">
+              Obtenha sua chave em <strong>aistudio.google.com</strong>.
+              Digite apenas quando quiser substituir. Deixe em branco para preservar a atual.
             </div>
           </div>
 

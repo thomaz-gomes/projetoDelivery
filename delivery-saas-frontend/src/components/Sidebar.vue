@@ -704,7 +704,7 @@ function selectMenuOption(opt){
       </div>
 
       <div class="d-flex align-items-center">
-        <div class="quick-shortcuts d-none d-sm-flex align-items-center justify-content-end">
+        <div v-if="!saas.isCardapioSimplesOnly" class="quick-shortcuts d-none d-sm-flex align-items-center justify-content-end">
           <template v-if="!hasAnyShortcut">
             <button class="btn btn-light p-2 shortcut-btn" title="Configurar atalhos" @click.prevent="openManageShortcuts()">
               <i class="bi bi-plus" style="font-size:1.1rem;"></i>
@@ -745,8 +745,8 @@ function selectMenuOption(opt){
           </button>
           <ul ref="quickMenuMenu" :class="['dropdown-menu','dropdown-menu-end',{ show: quickMenuOpen }]" aria-labelledby="quickMenuDropdown" v-show="quickMenuOpen">
             
-            <li v-if="(menusList || []).length === 0" class="dropdown-item text-muted">Nenhum cardápio disponível</li>
-            <li v-for="m in menusList" :key="m.id" class="dropdown-item d-flex align-items-center justify-content-between py-2">
+            <li v-if="!saas.isCardapioSimplesOnly && (menusList || []).length === 0" class="dropdown-item text-muted">Nenhum cardápio disponível</li>
+            <li v-if="!saas.isCardapioSimplesOnly" v-for="m in menusList" :key="m.id" class="dropdown-item d-flex align-items-center justify-content-between py-2">
               <div class="d-flex align-items-center">
                 <img v-if="m._thumb" :src="m._thumb" alt="" style="width:28px;height:28px;object-fit:cover;border-radius:6px;margin-right:8px" />
                 <div style="min-width:120px">

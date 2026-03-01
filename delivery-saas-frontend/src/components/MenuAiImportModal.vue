@@ -53,7 +53,7 @@
                   <i class="bi bi-link-45deg method-icon text-primary"></i>
                   <div class="method-title">Por Link</div>
                   <div class="method-desc text-muted small">Cole a URL de um site ou marketplace</div>
-                  <div class="text-primary-emphasis small mt-1 fw-semibold">~1 crédito / item</div>
+                  <div class="text-primary-emphasis small mt-1 fw-semibold">{{ linkCost }} crédito(s) / item</div>
                 </div>
               </div>
               <div class="col-12 col-sm-4">
@@ -68,7 +68,7 @@
                   <i class="bi bi-camera method-icon text-success"></i>
                   <div class="method-title">Por Foto</div>
                   <div class="method-desc text-muted small">Fotos ou screenshots do cardápio</div>
-                  <div class="text-primary-emphasis small mt-1 fw-semibold">5 créditos / foto</div>
+                  <div class="text-primary-emphasis small mt-1 fw-semibold">{{ photoCost }} crédito(s) / foto</div>
                 </div>
               </div>
               <div class="col-12 col-sm-4">
@@ -83,7 +83,7 @@
                   <i class="bi bi-file-earmark-spreadsheet method-icon text-warning"></i>
                   <div class="method-title">Por Planilha</div>
                   <div class="method-desc text-muted small">Arquivo .xlsx ou .csv</div>
-                  <div class="text-primary-emphasis small mt-1 fw-semibold">~1 crédito / item</div>
+                  <div class="text-primary-emphasis small mt-1 fw-semibold">{{ planilhaCost }} crédito(s) / item</div>
                 </div>
               </div>
             </div>
@@ -450,12 +450,27 @@ const aiCreditsStore = useAiCreditsStore()
 // Estimativa de créditos retornada pelo job após o parse
 const creditEstimate = ref(null) // { itemCount, serviceKey, costPerUnit, totalCost }
 
+// Custos configurados pelo admin (carregados via /ai-credits/services)
+const serviceCosts = ref({})
+
+const linkCost     = computed(() => serviceCosts.value['MENU_IMPORT_LINK']     ?? 5)
+const photoCost    = computed(() => serviceCosts.value['MENU_IMPORT_PHOTO']    ?? 5)
+const planilhaCost = computed(() => serviceCosts.value['MENU_IMPORT_PLANILHA'] ?? 2)
+
 // Checagem de sobrescrita logo ao abrir o modal
 const hasExistingItems = ref(false)
 
 onMounted(async () => {
   // Carrega saldo de créditos para exibir estimativa e bloquear se necessário
   aiCreditsStore.fetch()
+
+  // Carrega custos configurados pelo admin
+  try {
+    const { data } = await api.get('/ai-credits/services')
+    const map = {}
+    for (const s of (data || [])) map[s.key] = s.creditsPerUnit
+    serviceCosts.value = map
+  } catch (_) {}
 
   try {
     const res = await api.get('/menu/products', { params: { menuId: props.menuId } })

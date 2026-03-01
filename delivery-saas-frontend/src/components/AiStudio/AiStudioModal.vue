@@ -492,7 +492,7 @@ function backToConfig() {
 .ai-studio-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1070;
+  z-index: 3000;
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(4px);
   display: flex;

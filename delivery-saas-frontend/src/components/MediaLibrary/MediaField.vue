@@ -11,7 +11,7 @@
       </div>
       <div class="media-input-group__actions">
         <button type="button" class="btn btn-sm btn-outline-primary" @click="openLibrary">
-          <i class="bi bi-folder2-open me-1"></i>Selecionar
+          <i class="bi bi-folder2-open me-1"></i>{{ modelValue ? 'Trocar' : 'Selecionar' }}
         </button>
         <button v-if="modelValue" type="button" class="btn btn-sm btn-outline-danger" @click="remove">
           <i class="bi bi-x-lg"></i>
@@ -29,7 +29,10 @@ import { useMediaLibrary } from '../../composables/useMediaLibrary.js'
 const props = defineProps({
   modelValue: { type: String, default: null },
   label: { type: String, default: '' },
-  fieldId: { type: String, required: true }
+  fieldId: { type: String, required: true },
+  cropAspect: { type: Number, default: 1 },
+  targetWidth: { type: Number, default: 600 },
+  targetHeight: { type: Number, default: 600 },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -45,6 +48,11 @@ const displayName = computed(() => {
 function openLibrary() {
   openFor(props.fieldId, (url) => {
     emit('update:modelValue', url)
+  }, {
+    currentUrl: props.modelValue || null,
+    cropAspect: props.cropAspect,
+    targetWidth: props.targetWidth,
+    targetHeight: props.targetHeight,
   })
 }
 

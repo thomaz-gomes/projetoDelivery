@@ -96,17 +96,20 @@
           <div class="col-12 mb-3">
             <label class="form-label">Tipos de entrega</label>
             <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="allowDelivery" v-model="form.allowDelivery">
+              <input class="form-check-input" type="checkbox" id="allowDelivery" v-model="form.allowDelivery" :disabled="isCatalogOnly">
               <label class="form-check-label" for="allowDelivery">Entrega (Delivery)</label>
             </div>
             <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="allowPickup" v-model="form.allowPickup">
+              <input class="form-check-input" type="checkbox" id="allowPickup" v-model="form.allowPickup" :disabled="isCatalogOnly">
               <label class="form-check-label" for="allowPickup">Retirada (Pickup)</label>
             </div>
             <div class="form-check form-switch mt-3">
-              <input class="form-check-input" type="checkbox" id="catalogMode" v-model="form.catalogMode">
+              <input class="form-check-input" type="checkbox" id="catalogMode" v-model="form.catalogMode" :disabled="isCatalogOnly">
               <label class="form-check-label" for="catalogMode">Modo catálogo</label>
               <div class="form-text">Quando ativo, o cliente poderá apenas visualizar os produtos, sem opção de compra.</div>
+            </div>
+            <div v-if="isCatalogOnly" class="form-text text-warning mt-2">
+              <i class="bi bi-lock-fill me-1"></i>Seu plano inclui apenas o modo catálogo. Delivery e retirada não estão disponíveis.
             </div>
           </div>
           <div class="col-md-6 mb-3">
@@ -134,9 +137,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
+import { useSaasStore } from '../stores/saas'
 import Swal from 'sweetalert2'
 import MediaField from '../components/MediaLibrary/MediaField.vue'
 import { applyPhoneMask } from '../utils/phoneMask'
@@ -146,6 +150,9 @@ const route = useRoute()
 const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
+
+const saas = useSaasStore()
+const isCatalogOnly = computed(() => saas.isCardapioSimplesOnly)
 
 const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
 const dayNames = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado']
@@ -321,7 +328,15 @@ async function save(){
   finally{ saving.value = false }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await saas.fetchMySubscription().catch(() => {})
+  await load()
+  if (isCatalogOnly.value) {
+    form.value.allowDelivery = false
+    form.value.allowPickup = false
+    form.value.catalogMode = true
+  }
+})
 
 function openStructure(){
   if(!form.value.id) return

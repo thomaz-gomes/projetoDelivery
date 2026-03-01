@@ -39,13 +39,25 @@ router.post('/menus', requireRole('ADMIN'), async (req, res) => {
     if (!st || st.companyId !== companyId) return res.status(400).json({ message: 'Loja inválida' })
   }
 
-  // validate slug when provided
+  // validate slug when provided; auto-generate from name when omitted
   let normalized = null
   if (slug !== null && slug !== undefined && String(slug || '').trim() !== '') {
     normalized = normalizeSlug(slug)
     if (!isValidSlug(normalized) || isReservedSlug(normalized)) return res.status(400).json({ message: 'Slug inválido' })
     const exists = await prisma.menu.findFirst({ where: { slug: normalized } })
     if (exists) return res.status(400).json({ message: 'Slug já em uso' })
+  } else {
+    const base = normalizeSlug(name)
+    if (isValidSlug(base) && !isReservedSlug(base)) {
+      let candidate = base
+      let attempt = 1
+      while (attempt <= 20) {
+        const exists = await prisma.menu.findFirst({ where: { slug: candidate } })
+        if (!exists) { normalized = candidate; break }
+        candidate = `${base}-${attempt + 1}`
+        attempt++
+      }
+    }
   }
 
   // SaaS limit: ensure menu count does not exceed plan

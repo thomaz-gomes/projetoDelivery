@@ -493,6 +493,18 @@ authRouter.post('/setup-company', authMiddleware, async (req, res) => {
     ];
     await prisma.paymentMethod.createMany({ data: defaultPayments });
 
+    // Auto-atribuir plano padrão (isDefault: true) ao novo cliente
+    try {
+      const defaultPlan = await prisma.saasPlan.findFirst({ where: { isDefault: true, isActive: true } })
+      if (defaultPlan) {
+        await prisma.saasSubscription.create({
+          data: { companyId: company.id, planId: defaultPlan.id, status: 'ACTIVE', nextDueAt: null }
+        })
+      }
+    } catch (subErr) {
+      console.warn('[auth] setup-company: falha ao atribuir plano padrão', subErr?.message)
+    }
+
     // Link user to company
     await prisma.user.update({
       where: { id: userId },

@@ -864,6 +864,10 @@ model SaasPlan {
   aiCreditsMonthlyLimit Int      @default(100)
   unlimitedAiCredits    Boolean  @default(false)
   isActive              Boolean  @default(true)
+  // isDefault: atribuído automaticamente a novos clientes
+  isDefault             Boolean  @default(false)
+  // isSystem: protege contra exclusão (planos de sistema)
+  isSystem              Boolean  @default(false)
   createdAt             DateTime @default(now())
 
   modules       SaasPlanModule[]

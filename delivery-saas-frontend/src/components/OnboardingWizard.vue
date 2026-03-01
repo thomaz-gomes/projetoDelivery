@@ -124,6 +124,9 @@
 import { ref } from 'vue'
 import api from '../api.js'
 import TextInput from './form/input/TextInput.vue'
+import { useSaasStore } from '../stores/saas.js'
+
+const saas = useSaasStore()
 
 const STEPS = ['Loja', 'Cardápio', 'Primeiro item']
 
@@ -173,9 +176,11 @@ async function saveMenu() {
   if (!menuForm.value.name.trim()) { error.value = 'Informe o nome do cardápio.'; return }
   saving.value = true
   try {
+    const isCatalogOnly = saas.isCardapioSimplesOnly
     const { data } = await api.post('/menu/menus', {
-      name:    menuForm.value.name.trim(),
-      storeId: createdStoreId.value || undefined,
+      name:         menuForm.value.name.trim(),
+      storeId:      createdStoreId.value || undefined,
+      ...(isCatalogOnly ? { catalogMode: true, allowDelivery: false, allowPickup: false } : {}),
     })
     createdMenuId.value = data.id
     step.value = 2

@@ -559,7 +559,7 @@ async function save(){
 
 function cancel(){ router.push('/settings/stores') }
 
-onMounted(()=>{ load(); _startPauseTicker() })
+onMounted(()=>{ load(); _startPauseTicker(); modulesStore.fetchEnabled() })
 onBeforeUnmount(()=>{ _clearPauseTicker(); /* ImageUploader handles object URLs */ })
 </script>
 

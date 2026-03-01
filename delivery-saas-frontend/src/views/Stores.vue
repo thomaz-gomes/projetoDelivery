@@ -2,6 +2,11 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import ListCard from '@/components/ListCard.vue'
+import { useSaasStore } from '../stores/saas'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+const saas = useSaasStore()
 
 const stores = ref([]);
 const loading = ref(false);
@@ -12,6 +17,17 @@ const primaryStoreId = computed(() => stores.value.length ? stores.value[0].id :
 
 const totalCount = computed(() => stores.value.length)
 const activeCount = computed(() => (stores.value || []).filter(s => (s.isActive === undefined ? true : !!s.isActive)).length)
+
+const atStoreLimit = computed(() => {
+  const limit = saas.storeLimit
+  if (limit === null || limit === undefined || limit === Infinity) return false
+  return stores.value.length >= limit
+})
+
+function goNewStore() {
+  if (atStoreLimit.value) return
+  router.push('/settings/stores/new')
+}
 
 const filtered = computed(() => {
   const q = (search.value || '').toLowerCase().trim()
@@ -39,7 +55,7 @@ async function remove(id) {
 
 function resetFilters() { search.value = ''; load() }
 
-onMounted(load);
+onMounted(() => { load(); saas.fetchMySubscription().catch(() => {}) });
 </script>
 
 <template>
@@ -48,7 +64,7 @@ onMounted(load);
       <template #actions>
         <div class="d-flex align-items-center" style="gap:8px">
           <div class="d-flex" style="gap:8px">
-            <button class="btn btn-primary" @click="$router.push('/settings/stores/new')">
+            <button class="btn btn-primary" @click="goNewStore" :disabled="atStoreLimit" :title="atStoreLimit ? `Limite do plano atingido (${stores.length}/${saas.storeLimit} lojas)` : ''">
               <i class="bi bi-plus-lg me-1"></i> Nova Loja
             </button>
           </div>

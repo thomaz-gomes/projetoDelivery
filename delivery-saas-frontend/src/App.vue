@@ -89,14 +89,16 @@ async function checkOnboarding(user) {
   try { if (sessionStorage.getItem('onboarding_skipped') === '1') return } catch {}
   _onboardingChecked = true
   try {
-    const [storesRes, menusRes, productsRes] = await Promise.all([
+    // Garante que o saas store está populado antes de mostrar o wizard
+    // (necessário para isCardapioSimplesOnly funcionar corretamente no wizard)
+    if (!saas.subscription) await saas.fetchMySubscription().catch(() => {})
+
+    const [storesRes, menusRes] = await Promise.all([
       api.get('/stores'),
       api.get('/menu/menus'),
-      api.get('/menu/products'),
     ])
-    const stores   = Array.isArray(storesRes.data)   ? storesRes.data   : []
-    const menus    = Array.isArray(menusRes.data)    ? menusRes.data    : []
-    const products = Array.isArray(productsRes.data) ? productsRes.data : []
+    const stores = Array.isArray(storesRes.data) ? storesRes.data : []
+    const menus  = Array.isArray(menusRes.data)  ? menusRes.data  : []
 
     if (stores.length === 0) {
       onboardingInitialStep.value = 0
@@ -104,11 +106,6 @@ async function checkOnboarding(user) {
     } else if (menus.length === 0) {
       onboardingInitialStep.value = 1
       onboardingStoreId.value = stores[0].id
-      showOnboarding.value = true
-    } else if (products.length === 0) {
-      onboardingInitialStep.value = 2
-      onboardingStoreId.value = stores[0].id
-      onboardingMenuId.value = menus[0].id
       showOnboarding.value = true
     }
   } catch {}
@@ -163,7 +160,7 @@ const showMobileHeader = computed(() => {
         </button>
         <span class="mobile-topbar-title"><img src="/core.png" alt="" class="log" style="max-width:125px"></span>
       
-          <div class="d-block d-sm-none dropdown ms-3">
+          <div v-if="!saas.isCardapioSimplesOnly" class="d-block d-sm-none dropdown ms-3">
           <button ref="quickMenuBtn" class="btn btn-light dropdown-toggle" type="button" id="quickMenuDropdown" @click.prevent="quickMenuOpen = !quickMenuOpen" :aria-expanded="quickMenuOpen">
             <template v-if="auth.user">
               <span class="d-flex align-items-center user-info" style="gap: 16px; padding: 1px 4px;">
@@ -255,6 +252,14 @@ const showMobileHeader = computed(() => {
           <router-view />
         </main>
       </div>
+      <OnboardingWizard
+        :visible="showOnboarding"
+        :initial-step="onboardingInitialStep"
+        :initial-store-id="onboardingStoreId"
+        :initial-menu-id="onboardingMenuId"
+        @done="onOnboardingDone"
+        @skip="showOnboarding = false"
+      />
     </template>
 
     <template v-else>
@@ -264,14 +269,6 @@ const showMobileHeader = computed(() => {
     <MediaLibraryModal />
     <AiStudioModal />
     <ImportProgressBar />
-    <OnboardingWizard
-      :visible="showOnboarding"
-      :initial-step="onboardingInitialStep"
-      :initial-store-id="onboardingStoreId"
-      :initial-menu-id="onboardingMenuId"
-      @done="onOnboardingDone"
-      @skip="showOnboarding = false"
-    />
   </div>
 </template>
 

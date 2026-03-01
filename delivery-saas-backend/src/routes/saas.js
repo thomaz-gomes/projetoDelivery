@@ -83,9 +83,13 @@ saasRouter.post('/plans', requireRole('SUPER_ADMIN'), async (req, res) => {
 
 saasRouter.put('/plans/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
-  const { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, aiCreditsMonthlyLimit, unlimitedAiCredits, moduleIds } = req.body || {}
+  const { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, aiCreditsMonthlyLimit, unlimitedAiCredits, moduleIds, isDefault } = req.body || {}
   try {
-    const updated = await prisma.saasPlan.update({ where: { id }, data: { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, ...(aiCreditsMonthlyLimit !== undefined && { aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit) }), ...(unlimitedAiCredits !== undefined && { unlimitedAiCredits: Boolean(unlimitedAiCredits) }) } })
+    // Se marcando como padrão, desmarcar o anterior
+    if (isDefault === true) {
+      await prisma.saasPlan.updateMany({ where: { isDefault: true, NOT: { id } }, data: { isDefault: false } })
+    }
+    const updated = await prisma.saasPlan.update({ where: { id }, data: { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, ...(aiCreditsMonthlyLimit !== undefined && { aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit) }), ...(unlimitedAiCredits !== undefined && { unlimitedAiCredits: Boolean(unlimitedAiCredits) }), ...(isDefault !== undefined && { isDefault: Boolean(isDefault) }) } })
     if (Array.isArray(moduleIds)) {
       // replace module assignments
       await prisma.saasPlanModule.deleteMany({ where: { planId: id } })
@@ -112,6 +116,9 @@ saasRouter.put('/plans/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
 
 saasRouter.delete('/plans/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
+  const plan = await prisma.saasPlan.findUnique({ where: { id } })
+  if (!plan) return res.status(404).json({ message: 'Plano não encontrado' })
+  if (plan.isSystem) return res.status(403).json({ message: 'Este plano é padrão do sistema e não pode ser excluído.' })
   await prisma.saasPlanModule.deleteMany({ where: { planId: id } })
   await prisma.saasPlan.delete({ where: { id } })
   res.json({ ok: true })
@@ -489,8 +496,8 @@ saasRouter.delete('/companies/:id', requireRole('SUPER_ADMIN'), async (_req, res
 // -------- System Settings (SUPER_ADMIN) --------
 
 // Chaves expostas na API (whitelist). Valores de chaves *_key são mascarados na leitura.
-const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price']
-const SENSITIVE_KEYS = new Set(['openai_api_key'])
+const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price', 'google_ai_api_key']
+const SENSITIVE_KEYS = new Set(['openai_api_key', 'google_ai_api_key'])
 
 function maskValue(key, value) {
   if (!value) return ''
