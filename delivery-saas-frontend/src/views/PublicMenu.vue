@@ -56,6 +56,14 @@
       <div class="mt-1">Itens removidos/ajustados: {{ migrationSummary.join(', ') }}</div>
     </div>
 
+    <!-- Offline / cached-data badge -->
+    <div v-if="isOffline || dataSource === 'cache'" class="offline-badge" role="status" aria-live="polite">
+      <i class="bi bi-wifi-off me-1"></i>
+      <span v-if="isOffline">Modo offline — </span>
+      <span v-else>Cardápio em cache — </span>
+      <span v-if="cacheTimestamp">sincronizado em {{ formatCacheDate(cacheTimestamp) }}</span>
+    </div>
+
     <!-- Overlapping white panel with company info, delivery toggle and calc box -->
     <div class="hero-panel container">
       <div class="d-flex align-items-start justify-content-between gap-3">
@@ -139,8 +147,22 @@
       </div>
 
       <div v-else>
+
+      <!-- No-connection error page: shown when load failed and no cached data exists -->
+      <div v-if="serverError && !categories.length" class="no-connection-page text-center py-5 px-3">
+        <div class="mb-4">
+          <img :src="assetUrl(menu?.logo || company?.logo || 'default-logo.svg')" alt="logo" style="max-height:72px;object-fit:contain;opacity:0.5" />
+        </div>
+        <i class="bi bi-wifi-off display-4 text-secondary mb-3 d-block"></i>
+        <h5 class="fw-bold mb-2">Sem conexão</h5>
+        <p class="text-muted mb-4">Não foi possível carregar o cardápio e não há dados armazenados.<br>Conecte-se à internet e tente novamente.</p>
+        <button class="btn btn-primary" @click="() => location.reload()">
+          <i class="bi bi-arrow-clockwise me-1"></i> Tentar novamente
+        </button>
+      </div>
+
       <!-- Campo de busca -->
-      <div class="search-categories-container mb-3">
+      <div v-else class="search-categories-container mb-3">
         <!-- unified category pills (mobile + desktop) -->
         <div v-if="categories.length" class="categories-pills" :class="{ 'search-active': searchExpanded }">
           <ul ref="navRef" class="nav nav-pills overflow-auto" :class="{ stuck: isNavSticky }" style="gap:2px;">
@@ -969,6 +991,8 @@ import { initMetaPixel, trackViewContent, trackAddToCart as trackPixelAddToCart,
 import ListGroup from '../components/form/list-group/ListGroup.vue';
 import { io } from 'socket.io-client'
 import { SOCKET_URL } from '@/config'
+import { loadMenuSnapshot, saveMenuSnapshot } from '../utils/menuDb.js';
+import { extractMenuImageUrls, precacheMenuImages, gcMenuImages, registerMenuServiceWorker } from '../utils/menuOfflineSync.js';
 
 let route;
 let router;
@@ -1009,6 +1033,11 @@ const paymentMethods = ref([]);
 const company = ref(null)
 const menu = ref(null)
 const isCatalogMode = computed(() => !!(menu.value && menu.value.catalogMode))
+
+// Offline mode state
+const isOffline = ref(false);         // true when network is unavailable and we're showing cached data
+const dataSource = ref('network');    // 'cache' | 'network'
+const cacheTimestamp = ref(null);     // ms timestamp of the last successful sync
 
 // Catalog mode: WhatsApp contact number (menu > company phone fallback), digits only with BR prefix
 const catalogWhatsappNumber = computed(() => {
@@ -3354,20 +3383,104 @@ function goToReview(){
 }
 function backFromReview(){ checkoutStep.value = (orderType.value === 'DELIVERY' ? 'payment' : 'delivery') }
 
+// ── applyMenuPayload ─────────────────────────────────────────────────────────
+// Applies a raw API payload to all reactive state refs.
+// Called both from the IndexedDB cache path and from the network path so the
+// same data-binding logic is reused without duplication.
+function applyMenuPayload(data) {
+  // filter out inactive categories and inactive products
+  const rawCategories = data.categories || []
+  categories.value = rawCategories.map(c => ({ ...c, products: (c.products || []).filter(p => p.isActive !== false) })).filter(c => c.isActive !== false)
+  uncategorized.value = (data.uncategorized || []).filter(p => p.isActive !== false)
+  // if a previously selected/active category is now inactive/absent, reset active state
+  if(activeCategoryId.value && !categories.value.find(c => c.id === activeCategoryId.value)) activeCategoryId.value = null
+  company.value = data.company || null
+  // Set default city/state from company address for new customer addresses
+  if (company.value && company.value.city && !customer.value.address.city) {
+    customer.value.address.city = company.value.city
+  }
+  if (company.value && company.value.state && !customer.value.address.state) {
+    customer.value.address.state = company.value.state
+  }
+  menu.value = data.menu || null
+  // Initialize Meta Pixel if configured for this menu
+  try{ if(data.metaPixel) initMetaPixel(data.metaPixel) }catch(e){ console.warn('Meta Pixel init failed', e) }
+  try{
+    if(menu.value){
+      if(menu.value.allowDelivery === false && menu.value.allowPickup === true) orderType.value = 'PICKUP'
+      else if(menu.value.allowDelivery === true && menu.value.allowPickup === false) orderType.value = 'DELIVERY'
+    }
+  }catch(e){}
+  // set page title and social meta tags, prefer store name when available
+  try{
+    // Prefer the selected menu's name as the document title, then store name, then company name
+    const title = (menu.value && menu.value.name) || (company.value && company.value.store && company.value.store.name) || (company.value && company.value.name) || 'Cardápio'
+    try{ document.title = title }catch(e){}
+    const setMeta = (prop, val, isProperty=false) => {
+      try{
+        if(!val) return
+        const selector = isProperty ? `meta[property="${prop}"]` : `meta[name="${prop}"]`
+        let m = document.querySelector(selector)
+        if(!m){ m = document.createElement('meta'); if(isProperty) m.setAttribute('property', prop); else m.setAttribute('name', prop); document.getElementsByTagName('head')[0].appendChild(m) }
+        m.setAttribute(isProperty ? 'content' : 'content', val)
+      }catch(e){ }
+    }
+    setMeta('og:title', title, true)
+    setMeta('twitter:title', title)
+    // image: prefer menu banner, then store banner, then company banner
+    try{
+      const imgPath = (menu.value && menu.value.banner) || (company.value && company.value.store && company.value.store.banner) || (company.value && company.value.banner) || null
+      if(imgPath){ setMeta('og:image', assetUrl(imgPath), true); setMeta('twitter:image', assetUrl(imgPath)) }
+    }catch(e){}
+  }catch(e){ /* ignore meta tag errors */ }
+  // after menu loaded, validate any persisted cart to remove stale items/options
+  try{ validatePersistedCart() }catch(e){ console.warn('validatePersistedCart failed', e) }
+}
+
+// Format cached-at timestamp for the offline badge
+function formatCacheDate(ts) {
+  try{
+    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(ts))
+  }catch(e){ return new Date(ts).toLocaleString('pt-BR') }
+}
+
 onMounted(async ()=>{
   loading.value = true;
-  try{
-    // TEMP LOG: indicate component mounted and parameters
-    try{ console.log('[PublicMenu] mounted', { companyId: companyId, menuId: menuId && menuId.value, storeId: storeId && storeId.value }) }catch(e){}
+
+  // Register service worker for image caching (once per page lifetime)
+  try{ registerMenuServiceWorker() }catch(e){}
+
   // build public menu path including optional menuId/storeId query hints
   const menuQuery = []
   if(menuId.value) menuQuery.push(`menuId=${encodeURIComponent(menuId.value)}`)
   if(storeId.value) menuQuery.push(`storeId=${encodeURIComponent(storeId.value)}`)
   const menuUrl = publicPath(`/public/${companyId}/menu${menuQuery.length ? ('?' + menuQuery.join('&')) : ''}`)
-  const res = await api.get(menuUrl);
-  const data = res.data || {};
-  // store last-loaded storeId so updates can be applied selectively
-  let _lastLoadedStoreId = storeId.value || (data.company && data.company.store && data.company.store.id) || null
+
+  // Unique cache key per company + menu + store selection
+  const cacheKey = `menu_${companyId}_${menuId.value || ''}_${storeId.value || ''}`
+
+  // ── Step 1: Instant render from IndexedDB (stale-while-revalidate) ──────────
+  let snapshot = null
+  try{ snapshot = await loadMenuSnapshot(cacheKey) }catch(e){}
+  let cacheApplied = false
+  if(snapshot?.data){
+    try{
+      applyMenuPayload(snapshot.data)
+      dataSource.value = 'cache'
+      cacheTimestamp.value = snapshot.savedAt
+      loading.value = false
+      cacheApplied = true
+    }catch(e){ console.warn('[offline] failed to apply cached data', e) }
+  }
+
+  // ── Step 2: Fetch from network (always — revalidates cached data) ───────────
+  try{
+    // TEMP LOG: indicate component mounted and parameters
+    try{ console.log('[PublicMenu] mounted', { companyId: companyId, menuId: menuId && menuId.value, storeId: storeId && storeId.value }) }catch(e){}
+    const res = await api.get(menuUrl);
+    const data = res.data || {};
+    // store last-loaded storeId so updates can be applied selectively
+    let _lastLoadedStoreId = storeId.value || (data.company && data.company.store && data.company.store.id) || null
     // TEMP LOG: inspect payload in browser console to debug schedule fields
     try{ console.log('[PublicMenu] payload', {
       company: data.company,
@@ -3396,59 +3509,27 @@ onMounted(async ()=>{
           try{ window.__PUBLIC_MENU_MENU_INFERRED = data2 }catch(e){}
           // replace data with the refetched payload
           if(data2) {
-            // overwrite locals below by reassigning data variable
             Object.assign(data, data2)
           }
         }
       }
     }catch(e){ console.warn('menuId inference failed', e) }
-  // filter out inactive categories and inactive products
-  const rawCategories = data.categories || []
-  categories.value = rawCategories.map(c => ({ ...c, products: (c.products || []).filter(p => p.isActive !== false) })).filter(c => c.isActive !== false)
-  uncategorized.value = (data.uncategorized || []).filter(p => p.isActive !== false)
-  // if a previously selected/active category is now inactive/absent, reset active state
-  if(activeCategoryId.value && !categories.value.find(c => c.id === activeCategoryId.value)) activeCategoryId.value = null
-  company.value = data.company || null
-  // Set default city/state from company address for new customer addresses
-  if (company.value && company.value.city && !customer.value.address.city) {
-    customer.value.address.city = company.value.city
-  }
-  if (company.value && company.value.state && !customer.value.address.state) {
-    customer.value.address.state = company.value.state
-  }
-  menu.value = data.menu || null
-    // Initialize Meta Pixel if configured for this menu
-    try{ if(data.metaPixel) initMetaPixel(data.metaPixel) }catch(e){ console.warn('Meta Pixel init failed', e) }
+
+    // GC orphaned images and precache new ones
     try{
-      if(menu.value){
-        if(menu.value.allowDelivery === false && menu.value.allowPickup === true) orderType.value = 'PICKUP'
-        else if(menu.value.allowDelivery === true && menu.value.allowPickup === false) orderType.value = 'DELIVERY'
-      }
-    }catch(e){}
-    // set page title and social meta tags, prefer store name when available
-    try{
-      // Prefer the selected menu's name as the document title, then store name, then company name
-      const title = (menu.value && menu.value.name) || (company.value && company.value.store && company.value.store.name) || (company.value && company.value.name) || 'Cardápio'
-      try{ document.title = title }catch(e){}
-      const setMeta = (prop, val, isProperty=false) => {
-        try{
-          if(!val) return
-          const selector = isProperty ? `meta[property="${prop}"]` : `meta[name="${prop}"]`
-          let m = document.querySelector(selector)
-          if(!m){ m = document.createElement('meta'); if(isProperty) m.setAttribute('property', prop); else m.setAttribute('name', prop); document.getElementsByTagName('head')[0].appendChild(m) }
-          m.setAttribute(isProperty ? 'content' : 'content', val)
-        }catch(e){ }
-      }
-      setMeta('og:title', title, true)
-      setMeta('twitter:title', title)
-      // image: prefer menu banner, then store banner, then company banner
-      try{
-        const imgPath = (menu.value && menu.value.banner) || (company.value && company.value.store && company.value.store.banner) || (company.value && company.value.banner) || null
-        if(imgPath){ setMeta('og:image', assetUrl(imgPath), true); setMeta('twitter:image', assetUrl(imgPath)) }
-      }catch(e){}
-    }catch(e){ /* ignore meta tag errors */ }
-    // after menu loaded, validate any persisted cart to remove stale items/options
-    try{ validatePersistedCart() }catch(e){ console.warn('validatePersistedCart failed', e) }
+      const newUrls = extractMenuImageUrls(data)
+      if(snapshot?.data){ gcMenuImages(newUrls) } // remove images no longer in menu
+      precacheMenuImages(newUrls)
+    }catch(e){ console.warn('[offline] image sync error', e) }
+
+    // Apply fresh network data and persist to IndexedDB
+    applyMenuPayload(data)
+    try{ await saveMenuSnapshot(cacheKey, data) }catch(e){ console.warn('[offline] IndexedDB save error', e) }
+    dataSource.value = 'network'
+    cacheTimestamp.value = Date.now()
+    isOffline.value = false
+    if(!cacheApplied) loading.value = false
+
     // prefer payment methods provided by public endpoint if available
     if(company.value && Array.isArray(company.value.paymentMethods) && company.value.paymentMethods.length){
       paymentMethods.value = company.value.paymentMethods
@@ -3473,15 +3554,23 @@ onMounted(async ()=>{
       neighborhoodsList.value = Array.isArray(nr.data) ? nr.data : []
       try{ refreshDeliveryFee() }catch(e){}
     }catch(e){ console.warn('failed to load public neighborhoods', e) }
-    
+
     // initial evaluation of discounts for the persisted cart
     try{ scheduleEvaluateDiscounts() }catch(e){}
     // fetch cashback settings and wallet when menu/company loaded
     try{ fetchCashbackSettingsAndWallet() }catch(e){}
   }catch(e){
-    console.error(e);
-    serverError.value = 'Não foi possível carregar o cardápio.';
-  }finally{ loading.value = false; }
+    if(!cacheApplied){
+      // No cached data available — show the error page
+      console.error(e);
+      serverError.value = 'Não foi possível carregar o cardápio.';
+      loading.value = false;
+    } else {
+      // We have cached data — stay functional but flag offline mode
+      console.warn('[PublicMenu] network unavailable, serving cached data', e);
+      isOffline.value = true;
+    }
+  }
 });
 
 function selectCategory(id){
@@ -4598,6 +4687,30 @@ body { padding-bottom: 110px; }
   font-size: 0.95rem;
 }
 .migration-toast .mt-1{ margin-top:6px }
+
+/* Offline / cached-data badge */
+.offline-badge {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(33, 37, 41, 0.88);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  z-index: 11500;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.22);
+  pointer-events: none;
+}
+@media (max-width: 767px){
+  .offline-badge { bottom: 72px; font-size: 0.75rem; padding: 6px 14px; }
+}
+
+/* No-connection error page */
+.no-connection-page { max-width: 420px; margin: 0 auto; }
 
 /* Checkout modal / review styling to match drawer visual */
 .product-modal .cart-item-qty { width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid rgba(0,0,0,0.06); background:#fafafa; font-weight:700; margin-right:12px }
