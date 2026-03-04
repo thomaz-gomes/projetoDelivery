@@ -86,6 +86,10 @@
                 <div class="product-card-body">
                   <h6 class="mb-1 product-title">{{ p.name }}</h6>
                   <div class="small text-muted product-desc">{{ p.description }}</div>
+                  <div v-if="p.image" class="ai-photo-cta mt-1">
+                    <i class="bi bi-stars me-1"></i>
+                    Otimize sua foto com IA — cardápios com fotos chamativas convertem até 60% a mais
+                  </div>
                 </div>
 
                 <div class="product-card-media d-flex align-items-center">
@@ -125,6 +129,7 @@ import api from '../api'
 import { assetUrl } from '../utils/assetUrl.js'
 import { bindLoading } from '../state/globalLoading.js'
 import { useMediaLibrary } from '../composables/useMediaLibrary.js'
+import { useAiStudio } from '../composables/useAiStudio.js'
 import MenuAiImportModal from '../components/MenuAiImportModal.vue'
 
 const loading = ref(false)
@@ -151,12 +156,26 @@ function onImported() {
 
 // Media Library for product image selection
 const { openFor } = useMediaLibrary()
+const { openStudio } = useAiStudio()
 
 function openMediaFor(prod) {
-  openFor(`product-image-${prod.id}`, async (url) => {
+  openFor(`product-image-${prod.id}`, async (url, mediaObj) => {
     try {
       await api.patch(`/menu/products/${prod.id}`, { image: url })
       prod.image = url
+      const cta = await Swal.fire({
+        icon: 'success',
+        title: 'Imagem atualizada!',
+        text: 'Profissionalize sua foto com IA e aumente suas vendas no cardápio',
+        confirmButtonText: 'Quero mais vendas',
+        cancelButtonText: 'Não quero',
+        showCancelButton: true,
+        confirmButtonColor: '#5c6cff',
+        cancelButtonColor: '#6c757d'
+      })
+      if (cta.isConfirmed && mediaObj) {
+        openStudio(mediaObj, (newItem) => { prod.image = newItem.url })
+      }
     } catch (e) {
       console.warn('Failed to update product image', e)
     }

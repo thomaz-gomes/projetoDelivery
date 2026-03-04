@@ -21,9 +21,9 @@ export function useMediaLibrary() {
     isOpen.value = true
   }
 
-  function select(url) {
+  function select(url, mediaObj = null) {
     const cb = callbacks.get(activeFieldId.value)
-    if (cb) cb(url)
+    if (cb) cb(url, mediaObj)
     close()
   }
 

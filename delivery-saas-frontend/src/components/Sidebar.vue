@@ -794,9 +794,16 @@ function selectMenuOption(opt){
             </template>
             <!-- Item normal -->
             <template v-else>
-              <router-link :to="item.to" class="nav-link title d-flex align-items-center" @click="offCanvasOpen = false">
+              <!-- Categoria (tem filhos): apenas label, sem ação de clique -->
+              <span v-if="item.children" class="nav-link title d-flex align-items-center" style="cursor:default;">
                 <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
                 <span>{{ item.name }}</span>
+              </span>
+              <!-- Link direto (sem filhos): clicável com estilo de link -->
+              <router-link v-else :to="item.to" :class="['nav-link','title','nav-direct-link','d-flex','align-items-center', item.to === '/orders' ? 'nav-pedidos-link' : '']" @click="offCanvasOpen = false">
+                <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
+                <span>{{ item.name }}</span>
+                <i class="bi bi-chevron-right ms-auto" style="font-size:0.75rem;opacity:0.6;" aria-hidden="true"></i>
               </router-link>
               <ul v-if="item.children" class="nav flex-column ms-3">
                 <li v-for="child in item.children" :key="child.to" class="nav-item mb-1">
@@ -910,6 +917,35 @@ function selectMenuOption(opt){
   color: #89D136;
 }
 .parent-link { cursor: pointer; }
+.nav-direct-link {
+  border-left: 3px solid #89D136;
+  padding-left: 0.65rem !important;
+  border-radius: 0 6px 6px 0;
+  background: rgba(137, 209, 54, 0.06);
+}
+.nav-direct-link:hover, .nav-direct-link:focus {
+  background: rgba(137, 209, 54, 0.15) !important;
+}
+.nav-pedidos-link {
+  background: #89D136 !important;
+  color: #000435 !important;
+  border-left: none !important;
+  border-radius: 50px !important;
+  padding: 0.5rem 1rem !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 10px rgba(137, 209, 54, 0.4);
+  margin-bottom: 0.25rem;
+}
+.nav-pedidos-link i { color: #000435 !important; }
+.nav-pedidos-link:hover, .nav-pedidos-link:focus {
+  background: #7bc22e !important;
+  box-shadow: 0 4px 14px rgba(137, 209, 54, 0.55) !important;
+  color: #000435 !important;
+}
+.nav-pedidos-link.active {
+  background: #6aaa28 !important;
+  color: #000435 !important;
+}
 .child-link { font-size: .95rem; }
 .child-link i { font-size: 1rem }
 

@@ -37,8 +37,8 @@ export const nav = [
     { name: 'Fluxo de Caixa', to: '/financial/cash-flow', icon: 'bi bi-graph-up' },
     { name: 'Contas Bancárias', to: '/financial/accounts', icon: 'bi bi-bank' },
   ] },
-  { name: 'Lista de cardápios', to: '/menu/menus', icon: 'bi bi-list' },
   { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', children: [
+    { name: 'Lista de cardápios', to: '/menu/menus', icon: 'bi bi-list' },
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt', moduleKey: 'cardapio_completo', lockable: true },
     { name: 'Dados Fiscais', to: '/settings/dados-fiscais', icon: 'bi bi-receipt', moduleKey: 'fiscal' },
     { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug', moduleKey: 'cardapio_completo', lockable: true },

@@ -36,7 +36,7 @@
                 :key="item.id"
                 class="media-library-grid__item"
                 :class="{ selected: selectedUrl === item.url }"
-                @click="selectedUrl = item.url"
+                @click="selectedUrl = item.url; selectedMedia = item"
               >
                 <img :src="assetUrl(item.url)" :alt="item.filename" />
                 <span class="check-badge"><i class="bi bi-check"></i></span>
@@ -50,6 +50,14 @@
                   @click.stop="openStudio(item, (newItem) => { libraryItems.unshift(newItem); selectedUrl = newItem.url })"
                 >
                   <i class="bi bi-stars"></i>
+                </button>
+                <button
+                  type="button"
+                  class="delete-media-trigger"
+                  title="Apagar imagem"
+                  @click.stop="deleteMedia(item)"
+                >
+                  <i class="bi bi-trash"></i>
                 </button>
               </div>
             </div>
@@ -254,6 +262,7 @@ import { useMediaLibrary } from '../../composables/useMediaLibrary.js'
 import { useAiStudio } from '../../composables/useAiStudio.js'
 import { assetUrl } from '../../utils/assetUrl.js'
 import api from '../../api.js'
+import Swal from 'sweetalert2'
 
 const MAX_SIZE = 2 * 1024 * 1024
 
@@ -271,6 +280,7 @@ const uploading = ref(false)
 
 // ── Library state ──
 const selectedUrl = ref(null)
+const selectedMedia = ref(null)
 const loading = ref(false)
 const libraryItems = ref([])
 
@@ -366,6 +376,31 @@ async function loadLibrary() {
     libraryItems.value = []
   } finally {
     loading.value = false
+  }
+}
+
+// ── Delete media ──
+async function deleteMedia(item) {
+  const res = await Swal.fire({
+    title: 'Apagar imagem?',
+    text: 'Esta ação é irreversível.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Apagar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#dc3545',
+    customClass: { container: 'swal-above-modal' }
+  })
+  if (!res.isConfirmed) return
+  try {
+    await api.delete(`/media/${item.id}`)
+    libraryItems.value = libraryItems.value.filter(i => i.id !== item.id)
+    if (selectedUrl.value === item.url) {
+      selectedUrl.value = null
+      selectedMedia.value = null
+    }
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao apagar imagem' })
   }
 }
 
@@ -567,7 +602,7 @@ async function confirm() {
         filename: stagedFile.value.name
       })
       const media = res.data
-      select(media.url)
+      select(media.url, media)
       clearStaged()
     } catch (e) {
       uploadError.value = e?.response?.data?.message || 'Erro ao fazer upload.'
@@ -575,9 +610,9 @@ async function confirm() {
       uploading.value = false
     }
   } else if (activeTab.value === 'library' && selectedUrl.value) {
-    select(selectedUrl.value)
+    select(selectedUrl.value, selectedMedia.value)
   } else if (activeTab.value === 'generate' && genMedia.value) {
-    select(genMedia.value.url)
+    select(genMedia.value.url, genMedia.value)
   }
 }
 
