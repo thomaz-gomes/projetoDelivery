@@ -24,3 +24,6 @@ temp/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Git worktrees
+.worktrees/
