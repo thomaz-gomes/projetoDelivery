@@ -183,6 +183,22 @@ saasRouter.post('/subscriptions', requireRole('SUPER_ADMIN'), async (req, res) =
       console.error('Invoice creation error', ie)
     }
 
+    // After subscription creation, grant initial AI credits
+    try {
+      const planForCredits = await prisma.saasPlan.findUnique({ where: { id: String(planId) } })
+      if (planForCredits && planForCredits.aiCreditsMonthlyLimit > 0) {
+        await prisma.company.update({
+          where: { id: companyId },
+          data: {
+            aiCreditsBalance: planForCredits.aiCreditsMonthlyLimit,
+            aiCreditsLastReset: new Date()
+          }
+        })
+      }
+    } catch (ce) {
+      console.error('Initial credit grant error', ce)
+    }
+
     res.status(201).json(created)
   } catch (e) {
     return res.status(500).json({ message: 'Erro ao salvar assinatura', error: e?.message || String(e) })
