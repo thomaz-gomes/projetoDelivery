@@ -47,7 +47,7 @@ async function subscribe() {
     await store.subscribeToModule(mod.value.id, selectedPeriod.value)
     await modulesStore.fetchEnabled(true)
   } catch (e) {
-    alert(e?.response?.data?.message || 'Erro ao assinar módulo')
+    alert(e?.response?.data?.message || 'Erro ao processar pagamento')
   } finally {
     subscribing.value = false
   }
@@ -138,7 +138,7 @@ onMounted(async () => {
             @click="subscribe"
           >
             <span v-if="subscribing" class="spinner-border spinner-border-sm me-1" role="status"></span>
-            Assinar por {{ formatPrice(selectedPrice) }}/{{ selectedPeriod === 'MONTHLY' ? 'mês' : 'ano' }}
+            Pagar {{ formatPrice(selectedPrice) }} e ativar
           </button>
 
           <!-- Cancel -->
