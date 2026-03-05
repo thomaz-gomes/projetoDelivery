@@ -409,7 +409,7 @@ saasRouter.get('/invoices', async (req, res) => {
     if (statusFilter) where.status = statusFilter
 
     const total = await prisma.saasInvoice.count({ where })
-    const rows = await prisma.saasInvoice.findMany({ where, orderBy: [{ year: 'desc' }, { month: 'desc' }], skip: (page - 1) * pageSize, take: pageSize })
+    const rows = await prisma.saasInvoice.findMany({ where, orderBy: [{ year: 'desc' }, { month: 'desc' }], skip: (page - 1) * pageSize, take: pageSize, include: { items: true } })
     res.json({ rows, total, page, pageSize })
   } catch (e) {
     res.status(500).json({ message: 'Erro ao listar faturas', error: e?.message || String(e) })
