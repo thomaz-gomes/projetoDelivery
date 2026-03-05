@@ -2,6 +2,7 @@ import express from 'express'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { AI_SERVICE_COSTS, clearServiceCostCache } from '../services/aiCreditManager.js'
+import { calculateProRation } from '../services/proRation.js'
 
 export const saasRouter = express.Router()
 saasRouter.use(authMiddleware)
@@ -21,7 +22,7 @@ async function ensureCardapioSimplesIncluded(moduleIds) {
 
 // -------- Modules CRUD (SUPER_ADMIN) --------
 saasRouter.get('/modules', requireRole('SUPER_ADMIN'), async (_req, res) => {
-  const rows = await prisma.saasModule.findMany({ orderBy: { name: 'asc' } })
+  const rows = await prisma.saasModule.findMany({ orderBy: { name: 'asc' }, include: { prices: true } })
   res.json(rows)
 })
 
@@ -38,10 +39,18 @@ saasRouter.post('/modules', requireRole('SUPER_ADMIN'), async (req, res) => {
 
 saasRouter.put('/modules/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
-  const { name, description, isActive } = req.body || {}
+  const { name, description, isActive, prices } = req.body || {}
   try {
     const updated = await prisma.saasModule.update({ where: { id }, data: { name, description, isActive } })
-    res.json(updated)
+    if (Array.isArray(prices)) {
+      await prisma.saasModulePrice.deleteMany({ where: { moduleId: id } })
+      if (prices.length) {
+        const priceData = prices.map(p => ({ moduleId: id, period: String(p.period || '').toUpperCase(), price: String(p.price || 0) }))
+        await prisma.saasModulePrice.createMany({ data: priceData })
+      }
+    }
+    const withPrices = await prisma.saasModule.findUnique({ where: { id }, include: { prices: true } })
+    res.json(withPrices)
   } catch (e) {
     return res.status(500).json({ message: 'Erro ao atualizar módulo', error: e?.message || String(e) })
   }
@@ -202,17 +211,157 @@ saasRouter.get('/subscription/:companyId', requireRole('SUPER_ADMIN'), async (re
 saasRouter.get('/modules/me', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   try {
-    const sub = await prisma.saasSubscription.findUnique({ where: { companyId }, include: { plan: { include: { modules: { include: { module: true } } } } } })
-    const enabled = []
-    if (sub && sub.plan && Array.isArray(sub.plan.modules)) {
-      for (const pm of sub.plan.modules) {
-        const m = pm && pm.module
-        if (m && m.isActive !== false) enabled.push(m.key)
-      }
-    }
+    const subs = await prisma.saasModuleSubscription.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      include: { module: true }
+    })
+    const enabled = subs
+      .filter(s => s.module && s.module.isActive !== false)
+      .map(s => s.module.key)
     res.json({ companyId, enabled })
   } catch (e) {
     res.status(500).json({ message: 'Erro ao obter módulos', error: e?.message || String(e) })
+  }
+})
+
+// -------- Module Subscriptions (ADMIN) --------
+
+// List company's active module subscriptions
+saasRouter.get('/module-subscriptions/me', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  try {
+    const subs = await prisma.saasModuleSubscription.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      include: { module: { include: { prices: true } } }
+    })
+    res.json(subs)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao listar assinaturas de módulos', error: e?.message || String(e) })
+  }
+})
+
+// Subscribe to a module
+saasRouter.post('/module-subscriptions', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const { moduleId, period } = req.body || {}
+  if (!moduleId || !period) return res.status(400).json({ message: 'moduleId e period são obrigatórios' })
+  try {
+    // Check if already subscribed
+    const existing = await prisma.saasModuleSubscription.findUnique({
+      where: { companyId_moduleId: { companyId, moduleId } }
+    })
+    if (existing && existing.status === 'ACTIVE') {
+      return res.status(409).json({ message: 'Módulo já assinado' })
+    }
+
+    // Get module price for the period
+    const upperPeriod = String(period).toUpperCase()
+    const modulePrice = await prisma.saasModulePrice.findUnique({
+      where: { moduleId_period: { moduleId, period: upperPeriod } }
+    })
+    if (!modulePrice) {
+      return res.status(400).json({ message: 'Preço não encontrado para o período informado' })
+    }
+
+    const { proRatedPrice, nextDueAt } = calculateProRation(Number(modulePrice.price), upperPeriod)
+
+    // Get or create a subscription for the company (needed for invoice)
+    let sub = await prisma.saasSubscription.findUnique({ where: { companyId } })
+
+    // Create or reactivate module subscription
+    let moduleSub
+    if (existing) {
+      moduleSub = await prisma.saasModuleSubscription.update({
+        where: { id: existing.id },
+        data: { status: 'ACTIVE', period: upperPeriod, nextDueAt, canceledAt: null, startedAt: new Date() }
+      })
+    } else {
+      moduleSub = await prisma.saasModuleSubscription.create({
+        data: { companyId, moduleId, period: upperPeriod, nextDueAt }
+      })
+    }
+
+    // Create pro-rated invoice with line item
+    if (sub) {
+      const now = new Date()
+      const invoice = await prisma.saasInvoice.create({
+        data: {
+          subscriptionId: sub.id,
+          year: now.getFullYear(),
+          month: now.getMonth() + 1,
+          amount: String(proRatedPrice),
+          dueDate: now,
+          status: 'PAID',
+          paidAt: now,
+          items: {
+            create: {
+              type: 'MODULE',
+              referenceId: moduleSub.id,
+              description: `Assinatura módulo (${upperPeriod})`,
+              amount: String(proRatedPrice)
+            }
+          }
+        }
+      })
+
+      // Create payment record
+      await prisma.saasPayment.create({
+        data: {
+          companyId,
+          invoiceId: invoice.id,
+          amount: String(proRatedPrice),
+          gateway: 'manual',
+          status: 'PAID',
+          paidAt: now
+        }
+      })
+    }
+
+    res.status(201).json(moduleSub)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao assinar módulo', error: e?.message || String(e) })
+  }
+})
+
+// Cancel module subscription
+saasRouter.delete('/module-subscriptions/:moduleId', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const { moduleId } = req.params
+  try {
+    const existing = await prisma.saasModuleSubscription.findUnique({
+      where: { companyId_moduleId: { companyId, moduleId } }
+    })
+    if (!existing) return res.status(404).json({ message: 'Assinatura não encontrada' })
+
+    const updated = await prisma.saasModuleSubscription.update({
+      where: { id: existing.id },
+      data: { status: 'CANCELED', canceledAt: new Date() }
+    })
+    res.json(updated)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao cancelar assinatura de módulo', error: e?.message || String(e) })
+  }
+})
+
+// -------- Store Module Visibility (ADMIN) --------
+
+// Get all modules with subscription status for the company
+saasRouter.get('/store/modules', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  try {
+    const [allModules, companySubs] = await Promise.all([
+      prisma.saasModule.findMany({ where: { isActive: true }, orderBy: { name: 'asc' }, include: { prices: true } }),
+      prisma.saasModuleSubscription.findMany({ where: { companyId, status: 'ACTIVE' } })
+    ])
+    const subMap = new Map(companySubs.map(s => [s.moduleId, s]))
+    const result = allModules.map(mod => ({
+      ...mod,
+      isSubscribed: subMap.has(mod.id),
+      subscription: subMap.get(mod.id) || null
+    }))
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao listar módulos da loja', error: e?.message || String(e) })
   }
 })
 
@@ -628,6 +777,139 @@ saasRouter.put('/credit-services', requireRole('SUPER_ADMIN'), async (req, res) 
     res.json({ message: 'Custos de serviços atualizados com sucesso' })
   } catch (e) {
     res.status(500).json({ message: 'Erro ao atualizar custos de serviços', error: e?.message })
+  }
+})
+
+// -------- AI Credit Packs CRUD (SUPER_ADMIN) --------
+
+saasRouter.get('/credit-packs', requireRole('SUPER_ADMIN'), async (_req, res) => {
+  try {
+    const rows = await prisma.aiCreditPack.findMany({ orderBy: { sortOrder: 'asc' } })
+    res.json(rows)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao listar pacotes de crédito', error: e?.message || String(e) })
+  }
+})
+
+saasRouter.post('/credit-packs', requireRole('SUPER_ADMIN'), async (req, res) => {
+  const { name, credits, price, isActive = true, sortOrder = 0 } = req.body || {}
+  if (!name || credits === undefined || price === undefined) {
+    return res.status(400).json({ message: 'name, credits e price são obrigatórios' })
+  }
+  try {
+    const pack = await prisma.aiCreditPack.create({
+      data: { name, credits: Number(credits), price: String(price), isActive: Boolean(isActive), sortOrder: Number(sortOrder) }
+    })
+    res.status(201).json(pack)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao criar pacote de crédito', error: e?.message || String(e) })
+  }
+})
+
+saasRouter.put('/credit-packs/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
+  const { id } = req.params
+  const { name, credits, price, isActive, sortOrder } = req.body || {}
+  try {
+    const data = {}
+    if (name !== undefined) data.name = name
+    if (credits !== undefined) data.credits = Number(credits)
+    if (price !== undefined) data.price = String(price)
+    if (isActive !== undefined) data.isActive = Boolean(isActive)
+    if (sortOrder !== undefined) data.sortOrder = Number(sortOrder)
+    const updated = await prisma.aiCreditPack.update({ where: { id }, data })
+    res.json(updated)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao atualizar pacote de crédito', error: e?.message || String(e) })
+  }
+})
+
+saasRouter.delete('/credit-packs/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
+  const { id } = req.params
+  try {
+    await prisma.aiCreditPack.delete({ where: { id } })
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao remover pacote de crédito', error: e?.message || String(e) })
+  }
+})
+
+// -------- AI Credit Pack Purchase (ADMIN) --------
+
+saasRouter.get('/credit-packs/available', requireRole('ADMIN'), async (_req, res) => {
+  try {
+    const rows = await prisma.aiCreditPack.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } })
+    res.json(rows)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao listar pacotes disponíveis', error: e?.message || String(e) })
+  }
+})
+
+saasRouter.post('/credit-packs/purchase', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const { packId } = req.body || {}
+  if (!packId) return res.status(400).json({ message: 'packId é obrigatório' })
+  try {
+    const pack = await prisma.aiCreditPack.findUnique({ where: { id: packId } })
+    if (!pack || !pack.isActive) return res.status(404).json({ message: 'Pacote não encontrado ou inativo' })
+
+    const now = new Date()
+
+    // Create purchase record
+    const purchase = await prisma.aiCreditPurchase.create({
+      data: {
+        companyId,
+        packId: pack.id,
+        credits: pack.credits,
+        amount: String(pack.price)
+      }
+    })
+
+    // Create invoice with line item
+    const sub = await prisma.saasSubscription.findUnique({ where: { companyId } })
+    let invoice = null
+    if (sub) {
+      invoice = await prisma.saasInvoice.create({
+        data: {
+          subscriptionId: sub.id,
+          year: now.getFullYear(),
+          month: now.getMonth() + 1,
+          amount: String(pack.price),
+          dueDate: now,
+          status: 'PAID',
+          paidAt: now,
+          items: {
+            create: {
+              type: 'CREDIT_PACK',
+              referenceId: purchase.id,
+              description: `Pacote de créditos: ${pack.name} (${pack.credits} créditos)`,
+              amount: String(pack.price)
+            }
+          }
+        }
+      })
+
+      // Create payment record
+      await prisma.saasPayment.create({
+        data: {
+          companyId,
+          invoiceId: invoice.id,
+          amount: String(pack.price),
+          gateway: 'manual',
+          status: 'PAID',
+          paidAt: now
+        }
+      })
+    }
+
+    // Add credits to company balance immediately
+    await prisma.company.update({
+      where: { id: companyId },
+      data: { aiCreditsBalance: { increment: pack.credits } }
+    })
+
+    res.status(201).json({ purchase, invoice })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao comprar pacote de créditos', error: e?.message || String(e) })
   }
 })
 

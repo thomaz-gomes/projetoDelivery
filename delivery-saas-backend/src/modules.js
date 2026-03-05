@@ -11,14 +11,14 @@ async function fetchEnabledModuleKeys(companyId){
   const now = Date.now()
   const c = cache.get(companyId)
   if (c && (now - c.ts) < TTL_MS) return c.keys
-  const sub = await prisma.saasSubscription.findUnique({ where: { companyId }, include: { plan: { include: { modules: { include: { module: true } } } } } })
-  const keys = new Set()
-  if (sub && sub.plan && Array.isArray(sub.plan.modules)) {
-    for (const pm of sub.plan.modules) {
-      const m = pm && pm.module
-      if (m && m.isActive !== false && m.key) keys.add(String(m.key).toLowerCase())
-    }
-  }
+  const subs = await prisma.saasModuleSubscription.findMany({
+    where: { companyId, status: 'ACTIVE' },
+    include: { module: true }
+  })
+  const keys = new Set(
+    subs.filter(s => s.module && s.module.isActive !== false)
+      .map(s => String(s.module.key).toLowerCase())
+  )
   cache.set(companyId, { keys, ts: now })
   return keys
 }
