@@ -3,6 +3,7 @@ import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { AI_SERVICE_COSTS, clearServiceCostCache } from '../services/aiCreditManager.js'
 import { calculateProRation } from '../services/proRation.js'
+import { encrypt, decrypt } from '../services/encryption.js'
 
 export const saasRouter = express.Router()
 saasRouter.use(authMiddleware)
@@ -1012,6 +1013,63 @@ saasRouter.post('/credit-packs/purchase', requireRole('ADMIN'), async (req, res)
     res.status(201).json({ purchase, invoice })
   } catch (e) {
     res.status(500).json({ message: 'Erro ao comprar pacote de créditos', error: e?.message || String(e) })
+  }
+})
+
+// -------- Mercado Pago Config (SUPER_ADMIN) --------
+
+saasRouter.get('/mercadopago-config', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    const config = await prisma.mercadoPagoConfig.findUnique({ where: { companyId } })
+    if (!config) return res.json(null)
+    res.json({
+      id: config.id,
+      publicKey: config.publicKey,
+      mpUserId: config.mpUserId,
+      isActive: config.isActive,
+      hasAccessToken: !!config.accessToken,
+      hasRefreshToken: !!config.refreshToken,
+      createdAt: config.createdAt,
+      updatedAt: config.updatedAt
+    })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao buscar configuração MP', error: e?.message })
+  }
+})
+
+saasRouter.put('/mercadopago-config', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    const { accessToken, publicKey, refreshToken, isActive } = req.body || {}
+
+    const data = {}
+    if (accessToken !== undefined && accessToken !== '') data.accessToken = encrypt(accessToken)
+    if (publicKey !== undefined) data.publicKey = publicKey
+    if (refreshToken !== undefined) data.refreshToken = refreshToken ? encrypt(refreshToken) : null
+    if (isActive !== undefined) data.isActive = isActive
+
+    const existing = await prisma.mercadoPagoConfig.findUnique({ where: { companyId } })
+    let config
+    if (existing) {
+      config = await prisma.mercadoPagoConfig.update({ where: { companyId }, data })
+    } else {
+      if (!accessToken) return res.status(400).json({ message: 'accessToken é obrigatório na primeira configuração' })
+      config = await prisma.mercadoPagoConfig.create({
+        data: { companyId, ...data }
+      })
+    }
+
+    res.json({
+      id: config.id,
+      publicKey: config.publicKey,
+      mpUserId: config.mpUserId,
+      isActive: config.isActive,
+      hasAccessToken: !!config.accessToken,
+      updatedAt: config.updatedAt
+    })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao salvar configuração MP', error: e?.message })
   }
 })
 
