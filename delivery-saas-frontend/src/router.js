@@ -105,6 +105,7 @@ import ProductsReport from './views/reports/ProductsReport.vue';
 import AddOnStore from './views/AddOnStore.vue';
 import AddOnDetail from './views/AddOnDetail.vue';
 import CreditPackStore from './views/CreditPackStore.vue';
+import PaymentResult from './views/PaymentResult.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -238,6 +239,7 @@ const router = createRouter({
     // ---- Loja de Complementos ----
     { path: '/store', component: AddOnStore, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/store/credits', component: CreditPackStore, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/payment/result', component: PaymentResult, meta: { requiresAuth: true } },
     { path: '/store/:moduleKey', component: AddOnDetail, meta: { requiresAuth: true, role: 'ADMIN' } },
   ]
 });
