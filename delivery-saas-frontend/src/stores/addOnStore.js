@@ -33,7 +33,15 @@ export const useAddOnStoreStore = defineStore('addOnStore', {
     },
 
     async subscribeToModule(moduleId, period = 'MONTHLY') {
-      const { data } = await api.post('/saas/module-subscriptions', { moduleId, period })
+      const { data } = await api.post('/payment/create-preference', {
+        type: 'MODULE',
+        referenceId: moduleId,
+        period
+      })
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+        return data
+      }
       await this.fetchStoreModules()
       return data
     },
@@ -45,7 +53,28 @@ export const useAddOnStoreStore = defineStore('addOnStore', {
     },
 
     async purchaseCreditPack(packId) {
-      const { data } = await api.post('/saas/credit-packs/purchase', { packId })
+      const { data } = await api.post('/payment/create-preference', {
+        type: 'CREDIT_PACK',
+        referenceId: packId
+      })
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+        return data
+      }
+      return data
+    },
+
+    async payInvoice(invoiceId) {
+      const { data } = await api.post('/payment/create-preference', { invoiceId })
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+        return data
+      }
+      return data
+    },
+
+    async checkPaymentStatus(paymentId) {
+      const { data } = await api.get(`/payment/status/${paymentId}`)
       return data
     }
   }
