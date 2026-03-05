@@ -75,10 +75,7 @@ async function getServiceCost(serviceKey) {
 
 /**
  * Retorna o saldo atual de créditos e o limite mensal do plano da empresa.
- *
- * Auto-inicialização: se a empresa nunca teve um reset (aiCreditsLastReset = null),
- * o saldo é imediatamente definido como o limite mensal do plano. Isso resolve
- * o caso de empresas criadas antes da implantação do sistema de créditos.
+ * Retorna null se a empresa nao for encontrada.
  */
 export async function getBalance(companyId) {
   const company = await prisma.company.findUnique({
