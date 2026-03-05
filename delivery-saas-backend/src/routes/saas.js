@@ -477,16 +477,57 @@ saasRouter.post('/jobs/generate-invoices', requireRole('SUPER_ADMIN'), async (re
         if (!chosen && s.plan && Array.isArray(s.plan.prices) && s.plan.prices.length) {
           chosen = s.plan.prices.find(p => String(p.period || '').toUpperCase() === 'MONTHLY') || s.plan.prices[0]
         }
-        const amount = chosen ? String(chosen.price) : String(s.plan ? s.plan.price : 0)
+        const planPrice = chosen ? Number(chosen.price) : Number(s.plan ? s.plan.price : 0)
         const year = invoiceDate.getFullYear()
         const month = invoiceDate.getMonth() + 1
-        await prisma.saasInvoice.create({ data: { subscriptionId: s.id, year, month, amount, dueDate: invoiceDate } })
-        // compute next
         const period = chosen ? chosen.period : (s.period || 'MONTHLY')
+
+        // Build invoice items: 1 line for plan + 1 per active module subscription
+        const invoiceItems = []
+        invoiceItems.push({
+          type: 'PLAN',
+          referenceId: s.planId,
+          description: `Plano ${s.plan ? s.plan.name : 'N/A'} (${period})`,
+          amount: String(planPrice)
+        })
+
+        // Add active module subscriptions
+        let totalAmount = planPrice
+        const moduleSubs = await prisma.saasModuleSubscription.findMany({
+          where: { companyId: s.companyId, status: 'ACTIVE' },
+          include: { module: { include: { prices: true } } }
+        })
+        for (const ms of moduleSubs) {
+          let modulePrice = 0
+          if (ms.module && Array.isArray(ms.module.prices)) {
+            const mp = ms.module.prices.find(p => String(p.period || '').toUpperCase() === String(ms.period || period).toUpperCase())
+            modulePrice = mp ? Number(mp.price) : 0
+          }
+          invoiceItems.push({
+            type: 'MODULE',
+            referenceId: ms.moduleId,
+            description: `Módulo ${ms.module ? ms.module.name : ms.moduleId} (${ms.period || period})`,
+            amount: String(modulePrice)
+          })
+          totalAmount += modulePrice
+        }
+
+        await prisma.saasInvoice.create({
+          data: {
+            subscriptionId: s.id,
+            year,
+            month,
+            amount: String(totalAmount),
+            dueDate: invoiceDate,
+            items: { create: invoiceItems }
+          }
+        })
+
+        // compute next
         const next = new Date(invoiceDate)
         next.setMonth(next.getMonth() + monthsFromPeriod(period))
         await prisma.saasSubscription.update({ where: { id: s.id }, data: { nextDueAt: next } })
-        results.push({ subscriptionId: s.id, year, month, amount })
+        results.push({ subscriptionId: s.id, year, month, amount: String(totalAmount), items: invoiceItems.length })
       } catch (e) {
         console.error('generate-invoice error for subscription', s.id, e)
       }

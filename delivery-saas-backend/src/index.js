@@ -64,6 +64,7 @@ import dadosFiscaisRouter from './routes/dadosFiscais.js'
 import productReportsRouter from './routes/reports/products.js'
 import aiCreditsRouter from './routes/aiCredits.js'
 import aiStudioRouter from './routes/aiStudio.js'
+import { paymentRouter } from './routes/payment.js'
 import './cron.js'
 
 const app = express();
@@ -204,6 +205,8 @@ app.use('/saas', saasRouter);
 // AI Credits: saldo, histórico e gestão de créditos de IA por empresa
 app.use('/ai-credits', aiCreditsRouter);
 app.use('/ai-studio', aiStudioRouter);
+// Payment webhook (gateway-agnostic, no auth — validated by paymentId)
+app.use('/payment', paymentRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
