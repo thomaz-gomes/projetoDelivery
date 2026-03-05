@@ -655,7 +655,7 @@ saasRouter.post('/companies', requireRole('SUPER_ADMIN'), async (req, res) => {
     return res.status(400).json({ message: 'name, masterName, masterEmail e masterPassword são obrigatórios' })
   }
   try {
-    const company = await prisma.company.create({ data: { name } })
+    const company = await prisma.company.create({ data: { name, managedById: req.user.companyId } })
     // create master user
     const bcrypt = await import('bcryptjs')
     const hash = await bcrypt.hash(String(masterPassword), 10)
