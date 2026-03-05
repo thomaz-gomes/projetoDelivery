@@ -59,7 +59,10 @@ async function loadAll() {
   } finally { loading.value = false }
 }
 
-onMounted(loadAll)
+onMounted(() => {
+  loadAll()
+  loadMpConfig()
+})
 
 // --- Plan editing ---
 function openEditPlan(p) {
@@ -182,6 +185,40 @@ async function deletePack(pack) {
 function periodLabel(v) {
   const opt = PERIOD_OPTIONS.find(o => o.value === v)
   return opt ? opt.label : v
+}
+
+// ---- Mercado Pago Config ----
+const mpConfig = ref(null)
+const mpForm = ref({ accessToken: '', publicKey: '', isActive: true })
+const mpSaving = ref(false)
+
+async function loadMpConfig() {
+  try {
+    const { data } = await api.get('/saas/mercadopago-config')
+    mpConfig.value = data
+    if (data) {
+      mpForm.value.publicKey = data.publicKey || ''
+      mpForm.value.isActive = data.isActive
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function saveMpConfig() {
+  mpSaving.value = true
+  try {
+    const payload = {}
+    if (mpForm.value.accessToken) payload.accessToken = mpForm.value.accessToken
+    payload.publicKey = mpForm.value.publicKey
+    payload.isActive = mpForm.value.isActive
+    const { data } = await api.put('/saas/mercadopago-config', payload)
+    mpConfig.value = data
+    mpForm.value.accessToken = ''
+    alert('Configuração salva com sucesso!')
+  } catch (e) {
+    alert(e?.response?.data?.message || 'Erro ao salvar configuração')
+  } finally {
+    mpSaving.value = false
+  }
 }
 </script>
 
@@ -432,6 +469,33 @@ function periodLabel(v) {
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+      <!-- ====== SECTION 4: Mercado Pago Config ====== -->
+      <div class="card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Gateway de Pagamento - Mercado Pago</h5>
+          <span v-if="mpConfig?.hasAccessToken" class="badge bg-success">Configurado</span>
+          <span v-else class="badge bg-secondary">Não configurado</span>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Access Token</label>
+            <input type="password" class="form-control" v-model="mpForm.accessToken" placeholder="Deixe vazio para manter o atual" />
+            <small class="text-muted">Token de acesso do Mercado Pago (produção)</small>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Public Key</label>
+            <input type="text" class="form-control" v-model="mpForm.publicKey" />
+          </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" v-model="mpForm.isActive" id="mpActive" />
+            <label class="form-check-label" for="mpActive">Ativo</label>
+          </div>
+          <button class="btn btn-primary" :disabled="mpSaving" @click="saveMpConfig">
+            <span v-if="mpSaving" class="spinner-border spinner-border-sm me-1"></span>
+            Salvar
+          </button>
         </div>
       </div>
     </template>
