@@ -103,6 +103,9 @@ import FinancialGateways from './views/financial/FinancialGateways.vue';
 import FinancialOFX from './views/financial/FinancialOFX.vue';
 import FinancialCostCenters from './views/financial/FinancialCostCenters.vue';
 import ProductsReport from './views/reports/ProductsReport.vue';
+import AddOnStore from './views/AddOnStore.vue';
+import AddOnDetail from './views/AddOnDetail.vue';
+import CreditPackStore from './views/CreditPackStore.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -233,6 +236,10 @@ const router = createRouter({
     { path: '/financial/gateways', component: FinancialGateways, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/financial/ofx', component: FinancialOFX, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/financial/cost-centers', component: FinancialCostCenters, meta: { requiresAuth: true, role: 'ADMIN' } },
+    // ---- Loja de Complementos ----
+    { path: '/store', component: AddOnStore, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/store/credits', component: CreditPackStore, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/store/:moduleKey', component: AddOnDetail, meta: { requiresAuth: true, role: 'ADMIN' } },
   ]
 });
 
