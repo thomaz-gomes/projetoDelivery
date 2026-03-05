@@ -19,6 +19,9 @@ export function buildVisibleNav(user, enabledModules, nav) {
 
       // Module guard: inaccessible items show with locked:true (upgrade badge)
       if (item.moduleKey && !isModuleEnabled(item.moduleKey)) {
+        if (item.lockable) {
+          return { ...item, locked: true, to: `/store/${item.moduleKey.toLowerCase()}`, children: [] }
+        }
         return { ...item, locked: true, children: [] };
       }
 
@@ -27,6 +30,9 @@ export function buildVisibleNav(user, enabledModules, nav) {
         copy.children = copy.children.map(c => {
           if (c.role && String(c.role).toUpperCase() !== role) return null;
           if (c.moduleKey && !isModuleEnabled(c.moduleKey)) {
+            if (c.lockable) {
+              return { ...c, locked: true, to: `/store/${c.moduleKey.toLowerCase()}` };
+            }
             return { ...c, locked: true };
           }
           return c;

@@ -46,6 +46,11 @@ export const nav = [
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp' },
     { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' }
   ] },
+  {
+    name: 'Loja de Add-ons',
+    to: '/store',
+    icon: 'bi-shop',
+  },
   { name: 'SaaS', to: '/saas', icon: 'bi bi-grid-3x3-gap', role: 'SUPER_ADMIN', children: [
     { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
     { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },

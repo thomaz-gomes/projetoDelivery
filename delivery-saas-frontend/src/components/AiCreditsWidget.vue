@@ -26,6 +26,11 @@
         Renova em {{ store.nextResetFormatted() }}
       </small>
     </div>
+    <div class="mt-1">
+      <router-link to="/store/credits" class="text-decoration-none small text-primary">
+        Comprar creditos
+      </router-link>
+    </div>
   </div>
 
   <!-- Versão expandida (card completo para painéis/modais) -->
