@@ -110,6 +110,13 @@ model Company {
   moduleSubscriptions   SaasModuleSubscription[]
   aiCreditPurchases     AiCreditPurchase[]
   saasPayments          SaasPayment[]
+
+  // White-label: which SaaS manager company manages this restaurant
+  managedById          String?
+  managedBy            Company?  @relation("CompanyManager", fields: [managedById], references: [id])
+  managedCompanies     Company[] @relation("CompanyManager")
+  // Mercado Pago config for this company (if it's a SaaS manager)
+  mercadoPagoConfig    MercadoPagoConfig?
 }
 
 model User {
@@ -1662,4 +1669,17 @@ model SystemSetting {
   value     String
   updatedAt DateTime @updatedAt
   updatedBy String?               // userId de quem fez a última alteração
+}
+
+model MercadoPagoConfig {
+  id           String   @id @default(uuid())
+  companyId    String   @unique
+  company      Company  @relation(fields: [companyId], references: [id])
+  accessToken  String
+  publicKey    String?
+  refreshToken String?
+  mpUserId     String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
