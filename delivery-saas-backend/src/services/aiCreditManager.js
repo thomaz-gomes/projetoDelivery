@@ -75,10 +75,7 @@ async function getServiceCost(serviceKey) {
 
 /**
  * Retorna o saldo atual de créditos e o limite mensal do plano da empresa.
- *
- * Auto-inicialização: se a empresa nunca teve um reset (aiCreditsLastReset = null),
- * o saldo é imediatamente definido como o limite mensal do plano. Isso resolve
- * o caso de empresas criadas antes da implantação do sistema de créditos.
+ * Retorna null se a empresa nao for encontrada.
  */
 export async function getBalance(companyId) {
   const company = await prisma.company.findUnique({
@@ -87,37 +84,22 @@ export async function getBalance(companyId) {
       aiCreditsBalance: true,
       aiCreditsLastReset: true,
       saasSubscription: {
-        select: { plan: { select: { aiCreditsMonthlyLimit: true, unlimitedAiCredits: true } } },
-      },
-    },
-  })
-
-  const plan = company?.saasSubscription?.plan
-  const monthlyLimit = plan?.aiCreditsMonthlyLimit ?? 100
-  const unlimitedAiCredits = plan?.unlimitedAiCredits ?? false
-  let balance = company?.aiCreditsBalance ?? 0
-  let lastReset = company?.aiCreditsLastReset ?? null
-
-  // Auto-inicializar: empresa que nunca teve reset recebe o limite do plano imediatamente.
-  // Acontece com empresas existentes após a migração do sistema de créditos.
-  if (!lastReset && !unlimitedAiCredits && company) {
-    try {
-      await prisma.company.update({
-        where: { id: companyId },
-        data: { aiCreditsBalance: monthlyLimit, aiCreditsLastReset: new Date() },
-      })
-      balance = monthlyLimit
-      lastReset = new Date()
-    } catch {
-      // Silencioso: na pior das hipóteses, o saldo permanece em 0 nesta chamada
+        select: {
+          plan: {
+            select: { aiCreditsMonthlyLimit: true, unlimitedAiCredits: true }
+          }
+        }
+      }
     }
-  }
+  })
+  if (!company) return null
 
+  const plan = company.saasSubscription?.plan
   return {
-    balance,
-    monthlyLimit,
-    unlimitedAiCredits,
-    lastReset,
+    balance: company.aiCreditsBalance,
+    monthlyLimit: plan?.aiCreditsMonthlyLimit ?? 0,
+    unlimitedAiCredits: plan?.unlimitedAiCredits ?? false,
+    lastReset: company.aiCreditsLastReset
   }
 }
 
@@ -128,7 +110,9 @@ export async function getBalance(companyId) {
 export async function checkCredits(companyId, serviceKey, quantity = 1) {
   const costPerUnit = await getServiceCost(serviceKey)
   const totalCost = costPerUnit * Math.max(1, quantity)
-  const { balance, monthlyLimit, unlimitedAiCredits, lastReset } = await getBalance(companyId)
+  const balanceInfo = await getBalance(companyId)
+  if (!balanceInfo) return { ok: false, balance: 0, monthlyLimit: 0, unlimitedAiCredits: false, lastReset: null, totalCost, costPerUnit, serviceKey, quantity }
+  const { balance, monthlyLimit, unlimitedAiCredits, lastReset } = balanceInfo
 
   // Planos com créditos ilimitados sempre aprovam sem verificar saldo
   if (unlimitedAiCredits) {
@@ -163,7 +147,8 @@ export async function debitCredits(companyId, serviceKey, quantity = 1, metadata
   const totalCost = costPerUnit * Math.max(1, quantity)
 
   // Verificar se o plano tem créditos ilimitados — registra uso sem debitar saldo
-  const { unlimitedAiCredits, balance: currentBalance } = await getBalance(companyId)
+  const balanceInfo = await getBalance(companyId)
+  const { unlimitedAiCredits, balance: currentBalance } = balanceInfo || { unlimitedAiCredits: false, balance: 0 }
   if (unlimitedAiCredits) {
     await prisma.aiCreditTransaction.create({
       data: {
@@ -232,17 +217,8 @@ export async function debitCredits(companyId, serviceKey, quantity = 1, metadata
  * Atualiza a data do último reset.
  */
 export async function resetCompanyCredits(companyId) {
-  const { monthlyLimit } = await getBalance(companyId)
-
-  await prisma.company.update({
-    where: { id: companyId },
-    data: {
-      aiCreditsBalance: monthlyLimit,
-      aiCreditsLastReset: new Date(),
-    },
-  })
-
-  return { monthlyLimit }
+  console.log(`[aiCreditManager] resetCompanyCredits(${companyId}): no-op (new billing model)`)
+  return { ok: true }
 }
 
 /**
@@ -250,28 +226,8 @@ export async function resetCompanyCredits(companyId) {
  * Chamado pelo cron mensal.
  */
 export async function resetAllDueCredits() {
-  const companies = await prisma.company.findMany({
-    select: {
-      id: true,
-      saasSubscription: { select: { plan: { select: { aiCreditsMonthlyLimit: true, unlimitedAiCredits: true } } } },
-    },
-  })
-
-  let resetCount = 0
-  for (const company of companies) {
-    const plan = company.saasSubscription?.plan
-    const limit = plan?.aiCreditsMonthlyLimit ?? 100
-    const unlimited = plan?.unlimitedAiCredits ?? false
-    await prisma.company.update({
-      where: { id: company.id },
-      // Empresas com plano ilimitado mantêm saldo em 0 (irrelevante); as demais são restauradas
-      data: { aiCreditsBalance: unlimited ? 0 : limit, aiCreditsLastReset: new Date() },
-    })
-    resetCount++
-  }
-
-  console.log(`[AiCreditManager] Reset mensal concluído: ${resetCount} empresa(s) atualizadas`)
-  return { resetCount }
+  console.log('[aiCreditManager] resetAllDueCredits: no-op (new billing model)')
+  return { reset: 0 }
 }
 
 /**

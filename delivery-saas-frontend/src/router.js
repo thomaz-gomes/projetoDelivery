@@ -24,7 +24,6 @@ import RiderAccount from './views/RiderAccount.vue';
 import RiderAccountAdmin from './views/RiderAccountAdmin.vue';
 import api from './api';
 import { useAuthStore } from './stores/auth';
-import { useSaasStore } from './stores/saas';
 import RiderAdjustments from './views/RiderAdjustments.vue';
 import CustomersList from './views/CustomersList.vue';
 import CustomerForm from './views/CustomerForm.vue';
@@ -103,6 +102,9 @@ import FinancialGateways from './views/financial/FinancialGateways.vue';
 import FinancialOFX from './views/financial/FinancialOFX.vue';
 import FinancialCostCenters from './views/financial/FinancialCostCenters.vue';
 import ProductsReport from './views/reports/ProductsReport.vue';
+import AddOnStore from './views/AddOnStore.vue';
+import AddOnDetail from './views/AddOnDetail.vue';
+import CreditPackStore from './views/CreditPackStore.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -233,6 +235,10 @@ const router = createRouter({
     { path: '/financial/gateways', component: FinancialGateways, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/financial/ofx', component: FinancialOFX, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/financial/cost-centers', component: FinancialCostCenters, meta: { requiresAuth: true, role: 'ADMIN' } },
+    // ---- Loja de Complementos ----
+    { path: '/store', component: AddOnStore, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/store/credits', component: CreditPackStore, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/store/:moduleKey', component: AddOnDetail, meta: { requiresAuth: true, role: 'ADMIN' } },
   ]
 });
 
@@ -291,11 +297,14 @@ router.beforeEach(async (to) => {
       const auth = useAuthStore()
       const userRole = String(auth.user?.role || '').toUpperCase()
       if (userRole === 'ADMIN') {
-        const saas = useSaasStore()
-        if (!saas.subscription) {
-          try { await saas.fetchMySubscription() } catch {}
+        const { useModulesStore } = await import('./stores/modules')
+        const modules = useModulesStore()
+        if (!modules.enabled.length) {
+          try { await modules.fetchEnabled() } catch {}
         }
-        if (saas.isCardapioSimplesOnly) return { path: '/menu/menus' }
+        const hasSimples = modules.has('CARDAPIO_SIMPLES')
+        const hasCompleto = modules.has('CARDAPIO_COMPLETO')
+        if (hasSimples && !hasCompleto) return { path: '/menu/menus' }
       }
     }
   }

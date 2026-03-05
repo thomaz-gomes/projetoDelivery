@@ -1,13 +1,19 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 import { useAuthStore } from '../stores/auth'
+import Swal from 'sweetalert2'
 
 const auth = useAuthStore()
 const subscription = ref(null)
 const invoices = ref([])
 const companies = ref([])
 const selectedCompany = ref(null)
+const expandedInvoice = ref(null)
+
+// Module subscriptions (ADMIN)
+const moduleSubs = ref([])
+const loadingModuleSubs = ref(false)
 
 const page = ref(1)
 const pageSize = ref(10)
@@ -18,8 +24,10 @@ const statusFilter = ref('')
 
 const newInvoice = ref({ year: new Date().getFullYear(), month: new Date().getMonth()+1, amount: 0, dueDate: '' })
 
+const isSuperAdmin = computed(() => auth.user && String(auth.user.role || '').toUpperCase() === 'SUPER_ADMIN')
+const isAdmin = computed(() => auth.user && ['ADMIN', 'SUPER_ADMIN'].includes(String(auth.user.role || '').toUpperCase()))
+
 async function load(){
-  // default for regular ADMIN: load current company subscription and invoices with pagination & filters
   const subRes = await api.get('/saas/subscription/me')
   subscription.value = subRes.data || null
   const params = { page: page.value, pageSize: pageSize.value }
@@ -47,9 +55,38 @@ async function loadForCompany(companyId){
   }catch(e){ invoices.value = []; total.value = 0 }
 }
 
+async function loadModuleSubs() {
+  if (!isAdmin.value || isSuperAdmin.value) return
+  loadingModuleSubs.value = true
+  try {
+    const res = await api.get('/saas/module-subscriptions/me')
+    moduleSubs.value = res.data || []
+  } catch (e) { moduleSubs.value = [] }
+  finally { loadingModuleSubs.value = false }
+}
+
+async function cancelModuleSub(sub) {
+  const result = await Swal.fire({
+    title: `Cancelar módulo "${sub.module?.name || sub.moduleId}"?`,
+    text: 'O módulo ficará indisponível após o cancelamento.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'Sim, cancelar',
+    cancelButtonText: 'Voltar'
+  })
+  if (!result.isConfirmed) return
+  try {
+    await api.delete(`/saas/module-subscriptions/${sub.moduleId}`)
+    await loadModuleSubs()
+    Swal.fire({ icon: 'success', title: 'Cancelado', timer: 1500, showConfirmButton: false })
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Falha ao cancelar' })
+  }
+}
+
 onMounted(async () => {
-  if (auth.user && String(auth.user.role || '').toUpperCase() === 'SUPER_ADMIN') {
-    // load companies for selection
+  if (isSuperAdmin.value) {
     const res = await api.get('/saas/companies')
     companies.value = res.data || []
     if (companies.value.length) {
@@ -58,6 +95,7 @@ onMounted(async () => {
     }
   } else {
     await load()
+    await loadModuleSubs()
   }
 })
 
@@ -97,23 +135,32 @@ async function editInvoice(inv){
 
 async function deleteInvoice(inv){
   try{
-    if (!window.confirm(`Remover fatura ${inv.month}/${inv.year} — R$ ${inv.amount} ?`)) return;
+    if (!window.confirm(`Remover fatura ${inv.month}/${inv.year} -- R$ ${inv.amount} ?`)) return;
     await api.delete(`/saas/invoices/${inv.id}`)
     if (selectedCompany.value) await loadForCompany(selectedCompany.value)
     else await load()
   }catch(e){ console.warn('Failed to delete invoice', e) }
 }
 
+function toggleInvoiceItems(id) {
+  expandedInvoice.value = expandedInvoice.value === id ? null : id
+}
+
 function totalPages(){ return Math.max(1, Math.ceil((total.value || 0) / pageSize.value)) }
 
 function goToPage(p){ if (p<1) p=1; if (p>totalPages()) p=totalPages(); page.value = p; if (selectedCompany.value) return loadForCompany(selectedCompany.value); return load() }
+
+function itemTypeLabel(type) {
+  const labels = { PLAN: 'Plano', MODULE: 'Módulo', CREDIT_PACK: 'Pacote de Créditos' }
+  return labels[type] || type
+}
 </script>
 
 <template>
   <div class="container py-3">
     <h2 class="mb-3">Mensalidades</h2>
 
-    <div v-if="(auth && auth.user && String(auth.user.role||'').toUpperCase()==='SUPER_ADMIN')" class="mb-3">
+    <div v-if="isSuperAdmin" class="mb-3">
       <label class="form-label">Empresa</label>
       <select class="form-select w-50 mb-2" v-model="selectedCompany" @change="loadForCompany(selectedCompany)">
         <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
@@ -132,10 +179,50 @@ function goToPage(p){ if (p<1) p=1; if (p>totalPages()) p=totalPages(); page.val
       </div>
     </div>
 
+    <!-- Module Subscriptions (ADMIN only) -->
+    <div v-if="isAdmin && !isSuperAdmin" class="card mb-3">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-box-seam me-2"></i>Módulos Assinados</h6>
+      </div>
+      <div class="card-body">
+        <div v-if="loadingModuleSubs" class="text-center py-3">
+          <div class="spinner-border spinner-border-sm text-primary"></div>
+        </div>
+        <div v-else-if="moduleSubs.length === 0" class="text-muted small">
+          Nenhum módulo assinado individualmente.
+          <router-link to="/store" class="text-primary">Ver loja de add-ons</router-link>
+        </div>
+        <table v-else class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Módulo</th>
+              <th>Período</th>
+              <th>Próximo vencimento</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="sub in moduleSubs" :key="sub.id">
+              <td>
+                <strong>{{ sub.module?.name || sub.moduleId }}</strong>
+              </td>
+              <td>{{ sub.period || '--' }}</td>
+              <td>{{ sub.nextDueAt ? new Date(sub.nextDueAt).toLocaleDateString() : '--' }}</td>
+              <td>
+                <button class="btn btn-sm btn-outline-danger" @click="cancelModuleSub(sub)">
+                  <i class="bi bi-x-lg me-1"></i>Cancelar
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="card mb-3" v-if="subscription">
       <div class="card-body">
-        <div><strong>Plano:</strong> {{ subscription.plan?.name }} — R$ {{ Number(subscription.plan?.price || 0).toFixed(2) }}</div>
-        <div class="small text-muted">Próximo vencimento: {{ subscription.nextDueAt ? new Date(subscription.nextDueAt).toLocaleDateString() : '—' }}</div>
+        <div><strong>Plano:</strong> {{ subscription.plan?.name }} -- R$ {{ Number(subscription.plan?.price || 0).toFixed(2) }}</div>
+        <div class="small text-muted">Próximo vencimento: {{ subscription.nextDueAt ? new Date(subscription.nextDueAt).toLocaleDateString() : '--' }}</div>
         <div class="mt-2 small">Módulos habilitados:
           <span v-for="pm in (subscription.plan?.modules||[])" :key="pm.moduleId" class="badge bg-secondary me-1">{{ pm.module?.name || pm.moduleId }}</span>
         </div>
@@ -177,19 +264,57 @@ function goToPage(p){ if (p<1) p=1; if (p>totalPages()) p=totalPages(); page.val
         </div>
         <table class="table table-sm">
           <thead>
-            <tr><th>Mês</th><th>Valor</th><th>Status</th><th>Ações</th></tr>
+            <tr><th>Mês</th><th>Valor</th><th>Status</th><th>Itens</th><th>Ações</th></tr>
           </thead>
           <tbody>
-            <tr v-for="i in invoices" :key="i.id">
-              <td>{{ i.month }}/{{ i.year }}</td>
-              <td>R$ {{ Number(i.amount).toFixed(2) }}</td>
-              <td>{{ i.status }}</td>
-              <td>
-                <button v-if="i.status!=='PAID'" class="btn btn-sm btn-success me-1" @click="markPaid(i.id)">Marcar como pago</button>
-                <button v-if="auth.user && String(auth.user.role||'').toUpperCase()==='SUPER_ADMIN'" class="btn btn-sm btn-outline-secondary me-1" @click="editInvoice(i)">Editar</button>
-                <button v-if="auth.user && String(auth.user.role||'').toUpperCase()==='SUPER_ADMIN'" class="btn btn-sm btn-outline-danger" @click="deleteInvoice(i)">Remover</button>
-              </td>
-            </tr>
+            <template v-for="i in invoices" :key="i.id">
+              <tr>
+                <td>{{ i.month }}/{{ i.year }}</td>
+                <td>R$ {{ Number(i.amount).toFixed(2) }}</td>
+                <td>
+                  <span class="badge" :class="{ 'bg-success': i.status === 'PAID', 'bg-warning text-dark': i.status === 'PENDING', 'bg-danger': i.status === 'OVERDUE' }">
+                    {{ i.status }}
+                  </span>
+                </td>
+                <td>
+                  <button
+                    v-if="i.items && i.items.length"
+                    class="btn btn-sm btn-outline-secondary"
+                    @click="toggleInvoiceItems(i.id)"
+                  >
+                    <i class="bi" :class="expandedInvoice === i.id ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                    {{ i.items.length }} {{ i.items.length === 1 ? 'item' : 'itens' }}
+                  </button>
+                  <span v-else class="text-muted small">--</span>
+                </td>
+                <td>
+                  <button v-if="i.status!=='PAID'" class="btn btn-sm btn-success me-1" @click="markPaid(i.id)">Marcar como pago</button>
+                  <button v-if="isSuperAdmin" class="btn btn-sm btn-outline-secondary me-1" @click="editInvoice(i)">Editar</button>
+                  <button v-if="isSuperAdmin" class="btn btn-sm btn-outline-danger" @click="deleteInvoice(i)">Remover</button>
+                </td>
+              </tr>
+              <!-- Invoice line items (collapsible) -->
+              <tr v-if="expandedInvoice === i.id && i.items && i.items.length">
+                <td colspan="5" class="bg-light p-0">
+                  <table class="table table-sm table-borderless mb-0 ms-4" style="max-width: 90%;">
+                    <thead>
+                      <tr class="text-muted small">
+                        <th>Tipo</th>
+                        <th>Descrição</th>
+                        <th>Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="item in i.items" :key="item.id" class="small">
+                        <td><span class="badge bg-secondary">{{ itemTypeLabel(item.type) }}</span></td>
+                        <td>{{ item.description }}</td>
+                        <td>R$ {{ Number(item.amount).toFixed(2) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
         <div class="d-flex justify-content-between align-items-center">

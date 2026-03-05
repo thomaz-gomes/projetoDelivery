@@ -784,13 +784,18 @@ function selectMenuOption(opt){
           <li v-for="item in visibleNav" :key="item.to" class="nav-item mb-2">
             <!-- Item bloqueado (upgrade necessário) -->
             <template v-if="item.locked">
-              <span class="nav-link title d-flex align-items-center text-muted" style="cursor:default;opacity:0.55;">
+              <router-link
+                :to="item.to || '/store'"
+                class="nav-link title d-flex align-items-center text-muted"
+                style="opacity:0.55;"
+                @click="offCanvasOpen = false"
+              >
                 <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
                 <span>{{ item.name }}</span>
                 <span class="badge bg-warning text-dark ms-auto d-flex align-items-center gap-1" style="font-size:0.6rem;white-space:nowrap;">
                   <i class="bi bi-lock-fill"></i> Upgrade
                 </span>
-              </span>
+              </router-link>
             </template>
             <!-- Item normal -->
             <template v-else>
@@ -809,13 +814,18 @@ function selectMenuOption(opt){
                 <li v-for="child in item.children" :key="child.to" class="nav-item mb-1">
                   <!-- Filho bloqueado -->
                   <template v-if="child.locked">
-                    <span class="nav-link d-flex align-items-center text-muted" style="cursor:default;opacity:0.55;">
+                    <router-link
+                      :to="child.to || '/store'"
+                      class="nav-link d-flex align-items-center text-muted"
+                      style="opacity:0.55;"
+                      @click="offCanvasOpen = false"
+                    >
                       <i :class="child.icon + ' me-2'" aria-hidden="true"></i>
                       <span>{{ child.name }}</span>
                       <span class="badge bg-warning text-dark ms-auto d-flex align-items-center gap-1" style="font-size:0.6rem;white-space:nowrap;">
                         <i class="bi bi-lock-fill"></i> Upgrade
                       </span>
-                    </span>
+                    </router-link>
                   </template>
                   <!-- Filho normal -->
                   <template v-else>

@@ -105,6 +105,11 @@ model Company {
   aiCreditsBalance     Int                  @default(0)
   aiCreditsLastReset   DateTime             @default(now())
   aiCreditTransactions AiCreditTransaction[]
+
+  // ---- Billing revamp ----
+  moduleSubscriptions   SaasModuleSubscription[]
+  aiCreditPurchases     AiCreditPurchase[]
+  saasPayments          SaasPayment[]
 }
 
 model User {
@@ -848,7 +853,9 @@ model SaasModule {
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
 
-  plans SaasPlanModule[]
+  plans         SaasPlanModule[]
+  prices        SaasModulePrice[]
+  subscriptions SaasModuleSubscription[]
 }
 
 // Subscription plan with price, limits and enabled modules
@@ -897,6 +904,35 @@ model SaasPlanModule {
   @@id([planId, moduleId])
 }
 
+// Per-module pricing (for add-on purchases)
+model SaasModulePrice {
+  id        String     @id @default(uuid())
+  moduleId  String
+  module    SaasModule @relation(fields: [moduleId], references: [id])
+  period    String     // MONTHLY, ANNUAL
+  price     Decimal
+  createdAt DateTime   @default(now())
+
+  @@unique([moduleId, period])
+}
+
+// Company subscription to an individual add-on module
+model SaasModuleSubscription {
+  id         String     @id @default(uuid())
+  companyId  String
+  company    Company    @relation(fields: [companyId], references: [id])
+  moduleId   String
+  module     SaasModule @relation(fields: [moduleId], references: [id])
+  status     String     @default("ACTIVE") // ACTIVE, CANCELED, SUSPENDED
+  period     String     // MONTHLY, ANNUAL
+  startedAt  DateTime   @default(now())
+  nextDueAt  DateTime
+  canceledAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@unique([companyId, moduleId])
+}
+
 // Company subscription to a plan
 model SaasSubscription {
   id        String    @id @default(uuid())
@@ -927,6 +963,9 @@ model SaasInvoice {
   dueDate        DateTime?
   paidAt         DateTime?
   createdAt      DateTime         @default(now())
+
+  items  SaasInvoiceItem[]
+  payments SaasPayment[]
 
   @@index([subscriptionId, year, month], name: "sub_month_idx")
 }
@@ -960,6 +999,60 @@ model AiCreditTransaction {
   createdAt     DateTime @default(now())
 
   @@index([companyId, createdAt])
+}
+
+// Line items within a SaaS invoice
+model SaasInvoiceItem {
+  id          String      @id @default(uuid())
+  invoiceId   String
+  invoice     SaasInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  type        String      // PLAN, MODULE, CREDIT_PACK
+  referenceId String
+  description String
+  amount      Decimal
+}
+
+// Payment record for SaaS billing
+model SaasPayment {
+  id         String       @id @default(uuid())
+  companyId  String
+  company    Company      @relation(fields: [companyId], references: [id])
+  invoiceId  String?
+  invoice    SaasInvoice? @relation(fields: [invoiceId], references: [id])
+  amount     Decimal
+  status     String       @default("PENDING") // PENDING, PROCESSING, PAID, FAILED, REFUNDED
+  gateway    String       @default("manual")
+  gatewayRef String?
+  method     String?      // PIX, BOLETO, CREDIT_CARD
+  paidAt     DateTime?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+}
+
+// Pre-defined AI credit packs available for purchase
+model AiCreditPack {
+  id        String             @id @default(uuid())
+  name      String
+  credits   Int
+  price     Decimal
+  isActive  Boolean            @default(true)
+  sortOrder Int                @default(0)
+  createdAt DateTime           @default(now())
+
+  purchases AiCreditPurchase[]
+}
+
+// Record of a company purchasing an AI credit pack
+model AiCreditPurchase {
+  id         String       @id @default(uuid())
+  companyId  String
+  company    Company      @relation(fields: [companyId], references: [id])
+  packId     String
+  pack       AiCreditPack @relation(fields: [packId], references: [id])
+  credits    Int
+  amount     Decimal
+  paymentRef String?
+  createdAt  DateTime     @default(now())
 }
 
 model PaymentMethod {
