@@ -14,14 +14,13 @@ function formatPrice(val) {
 }
 
 async function purchase(pack) {
-  if (!confirm(`Confirma a compra de "${pack.name}" por ${formatPrice(pack.price)}?`)) return
+  if (!confirm(`Confirma a compra de "${pack.name}" por ${formatPrice(pack.price)}? Você será redirecionado para o pagamento.`)) return
   purchasing.value = pack.id
   try {
     await store.purchaseCreditPack(pack.id)
     await credits.fetch()
-    alert(`Pacote "${pack.name}" adquirido com sucesso!`)
   } catch (e) {
-    alert(e?.response?.data?.message || 'Erro ao comprar pacote')
+    alert(e?.response?.data?.message || 'Erro ao processar pagamento')
   } finally {
     purchasing.value = null
   }
