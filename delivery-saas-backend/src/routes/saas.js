@@ -339,6 +339,46 @@ saasRouter.post('/module-subscriptions', requireRole('ADMIN'), async (req, res) 
   }
 })
 
+// Assign module to company (SUPER_ADMIN)
+saasRouter.post('/module-subscriptions/assign', requireRole('SUPER_ADMIN'), async (req, res) => {
+  const { companyId, moduleId, period = 'MONTHLY' } = req.body || {}
+  if (!companyId || !moduleId) {
+    return res.status(400).json({ message: 'companyId e moduleId são obrigatórios' })
+  }
+  try {
+    const existing = await prisma.saasModuleSubscription.findUnique({
+      where: { companyId_moduleId: { companyId, moduleId } }
+    })
+    const nextDueAt = new Date()
+    nextDueAt.setMonth(nextDueAt.getMonth() + (period === 'ANNUAL' ? 12 : 1))
+
+    const sub = existing
+      ? await prisma.saasModuleSubscription.update({
+          where: { id: existing.id },
+          data: { status: 'ACTIVE', period, nextDueAt, canceledAt: null }
+        })
+      : await prisma.saasModuleSubscription.create({
+          data: { companyId, moduleId, period, nextDueAt }
+        })
+    res.json(sub)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao atribuir módulo', error: e?.message })
+  }
+})
+
+// Remove module from company (SUPER_ADMIN)
+saasRouter.delete('/module-subscriptions/assign/:companyId/:moduleId', requireRole('SUPER_ADMIN'), async (req, res) => {
+  const { companyId, moduleId } = req.params
+  try {
+    await prisma.saasModuleSubscription.deleteMany({
+      where: { companyId, moduleId }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao remover módulo', error: e?.message })
+  }
+})
+
 // Cancel module subscription
 saasRouter.delete('/module-subscriptions/:moduleId', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
