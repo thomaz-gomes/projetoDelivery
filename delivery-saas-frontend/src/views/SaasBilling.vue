@@ -2,9 +2,12 @@
 import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useAddOnStoreStore } from '../stores/addOnStore'
 import Swal from 'sweetalert2'
 
 const auth = useAuthStore()
+const addOnStore = useAddOnStoreStore()
+const payingInvoice = ref(null)
 const subscription = ref(null)
 const invoices = ref([])
 const companies = ref([])
@@ -154,6 +157,17 @@ function itemTypeLabel(type) {
   const labels = { PLAN: 'Plano', MODULE: 'Módulo', CREDIT_PACK: 'Pacote de Créditos' }
   return labels[type] || type
 }
+
+async function payInvoice(invoice) {
+  payingInvoice.value = invoice.id
+  try {
+    await addOnStore.payInvoice(invoice.id)
+  } catch (e) {
+    alert(e?.response?.data?.message || 'Erro ao iniciar pagamento')
+  } finally {
+    payingInvoice.value = null
+  }
+}
 </script>
 
 <template>
@@ -288,6 +302,15 @@ function itemTypeLabel(type) {
                   <span v-else class="text-muted small">--</span>
                 </td>
                 <td>
+                  <button
+                    v-if="i.status === 'PENDING'"
+                    class="btn btn-sm btn-primary me-1"
+                    :disabled="payingInvoice === i.id"
+                    @click="payInvoice(i)"
+                  >
+                    <span v-if="payingInvoice === i.id" class="spinner-border spinner-border-sm me-1"></span>
+                    Pagar
+                  </button>
                   <button v-if="i.status!=='PAID'" class="btn btn-sm btn-success me-1" @click="markPaid(i.id)">Marcar como pago</button>
                   <button v-if="isSuperAdmin" class="btn btn-sm btn-outline-secondary me-1" @click="editInvoice(i)">Editar</button>
                   <button v-if="isSuperAdmin" class="btn btn-sm btn-outline-danger" @click="deleteInvoice(i)">Remover</button>
