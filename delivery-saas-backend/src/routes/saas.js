@@ -284,54 +284,59 @@ saasRouter.post('/module-subscriptions', requireRole('ADMIN'), async (req, res) 
     // Get or create a subscription for the company (needed for invoice)
     let sub = await prisma.saasSubscription.findUnique({ where: { companyId } })
 
-    // Create or reactivate module subscription
-    let moduleSub
-    if (existing) {
-      moduleSub = await prisma.saasModuleSubscription.update({
-        where: { id: existing.id },
-        data: { status: 'ACTIVE', period: upperPeriod, nextDueAt, canceledAt: null, startedAt: new Date() }
-      })
-    } else {
-      moduleSub = await prisma.saasModuleSubscription.create({
-        data: { companyId, moduleId, period: upperPeriod, nextDueAt }
-      })
-    }
+    // Wrap subscription + invoice + payment in a transaction
+    const moduleSub = await prisma.$transaction(async (tx) => {
+      // Create or reactivate module subscription
+      let mSub
+      if (existing) {
+        mSub = await tx.saasModuleSubscription.update({
+          where: { id: existing.id },
+          data: { status: 'ACTIVE', period: upperPeriod, nextDueAt, canceledAt: null, startedAt: new Date() }
+        })
+      } else {
+        mSub = await tx.saasModuleSubscription.create({
+          data: { companyId, moduleId, period: upperPeriod, nextDueAt }
+        })
+      }
 
-    // Create pro-rated invoice with line item
-    if (sub) {
-      const now = new Date()
-      const invoice = await prisma.saasInvoice.create({
-        data: {
-          subscriptionId: sub.id,
-          year: now.getFullYear(),
-          month: now.getMonth() + 1,
-          amount: String(proRatedPrice),
-          dueDate: now,
-          status: 'PAID',
-          paidAt: now,
-          items: {
-            create: {
-              type: 'MODULE',
-              referenceId: moduleSub.id,
-              description: `Assinatura módulo (${upperPeriod})`,
-              amount: String(proRatedPrice)
+      // Create pro-rated invoice with line item
+      if (sub) {
+        const now = new Date()
+        const invoice = await tx.saasInvoice.create({
+          data: {
+            subscriptionId: sub.id,
+            year: now.getFullYear(),
+            month: now.getMonth() + 1,
+            amount: String(proRatedPrice),
+            dueDate: now,
+            status: 'PAID',
+            paidAt: now,
+            items: {
+              create: {
+                type: 'MODULE',
+                referenceId: moduleId,
+                description: `Assinatura módulo (${upperPeriod})`,
+                amount: String(proRatedPrice)
+              }
             }
           }
-        }
-      })
+        })
 
-      // Create payment record
-      await prisma.saasPayment.create({
-        data: {
-          companyId,
-          invoiceId: invoice.id,
-          amount: String(proRatedPrice),
-          gateway: 'manual',
-          status: 'PAID',
-          paidAt: now
-        }
-      })
-    }
+        // Create payment record
+        await tx.saasPayment.create({
+          data: {
+            companyId,
+            invoiceId: invoice.id,
+            amount: String(proRatedPrice),
+            gateway: 'manual',
+            status: 'PAID',
+            paidAt: now
+          }
+        })
+      }
+
+      return mSub
+    })
 
     res.status(201).json(moduleSub)
   } catch (e) {
@@ -977,7 +982,7 @@ saasRouter.post('/credit-packs/purchase', requireRole('ADMIN'), async (req, res)
           items: {
             create: {
               type: 'CREDIT_PACK',
-              referenceId: purchase.id,
+              referenceId: pack.id,
               description: `Pacote de créditos: ${pack.name} (${pack.credits} créditos)`,
               amount: String(pack.price)
             }

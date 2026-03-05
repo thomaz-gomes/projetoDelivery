@@ -3,12 +3,22 @@ import { prisma } from '../prisma.js'
 
 export const paymentRouter = express.Router()
 
+const WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || ''
+
 /**
  * POST /payment/webhook
  * Gateway-agnostic webhook handler.
  * Body: { paymentId, status, gatewayRef?, paidAt? }
  */
 paymentRouter.post('/webhook', async (req, res) => {
+  // Verify webhook secret
+  if (WEBHOOK_SECRET) {
+    const provided = req.headers['x-webhook-secret'] || ''
+    if (provided !== WEBHOOK_SECRET) {
+      return res.status(401).json({ message: 'Invalid webhook secret' })
+    }
+  }
+
   const { paymentId, status, gatewayRef, paidAt } = req.body || {}
   if (!paymentId || !status) {
     return res.status(400).json({ message: 'paymentId e status são obrigatórios' })
@@ -20,6 +30,11 @@ paymentRouter.post('/webhook', async (req, res) => {
       include: { invoice: { include: { items: true } } }
     })
     if (!payment) return res.status(404).json({ message: 'Pagamento não encontrado' })
+
+    // Idempotency: skip if already paid
+    if (payment.status === 'PAID') {
+      return res.json({ ok: true, message: 'Already processed' })
+    }
 
     await prisma.saasPayment.update({
       where: { id: paymentId },

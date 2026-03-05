@@ -97,7 +97,7 @@ onMounted(async () => {
       <p class="text-muted">{{ mod.description }}</p>
 
       <!-- Active status -->
-      <div v-if="mod.subscribed" class="alert alert-success d-flex align-items-center mb-4">
+      <div v-if="mod.isSubscribed" class="alert alert-success d-flex align-items-center mb-4">
         <i class="bi bi-check-circle-fill me-2 fs-5"></i>
         <span>Este módulo está ativo na sua conta.</span>
       </div>
@@ -132,7 +132,7 @@ onMounted(async () => {
 
           <!-- Subscribe CTA -->
           <button
-            v-if="!mod.subscribed"
+            v-if="!mod.isSubscribed"
             class="btn btn-primary w-100"
             :disabled="subscribing || selectedPrice == null"
             @click="subscribe"
@@ -143,7 +143,7 @@ onMounted(async () => {
 
           <!-- Cancel -->
           <button
-            v-if="mod.subscribed"
+            v-if="mod.isSubscribed"
             class="btn btn-outline-danger w-100"
             :disabled="cancelling"
             @click="cancel"

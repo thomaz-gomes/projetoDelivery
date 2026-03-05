@@ -67,8 +67,8 @@ async function loadModuleSubs() {
 
 async function cancelModuleSub(sub) {
   const result = await Swal.fire({
-    title: `Cancelar modulo "${sub.module?.name || sub.moduleId}"?`,
-    text: 'O modulo ficara indisponivel apos o cancelamento.',
+    title: `Cancelar módulo "${sub.module?.name || sub.moduleId}"?`,
+    text: 'O módulo ficará indisponível após o cancelamento.',
     icon: 'warning',
     showCancelButton: true,
     confirmButtonColor: '#dc3545',
@@ -119,7 +119,7 @@ async function editInvoice(inv){
   try{
     const year = window.prompt('Ano', String(inv.year))
     if (year === null) return
-    const month = window.prompt('Mes (1-12)', String(inv.month))
+    const month = window.prompt('Mês (1-12)', String(inv.month))
     if (month === null) return
     const amount = window.prompt('Valor', String(inv.amount))
     if (amount === null) return
@@ -151,7 +151,7 @@ function totalPages(){ return Math.max(1, Math.ceil((total.value || 0) / pageSiz
 function goToPage(p){ if (p<1) p=1; if (p>totalPages()) p=totalPages(); page.value = p; if (selectedCompany.value) return loadForCompany(selectedCompany.value); return load() }
 
 function itemTypeLabel(type) {
-  const labels = { PLAN: 'Plano', MODULE: 'Modulo', CREDIT_PACK: 'Pacote de Creditos' }
+  const labels = { PLAN: 'Plano', MODULE: 'Módulo', CREDIT_PACK: 'Pacote de Créditos' }
   return labels[type] || type
 }
 </script>
@@ -170,7 +170,7 @@ function itemTypeLabel(type) {
           <h6>Criar fatura</h6>
           <div class="row g-2 align-items-end">
             <div class="col-auto"><label class="form-label">Ano</label><input type="number" class="form-control" v-model.number="newInvoice.year" /></div>
-            <div class="col-auto"><label class="form-label">Mes</label><input type="number" class="form-control" v-model.number="newInvoice.month" min="1" max="12" /></div>
+            <div class="col-auto"><label class="form-label">Mês</label><input type="number" class="form-control" v-model.number="newInvoice.month" min="1" max="12" /></div>
             <div class="col-auto"><label class="form-label">Valor</label><input type="number" class="form-control" v-model.number="newInvoice.amount" step="0.01" /></div>
             <div class="col-auto"><label class="form-label">Vencimento</label><input type="date" class="form-control" v-model="newInvoice.dueDate" /></div>
             <div class="col-auto"><button class="btn btn-primary" @click="createInvoice">Criar fatura</button></div>
@@ -182,23 +182,23 @@ function itemTypeLabel(type) {
     <!-- Module Subscriptions (ADMIN only) -->
     <div v-if="isAdmin && !isSuperAdmin" class="card mb-3">
       <div class="card-header">
-        <h6 class="mb-0"><i class="bi bi-box-seam me-2"></i>Modulos Assinados</h6>
+        <h6 class="mb-0"><i class="bi bi-box-seam me-2"></i>Módulos Assinados</h6>
       </div>
       <div class="card-body">
         <div v-if="loadingModuleSubs" class="text-center py-3">
           <div class="spinner-border spinner-border-sm text-primary"></div>
         </div>
         <div v-else-if="moduleSubs.length === 0" class="text-muted small">
-          Nenhum modulo assinado individualmente.
+          Nenhum módulo assinado individualmente.
           <router-link to="/store" class="text-primary">Ver loja de add-ons</router-link>
         </div>
         <table v-else class="table table-sm mb-0">
           <thead>
             <tr>
-              <th>Modulo</th>
-              <th>Periodo</th>
-              <th>Proximo vencimento</th>
-              <th>Acoes</th>
+              <th>Módulo</th>
+              <th>Período</th>
+              <th>Próximo vencimento</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -222,8 +222,8 @@ function itemTypeLabel(type) {
     <div class="card mb-3" v-if="subscription">
       <div class="card-body">
         <div><strong>Plano:</strong> {{ subscription.plan?.name }} -- R$ {{ Number(subscription.plan?.price || 0).toFixed(2) }}</div>
-        <div class="small text-muted">Proximo vencimento: {{ subscription.nextDueAt ? new Date(subscription.nextDueAt).toLocaleDateString() : '--' }}</div>
-        <div class="mt-2 small">Modulos habilitados:
+        <div class="small text-muted">Próximo vencimento: {{ subscription.nextDueAt ? new Date(subscription.nextDueAt).toLocaleDateString() : '--' }}</div>
+        <div class="mt-2 small">Módulos habilitados:
           <span v-for="pm in (subscription.plan?.modules||[])" :key="pm.moduleId" class="badge bg-secondary me-1">{{ pm.module?.name || pm.moduleId }}</span>
         </div>
       </div>
@@ -238,7 +238,7 @@ function itemTypeLabel(type) {
             <input class="form-control" type="number" v-model="yearFilter" />
           </div>
           <div class="col-auto">
-            <label class="form-label">Mes</label>
+            <label class="form-label">Mês</label>
             <input class="form-control" type="number" v-model="monthFilter" min="1" max="12" />
           </div>
           <div class="col-auto">
@@ -251,7 +251,7 @@ function itemTypeLabel(type) {
             </select>
           </div>
           <div class="col-auto">
-            <label class="form-label">Por pagina</label>
+            <label class="form-label">Por página</label>
             <select class="form-select" v-model.number="pageSize">
               <option :value="5">5</option>
               <option :value="10">10</option>
@@ -264,7 +264,7 @@ function itemTypeLabel(type) {
         </div>
         <table class="table table-sm">
           <thead>
-            <tr><th>Mes</th><th>Valor</th><th>Status</th><th>Itens</th><th>Acoes</th></tr>
+            <tr><th>Mês</th><th>Valor</th><th>Status</th><th>Itens</th><th>Ações</th></tr>
           </thead>
           <tbody>
             <template v-for="i in invoices" :key="i.id">
@@ -300,7 +300,7 @@ function itemTypeLabel(type) {
                     <thead>
                       <tr class="text-muted small">
                         <th>Tipo</th>
-                        <th>Descricao</th>
+                        <th>Descrição</th>
                         <th>Valor</th>
                       </tr>
                     </thead>
@@ -321,8 +321,8 @@ function itemTypeLabel(type) {
           <div class="small text-muted">Total: {{ total }} faturas</div>
           <div>
             <button class="btn btn-sm btn-outline-secondary me-2" :disabled="page<=1" @click="goToPage(page-1)">Anterior</button>
-            <span class="mx-2">Pagina {{ page }} / {{ totalPages() }}</span>
-            <button class="btn btn-sm btn-outline-secondary ms-2" :disabled="page>=totalPages()" @click="goToPage(page+1)">Proxima</button>
+            <span class="mx-2">Página {{ page }} / {{ totalPages() }}</span>
+            <button class="btn btn-sm btn-outline-secondary ms-2" :disabled="page>=totalPages()" @click="goToPage(page+1)">Próxima</button>
           </div>
         </div>
       </div>

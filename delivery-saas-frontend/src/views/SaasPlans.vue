@@ -11,8 +11,8 @@ const PERIOD_OPTIONS = [
 ]
 
 const MODULE_KEYS = {
-  CARDAPIO_SIMPLES:  { label: 'Cardapio Simples (Base)',  icon: 'bi-list',              color: 'primary' },
-  CARDAPIO_COMPLETO: { label: 'Cardapio Completo',        icon: 'bi-list-check',        color: 'success' },
+  CARDAPIO_SIMPLES:  { label: 'Cardápio Simples (Base)',  icon: 'bi-list',              color: 'primary' },
+  CARDAPIO_COMPLETO: { label: 'Cardápio Completo',        icon: 'bi-list-check',        color: 'success' },
   RIDERS:            { label: 'Entregadores',             icon: 'bi-bicycle',           color: 'primary' },
   AFFILIATES:        { label: 'Afiliados',                icon: 'bi-people-fill',       color: 'success' },
   STOCK:             { label: 'Controle de Estoque',      icon: 'bi-box-seam',          color: 'warning' },
@@ -107,9 +107,9 @@ async function savePlan() {
 async function saveModulePrices(mod) {
   try {
     await api.put(`/saas/modules/${mod.id}`, { prices: mod.prices.map(p => ({ period: p.period, price: String(Number(p.price || 0)) })) })
-    Swal.fire({ icon: 'success', title: 'Salvo', text: `Precos de ${mod.name} atualizados`, timer: 1500, showConfirmButton: false })
+    Swal.fire({ icon: 'success', title: 'Salvo', text: `Preços de ${mod.name} atualizados`, timer: 1500, showConfirmButton: false })
   } catch (e) {
-    Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Falha ao salvar precos' })
+    Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Falha ao salvar preços' })
   }
 }
 
@@ -188,8 +188,8 @@ function periodLabel(v) {
 <template>
   <div class="container py-3">
     <div class="mb-3">
-      <h2 class="mb-0">Planos e Precos</h2>
-      <small class="text-muted">Configure o plano base, precos dos modulos e pacotes de creditos</small>
+      <h2 class="mb-0">Planos e Preços</h2>
+      <small class="text-muted">Configure o plano base, preços dos módulos e pacotes de créditos</small>
     </div>
 
     <!-- Loading -->
@@ -212,18 +212,18 @@ function periodLabel(v) {
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Nome do plano</label>
-                <input v-model="planForm.name" class="form-control" placeholder="Ex: Basico, Pro, Enterprise" />
+                <input v-model="planForm.name" class="form-control" placeholder="Ex: Básico, Pro, Enterprise" />
               </div>
               <div class="col-md-6">
-                <label class="form-label">Preco padrao (R$)</label>
+                <label class="form-label">Preço padrão (R$)</label>
                 <input v-model.number="planForm.price" type="number" step="0.01" class="form-control" />
-                <small class="text-muted">Usado se nao houver precos por periodo</small>
+                <small class="text-muted">Usado se não houver preços por período</small>
               </div>
             </div>
 
-            <!-- Precos por periodo -->
+            <!-- Preços por período -->
             <div class="mt-3">
-              <label class="form-label">Precos por periodo</label>
+              <label class="form-label">Preços por período</label>
               <div v-for="(pr, idx) in planForm.prices" :key="idx" class="d-flex gap-2 mb-2 align-items-center">
                 <select v-model="pr.period" class="form-select" style="max-width: 160px;">
                   <option v-for="opt in PERIOD_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
@@ -237,14 +237,14 @@ function periodLabel(v) {
                 </button>
               </div>
               <button class="btn btn-sm btn-outline-primary" @click.prevent="planForm.prices.push({ period: 'MONTHLY', price: 0 })">
-                <i class="bi bi-plus me-1"></i>Adicionar periodo
+                <i class="bi bi-plus me-1"></i>Adicionar período
               </button>
             </div>
 
             <!-- Limites -->
             <div class="row g-3 mt-2">
               <div class="col-md-3">
-                <label class="form-label">Limite de cardapios</label>
+                <label class="form-label">Limite de cardápios</label>
                 <input v-model.number="planForm.menuLimit" type="number" min="0" class="form-control" :disabled="planForm.unlimitedMenus" />
               </div>
               <div class="col-md-3">
@@ -254,7 +254,7 @@ function periodLabel(v) {
               <div class="col-md-6 d-flex align-items-end gap-3">
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" v-model="planForm.unlimitedMenus" id="chkMenus" />
-                  <label class="form-check-label" for="chkMenus">Cardapios ilimitados</label>
+                  <label class="form-check-label" for="chkMenus">Cardápios ilimitados</label>
                 </div>
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" v-model="planForm.unlimitedStores" id="chkStores" />
@@ -266,13 +266,13 @@ function periodLabel(v) {
             <!-- Creditos de IA -->
             <div class="row g-3 mt-2">
               <div class="col-md-3">
-                <label class="form-label">Creditos de IA / mes</label>
+                <label class="form-label">Créditos de IA / mês</label>
                 <input v-model.number="planForm.aiCreditsMonthlyLimit" type="number" min="0" class="form-control" :disabled="planForm.unlimitedAiCredits" />
               </div>
               <div class="col-md-6 d-flex align-items-end">
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" v-model="planForm.unlimitedAiCredits" id="chkAiCredits" />
-                  <label class="form-check-label" for="chkAiCredits">Creditos IA ilimitados</label>
+                  <label class="form-check-label" for="chkAiCredits">Créditos IA ilimitados</label>
                 </div>
               </div>
             </div>
@@ -292,9 +292,9 @@ function periodLabel(v) {
               <span class="h5 mb-0 text-primary">R$ {{ Number(plan.price).toFixed(2) }}</span>
             </div>
             <div class="d-flex gap-3 mb-2 small text-muted flex-wrap">
-              <span><i class="bi bi-journal-text me-1"></i>Cardapios: {{ plan.unlimitedMenus ? 'Ilimitado' : (plan.menuLimit ?? '--') }}</span>
+              <span><i class="bi bi-journal-text me-1"></i>Cardápios: {{ plan.unlimitedMenus ? 'Ilimitado' : (plan.menuLimit ?? '--') }}</span>
               <span><i class="bi bi-shop me-1"></i>Lojas: {{ plan.unlimitedStores ? 'Ilimitado' : (plan.storeLimit ?? '--') }}</span>
-              <span><i class="bi bi-stars me-1"></i>IA: {{ plan.unlimitedAiCredits ? 'Ilimitado' : ((plan.aiCreditsMonthlyLimit ?? 100) + ' creditos/mes') }}</span>
+              <span><i class="bi bi-stars me-1"></i>IA: {{ plan.unlimitedAiCredits ? 'Ilimitado' : ((plan.aiCreditsMonthlyLimit ?? 100) + ' créditos/mês') }}</span>
             </div>
             <div v-if="plan.prices && plan.prices.length" class="mb-2">
               <span v-for="pr in plan.prices" :key="pr.id" class="badge bg-info text-dark me-1">
@@ -312,12 +312,12 @@ function periodLabel(v) {
       <!-- ====== SECTION 2: Module Pricing ====== -->
       <div class="card mb-4">
         <div class="card-header">
-          <h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>Precos dos Modulos</h5>
+          <h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>Preços dos Módulos</h5>
         </div>
         <div class="card-body">
-          <p class="text-muted small mb-3">Configure os precos mensal e anual para cada modulo. Empresas podem assinar modulos individualmente.</p>
+          <p class="text-muted small mb-3">Configure os preços mensal e anual para cada módulo. Empresas podem assinar módulos individualmente.</p>
 
-          <div v-if="modules.length === 0" class="text-muted">Nenhum modulo cadastrado.</div>
+          <div v-if="modules.length === 0" class="text-muted">Nenhum módulo cadastrado.</div>
 
           <div v-for="mod in modules" :key="mod.id" class="border rounded p-3 mb-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
@@ -329,7 +329,7 @@ function periodLabel(v) {
                 <small class="text-muted">({{ mod.key }})</small>
               </div>
               <button class="btn btn-sm btn-primary" @click="saveModulePrices(mod)">
-                <i class="bi bi-check-lg me-1"></i>Salvar precos
+                <i class="bi bi-check-lg me-1"></i>Salvar preços
               </button>
             </div>
 
@@ -347,7 +347,7 @@ function periodLabel(v) {
             </div>
 
             <button class="btn btn-sm btn-outline-primary" @click.prevent="addModulePrice(mod)">
-              <i class="bi bi-plus me-1"></i>Adicionar periodo
+              <i class="bi bi-plus me-1"></i>Adicionar período
             </button>
           </div>
         </div>
@@ -356,7 +356,7 @@ function periodLabel(v) {
       <!-- ====== SECTION 3: Credit Packs ====== -->
       <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-          <h5 class="mb-0"><i class="bi bi-stars me-2"></i>Pacotes de Creditos</h5>
+          <h5 class="mb-0"><i class="bi bi-stars me-2"></i>Pacotes de Créditos</h5>
           <button v-if="!showPackForm" class="btn btn-sm btn-primary" @click="openCreatePack">
             <i class="bi bi-plus-lg me-1"></i>Novo pacote
           </button>
@@ -371,11 +371,11 @@ function periodLabel(v) {
                 <input v-model="packForm.name" class="form-control" placeholder="Ex: Pacote Starter" />
               </div>
               <div class="col-md-2">
-                <label class="form-label">Creditos</label>
+                <label class="form-label">Créditos</label>
                 <input v-model.number="packForm.credits" type="number" min="0" class="form-control" />
               </div>
               <div class="col-md-2">
-                <label class="form-label">Preco (R$)</label>
+                <label class="form-label">Preço (R$)</label>
                 <input v-model.number="packForm.price" type="number" step="0.01" class="form-control" />
               </div>
               <div class="col-md-2">
@@ -399,17 +399,17 @@ function periodLabel(v) {
 
           <!-- Pack list -->
           <div v-if="creditPacks.length === 0 && !showPackForm" class="text-muted text-center py-3">
-            Nenhum pacote de creditos cadastrado.
+            Nenhum pacote de créditos cadastrado.
           </div>
           <table v-else-if="creditPacks.length" class="table table-sm">
             <thead>
               <tr>
                 <th>Nome</th>
-                <th>Creditos</th>
-                <th>Preco</th>
+                <th>Créditos</th>
+                <th>Preço</th>
                 <th>Ordem</th>
                 <th>Ativo</th>
-                <th>Acoes</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -419,7 +419,7 @@ function periodLabel(v) {
                 <td>R$ {{ Number(pack.price).toFixed(2) }}</td>
                 <td>{{ pack.sortOrder }}</td>
                 <td>
-                  <span :class="pack.isActive ? 'badge bg-success' : 'badge bg-secondary'">{{ pack.isActive ? 'Sim' : 'Nao' }}</span>
+                  <span :class="pack.isActive ? 'badge bg-success' : 'badge bg-secondary'">{{ pack.isActive ? 'Sim' : 'Não' }}</span>
                 </td>
                 <td>
                   <button class="btn btn-sm btn-outline-secondary me-1" @click="openEditPack(pack)">

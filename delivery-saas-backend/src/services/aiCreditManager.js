@@ -217,17 +217,8 @@ export async function debitCredits(companyId, serviceKey, quantity = 1, metadata
  * Atualiza a data do último reset.
  */
 export async function resetCompanyCredits(companyId) {
-  const { monthlyLimit } = await getBalance(companyId)
-
-  await prisma.company.update({
-    where: { id: companyId },
-    data: {
-      aiCreditsBalance: monthlyLimit,
-      aiCreditsLastReset: new Date(),
-    },
-  })
-
-  return { monthlyLimit }
+  console.log(`[aiCreditManager] resetCompanyCredits(${companyId}): no-op (new billing model)`)
+  return { ok: true }
 }
 
 /**
