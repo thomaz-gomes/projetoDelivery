@@ -24,7 +24,6 @@ import RiderAccount from './views/RiderAccount.vue';
 import RiderAccountAdmin from './views/RiderAccountAdmin.vue';
 import api from './api';
 import { useAuthStore } from './stores/auth';
-import { useSaasStore } from './stores/saas';
 import RiderAdjustments from './views/RiderAdjustments.vue';
 import CustomersList from './views/CustomersList.vue';
 import CustomerForm from './views/CustomerForm.vue';
@@ -298,11 +297,14 @@ router.beforeEach(async (to) => {
       const auth = useAuthStore()
       const userRole = String(auth.user?.role || '').toUpperCase()
       if (userRole === 'ADMIN') {
-        const saas = useSaasStore()
-        if (!saas.subscription) {
-          try { await saas.fetchMySubscription() } catch {}
+        const { useModulesStore } = await import('./stores/modules')
+        const modules = useModulesStore()
+        if (!modules.enabled.length) {
+          try { await modules.fetchEnabled() } catch {}
         }
-        if (saas.isCardapioSimplesOnly) return { path: '/menu/menus' }
+        const hasSimples = modules.has('CARDAPIO_SIMPLES')
+        const hasCompleto = modules.has('CARDAPIO_COMPLETO')
+        if (hasSimples && !hasCompleto) return { path: '/menu/menus' }
       }
     }
   }
