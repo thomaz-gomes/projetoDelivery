@@ -456,6 +456,12 @@ async function saveMpConfig() {
                 </div>
               </div>
             </div>
+            <!-- Split breakdown em tempo real -->
+            <div v-if="packForm.credits > 0 && packForm.price > 0" class="mt-2 small text-muted">
+              <i class="bi bi-diagram-3 me-1"></i>
+              Split: R$ {{ (packForm.credits * CREDIT_SPLIT_RATE).toFixed(2) }} plataforma
+              &middot; R$ {{ Math.max(0, Number(packForm.price) - packForm.credits * CREDIT_SPLIT_RATE).toFixed(2) }} para você
+            </div>
             <div class="mt-3 d-flex gap-2">
               <button class="btn btn-primary" @click="savePack">
                 <i class="bi bi-check-lg me-1"></i>{{ editingPackId ? 'Salvar' : 'Criar' }}
