@@ -80,7 +80,7 @@ ordersRouter.get('/', async (req, res) => {
 
 // POST atribuir entregador manualmente
 // allow ADMIN and store-level users to assign riders
-ordersRouter.post('/:id/assign', requireRole('ADMIN','STORE'), async (req, res) => {
+ordersRouter.post('/:id/assign', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (req, res) => {
   const { id } = req.params;
   const { riderId, riderPhone, alsoSetStatus } = req.body || {};
   if (!riderId && !riderPhone) return res.status(400).json({ message: 'Informe riderId ou riderPhone' });
@@ -247,7 +247,7 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
 });
 
 // Admin: edit order details (customer, address, items, payment, notes)
-ordersRouter.patch('/:id', requireRole('ADMIN', 'STORE'), async (req, res) => {
+ordersRouter.patch('/:id', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (req, res) => {
   const { id } = req.params;
   const companyId = req.user.companyId;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
@@ -308,7 +308,7 @@ ordersRouter.patch('/:id', requireRole('ADMIN', 'STORE'), async (req, res) => {
 
 // Admin: patch order status (manual change)
 // allow ADMIN and store-level users to change status from the admin panel / PDV
-ordersRouter.patch('/:id/status', requireRole('ADMIN', 'STORE'), async (req, res) => {
+ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (req, res) => {
   const { id } = req.params;
   const { status, cancellationCode } = req.body || {};
   const companyId = req.user.companyId;
@@ -630,7 +630,7 @@ ordersRouter.post('/:id/refresh-ifood', async (req, res) => {
 });
 
 // PDV create route (previously the opening wrapper was missing)
-ordersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
+ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const companyId = req.user.companyId;
   try {
     // Aceitar tanto `type` (legado) quanto `orderType` (frontend atual)
