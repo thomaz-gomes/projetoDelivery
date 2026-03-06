@@ -68,6 +68,8 @@ const leafletError = ref('')
 
 let map = null
 let markersMap = {} // riderId -> L.marker
+let circlesMap = {} // riderId -> L.circle (accuracy radius)
+let staleCheckInterval = null
 let socket = null
 let pollInterval = null
 let L = null
@@ -125,20 +127,50 @@ function updateMarker(pos) {
   const lng = Number(pos.lng)
   if (isNaN(lat) || isNaN(lng)) return
 
+  const accuracy = pos.accuracy ? Number(pos.accuracy) : null
   const popupHtml = `
-    <div style="min-width:120px">
+    <div style="min-width:140px">
       <strong>${name}</strong><br>
       <small class="text-muted">Atualizado: ${formatTime(pos.updatedAt)}</small>
       ${pos.orderId ? `<br><small>Pedido: ${pos.orderId.slice(0,8)}...</small>` : ''}
+      ${accuracy ? `<br><small>Precisão: ~${Math.round(accuracy)}m</small>` : ''}
+      <hr style="margin:4px 0">
+      <button onclick="window.__hideRider__('${riderId}')" class="btn btn-sm btn-outline-danger w-100">
+        <i class="bi bi-eye-slash me-1"></i>Ocultar do mapa
+      </button>
     </div>`
 
   if (markersMap[riderId]) {
     markersMap[riderId].setLatLng([lat, lng])
     markersMap[riderId].getPopup()?.setContent(popupHtml)
+    markersMap[riderId].setOpacity(1) // reset stale opacity
   } else {
     markersMap[riderId] = L.marker([lat, lng], { icon: riderIcon() })
       .bindPopup(popupHtml)
       .addTo(map)
+  }
+
+  // Store last update timestamp for stale detection
+  markersMap[riderId]._lastUpdate = new Date(pos.updatedAt || Date.now()).getTime()
+
+  // Accuracy circle
+  if (accuracy && accuracy > 0) {
+    if (circlesMap[riderId]) {
+      circlesMap[riderId].setLatLng([lat, lng])
+      circlesMap[riderId].setRadius(accuracy)
+    } else {
+      circlesMap[riderId] = L.circle([lat, lng], {
+        radius: accuracy,
+        color: '#0d6efd',
+        fillColor: '#0d6efd',
+        fillOpacity: 0.1,
+        weight: 1,
+        opacity: 0.3,
+      }).addTo(map)
+    }
+  } else if (circlesMap[riderId]) {
+    map.removeLayer(circlesMap[riderId])
+    delete circlesMap[riderId]
   }
 }
 
@@ -147,6 +179,28 @@ function removeStaleMarkers(activeIds) {
     if (!activeIds.includes(id)) {
       map.removeLayer(markersMap[id])
       delete markersMap[id]
+      if (circlesMap[id]) {
+        map.removeLayer(circlesMap[id])
+        delete circlesMap[id]
+      }
+    }
+  }
+}
+
+function checkStaleMarkers() {
+  const now = Date.now()
+  for (const [riderId, marker] of Object.entries(markersMap)) {
+    const lastUpdate = marker._lastUpdate || 0
+    const ageMs = now - lastUpdate
+    if (ageMs > 5 * 60 * 1000) {
+      // 5+ minutes: remove from map
+      removeMarker(riderId)
+    } else if (ageMs > 2 * 60 * 1000) {
+      // 2+ minutes: reduce opacity
+      marker.setOpacity(0.5)
+      if (circlesMap[riderId]) {
+        circlesMap[riderId].setStyle({ fillOpacity: 0.05, opacity: 0.15 })
+      }
     }
   }
 }
@@ -176,6 +230,10 @@ function removeMarker(riderId) {
   if (markersMap[riderId] && map) {
     map.removeLayer(markersMap[riderId])
     delete markersMap[riderId]
+  }
+  if (circlesMap[riderId] && map) {
+    map.removeLayer(circlesMap[riderId])
+    delete circlesMap[riderId]
   }
   positions.value = positions.value.filter(p => (p.riderId || p.rider?.id) !== riderId)
 }
@@ -229,14 +287,28 @@ onMounted(async () => {
 
   ensureSocket()
 
+  // Global handler for hide button in popup
+  window.__hideRider__ = async (riderId) => {
+    try {
+      await api.put(`/riders/${riderId}/position/hide`, { hidden: true })
+      removeMarker(riderId)
+    } catch (e) {
+      console.warn('Failed to hide rider:', e)
+    }
+  }
+
   // Polling fallback every 15s
   pollInterval = setInterval(loadPositions, 15000)
+  staleCheckInterval = setInterval(checkStaleMarkers, 30000)
 })
 
 onUnmounted(() => {
   try { socket?.disconnect() } catch (e) {}
   if (pollInterval) clearInterval(pollInterval)
+  if (staleCheckInterval) clearInterval(staleCheckInterval)
   if (map) { map.remove(); map = null }
   markersMap = {}
+  circlesMap = {}
+  delete window.__hideRider__
 })
 </script>
