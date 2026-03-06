@@ -25,7 +25,7 @@ const ALL_MODULES = [
 ];
 
 // Modules every company should have active by default
-const DEFAULT_MODULES = ['CARDAPIO_SIMPLES', 'CARDAPIO_COMPLETO'];
+const DEFAULT_MODULES = ['CARDAPIO_SIMPLES', 'CARDAPIO_COMPLETO', 'RIDERS'];
 
 async function main() {
   // 1. Upsert all SaasModule records
