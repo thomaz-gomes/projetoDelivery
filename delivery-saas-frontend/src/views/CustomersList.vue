@@ -71,7 +71,7 @@ const prevPage = () => { if(offset.value > 0){ offset.value = Math.max(0, offset
 
 const displayed = computed(() => store.list || [])
 
-function editCustomer(id){ router.push(`/customers/${id}/edit`) }
+function editCustomer(id){ router.push(`/customers/${id}`) }
 
 const tierColors = {
   em_risco: '#dc3545',

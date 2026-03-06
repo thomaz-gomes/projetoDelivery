@@ -44,6 +44,11 @@ export const useCustomersStore = defineStore('customers', {
       });
       return data;
     },
+    async addAddress(customerId, payload) {
+      const { data } = await api.post(`/customers/${customerId}/addresses`, payload);
+      await this.get(customerId);
+      return data;
+    },
     async setDefaultAddress(customerId, addressId) {
       await api.patch(`/customers/${customerId}/addresses/${addressId}/default`);
       await this.get(customerId);

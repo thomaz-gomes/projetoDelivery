@@ -690,20 +690,22 @@ customersRouter.post('/merge', requireRole('ADMIN'), async (req, res) => {
       } catch(e) { /* ignore if no table or other issues */ }
 
       // Diagnostic: check for any remaining FK references before delete
-      const tables = await tx.$queryRawUnsafe("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+      const tables = await tx.$queryRawUnsafe(`
+        SELECT table_name, column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND lower(column_name) IN ('customerid', 'clientid', 'customer_id', 'client_id')
+      `);
       const fkProblems = [];
       for (const trow of tables) {
-        const table = trow.name;
+        const table = trow.table_name;
+        const col = trow.column_name;
         try {
-          const cols = await tx.$queryRawUnsafe(`PRAGMA table_info('${table}')`);
-          const candidateCols = cols.filter(c => /customerid|clientid|customer_id|client_id/i.test(String(c.name))).map(c => c.name);
-          for (const col of candidateCols) {
-            const placeholders = validIds.map(() => '?').join(',');
-            const q = `SELECT count(*) as cnt FROM "${table}" WHERE \"${col}\" IN (${placeholders})`;
-            const cntRow = await tx.$queryRawUnsafe(q, ...validIds);
-            const cnt = Number(cntRow?.[0]?.cnt ?? cntRow?.cnt ?? 0);
-            if (cnt > 0) fkProblems.push({ table, column: col, count: cnt });
-          }
+          const placeholders = validIds.map((_, i) => `$${i + 1}`).join(',');
+          const q = `SELECT count(*)::int as cnt FROM "${table}" WHERE "${col}" IN (${placeholders})`;
+          const cntRow = await tx.$queryRawUnsafe(q, ...validIds);
+          const cnt = Number(cntRow?.[0]?.cnt ?? 0);
+          if (cnt > 0) fkProblems.push({ table, column: col, count: cnt });
         } catch (e) {
           // ignore inspection errors
         }

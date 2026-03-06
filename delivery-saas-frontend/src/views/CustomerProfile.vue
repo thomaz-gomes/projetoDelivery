@@ -3,6 +3,7 @@ import { ref, onMounted, computed, reactive } from 'vue';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
 import { useRoute } from 'vue-router';
 import { useCustomersStore } from '../stores/customers';
+import { applyPhoneMask } from '../utils/phoneMask';
 import BaseButton from '../components/BaseButton.vue';
 import TextInput from '../components/form/input/TextInput.vue';
 import Swal from 'sweetalert2';
@@ -18,9 +19,49 @@ const ordersPage = ref(1);
 const ordersPerPage = 10;
 const totalOrderPages = computed(() => Math.ceil(store.ordersTotal / ordersPerPage));
 
+// Inline edit for customer data
+const editingData = ref(false);
+const dataForm = reactive({ fullName: '', cpf: '', whatsapp: '', phone: '' });
+
+function openEditData() {
+  const c = store.current;
+  Object.assign(dataForm, {
+    fullName: c.fullName || '',
+    cpf: c.cpf || '',
+    whatsapp: c.whatsapp || '',
+    phone: c.phone || '',
+  });
+  editingData.value = true;
+}
+
+async function saveData() {
+  try {
+    await store.update(store.current.id, { ...dataForm });
+    await store.get(store.current.id);
+    editingData.value = false;
+    Swal.fire({ icon: 'success', text: 'Dados atualizados', timer: 1500, showConfirmButton: false });
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao salvar' });
+  }
+}
+
+function handleWhatsAppInput(e) {
+  dataForm.whatsapp = applyPhoneMask(e.target.value);
+}
+function handlePhoneInput(e) {
+  dataForm.phone = applyPhoneMask(e.target.value);
+}
+
 // Address edit modal
 const editingAddress = ref(null);
 const editForm = reactive({
+  label: '', street: '', number: '', complement: '', neighborhood: '',
+  reference: '', observation: '', city: '', state: '', postalCode: '',
+});
+
+// New address modal
+const addingAddress = ref(false);
+const newAddrForm = reactive({
   label: '', street: '', number: '', complement: '', neighborhood: '',
   reference: '', observation: '', city: '', state: '', postalCode: '',
 });
@@ -50,7 +91,7 @@ function starsHtml(stars) {
 }
 
 function statusLabel(s) {
-  const map = { EM_PREPARO: 'Em preparo', SAIU_PARA_ENTREGA: 'Saiu p/ entrega', CONFIRMACAO_PAGAMENTO: 'Conf. pagamento', CONCLUIDO: 'Concluído', CANCELADO: 'Cancelado', INVOICE_AUTHORIZED: 'NF-e emitida' };
+  const map = { EM_PREPARO: 'Em preparo', SAIU_PARA_ENTREGA: 'Saiu p/ entrega', CONFIRMACAO_PAGAMENTO: 'Conf. pagamento', CONCLUIDO: 'Concluido', CANCELADO: 'Cancelado', INVOICE_AUTHORIZED: 'NF-e emitida' };
   return map[s] || s;
 }
 
@@ -64,7 +105,7 @@ async function setDefault(addressId) {
   try {
     await store.setDefaultAddress(store.current.id, addressId);
   } catch (e) {
-    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao definir endereço padrão' });
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao definir endereco padrao' });
   }
 }
 
@@ -88,7 +129,7 @@ async function saveAddress() {
   try {
     await store.updateAddress(store.current.id, editingAddress.value.id, { ...editForm });
     editingAddress.value = null;
-    Swal.fire({ icon: 'success', text: 'Endereço atualizado', timer: 1500, showConfirmButton: false });
+    Swal.fire({ icon: 'success', text: 'Endereco atualizado', timer: 1500, showConfirmButton: false });
   } catch (e) {
     Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao salvar' });
   }
@@ -96,8 +137,8 @@ async function saveAddress() {
 
 async function deleteAddress(address) {
   const r = await Swal.fire({
-    title: 'Excluir endereço?',
-    text: address.formatted || [address.street, address.number].filter(Boolean).join(', ') || 'Este endereço',
+    title: 'Excluir endereco?',
+    text: address.formatted || [address.street, address.number].filter(Boolean).join(', ') || 'Este endereco',
     icon: 'warning',
     showCancelButton: true,
     confirmButtonText: 'Excluir',
@@ -107,9 +148,27 @@ async function deleteAddress(address) {
   if (!r.isConfirmed) return;
   try {
     await store.deleteAddress(store.current.id, address.id);
-    Swal.fire({ icon: 'success', text: 'Endereço removido', timer: 1500, showConfirmButton: false });
+    Swal.fire({ icon: 'success', text: 'Endereco removido', timer: 1500, showConfirmButton: false });
   } catch (e) {
     Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao excluir' });
+  }
+}
+
+function openAddAddress() {
+  Object.assign(newAddrForm, {
+    label: '', street: '', number: '', complement: '', neighborhood: '',
+    reference: '', observation: '', city: '', state: '', postalCode: '',
+  });
+  addingAddress.value = true;
+}
+
+async function saveNewAddress() {
+  try {
+    await store.addAddress(store.current.id, { ...newAddrForm });
+    addingAddress.value = false;
+    Swal.fire({ icon: 'success', text: 'Endereco adicionado', timer: 1500, showConfirmButton: false });
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao adicionar endereco' });
   }
 }
 
@@ -155,11 +214,11 @@ async function manualCredit() {
     await api.post('/cashback/credit', {
       clientId: store.current.id,
       amount,
-      description: manualCashbackDesc.value || 'Crédito manual (admin)',
+      description: manualCashbackDesc.value || 'Credito manual (admin)',
     });
     manualCashbackAmount.value = '';
     manualCashbackDesc.value = '';
-    Swal.fire({ icon: 'success', text: 'Crédito adicionado', timer: 1500, showConfirmButton: false });
+    Swal.fire({ icon: 'success', text: 'Credito adicionado', timer: 1500, showConfirmButton: false });
     await loadCashback();
   } catch (e) {
     Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao creditar' });
@@ -174,11 +233,11 @@ async function manualDebit() {
     await api.post('/cashback/debit', {
       clientId: store.current.id,
       amount,
-      description: manualCashbackDesc.value || 'Débito manual (admin)',
+      description: manualCashbackDesc.value || 'Debito manual (admin)',
     });
     manualCashbackAmount.value = '';
     manualCashbackDesc.value = '';
-    Swal.fire({ icon: 'success', text: 'Débito realizado', timer: 1500, showConfirmButton: false });
+    Swal.fire({ icon: 'success', text: 'Debito realizado', timer: 1500, showConfirmButton: false });
     await loadCashback();
   } catch (e) {
     Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao debitar' });
@@ -188,7 +247,7 @@ async function manualDebit() {
 
 <template>
   <div v-if="store.current" class="container py-4">
-    <!-- Cabeçalho -->
+    <!-- Cabecalho -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
       <div class="d-flex align-items-center gap-3">
         <div class="profile-avatar" :style="{ background: currentTier.bg, color: currentTier.color }">
@@ -208,12 +267,6 @@ async function manualDebit() {
         <BaseButton variant="outline" @click="$router.push('/customers')">
           <i class="bi bi-arrow-left me-1"></i> Voltar
         </BaseButton>
-        <BaseButton variant="primary" @click="$router.push(`/customers/${store.current.id}/edit`)">
-          <i class="bi bi-pencil me-1"></i> Editar
-        </BaseButton>
-        <BaseButton variant="success" @click="$router.push(`/customers/${store.current.id}/edit?addAddress=1`)">
-          <i class="bi bi-geo-alt me-1"></i> Novo endereço
-        </BaseButton>
       </div>
     </div>
 
@@ -223,12 +276,12 @@ async function manualDebit() {
         <div class="stat-card" style="border-left: 4px solid #198754;">
           <div class="stat-label">Total gasto</div>
           <div class="stat-value text-success">{{ formatCurrency(stats.totalSpent || 0) }}</div>
-          <div class="stat-sub">{{ stats.totalOrders || 0 }} pedidos concluídos</div>
+          <div class="stat-sub">{{ stats.totalOrders || 0 }} pedidos concluidos</div>
         </div>
       </div>
       <div class="col-md-3 col-6">
         <div class="stat-card" style="border-left: 4px solid #0d6efd;">
-          <div class="stat-label">Último pedido</div>
+          <div class="stat-label">Ultimo pedido</div>
           <div class="stat-value text-primary">{{ formatDate(stats.lastOrderDate) }}</div>
           <div class="stat-sub">{{ store.current.orders?.length || 0 }} pedidos no total</div>
         </div>
@@ -242,7 +295,7 @@ async function manualDebit() {
       </div>
       <div class="col-md-3 col-6">
         <div class="stat-card" :style="{ borderLeft: '4px solid ' + currentTier.color }">
-          <div class="stat-label">Classificação</div>
+          <div class="stat-label">Classificacao</div>
           <div class="stat-value" :style="{ color: currentTier.color }">
             {{ starsHtml(stats.stars) }}
           </div>
@@ -257,7 +310,7 @@ async function manualDebit() {
     <ul class="nav nav-tabs mb-4">
       <li class="nav-item">
         <a class="nav-link" :class="{ active: activeTab === 'dados' }" href="#" @click.prevent="activeTab = 'dados'">
-          <i class="bi bi-person-vcard me-1"></i> Dados / Endereços
+          <i class="bi bi-person-vcard me-1"></i> Dados / Enderecos
         </a>
       </li>
       <li class="nav-item">
@@ -273,44 +326,78 @@ async function manualDebit() {
       </li>
     </ul>
 
-    <!-- Tab: Dados / Endereços -->
+    <!-- Tab: Dados / Enderecos -->
     <div v-show="activeTab === 'dados'">
       <div class="row g-4">
+        <!-- Dados do cliente -->
         <div class="col-lg-6">
           <div class="card">
-            <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
-              <i class="bi bi-person-vcard text-primary"></i> Dados do cliente
+            <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-person-vcard text-primary"></i> Dados do cliente
+              </div>
+              <button v-if="!editingData" class="btn btn-sm btn-outline-primary" @click="openEditData" title="Editar dados">
+                <i class="bi bi-pencil"></i>
+              </button>
             </div>
             <div class="card-body">
-              <div class="row g-3">
-                <div class="col-sm-3">
+              <!-- Modo visualizacao -->
+              <div v-if="!editingData" class="row g-3">
+                <div class="col-sm-6">
+                  <div class="info-label">Nome</div>
+                  <div class="info-value">{{ store.current.fullName || '\u2014' }}</div>
+                </div>
+                <div class="col-sm-6">
                   <div class="info-label">CPF</div>
-                  <div class="info-value">{{ store.current.cpf || '—' }}</div>
+                  <div class="info-value">{{ store.current.cpf || '\u2014' }}</div>
                 </div>
-                <div class="col-sm-3">
+                <div class="col-sm-6">
                   <div class="info-label">WhatsApp</div>
-                  <div class="info-value">{{ store.current.whatsapp || '—' }}</div>
+                  <div class="info-value">{{ store.current.whatsapp || '\u2014' }}</div>
                 </div>
-                <div class="col-sm-3">
+                <div class="col-sm-6">
                   <div class="info-label">Telefone</div>
-                  <div class="info-value">{{ store.current.phone || '—' }}</div>
+                  <div class="info-value">{{ store.current.phone || '\u2014' }}</div>
                 </div>
-                <div class="col-sm-3">
+                <div v-if="store.current.ifoodCustomerId" class="col-sm-6">
                   <div class="info-label">iFood ID</div>
-                  <div class="info-value">{{ store.current.ifoodCustomerId || '—' }}</div>
+                  <div class="info-value">{{ store.current.ifoodCustomerId }}</div>
+                </div>
+              </div>
+              <!-- Modo edicao -->
+              <div v-else class="row g-3">
+                <div class="col-sm-6">
+                  <TextInput label="Nome" v-model="dataForm.fullName" inputClass="form-control" />
+                </div>
+                <div class="col-sm-6">
+                  <TextInput label="CPF" v-model="dataForm.cpf" placeholder="000.000.000-00" inputClass="form-control" />
+                </div>
+                <div class="col-sm-6">
+                  <TextInput label="WhatsApp" v-model="dataForm.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" />
+                </div>
+                <div class="col-sm-6">
+                  <TextInput label="Telefone" v-model="dataForm.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" />
+                </div>
+                <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+                  <BaseButton variant="outline" size="sm" @click="editingData = false">Cancelar</BaseButton>
+                  <BaseButton variant="primary" size="sm" @click="saveData">Salvar</BaseButton>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
+        <!-- Enderecos -->
         <div class="col-lg-6">
           <div class="card">
             <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
               <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-geo-alt text-primary"></i> Endereços
+                <i class="bi bi-geo-alt text-primary"></i> Enderecos
                 <span class="badge bg-light text-dark">{{ store.current.addresses?.length || 0 }}</span>
               </div>
+              <button class="btn btn-sm btn-outline-success" @click="openAddAddress" title="Novo endereco">
+                <i class="bi bi-plus-lg me-1"></i> Novo
+              </button>
             </div>
             <div class="card-body p-0">
               <div
@@ -327,23 +414,23 @@ async function manualDebit() {
                         name="default-addr"
                         :checked="a.isDefault"
                         @change="setDefault(a.id)"
-                        title="Definir como padrão"
+                        title="Definir como padrao"
                       />
                     </div>
                     <div>
                       <div class="fw-medium">
-                        {{ a.label || 'Endereço ' + (i + 1) }}
-                        <span v-if="a.isDefault" class="badge bg-success-subtle text-success ms-1">Padrão</span>
+                        {{ a.label || 'Endereco ' + (i + 1) }}
+                        <span v-if="a.isDefault" class="badge bg-success-subtle text-success ms-1">Padrao</span>
                       </div>
                       <div class="mt-1">
                         <div v-if="a.formatted && !a.street">{{ a.formatted }}</div>
                         <div v-else>
                           {{ [a.street, a.number].filter(Boolean).join(', ') }}
-                          <span v-if="a.complement"> — {{ a.complement }}</span>
+                          <span v-if="a.complement"> &mdash; {{ a.complement }}</span>
                         </div>
                       </div>
                       <div class="small text-muted mt-1">
-                        <span v-if="a.neighborhood">{{ a.neighborhood }} — </span>
+                        <span v-if="a.neighborhood">{{ a.neighborhood }} &mdash; </span>
                         <span v-if="a.city || a.state">{{ [a.city, a.state].filter(Boolean).join('/') }}</span>
                         <span v-if="(a.postalCode || a.zip || a.postal_code)"> | CEP {{ a.postalCode || a.zip || a.postal_code }}</span>
                       </div>
@@ -368,7 +455,7 @@ async function manualDebit() {
                 v-if="!store.current.addresses?.length"
                 class="text-muted text-center py-4 small"
               >
-                Nenhum endereço cadastrado.
+                Nenhum endereco cadastrado.
               </div>
             </div>
           </div>
@@ -417,10 +504,10 @@ async function manualDebit() {
           </div>
         </div>
 
-        <!-- Paginação -->
+        <!-- Paginacao -->
         <div v-if="totalOrderPages > 1" class="d-flex justify-content-between align-items-center p-3 border-top">
           <div class="text-muted small">
-            Página {{ ordersPage }} de {{ totalOrderPages }} ({{ store.ordersTotal }} pedidos)
+            Pagina {{ ordersPage }} de {{ totalOrderPages }} ({{ store.ordersTotal }} pedidos)
           </div>
           <nav>
             <ul class="pagination pagination-sm mb-0">
@@ -436,7 +523,7 @@ async function manualDebit() {
                 <button class="page-link" @click="loadOrders(p)">{{ p }}</button>
               </li>
               <li class="page-item" :class="{ disabled: ordersPage >= totalOrderPages }">
-                <button class="page-link" @click="loadOrders(ordersPage + 1)" :disabled="ordersPage >= totalOrderPages">Próxima</button>
+                <button class="page-link" @click="loadOrders(ordersPage + 1)" :disabled="ordersPage >= totalOrderPages">Proxima</button>
               </li>
             </ul>
           </nav>
@@ -460,13 +547,13 @@ async function manualDebit() {
                   <div class="fs-3 fw-bold text-success">{{ formatCurrency(cashbackBalance) }}</div>
                 </div>
                 <hr>
-                <div class="small fw-semibold mb-2">Crédito / Débito manual</div>
+                <div class="small fw-semibold mb-2">Credito / Debito manual</div>
                 <div class="row g-2 mb-2">
                   <div class="col-12">
                     <TextInput label="Valor (R$)" v-model="manualCashbackAmount" type="number" step="0.01" min="0" inputClass="form-control" />
                   </div>
                   <div class="col-12">
-                    <TextInput label="Descrição (opcional)" v-model="manualCashbackDesc" inputClass="form-control" />
+                    <TextInput label="Descricao (opcional)" v-model="manualCashbackDesc" inputClass="form-control" />
                   </div>
                 </div>
                 <div class="d-flex gap-2">
@@ -485,13 +572,13 @@ async function manualDebit() {
         <div class="col-lg-7">
           <div class="card">
             <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
-              <i class="bi bi-clock-history text-primary"></i> Histórico de Transações
+              <i class="bi bi-clock-history text-primary"></i> Historico de Transacoes
               <span class="badge bg-light text-dark">{{ cashbackTransactions.length }}</span>
             </div>
             <div class="card-body p-0">
               <div v-if="cashbackLoading" class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div></div>
               <div v-else-if="!cashbackTransactions.length" class="text-muted text-center py-4 small">
-                Nenhuma transação de cashback encontrada.
+                Nenhuma transacao de cashback encontrada.
               </div>
               <div v-else>
                 <div
@@ -503,10 +590,10 @@ async function manualDebit() {
                     <div>
                       <div class="fw-medium">
                         <span :class="t.type === 'CREDIT' ? 'text-success' : 'text-danger'">
-                          {{ t.type === 'CREDIT' ? 'Crédito' : 'Débito' }}
+                          {{ t.type === 'CREDIT' ? 'Credito' : 'Debito' }}
                         </span>
                       </div>
-                      <div class="small text-muted">{{ t.description || '—' }}</div>
+                      <div class="small text-muted">{{ t.description || '\u2014' }}</div>
                       <div class="small text-muted">{{ formatDate(t.createdAt) }}</div>
                     </div>
                     <div class="text-end">
@@ -523,51 +610,95 @@ async function manualDebit() {
       </div>
     </div>
 
-    <!-- Modal: Editar Endereço -->
+    <!-- Modal: Editar Endereco -->
     <div v-if="editingAddress" class="modal-overlay" @click.self="editingAddress = null">
       <div class="modal-box">
         <div class="d-flex justify-content-between align-items-center mb-3">
-          <h5 class="mb-0">Editar Endereço</h5>
+          <h5 class="mb-0">Editar Endereco</h5>
           <button class="btn-close" @click="editingAddress = null"></button>
         </div>
-        <form @submit.prevent="saveAddress">
-          <div class="row g-2">
-            <div class="col-12">
-              <TextInput label="Rótulo" v-model="editForm.label" placeholder="Casa, Trabalho..." inputClass="form-control" />
-            </div>
-            <div class="col-8">
-              <TextInput label="Rua" v-model="editForm.street" inputClass="form-control" />
-            </div>
-            <div class="col-4">
-              <TextInput label="Número" v-model="editForm.number" inputClass="form-control" />
-            </div>
-            <div class="col-6">
-              <TextInput label="Complemento" v-model="editForm.complement" inputClass="form-control" />
-            </div>
-            <div class="col-6">
-              <TextInput label="Bairro" v-model="editForm.neighborhood" inputClass="form-control" />
-            </div>
-            <div class="col-6">
-              <TextInput label="Cidade" v-model="editForm.city" inputClass="form-control" />
-            </div>
-            <div class="col-3">
-              <TextInput label="UF" v-model="editForm.state" maxlength="2" inputClass="form-control text-uppercase" />
-            </div>
-            <div class="col-3">
-              <TextInput label="CEP" v-model="editForm.postalCode" inputClass="form-control" />
-            </div>
-            <div class="col-6">
-              <TextInput label="Referência" v-model="editForm.reference" inputClass="form-control" />
-            </div>
-            <div class="col-6">
-              <TextInput label="Observação" v-model="editForm.observation" inputClass="form-control" />
-            </div>
+        <div class="row g-2">
+          <div class="col-12">
+            <TextInput label="Rotulo" v-model="editForm.label" placeholder="Casa, Trabalho..." inputClass="form-control" />
           </div>
-          <div class="d-flex justify-content-end gap-2 mt-3">
-            <BaseButton variant="outline" type="button" @click="editingAddress = null">Cancelar</BaseButton>
-            <BaseButton variant="primary" type="submit">Salvar</BaseButton>
+          <div class="col-8">
+            <TextInput label="Rua" v-model="editForm.street" inputClass="form-control" />
           </div>
-        </form>
+          <div class="col-4">
+            <TextInput label="Numero" v-model="editForm.number" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Complemento" v-model="editForm.complement" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Bairro" v-model="editForm.neighborhood" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Cidade" v-model="editForm.city" inputClass="form-control" />
+          </div>
+          <div class="col-3">
+            <TextInput label="UF" v-model="editForm.state" maxlength="2" inputClass="form-control text-uppercase" />
+          </div>
+          <div class="col-3">
+            <TextInput label="CEP" v-model="editForm.postalCode" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Referencia" v-model="editForm.reference" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Observacao" v-model="editForm.observation" inputClass="form-control" />
+          </div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <BaseButton variant="outline" @click="editingAddress = null">Cancelar</BaseButton>
+          <BaseButton variant="primary" @click="saveAddress">Salvar</BaseButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Novo Endereco -->
+    <div v-if="addingAddress" class="modal-overlay" @click.self="addingAddress = false">
+      <div class="modal-box">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Novo Endereco</h5>
+          <button class="btn-close" @click="addingAddress = false"></button>
+        </div>
+        <div class="row g-2">
+          <div class="col-12">
+            <TextInput label="Rotulo" v-model="newAddrForm.label" placeholder="Casa, Trabalho..." inputClass="form-control" />
+          </div>
+          <div class="col-8">
+            <TextInput label="Rua" v-model="newAddrForm.street" inputClass="form-control" />
+          </div>
+          <div class="col-4">
+            <TextInput label="Numero" v-model="newAddrForm.number" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Complemento" v-model="newAddrForm.complement" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Bairro" v-model="newAddrForm.neighborhood" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Cidade" v-model="newAddrForm.city" inputClass="form-control" />
+          </div>
+          <div class="col-3">
+            <TextInput label="UF" v-model="newAddrForm.state" maxlength="2" inputClass="form-control text-uppercase" />
+          </div>
+          <div class="col-3">
+            <TextInput label="CEP" v-model="newAddrForm.postalCode" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Referencia" v-model="newAddrForm.reference" inputClass="form-control" />
+          </div>
+          <div class="col-6">
+            <TextInput label="Observacao" v-model="newAddrForm.observation" inputClass="form-control" />
+          </div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <BaseButton variant="outline" @click="addingAddress = false">Cancelar</BaseButton>
+          <BaseButton variant="primary" @click="saveNewAddress">Salvar</BaseButton>
+        </div>
       </div>
     </div>
 
@@ -597,7 +728,7 @@ async function manualDebit() {
         </div>
 
         <div v-if="selectedOrder.address" class="mb-3">
-          <div class="info-label">Endereço de entrega</div>
+          <div class="info-label">Endereco de entrega</div>
           <div class="info-value">{{ selectedOrder.address }}</div>
         </div>
 
@@ -617,7 +748,7 @@ async function manualDebit() {
             <tr>
               <th>Qtd</th>
               <th>Item</th>
-              <th class="text-end">Preço</th>
+              <th class="text-end">Preco</th>
               <th class="text-end">Subtotal</th>
             </tr>
           </thead>

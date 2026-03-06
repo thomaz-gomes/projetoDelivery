@@ -8,6 +8,7 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   block: { type: Boolean, default: false },
   icon: { type: String, default: '' },           // emoji/char opcional
+  type: { type: String, default: 'button' },     // button, submit, reset
 });
 
 // Mapeia variantes para classes do Bootstrap
@@ -46,7 +47,7 @@ const baseClass = computed(() => {
     :disabled="disabled || loading"
     :aria-disabled="disabled || loading"
     :aria-busy="loading ? 'true' : 'false'"
-    type="button"
+    :type="type"
   >
     <!-- Spinner Bootstrap -->
     <span

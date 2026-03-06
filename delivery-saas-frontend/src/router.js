@@ -121,7 +121,6 @@ const router = createRouter({
     { path: '/orders/:id/receipt', component: Receipt, meta: { requiresAuth: true } },
   { path: '/customers', component: CustomersList, meta: { requiresAuth: true } },
   { path: '/customers/new', component: CustomerForm, meta: { requiresAuth: true } },
-  { path: '/customers/:id/edit', component: CustomerForm, meta: { requiresAuth: true } },
   { path: '/customers/:id', component: CustomerProfile, meta: { requiresAuth: true } },
   { path: '/customer-groups', component: CustomerGroupsList, meta: { requiresAuth: true } },
   { path: '/customer-groups/new', component: CustomerGroupForm, meta: { requiresAuth: true } },
