@@ -465,6 +465,9 @@ function ensureSocket(){
             const { data } = await api.get(`/orders/${id}`);
             orders.value.splice(idx, 1, data);
           }catch(e){ console.warn('Failed to refresh order after update', e); }
+        } else {
+          // Order not in list — may have been newly assigned to this rider; reload all
+          await load();
         }
         syncTrackingWithOrders(orders.value);
       }catch(e){ console.warn('order-updated handler error', e) }
