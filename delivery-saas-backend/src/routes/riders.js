@@ -72,7 +72,7 @@ ridersRouter.post('/me/position', requireRole('RIDER'), async (req, res) => {
     const riderId = req.user.riderId;
     if (!riderId) return res.status(400).json({ message: 'riderId não encontrado no token' });
 
-    const { lat, lng, heading, orderId } = req.body;
+    const { lat, lng, heading, orderId, accuracy } = req.body;
     if (typeof lat !== 'number' || typeof lng !== 'number') {
       return res.status(400).json({ message: 'lat e lng (number) são obrigatórios' });
     }
@@ -84,25 +84,28 @@ ridersRouter.post('/me/position', requireRole('RIDER'), async (req, res) => {
     // Upsert rider position
     const position = await prisma.riderPosition.upsert({
       where: { riderId },
-      update: { lat, lng, heading: heading ?? null, orderId: orderId ?? null },
-      create: { riderId, lat, lng, heading: heading ?? null, orderId: orderId ?? null },
+      update: { lat, lng, heading: heading ?? null, orderId: orderId ?? null, accuracy: typeof accuracy === 'number' ? accuracy : null },
+      create: { riderId, lat, lng, heading: heading ?? null, orderId: orderId ?? null, accuracy: typeof accuracy === 'number' ? accuracy : null },
     });
 
     // Get rider name for the socket payload
     const rider = await prisma.rider.findUnique({ where: { id: riderId }, select: { name: true } });
 
     // Emit to admin dashboard sockets of this company
-    try {
-      emitirPosicaoEntregador(companyId, {
-        riderId,
-        riderName: rider?.name || 'Entregador',
-        lat,
-        lng,
-        heading: heading ?? null,
-        orderId: orderId ?? null,
-        updatedAt: position.updatedAt,
-      });
-    } catch (e) { /* non-blocking */ }
+    if (!position.hidden) {
+      try {
+        emitirPosicaoEntregador(companyId, {
+          riderId,
+          riderName: rider?.name || 'Entregador',
+          lat,
+          lng,
+          heading: heading ?? null,
+          orderId: orderId ?? null,
+          accuracy: typeof accuracy === 'number' ? accuracy : null,
+          updatedAt: position.updatedAt,
+        });
+      } catch (e) { /* non-blocking */ }
+    }
 
     // Async cleanup: delete positions not updated in last 24h
     prisma.riderPosition.deleteMany({
@@ -139,7 +142,7 @@ ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN'), async (r
   try {
     const companyId = req.user.companyId;
     const positions = await prisma.riderPosition.findMany({
-      where: { rider: { companyId } },
+      where: { rider: { companyId }, hidden: false },
       include: { rider: { select: { id: true, name: true } } },
       orderBy: { updatedAt: 'desc' },
     });
@@ -147,6 +150,31 @@ ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN'), async (r
   } catch (e) {
     console.error('map/positions error:', e);
     return res.status(500).json({ message: 'Erro ao buscar posições' });
+  }
+});
+
+// PUT /riders/:riderId/position/hide — ADMIN only (toggle hidden on map)
+ridersRouter.put('/:riderId/position/hide', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { riderId } = req.params;
+    const { hidden } = req.body;
+
+    const rider = await prisma.rider.findFirst({ where: { id: riderId, companyId } });
+    if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+    const position = await prisma.riderPosition.findUnique({ where: { riderId } });
+    if (!position) return res.status(404).json({ message: 'Posição não encontrada' });
+
+    await prisma.riderPosition.update({
+      where: { riderId },
+      data: { hidden: typeof hidden === 'boolean' ? hidden : true },
+    });
+
+    return res.json({ ok: true, hidden: typeof hidden === 'boolean' ? hidden : true });
+  } catch (e) {
+    console.error('PUT /:riderId/position/hide error:', e);
+    return res.status(500).json({ message: 'Erro ao ocultar entregador' });
   }
 });
 

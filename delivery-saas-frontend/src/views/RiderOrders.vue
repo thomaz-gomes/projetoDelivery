@@ -326,15 +326,22 @@ function formatAddress(o){
   }
 }
 
-function startTracking(orderId) {
+function startTracking(orderId = null) {
   if (!navigator.geolocation) return
   if (watchId !== null) return // already watching
-  activeOrderForTracking.value = orderId
+  activeOrderForTracking.value = orderId || '__active__'
 
   const sendPosition = (pos) => {
-    const { latitude: lat, longitude: lng, heading } = pos.coords
-    api.post('/riders/me/position', { lat, lng, heading: heading ?? null, orderId })
-      .catch((e) => console.warn('GPS position update failed:', e?.message))
+    const { latitude: lat, longitude: lng, heading, accuracy } = pos.coords
+    // Filter out low-accuracy readings (> 100m = likely cell tower)
+    if (accuracy && accuracy > 100) return
+    api.post('/riders/me/position', {
+      lat,
+      lng,
+      heading: heading ?? null,
+      orderId: orderId ?? null,
+      accuracy: accuracy ?? null,
+    }).catch((e) => console.warn('GPS position update failed:', e?.message))
   }
 
   watchId = navigator.geolocation.watchPosition(
@@ -343,13 +350,12 @@ function startTracking(orderId) {
     { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
   )
 
-  // Fallback periódico: garante envio a cada 30s mesmo que watchPosition seja
-  // suspenso pelo browser em segundo plano ou com tela apagada (mobile).
+  // Fallback: send every 30s in case watchPosition is suspended (mobile bg)
   trackingIntervalId = setInterval(() => {
     if (watchId === null) return
     navigator.geolocation.getCurrentPosition(
       sendPosition,
-      (err) => console.warn('GPS fallback getCurrentPosition error:', err?.message),
+      (err) => console.warn('GPS fallback error:', err?.message),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     )
   }, 30000)
@@ -376,15 +382,18 @@ async function checkTrackingStatus() {
 
 function syncTrackingWithOrders(orderList) {
   if (!trackingEnabled.value) { stopTracking(); return }
+  // Always track when logged in and tracking is enabled
   const activeOrder = orderList.find(o => o.status === 'SAIU_PARA_ENTREGA')
-  if (activeOrder) {
-    if (activeOrderForTracking.value !== activeOrder.id) {
-      stopTracking()
-      startTracking(activeOrder.id)
-    }
-  } else {
+  const orderId = activeOrder ? activeOrder.id : null
+  if (activeOrderForTracking.value === null) {
+    // Not tracking yet — start
+    startTracking(orderId)
+  } else if (activeOrder && activeOrderForTracking.value !== activeOrder.id) {
+    // Active order changed — restart with new orderId
     stopTracking()
+    startTracking(orderId)
   }
+  // If no active order but already tracking, keep tracking (just without orderId)
 }
 
 async function load(){
@@ -467,30 +476,50 @@ function ensureSocket(){
 // Isso resolve o problema de watchPosition ser suspenso em segundo plano no mobile.
 function onVisibilityChange() {
   if (document.visibilityState === 'visible' && trackingEnabled.value) {
-    const currentOrderId = activeOrderForTracking.value
-    if (currentOrderId) {
-      // Reinicia o watch — pode ter sido pausado pelo browser enquanto em bg
+    if (activeOrderForTracking.value) {
+      // Restart watch — may have been paused by browser while in bg
+      const currentOrderId = activeOrderForTracking.value === '__active__' ? null : activeOrderForTracking.value
       stopTracking()
       startTracking(currentOrderId)
     } else {
-      syncTrackingWithOrders(orders.value)
+      // Page came back visible but not tracking — start if enabled
+      startTracking(null)
     }
   }
 }
 
-onMounted(async ()=>{
+function onBeforeUnload() {
+  const token = localStorage.getItem('token')
+  if (token && trackingEnabled.value && activeOrderForTracking.value) {
+    try {
+      fetch(`${api.defaults.baseURL}/riders/me/position`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+        keepalive: true,
+      }).catch(() => {})
+    } catch (e) { /* best effort */ }
+  }
+}
+
+onMounted(async () => {
   await checkTrackingStatus()
-  load();
-  ensureSocket();
-  try{ window.addEventListener('open-rider-scanner', externalOpenScannerHandler) }catch(e){}
+  // Start GPS tracking immediately if enabled (don't wait for orders)
+  if (trackingEnabled.value && navigator.geolocation) {
+    startTracking(null)
+  }
+  load()
+  ensureSocket()
+  try { window.addEventListener('open-rider-scanner', externalOpenScannerHandler) } catch (e) {}
   document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('beforeunload', onBeforeUnload)
 })
-onUnmounted(()=>{
+onUnmounted(() => {
   stopTracking()
-  try{ socket && socket.disconnect(); }catch(e){}
-  try{ window.removeEventListener('open-rider-scanner', externalOpenScannerHandler) }catch(e){}
+  try { socket && socket.disconnect() } catch (e) {}
+  try { window.removeEventListener('open-rider-scanner', externalOpenScannerHandler) } catch (e) {}
   document.removeEventListener('visibilitychange', onVisibilityChange)
-  stopScanner();
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  stopScanner()
 })
 </script>
 

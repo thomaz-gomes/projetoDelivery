@@ -559,6 +559,8 @@ model RiderPosition {
   lat       Float
   lng       Float
   heading   Float?
+  accuracy  Float?
+  hidden    Boolean  @default(false)
   updatedAt DateTime @updatedAt
   rider     Rider    @relation(fields: [riderId], references: [id])
 }
