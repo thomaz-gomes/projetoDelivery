@@ -62,6 +62,7 @@ async function loadAll() {
 onMounted(() => {
   loadAll()
   loadMpConfig()
+  loadPlatformFee()
 })
 
 // --- Plan editing ---
@@ -187,6 +188,31 @@ function periodLabel(v) {
   return opt ? opt.label : v
 }
 
+// ---- Platform Fee (split) ----
+const platformFee = ref(null) // { feeCents, feeDecimal }
+
+async function loadPlatformFee() {
+  try {
+    const { data } = await api.get('/saas/platform-fee')
+    platformFee.value = data
+  } catch (e) { /* ignore */ }
+}
+
+function splitInfo(price) {
+  if (!platformFee.value || price == null) return null
+  const total = Number(price)
+  const fee = platformFee.value.feeDecimal
+  const gestor = Math.max(0, total - fee)
+  return { total, fee, gestor }
+}
+
+// ---- Gateways de Pagamento ----
+const activeGateway = ref('mercadopago')
+const GATEWAYS = [
+  { key: 'mercadopago', label: 'Mercado Pago', icon: 'bi-credit-card' }
+  // Futuros gateways podem ser adicionados aqui
+]
+
 // ---- Mercado Pago Config ----
 const mpConfig = ref(null)
 const mpForm = ref({ accessToken: '', publicKey: '', isActive: true })
@@ -213,9 +239,9 @@ async function saveMpConfig() {
     const { data } = await api.put('/saas/mercadopago-config', payload)
     mpConfig.value = data
     mpForm.value.accessToken = ''
-    alert('Configuração salva com sucesso!')
+    Swal.fire({ icon: 'success', title: 'Salvo', text: 'Configuração do gateway salva com sucesso', timer: 1500, showConfirmButton: false })
   } catch (e) {
-    alert(e?.response?.data?.message || 'Erro ao salvar configuração')
+    Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Erro ao salvar configuração' })
   } finally {
     mpSaving.value = false
   }
@@ -370,17 +396,25 @@ async function saveMpConfig() {
               </button>
             </div>
 
-            <div v-for="(price, idx) in (mod.prices || [])" :key="idx" class="d-flex gap-2 mb-2 align-items-center">
-              <select v-model="price.period" class="form-select" style="max-width: 160px;">
-                <option v-for="opt in PERIOD_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-              <div class="input-group" style="max-width: 200px;">
-                <span class="input-group-text">R$</span>
-                <input v-model.number="price.price" type="number" step="0.01" class="form-control" />
+            <div v-for="(price, idx) in (mod.prices || [])" :key="idx" class="mb-2">
+              <div class="d-flex gap-2 align-items-center">
+                <select v-model="price.period" class="form-select" style="max-width: 160px;">
+                  <option v-for="opt in PERIOD_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+                <div class="input-group" style="max-width: 200px;">
+                  <span class="input-group-text">R$</span>
+                  <input v-model.number="price.price" type="number" step="0.01" class="form-control" />
+                </div>
+                <button class="btn btn-outline-danger btn-sm" @click.prevent="removeModulePrice(mod, idx)">
+                  <i class="bi bi-x-lg"></i>
+                </button>
               </div>
-              <button class="btn btn-outline-danger btn-sm" @click.prevent="removeModulePrice(mod, idx)">
-                <i class="bi bi-x-lg"></i>
-              </button>
+              <!-- Split breakdown -->
+              <div v-if="splitInfo(price.price)" class="ms-1 mt-1 small text-muted">
+                <i class="bi bi-diagram-3 me-1"></i>
+                Split: R$ {{ splitInfo(price.price).fee.toFixed(2) }} plataforma
+                &middot; R$ {{ splitInfo(price.price).gestor.toFixed(2) }} para você
+              </div>
             </div>
 
             <button class="btn btn-sm btn-outline-primary" @click.prevent="addModulePrice(mod)">
@@ -444,6 +478,7 @@ async function saveMpConfig() {
                 <th>Nome</th>
                 <th>Créditos</th>
                 <th>Preço</th>
+                <th>Split</th>
                 <th>Ordem</th>
                 <th>Ativo</th>
                 <th>Ações</th>
@@ -454,6 +489,13 @@ async function saveMpConfig() {
                 <td>{{ pack.name }}</td>
                 <td>{{ pack.credits }}</td>
                 <td>R$ {{ Number(pack.price).toFixed(2) }}</td>
+                <td>
+                  <template v-if="splitInfo(pack.price)">
+                    <small class="text-muted d-block">Plataforma: R$ {{ splitInfo(pack.price).fee.toFixed(2) }}</small>
+                    <small class="text-success fw-semibold">Você: R$ {{ splitInfo(pack.price).gestor.toFixed(2) }}</small>
+                  </template>
+                  <small v-else class="text-muted">—</small>
+                </td>
                 <td>{{ pack.sortOrder }}</td>
                 <td>
                   <span :class="pack.isActive ? 'badge bg-success' : 'badge bg-secondary'">{{ pack.isActive ? 'Sim' : 'Não' }}</span>
@@ -471,31 +513,57 @@ async function saveMpConfig() {
           </table>
         </div>
       </div>
-      <!-- ====== SECTION 4: Mercado Pago Config ====== -->
+      <!-- ====== SECTION 4: Gateways de Pagamento ====== -->
       <div class="card mt-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <h5 class="mb-0">Gateway de Pagamento - Mercado Pago</h5>
-          <span v-if="mpConfig?.hasAccessToken" class="badge bg-success">Configurado</span>
-          <span v-else class="badge bg-secondary">Não configurado</span>
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-credit-card me-2"></i>Gateways de Pagamento</h5>
         </div>
         <div class="card-body">
-          <div class="mb-3">
-            <label class="form-label">Access Token</label>
-            <input type="password" class="form-control" v-model="mpForm.accessToken" placeholder="Deixe vazio para manter o atual" />
-            <small class="text-muted">Token de acesso do Mercado Pago (produção)</small>
+          <!-- Platform fee info -->
+          <div v-if="platformFee" class="alert alert-info d-flex align-items-center mb-3">
+            <i class="bi bi-info-circle me-2"></i>
+            <span>Taxa da plataforma por transação: <strong>R$ {{ platformFee.feeDecimal.toFixed(2) }}</strong> (split automático)</span>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Public Key</label>
-            <input type="text" class="form-control" v-model="mpForm.publicKey" />
+
+          <!-- Gateway tabs -->
+          <ul class="nav nav-tabs mb-3">
+            <li v-for="gw in GATEWAYS" :key="gw.key" class="nav-item">
+              <button
+                class="nav-link d-flex align-items-center gap-1"
+                :class="{ active: activeGateway === gw.key }"
+                @click="activeGateway = gw.key"
+              >
+                <i class="bi" :class="gw.icon"></i>
+                {{ gw.label }}
+                <span v-if="gw.key === 'mercadopago' && mpConfig?.hasAccessToken" class="badge bg-success ms-1">Ativo</span>
+                <span v-else-if="gw.key === 'mercadopago'" class="badge bg-secondary ms-1">Inativo</span>
+              </button>
+            </li>
+          </ul>
+
+          <!-- Mercado Pago Config -->
+          <div v-if="activeGateway === 'mercadopago'">
+            <p class="text-muted small mb-3">Configure suas credenciais do Mercado Pago para receber pagamentos. O split da plataforma é aplicado automaticamente em cada transação.</p>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Access Token</label>
+                <input type="password" class="form-control" v-model="mpForm.accessToken" placeholder="Deixe vazio para manter o atual" />
+                <small class="text-muted">Token de acesso do Mercado Pago (produção)</small>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Public Key</label>
+                <input type="text" class="form-control" v-model="mpForm.publicKey" />
+              </div>
+            </div>
+            <div class="form-check form-switch mt-3 mb-3">
+              <input class="form-check-input" type="checkbox" v-model="mpForm.isActive" id="mpActive" />
+              <label class="form-check-label" for="mpActive">Gateway ativo</label>
+            </div>
+            <button class="btn btn-primary" :disabled="mpSaving" @click="saveMpConfig">
+              <span v-if="mpSaving" class="spinner-border spinner-border-sm me-1"></span>
+              Salvar configuração
+            </button>
           </div>
-          <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" v-model="mpForm.isActive" id="mpActive" />
-            <label class="form-check-label" for="mpActive">Ativo</label>
-          </div>
-          <button class="btn btn-primary" :disabled="mpSaving" @click="saveMpConfig">
-            <span v-if="mpSaving" class="spinner-border spinner-border-sm me-1"></span>
-            Salvar
-          </button>
         </div>
       </div>
     </template>

@@ -1016,6 +1016,12 @@ saasRouter.post('/credit-packs/purchase', requireRole('ADMIN'), async (req, res)
   }
 })
 
+// -------- Platform Fee (read-only for SUPER_ADMIN) --------
+saasRouter.get('/platform-fee', requireRole('SUPER_ADMIN'), (_req, res) => {
+  const feeCents = Number(process.env.MP_PLATFORM_FEE || '200')
+  res.json({ feeCents, feeDecimal: feeCents / 100 })
+})
+
 // -------- Mercado Pago Config (SUPER_ADMIN) --------
 
 saasRouter.get('/mercadopago-config', requireRole('SUPER_ADMIN'), async (req, res) => {
