@@ -59,6 +59,7 @@ storesRouter.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
     const companyId = req.user.companyId
+    if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa associada' })
     const s = await prisma.store.findFirst({ where: { id, companyId } })
     if (!s) return res.status(404).json({ message: 'Loja não encontrada' })
     // Attempt to read merged settings from public/uploads/store/<id>/settings.json
