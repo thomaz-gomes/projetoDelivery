@@ -473,7 +473,6 @@ async function saveMpConfig() {
                 <th>Nome</th>
                 <th>Créditos</th>
                 <th>Preço</th>
-                <th>Split</th>
                 <th>Ordem</th>
                 <th>Ativo</th>
                 <th>Ações</th>
@@ -484,13 +483,6 @@ async function saveMpConfig() {
                 <td>{{ pack.name }}</td>
                 <td>{{ pack.credits }}</td>
                 <td>R$ {{ Number(pack.price).toFixed(2) }}</td>
-                <td>
-                  <template v-if="splitInfo(pack.price, pack.platformFee, 'MONTHLY')">
-                    <small class="text-muted d-block">Plataforma: R$ {{ splitInfo(pack.price, pack.platformFee, 'MONTHLY').fee.toFixed(2) }}</small>
-                    <small class="text-success fw-semibold">Você: R$ {{ splitInfo(pack.price, pack.platformFee, 'MONTHLY').gestor.toFixed(2) }}</small>
-                  </template>
-                  <small v-else class="text-muted">—</small>
-                </td>
                 <td>{{ pack.sortOrder }}</td>
                 <td>
                   <span :class="pack.isActive ? 'badge bg-success' : 'badge bg-secondary'">{{ pack.isActive ? 'Sim' : 'Não' }}</span>

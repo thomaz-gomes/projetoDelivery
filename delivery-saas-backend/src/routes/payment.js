@@ -308,7 +308,7 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
       }
 
       const description = `Créditos IA - ${pack.name}`
-      const pref = await buildMpPreference(mpConfig, result.payment, description, pack.platformFee)
+      const pref = await buildMpPreference(mpConfig, result.payment, description)
 
       return res.json({
         checkoutUrl: pref.init_point,

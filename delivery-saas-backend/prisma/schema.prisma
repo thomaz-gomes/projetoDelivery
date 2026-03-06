@@ -1043,7 +1043,6 @@ model AiCreditPack {
   name        String
   credits     Int
   price       Decimal
-  platformFee Decimal            @default(0) // taxa de split da plataforma por transação (BRL)
   isActive    Boolean            @default(true)
   sortOrder   Int                @default(0)
   createdAt   DateTime           @default(now())
