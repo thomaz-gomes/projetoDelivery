@@ -40,7 +40,7 @@ const modules = ref([])
 const creditPacks = ref([])
 const showPackForm = ref(false)
 const editingPackId = ref(null)
-const emptyPackForm = () => ({ name: '', credits: 0, price: 0, platformFee: 0, isActive: true, sortOrder: 0 })
+const emptyPackForm = () => ({ name: '', credits: 0, price: 0, isActive: true, sortOrder: 0 })
 const packForm = ref(emptyPackForm())
 
 async function loadAll() {
@@ -109,7 +109,7 @@ async function savePlan() {
 // --- Module Pricing ---
 async function saveModulePrices(mod) {
   try {
-    await api.put(`/saas/modules/${mod.id}`, { prices: mod.prices.map(p => ({ period: p.period, price: String(Number(p.price || 0)) })), platformFee: Number(mod.platformFee || 0) })
+    await api.put(`/saas/modules/${mod.id}`, { prices: mod.prices.map(p => ({ period: p.period, price: String(Number(p.price || 0)) })) })
     Swal.fire({ icon: 'success', title: 'Salvo', text: `Preços de ${mod.name} atualizados`, timer: 1500, showConfirmButton: false })
   } catch (e) {
     Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Falha ao salvar preços' })
@@ -138,7 +138,6 @@ function openEditPack(pack) {
     name: pack.name,
     credits: pack.credits,
     price: Number(pack.price || 0),
-    platformFee: Number(pack.platformFee || 0),
     isActive: pack.isActive !== false,
     sortOrder: pack.sortOrder || 0
   }
@@ -388,15 +387,6 @@ async function saveMpConfig() {
               </button>
             </div>
 
-            <!-- Taxa de split do módulo -->
-            <div class="d-flex align-items-center gap-2 mb-3">
-              <label class="form-label mb-0 small text-muted">Taxa split (R$):</label>
-              <div class="input-group" style="max-width: 150px;">
-                <span class="input-group-text">R$</span>
-                <input v-model.number="mod.platformFee" type="number" step="0.01" min="0" class="form-control form-control-sm" />
-              </div>
-            </div>
-
             <div v-for="(price, idx) in (mod.prices || [])" :key="idx" class="mb-2">
               <div class="d-flex gap-2 align-items-center">
                 <select v-model="price.period" class="form-select" style="max-width: 160px;">
@@ -442,17 +432,13 @@ async function saveMpConfig() {
                 <label class="form-label">Nome</label>
                 <input v-model="packForm.name" class="form-control" placeholder="Ex: Pacote Starter" />
               </div>
-              <div class="col-md-2">
+              <div class="col-md-3">
                 <label class="form-label">Créditos</label>
                 <input v-model.number="packForm.credits" type="number" min="0" class="form-control" />
               </div>
-              <div class="col-md-2">
+              <div class="col-md-3">
                 <label class="form-label">Preço (R$)</label>
                 <input v-model.number="packForm.price" type="number" step="0.01" class="form-control" />
-              </div>
-              <div class="col-md-2">
-                <label class="form-label">Split (R$)</label>
-                <input v-model.number="packForm.platformFee" type="number" step="0.01" min="0" class="form-control" />
               </div>
               <div class="col-md-1">
                 <label class="form-label">Ordem</label>
