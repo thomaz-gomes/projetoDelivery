@@ -10,6 +10,7 @@ export const paymentRouter = express.Router()
 
 const WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || ''
 const MP_PLATFORM_FEE_DEFAULT = Number(process.env.MP_PLATFORM_FEE || '200') / 100
+const MP_CREDIT_SPLIT_RATE = Number(process.env.MP_CREDIT_SPLIT_RATE || '0.01')
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
@@ -308,7 +309,8 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
       }
 
       const description = `Créditos IA - ${pack.name}`
-      const pref = await buildMpPreference(mpConfig, result.payment, description)
+      const creditPackFee = pack.credits * MP_CREDIT_SPLIT_RATE
+      const pref = await buildMpPreference(mpConfig, result.payment, description, creditPackFee)
 
       return res.json({
         checkoutUrl: pref.init_point,
