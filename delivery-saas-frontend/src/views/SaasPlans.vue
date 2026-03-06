@@ -187,14 +187,18 @@ function periodLabel(v) {
   return opt ? opt.label : v
 }
 
-// ---- Split Info (per-product) ----
-function splitInfo(price, fee) {
-  if (fee == null || price == null) return null
+// ---- Split Info ----
+const PERIOD_MONTHS = { MONTHLY: 1, BIMONTHLY: 2, QUARTERLY: 3, ANNUAL: 12 }
+
+function splitInfo(price, monthlyFee, period) {
+  if (monthlyFee == null || price == null) return null
+  const mFee = Number(monthlyFee)
+  if (mFee <= 0) return null
+  const months = PERIOD_MONTHS[period] || 1
+  const fee = mFee * months
   const total = Number(price)
-  const f = Number(fee)
-  if (f <= 0) return null
-  const gestor = Math.max(0, total - f)
-  return { total, fee: f, gestor }
+  const gestor = Math.max(0, total - fee)
+  return { total, fee, gestor }
 }
 
 // ---- Gateways de Pagamento ----
@@ -401,10 +405,10 @@ async function saveMpConfig() {
                 </button>
               </div>
               <!-- Split breakdown -->
-              <div v-if="splitInfo(price.price, price.platformFee)" class="ms-1 mt-1 small text-muted">
+              <div v-if="splitInfo(price.price, mod.platformFee, price.period)" class="ms-1 mt-1 small text-muted">
                 <i class="bi bi-diagram-3 me-1"></i>
-                Split: R$ {{ splitInfo(price.price, price.platformFee).fee.toFixed(2) }} plataforma
-                &middot; R$ {{ splitInfo(price.price, price.platformFee).gestor.toFixed(2) }} para você
+                Split: R$ {{ splitInfo(price.price, mod.platformFee, price.period).fee.toFixed(2) }} plataforma
+                &middot; R$ {{ splitInfo(price.price, mod.platformFee, price.period).gestor.toFixed(2) }} para você
               </div>
             </div>
 
@@ -481,9 +485,9 @@ async function saveMpConfig() {
                 <td>{{ pack.credits }}</td>
                 <td>R$ {{ Number(pack.price).toFixed(2) }}</td>
                 <td>
-                  <template v-if="splitInfo(pack.price, pack.platformFee)">
-                    <small class="text-muted d-block">Plataforma: R$ {{ splitInfo(pack.price, pack.platformFee).fee.toFixed(2) }}</small>
-                    <small class="text-success fw-semibold">Você: R$ {{ splitInfo(pack.price, pack.platformFee).gestor.toFixed(2) }}</small>
+                  <template v-if="splitInfo(pack.price, pack.platformFee, 'MONTHLY')">
+                    <small class="text-muted d-block">Plataforma: R$ {{ splitInfo(pack.price, pack.platformFee, 'MONTHLY').fee.toFixed(2) }}</small>
+                    <small class="text-success fw-semibold">Você: R$ {{ splitInfo(pack.price, pack.platformFee, 'MONTHLY').gestor.toFixed(2) }}</small>
                   </template>
                   <small v-else class="text-muted">—</small>
                 </td>

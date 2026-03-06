@@ -858,6 +858,7 @@ model SaasModule {
   name        String
   description String?
   isActive    Boolean   @default(true)
+  platformFee Decimal   @default(0) // taxa de split mensal da plataforma (BRL)
   createdAt   DateTime  @default(now())
 
   plans         SaasPlanModule[]
@@ -916,10 +917,9 @@ model SaasModulePrice {
   id        String     @id @default(uuid())
   moduleId  String
   module    SaasModule @relation(fields: [moduleId], references: [id])
-  period      String     // MONTHLY, ANNUAL
-  price       Decimal
-  platformFee Decimal    @default(0) // taxa de split da plataforma (BRL) por período
-  createdAt   DateTime   @default(now())
+  period    String     // MONTHLY, ANNUAL
+  price     Decimal
+  createdAt DateTime   @default(now())
 
   @@unique([moduleId, period])
 }
