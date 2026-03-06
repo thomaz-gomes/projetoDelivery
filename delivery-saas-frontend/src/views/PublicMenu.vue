@@ -3524,7 +3524,11 @@ onMounted(async ()=>{
 
     // Apply fresh network data and persist to IndexedDB
     applyMenuPayload(data)
-    try{ await saveMenuSnapshot(cacheKey, data) }catch(e){ console.warn('[offline] IndexedDB save error', e) }
+    try{
+      console.log('[PublicMenu] about to save snapshot, cacheKey:', cacheKey, 'data keys:', Object.keys(data));
+      await saveMenuSnapshot(cacheKey, data)
+      console.log('[PublicMenu] snapshot saved OK');
+    }catch(e){ console.error('[offline] IndexedDB save error', e) }
     dataSource.value = 'network'
     cacheTimestamp.value = Date.now()
     isOffline.value = false

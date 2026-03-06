@@ -35,15 +35,18 @@ function openDb() {
  */
 export async function loadMenuSnapshot(cacheKey) {
   try {
+    console.log('[menuDb] loading snapshot, key:', cacheKey);
     const db = await openDb();
-    return await new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const req = tx.objectStore(STORE_NAME).get(cacheKey);
       req.onsuccess = () => resolve(req.result ?? null);
       req.onerror = () => reject(req.error);
     });
+    console.log('[menuDb] load result:', result ? `found (savedAt: ${new Date(result.savedAt).toLocaleString()}, categories: ${result.data?.categories?.length})` : 'null');
+    return result;
   } catch (e) {
-    console.warn('[menuDb] load error', e);
+    console.error('[menuDb] load error', e);
     return null;
   }
 }
@@ -56,18 +59,27 @@ export async function loadMenuSnapshot(cacheKey) {
  */
 export async function saveMenuSnapshot(cacheKey, data) {
   try {
+    console.log('[menuDb] saving snapshot, key:', cacheKey, 'has data:', !!data, 'categories:', data?.categories?.length);
     const db = await openDb();
+    console.log('[menuDb] db opened, stores:', [...db.objectStoreNames]);
+    // Clone data to strip any non-serializable content (Vue proxies, etc.)
+    const plainData = JSON.parse(JSON.stringify(data));
     await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
-      const req = tx.objectStore(STORE_NAME).put(
-        { cacheKey, savedAt: Date.now(), data },
+      tx.oncomplete = () => { console.log('[menuDb] transaction committed'); resolve(); };
+      tx.onerror = (e) => { console.error('[menuDb] transaction error', e); reject(tx.error); };
+      tx.onabort = (e) => { console.error('[menuDb] transaction aborted', tx.error); reject(tx.error); };
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.put(
+        { cacheKey, savedAt: Date.now(), data: plainData },
         cacheKey
       );
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => console.log('[menuDb] put request succeeded');
+      req.onerror = () => { console.error('[menuDb] put request error', req.error); reject(req.error); };
     });
+    console.log('[menuDb] snapshot saved successfully');
   } catch (e) {
-    console.warn('[menuDb] save error', e);
+    console.error('[menuDb] save error', e);
   }
 }
 
