@@ -34,6 +34,13 @@ async function waitForDb(retries = 120, delay = 3000) {
     console.log('Running prisma db push...')
     execSync('npx prisma db push --skip-generate', { stdio: 'inherit', env: process.env })
 
+    console.log('Running module seeds...')
+    try {
+      execSync('node src/seeds/seedModules.js', { stdio: 'inherit', env: process.env })
+    } catch (seedErr) {
+      console.warn('Module seed warning (non-fatal):', seedErr && seedErr.message)
+    }
+
     console.log('Database schema synced successfully')
     await prisma.$disconnect()
     process.exit(0)
