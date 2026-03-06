@@ -1,5 +1,8 @@
 # Arquivos de ambiente
 delivery-print-agent/.env
+deploy/.env
+deploy/.env.bak
+deploy/backups/
 
 # Logs
 *.log
