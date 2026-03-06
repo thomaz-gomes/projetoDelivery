@@ -40,9 +40,11 @@ saasRouter.post('/modules', requireRole('SUPER_ADMIN'), async (req, res) => {
 
 saasRouter.put('/modules/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
-  const { name, description, isActive, prices } = req.body || {}
+  const { name, description, isActive, prices, platformFee } = req.body || {}
   try {
-    const updated = await prisma.saasModule.update({ where: { id }, data: { name, description, isActive } })
+    const data = { name, description, isActive }
+    if (platformFee !== undefined) data.platformFee = Number(platformFee)
+    const updated = await prisma.saasModule.update({ where: { id }, data })
     if (Array.isArray(prices)) {
       await prisma.saasModulePrice.deleteMany({ where: { moduleId: id } })
       if (prices.length) {
@@ -895,13 +897,13 @@ saasRouter.get('/credit-packs', requireRole('SUPER_ADMIN'), async (_req, res) =>
 })
 
 saasRouter.post('/credit-packs', requireRole('SUPER_ADMIN'), async (req, res) => {
-  const { name, credits, price, isActive = true, sortOrder = 0 } = req.body || {}
+  const { name, credits, price, platformFee = 0, isActive = true, sortOrder = 0 } = req.body || {}
   if (!name || credits === undefined || price === undefined) {
     return res.status(400).json({ message: 'name, credits e price são obrigatórios' })
   }
   try {
     const pack = await prisma.aiCreditPack.create({
-      data: { name, credits: Number(credits), price: String(price), isActive: Boolean(isActive), sortOrder: Number(sortOrder) }
+      data: { name, credits: Number(credits), price: String(price), platformFee: Number(platformFee), isActive: Boolean(isActive), sortOrder: Number(sortOrder) }
     })
     res.status(201).json(pack)
   } catch (e) {
@@ -911,12 +913,13 @@ saasRouter.post('/credit-packs', requireRole('SUPER_ADMIN'), async (req, res) =>
 
 saasRouter.put('/credit-packs/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
-  const { name, credits, price, isActive, sortOrder } = req.body || {}
+  const { name, credits, price, platformFee, isActive, sortOrder } = req.body || {}
   try {
     const data = {}
     if (name !== undefined) data.name = name
     if (credits !== undefined) data.credits = Number(credits)
     if (price !== undefined) data.price = String(price)
+    if (platformFee !== undefined) data.platformFee = Number(platformFee)
     if (isActive !== undefined) data.isActive = Boolean(isActive)
     if (sortOrder !== undefined) data.sortOrder = Number(sortOrder)
     const updated = await prisma.aiCreditPack.update({ where: { id }, data })
@@ -1014,12 +1017,6 @@ saasRouter.post('/credit-packs/purchase', requireRole('ADMIN'), async (req, res)
   } catch (e) {
     res.status(500).json({ message: 'Erro ao comprar pacote de créditos', error: e?.message || String(e) })
   }
-})
-
-// -------- Platform Fee (read-only for SUPER_ADMIN) --------
-saasRouter.get('/platform-fee', requireRole('SUPER_ADMIN'), (_req, res) => {
-  const feeCents = Number(process.env.MP_PLATFORM_FEE || '200')
-  res.json({ feeCents, feeDecimal: feeCents / 100 })
 })
 
 // -------- Mercado Pago Config (SUPER_ADMIN) --------

@@ -40,7 +40,7 @@ const modules = ref([])
 const creditPacks = ref([])
 const showPackForm = ref(false)
 const editingPackId = ref(null)
-const emptyPackForm = () => ({ name: '', credits: 0, price: 0, isActive: true, sortOrder: 0 })
+const emptyPackForm = () => ({ name: '', credits: 0, price: 0, platformFee: 0, isActive: true, sortOrder: 0 })
 const packForm = ref(emptyPackForm())
 
 async function loadAll() {
@@ -62,7 +62,6 @@ async function loadAll() {
 onMounted(() => {
   loadAll()
   loadMpConfig()
-  loadPlatformFee()
 })
 
 // --- Plan editing ---
@@ -110,7 +109,7 @@ async function savePlan() {
 // --- Module Pricing ---
 async function saveModulePrices(mod) {
   try {
-    await api.put(`/saas/modules/${mod.id}`, { prices: mod.prices.map(p => ({ period: p.period, price: String(Number(p.price || 0)) })) })
+    await api.put(`/saas/modules/${mod.id}`, { prices: mod.prices.map(p => ({ period: p.period, price: String(Number(p.price || 0)) })), platformFee: Number(mod.platformFee || 0) })
     Swal.fire({ icon: 'success', title: 'Salvo', text: `Preços de ${mod.name} atualizados`, timer: 1500, showConfirmButton: false })
   } catch (e) {
     Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Falha ao salvar preços' })
@@ -139,6 +138,7 @@ function openEditPack(pack) {
     name: pack.name,
     credits: pack.credits,
     price: Number(pack.price || 0),
+    platformFee: Number(pack.platformFee || 0),
     isActive: pack.isActive !== false,
     sortOrder: pack.sortOrder || 0
   }
@@ -188,22 +188,14 @@ function periodLabel(v) {
   return opt ? opt.label : v
 }
 
-// ---- Platform Fee (split) ----
-const platformFee = ref(null) // { feeCents, feeDecimal }
-
-async function loadPlatformFee() {
-  try {
-    const { data } = await api.get('/saas/platform-fee')
-    platformFee.value = data
-  } catch (e) { /* ignore */ }
-}
-
-function splitInfo(price) {
-  if (!platformFee.value || price == null) return null
+// ---- Split Info (per-product) ----
+function splitInfo(price, fee) {
+  if (fee == null || price == null) return null
   const total = Number(price)
-  const fee = platformFee.value.feeDecimal
-  const gestor = Math.max(0, total - fee)
-  return { total, fee, gestor }
+  const f = Number(fee)
+  if (f <= 0) return null
+  const gestor = Math.max(0, total - f)
+  return { total, fee: f, gestor }
 }
 
 // ---- Gateways de Pagamento ----
@@ -396,6 +388,15 @@ async function saveMpConfig() {
               </button>
             </div>
 
+            <!-- Taxa de split do módulo -->
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <label class="form-label mb-0 small text-muted">Taxa split (R$):</label>
+              <div class="input-group" style="max-width: 150px;">
+                <span class="input-group-text">R$</span>
+                <input v-model.number="mod.platformFee" type="number" step="0.01" min="0" class="form-control form-control-sm" />
+              </div>
+            </div>
+
             <div v-for="(price, idx) in (mod.prices || [])" :key="idx" class="mb-2">
               <div class="d-flex gap-2 align-items-center">
                 <select v-model="price.period" class="form-select" style="max-width: 160px;">
@@ -410,10 +411,10 @@ async function saveMpConfig() {
                 </button>
               </div>
               <!-- Split breakdown -->
-              <div v-if="splitInfo(price.price)" class="ms-1 mt-1 small text-muted">
+              <div v-if="splitInfo(price.price, mod.platformFee)" class="ms-1 mt-1 small text-muted">
                 <i class="bi bi-diagram-3 me-1"></i>
-                Split: R$ {{ splitInfo(price.price).fee.toFixed(2) }} plataforma
-                &middot; R$ {{ splitInfo(price.price).gestor.toFixed(2) }} para você
+                Split: R$ {{ splitInfo(price.price, mod.platformFee).fee.toFixed(2) }} plataforma
+                &middot; R$ {{ splitInfo(price.price, mod.platformFee).gestor.toFixed(2) }} para você
               </div>
             </div>
 
@@ -450,10 +451,14 @@ async function saveMpConfig() {
                 <input v-model.number="packForm.price" type="number" step="0.01" class="form-control" />
               </div>
               <div class="col-md-2">
+                <label class="form-label">Split (R$)</label>
+                <input v-model.number="packForm.platformFee" type="number" step="0.01" min="0" class="form-control" />
+              </div>
+              <div class="col-md-1">
                 <label class="form-label">Ordem</label>
                 <input v-model.number="packForm.sortOrder" type="number" class="form-control" />
               </div>
-              <div class="col-md-2 d-flex align-items-end">
+              <div class="col-md-1 d-flex align-items-end">
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" v-model="packForm.isActive" id="chkPackActive" />
                   <label class="form-check-label" for="chkPackActive">Ativo</label>
@@ -490,9 +495,9 @@ async function saveMpConfig() {
                 <td>{{ pack.credits }}</td>
                 <td>R$ {{ Number(pack.price).toFixed(2) }}</td>
                 <td>
-                  <template v-if="splitInfo(pack.price)">
-                    <small class="text-muted d-block">Plataforma: R$ {{ splitInfo(pack.price).fee.toFixed(2) }}</small>
-                    <small class="text-success fw-semibold">Você: R$ {{ splitInfo(pack.price).gestor.toFixed(2) }}</small>
+                  <template v-if="splitInfo(pack.price, pack.platformFee)">
+                    <small class="text-muted d-block">Plataforma: R$ {{ splitInfo(pack.price, pack.platformFee).fee.toFixed(2) }}</small>
+                    <small class="text-success fw-semibold">Você: R$ {{ splitInfo(pack.price, pack.platformFee).gestor.toFixed(2) }}</small>
                   </template>
                   <small v-else class="text-muted">—</small>
                 </td>
@@ -519,12 +524,6 @@ async function saveMpConfig() {
           <h5 class="mb-0"><i class="bi bi-credit-card me-2"></i>Gateways de Pagamento</h5>
         </div>
         <div class="card-body">
-          <!-- Platform fee info -->
-          <div v-if="platformFee" class="alert alert-info d-flex align-items-center mb-3">
-            <i class="bi bi-info-circle me-2"></i>
-            <span>Taxa da plataforma por transação: <strong>R$ {{ platformFee.feeDecimal.toFixed(2) }}</strong> (split automático)</span>
-          </div>
-
           <!-- Gateway tabs -->
           <ul class="nav nav-tabs mb-3">
             <li v-for="gw in GATEWAYS" :key="gw.key" class="nav-item">

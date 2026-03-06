@@ -858,6 +858,7 @@ model SaasModule {
   name        String
   description String?
   isActive    Boolean   @default(true)
+  platformFee Decimal   @default(0) // taxa de split da plataforma por transação (BRL)
   createdAt   DateTime  @default(now())
 
   plans         SaasPlanModule[]
@@ -1038,13 +1039,14 @@ model SaasPayment {
 
 // Pre-defined AI credit packs available for purchase
 model AiCreditPack {
-  id        String             @id @default(uuid())
-  name      String
-  credits   Int
-  price     Decimal
-  isActive  Boolean            @default(true)
-  sortOrder Int                @default(0)
-  createdAt DateTime           @default(now())
+  id          String             @id @default(uuid())
+  name        String
+  credits     Int
+  price       Decimal
+  platformFee Decimal            @default(0) // taxa de split da plataforma por transação (BRL)
+  isActive    Boolean            @default(true)
+  sortOrder   Int                @default(0)
+  createdAt   DateTime           @default(now())
 
   purchases AiCreditPurchase[]
 }

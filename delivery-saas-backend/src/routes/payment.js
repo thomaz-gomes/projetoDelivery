@@ -9,7 +9,7 @@ import { calculateProRation } from '../services/proRation.js'
 export const paymentRouter = express.Router()
 
 const WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || ''
-const MP_PLATFORM_FEE = Number(process.env.MP_PLATFORM_FEE || '200') / 100
+const MP_PLATFORM_FEE_DEFAULT = Number(process.env.MP_PLATFORM_FEE || '200') / 100
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
@@ -47,7 +47,8 @@ async function getMpConfig(companyId) {
 // ---------------------------------------------------------------------------
 // Helper: build MP preference and save reference
 // ---------------------------------------------------------------------------
-async function buildMpPreference(mpConfig, payment, description) {
+async function buildMpPreference(mpConfig, payment, description, platformFee) {
+  const fee = platformFee != null ? Number(platformFee) : MP_PLATFORM_FEE_DEFAULT
   const pref = await createPreference(mpConfig.accessToken, {
     externalReference: payment.id,
     items: [{
@@ -62,7 +63,7 @@ async function buildMpPreference(mpConfig, payment, description) {
       failure: `${FRONTEND_URL}/payment/result?status=failure&external_reference=${payment.id}`,
       pending: `${FRONTEND_URL}/payment/result?status=pending&external_reference=${payment.id}`
     },
-    marketplaceFee: MP_PLATFORM_FEE
+    marketplaceFee: fee
   })
 
   // Save preference id in payment metadata
@@ -237,7 +238,7 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
       }
 
       const description = `Módulo ${mod.name} - ${period}`
-      const pref = await buildMpPreference(mpConfig, result.payment, description)
+      const pref = await buildMpPreference(mpConfig, result.payment, description, mod.platformFee)
 
       return res.json({
         checkoutUrl: pref.init_point,
@@ -307,7 +308,7 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
       }
 
       const description = `Créditos IA - ${pack.name}`
-      const pref = await buildMpPreference(mpConfig, result.payment, description)
+      const pref = await buildMpPreference(mpConfig, result.payment, description, pack.platformFee)
 
       return res.json({
         checkoutUrl: pref.init_point,
