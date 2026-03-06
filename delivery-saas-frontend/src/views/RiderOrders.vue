@@ -333,8 +333,8 @@ function startTracking(orderId = null) {
 
   const sendPosition = (pos) => {
     const { latitude: lat, longitude: lng, heading, accuracy } = pos.coords
-    // Filter out low-accuracy readings (> 100m = likely cell tower)
-    if (accuracy && accuracy > 100) return
+    // Filter out very inaccurate readings (> 1000m = likely no GPS at all)
+    if (accuracy && accuracy > 1000) return
     api.post('/riders/me/position', {
       lat,
       lng,
@@ -347,7 +347,7 @@ function startTracking(orderId = null) {
   watchId = navigator.geolocation.watchPosition(
     sendPosition,
     (err) => console.warn('GPS watchPosition error:', err?.message),
-    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
   )
 
   // Fallback: send every 30s in case watchPosition is suspended (mobile bg)
@@ -356,7 +356,7 @@ function startTracking(orderId = null) {
     navigator.geolocation.getCurrentPosition(
       sendPosition,
       (err) => console.warn('GPS fallback error:', err?.message),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+      { enableHighAccuracy: false, maximumAge: 30000, timeout: 15000 }
     )
   }, 30000)
 }
