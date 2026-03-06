@@ -369,6 +369,8 @@ onMounted(async () => {
                     <th>Operação</th>
                     <th style="width: 140px;">Créditos</th>
                     <th style="width: 120px;" class="text-end">Valor (R$)</th>
+                    <th style="width: 120px;" class="text-end">Split (R$)</th>
+                    <th style="width: 120px;" class="text-end">Resultado (R$)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -389,6 +391,12 @@ onMounted(async () => {
                     </td>
                     <td class="text-end fw-semibold" :class="brlPrice > 0 ? 'text-success' : 'text-muted'">
                       {{ brlFor(creditServices[def.key]) }}
+                    </td>
+                    <td class="text-end text-muted">
+                      R$ {{ ((creditServices[def.key] || 0) * 0.01).toFixed(2).replace('.', ',') }}
+                    </td>
+                    <td class="text-end fw-semibold" :class="brlPrice > 0 && (creditServices[def.key] || 0) * brlPrice - (creditServices[def.key] || 0) * 0.01 > 0 ? 'text-success' : 'text-danger'">
+                      {{ brlPrice > 0 ? 'R$ ' + ((creditServices[def.key] || 0) * brlPrice - (creditServices[def.key] || 0) * 0.01).toFixed(2).replace('.', ',') : 'R$ —' }}
                     </td>
                   </tr>
                 </tbody>
