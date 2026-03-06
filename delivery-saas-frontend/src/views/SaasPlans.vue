@@ -401,10 +401,10 @@ async function saveMpConfig() {
                 </button>
               </div>
               <!-- Split breakdown -->
-              <div v-if="splitInfo(price.price, mod.platformFee)" class="ms-1 mt-1 small text-muted">
+              <div v-if="splitInfo(price.price, price.platformFee)" class="ms-1 mt-1 small text-muted">
                 <i class="bi bi-diagram-3 me-1"></i>
-                Split: R$ {{ splitInfo(price.price, mod.platformFee).fee.toFixed(2) }} plataforma
-                &middot; R$ {{ splitInfo(price.price, mod.platformFee).gestor.toFixed(2) }} para você
+                Split: R$ {{ splitInfo(price.price, price.platformFee).fee.toFixed(2) }} plataforma
+                &middot; R$ {{ splitInfo(price.price, price.platformFee).gestor.toFixed(2) }} para você
               </div>
             </div>
 

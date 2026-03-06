@@ -238,7 +238,7 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
       }
 
       const description = `Módulo ${mod.name} - ${period}`
-      const pref = await buildMpPreference(mpConfig, result.payment, description, mod.platformFee)
+      const pref = await buildMpPreference(mpConfig, result.payment, description, modulePrice.platformFee)
 
       return res.json({
         checkoutUrl: pref.init_point,
