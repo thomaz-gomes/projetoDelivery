@@ -12,7 +12,7 @@ companiesRouter.get('/company', async (req, res) => {
   const companyId = req.user.companyId
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' })
   try {
-    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, alwaysOpen: true, timezone: true, weeklySchedule: true } })
+    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, alwaysOpen: true, timezone: true, weeklySchedule: true, street: true, addressNumber: true, addressNeighborhood: true, city: true, state: true, postalCode: true } })
     if (!c) return res.status(404).json({ message: 'Empresa não encontrada' })
     // If timezone not set, return default Brasilia timezone so UI shows the expected default
     if (!c.timezone) c.timezone = 'America/Sao_Paulo'

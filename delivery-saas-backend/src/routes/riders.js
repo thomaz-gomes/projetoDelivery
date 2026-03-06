@@ -153,6 +153,40 @@ ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN'), async (r
   }
 });
 
+// GET /riders/map/deliveries — active orders with coordinates for the map
+ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const stores = await prisma.store.findMany({ where: { companyId }, select: { id: true } });
+    const storeIds = stores.map(s => s.id);
+    const orders = await prisma.order.findMany({
+      where: {
+        storeId: { in: storeIds },
+        status: { in: ['EM_PREPARO', 'SAIU_PARA_ENTREGA'] },
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      select: {
+        id: true,
+        displayId: true,
+        status: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        customerName: true,
+        riderId: true,
+        rider: { select: { id: true, name: true } },
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(orders);
+  } catch (e) {
+    console.error('map/deliveries error:', e);
+    return res.status(500).json({ message: 'Erro ao buscar entregas' });
+  }
+});
+
 // PUT /riders/:riderId/position/hide — ADMIN only (toggle hidden on map)
 ridersRouter.put('/:riderId/position/hide', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
   try {

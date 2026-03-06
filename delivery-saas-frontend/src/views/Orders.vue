@@ -444,13 +444,7 @@ onMounted(async () => {
       // re-init drag/drop to ensure DOM reflects any structural changes
       try { await nextTick(); initDragAndDrop(); } catch (e) { /* ignore */ }
 
-      // notify only when status changed
-      try {
-        if (old && old.status !== updated.status) {
-          Swal.fire({ icon: 'info', title: 'Pedido atualizado', text: `Pedido ${formatDisplay(updated)} mudou para ${updated.status}`, toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-          beep();
-        }
-      } catch (e) { /* ignore notify errors */ }
+      // status change – no sound/alert needed; only new orders should notify
     } catch (e) {
       console.warn('Erro ao processar evento de pedido atualizado', e);
     }

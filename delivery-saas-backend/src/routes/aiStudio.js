@@ -51,6 +51,13 @@ const STYLE_PROMPTS = {
     'solid coral or teal or saffron-yellow matte backdrop, bright front diffused light with fill reflector eliminating harsh shadows, saturated but natural colors — real commercial food photography for delivery apps, clean bright appearance, no neon or digital-looking tones',
 }
 
+// Descrições de aspect ratio para injetar no prompt textual
+const RATIO_PROMPTS = {
+  '1:1':  'Square format (1:1 aspect ratio)',
+  '16:9': 'Wide landscape format (16:9 aspect ratio, wider than tall)',
+  '9:16': 'Tall portrait format (9:16 aspect ratio, taller than wide, vertical orientation)',
+}
+
 // Prompts de ângulo de câmera
 const ANGLE_PROMPTS = {
   top:      'camera positioned directly overhead at 90 degrees, perfectly parallel to the surface, symmetrical flat-lay composition',
@@ -83,7 +90,9 @@ router.get('/cost', requireRole('ADMIN'), async (req, res) => {
 router.post('/enhance', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const userId = req.user.id
-  const { mediaId, style = 'minimal', angle = 'standard', mode = 'new' } = req.body || {}
+  const { mediaId, style = 'minimal', angle = 'standard', mode = 'new', aspectRatio = '1:1' } = req.body || {}
+  const VALID_RATIOS_E = ['1:1', '16:9', '9:16']
+  const safeRatioE = VALID_RATIOS_E.includes(aspectRatio) ? aspectRatio : '1:1'
 
   if (!mediaId) return res.status(400).json({ message: 'mediaId é obrigatório' })
   if (!STYLE_PROMPTS[style]) return res.status(400).json({ message: `Estilo inválido: ${style}` })
@@ -160,6 +169,7 @@ router.post('/enhance', requireRole('ADMIN'), async (req, res) => {
       `- Color grading: natural appetizing food tones, no oversaturation\n` +
       `- Sharpness and clarity of textures: crispy looks crispy, saucy looks saucy\n` +
       `- Background: clean up distracting elements while keeping the overall setting consistent\n` +
+      `\nIMAGE FORMAT: ${RATIO_PROMPTS[safeRatioE]}. The output image MUST be in ${safeRatioE} aspect ratio.\n` +
       `\nThe result must look like this exact same dish retouched by a professional food photographer — not a new dish, not a recreation. ` +
       `Realistic photo, no CGI, no illustration, no watermarks, no text.`
 
@@ -177,7 +187,10 @@ router.post('/enhance', requireRole('ADMIN'), async (req, res) => {
               { text: enhancePrompt },
             ],
           }],
-          generationConfig: { responseModalities: ['IMAGE'] },
+          generationConfig: {
+            responseModalities: ['IMAGE'],
+            imageConfig: { aspectRatio: safeRatioE },
+          },
         }),
         signal: AbortSignal.timeout(120_000),
       }
@@ -249,10 +262,12 @@ router.post('/enhance', requireRole('ADMIN'), async (req, res) => {
 router.post('/generate', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const userId = req.user.id
-  const { description, style = 'minimal', angle = 'standard' } = req.body || {}
+  const { description, style = 'minimal', angle = 'standard', aspectRatio = '1:1', referenceBase64 } = req.body || {}
 
   const descTrimmed = (description || '').trim()
   if (descTrimmed.length < 5) return res.status(400).json({ message: 'Descrição do produto é obrigatória (mínimo 5 caracteres)' })
+  const VALID_RATIOS = ['1:1', '16:9', '9:16']
+  const safeRatio = VALID_RATIOS.includes(aspectRatio) ? aspectRatio : '1:1'
   if (!STYLE_PROMPTS[style]) return res.status(400).json({ message: `Estilo inválido: ${style}` })
   if (!ANGLE_PROMPTS[angle]) return res.status(400).json({ message: `Ângulo inválido: ${angle}` })
 
@@ -268,19 +283,102 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
 
     const apiKey = await getGoogleAIKey()
 
-    // Monta o prompt para Imagen 3 a partir da descrição do usuário
-    const imagenPrompt =
-      `A real food photograph taken with a Canon EOS R5 DSLR, 100mm f/2.8 macro lens. ` +
-      `Subject: ${descTrimmed}. ` +
-      `Setting: ${STYLE_PROMPTS[style]}. ` +
-      `Composition: ${ANGLE_PROMPTS[angle]}. ` +
-      `Authentic natural food textures, realistic surface imperfections, genuine color rendition. ` +
-      `Natural imperfections: food must never look uniform or CGI-perfect. ` +
-      `If legumes or beans are present: vary size, color, and show some split or broken pieces. ` +
-      `If broth or liquid is present: cloudy with natural fat pools on surface. ` +
-      `If rice or grains: clump slightly, vary in opacity. ` +
-      `This must look like an actual photograph, not digital art, not CGI, not 3D rendering, not illustration. ` +
-      `Avoid: clay or plastic appearance, artificial smoothness, fake gloss, cartoon style, neon colors, watermarks, text`
+    // Detecta se há imagem de referência (data URI base64)
+    let refImageBuffer = null
+    let refMimeType = 'image/jpeg'
+    if (referenceBase64 && typeof referenceBase64 === 'string') {
+      const match = referenceBase64.match(/^data:(image\/\w+);base64,(.+)$/)
+      if (match) {
+        refMimeType = match[1]
+        refImageBuffer = Buffer.from(match[2], 'base64')
+      }
+    }
+
+    // ── Com referência: 2 etapas (Vision analisa → Imagen gera) ──
+    // ── Sem referência: geração direta por descrição ──
+    let imagenPrompt
+
+    if (refImageBuffer) {
+      // ETAPA 1: Gemini Flash Vision analisa a foto e gera descrição ultra-detalhada
+      const VALID_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+      if (!VALID_MIMES.includes(refMimeType)) refMimeType = 'image/jpeg'
+      const refBase64 = refImageBuffer.toString('base64')
+
+      const visionRes = await fetch(
+        `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { inlineData: { mimeType: refMimeType, data: refBase64 } },
+                {
+                  text:
+                    `You are a food photography expert. Analyze this food photo and output a single detailed description ` +
+                    `for an image generation model to recreate this EXACT dish.\n\n` +
+                    `DESCRIBE WITH EXTREME PRECISION:\n` +
+                    `- Exact food type (e.g. "artisanal cheeseburger", not just "burger")\n` +
+                    `- Every visible ingredient from top to bottom: bread/bun type and texture, each layer of meat (specify beef/chicken/pork), ` +
+                    `cheese type and melt level, exact lettuce variety (curly, romaine, iceberg), tomato slices, sauces, egg style (fried with runny yolk, hard yolk, etc)\n` +
+                    `- Textures: caramelized edges on meat, crispy or soft bun, melted or solid cheese\n` +
+                    `- Container/wrapper/plate if visible\n` +
+                    `- Any visible props or garnishes\n\n` +
+                    `FORMAT: Write it as a single comma-separated description in English, like a professional food photography prompt. ` +
+                    `Example: "artisanal cheeseburger with fried egg and melted cheddar, thick grilled beef patty with caramelized edges, ` +
+                    `vibrant green lettuce leaf, fluffy toasted brioche bun with smooth shiny top"\n\n` +
+                    `CRITICAL: Only describe what you ACTUALLY SEE. Do NOT invent, assume, or add ingredients not visible in the photo. ` +
+                    `If you can't identify something precisely, describe its appearance (color, shape, texture) instead of guessing.\n\n` +
+                    `Output ONLY the description, nothing else.`,
+                },
+              ],
+            }],
+            generationConfig: { maxOutputTokens: 500, temperature: 0.1 },
+            thinkingConfig: { thinkingBudget: 0 },
+          }),
+          signal: AbortSignal.timeout(30_000),
+        }
+      )
+
+      if (!visionRes.ok) {
+        const errText = await visionRes.text().catch(() => '')
+        throw new Error(`Vision analysis error ${visionRes.status}: ${errText.slice(0, 200)}`)
+      }
+
+      const visionData = await visionRes.json()
+      const visionParts = visionData.candidates?.[0]?.content?.parts || []
+      const foodDescription = visionParts.find(p => p.text)?.text?.trim() || ''
+      if (!foodDescription) throw new Error('Não foi possível analisar a imagem de referência')
+
+      console.log('[AI Studio] Vision description:', foodDescription.slice(0, 200))
+
+      // ETAPA 2: Monta prompt separando FOOD (da Vision) de SCENE (estilo/ângulo)
+      // A separação evita que o estilo fotográfico influencie nos ingredientes
+      imagenPrompt =
+        `FOOD (reproduce exactly, do not change any ingredient): ${foodDescription}. ` +
+        `\nSCENE DIRECTION: ${descTrimmed}. ` +
+        `\nLIGHTING AND SURFACE (affects ONLY background and light, NOT the food itself): ${STYLE_PROMPTS[style]}. ` +
+        `\nCAMERA: ${ANGLE_PROMPTS[angle]}. ` +
+        `\nIMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.\n` +
+        `\nSTYLE: realistic shadows and highlights, shallow depth of field, ` +
+        `emphasis on food textures, high-end food photography for delivery app, ` +
+        `real DSLR photograph, not digital art, not CGI, not illustration, no watermarks, no text`
+
+    } else {
+      imagenPrompt =
+        `A real food photograph taken with a Canon EOS R5 DSLR, 100mm f/2.8 macro lens. ` +
+        `Subject: ${descTrimmed}. ` +
+        `Setting: ${STYLE_PROMPTS[style]}. ` +
+        `Composition: ${ANGLE_PROMPTS[angle]}. ` +
+        `Authentic natural food textures, realistic surface imperfections, genuine color rendition. ` +
+        `Natural imperfections: food must never look uniform or CGI-perfect. ` +
+        `If legumes or beans are present: vary size, color, and show some split or broken pieces. ` +
+        `If broth or liquid is present: cloudy with natural fat pools on surface. ` +
+        `If rice or grains: clump slightly, vary in opacity. ` +
+        `This must look like an actual photograph, not digital art, not CGI, not 3D rendering, not illustration. ` +
+        `\nIMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.\n` +
+        `Avoid: clay or plastic appearance, artificial smoothness, fake gloss, cartoon style, neon colors, watermarks, text`
+    }
 
     const imageGenRes = await fetch(
       `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
@@ -289,7 +387,10 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: imagenPrompt }] }],
-          generationConfig: { responseModalities: ['IMAGE'] },
+          generationConfig: {
+            responseModalities: ['IMAGE'],
+            imageConfig: { aspectRatio: safeRatio },
+          },
         }),
         signal: AbortSignal.timeout(120_000),
       }

@@ -91,7 +91,18 @@ export default defineConfig({
       try { console.log('Vite proxy agent endpoints target:', agentTarget); } catch(e) {}
       return {
         '/api': { target, changeOrigin: true, secure: false },
-        '/menu': { target, changeOrigin: true, secure: false },
+        '/menu': {
+          target,
+          changeOrigin: true,
+          secure: false,
+          // Only proxy API calls (Accept: application/json) so that browser
+          // navigation refreshes on /menu/* SPA routes fall through to index.html
+          bypass(req) {
+            if (req.headers.accept && req.headers.accept.includes('text/html')) {
+              return req.url; // serve index.html via Vite
+            }
+          }
+        },
         '/auth': { target, changeOrigin: true, secure: false },
         '/socket.io': { target: agentTarget, ws: true, changeOrigin: true, secure: false },
         // Agent setup endpoints used by the PrinterSetup UI

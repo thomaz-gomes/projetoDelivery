@@ -39,8 +39,13 @@
     </div>
 
     <div class="mt-3">
-      <div v-if="positions.length === 0 && !loadingPositions" class="text-muted small text-center py-2">
-        Nenhum entregador com posição ativa no momento.
+      <div class="d-flex align-items-center gap-3 mb-2 small text-muted">
+        <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#0d6efd" class="me-1"></span>Entregadores</span>
+        <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#fd7e14" class="me-1"></span>Em preparo</span>
+        <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#dc3545" class="me-1"></span>Saiu p/ entrega</span>
+      </div>
+      <div v-if="positions.length === 0 && deliveries.length === 0 && !loadingPositions" class="text-muted small text-center py-2">
+        Nenhum entregador ou entrega ativa no momento.
       </div>
       <div v-else class="row g-2">
         <div v-for="pos in positions" :key="pos.riderId" class="col-auto">
@@ -48,6 +53,12 @@
             <i class="bi bi-person-fill text-primary"></i>
             <span>{{ pos.rider?.name || pos.riderName || 'Entregador' }}</span>
             <span class="text-muted small ms-1">{{ formatTime(pos.updatedAt) }}</span>
+          </div>
+        </div>
+        <div v-for="order in deliveries" :key="order.id" class="col-auto">
+          <div class="badge bg-light text-dark border d-flex align-items-center gap-1 px-2 py-1">
+            <i class="bi bi-geo-alt-fill" :class="order.status === 'SAIU_PARA_ENTREGA' ? 'text-danger' : 'text-warning'"></i>
+            <span>#{{ order.displayId || order.id.slice(0,6) }} {{ order.customerName || '' }}</span>
           </div>
         </div>
       </div>
@@ -63,12 +74,14 @@ import { SOCKET_URL } from '@/config'
 
 const trackingEnabled = ref(false)
 const positions = ref([])
+const deliveries = ref([])
 const loadingPositions = ref(false)
 const leafletError = ref('')
 
 let map = null
 let markersMap = {} // riderId -> L.marker
 let circlesMap = {} // riderId -> L.circle (accuracy radius)
+let deliveryMarkersMap = {} // orderId -> L.marker
 let staleCheckInterval = null
 let socket = null
 let pollInterval = null
@@ -107,16 +120,99 @@ function riderIcon() {
   })
 }
 
-function initMap() {
+function deliveryIcon(status) {
+  const color = status === 'SAIU_PARA_ENTREGA' ? '#dc3545' : '#fd7e14'
+  const emoji = status === 'SAIU_PARA_ENTREGA' ? '🏍️' : '📦'
+  return L.divIcon({
+    className: '',
+    html: `<div style="background:${color};color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.35)">${emoji}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  })
+}
+
+function updateDeliveryMarker(order) {
+  if (!map || !L) return
+  const lat = Number(order.latitude)
+  const lng = Number(order.longitude)
+  if (isNaN(lat) || isNaN(lng)) return
+
+  const display = order.displayId || order.id.slice(0, 6)
+  const customer = order.customerName || ''
+  const addr = order.address || ''
+  const statusLabel = order.status === 'SAIU_PARA_ENTREGA' ? 'Saiu p/ entrega' : 'Em preparo'
+  const riderName = order.rider?.name || ''
+  const popupHtml = `
+    <div style="min-width:160px">
+      <strong>#${display}</strong> — ${statusLabel}<br>
+      ${customer ? `<small>${customer}</small><br>` : ''}
+      ${addr ? `<small class="text-muted">${addr}</small><br>` : ''}
+      ${riderName ? `<small>Entregador: ${riderName}</small>` : ''}
+    </div>`
+
+  if (deliveryMarkersMap[order.id]) {
+    deliveryMarkersMap[order.id].setLatLng([lat, lng])
+    deliveryMarkersMap[order.id].setIcon(deliveryIcon(order.status))
+    deliveryMarkersMap[order.id].getPopup()?.setContent(popupHtml)
+  } else {
+    deliveryMarkersMap[order.id] = L.marker([lat, lng], { icon: deliveryIcon(order.status) })
+      .bindPopup(popupHtml)
+      .addTo(map)
+  }
+}
+
+function removeStaleDeliveryMarkers(activeIds) {
+  for (const id of Object.keys(deliveryMarkersMap)) {
+    if (!activeIds.includes(id)) {
+      map.removeLayer(deliveryMarkersMap[id])
+      delete deliveryMarkersMap[id]
+    }
+  }
+}
+
+let companyCenter = null // [lat, lng] resolved from company address
+
+function initMap(center) {
   try {
-    map = L.map('rider-map').setView([-12.9714, -38.5014], 13) // Salvador, BA — adjust as needed
+    const startCenter = center || [-12.9714, -38.5014]
+    map = L.map('rider-map').setView(startCenter, 14)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
     }).addTo(map)
+    // Mark company location
+    if (center) {
+      L.marker(center, {
+        icon: L.divIcon({
+          className: '',
+          html: '<div style="background:#198754;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,0.35)">🏪</div>',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+          popupAnchor: [0, -18],
+        }),
+      }).bindPopup('<strong>Sua empresa</strong>').addTo(map)
+    }
   } catch (e) {
     leafletError.value = e?.message || 'Erro ao inicializar mapa'
   }
+}
+
+async function resolveCompanyCenter() {
+  try {
+    const { data } = await api.get('/settings/company')
+    const parts = [data.street, data.addressNumber, data.addressNeighborhood, data.city, data.state].filter(Boolean)
+    if (parts.length < 2) return null
+    const query = parts.join(', ')
+    const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`)
+    const results = await resp.json()
+    if (results && results.length > 0) {
+      return [parseFloat(results[0].lat), parseFloat(results[0].lon)]
+    }
+  } catch (e) {
+    console.warn('resolveCompanyCenter error:', e)
+  }
+  return null
 }
 
 function updateMarker(pos) {
@@ -208,14 +304,21 @@ function checkStaleMarkers() {
 async function loadPositions() {
   loadingPositions.value = true
   try {
-    const { data } = await api.get('/riders/map/positions')
-    positions.value = data
+    const [posRes, delRes] = await Promise.all([
+      api.get('/riders/map/positions'),
+      api.get('/riders/map/deliveries').catch(() => ({ data: [] })),
+    ])
+    positions.value = posRes.data
+    deliveries.value = delRes.data
     if (map) {
-      data.forEach(updateMarker)
-      removeStaleMarkers(data.map(p => p.riderId || p.rider?.id).filter(Boolean))
-      // Fit map to markers if any
-      if (data.length > 0) {
-        const group = L.featureGroup(Object.values(markersMap))
+      posRes.data.forEach(updateMarker)
+      removeStaleMarkers(posRes.data.map(p => p.riderId || p.rider?.id).filter(Boolean))
+      delRes.data.forEach(updateDeliveryMarker)
+      removeStaleDeliveryMarkers(delRes.data.map(o => o.id))
+      // Fit map to all markers (riders + deliveries)
+      const allMarkers = [...Object.values(markersMap), ...Object.values(deliveryMarkersMap)]
+      if (allMarkers.length > 0) {
+        const group = L.featureGroup(allMarkers)
         map.fitBounds(group.getBounds().pad(0.3))
       }
     }
@@ -274,11 +377,12 @@ onMounted(async () => {
     trackingEnabled.value = data.enabled ?? false
   } catch (e) { /* non-blocking */ }
 
-  // Load Leaflet and initialize map
+  // Resolve company center and load Leaflet in parallel
   try {
-    await loadLeaflet()
+    const [center] = await Promise.all([resolveCompanyCenter(), loadLeaflet()])
+    companyCenter = center
     await nextTick()
-    initMap()
+    initMap(companyCenter)
     await loadPositions()
   } catch (e) {
     leafletError.value = e?.message || 'Erro ao inicializar mapa'
@@ -309,6 +413,7 @@ onUnmounted(() => {
   if (map) { map.remove(); map = null }
   markersMap = {}
   circlesMap = {}
+  deliveryMarkersMap = {}
   delete window.__hideRider__
 })
 </script>

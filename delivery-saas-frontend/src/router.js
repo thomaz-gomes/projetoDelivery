@@ -102,6 +102,7 @@ import FinancialGateways from './views/financial/FinancialGateways.vue';
 import FinancialOFX from './views/financial/FinancialOFX.vue';
 import FinancialCostCenters from './views/financial/FinancialCostCenters.vue';
 import ProductsReport from './views/reports/ProductsReport.vue';
+import StudioIA from './views/StudioIA.vue';
 import AddOnStore from './views/AddOnStore.vue';
 import AddOnDetail from './views/AddOnDetail.vue';
 import CreditPackStore from './views/CreditPackStore.vue';
@@ -165,6 +166,7 @@ const router = createRouter({
   { path: '/affiliates/:id/sales/new', component: AffiliateSaleNew, meta: { requiresAuth: true } },
   { path: '/affiliates/:id/payments/new', component: AffiliatePaymentNew, meta: { requiresAuth: true } },
   { path: '/affiliates/:id/statement', component: AffiliateStatement, meta: { requiresAuth: true } },
+  { path: '/marketing/studio-ia', component: StudioIA, meta: { requiresAuth: true } },
   { path: '/coupons', component: CouponsList, meta: { requiresAuth: true } },
   { path: '/coupons/new', component: CouponForm, meta: { requiresAuth: true } },
   { path: '/coupons/:id/edit', component: CouponForm, meta: { requiresAuth: true } },

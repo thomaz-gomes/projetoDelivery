@@ -21,6 +21,7 @@ export const nav = [
     { name: 'Configurações', to: '/settings/rider-tracking', icon: 'bi bi-gear' },
   ] },
   { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', children: [
+    { name: 'Studio IA', to: '/marketing/studio-ia', icon: 'bi bi-stars' },
     { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill', moduleKey: 'affiliates', lockable: true },
     { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated', moduleKey: 'coupons', lockable: true },
     { name: 'Cashback', to: '/settings/cashback', icon: 'bi bi-cash-stack', moduleKey: 'cashback', lockable: true },
