@@ -72,7 +72,7 @@ ridersRouter.post('/me/position', requireRole('RIDER'), async (req, res) => {
     const riderId = req.user.riderId;
     if (!riderId) return res.status(400).json({ message: 'riderId não encontrado no token' });
 
-    const { lat, lng, heading, orderId } = req.body;
+    const { lat, lng, heading, orderId, accuracy } = req.body;
     if (typeof lat !== 'number' || typeof lng !== 'number') {
       return res.status(400).json({ message: 'lat e lng (number) são obrigatórios' });
     }
@@ -84,25 +84,28 @@ ridersRouter.post('/me/position', requireRole('RIDER'), async (req, res) => {
     // Upsert rider position
     const position = await prisma.riderPosition.upsert({
       where: { riderId },
-      update: { lat, lng, heading: heading ?? null, orderId: orderId ?? null },
-      create: { riderId, lat, lng, heading: heading ?? null, orderId: orderId ?? null },
+      update: { lat, lng, heading: heading ?? null, orderId: orderId ?? null, accuracy: typeof accuracy === 'number' ? accuracy : null },
+      create: { riderId, lat, lng, heading: heading ?? null, orderId: orderId ?? null, accuracy: typeof accuracy === 'number' ? accuracy : null },
     });
 
     // Get rider name for the socket payload
     const rider = await prisma.rider.findUnique({ where: { id: riderId }, select: { name: true } });
 
     // Emit to admin dashboard sockets of this company
-    try {
-      emitirPosicaoEntregador(companyId, {
-        riderId,
-        riderName: rider?.name || 'Entregador',
-        lat,
-        lng,
-        heading: heading ?? null,
-        orderId: orderId ?? null,
-        updatedAt: position.updatedAt,
-      });
-    } catch (e) { /* non-blocking */ }
+    if (!position.hidden) {
+      try {
+        emitirPosicaoEntregador(companyId, {
+          riderId,
+          riderName: rider?.name || 'Entregador',
+          lat,
+          lng,
+          heading: heading ?? null,
+          orderId: orderId ?? null,
+          accuracy: typeof accuracy === 'number' ? accuracy : null,
+          updatedAt: position.updatedAt,
+        });
+      } catch (e) { /* non-blocking */ }
+    }
 
     // Async cleanup: delete positions not updated in last 24h
     prisma.riderPosition.deleteMany({
