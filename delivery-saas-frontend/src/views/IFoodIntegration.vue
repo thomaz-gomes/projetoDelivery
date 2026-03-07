@@ -19,6 +19,62 @@ const wizardConfirming = ref(false);
 const statusMsg = ref('');
 const statusType = ref('info');
 
+// ── Tabs ──
+const activeTab = ref('connections'); // 'connections' | 'payments'
+
+// ── Payment mappings ──
+const paymentIntegId = ref(null); // selected integration for payment mapping
+const paymentMappings = ref([]);
+const paymentSaving = ref(false);
+const paymentMsg = ref('');
+const paymentMsgType = ref('info');
+const companyPaymentMethods = ref([]);
+
+async function loadCompanyPaymentMethods() {
+  try {
+    const { data } = await api.get('/menu/payment-methods');
+    companyPaymentMethods.value = (data || []).filter(m => m.isActive !== false);
+  } catch (e) { companyPaymentMethods.value = []; }
+}
+
+async function loadPaymentMappings(integId) {
+  if (!integId) return;
+  paymentIntegId.value = integId;
+  paymentMsg.value = '';
+  try {
+    const { data } = await api.get(`/integrations/ifood/${integId}/payment-mappings`);
+    paymentMappings.value = data || [];
+  } catch (e) {
+    paymentMappings.value = [];
+    paymentMsg.value = 'Erro ao carregar mapeamentos';
+    paymentMsgType.value = 'danger';
+  }
+}
+
+async function savePaymentMappings() {
+  if (!paymentIntegId.value) return;
+  paymentSaving.value = true;
+  paymentMsg.value = '';
+  try {
+    await api.put(`/integrations/ifood/${paymentIntegId.value}/payment-mappings`, {
+      mappings: paymentMappings.value.map(m => ({ ifoodCode: m.ifoodCode, systemName: m.systemName })),
+    });
+    paymentMsg.value = 'Mapeamentos salvos com sucesso!';
+    paymentMsgType.value = 'success';
+  } catch (e) {
+    paymentMsg.value = e?.response?.data?.message || 'Erro ao salvar mapeamentos';
+    paymentMsgType.value = 'danger';
+  } finally { paymentSaving.value = false; }
+}
+
+async function openPaymentsTab() {
+  activeTab.value = 'payments';
+  await loadCompanyPaymentMethods();
+  // Auto-select first active integration
+  const active = integrations.value.find(i => isActive(i)) || integrations.value[0];
+  if (active) await loadPaymentMappings(active.id);
+}
+
 let refreshTimers = [];
 
 function clearRefreshTimers() {
@@ -249,6 +305,23 @@ onUnmounted(() => { clearRefreshTimers(); });
       </span>
     </div>
 
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4">
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: activeTab === 'connections' }" href="#" @click.prevent="activeTab = 'connections'">
+          <i class="bi bi-link-45deg me-1"></i>Conexões
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: activeTab === 'payments' }" href="#" @click.prevent="openPaymentsTab">
+          <i class="bi bi-credit-card me-1"></i>Formas de Pagamento
+        </a>
+      </li>
+    </ul>
+
+    <!-- ═══ TAB: CONNECTIONS ═══ -->
+    <div v-if="activeTab === 'connections'">
+
     <div v-if="statusMsg" :class="['alert', `alert-${statusType}`]" role="alert">{{ statusMsg }}</div>
 
     <!-- ═══ LIST OF EXISTING INTEGRATIONS ═══ -->
@@ -393,5 +466,87 @@ onUnmounted(() => { clearRefreshTimers(); });
 
       </div>
     </div>
+
+    </div><!-- /connections tab -->
+
+    <!-- ═══ TAB: FORMAS DE PAGAMENTO ═══ -->
+    <div v-if="activeTab === 'payments'">
+      <p class="text-muted mb-3">
+        Vincule as formas de pagamento do iFood às formas cadastradas no sistema.
+        O nome configurado será usado em pedidos, comandas e financeiro.
+      </p>
+
+      <!-- Integration selector (if multiple) -->
+      <div v-if="integrations.length > 1" class="mb-3" style="max-width:400px">
+        <label class="form-label small fw-semibold">Integração</label>
+        <select class="form-select" :value="paymentIntegId" @change="loadPaymentMappings($event.target.value)">
+          <option v-for="integ in integrations" :key="integ.id" :value="integ.id">
+            {{ storeName(integ) }} {{ isActive(integ) ? '(Conectado)' : '(Desconectado)' }}
+          </option>
+        </select>
+      </div>
+
+      <div v-if="paymentMsg" :class="['alert py-2 small', `alert-${paymentMsgType}`]" role="alert">{{ paymentMsg }}</div>
+
+      <div v-if="paymentMappings.length" class="card">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width:220px">Código iFood</th>
+                <th style="width:200px">Sugestão</th>
+                <th>Nome no sistema</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="m in paymentMappings" :key="m.ifoodCode">
+                <td>
+                  <code class="fw-bold">{{ m.ifoodCode }}</code>
+                </td>
+                <td class="text-muted small">{{ m.defaultName }}</td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <input
+                      type="text"
+                      class="form-control form-control-sm"
+                      style="max-width:300px"
+                      v-model="m.systemName"
+                      :placeholder="m.defaultName"
+                    />
+                    <button
+                      v-if="companyPaymentMethods.length"
+                      class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                      type="button"
+                      data-bs-toggle="dropdown"
+                      title="Selecionar do cadastro"
+                    >
+                      <i class="bi bi-list-ul"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                      <li v-for="pm in companyPaymentMethods" :key="pm.id">
+                        <a class="dropdown-item small" href="#" @click.prevent="m.systemName = pm.name">
+                          {{ pm.name }} <span class="text-muted">({{ pm.code }})</span>
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex justify-content-end gap-2">
+          <button class="btn btn-primary" @click="savePaymentMappings" :disabled="paymentSaving">
+            <span v-if="paymentSaving" class="spinner-border spinner-border-sm me-1" role="status"></span>
+            Salvar mapeamentos
+          </button>
+        </div>
+      </div>
+
+      <div v-else-if="integrations.length === 0" class="alert alert-info">
+        Nenhuma integração iFood configurada. Adicione uma integração na aba Conexões.
+      </div>
+    </div><!-- /payments tab -->
+
   </div>
 </template>

@@ -4,14 +4,11 @@
     <!-- Header -->
     <div class="studio-ia-hero">
       <div class="studio-ia-hero-content">
-        <div class="d-flex align-items-center gap-3 mb-2">
-          <span class="studio-ia-hero-badge"><i class="bi bi-stars"></i></span>
+        <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
           <div>
             <h4 class="mb-0 fw-bold text-white">Studio IA</h4>
-            <small class="text-white-50">Crie e aprimore fotos profissionais com inteligencia artificial</small>
+            <small class="text-white-50">Crie e aprimore fotos profissionais com inteligência artificial</small>
           </div>
-        </div>
-        <div class="d-flex align-items-center gap-2 mt-2">
           <span class="badge bg-warning text-dark px-3 py-2">
             <i class="bi bi-lightning-charge-fill me-1"></i>
             Saldo: <strong>{{ balance ?? '...' }}</strong> creditos
@@ -145,10 +142,19 @@
               </div>
             </div>
 
-            <!-- Gerar -->
-            <div class="d-flex align-items-center gap-2 flex-wrap">
+           
+
+            <div v-if="genError" class="alert alert-danger py-2 small mt-3 mb-0">
+              <i class="bi bi-exclamation-triangle me-1"></i>{{ genError }}
+            </div>
+          </div>
+
+          <!-- Preview -->
+          <div class="col-12 col-lg-7">
+             <!-- Gerar -->
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-4">
               <span class="badge bg-warning text-dark px-3 py-2">
-                <i class="bi bi-lightning-charge-fill me-1"></i>Custo: <strong>10</strong> creditos
+                <i class="bi bi-lightning-charge-fill me-1"></i>Custo: <strong>{{ creditCost ?? '...' }}</strong> creditos
               </span>
               <button
                 type="button"
@@ -161,14 +167,6 @@
                 {{ genLoading ? 'Gerando...' : 'Gerar Imagem' }}
               </button>
             </div>
-
-            <div v-if="genError" class="alert alert-danger py-2 small mt-3 mb-0">
-              <i class="bi bi-exclamation-triangle me-1"></i>{{ genError }}
-            </div>
-          </div>
-
-          <!-- Preview -->
-          <div class="col-12 col-lg-7">
             <div v-if="genLoading" class="sia-preview-placeholder">
               <div class="spinner-border text-warning" style="width:3rem;height:3rem" role="status"></div>
               <p class="text-muted small mt-3 mb-0">Gerando imagem com IA...<br>Isso pode levar ate 2 minutos.</p>
@@ -282,10 +280,18 @@
               </div>
             </div>
 
+            
+            <div v-if="enhanceError" class="alert alert-danger py-2 small mt-3 mb-0">
+              <i class="bi bi-exclamation-triangle me-1"></i>{{ enhanceError }}
+            </div>
+          </div>
+
+          <!-- Preview / Resultado -->
+          <div class="col-12 col-lg-7">
             <!-- Botao -->
-            <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-4">
               <span class="badge bg-warning text-dark px-3 py-2">
-                <i class="bi bi-lightning-charge-fill me-1"></i>Custo: <strong>10</strong> creditos
+                <i class="bi bi-lightning-charge-fill me-1"></i>Custo: <strong>{{ creditCost ?? '...' }}</strong> creditos
               </span>
               <button
                 type="button"
@@ -299,13 +305,6 @@
               </button>
             </div>
 
-            <div v-if="enhanceError" class="alert alert-danger py-2 small mt-3 mb-0">
-              <i class="bi bi-exclamation-triangle me-1"></i>{{ enhanceError }}
-            </div>
-          </div>
-
-          <!-- Preview / Resultado -->
-          <div class="col-12 col-lg-7">
             <div v-if="enhanceLoading" class="sia-preview-placeholder">
               <div class="spinner-border text-warning" style="width:3rem;height:3rem" role="status"></div>
               <p class="text-muted small mt-3 mb-0">Otimizando imagem com IA...<br>Isso pode levar ate 2 minutos.</p>
@@ -413,6 +412,7 @@ const RATIOS = [
 // ── State ──
 const tab = ref('create')
 const balance = ref(null)
+const creditCost = ref(null)
 
 // Create tab
 const genDescription = ref('')
@@ -449,6 +449,10 @@ const galleryLoading = ref(false)
 onMounted(async () => {
   await creditsStore.fetch()
   balance.value = creditsStore.balance
+  try {
+    const res = await api.get('/ai-studio/cost')
+    creditCost.value = res.data.cost
+  } catch {}
 })
 
 // ── Reference image (create tab) ──
@@ -660,11 +664,9 @@ async function refreshBalance() {
 
 /* ── Hero ── */
 .studio-ia-hero {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  border-radius: 16px;
-  padding: 1.5rem 2rem;
-  margin-bottom: 0;
-  border-bottom: 3px solid rgba(255, 215, 0, 0.3);
+    background: #8dbf21;
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
 }
 
 /* ── Tabs ── */

@@ -593,11 +593,22 @@ router.get('/payment-methods', async (req, res) => {
   res.json(rows)
 })
 
+router.get('/payment-methods/:id', async (req, res) => {
+  const companyId = req.user.companyId
+  const row = await prisma.paymentMethod.findFirst({ where: { id: req.params.id, companyId } })
+  if (!row) return res.status(404).json({ message: 'Método não encontrado' })
+  res.json(row)
+})
+
+const PM_EXTRA_FIELDS = ['description','isOnline','noChange','paymentType','cardBrand','taxRate','fixedFee','transferFormat','daysToReceive','accountId','intermediaryName','intermediaryCnpj','platformUserCode']
+
 router.post('/payment-methods', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const { name, code, config = {}, isActive = true } = req.body || {}
   if (!name || !code) return res.status(400).json({ message: 'name e code são obrigatórios' })
-  const created = await prisma.paymentMethod.create({ data: { companyId, name, code, config, isActive: Boolean(isActive) } })
+  const extra = {}
+  for (const f of PM_EXTRA_FIELDS) { if (req.body[f] !== undefined) extra[f] = req.body[f] }
+  const created = await prisma.paymentMethod.create({ data: { companyId, name, code, config, isActive: Boolean(isActive), ...extra } })
   res.status(201).json(created)
 })
 
@@ -607,7 +618,9 @@ router.patch('/payment-methods/:id', requireRole('ADMIN'), async (req, res) => {
   const existing = await prisma.paymentMethod.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Método não encontrado' })
   const { name, code, config, isActive } = req.body || {}
-  const updated = await prisma.paymentMethod.update({ where: { id }, data: { name: name ?? existing.name, code: code ?? existing.code, config: config ?? existing.config, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive } })
+  const extra = {}
+  for (const f of PM_EXTRA_FIELDS) { if (req.body[f] !== undefined) extra[f] = req.body[f] }
+  const updated = await prisma.paymentMethod.update({ where: { id }, data: { name: name ?? existing.name, code: code ?? existing.code, config: config ?? existing.config, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, ...extra } })
   res.json(updated)
 })
 

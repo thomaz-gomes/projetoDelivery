@@ -467,6 +467,19 @@ export async function processIFoodWebhook(eventId) {
           mapped.raw.payment = mapped.raw.payment || mapped.payment;
         }
       } catch (e) { /* non-fatal */ }
+      // Enrich payment method labels using company's iFood payment mappings
+      try {
+        const { resolveIfoodPaymentLabel } = await import('../routes/integrations.js');
+        const ifoodPay = (payload.order || payload)?.payments;
+        const methods = ifoodPay?.methods || [];
+        if (methods.length > 0) {
+          for (const m of methods) {
+            const label = await resolveIfoodPaymentLabel(companyId, m.method, m.card?.brand);
+            if (label) m._systemLabel = label;
+          }
+        }
+      } catch (e) { /* non-fatal */ }
+
       // If payload contains an iFood event code, prefer mapping its status
       let inferred = null;
       try {

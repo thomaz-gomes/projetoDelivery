@@ -407,6 +407,115 @@ integrationsRouter.get('/ifood/debug', requireRole('ADMIN'), async (req, res) =>
 });
 
 // Dev-only: trigger a specific iFood action endpoint for testing from UI
+// ── iFood Payment Method Mappings ──
+
+// Default iFood payment codes with suggested PT-BR labels
+const IFOOD_DEFAULT_CODES = [
+  { ifoodCode: 'CASH', defaultName: 'Dinheiro' },
+  { ifoodCode: 'CREDIT', defaultName: 'Crédito' },
+  { ifoodCode: 'DEBIT', defaultName: 'Débito' },
+  { ifoodCode: 'MEAL_VOUCHER', defaultName: 'Vale Refeição' },
+  { ifoodCode: 'FOOD_VOUCHER', defaultName: 'Vale Alimentação' },
+  { ifoodCode: 'PIX', defaultName: 'PIX' },
+  { ifoodCode: 'WALLET', defaultName: 'Carteira Digital' },
+  { ifoodCode: 'VOUCHER', defaultName: 'Voucher' },
+  { ifoodCode: 'DELIVERY_FEE_VOUCHER', defaultName: 'Voucher Entrega' },
+  { ifoodCode: 'DISCOUNT_VOUCHER', defaultName: 'Voucher Desconto' },
+  { ifoodCode: 'OTHER', defaultName: 'Outros' },
+  { ifoodCode: 'OTHER_VOUCHER', defaultName: 'Outro Voucher' },
+  { ifoodCode: 'ONLINE', defaultName: 'Pagamento Online' },
+];
+
+// GET /integrations/ifood/:integrationId/payment-mappings
+integrationsRouter.get('/ifood/:integrationId/payment-mappings', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { integrationId } = req.params;
+    const integ = await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'IFOOD' } });
+    if (!integ) return res.status(404).json({ message: 'Integração não encontrada' });
+
+    const mappings = await prisma.ifoodPaymentMapping.findMany({ where: { integrationId }, orderBy: { ifoodCode: 'asc' } });
+
+    // Merge with defaults so frontend always shows all known codes
+    const mapped = new Map(mappings.map(m => [m.ifoodCode, m]));
+    const result = IFOOD_DEFAULT_CODES.map(d => {
+      const existing = mapped.get(d.ifoodCode);
+      return {
+        ifoodCode: d.ifoodCode,
+        defaultName: d.defaultName,
+        systemName: existing ? existing.systemName : '',
+        id: existing ? existing.id : null,
+      };
+    });
+    // Include any extra mappings not in defaults (custom codes)
+    for (const m of mappings) {
+      if (!IFOOD_DEFAULT_CODES.find(d => d.ifoodCode === m.ifoodCode)) {
+        result.push({ ifoodCode: m.ifoodCode, defaultName: m.ifoodCode, systemName: m.systemName, id: m.id });
+      }
+    }
+    res.json(result);
+  } catch (e) {
+    console.error('GET payment-mappings error', e?.message);
+    res.status(500).json({ message: 'Erro ao carregar mapeamentos' });
+  }
+});
+
+// PUT /integrations/ifood/:integrationId/payment-mappings (bulk save)
+integrationsRouter.put('/ifood/:integrationId/payment-mappings', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { integrationId } = req.params;
+    const integ = await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'IFOOD' } });
+    if (!integ) return res.status(404).json({ message: 'Integração não encontrada' });
+
+    const mappings = req.body?.mappings;
+    if (!Array.isArray(mappings)) return res.status(400).json({ message: 'mappings deve ser um array' });
+
+    // Upsert each mapping (only those with a non-empty systemName)
+    const ops = [];
+    for (const m of mappings) {
+      if (!m.ifoodCode) continue;
+      const code = String(m.ifoodCode).toUpperCase().trim();
+      const name = String(m.systemName || '').trim();
+      if (!name) {
+        // Empty name = remove mapping
+        ops.push(prisma.ifoodPaymentMapping.deleteMany({ where: { integrationId, ifoodCode: code } }));
+      } else {
+        ops.push(prisma.ifoodPaymentMapping.upsert({
+          where: { integ_ifood_code_key: { integrationId, ifoodCode: code } },
+          update: { systemName: name },
+          create: { integrationId, ifoodCode: code, systemName: name },
+        }));
+      }
+    }
+    await prisma.$transaction(ops);
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('PUT payment-mappings error', e?.message);
+    res.status(500).json({ message: 'Erro ao salvar mapeamentos' });
+  }
+});
+
+// Helper: resolve payment label given companyId + iFood code + brand
+// Exported so webhook processor and print template can use it
+export async function resolveIfoodPaymentLabel(companyId, ifoodCode, brand) {
+  if (!ifoodCode) return null;
+  const code = String(ifoodCode).toUpperCase().trim();
+  try {
+    // Find any IFOOD integration for this company that has a mapping for this code
+    const mapping = await prisma.ifoodPaymentMapping.findFirst({
+      where: { ifoodCode: code, integration: { companyId, provider: 'IFOOD' } },
+    });
+    if (mapping?.systemName) {
+      let label = mapping.systemName;
+      if (brand) label += ` ${brand}`;
+      return label;
+    }
+  } catch (e) { /* fallback */ }
+  return null; // no mapping found, caller should use fallback
+}
+
 integrationsRouter.post('/ifood/action', requireRole('ADMIN'), async (req, res) => {
   try {
     if (process.env.NODE_ENV === 'production' && process.env.ALLOW_IFOOD_DEBUG !== '1') {

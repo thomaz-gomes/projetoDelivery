@@ -113,6 +113,7 @@ const selectedStatus = ref('TODOS');
 const selectedRider = ref('TODOS');
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
 const companyPaymentMethods = ref([]);
+const ifoodPaymentMap = ref({}); // { CASH: 'Dinheiro', CREDIT: 'Visa Crédito', ... }
 const statusFiltersMobile = computed(() => statusFilters.filter(s => s.value !== 'TODOS'));
 // extra filters
 const searchOrderNumber = ref('');
@@ -240,6 +241,19 @@ onMounted(async () => {
     } catch (e) {
       companyPaymentMethods.value = [{ code: 'CASH', name: 'Dinheiro' }];
     }
+    // load iFood payment mappings (from all integrations)
+    try {
+      const integRes = await api.get('/integrations/ifood');
+      const integs = Array.isArray(integRes.data) ? integRes.data : (integRes.data ? [integRes.data] : []);
+      for (const integ of integs) {
+        try {
+          const mapRes = await api.get(`/integrations/ifood/${integ.id}/payment-mappings`);
+          for (const m of (mapRes.data || [])) {
+            if (m.systemName) ifoodPaymentMap.value[m.ifoodCode] = m.systemName;
+          }
+        } catch (e) { /* ignore per-integration errors */ }
+      }
+    } catch (e) { /* ignore */ }
   } catch (e) {
     console.error(e);
     const msg = ridersEnabled.value ? 'Falha ao carregar pedidos/entregadores.' : 'Falha ao carregar pedidos.';
@@ -756,6 +770,48 @@ function getStatusStartDurationDisplay(o) {
 }
 
 // Helper: resolve iFood payments object from the payload (handles both event-envelope and flat shapes)
+const PAYMENT_METHOD_MAP = {
+  'CASH': 'Dinheiro',
+  'CREDIT': 'Crédito',
+  'DEBIT': 'Débito',
+  'MEAL_VOUCHER': 'Vale Refeição',
+  'FOOD_VOUCHER': 'Vale Alimentação',
+  'GIFT_CARD': 'Gift Card',
+  'PIX': 'PIX',
+  'PREPAID': 'Pré-pago',
+  'ONLINE': 'Pagamento Online',
+  'WALLET': 'Carteira Digital',
+  'VOUCHER': 'Voucher',
+  'DINHEIRO': 'Dinheiro',
+  'CREDITO': 'Crédito',
+  'DEBITO': 'Débito',
+};
+
+function translatePaymentMethod(raw, brand) {
+  if (!raw) return '—';
+  const upper = raw.toUpperCase().trim();
+  // Priority 1: company's iFood payment mapping from DB
+  const dbLabel = ifoodPaymentMap.value[upper];
+  if (dbLabel) {
+    let label = dbLabel;
+    if (brand) label += ` ${brand}`;
+    return label;
+  }
+  // Priority 2: static fallback map
+  let label = PAYMENT_METHOD_MAP[upper] || null;
+  if (!label) {
+    for (const [key, val] of Object.entries(PAYMENT_METHOD_MAP)) {
+      if (upper.startsWith(key)) {
+        label = val;
+        break;
+      }
+    }
+  }
+  if (!label) label = raw;
+  if (brand) label += ` ${brand}`;
+  return label;
+}
+
 function resolveIfoodPayments(o) {
   // iFood event payload wraps order: { order: { payments: { methods: [] } } }
   const fromOrder = o.payload?.order?.payments;
@@ -797,9 +853,9 @@ function normalizeOrder(o){
   // Priority: own payment field → iFood payments object (handles event-envelope and flat) → legacy array → PDV
   let paymentMethod = '—';
   if (o.payment && (o.payment.methodCode || o.payment.method)) {
-    paymentMethod = o.payment.methodCode || o.payment.method || String(o.payment.amount || '');
+    paymentMethod = translatePaymentMethod(o.payment.methodCode || o.payment.method || String(o.payment.amount || ''), o.payment.card?.brand);
   } else if (o.payload && o.payload.payment) {
-    paymentMethod = o.payload.payment.methodCode || o.payload.payment.method || o.payload.payment.type || paymentMethod;
+    paymentMethod = translatePaymentMethod(o.payload.payment.methodCode || o.payload.payment.method || o.payload.payment.type || paymentMethod, o.payload.payment.card?.brand);
   } else {
     // iFood: payments is an object { methods: [], prepaid } at payload.order.payments or payload.payments
     try {
@@ -808,9 +864,9 @@ function normalizeOrder(o){
         const methods = ifoodPay.methods || [];
         if (methods.length > 0) {
           paymentMethod = methods.map(m => {
-            let label = m.method || m.type || '';
-            if (m.card?.brand) label += ` (${m.card.brand})`;
-            return label;
+            // Prefer backend-resolved label from iFood payment mapping
+            if (m._systemLabel) return m._systemLabel;
+            return translatePaymentMethod(m.method || m.type || '', m.card?.brand);
           }).filter(Boolean).join(' + ') || paymentMethod;
         } else if (ifoodPay.prepaid) {
           paymentMethod = 'Pré-pago';
@@ -818,7 +874,7 @@ function normalizeOrder(o){
       } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0]) {
         // Legacy: payments as an array
         const m = o.payload.payments[0];
-        paymentMethod = m.method || m.type || paymentMethod;
+        paymentMethod = translatePaymentMethod(m.method || m.type || paymentMethod, m.card?.brand);
       }
     } catch(e) {}
   }
@@ -997,9 +1053,15 @@ function normalizeOrder(o){
     })(),
     scheduledTime: (function() {
       try {
-        const timing = o.payload?.order?.orderTiming || o.payload?.orderTiming || null;
+        const ord = o.payload?.order || o.payload || {};
+        const timing = ord.orderTiming || null;
         if (timing !== 'SCHEDULED') return null;
-        const dt = o.payload?.order?.scheduledDateTimeStart || o.payload?.scheduledDateTimeStart || o.payload?.order?.scheduledDeliveryDateTime || null;
+        const dt = ord.schedule?.scheduledDateTimeStart
+          || ord.schedule?.deliveryDateTimeStart
+          || ord.scheduledDateTimeStart
+          || ord.scheduledDeliveryDateTime
+          || ord.delivery?.scheduledDateTimeStart
+          || null;
         return dt ? new Date(dt) : null;
       } catch (e) { return null; }
     })(),

@@ -240,8 +240,28 @@ function buildContext(order, settings = {}) {
     : (o.paymentMethod ? [{ method: o.paymentMethod, amount: total }]
     : []));
 
+  const PAY_MAP = {
+    'CASH': 'Dinheiro', 'CREDIT': 'Crédito', 'DEBIT': 'Débito',
+    'MEAL_VOUCHER': 'Vale Refeição', 'FOOD_VOUCHER': 'Vale Alimentação',
+    'GIFT_CARD': 'Gift Card', 'PIX': 'PIX', 'PREPAID': 'Pré-pago',
+    'ONLINE': 'Pagamento Online', 'WALLET': 'Carteira Digital', 'VOUCHER': 'Voucher',
+  };
+  function translatePay(raw, brand) {
+    if (!raw) return 'Pagamento';
+    const upper = String(raw).toUpperCase().trim();
+    let label = PAY_MAP[upper] || null;
+    if (!label) {
+      for (const [k, v] of Object.entries(PAY_MAP)) {
+        if (upper.startsWith(k)) { label = v; break; }
+      }
+    }
+    if (!label) label = raw;
+    if (brand) label += ' ' + brand;
+    return label;
+  }
+
   const pagamentos = paymentsList.map(p => ({
-    payment_method: (p.method || p.type || p.name || p.paymentMethod || 'Pagamento').toUpperCase(),
+    payment_method: p._systemLabel || translatePay(p.method || p.type || p.name || p.paymentMethod, p.card?.brand),
     payment_value: (Number(p.amount ?? p.value ?? p.paymentAmount ?? 0) || 0).toFixed(2)
   }));
 
@@ -264,7 +284,12 @@ function buildContext(order, settings = {}) {
     try {
       const timing = ifoodPayload.orderTiming || payload.orderTiming || null;
       if (timing !== 'SCHEDULED') return '';
-      const dt = ifoodPayload.scheduledDateTimeStart || payload.scheduledDateTimeStart || ifoodPayload.scheduledDeliveryDateTime || null;
+      const dt = ifoodPayload.schedule?.scheduledDateTimeStart
+        || ifoodPayload.schedule?.deliveryDateTimeStart
+        || ifoodPayload.scheduledDateTimeStart
+        || ifoodPayload.scheduledDeliveryDateTime
+        || ifoodPayload.delivery?.scheduledDateTimeStart
+        || null;
       if (!dt) return '';
       const d = new Date(dt);
       return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });

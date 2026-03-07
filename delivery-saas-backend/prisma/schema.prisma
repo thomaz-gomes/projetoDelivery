@@ -456,6 +456,21 @@ model ApiIntegration {
 
   // previously there was a unique constraint companyId+provider; removed to allow
   // multiple integrations of the same provider per company (multi-store setups)
+  paymentMappings IfoodPaymentMapping[]
+}
+
+// Maps iFood payment method codes to company PaymentMethod entries.
+// Used by order display, print templates, and financial module.
+model IfoodPaymentMapping {
+  id              String         @id @default(uuid())
+  integrationId   String
+  integration     ApiIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  ifoodCode       String         // e.g. CASH, CREDIT, DEBIT, MEAL_VOUCHER, PIX, OTHER
+  systemName      String         // display name to use across system, e.g. "Dinheiro", "Visa Crédito"
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([integrationId, ifoodCode], name: "integ_ifood_code_key")
 }
 
 // Optional mapping of an API integration to a specific Store (for multi-store setups)
@@ -1066,16 +1081,29 @@ model AiCreditPurchase {
 }
 
 model PaymentMethod {
-  id        String   @id @default(uuid())
-  companyId String
-  company   Company  @relation(fields: [companyId], references: [id])
-  name      String
+  id               String   @id @default(uuid())
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id])
+  name             String
+  description      String?
   // code should be unique per company (not globally). uniqueness enforced below.
-  code      String // ex: PIX, CASH, CARD_ON_DELIVERY
-  isActive  Boolean  @default(true)
-  config    Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  code             String // ex: PIX, CASH, CARD_ON_DELIVERY
+  isActive         Boolean  @default(true)
+  isOnline         Boolean  @default(false)
+  noChange         Boolean  @default(false) // "Sem troco"
+  paymentType      String?  // credit, debit, pix, cash, voucher, etc.
+  cardBrand        String?  // Visa, Mastercard, Elo, etc.
+  taxRate          Float?   // Taxa em %
+  fixedFee         Float?   // Taxa fixa por transação
+  transferFormat   String?  // Formato de repasse
+  daysToReceive    Int?     // Dias para recebimento
+  accountId        String?  // Conta financeira para recebimento
+  intermediaryName String?  // Nome fantasia do intermediador
+  intermediaryCnpj String?  // CNPJ do intermediador
+  platformUserCode String?  // Código de usuário na plataforma
+  config           Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([companyId, code], name: "company_payment_code_key")
 }
