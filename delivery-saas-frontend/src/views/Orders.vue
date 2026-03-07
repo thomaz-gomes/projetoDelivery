@@ -454,6 +454,46 @@ onMounted(async () => {
   const orderUpdateEvents = ['pedido-atualizado', 'order-updated', 'order:updated', 'order-status-changed', 'pedido-status', 'update-order'];
   orderUpdateEvents.forEach(ev => socket.value.on(ev, (p) => handleOrderUpdateEvent(p, ev)));
 
+  // Listen for iFood negotiation events (consumer cancellation requests)
+  socket.value.on('ifood-negotiation', async (data) => {
+    try {
+      console.log('[ifood-negotiation] event received:', data);
+      if (data.type === 'CONSUMER_CANCELLATION_REQUESTED') {
+        beep();
+        const display = data.displayId || (data.externalId ? data.externalId.slice(0, 8) : '??');
+        const result = await Swal.fire({
+          icon: 'warning',
+          title: 'Cliente solicitou cancelamento',
+          html: `<p>O cliente solicitou o cancelamento do pedido <strong>#${display}</strong> via iFood.</p><p class="text-muted small">Deseja aceitar ou recusar o cancelamento?</p>`,
+          showCancelButton: true,
+          showDenyButton: true,
+          confirmButtonText: 'Aceitar cancelamento',
+          denyButtonText: 'Recusar cancelamento',
+          cancelButtonText: 'Decidir depois',
+          confirmButtonColor: '#dc3545',
+          denyButtonColor: '#198754',
+        });
+        if (result.isConfirmed || result.isDenied) {
+          const action = result.isConfirmed ? 'ACCEPTED' : 'DENIED';
+          try {
+            await api.post(`/integrations/ifood/orders/${encodeURIComponent(data.externalId)}/cancellation-dispute`, { action });
+            Swal.fire({ icon: 'success', text: action === 'ACCEPTED' ? 'Cancelamento aceito.' : 'Cancelamento recusado.', timer: 2000, showConfirmButton: false });
+            if (action === 'ACCEPTED' && data.orderId) {
+              // Update local order status
+              const idx = store.orders.findIndex(o => o && o.id === data.orderId);
+              if (idx !== -1) store.orders[idx].status = 'CANCELADO';
+            }
+          } catch (e) {
+            console.error('Erro ao responder negociacao:', e);
+            Swal.fire('Erro', 'Falha ao responder ao iFood.', 'error');
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[ifood-negotiation] handler error:', e);
+    }
+  });
+
   // Listen for print results emitted by backend so UI shows toast notifications
   socket.value.on('print-result', (payload) => {
     try {
@@ -2096,6 +2136,36 @@ async function editPayment() {
   if (result.isConfirmed && result.value) await saveOrderEdit(result.value);
 }
 
+function isTakeoutOrder(o) {
+  if (!o) return false;
+  const t = String(o.orderType || o.payload?.orderType || o.payload?.order?.orderType || o.payload?.type || '').toUpperCase();
+  return t === 'TAKEOUT' || t === 'PICKUP' || t === 'TAKE-OUT' || t === 'PICK-UP';
+}
+
+async function markReadyForPickup(o) {
+  if (!o || o.status !== 'EM_PREPARO') return;
+  const conf = await Swal.fire({
+    title: 'Pronto para Retirada?',
+    text: `Marcar pedido #${formatDisplay(o)} como pronto para o cliente retirar?`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Sim, está pronto',
+    cancelButtonText: 'Cancelar'
+  });
+  if (!conf.isConfirmed) return;
+  try {
+    loading.value = true;
+    await api.patch(`/orders/${o.id}/status`, { status: 'PRONTO' });
+    o.status = 'PRONTO';
+    Swal.fire({ icon: 'success', text: 'Pedido marcado como pronto!', timer: 1500, showConfirmButton: false });
+  } catch (e) {
+    console.error('markReadyForPickup error:', e);
+    Swal.fire('Erro', 'Falha ao atualizar status.', 'error');
+  } finally {
+    loading.value = false;
+  }
+}
+
 async function cancelOrderFromDetails() {
   if (!selectedOrder.value) return;
   const o = selectedOrder.value;
@@ -2176,6 +2246,7 @@ async function cancelOrderFromDetails() {
 
 const STATUS_LABEL = {
   EM_PREPARO: 'Em preparo',
+  PRONTO: 'Pronto p/ retirada',
   SAIU_PARA_ENTREGA: 'Saiu para entrega',
   CONCLUIDO: 'Concluído',
   CONFIRMACAO_PAGAMENTO: 'Confirmação de pagamento',
@@ -2587,6 +2658,7 @@ async function changeStatus(order, to) {
 
 const statusActions = [
   { to: 'EM_PREPARO', label: 'Em preparo' },
+  { to: 'PRONTO', label: 'Pronto p/ retirada' },
   { to: 'SAIU_PARA_ENTREGA', label: 'Saiu p/ entrega' },
   { to: 'CONFIRMACAO_PAGAMENTO', label: 'Confirmação de pagamento' },
   { to: 'CONCLUIDO', label: 'Concluído' },
@@ -2596,6 +2668,7 @@ const statusActions = [
 const statusFilters = [
   { value: 'TODOS', label: 'Todos', color: 'secondary' },
   { value: 'EM_PREPARO', label: 'Em preparo', color: 'warning' },
+  { value: 'PRONTO', label: 'Pronto p/ retirada', color: 'info' },
   { value: 'SAIU_PARA_ENTREGA', label: 'Saiu p/ entrega', color: 'primary' },
   { value: 'CONFIRMACAO_PAGAMENTO', label: 'Confirmação de pagamento', color: 'info' },
   { value: 'CONCLUIDO', label: 'Concluído', color: 'success' },
@@ -2939,6 +3012,10 @@ function pulseButton() {
                   </span>
                   <span class="oc-channel">{{ normalizeOrder(o).storeName ? (normalizeOrder(o).storeName + (normalizeOrder(o).channelLabel ? ' | ' + normalizeOrder(o).channelLabel : '')) : (normalizeOrder(o).channelLabel || '—') }}</span>
                 </div>
+                <!-- Scheduled order banner -->
+                <div v-if="normalizeOrder(o).scheduledTime" class="oc-scheduled-banner">
+                  <i class="bi bi-clock-history"></i> Agendado: {{ new Date(normalizeOrder(o).scheduledTime).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) }} {{ new Date(normalizeOrder(o).scheduledTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}
+                </div>
                 <!-- Row 2: info chips -->
                 <div class="oc-info">
                   <span v-if="o.customerPhone" class="oc-chip"><i class="bi bi-telephone"></i> {{ o.customerPhone }}</span>
@@ -2967,6 +3044,9 @@ function pulseButton() {
                     <button class="btn btn-sm btn-outline-secondary" @click="viewReceipt(o)" title="Visualizar comanda"><i class="bi bi-eye"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" @click="printReceipt(o)" title="Imprimir comanda"><i class="bi bi-printer"></i></button>
                     <button class="btn btn-sm btn-outline-success" @click.stop="emitirNfeOrder(o)" title="Emitir NF-e"><i class="bi bi-receipt"></i></button>
+                    <button v-if="o.status === 'EM_PREPARO' && isTakeoutOrder(o)" class="btn btn-sm btn-info text-white" @click.stop="markReadyForPickup(o)" :disabled="loading" title="Pronto para Retirada">
+                      <i class="bi bi-bag-check"></i> Pronto
+                    </button>
                     <button class="btn btn-sm btn-primary advance" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status) || !store.canTransition(o.status, getNextStatus(o.status)) || loading" title="Avançar status">
                       Avançar <i class="bi bi-arrow-right"></i>
                     </button>
@@ -3189,6 +3269,11 @@ function pulseButton() {
             <i class="bi bi-x-circle"></i> Cancelar pedido
           </button>
           <div class="d-flex gap-2">
+            <button v-if="selectedOrder && selectedOrder.status === 'EM_PREPARO' && isTakeoutOrder(selectedOrder)"
+              type="button" class="btn btn-info text-white" @click="markReadyForPickup(selectedOrder)"
+              title="Pronto para Retirada">
+              <i class="bi bi-bag-check"></i> Pronto p/ Retirada
+            </button>
             <button type="button" class="btn btn-outline-secondary" @click="printReceipt(selectedOrder)" title="Imprimir">
               <i class="bi bi-printer"></i> Imprimir
             </button>
@@ -3328,6 +3413,24 @@ function pulseButton() {
   max-width: 90px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Scheduled order banner */
+.oc-scheduled-banner {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.oc-scheduled-banner i {
+  font-size: 0.85rem;
 }
 
 /* Info chips row */

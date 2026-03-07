@@ -19,7 +19,7 @@ function parseDateRange(query) {
 async function fetchItems(companyId, from, to, storeId) {
   const orderWhere = {
     companyId,
-    status: { in: ['CONCLUIDO', 'INVOICE_AUTHORIZED'] },
+    status: { not: 'CANCELADO' },
     createdAt: { gte: from, lte: to },
   };
   if (storeId) orderWhere.storeId = storeId;
@@ -58,7 +58,7 @@ router.get('/debug', async (req, res) => {
       prisma.order.count({
         where: {
           companyId,
-          status: { in: ['CONCLUIDO', 'INVOICE_AUTHORIZED'] },
+          status: { not: 'CANCELADO' },
           createdAt: { gte: from, lte: to },
         },
       }),

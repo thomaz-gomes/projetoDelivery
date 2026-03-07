@@ -20,6 +20,7 @@
  *   {{qr_url}}           - URL do QR code (despacho)
  *   {{codigo_coleta}}    - Código de coleta iFood (pickupCode)
  *   {{localizador}}      - Localizador do pedido iFood (phone.localizer)
+ *   {{horario_agendado}} - Horário agendado (DD/MM HH:MM) para pedidos SCHEDULED
  *
  * QR Code:
  *   Use [QR:{{qr_url}}] em uma linha isolada para imprimir
@@ -50,6 +51,9 @@ const DEFAULT_TEMPLATE = `================================================
 Data: {{data_pedido}}  Hora: {{hora_pedido}}
 {{#if tipo_pedido}}
 Tipo: {{tipo_pedido}}
+{{/if}}
+{{#if horario_agendado}}
+*** AGENDADO PARA: {{horario_agendado}} ***
 {{/if}}
 
 ------------------------------------------------
@@ -92,8 +96,15 @@ FORMAS DE PAGAMENTO
 {{payment_method}}   R$ {{payment_value}}
 {{/each}}
 
+{{#if troco}}
+TROCO PARA:            R$ {{troco}}
+{{/if}}
+
 {{#if observacoes}}
 OBS: {{observacoes}}
+{{/if}}
+{{#if obs_entrega}}
+OBS ENTREGA: {{obs_entrega}}
 {{/if}}
 {{#if qr_url}}
 [QR:{{qr_url}}]
@@ -112,6 +123,7 @@ const DEFAULT_TEMPLATE_V2 = {
     { t: 'text', c: 'PEDIDO #{{display_id}}', a: 'center', b: true, s: 'xl' },
     { t: 'text', c: 'Data: {{data_pedido}}  Hora: {{hora_pedido}}' },
     { t: 'cond', key: 'tipo_pedido', c: 'Tipo: {{tipo_pedido}}' },
+    { t: 'cond', key: 'horario_agendado', c: '*** AGENDADO PARA: {{horario_agendado}} ***', b: true },
     { t: 'sep' },
     { t: 'text', c: 'CLIENTE: {{nome_cliente}}', b: true },
     { t: 'text', c: 'Telefone: {{telefone_cliente}}' },
@@ -129,7 +141,9 @@ const DEFAULT_TEMPLATE_V2 = {
     { t: 'sep' },
     { t: 'text', c: 'FORMAS DE PAGAMENTO', b: true },
     { t: 'payments' },
+    { t: 'cond', key: 'troco', c: 'TROCO PARA: R$ {{troco}}' },
     { t: 'cond', key: 'observacoes', c: 'OBS: {{observacoes}}' },
+    { t: 'cond', key: 'obs_entrega', c: 'OBS ENTREGA: {{obs_entrega}}' },
     { t: 'qr' },
     { t: 'sep' },
     { t: 'text', c: 'Obrigado e bom apetite!', a: 'center' },

@@ -1,5 +1,5 @@
 /* ================================================================
-   Bootstrap 5 Overrides — Flat Moderno
+   Bootstrap 5 Overrides — Modern Flat UI
    ================================================================ */
 
 /* ── Body ── */
@@ -10,24 +10,28 @@ body {
 
 /* ── Cards ── */
 .card {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-color-soft);
   border-radius: var(--border-radius);
   box-shadow: var(--shadow-card);
   background: var(--bg-card);
   transition: var(--transition-base);
 }
 .card:hover {
-  box-shadow: var(--shadow-hover);
+  box-shadow: var(--shadow-card);
 }
 .card-header {
   background: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color-soft);
   border-radius: var(--border-radius) var(--border-radius) 0 0;
   font-weight: 600;
+  padding: 1rem 1.25rem;
 }
 .card-footer {
   background: var(--bg-card);
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color-soft);
+}
+.card-body {
+  padding: 1.25rem;
 }
 
 /* ── Buttons ── */
@@ -35,6 +39,7 @@ body {
   border-radius: var(--border-radius-sm);
   font-weight: 500;
   transition: var(--transition-base);
+  letter-spacing: 0.01em;
 }
 .btn-primary {
   background-color: var(--primary) !important;
@@ -89,6 +94,15 @@ body {
 .btn:focus-visible {
   box-shadow: 0 0 0 0.2rem rgba(16, 87, 132, 0.25) !important;
 }
+.btn-sm {
+  border-radius: var(--border-radius-sm);
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+}
+.btn-lg {
+  border-radius: var(--border-radius-sm);
+  padding: 0.65rem 1.5rem;
+}
 
 /* ── Background utilities ── */
 .bg-primary {
@@ -103,28 +117,42 @@ body {
 
 /* ── Tables ── */
 .table {
-  border-color: var(--border-color);
+  border-color: transparent;
+  --bs-table-bg: transparent;
 }
 .table > thead > tr > th {
-  background: var(--bg-zebra);
-  border-bottom: 2px solid var(--border-color);
-  color: var(--text-secondary);
-  font-weight: 600;
-  font-size: 0.8rem;
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.78rem;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 0.75rem;
+  letter-spacing: 0.04em;
+  padding: 0.65rem 0.85rem;
+  white-space: nowrap;
 }
 .table > tbody > tr > td {
-  padding: 0.75rem;
+  padding: 0.85rem;
   vertical-align: middle;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+.table > tbody > tr:last-child > td {
+  border-bottom: none;
+}
+.table > tbody > tr {
+  transition: background-color 0.15s ease;
 }
 .table > tbody > tr:hover {
-  background-color: var(--bg-hover);
+  background-color: rgba(16, 87, 132, 0.03);
 }
 .table-striped > tbody > tr:nth-of-type(odd) > td {
   background-color: var(--bg-zebra);
+}
+/* Remove Bootstrap's default table borders */
+.table > :not(caption) > * > * {
+  box-shadow: none;
 }
 
 /* ── Forms ── */
@@ -133,25 +161,88 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius-sm);
   transition: var(--transition-base);
+  padding: 0.55rem 0.875rem;
+  font-size: 0.875rem;
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+}
+.form-control:hover,
+.form-select:hover {
+  border-color: var(--text-muted);
 }
 .form-control:focus,
 .form-select:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 0.2rem rgba(16, 87, 132, 0.15);
+  box-shadow: 0 0 0 3px rgba(16, 87, 132, 0.1);
+  background-color: var(--bg-card);
+}
+.form-control::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.form-control-sm {
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8rem;
+}
+.form-control-lg {
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
 }
 .form-label {
   font-weight: 500;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
+  letter-spacing: 0.01em;
 }
 .input-group-text {
   border: 1px solid var(--border-color);
   background: var(--bg-zebra);
   border-radius: var(--border-radius-sm);
+  font-size: 0.875rem;
+  padding: 0.55rem 0.875rem;
 }
 
-/* ── Nav / Tabs ── */
+/* ── Nav / Tabs — Segment Pill Style ── */
+.nav-tabs {
+  border-bottom: none;
+  background: #F1F3F5;
+  border-radius: var(--border-radius-sm);
+  padding: 0.25rem;
+  gap: 0.2rem;
+  display: inline-flex;
+  width: auto;
+}
+.nav-tabs .nav-item {
+  margin-bottom: 0;
+}
+.nav-tabs .nav-link {
+  border: none;
+  border-radius: 0.5rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.84rem;
+  padding: 0.45rem 1rem;
+  transition: var(--transition-base);
+  background: transparent;
+  white-space: nowrap;
+}
+.nav-tabs .nav-link:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.5);
+}
+.nav-tabs .nav-link.active {
+  color: var(--text-primary) !important;
+  background: var(--bg-card) !important;
+  box-shadow: var(--shadow-tab);
+  font-weight: 600;
+  border: none;
+}
+
+/* Nav pills (keep existing style but refine) */
+.nav-pills {
+  gap: 0.35rem;
+}
 .nav-link {
   color: var(--text-secondary);
   font-weight: 500;
@@ -162,24 +253,19 @@ body {
   color: var(--primary);
   background: rgba(16, 87, 132, 0.06);
 }
-.nav-link.active,
 .nav-pills .nav-link.active {
-  color: var(--primary) !important;
-  background: rgba(16, 87, 132, 0.1) !important;
+  color: #fff !important;
+  background: var(--primary) !important;
   font-weight: 600;
-}
-.nav-tabs .nav-link.active {
-  color: var(--primary);
-  border-bottom: 2px solid var(--primary);
-  background: transparent;
 }
 
 /* ── Badges ── */
 .badge {
   border-radius: var(--border-radius-pill);
   font-weight: 500;
-  font-size: 0.75rem;
-  padding: 0.3em 0.65em;
+  font-size: 0.72rem;
+  padding: 0.35em 0.7em;
+  letter-spacing: 0.01em;
 }
 .badge.bg-primary {
   background-color: var(--primary) !important;
@@ -187,30 +273,39 @@ body {
 .badge.bg-success {
   background-color: var(--success) !important;
 }
+.badge.bg-light {
+  background-color: #F1F3F5 !important;
+  color: var(--text-secondary) !important;
+}
 
 /* ── Modals ── */
 .modal-content {
   border-radius: var(--border-radius);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-color-soft);
   box-shadow: var(--shadow-dropdown);
 }
 .modal-header {
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color-soft);
+  padding: 1rem 1.25rem;
 }
 .modal-footer {
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color-soft);
+  padding: 0.85rem 1.25rem;
+}
+.modal-body {
+  padding: 1.25rem;
 }
 
 /* ── Dropdowns ── */
 .dropdown-menu {
   border-radius: var(--border-radius);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-color-soft);
   box-shadow: var(--shadow-dropdown);
-  padding: 0.35rem;
+  padding: 0.4rem;
 }
 .dropdown-item {
   border-radius: var(--border-radius-sm);
-  padding: 0.45rem 0.75rem;
+  padding: 0.5rem 0.85rem;
   font-size: 0.875rem;
   transition: var(--transition-base);
 }
@@ -227,7 +322,9 @@ body {
 
 /* ── List Group ── */
 .list-group-item {
-  border-color: var(--border-color);
+  border-color: var(--border-color-soft);
+  padding: 0.75rem 1rem;
+  transition: var(--transition-base);
 }
 .list-group-item.active {
   background-color: var(--primary);
@@ -238,7 +335,10 @@ body {
 .page-link {
   color: var(--primary);
   border-color: var(--border-color);
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-sm) !important;
+  font-size: 0.84rem;
+  padding: 0.4rem 0.75rem;
+  transition: var(--transition-base);
 }
 .page-link:hover {
   background: var(--bg-hover);
@@ -248,11 +348,15 @@ body {
   background-color: var(--primary);
   border-color: var(--primary);
 }
+.page-item + .page-item {
+  margin-left: 0.25rem;
+}
 
 /* ── Alerts ── */
 .alert {
   border-radius: var(--border-radius);
   border: none;
+  font-size: 0.875rem;
 }
 
 /* ── Progress ── */
@@ -288,7 +392,7 @@ body {
 }
 .form-check-input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 0.2rem rgba(16, 87, 132, 0.2);
+  box-shadow: 0 0 0 3px rgba(16, 87, 132, 0.12);
 }
 .form-check-input[type="checkbox"]:indeterminate {
   background-color: var(--primary);
@@ -299,8 +403,12 @@ body {
   border-color: var(--success);
 }
 .form-switch .form-check-input:focus {
-  box-shadow: 0 0 0 0.2rem rgba(137, 209, 54, 0.2);
+  box-shadow: 0 0 0 3px rgba(137, 209, 54, 0.15);
   border-color: var(--success);
+}
+.form-check-label {
+  font-size: 0.875rem;
+  color: var(--text-primary);
 }
 
 /* ── Focus ring global ── */
@@ -328,7 +436,7 @@ a:focus-visible,
 
 /* ── Offcanvas ── */
 .offcanvas {
-  border-right: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color-soft);
 }
 
 /* ── Close button ── */
@@ -343,11 +451,11 @@ a:focus-visible,
   box-shadow: none;
 }
 .accordion-button:focus {
-  box-shadow: 0 0 0 0.2rem rgba(16, 87, 132, 0.15);
+  box-shadow: 0 0 0 3px rgba(16, 87, 132, 0.1);
   border-color: var(--primary);
 }
 .accordion-item {
-  border-color: var(--border-color);
+  border-color: var(--border-color-soft);
   border-radius: var(--border-radius);
 }
 

@@ -294,7 +294,36 @@ integrationsRouter.get('/ifood/orders/:id/cancellationReasons', requireRole('ADM
 });
 
 /**
- *  ✅ Confirmar eventos processados
+ *  Responder a solicitacao de cancelamento do consumidor (Plataforma de Negociacao iFood)
+ *  POST /integrations/ifood/orders/:id/cancellation-dispute
+ *  Body: { action: 'ACCEPTED' | 'DENIED' }
+ */
+integrationsRouter.post('/ifood/orders/:id/cancellation-dispute', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const orderId = req.params.id; // externalId do iFood
+    const { action } = req.body || {};
+    if (!action || !['ACCEPTED', 'DENIED'].includes(String(action).toUpperCase())) {
+      return res.status(400).json({ message: 'action deve ser ACCEPTED ou DENIED' });
+    }
+    const { getIFoodAccessToken } = await import('../integrations/ifood/oauth.js');
+    const axios = (await import('axios')).default;
+    const token = await getIFoodAccessToken(companyId);
+    const base = process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br';
+    const { data } = await axios.post(
+      `${base}/order/v1.0/orders/${encodeURIComponent(orderId)}/cancellationDisputeResponse`,
+      { status: String(action).toUpperCase() },
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, timeout: 10000 }
+    );
+    res.json({ ok: true, data });
+  } catch (e) {
+    console.error('Erro ao responder negociacao iFood:', e.response?.data || e.message);
+    res.status(e.response?.status || 500).json({ message: 'Falha ao responder negociacao', error: e.response?.data || e.message });
+  }
+});
+
+/**
+ *  Confirmar eventos processados
  */
 integrationsRouter.post('/ifood/ack', requireRole('ADMIN'), async (req, res) => {
   try {

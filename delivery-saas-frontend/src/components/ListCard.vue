@@ -80,9 +80,9 @@ onBeforeUnmount(() => clearTimeout(debounceTimer))
 .list-card { padding-top: 16px }
 .list-card .card {
   background: var(--bg-card, #fff);
-  border: 1px solid var(--border-color, #E6E6E6);
-  border-radius: var(--border-radius, 0.75rem);
-  box-shadow: var(--shadow-card, 0 0.125rem 0.25rem rgba(0,0,0,0.075));
+  border: 1px solid var(--border-color-soft, rgba(0,0,0,0.06));
+  border-radius: var(--border-radius, 1rem);
+  box-shadow: var(--shadow-card, 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04));
   overflow: hidden;
 }
 .list-card .card-body { padding: 1.25rem; }
@@ -92,7 +92,8 @@ onBeforeUnmount(() => clearTimeout(debounceTimer))
   color: var(--text-primary, #212529);
 }
 .list-card .small.text-muted {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
 }
 
 .list-card--card-style .card-body { padding: 18px 20px; }

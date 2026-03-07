@@ -216,6 +216,12 @@ export function determineStatusFromIFoodEvent(payload, orderObj) {
   }
   if (code === 'CANCELLED' || code === 'CANCEL' || code === 'CAN') return 'CANCELADO';
 
+  // Negotiation platform events — these are not status changes but require
+  // merchant response. Return a special prefix so callers can detect them.
+  if (code === 'CONSUMER_CANCELLATION_REQUESTED' || code === 'CRR') return 'NEGOTIATION:CONSUMER_CANCELLATION_REQUESTED';
+  if (code === 'CONSUMER_CANCELLATION_ACCEPTED') return 'NEGOTIATION:CONSUMER_CANCELLATION_ACCEPTED';
+  if (code === 'CONSUMER_CANCELLATION_DENIED') return 'NEGOTIATION:CONSUMER_CANCELLATION_DENIED';
+
   return null;
 }
 
@@ -467,6 +473,45 @@ export async function processIFoodWebhook(eventId) {
         const codeRaw = payload && (payload.fullCode || payload.code || (payload.order && (payload.order.fullCode || payload.order.code)));
         const eventCode = codeRaw ? String(codeRaw).toUpperCase() : null;
         inferred = determineStatusFromIFoodEvent(payload, payload.order || payload);
+
+        // Negotiation platform events: emit to frontend and mark processed, but do NOT change order status
+        if (inferred && String(inferred).startsWith('NEGOTIATION:')) {
+          const negotiationType = inferred.replace('NEGOTIATION:', '');
+          const orderId = payload?.orderId || payload?.order?.id || payload?.id || null;
+          console.log('[iFood Processor] negotiation event:', negotiationType, 'orderId:', orderId);
+
+          // Find the local order to attach the negotiation event
+          let localOrder = null;
+          if (orderId) {
+            localOrder = await prisma.order.findUnique({ where: { externalId: orderId } });
+          }
+
+          // Emit negotiation event to frontend via Socket.IO
+          try {
+            const io = app && app.locals && app.locals.io;
+            if (io) {
+              io.to(`company:${companyId}`).emit('ifood-negotiation', {
+                type: negotiationType,
+                orderId: localOrder?.id || null,
+                externalId: orderId,
+                displayId: localOrder?.displayId || payload?.order?.displayId || null,
+                payload: payload,
+                companyId,
+              });
+              console.log('[iFood Processor] emitted ifood-negotiation to company room:', companyId);
+            }
+          } catch (eEmit) {
+            console.warn('[iFood Processor] failed to emit negotiation event:', eEmit?.message);
+          }
+
+          // Mark webhook event as processed
+          await prisma.webhookEvent.update({
+            where: { id: evt.id },
+            data: { status: 'PROCESSED', processedAt: new Date(), error: null },
+          });
+          return;
+        }
+
         if (inferred) mapped.status = inferred;
         console.log('[iFood Processor] eventCode:', eventCode, '-> inferred status:', inferred, 'mapped.status:', mapped.status);
       } catch (e) {

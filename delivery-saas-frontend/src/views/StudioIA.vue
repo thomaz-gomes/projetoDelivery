@@ -21,17 +21,23 @@
     </div>
 
     <!-- Tabs -->
-    <div class="studio-ia-tabs">
-      <button :class="{ active: tab === 'create' }" @click="tab = 'create'">
-        <i class="bi bi-plus-circle me-1"></i>Criar do Zero
-      </button>
-      <button :class="{ active: tab === 'enhance' }" @click="tab = 'enhance'">
-        <i class="bi bi-magic me-1"></i>Otimizar Foto
-      </button>
-      <button :class="{ active: tab === 'gallery' }" @click="tab = 'gallery'; loadGallery()">
-        <i class="bi bi-images me-1"></i>Galeria
-      </button>
-    </div>
+    <ul class="nav nav-tabs studio-ia-nav mt-3 mb-4">
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: tab === 'create' }" href="#" @click.prevent="tab = 'create'">
+          <i class="bi bi-plus-circle me-1"></i>Criar do Zero
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: tab === 'enhance' }" href="#" @click.prevent="tab = 'enhance'">
+          <i class="bi bi-magic me-1"></i>Otimizar Foto
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: tab === 'gallery' }" href="#" @click.prevent="tab = 'gallery'; loadGallery()">
+          <i class="bi bi-images me-1"></i>Galeria
+        </a>
+      </li>
+    </ul>
 
     <div class="studio-ia-body">
 
@@ -662,43 +668,17 @@ async function refreshBalance() {
 }
 
 /* ── Tabs ── */
-.studio-ia-tabs {
-  display: flex;
-  gap: 0;
-  background: #f8f9fa;
-  border-radius: 0 0 12px 12px;
-  overflow: hidden;
-  border: 1px solid #e9ecef;
-  border-top: none;
-  margin-bottom: 1.5rem;
-}
-.studio-ia-tabs button {
-  flex: 1;
-  padding: 0.75rem 1rem;
-  border: none;
-  background: transparent;
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: #6c757d;
-  cursor: pointer;
-  transition: all 0.15s;
-  border-bottom: 3px solid transparent;
-}
-.studio-ia-tabs button:hover {
-  color: #212529;
-  background: #e9ecef;
-}
-.studio-ia-tabs button.active {
-  color: #0d6efd;
-  background: #fff;
-  border-bottom-color: #0d6efd;
+.studio-ia-nav {
+  display: inline-flex;
+  width: auto;
 }
 
 /* ── Panel ── */
 .studio-ia-panel {
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #e9ecef;
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color-soft);
+  box-shadow: var(--shadow-card);
   padding: 1.5rem;
 }
 
@@ -1042,7 +1022,6 @@ async function refreshBalance() {
 /* ── Responsive ── */
 @media (max-width: 767.98px) {
   .studio-ia-hero { padding: 1rem 1.25rem; border-radius: 0; }
-  .studio-ia-tabs { border-radius: 0; }
   .studio-ia-panel { border-radius: 0; border-left: 0; border-right: 0; }
   .sia-style-grid { grid-template-columns: 1fr 1fr; }
   .sia-angle-grid { flex-direction: column; }

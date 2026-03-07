@@ -4,11 +4,35 @@ import crypto from 'crypto';
 import { prisma } from '../../prisma.js';
 import { getIFoodAccessToken } from './oauth.js';
 
+const MAX_RETRIES = 3;
+const DEFAULT_RETRY_DELAY_MS = 2000;
+
+function attachRateLimitInterceptor(instance) {
+  instance.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const config = error.config;
+      if (!config) return Promise.reject(error);
+      config._retryCount = config._retryCount || 0;
+      if (error.response && error.response.status === 429 && config._retryCount < MAX_RETRIES) {
+        config._retryCount += 1;
+        const retryAfter = error.response.headers['retry-after'];
+        const delayMs = retryAfter ? Number(retryAfter) * 1000 : DEFAULT_RETRY_DELAY_MS * Math.pow(2, config._retryCount - 1);
+        console.warn(`[iFood RateLimit] 429 received, retry ${config._retryCount}/${MAX_RETRIES} in ${delayMs}ms`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        return instance(config);
+      }
+      return Promise.reject(error);
+    }
+  );
+  return instance;
+}
+
 /**
  * Cria cliente HTTP autenticado para a Merchant API
  */
 function ifoodHttp(accessToken) {
-  return axios.create({
+  const instance = axios.create({
     baseURL: process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br',
     timeout: 15000,
     headers: {
@@ -16,6 +40,7 @@ function ifoodHttp(accessToken) {
       'Content-Type': 'application/json'
     }
   });
+  return attachRateLimitInterceptor(instance);
 }
 
 /**

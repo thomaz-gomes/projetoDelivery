@@ -257,6 +257,30 @@ function buildContext(order, settings = {}) {
   // iFood: campos específicos (ifoodPayload já desembrulhou o envelope)
   const codigoColeta = ifoodPayload.delivery?.pickupCode || '';
   const localizador = ifoodPayload.customer?.phone?.localizer || '';
+  const obsEntrega = ifoodPayload.delivery?.observations || '';
+
+  // Horário agendado (pedido SCHEDULED do iFood)
+  const horarioAgendado = (function() {
+    try {
+      const timing = ifoodPayload.orderTiming || payload.orderTiming || null;
+      if (timing !== 'SCHEDULED') return '';
+      const dt = ifoodPayload.scheduledDateTimeStart || payload.scheduledDateTimeStart || ifoodPayload.scheduledDeliveryDateTime || null;
+      if (!dt) return '';
+      const d = new Date(dt);
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
+  })();
+
+  // Troco (changeFor) para pagamento em dinheiro
+  const troco = (function() {
+    try {
+      const methods = ifoodPayload.payments?.methods || payload.payments?.methods || [];
+      const cash = methods.find(m => String(m.method || '').toUpperCase() === 'CASH');
+      if (cash?.changeFor) return Number(cash.changeFor).toFixed(2);
+      if (cash?.cash?.changeFor) return Number(cash.cash.changeFor).toFixed(2);
+    } catch (e) {}
+    return '';
+  })();
 
   return {
     header_name: settings.headerName || 'Minha Loja',
@@ -279,6 +303,9 @@ function buildContext(order, settings = {}) {
     qr_url: qrUrl,
     codigo_coleta: codigoColeta,
     localizador,
+    obs_entrega: obsEntrega,
+    troco,
+    horario_agendado: horarioAgendado,
   };
 }
 

@@ -41,7 +41,7 @@
     <!-- Sem dados -->
     <div v-else-if="loaded && noData" class="alert alert-info text-center">
       <i class="bi bi-info-circle me-2"></i>
-      Nenhum pedido concluído encontrado no período selecionado.
+      Nenhum pedido encontrado no período selecionado.
     </div>
 
     <!-- Gráficos -->

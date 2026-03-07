@@ -1,8 +1,8 @@
 /* ================================================================
-   Componentes Customizados — Flat Moderno
+   Componentes Customizados — Modern Flat UI
    ================================================================ */
 
-/* ── .ai-photo-cta ── Chamada de ação após campo de foto de produto */
+/* ── .ai-photo-cta ── Chamada de acao apos campo de foto de produto */
 .ai-photo-cta {
   display: flex;
   align-items: center;
@@ -11,13 +11,12 @@
   color: #7c3aed;
   background: linear-gradient(90deg, rgba(124,58,237,.07), rgba(139,92,246,.04));
   border-left: 3px solid #7c3aed;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;
   padding: 0.35rem 0.65rem;
 }
 
 /* ── .stat-card ──
-   Card de KPI / estatística com ícone, valor e variação.
-   Uso: <div class="stat-card"> ... </div>
+   Card de KPI / estatistica com icone, valor e variacao.
 */
 .stat-card {
   display: flex;
@@ -25,7 +24,7 @@
   gap: 1rem;
   padding: 1.25rem;
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-color-soft);
   border-radius: var(--border-radius);
   box-shadow: var(--shadow-card);
   transition: var(--transition-base);
@@ -33,6 +32,7 @@
 }
 .stat-card:hover {
   box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
 }
 .stat-card .stat-icon {
   display: flex;
@@ -45,19 +45,19 @@
   flex-shrink: 0;
 }
 .stat-card .stat-icon--primary {
-  background: rgba(16, 87, 132, 0.1);
+  background: rgba(16, 87, 132, 0.08);
   color: var(--primary);
 }
 .stat-card .stat-icon--success {
-  background: rgba(137, 209, 54, 0.15);
+  background: rgba(137, 209, 54, 0.12);
   color: var(--success-dark);
 }
 .stat-card .stat-icon--warning {
-  background: rgba(255, 193, 7, 0.15);
+  background: rgba(255, 193, 7, 0.12);
   color: #D4A017;
 }
 .stat-card .stat-icon--danger {
-  background: rgba(220, 53, 69, 0.1);
+  background: rgba(220, 53, 69, 0.08);
   color: #DC3545;
 }
 .stat-card .stat-body {
@@ -65,12 +65,12 @@
   min-width: 0;
 }
 .stat-card .stat-label {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 0.15rem;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.2rem;
 }
 .stat-card .stat-value {
   font-size: 1.5rem;
@@ -84,23 +84,23 @@
   margin-top: 0.15rem;
 }
 .stat-card .stat-change {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  padding: 0.15em 0.5em;
+  padding: 0.2em 0.55em;
   border-radius: var(--border-radius-pill);
   white-space: nowrap;
 }
 .stat-card .stat-change--up {
-  background: rgba(137, 209, 54, 0.15);
+  background: rgba(137, 209, 54, 0.12);
   color: var(--success-dark);
 }
 .stat-card .stat-change--down {
-  background: rgba(220, 53, 69, 0.1);
+  background: rgba(220, 53, 69, 0.08);
   color: #DC3545;
 }
 
 /* ── .sidebar-nav ──
-   Navegação lateral administrativa.
+   Navegacao lateral administrativa.
 */
 .sidebar-nav {
   display: flex;
@@ -142,7 +142,7 @@
 }
 .sidebar-nav .sidebar-nav__divider {
   height: 1px;
-  background: var(--border-color);
+  background: var(--border-color-soft);
   margin: 0.5rem 0;
 }
 .sidebar-nav .sidebar-nav__heading {
@@ -155,7 +155,7 @@
 }
 
 /* ── .section-header ──
-   Título de seção com ação à direita ("Ver todos", etc).
+   Titulo de secao com acao a direita.
 */
 .section-header {
   display: flex;
@@ -163,7 +163,7 @@
   align-items: baseline;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color-soft);
 }
 .section-header__title {
   font-size: 1.1rem;
@@ -188,7 +188,7 @@
 */
 .data-table {
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-color-soft);
   border-radius: var(--border-radius);
   box-shadow: var(--shadow-card);
   overflow: hidden;
@@ -200,8 +200,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid var(--border-color);
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--border-color-soft);
 }
 .data-table .data-table__title {
   font-weight: 600;
@@ -213,20 +213,20 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.65rem 1rem;
-  border-top: 1px solid var(--border-color);
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border-color-soft);
   font-size: 0.8rem;
   color: var(--text-secondary);
 }
 
 /* ── .action-chip ──
-   Botão-pílula para filtros rápidos, tags de status.
+   Botao-pilula para filtros rapidos, tags de status.
 */
 .action-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.3rem 0.85rem;
+  padding: 0.35rem 0.9rem;
   border-radius: var(--border-radius-pill);
   border: 1px solid var(--border-color);
   background: var(--bg-card);
