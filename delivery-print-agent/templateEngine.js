@@ -270,6 +270,7 @@ function buildContext(order, settings = {}) {
 
   // Tipo do pedido
   const tipoPedido = (payload.orderType || o.orderType || o.type || '').toUpperCase();
+  const isPickup = ['PICKUP', 'TAKEOUT', 'TAKE-OUT', 'PICK-UP'].includes(tipoPedido);
 
   // QR Code URL (para despacho pelo motoboy)
   const qrUrl = o.qrText || o.qrUrl || (payload.qrText) || '';
@@ -315,7 +316,7 @@ function buildContext(order, settings = {}) {
     hora_pedido: horaPedido,
     nome_cliente: nomeCliente,
     telefone_cliente: telefoneCliente,
-    endereco_cliente: endereco,
+    endereco_cliente: isPickup ? 'PEDIDO PARA RETIRADA' : endereco,
     items,
     total_itens_count: String(totalItensCount),
     subtotal: subtotal.toFixed(2),
