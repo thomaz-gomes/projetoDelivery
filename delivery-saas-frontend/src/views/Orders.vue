@@ -1156,8 +1156,11 @@ function cancelOrderAction(o) {
 
 // compute next status in the happy path pipeline
 function getNextStatus(current) {
+  const c = (current || '').toUpperCase();
+  // PRONTO advances to SAIU_PARA_ENTREGA (aguardando retirada / saiu)
+  if (c === 'PRONTO') return 'SAIU_PARA_ENTREGA';
   const pipeline = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO'];
-  const idx = pipeline.indexOf((current || '').toUpperCase());
+  const idx = pipeline.indexOf(c);
   if (idx === -1) return null;
   if (idx === pipeline.length - 1) return null;
   return pipeline[idx + 1];
@@ -2201,7 +2204,7 @@ async function editPayment() {
 function isTakeoutOrder(o) {
   if (!o) return false;
   const t = String(o.orderType || o.payload?.orderType || o.payload?.order?.orderType || o.payload?.type || '').toUpperCase();
-  return t === 'TAKEOUT' || t === 'PICKUP' || t === 'TAKE-OUT' || t === 'PICK-UP';
+  return ['TAKEOUT', 'PICKUP', 'TAKE-OUT', 'PICK-UP', 'BALCAO', 'BALCÃO', 'RETIRADA', 'INDOOR'].includes(t);
 }
 
 async function markReadyForPickup(o) {
@@ -2319,17 +2322,19 @@ const STATUS_LABEL = {
 // columns to render (order matters)
 const COLUMNS = [
   { key: 'EM_PREPARO', label: 'Novos / Em preparo' },
-  { key: 'SAIU_PARA_ENTREGA', label: 'Saiu para entrega' },
+  { key: 'SAIU_PARA_ENTREGA', label: 'Entrega / Aguardando retirada', also: ['PRONTO'] },
   { key: 'CONFIRMACAO_PAGAMENTO', label: 'Confirmação de pagamento' },
   { key: 'CONCLUIDO', label: 'Concluído' }
 ];
 
 function columnOrders(key) {
   // derive column items from the already-filteredOrders to keep filters consistent
+  const col = COLUMNS.find(c => c.key === key);
+  const accepted = [key.toUpperCase(), ...(col && col.also ? col.also.map(s => s.toUpperCase()) : [])];
   try {
     return filteredOrders.value.filter((o) => {
       if (!o) return false;
-      return (o.status || '').toUpperCase() === (key || '').toUpperCase();
+      return accepted.includes((o.status || '').toUpperCase());
     });
   } catch (e) {
     // fallback: if filteredOrders isn't ready for some reason, filter raw store.orders
@@ -2860,10 +2865,12 @@ async function openPdv(){
       if (match && Array.isArray(match.addresses) && match.addresses.length>0) {
         pdvPreset.value = { customerName: match.fullName || match.name || '', orderType: 'DELIVERY', autoStep: 2 };
       } else {
-        pdvPreset.value = null;
+        pdvPreset.value = { orderType: 'DELIVERY' };
       }
+    } else {
+      pdvPreset.value = { orderType: 'DELIVERY' };
     }
-  }catch(e){ pdvPreset.value = null }
+  }catch(e){ pdvPreset.value = { orderType: 'DELIVERY' } }
   showPdv.value = true;
 }
 

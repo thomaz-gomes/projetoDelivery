@@ -44,7 +44,8 @@ export const useOrdersStore = defineStore('orders', {
 
     canTransition(current, to) {
       const flow = {
-        EM_PREPARO: ['SAIU_PARA_ENTREGA', 'CANCELADO'],
+        EM_PREPARO: ['PRONTO', 'SAIU_PARA_ENTREGA', 'CANCELADO'],
+        PRONTO: ['SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO'],
         SAIU_PARA_ENTREGA: ['CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO'],
         CONFIRMACAO_PAGAMENTO: ['CONCLUIDO', 'CANCELADO'],
         CONCLUIDO: [],

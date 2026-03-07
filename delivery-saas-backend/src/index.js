@@ -700,20 +700,37 @@ export function emitirNovoPedido(pedido) {
       console.log('emitirNovoPedido: skipping recent emit for', oid);
       return;
     }
-    // Broadcast 'novo-pedido' only to non-agent sockets (dashboard/front-end clients).
-    // Agents will receive targeted emits later in the auto-print flow to avoid
-    // duplicate 'novo-pedido' deliveries (broadcast + targeted emit).
     const sockets = Array.from(io.sockets.sockets.values());
     let sent = 0;
+    const agentSockets = [];
     for (const s of sockets) {
       try {
-        // If socket identifies as an agent (has s.agent), skip broadcast to avoid duplicates
-        if (s && s.agent) continue;
+        if (s && s.agent) { agentSockets.push(s); continue; }
         try { s.emit('novo-pedido', pedido); sent++; } catch (e) { /* ignore per-socket */ }
       } catch (e) { /* ignore */ }
     }
     console.log(`📢 Novo pedido emitido para painel (não-agentes): ${sent} sockets — ${pedido.displayId || pedido.id}`);
     try { if (oid) markEmitted(oid); } catch (e) {}
+
+    // Auto-print: enrich order and emit to connected agents for automatic printing
+    if (agentSockets.length > 0) {
+      (async () => {
+        try {
+          const enriched = Object.assign({}, pedido);
+          try {
+            const { enrichOrderForAgent } = await import('./enrichOrderForAgent.js');
+            await enrichOrderForAgent(enriched);
+          } catch (e) { /* non-fatal */ }
+          const wrapper = { order: enriched };
+          for (const s of agentSockets) {
+            try {
+              s.emit('novo-pedido', wrapper, () => {});
+              console.log(`🖨️ Auto-print: emitido para agente ${s.id} — ${enriched.displaySimple || enriched.id}`);
+            } catch (e) { /* ignore per-socket */ }
+          }
+        } catch (e) { console.warn('Auto-print emit to agents failed:', e && e.message); }
+      })();
+    }
   } catch (e) {
     console.warn('emitirNovoPedido broadcast failed:', e && e.message);
   }

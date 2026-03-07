@@ -269,11 +269,11 @@ function buildContext(order, settings = {}) {
   const observacoes = o.observation || o.notes || payload.observation || payload.notes || '';
 
   // Tipo do pedido
-  const tipoPedido = (payload.orderType || o.orderType || o.type || '').toUpperCase();
-  const isPickup = ['PICKUP', 'TAKEOUT', 'TAKE-OUT', 'PICK-UP'].includes(tipoPedido);
+  const tipoPedido = (ifoodPayload.orderType || payload.orderType || o.orderType || o.type || '').toUpperCase();
+  const isPickup = ['PICKUP', 'TAKEOUT', 'TAKE-OUT', 'PICK-UP', 'BALCAO', 'RETIRADA', 'INDOOR'].includes(tipoPedido);
 
   // QR Code URL (para despacho pelo motoboy)
-  const qrUrl = o.qrText || o.qrUrl || (payload.qrText) || '';
+  const qrUrl = o.qrText || o.qrUrl || payload.qrText || ifoodPayload.qrText || o.url || '';
 
   // iFood: campos específicos (ifoodPayload já desembrulhou o envelope)
   const codigoColeta = ifoodPayload.delivery?.pickupCode || '';
