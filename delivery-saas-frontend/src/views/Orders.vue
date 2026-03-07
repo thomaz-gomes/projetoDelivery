@@ -3031,14 +3031,15 @@ function pulseButton() {
                 <div class="oc-address" :title="normalizeOrder(o).address || '-'">{{ normalizeOrder(o).address || '-' }}</div>
 
                 <!-- Row 4: time + total + actions -->
-                 
+                 <div class="d-flex justify-content-between">
                   <span class="oc-time">{{ getCreatedDurationDisplay(o) }}</span>
+                  
+                  <span class="oc-total">{{ formatCurrency(computeDisplayedTotal(o)) }}</span></div>
                 <div class="oc-footer">
                   <span v-if="isIfoodOrder(o)"  title="Pedido iFood">
                     <img src="https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png" alt="iFood" style="width:24px;height:24px;object-fit:contain;margin-right:4px;vertical-align:-2px;" />
                     
                   </span>
-                  <span class="oc-total">{{ formatCurrency(computeDisplayedTotal(o)) }}</span>
                   <div class="oc-actions">
                     <button class="btn btn-sm btn-outline-secondary" @click.stop="openDetails(o)" title="Detalhes"><i class="bi bi-list-ul"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" @click="viewReceipt(o)" title="Visualizar comanda"><i class="bi bi-eye"></i></button>
