@@ -29,6 +29,7 @@ import publicCartRouter from './routes/publicCart.js'
 import menuAdminRouter from './routes/menu.js'
 import menuOptionsRouter from './routes/menuOptions.js'
 import menuImportRouter from './routes/menuImport.js'
+import menuIntegrationRouter from './routes/menuIntegration.js'
 import { nfeRouter } from './routes/nfe.js'
 import companiesRouter from './routes/companies.js'
 import storesRouter from './routes/stores.js'
@@ -37,6 +38,7 @@ import rolesRouter from './routes/rolePermissions.js'
 import ingredientGroupsRouter from './routes/stock/ingredientGroups.js'
 import ingredientsRouter from './routes/stock/ingredients.js'
 import technicalSheetsRouter from './routes/stock/technicalSheets.js'
+import technicalSheetImportRouter from './routes/stock/technicalSheetImport.js'
 import stockMovementsRouter from './routes/stock/stockMovements.js'
 import agentSetupRouter, { agentPairRouter } from './routes/agentSetup.js'
 import agentPrintRouter from './routes/agentPrint.js'
@@ -181,6 +183,7 @@ app.use('/public/:companyId/cart', publicCartRouter);
 app.use('/menu', menuAdminRouter);
 app.use('/menu/options', menuOptionsRouter);
 app.use('/menu', menuImportRouter);
+app.use('/menu/integration', menuIntegrationRouter);
 app.use('/nfe', requireModule('nfe'), nfeRouter);
 app.use('/settings', companiesRouter);
 // Mount menu admin router also under /settings to provide backward-compatible
@@ -194,6 +197,7 @@ app.use('/roles', rolesRouter);
 app.use('/ingredient-groups', requireModule('STOCK'), ingredientGroupsRouter);
 app.use('/ingredients', requireModule('STOCK'), ingredientsRouter);
 app.use('/technical-sheets', requireModule('STOCK'), technicalSheetsRouter);
+app.use('/technical-sheets', requireModule('STOCK'), technicalSheetImportRouter);
 app.use('/stock-movements', requireModule('STOCK'), stockMovementsRouter);
 // Agent pairing endpoint (unauthenticated - agent has no token yet)
 app.use('/agent-setup', agentPairRouter);
@@ -709,27 +713,68 @@ export function emitirNovoPedido(pedido) {
         try { s.emit('novo-pedido', pedido); sent++; } catch (e) { /* ignore per-socket */ }
       } catch (e) { /* ignore */ }
     }
-    console.log(`📢 Novo pedido emitido para painel (não-agentes): ${sent} sockets — ${pedido.displayId || pedido.id}`);
+    console.log(`📢 Novo pedido emitido para painel (não-agentes): ${sent} sockets, agentes: ${agentSockets.length} — ${pedido.displayId || pedido.id}`);
     try { if (oid) markEmitted(oid); } catch (e) {}
 
-    // Auto-print: enrich order and emit to connected agents for automatic printing
+    // Auto-print: enrich order and deliver directly to connected agents.
+    // Falls back to printQueue if no agent is available (delivered when agent reconnects).
     if (agentSockets.length > 0) {
-      (async () => {
-        try {
-          const enriched = Object.assign({}, pedido);
+      const orderId = pedido.id || pedido.orderId || null;
+      if (orderId) {
+        (async () => {
           try {
-            const { enrichOrderForAgent } = await import('./enrichOrderForAgent.js');
-            await enrichOrderForAgent(enriched);
-          } catch (e) { /* non-fatal */ }
-          const wrapper = { order: enriched };
-          for (const s of agentSockets) {
+            const orderCopy = Object.assign({}, pedido);
             try {
-              s.emit('novo-pedido', wrapper, () => {});
-              console.log(`🖨️ Auto-print: emitido para agente ${s.id} — ${enriched.displaySimple || enriched.id}`);
-            } catch (e) { /* ignore per-socket */ }
-          }
-        } catch (e) { console.warn('Auto-print emit to agents failed:', e && e.message); }
-      })();
+              const { enrichOrderForAgent: enrich } = await import('./enrichOrderForAgent.js');
+              await enrich(orderCopy);
+            } catch (e) { console.warn('🖨️ Auto-print: enrichment failed:', e && e.message); }
+            // Safety net: ensure qrText is set for DELIVERY orders even if enrichment missed it
+            if (!orderCopy.qrText && orderCopy.id) {
+              const ot = String(orderCopy.orderType || (orderCopy.payload && (orderCopy.payload.orderType || orderCopy.payload.order_type)) || '').toUpperCase();
+              if (ot === 'DELIVERY' || (orderCopy.payload && (orderCopy.payload.delivery || orderCopy.payload.deliveryAddress))) {
+                const fe = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+                orderCopy.qrText = `${fe}/orders/${orderCopy.id}`;
+                console.log(`🖨️ Auto-print: qrText safety net generated: ${orderCopy.qrText}`);
+              }
+            }
+            console.log(`🖨️ Auto-print: enriched order ${orderId} qrText=${orderCopy.qrText || '(none)'} printerName=${orderCopy.printerName || '(none)'}`);
+            const ACK_TIMEOUT_MS = 10000;
+            for (const s of agentSockets) {
+              try {
+                const result = await new Promise(resolve => {
+                  let done = false;
+                  const timer = setTimeout(() => { if (!done) { done = true; resolve({ ok: false, error: 'ack_timeout', sid: s.id }); } }, ACK_TIMEOUT_MS + 1000);
+                  try {
+                    s.timeout(ACK_TIMEOUT_MS).emit('novo-pedido', orderCopy, (...args) => {
+                      if (done) return;
+                      done = true; clearTimeout(timer);
+                      resolve({ ok: true, ack: args, sid: s.id });
+                    });
+                  } catch (e) {
+                    if (!done) { done = true; clearTimeout(timer); resolve({ ok: false, error: String(e && e.message), sid: s.id }); }
+                  }
+                });
+                if (result.ok) {
+                  console.log(`🖨️ Auto-print: delivered to agent ${result.sid} — order ${orderId}`);
+                  break; // delivered successfully, stop trying other agents
+                } else {
+                  console.warn(`🖨️ Auto-print: agent ${result.sid} failed: ${result.error}`);
+                }
+              } catch (e) { /* ignore per-socket */ }
+            }
+          } catch (e) { console.warn('🖨️ Auto-print failed:', e && e.message); }
+        })();
+      }
+    } else {
+      // No agents connected — enqueue for later delivery when agent reconnects
+      try {
+        const storeId = pedido.storeId || (pedido.payload && pedido.payload.storeId) || null;
+        const orderId = pedido.id || pedido.orderId || null;
+        if (orderId) {
+          const job = printQueue.enqueue({ order: pedido, storeId });
+          console.log(`🖨️ Auto-print: no agent connected; job ${job.id} queued for order ${orderId}`);
+        }
+      } catch (e) { console.warn('🖨️ Auto-print enqueue failed:', e && e.message); }
     }
   } catch (e) {
     console.warn('emitirNovoPedido broadcast failed:', e && e.message);
