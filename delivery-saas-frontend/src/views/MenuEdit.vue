@@ -304,13 +304,17 @@ async function save(){
         if (typeof form.value.allowPickup !== 'undefined') meta.allowPickup = !!form.value.allowPickup
         if (Object.keys(meta).length) toUpload.menuMeta = meta
         if (Object.keys(toUpload).length && form.value.storeId && targetId) {
-          toUpload.menuId = targetId
-          const up = await api.post(`/stores/${form.value.storeId}/settings/upload`, toUpload)
-          const saved = up.data && up.data.saved ? up.data.saved : {}
-          // if upload returned a logo path, persist it to the menu record (menu.logoUrl supported)
-          if (saved.logo && targetId) {
-            try{ await api.patch(`/menu/menus/${targetId}`, { logoUrl: saved.logo }) }catch(e){ /* non-fatal */ }
-          }
+          try {
+            toUpload.menuId = targetId
+            const up = await api.post(`/stores/${form.value.storeId}/settings/upload`, toUpload)
+            const saved = up.data && up.data.saved ? up.data.saved : {}
+            if (saved.logo && targetId) {
+              try{ await api.patch(`/menu/menus/${targetId}`, { logoUrl: saved.logo }) }catch(e){ /* non-fatal */ }
+            }
+            if (saved.banner && targetId) {
+              try{ await api.patch(`/menu/menus/${targetId}`, { bannerUrl: saved.banner }) }catch(e){ /* non-fatal */ }
+            }
+          } catch(e) { console.warn('Settings upload failed (non-fatal)', e) }
         }
         // Persist menu-level fields directly into the DB menu row as well
         try{
