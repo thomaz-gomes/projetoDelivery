@@ -31,7 +31,7 @@
             <div class="mb-3"><TextInput label="CNPJ" labelClass="form-label" v-model="form.cnpj" placeholder="00.000.000/0000-00" inputClass="form-control" /></div>
             <div class="row">
               <div class="col-md-6 mb-3">
-                <MediaField v-model="form.bannerUrl" label="Banner" field-id="store-banner" />
+                <MediaField v-model="form.bannerUrl" label="Banner" field-id="store-banner" :crop-aspect="16/9" :target-width="1200" :target-height="675" />
               </div>
               <div class="col-md-6 mb-3">
                 <MediaField v-model="form.logoUrl" label="Logotipo" field-id="store-logo" />

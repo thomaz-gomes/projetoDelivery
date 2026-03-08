@@ -113,7 +113,7 @@
             </div>
           </div>
           <div class="col-md-6 mb-3">
-            <MediaField v-model="form.bannerUrl" label="Banner" field-id="menu-banner" />
+            <MediaField v-model="form.bannerUrl" label="Banner" field-id="menu-banner" :crop-aspect="16/9" :target-width="1200" :target-height="675" />
           </div>
           <div class="col-md-6 mb-3">
             <MediaField v-model="form.logoUrl" label="Logotipo" field-id="menu-logo" />
