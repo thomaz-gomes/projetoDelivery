@@ -26,7 +26,7 @@ async function fetch(){ loading.value = true; try{ const [{ data: s }, { data: i
 
 async function save(){
   try{
-    await api.patch(`/technical-sheets/${id}`, { name: sheet.value.name, notes: sheet.value.notes });
+    await api.patch(`/technical-sheets/${id}`, { name: sheet.value.name, notes: sheet.value.notes, yield: sheet.value.yield });
     await Swal.fire({ icon: 'success', title: 'Salvo', text: 'Ficha técnica salva com sucesso' });
     router.push('/technical-sheets');
   }catch(e){
@@ -53,8 +53,9 @@ onMounted(fetch);
     <div v-if="sheet" class="card">
       <div class="card-body">
         <div class="row g-2 mb-3">
-          <div class="col-md-6"><TextInput v-model="sheet.name" inputClass="form-control" placeholder="Nome da ficha" required /></div>
-          <div class="col-md-6"><TextInput v-model="sheet.notes" inputClass="form-control" placeholder="Observações (opcional)" /></div>
+          <div class="col-md-5"><TextInput v-model="sheet.name" inputClass="form-control" placeholder="Nome da ficha" required /></div>
+          <div class="col-md-4"><TextInput v-model="sheet.notes" inputClass="form-control" placeholder="Observações (opcional)" /></div>
+          <div class="col-md-3"><TextInput v-model="sheet.yield" inputClass="form-control" placeholder="Rendimento (ex: 10 porções)" /></div>
         </div>
         <div class="mb-3 d-flex gap-2 align-items-start">
           <select v-model="itemIng" class="form-select"><option :value="null">-- Selecione ingrediente --</option><option v-for="i in ingredients" :key="i.id" :value="i.id">{{ i.description }} ({{ i.unit }})</option></select>

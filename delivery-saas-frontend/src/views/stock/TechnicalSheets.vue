@@ -4,8 +4,10 @@ import { useRouter } from 'vue-router';
 import api from '../../api';
 import ListCard from '../../components/ListCard.vue';
 import TechnicalSheetForm from '../../components/TechnicalSheetForm.vue';
+import TechnicalSheetAiImportModal from '../../components/TechnicalSheetAiImportModal.vue';
 
 const list = ref([]);
+const showAiImport = ref(false);
 const q = ref('')
 const loading = ref(false);
 const form = ref({ id: null, name: '', notes: '' });
@@ -96,6 +98,9 @@ function onQuickClear(){ q.value = '' }
 
     <ListCard title="Fichas Técnicas" icon="bi bi-file-earmark-text" :subtitle="list.length ? `${list.length} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
       <template #actions>
+        <button class="btn btn-outline-primary me-2" @click="showAiImport = true">
+          <i class="bi bi-stars me-1"></i>Importar com IA
+        </button>
         <button class="btn btn-primary" @click="openCreate">Nova Ficha</button>
       </template>
 
@@ -182,5 +187,10 @@ function onQuickClear(){ q.value = '' }
       </div>
     </div>
 
+    <TechnicalSheetAiImportModal
+      v-if="showAiImport"
+      @close="showAiImport = false"
+      @imported="showAiImport = false; fetch()"
+    />
   </div>
 </template>
