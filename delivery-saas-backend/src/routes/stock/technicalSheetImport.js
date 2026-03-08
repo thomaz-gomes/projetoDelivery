@@ -122,7 +122,7 @@ async function runParseJob(jobId, method, files, companyId) {
       }),
       prisma.product.findMany({
         where: { companyId, isActive: true },
-        select: { id: true, name: true, technicalSheetId: true },
+        select: { id: true, name: true, technicalSheetId: true, menuId: true, menu: { select: { name: true } }, categoryId: true, category: { select: { name: true } } },
       }),
     ]);
 
@@ -458,14 +458,20 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
         },
       });
 
-      // Handle product linking
+      // Handle product linking (supports multiple products per sheet)
       const productAction = sheet.productAction; // 'link', 'create', or 'none'
-      if (productAction === 'link' && sheet.productId && validProductIds.has(sheet.productId)) {
-        await prisma.product.update({
-          where: { id: sheet.productId },
-          data: { technicalSheetId: newSheet.id },
-        });
-        linkedProducts++;
+      if (productAction === 'link') {
+        // Support both single productId (legacy) and productIds array
+        const ids = Array.isArray(sheet.productIds) && sheet.productIds.length
+          ? sheet.productIds.filter(id => validProductIds.has(id))
+          : (sheet.productId && validProductIds.has(sheet.productId) ? [sheet.productId] : []);
+        for (const pid of ids) {
+          await prisma.product.update({
+            where: { id: pid },
+            data: { technicalSheetId: newSheet.id },
+          });
+          linkedProducts++;
+        }
       } else if (productAction === 'create') {
         const newProduct = await prisma.product.create({
           data: {

@@ -64,6 +64,22 @@
       <span v-if="cacheTimestamp">sincronizado em {{ formatCacheDate(cacheTimestamp) }}</span>
     </div>
 
+    <!-- PWA Install Banner (mobile only) -->
+    <div v-if="showPwaInstallBanner" class="pwa-install-banner" role="banner">
+      <div class="d-flex align-items-center gap-2 flex-grow-1">
+        <img :src="assetUrl(menu?.logo || company?.logo || company?.store?.logoUrl || 'default-logo.svg')" alt="logo" class="pwa-install-logo" />
+        <div class="pwa-install-text">
+          <strong>Adicionar {{ displayName }}</strong>
+          <small v-if="!isIos" class="d-block text-muted">Instale na tela inicial do seu celular</small>
+          <small v-else class="d-block text-muted">Toque em <i class="bi bi-box-arrow-up"></i> e "Adicionar à Tela de Início"</small>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button v-if="!isIos" class="btn btn-sm btn-primary pwa-install-btn" @click="triggerPwaInstall">Instalar</button>
+        <button class="btn btn-sm btn-link text-muted p-0" @click="dismissPwaInstall" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
+      </div>
+    </div>
+
     <!-- Overlapping white panel with company info, delivery toggle and calc box -->
     <div class="hero-panel container">
       <div class="d-flex align-items-start justify-content-between gap-3">
@@ -1038,6 +1054,12 @@ const isCatalogMode = computed(() => !!(menu.value && menu.value.catalogMode))
 const isOffline = ref(false);         // true when network is unavailable and we're showing cached data
 const dataSource = ref('network');    // 'cache' | 'network'
 const cacheTimestamp = ref(null);     // ms timestamp of the last successful sync
+
+// PWA install prompt state
+const pwaInstallEvent = ref(null)     // captured beforeinstallprompt event
+const showPwaInstallBanner = ref(false)
+const isIos = ref(false)
+const isStandalone = ref(false)
 
 // Catalog mode: WhatsApp contact number (menu > company phone fallback), digits only with BR prefix
 const catalogWhatsappNumber = computed(() => {
@@ -3450,6 +3472,10 @@ onMounted(async ()=>{
   // Register service worker for image caching (once per page lifetime)
   try{ registerMenuServiceWorker() }catch(e){}
 
+  // PWA: inject dynamic manifest and setup install prompt
+  injectDynamicManifest()
+  setupPwaInstall()
+
   // build public menu path including optional menuId/storeId query hints
   const menuQuery = []
   if(menuId.value) menuQuery.push(`menuId=${encodeURIComponent(menuId.value)}`)
@@ -3767,6 +3793,85 @@ watch(() => menu.value?.logo || company.value?.logo, (newLogo) => {
     updateFavicon(newLogo);
   }
 }, { immediate: true });
+
+// ── PWA Install Prompt ──────────────────────────────────────────────────────
+
+function isMobileDevice() {
+  try { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) } catch { return false }
+}
+
+function setupPwaInstall() {
+  try {
+    // detect iOS
+    const ua = navigator.userAgent || ''
+    isIos.value = /iPhone|iPad|iPod/i.test(ua) && !window.MSStream
+    isStandalone.value = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+
+    if (isStandalone.value || !isMobileDevice()) return
+
+    // check if user already dismissed for this company
+    const dismissedKey = `pwa_dismissed_${companyId}`
+    if (localStorage.getItem(dismissedKey)) return
+
+    if (isIos.value) {
+      // iOS doesn't fire beforeinstallprompt — show manual instructions
+      showPwaInstallBanner.value = true
+      return
+    }
+
+    // Android/Chrome: capture beforeinstallprompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault()
+      pwaInstallEvent.value = e
+      showPwaInstallBanner.value = true
+    })
+
+    window.addEventListener('appinstalled', () => {
+      showPwaInstallBanner.value = false
+      pwaInstallEvent.value = null
+    })
+  } catch (e) {
+    console.warn('[PWA] setup failed', e)
+  }
+}
+
+async function triggerPwaInstall() {
+  try {
+    if (!pwaInstallEvent.value) return
+    pwaInstallEvent.value.prompt()
+    const result = await pwaInstallEvent.value.userChoice
+    if (result.outcome === 'accepted') {
+      showPwaInstallBanner.value = false
+    }
+    pwaInstallEvent.value = null
+  } catch (e) {
+    console.warn('[PWA] install prompt failed', e)
+  }
+}
+
+function dismissPwaInstall() {
+  showPwaInstallBanner.value = false
+  try { localStorage.setItem(`pwa_dismissed_${companyId}`, '1') } catch {}
+}
+
+function injectDynamicManifest() {
+  try {
+    // remove existing manifest links
+    document.querySelectorAll('link[rel="manifest"]').forEach(el => el.remove())
+
+    const params = []
+    if (storeId.value) params.push(`storeId=${encodeURIComponent(storeId.value)}`)
+    if (menuId.value) params.push(`menuId=${encodeURIComponent(menuId.value)}`)
+    const manifestUrl = `/api/public/${companyId}/manifest.json${params.length ? '?' + params.join('&') : ''}`
+
+    const link = document.createElement('link')
+    link.rel = 'manifest'
+    link.href = manifestUrl
+    document.head.appendChild(link)
+  } catch (e) {
+    console.warn('[PWA] Failed to inject dynamic manifest', e)
+  }
+}
 
 // fetch cashback settings for company and (if logged) the customer's wallet
 async function fetchCashbackSettingsAndWallet(){
@@ -4711,6 +4816,43 @@ body { padding-bottom: 110px; }
 }
 @media (max-width: 767px){
   .offline-badge { bottom: 72px; font-size: 0.75rem; padding: 6px 14px; }
+}
+
+/* PWA Install Banner */
+.pwa-install-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-card, #fff);
+  border-bottom: 1px solid var(--border-color, #e6e6e6);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  z-index: 1010;
+  position: relative;
+}
+.pwa-install-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--border-radius-sm, 10px);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.pwa-install-text {
+  font-size: 0.85rem;
+  line-height: 1.3;
+  min-width: 0;
+}
+.pwa-install-text strong {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.pwa-install-btn {
+  white-space: nowrap;
+  border-radius: var(--border-radius-sm, 10px);
 }
 
 /* No-connection error page */

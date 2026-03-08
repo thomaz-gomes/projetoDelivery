@@ -58,7 +58,72 @@ publicMenuRouter.get('/:storeSlug', async (req, res, next) => {
     return res.status(500).json({ message: 'Erro interno ao resolver slug público' })
   }
 })
- 
+
+// GET /public/:companyId/manifest.json — dynamic PWA manifest per store
+publicMenuRouter.get('/:companyId/manifest.json', async (req, res) => {
+  const { companyId } = req.params
+  const { storeId, menuId } = req.query || {}
+  try {
+    const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true } })
+    if (!company) return res.status(404).json({ message: 'Empresa não encontrada' })
+
+    let name = company.name || 'Cardápio Digital'
+    let logoUrl = null
+
+    // prefer store-level logo
+    if (storeId) {
+      const store = await prisma.store.findUnique({ where: { id: storeId }, select: { name: true, logoUrl: true } })
+      if (store) {
+        name = store.name || name
+        logoUrl = store.logoUrl || null
+      }
+    }
+
+    // prefer menu-level logo if available
+    if (menuId) {
+      const menu = await prisma.menu.findFirst({ where: { id: menuId }, select: { name: true, logoUrl: true } })
+      if (menu) {
+        logoUrl = menu.logoUrl || logoUrl
+      }
+    }
+
+    // resolve logo to full URL
+    let iconUrl = '/favico.png'
+    if (logoUrl) {
+      iconUrl = logoUrl.startsWith('http') ? logoUrl : logoUrl
+    }
+
+    // build start_url with query params
+    const params = []
+    if (storeId) params.push(`storeId=${encodeURIComponent(storeId)}`)
+    if (menuId) params.push(`menuId=${encodeURIComponent(menuId)}`)
+    const startUrl = `/public/${companyId}/menu${params.length ? '?' + params.join('&') : ''}`
+
+    const shortName = name.length > 12 ? name.substring(0, 12).trim() : name
+
+    const manifest = {
+      name,
+      short_name: shortName,
+      description: `Cardápio digital — ${name}`,
+      start_url: startUrl,
+      display: 'standalone',
+      background_color: '#ffffff',
+      theme_color: '#105784',
+      icons: [
+        { src: iconUrl, sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: iconUrl, sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+      ]
+    }
+
+    res.setHeader('Content-Type', 'application/manifest+json')
+    res.setHeader('Cache-Control', 'no-cache')
+    return res.json(manifest)
+  } catch (e) {
+    console.error('Failed to generate manifest', e)
+    return res.status(500).json({ message: 'Erro ao gerar manifest' })
+  }
+})
+
 // GET /public/:companyId/menu
 publicMenuRouter.get('/:companyId/menu', async (req, res) => {
   const { companyId } = req.params

@@ -380,20 +380,25 @@
                     <option value="create">Criar novo produto</option>
                   </select>
                   <template v-if="sheet.productAction === 'link'">
-                    <select
-                      v-model="sheet.productId"
-                      class="form-select form-select-sm flex-grow-1"
-                      style="min-width: 200px; max-width: 400px;"
-                    >
-                      <option :value="null">-- Selecione um produto --</option>
-                      <option
-                        v-for="prod in existingProducts"
-                        :key="prod.id"
-                        :value="prod.id"
+                    <div class="flex-grow-1" style="min-width: 200px; max-width: 500px;">
+                      <select
+                        multiple
+                        v-model="sheet.productIds"
+                        class="form-select form-select-sm"
+                        style="min-height: 80px;"
                       >
-                        {{ prod.name }}
-                      </option>
-                    </select>
+                        <option
+                          v-for="prod in groupedProducts"
+                          :key="prod.id"
+                          :value="prod.id"
+                        >
+                          {{ prod.label }}
+                        </option>
+                      </select>
+                      <div class="form-text mt-1">
+                        {{ sheet.productIds.length ? `${sheet.productIds.length} produto(s) selecionado(s)` : 'Segure Ctrl para selecionar multiplos' }}
+                      </div>
+                    </div>
                     <span v-if="sheet.productConfidence > 0" class="badge" :class="sheet.productConfidence >= 70 ? 'bg-success' : 'bg-warning text-dark'" title="Confiança do match automático">
                       {{ sheet.productConfidence }}%
                     </span>
@@ -672,6 +677,20 @@ const canImport = computed(() => {
   return aiCreditsStore.hasCredits(creditEstimate.value.totalCost)
 })
 
+// Products grouped by menu for display in multi-select
+const groupedProducts = computed(() => {
+  const products = existingProducts.value || []
+  return products
+    .map(p => ({
+      id: p.id,
+      name: p.name,
+      menuName: p.menu?.name || null,
+      categoryName: p.category?.name || null,
+      label: [p.menu?.name, p.category?.name, p.name].filter(Boolean).join(' > '),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+})
+
 // -- File Handling --
 function readFileAsBase64(file) {
   return new Promise((resolve, reject) => {
@@ -838,7 +857,7 @@ async function parseContent() {
         name: s.name || '',
         yield: s.yield ?? null,
         productAction: s.matchedProductId ? 'link' : 'none',
-        productId: s.matchedProductId || null,
+        productIds: s.matchedProductId ? [s.matchedProductId] : [],
         matchedProductName: s.matchedProductName || null,
         productConfidence: s.productConfidence ?? 0,
         items: (s.items || []).map(item => ({
@@ -890,7 +909,7 @@ function removeIngredient(si, ii) {
 
 function onProductActionChange(sheet) {
   if (sheet.productAction !== 'link') {
-    sheet.productId = null;
+    sheet.productIds = [];
   }
 }
 
@@ -912,7 +931,7 @@ async function doImport() {
       name: s.name,
       yield: s.yield,
       productAction: s.productAction || 'none',
-      productId: s.productAction === 'link' ? s.productId : null,
+      productIds: s.productAction === 'link' ? (s.productIds || []) : [],
       items: s.items.map(item => ({
         description: item.description,
         ingredientId: item.newIngredient ? null : item.ingredientId,

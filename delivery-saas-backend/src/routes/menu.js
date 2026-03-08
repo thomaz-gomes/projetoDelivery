@@ -309,7 +309,7 @@ router.get('/products', async (req, res) => {
   // support filtering by menuId
   const { menuId } = req.query
   if (menuId) where.menuId = menuId
-  const rows = await prisma.product.findMany({ where, orderBy: { position: 'asc' } })
+  const rows = await prisma.product.findMany({ where, orderBy: { position: 'asc' }, include: { menu: { select: { name: true } }, category: { select: { name: true } } } })
   res.json(rows)
 })
 
