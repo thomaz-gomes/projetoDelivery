@@ -1,5 +1,21 @@
 <template>
   <div id="mainMenu" class="container-fluid px-0">
+    <!-- PWA Install Banner (mobile only) — before everything -->
+    <div v-if="showPwaInstallBanner" class="pwa-install-banner" role="banner">
+      <div class="d-flex align-items-center gap-2 flex-grow-1">
+        <img :src="assetUrl(menu?.logo || company?.logo || company?.store?.logoUrl || 'default-logo.svg')" alt="logo" class="pwa-install-logo" />
+        <div class="pwa-install-text">
+          <strong>Adicionar {{ displayName }}</strong>
+          <small v-if="!isIos" class="d-block text-muted">Instale na tela inicial do seu celular</small>
+          <small v-else class="d-block text-muted">Toque em <i class="bi bi-box-arrow-up"></i> e "Adicionar à Tela de Início"</small>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button v-if="!isIos" class="btn btn-sm btn-primary pwa-install-btn" @click="triggerPwaInstall">Instalar</button>
+        <button class="btn btn-sm btn-link text-muted p-0" @click="dismissPwaInstall" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
+      </div>
+    </div>
+
     <!-- Hero banner -->
   <div class="public-hero position-relative text-white" ref="heroRef">
     <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
@@ -62,22 +78,6 @@
       <span v-if="isOffline">Modo offline — </span>
       <span v-else>Cardápio em cache — </span>
       <span v-if="cacheTimestamp">sincronizado em {{ formatCacheDate(cacheTimestamp) }}</span>
-    </div>
-
-    <!-- PWA Install Banner (mobile only) -->
-    <div v-if="showPwaInstallBanner" class="pwa-install-banner" role="banner">
-      <div class="d-flex align-items-center gap-2 flex-grow-1">
-        <img :src="assetUrl(menu?.logo || company?.logo || company?.store?.logoUrl || 'default-logo.svg')" alt="logo" class="pwa-install-logo" />
-        <div class="pwa-install-text">
-          <strong>Adicionar {{ displayName }}</strong>
-          <small v-if="!isIos" class="d-block text-muted">Instale na tela inicial do seu celular</small>
-          <small v-else class="d-block text-muted">Toque em <i class="bi bi-box-arrow-up"></i> e "Adicionar à Tela de Início"</small>
-        </div>
-      </div>
-      <div class="d-flex align-items-center gap-2">
-        <button v-if="!isIos" class="btn btn-sm btn-primary pwa-install-btn" @click="triggerPwaInstall">Instalar</button>
-        <button class="btn btn-sm btn-link text-muted p-0" @click="dismissPwaInstall" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-      </div>
     </div>
 
     <!-- Overlapping white panel with company info, delivery toggle and calc box -->
