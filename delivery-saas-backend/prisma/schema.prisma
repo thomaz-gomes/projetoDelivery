@@ -746,7 +746,7 @@ model Product {
   // options that are linked to this product (inverse relation for Option.linkedProduct)
   linkedOptions       Option[]
 
-  @@unique([companyId, integrationCode], name: "company_product_integration_idx")
+  @@index([companyId, integrationCode], name: "company_product_integration_idx")
   @@index([companyId, name], name: "company_product_name_idx")
 }
 
