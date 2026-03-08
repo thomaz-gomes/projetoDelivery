@@ -137,7 +137,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import { useSaasStore } from '../stores/saas'
@@ -155,6 +155,20 @@ const saas = useSaasStore()
 const isCatalogOnly = computed(() => saas.isCardapioSimplesOnly)
 
 const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
+// When catalogMode is enabled, disable delivery and pickup (and vice-versa)
+watch(() => form.value.catalogMode, (val) => {
+  if (val && !isCatalogOnly.value) {
+    form.value.allowDelivery = false
+    form.value.allowPickup = false
+  }
+})
+watch(() => form.value.allowDelivery, (val) => {
+  if (val && !isCatalogOnly.value) form.value.catalogMode = false
+})
+watch(() => form.value.allowPickup, (val) => {
+  if (val && !isCatalogOnly.value) form.value.catalogMode = false
+})
+
 const dayNames = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado']
 const weeklySchedule = ref(Array.from({length:7}).map((_,i)=>({ day: i, enabled: false, from: '', to: '' })))
 
@@ -307,6 +321,7 @@ async function save(){
           if (form.value.timezone !== undefined) menuPayload.timezone = form.value.timezone || null
           if (form.value.open24Hours !== undefined) menuPayload.open24Hours = !!form.value.open24Hours
           if (Array.isArray(weeklySchedule.value) && weeklySchedule.value.length === 7) menuPayload.weeklySchedule = weeklySchedule.value.map(w=>({ day: Number(w.day)||0, enabled: !!w.enabled, from: String(w.from||''), to: String(w.to||'') }))
+          if (form.value.logoUrl !== undefined) menuPayload.logoUrl = form.value.logoUrl || null
           if (form.value.allowDelivery !== undefined) menuPayload.allowDelivery = !!form.value.allowDelivery
           if (form.value.allowPickup !== undefined) menuPayload.allowPickup = !!form.value.allowPickup
           if (form.value.catalogMode !== undefined) menuPayload.catalogMode = !!form.value.catalogMode
