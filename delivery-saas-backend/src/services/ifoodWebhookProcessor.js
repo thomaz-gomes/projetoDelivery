@@ -7,6 +7,7 @@ import { notifyCustomerStatus, notifyCustomerOrderSummary } from './notify.js';
 import buildAndPersistStockMovementFromOrderItems from './stockFromOrder.js';
 import { canTransition } from '../stateMachine.js';
 import printQueue from '../printQueue.js'
+import { matchItemsToLocalProducts } from '../utils/integrationMatcher.js'
 
 /**
  * Extrai companyId a partir do merchantId do payload
@@ -122,6 +123,8 @@ function mapIFoodOrder(payload) {
     quantity: Number(it?.quantity || 1),
     price: Number(it?.price || it?.unitPrice || 0),
     notes: it?.observations || null,
+    externalCode: it?.externalCode || null,
+    subItems: it?.subItems || it?.subitems || it?.garnishItems || it?.options || null,
   }));
 
   // Cliente
@@ -311,12 +314,23 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
         storeId: storeId || null,
         displaySimple,
         items: {
-          create: mapped.items.map((i) => ({
-            name: i.name,
-            quantity: i.quantity,
-            price: i.price,
-            notes: i.notes || null,
-          })),
+          create: mapped.items.map((i) => {
+            const subs = i.subItems || i.subitems || i.garnishItems || []
+            const options = subs.length > 0 ? subs.map(s => ({
+              name: s.name,
+              quantity: Number(s.quantity || 1),
+              price: Number(s.totalPrice || s.price || 0),
+              _matchedProductId: s._matchedProductId || null,
+            })) : null
+            return {
+              name: i.name,
+              quantity: i.quantity,
+              price: i.price,
+              notes: i.notes || null,
+              productId: i.productId || i._matchedProductId || null,
+              options: options,
+            }
+          }),
         },
         histories: {
           create: [{ from: null, to: 'EM_PREPARO', reason: 'iFood webhook' }],
@@ -353,6 +367,31 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
       }
     } else {
       delete updateData.status;
+    }
+
+    // If items have matched integration codes, replace existing items
+    const hasMatchedItems = mapped.items && mapped.items.some(i => i._matchedProductId || i.productId)
+    if (hasMatchedItems) {
+      await prisma.orderItem.deleteMany({ where: { orderId: exists.id } })
+      updateData.items = {
+        create: mapped.items.map(i => {
+          const subs = i.subItems || i.subitems || i.garnishItems || []
+          const options = subs.length > 0 ? subs.map(s => ({
+            name: s.name,
+            quantity: Number(s.quantity || 1),
+            price: Number(s.totalPrice || s.price || 0),
+            _matchedProductId: s._matchedProductId || null,
+          })) : null
+          return {
+            name: i.name,
+            quantity: i.quantity,
+            price: i.price,
+            notes: i.notes || null,
+            productId: i.productId || i._matchedProductId || null,
+            options: options,
+          }
+        })
+      }
     }
 
     const updated = await prisma.order.update({
@@ -529,6 +568,27 @@ export async function processIFoodWebhook(eventId) {
         console.log('[iFood Processor] eventCode:', eventCode, '-> inferred status:', inferred, 'mapped.status:', mapped.status);
       } catch (e) {
         console.warn('[iFood Processor] failed to infer status from payload:', e?.message || e);
+      }
+
+      // Match integration items to local products by integrationCode
+      // Local product name replaces integration name; price kept from integration
+      try {
+        if (mapped.items && mapped.items.length > 0) {
+          const matchedItems = await matchItemsToLocalProducts(mapped.items, companyId)
+          mapped.items = matchedItems.map(it => ({
+            ...it,
+            productId: it._matchedProductId || null,
+          }))
+          // Also update payload items with matched local names for print agent
+          const rawItems = mapped.raw?.order?.items || mapped.raw?.items || null
+          if (rawItems) {
+            const matchedRaw = await matchItemsToLocalProducts(rawItems, companyId)
+            if (mapped.raw.order && mapped.raw.order.items) mapped.raw.order.items = matchedRaw
+            else if (mapped.raw.items) mapped.raw.items = matchedRaw
+          }
+        }
+      } catch (e) {
+        console.warn('[iFood Processor] integration code matching failed (continuing):', e?.message || e)
       }
 
       const res = await upsertOrder({ companyId, mapped, storeId });

@@ -111,6 +111,9 @@ export async function enrichOrderForAgent(order) {
     if (!order.qrText) {
       const p = order.payload || {}
       order.qrText = p.qrText || p.qr_text || null
+      if (order.qrText) console.log('enrichOrderForAgent: qrText resolved from payload:', order.qrText)
+    } else {
+      console.log('enrichOrderForAgent: qrText already set:', order.qrText)
     }
 
     // 3c. Extrair informações de takeout/retirada (quando presente no payload iFood)
@@ -160,9 +163,11 @@ export async function enrichOrderForAgent(order) {
     // 3b. Fallback: gerar qrText se ainda vazio e pedido for DELIVERY
     if (!order.qrText && order.id) {
       const orderType = String(order.orderType || (order.payload && (order.payload.orderType || order.payload.order_type)) || '').toUpperCase()
+      console.log('enrichOrderForAgent: qrText fallback check — orderType:', orderType, 'hasDelivery:', !!(order.payload && (order.payload.delivery || order.payload.deliveryAddress)))
       if (orderType === 'DELIVERY' || (order.payload && (order.payload.delivery || order.payload.deliveryAddress))) {
         const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')
         order.qrText = `${frontend}/orders/${order.id}`
+        console.log('enrichOrderForAgent: qrText generated as fallback:', order.qrText)
         // Auto-criar ticket para que o fallback por orderId funcione quando o motoboy escanear o QR
         try {
           const now = new Date()
@@ -236,6 +241,11 @@ export async function enrichOrderForAgent(order) {
       order.printerInterface = ps.interface || null
       order.printerType = ps.type || null
       order.paperWidth = ps.width || null
+    }
+
+    // Pass frontendUrl so the agent can generate qrText as a last resort
+    if (!order.frontendUrl) {
+      order.frontendUrl = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '') || null
     }
   } catch (e) {
     console.warn('enrichOrderForAgent failed:', e && e.message)

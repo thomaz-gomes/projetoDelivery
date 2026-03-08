@@ -40,6 +40,8 @@ export const AI_SERVICE_COSTS = {
   AI_STUDIO_ENHANCE:    10, // por aprimoramento de imagem no AI Studio (visão + geração)
   TECHNICAL_SHEET_IMPORT_PARSE: 5,  // por arquivo processado
   TECHNICAL_SHEET_IMPORT_ITEM:  1,  // por ficha técnica aplicada
+  INGREDIENT_IMPORT_PARSE:     5,  // por arquivo processado (importação de ingredientes)
+  INGREDIENT_IMPORT_ITEM:      1,  // por ingrediente aplicado
 }
 
 // ─── Cache de custos de serviços lidos do banco ────────────────────────────────
@@ -219,8 +221,35 @@ export async function debitCredits(companyId, serviceKey, quantity = 1, metadata
  * Atualiza a data do último reset.
  */
 export async function resetCompanyCredits(companyId) {
-  console.log(`[aiCreditManager] resetCompanyCredits(${companyId}): no-op (new billing model)`)
-  return { ok: true }
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: {
+      saasSubscription: {
+        select: {
+          plan: { select: { aiCreditsMonthlyLimit: true, unlimitedAiCredits: true } }
+        }
+      }
+    }
+  })
+  if (!company) {
+    const err = new Error('Empresa não encontrada')
+    err.statusCode = 404
+    throw err
+  }
+
+  const plan = company.saasSubscription?.plan
+  const monthlyLimit = plan?.aiCreditsMonthlyLimit ?? 100
+
+  await prisma.company.update({
+    where: { id: companyId },
+    data: {
+      aiCreditsBalance: monthlyLimit,
+      aiCreditsLastReset: new Date(),
+    },
+  })
+
+  console.log(`[aiCreditManager] resetCompanyCredits(${companyId}): saldo restaurado para ${monthlyLimit}`)
+  return { ok: true, monthlyLimit }
 }
 
 /**
@@ -228,8 +257,37 @@ export async function resetCompanyCredits(companyId) {
  * Chamado pelo cron mensal.
  */
 export async function resetAllDueCredits() {
-  console.log('[aiCreditManager] resetAllDueCredits: no-op (new billing model)')
-  return { reset: 0 }
+  // Busca todas as empresas com subscription ativa
+  const companies = await prisma.company.findMany({
+    where: { saasSubscription: { isNot: null } },
+    select: {
+      id: true,
+      saasSubscription: {
+        select: {
+          plan: { select: { aiCreditsMonthlyLimit: true, unlimitedAiCredits: true } }
+        }
+      }
+    }
+  })
+
+  let resetCount = 0
+  for (const company of companies) {
+    const plan = company.saasSubscription?.plan
+    if (!plan) continue
+    const monthlyLimit = plan.aiCreditsMonthlyLimit ?? 100
+
+    await prisma.company.update({
+      where: { id: company.id },
+      data: {
+        aiCreditsBalance: monthlyLimit,
+        aiCreditsLastReset: new Date(),
+      },
+    })
+    resetCount++
+  }
+
+  console.log(`[aiCreditManager] resetAllDueCredits: ${resetCount} empresas resetadas`)
+  return { reset: resetCount }
 }
 
 /**

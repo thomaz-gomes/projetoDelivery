@@ -2,6 +2,7 @@ import express from 'express'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { isCardapioSimplesOnly } from '../modules.js'
+import { generateOptionCode } from '../utils/integrationCode.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -126,7 +127,8 @@ router.post('/:groupId/options', requireRole('ADMIN'), async (req, res) => {
   const { name, price = 0, image = null, position = 0, availableDays = null, availableFrom = null, availableTo = null, isAvailable = true, linkedProductId = null, technicalSheetId = null } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
   try {
-    const data = { groupId, name, price: Number(price || 0), image: image ?? null, position: Number(position || 0) }
+    const integrationCode = await generateOptionCode(groupId)
+    const data = { groupId, name, price: Number(price || 0), image: image ?? null, position: Number(position || 0), integrationCode }
     // validate and attach technicalSheetId when provided
     if (technicalSheetId) {
       const ts = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })

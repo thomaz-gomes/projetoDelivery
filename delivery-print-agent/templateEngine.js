@@ -241,7 +241,8 @@ function buildContext(order, settings = {}) {
     : []));
 
   const PAY_MAP = {
-    'CASH': 'Dinheiro', 'CREDIT': 'Crédito', 'DEBIT': 'Débito',
+    'CASH': 'Dinheiro', 'CREDIT': 'Cartão de Crédito', 'DEBIT': 'Cartão de Débito',
+    'CREDIT_CARD': 'Cartão de Crédito', 'DEBIT_CARD': 'Cartão de Débito',
     'MEAL_VOUCHER': 'Vale Refeição', 'FOOD_VOUCHER': 'Vale Alimentação',
     'GIFT_CARD': 'Gift Card', 'PIX': 'PIX', 'PREPAID': 'Pré-pago',
     'ONLINE': 'Pagamento Online', 'WALLET': 'Carteira Digital', 'VOUCHER': 'Voucher',
@@ -273,7 +274,15 @@ function buildContext(order, settings = {}) {
   const isPickup = ['PICKUP', 'TAKEOUT', 'TAKE-OUT', 'PICK-UP', 'BALCAO', 'RETIRADA', 'INDOOR'].includes(tipoPedido);
 
   // QR Code URL (para despacho pelo motoboy)
-  const qrUrl = o.qrText || o.qrUrl || payload.qrText || ifoodPayload.qrText || o.url || '';
+  let qrUrl = o.qrText || o.qrUrl || payload.qrText || ifoodPayload.qrText || o.url || '';
+  // Fallback: gerar URL se pedido DELIVERY sem qrUrl (usa frontendUrl passado pelo backend)
+  if (!qrUrl && o.id && !isPickup) {
+    const fe = o.frontendUrl || (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '');
+    if (fe) {
+      qrUrl = `${fe}/orders/${o.id}`;
+      console.log(`[QR-DEBUG] buildContext fallback generated qr_url: ${qrUrl}`);
+    }
+  }
 
   // iFood: campos específicos (ifoodPayload já desembrulhou o envelope)
   const codigoColeta = ifoodPayload.delivery?.pickupCode || '';

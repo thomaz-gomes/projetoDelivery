@@ -3,8 +3,10 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../../api';
 import ListCard from '../../components/ListCard.vue';
+import IngredientAiImportModal from '../../components/IngredientAiImportModal.vue';
 
 const router = useRouter();
+const showAiImport = ref(false);
 const list = ref([]);
 const q = ref('')
 const loading = ref(false);
@@ -49,7 +51,10 @@ onUnmounted(() => { try{ document.removeEventListener('keydown', onKeydown); }ca
   <div class="p-4">
     <ListCard title="Ingredientes" icon="bi bi-box-seam" :subtitle="list.length ? `${list.length} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por descrição, grupo" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
       <template #actions>
-        <div class="mb-3 d-flex justify-content-end align-items-center">
+        <div class="mb-3 d-flex justify-content-end align-items-center gap-2">
+          <button class="btn btn-outline-primary" @click="showAiImport = true">
+            <i class="bi bi-stars me-1"></i>Importar com IA
+          </button>
           <button class="btn btn-primary" @click="goToNew">Novo Ingrediente</button>
         </div>
       </template>
@@ -74,5 +79,11 @@ onUnmounted(() => { try{ document.removeEventListener('keydown', onKeydown); }ca
         </div>
       </template>
     </ListCard>
+
+    <IngredientAiImportModal
+      v-if="showAiImport"
+      @close="showAiImport = false"
+      @imported="showAiImport = false; fetch()"
+    />
   </div>
 </template>

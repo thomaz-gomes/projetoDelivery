@@ -1,3 +1,5 @@
+import { normalizeToIngredientUnit } from '../utils/unitConversion.js';
+
 export async function buildAndPersistStockMovementFromOrderItems(prismaInstance, order) {
 	if (!order || !order.items || !Array.isArray(order.items) || order.items.length === 0) return null;
 
@@ -31,7 +33,10 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 					const sheet = await prismaInstance.technicalSheet.findUnique({ where: { id: product.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 					if (sheet && Array.isArray(sheet.items)) {
 						for (const si of sheet.items) {
-							if (si.ingredient && si.ingredient.controlsStock) addDed(si.ingredientId, Number(si.quantity || 0) * itemQty);
+							if (si.ingredient && si.ingredient.controlsStock) {
+								const qty = normalizeToIngredientUnit(Number(si.quantity || 0), si.unit, si.ingredient.unit);
+								addDed(si.ingredientId, qty * itemQty);
+							}
 						}
 					}
 				} catch (e) { /* ignore */ }
@@ -93,6 +98,22 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 							}
 						}
 
+						// If subitem was matched to a product via integration code, process its sheet directly
+						if (!option && optEntry && optEntry._matchedProductId) {
+							try {
+								const matchedProd = await prismaInstance.product.findUnique({ where: { id: optEntry._matchedProductId } });
+								if (matchedProd && matchedProd.technicalSheetId) {
+									const psheet = await prismaInstance.technicalSheet.findUnique({ where: { id: matchedProd.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
+									if (psheet && Array.isArray(psheet.items)) {
+										for (const psi of psheet.items) {
+											if (psi.ingredient && psi.ingredient.controlsStock) { const pqty = normalizeToIngredientUnit(Number(psi.quantity || 0), psi.unit, psi.ingredient.unit); addDed(psi.ingredientId, pqty * itemQty * optQty); }
+										}
+									}
+								}
+							} catch (e) { /* ignore */ }
+							continue;
+						}
+
 						if (!option) continue;
 
 						// If option links to a product, use its sheet; otherwise option's sheet
@@ -103,7 +124,7 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 									const osheet = await prismaInstance.technicalSheet.findUnique({ where: { id: linked.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 									if (osheet && Array.isArray(osheet.items)) {
 										for (const osi of osheet.items) {
-											if (osi.ingredient && osi.ingredient.controlsStock) addDed(osi.ingredientId, Number(osi.quantity || 0) * itemQty * optQty);
+											if (osi.ingredient && osi.ingredient.controlsStock) { const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit); addDed(osi.ingredientId, oqty * itemQty * optQty); }
 										}
 									}
 								}
@@ -113,7 +134,7 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 								const osheet = await prismaInstance.technicalSheet.findUnique({ where: { id: option.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 								if (osheet && Array.isArray(osheet.items)) {
 									for (const osi of osheet.items) {
-										if (osi.ingredient && osi.ingredient.controlsStock) addDed(osi.ingredientId, Number(osi.quantity || 0) * itemQty * optQty);
+										if (osi.ingredient && osi.ingredient.controlsStock) { const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit); addDed(osi.ingredientId, oqty * itemQty * optQty); }
 									}
 								}
 							} catch (e) { /* ignore */ }
@@ -139,7 +160,7 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 								const osheet = await prismaInstance.technicalSheet.findUnique({ where: { id: linked.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 								if (osheet && Array.isArray(osheet.items)) {
 									for (const osi of osheet.items) {
-										if (osi.ingredient && osi.ingredient.controlsStock) addDed(osi.ingredientId, Number(osi.quantity || 0) * itemQty * optQty);
+										if (osi.ingredient && osi.ingredient.controlsStock) { const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit); addDed(osi.ingredientId, oqty * itemQty * optQty); }
 									}
 								}
 							}
@@ -147,7 +168,7 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 							const osheet = await prismaInstance.technicalSheet.findUnique({ where: { id: option.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 							if (osheet && Array.isArray(osheet.items)) {
 								for (const osi of osheet.items) {
-									if (osi.ingredient && osi.ingredient.controlsStock) addDed(osi.ingredientId, Number(osi.quantity || 0) * itemQty * optQty);
+									if (osi.ingredient && osi.ingredient.controlsStock) { const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit); addDed(osi.ingredientId, oqty * itemQty * optQty); }
 								}
 							}
 						}

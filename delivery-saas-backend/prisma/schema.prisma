@@ -1222,6 +1222,7 @@ model TechnicalSheetItem {
   ingredientId     String
   ingredient       Ingredient     @relation(fields: [ingredientId], references: [id])
   quantity         Decimal
+  unit             String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 

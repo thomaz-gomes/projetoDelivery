@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import api from '../../api';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
+import { normalizeToIngredientUnit } from '../../utils/unitConversion.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -14,6 +15,7 @@ const loading = ref(false);
 const error = ref('');
 const itemQty = ref('');
 const itemIng = ref(null);
+const itemUnit = ref('');
 const ingredients = ref([]);
 
 const selectedIngredient = computed(() => {
@@ -34,7 +36,23 @@ async function save(){
   }
 }
 
-async function addItem(){ if(!sheet.value || !itemIng.value || !itemQty.value) return; try{ await api.post(`/technical-sheets/${sheet.value.id}/items`, { ingredientId: itemIng.value, quantity: Number(itemQty.value) }); await fetch(); itemQty.value=''; itemIng.value=null; }catch(e){ alert(e?.response?.data?.message || 'Erro ao adicionar item') } }
+async function addItem(){
+  if(!sheet.value || !itemIng.value || !itemQty.value) return;
+  try{
+    const payload = { ingredientId: itemIng.value, quantity: Number(itemQty.value) };
+    if (itemUnit.value) payload.unit = itemUnit.value;
+    await api.post(`/technical-sheets/${sheet.value.id}/items`, payload);
+    await fetch();
+    itemQty.value=''; itemIng.value=null; itemUnit.value='';
+  }catch(e){ alert(e?.response?.data?.message || 'Erro ao adicionar item') }
+}
+
+function itemCost(it) {
+  const cost = Number(it.ingredient?.avgCost) || 0;
+  const rawQty = Number(it.quantity) || 0;
+  const qty = normalizeToIngredientUnit(rawQty, it.unit, it.ingredient?.unit);
+  return cost * qty;
+}
 
 async function removeItem(itId){ if(!sheet.value) return; try{ await api.delete(`/technical-sheets/${sheet.value.id}/items/${itId}`); await fetch(); }catch(e){ alert('Erro ao remover item') } }
 
@@ -58,8 +76,15 @@ onMounted(fetch);
           <div class="col-md-3"><TextInput v-model="sheet.yield" inputClass="form-control" placeholder="Rendimento (ex: 10 porções)" /></div>
         </div>
         <div class="mb-3 d-flex gap-2 align-items-start">
-          <select v-model="itemIng" class="form-select"><option :value="null">-- Selecione ingrediente --</option><option v-for="i in ingredients" :key="i.id" :value="i.id">{{ i.description }} ({{ i.unit }})</option></select>
-          <input v-model="itemQty" type="number" step="any" class="form-control" placeholder="Quantidade" />
+          <select v-model="itemIng" class="form-select" @change="itemUnit = selectedIngredient?.unit || ''"><option :value="null">-- Selecione ingrediente --</option><option v-for="i in ingredients" :key="i.id" :value="i.id">{{ i.description }} ({{ i.unit }})</option></select>
+          <input v-model="itemQty" type="number" step="any" class="form-control" style="max-width:120px" placeholder="Qtd" />
+          <select v-model="itemUnit" class="form-select" style="max-width:100px">
+            <option value="UN">UN</option>
+            <option value="GR">GR</option>
+            <option value="KG">KG</option>
+            <option value="ML">ML</option>
+            <option value="L">L</option>
+          </select>
           <button class="btn btn-primary" @click="addItem">Adicionar</button>
         </div>
 
@@ -77,10 +102,10 @@ onMounted(fetch);
           <tbody>
             <tr v-for="it in sheet.items" :key="it.id">
               <td>{{ it.ingredient.description }}</td>
-              <td>{{ it.ingredient.unit || '-' }}</td>
-              <td>{{ fmtMoney(it.ingredient.avgCost) }}</td>
+              <td>{{ it.unit || it.ingredient.unit || '-' }}</td>
+              <td>{{ fmtMoney(it.ingredient.avgCost) }}/{{ it.ingredient.unit }}</td>
               <td>{{ it.quantity }}</td>
-              <td>{{ fmtMoney((it.ingredient.avgCost || 0) * (it.quantity || 0)) }}</td>
+              <td>{{ fmtMoney(itemCost(it)) }}</td>
               <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(it.id)">Remover</button></td>
             </tr>
           </tbody>

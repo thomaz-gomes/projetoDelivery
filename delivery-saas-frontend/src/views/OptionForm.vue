@@ -104,6 +104,7 @@ import TextInput from '../components/form/input/TextInput.vue'
 import TextareaInput from '../components/form/input/TextareaInput.vue'
 import CurrencyInput from '../components/form/input/CurrencyInput.vue'
 import SelectInput from '../components/form/select/SelectInput.vue'
+import { normalizeToIngredientUnit } from '../utils/unitConversion.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -201,7 +202,8 @@ function sheetTotalCost(sheet){
   if(!sheet || !sheet.items) return 0
   return sheet.items.reduce((acc, it) => {
     const cost = (it.ingredient && it.ingredient.avgCost) ? Number(it.ingredient.avgCost) : 0
-    const qty = Number(it.quantity || 0)
+    const rawQty = Number(it.quantity || 0)
+    const qty = normalizeToIngredientUnit(rawQty, it.unit, it.ingredient?.unit)
     return acc + (cost * qty)
   }, 0)
 }

@@ -7,7 +7,7 @@
         <div class="modal-header">
           <div>
             <h5 class="modal-title mb-0">
-              <i class="bi bi-stars me-2 text-warning"></i>Importar Fichas Tecnicas com IA
+              <i class="bi bi-stars me-2 text-warning"></i>Importar Ingredientes com IA
             </h5>
           </div>
           <button type="button" class="btn-close" @click="$emit('close')" :disabled="parsing || applying"></button>
@@ -37,7 +37,7 @@
 
           <!-- STEP 1: Escolher Metodo -->
           <div v-if="step === 1">
-            <p class="text-muted mb-3">Como deseja importar as fichas tecnicas?</p>
+            <p class="text-muted mb-3">Como deseja importar os ingredientes?</p>
             <div class="row g-3">
               <div class="col-6 col-sm-3">
                 <div
@@ -50,7 +50,7 @@
                 >
                   <i class="bi bi-camera method-icon text-success"></i>
                   <div class="method-title">Foto</div>
-                  <div class="method-desc text-muted small">Fotos ou screenshots das fichas</div>
+                  <div class="method-desc text-muted small">Fotos ou screenshots da lista</div>
                   <div class="text-primary-emphasis small mt-1 fw-semibold">5 credito(s) / arquivo</div>
                 </div>
               </div>
@@ -80,7 +80,7 @@
                 >
                   <i class="bi bi-file-earmark-pdf method-icon text-danger"></i>
                   <div class="method-title">PDF</div>
-                  <div class="method-desc text-muted small">Arquivo .pdf com fichas tecnicas</div>
+                  <div class="method-desc text-muted small">Arquivo .pdf com ingredientes</div>
                   <div class="text-primary-emphasis small mt-1 fw-semibold">5 credito(s) / arquivo</div>
                 </div>
               </div>
@@ -107,7 +107,7 @@
 
             <!-- Photo -->
             <div v-if="method === 'photo'">
-              <label class="form-label fw-semibold">Fotos das fichas tecnicas</label>
+              <label class="form-label fw-semibold">Fotos da lista de ingredientes</label>
               <input
                 ref="photoInput"
                 type="file"
@@ -124,7 +124,6 @@
                 class="d-none"
                 @change="handleFileChange($event, 'photo')"
               />
-              <!-- Sem fotos: dropzone vazio -->
               <div
                 v-if="photoPreviews.length === 0"
                 class="dropzone"
@@ -135,7 +134,7 @@
               >
                 <div class="dropzone-inner">
                   <i class="bi bi-images dropzone-icon text-muted"></i>
-                  <div class="dropzone-text mb-3">Selecione as fotos das fichas tecnicas</div>
+                  <div class="dropzone-text mb-3">Selecione as fotos da lista de ingredientes</div>
                   <div class="d-flex gap-2 justify-content-center flex-wrap">
                     <button type="button" class="btn btn-outline-primary btn-sm px-3" @click="$refs.photoInput.click()">
                       <i class="bi bi-folder2-open me-1"></i>Galeria
@@ -147,7 +146,6 @@
                   <div class="small text-muted mt-2">Ou arraste as fotos aqui - JPG, PNG, WEBP</div>
                 </div>
               </div>
-              <!-- Com fotos: grid de miniaturas -->
               <div
                 v-else
                 class="photo-grid"
@@ -167,7 +165,6 @@
                   @click="$refs.photoInput.click()"
                   role="button"
                   tabindex="0"
-                  @keydown.enter="$refs.photoInput.click()"
                   title="Adicionar da galeria"
                 >
                   <i class="bi bi-plus-lg"></i>
@@ -177,20 +174,19 @@
                   @click="$refs.cameraInput.click()"
                   role="button"
                   tabindex="0"
-                  @keydown.enter="$refs.cameraInput.click()"
                   title="Tirar foto"
                 >
                   <i class="bi bi-camera"></i>
                 </div>
               </div>
               <div class="form-text mt-2">
-                {{ photoPreviews.length ? `${photoPreviews.length} foto(s) selecionada(s) — adicione mais pela galeria ou camera` : 'Adicione fotos de diferentes paginas das fichas tecnicas' }}
+                {{ photoPreviews.length ? `${photoPreviews.length} foto(s) selecionada(s)` : 'Adicione fotos da lista de ingredientes' }}
               </div>
             </div>
 
             <!-- Spreadsheet -->
             <div v-if="method === 'spreadsheet'">
-              <label class="form-label fw-semibold">Planilha de fichas tecnicas</label>
+              <label class="form-label fw-semibold">Planilha de ingredientes</label>
               <div
                 class="dropzone"
                 :class="{ 'drag-over': dragging, 'has-file': sheetFileName }"
@@ -200,7 +196,6 @@
                 @click="$refs.sheetInput.click()"
                 role="button"
                 tabindex="0"
-                @keydown.enter="$refs.sheetInput.click()"
               >
                 <input
                   ref="sheetInput"
@@ -224,7 +219,7 @@
 
             <!-- PDF -->
             <div v-if="method === 'pdf'">
-              <label class="form-label fw-semibold">PDF das fichas tecnicas</label>
+              <label class="form-label fw-semibold">PDF com ingredientes</label>
               <div
                 class="dropzone"
                 :class="{ 'drag-over': dragging, 'has-file': pdfFileName }"
@@ -234,7 +229,6 @@
                 @click="$refs.pdfInput.click()"
                 role="button"
                 tabindex="0"
-                @keydown.enter="$refs.pdfInput.click()"
               >
                 <input
                   ref="pdfInput"
@@ -258,7 +252,7 @@
 
             <!-- DOCX -->
             <div v-if="method === 'docx'">
-              <label class="form-label fw-semibold">Documento Word das fichas tecnicas</label>
+              <label class="form-label fw-semibold">Documento Word com ingredientes</label>
               <div
                 class="dropzone"
                 :class="{ 'drag-over': dragging, 'has-file': docxFileName }"
@@ -268,7 +262,6 @@
                 @click="$refs.docxInput.click()"
                 role="button"
                 tabindex="0"
-                @keydown.enter="$refs.docxInput.click()"
               >
                 <input
                   ref="docxInput"
@@ -301,22 +294,21 @@
           <div v-if="step === 3">
             <div class="d-flex align-items-center justify-content-between mb-3">
               <div>
-                <span class="badge bg-success me-2">{{ sheets.length }} ficha(s)</span>
-                <span class="badge bg-secondary">{{ totalIngredients }} ingredientes</span>
+                <span class="badge bg-success me-2">{{ ingredients.length }} ingrediente(s)</span>
               </div>
               <button class="btn btn-sm btn-outline-secondary" @click="step = 2">
                 <i class="bi bi-arrow-left me-1"></i>Voltar
               </button>
             </div>
 
-            <!-- Estimativa e validacao de creditos -->
+            <!-- Estimativa de creditos -->
             <div v-if="creditEstimate" class="alert d-flex align-items-start gap-2 mb-3"
               :class="canImport ? 'alert-info' : 'alert-danger'" role="alert">
               <i class="bi bi-stars mt-1" style="font-size:1.1rem;flex-shrink:0"></i>
               <div class="flex-grow-1">
                 <div>
                   Esta operacao consumira <strong>{{ creditEstimate.totalCost }} credito(s)</strong>
-                  <small class="text-muted ms-1">({{ creditEstimate.itemCount }} fichas x {{ creditEstimate.costPerUnit }} credito cada)</small>
+                  <small class="text-muted ms-1">({{ creditEstimate.itemCount }} ingredientes x {{ creditEstimate.costPerUnit }} credito cada)</small>
                 </div>
                 <div v-if="!canImport" class="mt-1 fw-semibold">
                   <i class="bi bi-lock me-1"></i>Saldo atual: {{ aiCreditsStore.balance ?? '—' }} credito(s).
@@ -325,182 +317,122 @@
               </div>
             </div>
 
-            <div v-if="sheets.length === 0" class="alert alert-warning">
-              A IA nao encontrou fichas tecnicas no conteudo fornecido. Tente com outro metodo ou conteudo.
+            <div v-if="ingredients.length === 0" class="alert alert-warning">
+              A IA nao encontrou ingredientes no conteudo fornecido. Tente com outro metodo ou conteudo.
             </div>
 
-            <!-- Sheets accordion -->
-            <div v-for="(sheet, si) in sheets" :key="si" class="review-sheet mb-3">
-              <!-- Sheet header -->
-              <div class="review-sheet-header d-flex align-items-center justify-content-between">
-                <div class="d-flex align-items-center gap-2 flex-grow-1">
-                  <button
-                    class="btn btn-sm btn-link p-0 text-decoration-none"
-                    @click="toggleSheetCollapse(si)"
-                  >
-                    <i class="bi" :class="sheetCollapsed[si] ? 'bi-chevron-right' : 'bi-chevron-down'"></i>
-                  </button>
-                  <input
-                    v-model="sheet.name"
-                    class="form-control form-control-sm review-sheet-name"
-                    placeholder="Nome da ficha"
-                  />
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                  <div class="input-group input-group-sm" style="width: 160px;">
-                    <span class="input-group-text">Rend.</span>
-                    <input
-                      v-model="sheet.yield"
-                      type="text"
-                      class="form-control"
-                      placeholder="Ex: 10 porções"
-                    />
-                  </div>
-                  <span class="badge bg-light text-dark border">{{ sheet.items.length }}</span>
-                  <button class="btn btn-sm btn-outline-danger" @click="removeSheet(si)" title="Remover ficha">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Product linking -->
-              <div v-if="!sheetCollapsed[si]" class="review-product-link mt-2 mb-2 px-2">
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                  <label class="form-label mb-0 small fw-semibold text-nowrap">
-                    <i class="bi bi-box-seam me-1"></i>Produto:
-                  </label>
-                  <select
-                    v-model="sheet.productAction"
-                    class="form-select form-select-sm"
-                    style="width: auto; min-width: 160px;"
-                    @change="onProductActionChange(sheet)"
-                  >
-                    <option value="none">Nenhum</option>
-                    <option value="link">Vincular existente</option>
-                    <option value="create">Criar novo produto</option>
-                  </select>
-                  <template v-if="sheet.productAction === 'link'">
-                    <select
-                      v-model="sheet.productId"
-                      class="form-select form-select-sm flex-grow-1"
-                      style="min-width: 200px; max-width: 400px;"
-                    >
-                      <option :value="null">-- Selecione um produto --</option>
-                      <option
-                        v-for="prod in existingProducts"
-                        :key="prod.id"
-                        :value="prod.id"
-                      >
-                        {{ prod.name }}
-                      </option>
-                    </select>
-                    <span v-if="sheet.productConfidence > 0" class="badge" :class="sheet.productConfidence >= 70 ? 'bg-success' : 'bg-warning text-dark'" title="Confiança do match automático">
-                      {{ sheet.productConfidence }}%
-                    </span>
-                  </template>
-                  <template v-if="sheet.productAction === 'create'">
-                    <span class="badge bg-info text-dark">
-                      <i class="bi bi-plus-circle me-1"></i>Criará "{{ sheet.name }}"
-                    </span>
-                  </template>
-                </div>
-              </div>
-
-              <!-- Ingredients table -->
-              <div v-if="!sheetCollapsed[si]" class="review-ingredients mt-2">
-                <div class="table-responsive">
-                  <table class="table table-sm table-hover mb-0 align-middle">
-                    <thead>
-                      <tr>
-                        <th style="min-width:180px">Ingrediente Extraido</th>
-                        <th style="min-width:200px">Match</th>
-                        <th style="width:90px" class="text-center">Confianca</th>
-                        <th style="width:100px">Qtd</th>
-                        <th style="width:100px">Unidade</th>
-                        <th style="width:50px"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="(ing, ii) in sheet.items" :key="ii">
-                        <!-- Extracted name -->
-                        <td>
-                          <span class="small text-muted">{{ ing.description }}</span>
-                        </td>
-                        <!-- Match select -->
-                        <td>
-                          <template v-if="ing.newIngredient && !ing._selectMode">
-                            <span class="badge bg-warning text-dark me-1">
-                              <i class="bi bi-plus-circle me-1"></i>Criar novo
-                            </span>
-                            <button
-                              class="btn btn-sm btn-outline-secondary py-0 px-1"
-                              @click="ing._selectMode = true"
-                              title="Selecionar ingrediente existente"
-                            >
-                              <i class="bi bi-search" style="font-size:11px"></i>
-                            </button>
-                          </template>
-                          <template v-else>
-                            <select
-                              v-model="ing.ingredientId"
-                              class="form-select form-select-sm"
-                              @change="onIngredientSelect(ing)"
-                            >
-                              <option :value="null">-- Criar novo --</option>
-                              <option
-                                v-for="existIng in existingIngredients"
-                                :key="existIng.id"
-                                :value="existIng.id"
-                              >
-                                {{ existIng.description }}
-                              </option>
-                            </select>
-                          </template>
-                        </td>
-                        <!-- Confidence badge -->
-                        <td class="text-center">
-                          <span
-                            class="badge"
-                            :class="ing.confidence >= 70 ? 'bg-success' : 'bg-warning text-dark'"
-                          >
-                            {{ ing.confidence ?? 0 }}%
+            <!-- Ingredients table -->
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0 align-middle">
+                <thead>
+                  <tr>
+                    <th style="min-width:200px">Descricao</th>
+                    <th style="width:100px">Unidade</th>
+                    <th style="width:120px">Custo Medio</th>
+                    <th style="min-width:180px">Grupo</th>
+                    <th style="width:80px" class="text-center">Estoque</th>
+                    <th style="width:70px" class="text-center">CMV</th>
+                    <th style="width:100px">Est. Min.</th>
+                    <th style="width:50px"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(ing, i) in ingredients" :key="i">
+                    <!-- Description -->
+                    <td>
+                      <input
+                        v-model="ing.description"
+                        class="form-control form-control-sm"
+                        placeholder="Nome do ingrediente"
+                      />
+                    </td>
+                    <!-- Unit -->
+                    <td>
+                      <select v-model="ing.unit" class="form-select form-select-sm">
+                        <option value="UN">UN</option>
+                        <option value="GR">GR</option>
+                        <option value="KG">KG</option>
+                        <option value="ML">ML</option>
+                        <option value="L">L</option>
+                      </select>
+                    </td>
+                    <!-- Avg Cost -->
+                    <td>
+                      <input
+                        v-model.number="ing.avgCost"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        class="form-control form-control-sm"
+                        placeholder="R$"
+                      />
+                    </td>
+                    <!-- Group -->
+                    <td>
+                      <template v-if="ing.newGroup && !ing._selectGroupMode">
+                        <div class="d-flex align-items-center gap-1">
+                          <span class="badge bg-warning text-dark small">
+                            <i class="bi bi-plus-circle me-1"></i>{{ ing.groupName }}
                           </span>
-                        </td>
-                        <!-- Quantity -->
-                        <td>
-                          <input
-                            v-model.number="ing.quantity"
-                            type="number"
-                            step="0.001"
-                            min="0"
-                            class="form-control form-control-sm"
-                          />
-                        </td>
-                        <!-- Unit -->
-                        <td>
-                          <select v-model="ing.unit" class="form-select form-select-sm">
-                            <option value="UN">UN</option>
-                            <option value="GR">GR</option>
-                            <option value="KG">KG</option>
-                            <option value="ML">ML</option>
-                            <option value="L">L</option>
-                          </select>
-                        </td>
-                        <!-- Remove -->
-                        <td class="text-center">
-                          <button class="btn btn-sm btn-outline-danger py-0 px-1" @click="removeIngredient(si, ii)" title="Remover">
-                            <i class="bi bi-x-lg" style="font-size:11px"></i>
+                          <button
+                            class="btn btn-sm btn-outline-secondary py-0 px-1"
+                            @click="ing._selectGroupMode = true"
+                            title="Selecionar grupo existente"
+                          >
+                            <i class="bi bi-search" style="font-size:11px"></i>
                           </button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                        </div>
+                      </template>
+                      <template v-else>
+                        <select
+                          v-model="ing.groupId"
+                          class="form-select form-select-sm"
+                          @change="onGroupSelect(ing)"
+                        >
+                          <option :value="null">-- Sem grupo --</option>
+                          <option
+                            v-for="g in existingGroups"
+                            :key="g.id"
+                            :value="g.id"
+                          >
+                            {{ g.name }}
+                          </option>
+                        </select>
+                      </template>
+                    </td>
+                    <!-- Controls Stock -->
+                    <td class="text-center">
+                      <input type="checkbox" class="form-check-input" v-model="ing.controlsStock" />
+                    </td>
+                    <!-- Composes CMV -->
+                    <td class="text-center">
+                      <input type="checkbox" class="form-check-input" v-model="ing.composesCmv" />
+                    </td>
+                    <!-- Min Stock -->
+                    <td>
+                      <input
+                        v-model.number="ing.minStock"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        class="form-control form-control-sm"
+                        placeholder="-"
+                        :disabled="!ing.controlsStock"
+                      />
+                    </td>
+                    <!-- Remove -->
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-outline-danger py-0 px-1" @click="removeIngredient(i)" title="Remover">
+                        <i class="bi bi-x-lg" style="font-size:11px"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Loading overlay para parse (job assincrono) -->
+          <!-- Loading overlay -->
           <div v-if="parsing" class="parsing-overlay">
             <div class="text-center px-3">
               <div class="spinner-border text-primary mb-3" role="status">
@@ -522,7 +454,6 @@
         <!-- Footer -->
         <div class="modal-footer">
 
-          <!-- Step 1 footer -->
           <template v-if="step === 1">
             <button class="btn btn-outline-secondary" @click="$emit('close')">Cancelar</button>
             <button
@@ -534,7 +465,6 @@
             </button>
           </template>
 
-          <!-- Step 2 footer -->
           <template v-if="step === 2">
             <button class="btn btn-outline-secondary" @click="step = 1" :disabled="parsing">Voltar</button>
             <button
@@ -551,7 +481,6 @@
             </button>
           </template>
 
-          <!-- Step 3 footer -->
           <template v-if="step === 3">
             <button class="btn btn-outline-secondary" @click="$emit('close')" :disabled="applying">Cancelar</button>
             <button
@@ -566,7 +495,7 @@
                 <i class="bi bi-lock me-1"></i>Creditos insuficientes
               </span>
               <span v-else>
-                <i class="bi bi-check-circle me-1"></i>Importar {{ sheets.length }} ficha(s)
+                <i class="bi bi-check-circle me-1"></i>Importar {{ ingredients.length }} ingrediente(s)
                 <small v-if="creditEstimate" class="opacity-75 ms-1">(-{{ creditEstimate.totalCost }} creditos)</small>
               </span>
             </button>
@@ -579,7 +508,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import api from '../api'
 import Swal from 'sweetalert2'
 import { useAiCreditsStore } from '../stores/aiCredits.js'
@@ -588,26 +517,14 @@ const emit = defineEmits(['close', 'imported'])
 
 const aiCreditsStore = useAiCreditsStore()
 
-// Credit estimate returned by job after parse
 const creditEstimate = ref(null)
-
-// Existing ingredients for matching
-const existingIngredients = ref([])
-
-// Existing products for linking
-const existingProducts = ref([])
+const existingGroups = ref([])
 
 onMounted(async () => {
   aiCreditsStore.fetch()
-
-  // Load existing ingredients and products
   try {
-    const [ingRes, prodRes] = await Promise.all([
-      api.get('/ingredients'),
-      api.get('/menu/products'),
-    ])
-    existingIngredients.value = ingRes.data || []
-    existingProducts.value = prodRes.data || []
+    const { data } = await api.get('/ingredient-groups')
+    existingGroups.value = data || []
   } catch (_) {}
 })
 
@@ -620,7 +537,7 @@ const applying = ref(false)
 const parseError = ref('')
 const dragging = ref(false)
 
-// Photo (multiple images)
+// Photo
 const photoBase64Array = ref([])
 const photoPreviews = ref([])
 
@@ -637,8 +554,7 @@ const docxFileName = ref('')
 const docxFile = ref(null)
 
 // Review
-const sheets = ref([])
-const sheetCollapsed = reactive({})
+const ingredients = ref([])
 
 // Reset file state when method changes
 watch(method, () => {
@@ -662,12 +578,8 @@ const canParse = computed(() => {
   return false
 })
 
-const totalIngredients = computed(() =>
-  sheets.value.reduce((acc, s) => acc + (s.items?.length || 0), 0)
-)
-
 const canImport = computed(() => {
-  if (sheets.value.length === 0) return false
+  if (ingredients.value.length === 0) return false
   if (!creditEstimate.value) return true
   return aiCreditsStore.hasCredits(creditEstimate.value.totalCost)
 })
@@ -730,16 +642,13 @@ function removePhoto(index) {
   photoPreviews.value.splice(index, 1)
 }
 
-// -- PDF to images conversion using pdfjs-dist --
+// -- PDF to images --
 async function convertPdfToImages(file) {
   const pdfjsLib = await import('pdfjs-dist')
-  // Set worker source
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
-
   const arrayBuffer = await readFileAsArrayBuffer(file)
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
   const images = []
-
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
     const viewport = page.getViewport({ scale: 2.0 })
@@ -750,11 +659,10 @@ async function convertPdfToImages(file) {
     await page.render({ canvasContext: ctx, viewport }).promise
     images.push(canvas.toDataURL('image/png'))
   }
-
   return images
 }
 
-// -- DOCX text extraction using mammoth --
+// -- DOCX text extraction --
 async function extractDocxText(file) {
   const mammoth = await import('mammoth')
   const arrayBuffer = await readFileAsArrayBuffer(file)
@@ -762,14 +670,14 @@ async function extractDocxText(file) {
   return result.value
 }
 
-// -- Parse (async job + polling) --
+// -- Parse --
 const jobStage = ref('pending')
 const _stageLabelMap = {
   pending:              { label: 'Iniciando...', hint: 'Preparando o processamento' },
-  loading_ingredients:  { label: 'Carregando ingredientes...', hint: 'Buscando ingredientes cadastrados para matching' },
-  parsing_file:         { label: 'Processando arquivo...', hint: 'Lendo e preparando o conteúdo do arquivo' },
-  processing:           { label: 'Processando...', hint: 'Preparando dados para análise' },
-  ai_analyzing:         { label: 'Analisando com IA...', hint: 'Extraindo fichas técnicas e ingredientes' },
+  loading_ingredients:  { label: 'Carregando dados...', hint: 'Buscando ingredientes e grupos cadastrados' },
+  parsing_file:         { label: 'Processando arquivo...', hint: 'Lendo e preparando o conteudo do arquivo' },
+  processing:           { label: 'Processando...', hint: 'Preparando dados para analise' },
+  ai_analyzing:         { label: 'Analisando com IA...', hint: 'Extraindo ingredientes do conteudo' },
 }
 const parsingStageLabel = computed(() =>
   _stageLabelMap[jobStage.value]?.label || 'Analisando com IA...'
@@ -798,28 +706,24 @@ async function parseContent() {
     } else if (method.value === 'spreadsheet') {
       files = [sheetBase64.value]
     } else if (method.value === 'pdf') {
-      // Convert PDF pages to images, send as method='photo'
       jobStage.value = 'pending'
       const images = await convertPdfToImages(pdfFile.value)
       files = images
       sendMethod = 'photo'
     } else if (method.value === 'docx') {
-      // Extract text from DOCX, send as method='docx' with text array
       const text = await extractDocxText(docxFile.value)
       files = [text]
       sendMethod = 'docx'
     }
 
-    // Start job
-    const res = await api.post('/technical-sheets/ai-import/parse', { method: sendMethod, files }, { timeout: 30000 })
+    const res = await api.post('/ingredients/ai-import/parse', { method: sendMethod, files }, { timeout: 30000 })
     const { jobId } = res.data
 
-    // Poll status
     await new Promise((resolve, reject) => {
       function poll() {
         _pollTimer = setTimeout(async () => {
           try {
-            const { data } = await api.get(`/technical-sheets/ai-import/parse/${jobId}`, { timeout: 8000 })
+            const { data } = await api.get(`/ingredients/ai-import/parse/${jobId}`, { timeout: 8000 })
             if (data.stage) jobStage.value = data.stage
             if (data.done) {
               if (data.error) reject(new Error(data.error))
@@ -834,29 +738,28 @@ async function parseContent() {
       }
       poll()
     }).then(data => {
-      sheets.value = (data.sheets || []).map(s => ({
-        name: s.name || '',
-        yield: s.yield ?? null,
-        productAction: s.matchedProductId ? 'link' : 'none',
-        productId: s.matchedProductId || null,
-        matchedProductName: s.matchedProductName || null,
-        productConfidence: s.productConfidence ?? 0,
-        items: (s.items || []).map(item => ({
-          description: item.description || '',
-          ingredientId: item.matchedIngredientId || null,
-          newIngredient: !item.matchedIngredientId,
-          _selectMode: !!item.matchedIngredientId,
-          confidence: item.confidence ?? 0,
-          quantity: item.quantity ?? 0,
-          unit: item.unit || 'UN',
-        })),
+      ingredients.value = (data.ingredients || []).map(ing => ({
+        description: ing.description || '',
+        unit: ing.unit || 'UN',
+        avgCost: ing.avgCost,
+        groupId: ing.groupId || null,
+        groupName: ing.groupName || null,
+        newGroup: !ing.groupId && !!ing.groupName,
+        _selectGroupMode: !!ing.groupId,
+        controlsStock: ing.controlsStock !== false,
+        composesCmv: ing.composesCmv !== false,
+        minStock: ing.minStock,
       }))
-      sheets.value.forEach((_, i) => { sheetCollapsed[i] = false })
+
+      // Merge server groups with groups from job
+      if (data.existingGroups) {
+        existingGroups.value = data.existingGroups
+      }
 
       if (data.creditEstimate) creditEstimate.value = data.creditEstimate
 
-      if (sheets.value.length === 0) {
-        parseError.value = 'A IA nao encontrou fichas tecnicas no conteudo. Tente com outro formato.'
+      if (ingredients.value.length === 0) {
+        parseError.value = 'A IA nao encontrou ingredientes no conteudo. Tente com outro formato.'
         return
       }
       step.value = 3
@@ -876,31 +779,17 @@ async function parseContent() {
 }
 
 // -- Review editing --
-function toggleSheetCollapse(si) {
-  sheetCollapsed[si] = !sheetCollapsed[si]
+function removeIngredient(i) {
+  ingredients.value.splice(i, 1)
 }
 
-function removeSheet(si) {
-  sheets.value.splice(si, 1)
-}
-
-function removeIngredient(si, ii) {
-  sheets.value[si].items.splice(ii, 1)
-}
-
-function onProductActionChange(sheet) {
-  if (sheet.productAction !== 'link') {
-    sheet.productId = null;
-  }
-}
-
-function onIngredientSelect(ing) {
-  if (ing.ingredientId) {
-    ing.newIngredient = false
-    ing._selectMode = true
+function onGroupSelect(ing) {
+  if (ing.groupId) {
+    ing.newGroup = false
+    ing._selectGroupMode = true
   } else {
-    ing.newIngredient = true
-    ing._selectMode = false
+    ing.newGroup = false
+    ing._selectGroupMode = true
   }
 }
 
@@ -908,28 +797,23 @@ function onIngredientSelect(ing) {
 async function doImport() {
   applying.value = true
   try {
-    const cleanSheets = sheets.value.map(s => ({
-      name: s.name,
-      yield: s.yield,
-      productAction: s.productAction || 'none',
-      productId: s.productAction === 'link' ? s.productId : null,
-      items: s.items.map(item => ({
-        description: item.description,
-        ingredientId: item.newIngredient ? null : item.ingredientId,
-        newIngredient: item.newIngredient,
-        quantity: item.quantity,
-        unit: item.unit,
-      })),
+    const cleanIngredients = ingredients.value.map(ing => ({
+      description: ing.description,
+      unit: ing.unit,
+      avgCost: ing.avgCost,
+      groupId: ing.newGroup ? null : ing.groupId,
+      groupName: ing.groupName,
+      newGroup: ing.newGroup,
+      controlsStock: ing.controlsStock,
+      composesCmv: ing.composesCmv,
+      minStock: ing.controlsStock ? ing.minStock : null,
     }))
 
-    const { data: result } = await api.post('/technical-sheets/ai-import/apply', { sheets: cleanSheets })
+    const { data: result } = await api.post('/ingredients/ai-import/apply', { ingredients: cleanIngredients })
 
     aiCreditsStore.fetch()
 
-    const productInfo = []
-    if (result?.created?.linkedProducts) productInfo.push(`${result.created.linkedProducts} vinculado(s)`)
-    if (result?.created?.createdProducts) productInfo.push(`${result.created.createdProducts} criado(s)`)
-    const productText = productInfo.length ? ` | Produtos: ${productInfo.join(', ')}` : ''
+    const groupText = result?.created?.groups ? ` | ${result.created.groups} grupo(s) criado(s)` : ''
 
     Swal.fire({
       toast: true,
@@ -937,7 +821,7 @@ async function doImport() {
       showConfirmButton: false,
       timer: 4000,
       icon: 'success',
-      title: `${sheets.value.length} ficha(s) importada(s)!${productText}`,
+      title: `${result?.created?.ingredients || 0} ingrediente(s) importado(s)!${groupText}`,
     })
 
     emit('imported')
@@ -956,7 +840,7 @@ async function doImport() {
       Swal.fire({
         icon: 'error',
         title: 'Erro ao importar',
-        text: e.response?.data?.message || e.message || 'Falha ao importar fichas tecnicas',
+        text: e.response?.data?.message || e.message || 'Falha ao importar ingredientes',
       })
     }
   } finally {
@@ -981,257 +865,74 @@ function handleBackdropClick() {
   justify-content: center;
 }
 
-/* Step progress bar */
-.step-progress {
-  gap: 0;
-}
-.step-item {
-  display: flex;
-  align-items: center;
-  flex: 1;
-}
+.step-progress { gap: 0; }
+.step-item { display: flex; align-items: center; flex: 1; }
 .step-circle {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #dee2e6;
-  color: #6c757d;
-  font-size: 12px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #dee2e6; color: #6c757d; font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   transition: background 0.2s, color 0.2s;
 }
-.step-item.active .step-circle {
-  background: #0d6efd;
-  color: #fff;
-}
-.step-item.done .step-circle {
-  background: #198754;
-  color: #fff;
-}
-.step-label {
-  font-size: 13px;
-  color: #6c757d;
-  white-space: nowrap;
-}
-.step-item.active .step-label {
-  color: #0d6efd;
-  font-weight: 600;
-}
-.step-item.done .step-label {
-  color: #198754;
-}
-.step-line {
-  flex: 1;
-  height: 2px;
-  background: #dee2e6;
-  margin: 0 6px;
-}
+.step-item.active .step-circle { background: #0d6efd; color: #fff; }
+.step-item.done .step-circle { background: #198754; color: #fff; }
+.step-label { font-size: 13px; color: #6c757d; white-space: nowrap; }
+.step-item.active .step-label { color: #0d6efd; font-weight: 600; }
+.step-item.done .step-label { color: #198754; }
+.step-line { flex: 1; height: 2px; background: #dee2e6; margin: 0 6px; }
 
-/* Method cards */
 .method-card {
-  border: 2px solid #dee2e6;
-  border-radius: 12px;
-  padding: 20px 16px;
-  text-align: center;
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-  user-select: none;
+  border: 2px solid #dee2e6; border-radius: 12px; padding: 20px 16px;
+  text-align: center; cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; user-select: none;
 }
-.method-card:hover {
-  border-color: #0d6efd;
-  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.12);
-}
-.method-card.selected {
-  border-color: #0d6efd;
-  background: #f0f5ff;
-}
-.method-icon {
-  font-size: 2rem;
-  display: block;
-  margin-bottom: 8px;
-}
-.method-title {
-  font-weight: 600;
-  font-size: 15px;
-}
-.method-desc {
-  font-size: 12px;
-  margin-top: 4px;
-}
+.method-card:hover { border-color: #0d6efd; box-shadow: 0 2px 8px rgba(13, 110, 253, 0.12); }
+.method-card.selected { border-color: #0d6efd; background: #f0f5ff; }
+.method-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+.method-title { font-weight: 600; font-size: 15px; }
+.method-desc { font-size: 12px; margin-top: 4px; }
 
-/* Dropzone */
 .dropzone {
-  border: 2px dashed #ced4da;
-  border-radius: 12px;
-  padding: 32px 16px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-  background: #fff;
-  position: relative;
-  overflow: hidden;
-  min-height: 160px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border: 2px dashed #ced4da; border-radius: 12px; padding: 32px 16px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s; background: #fff;
+  position: relative; overflow: hidden; min-height: 160px;
+  display: flex; align-items: center; justify-content: center;
 }
-.dropzone:hover,
-.dropzone.drag-over {
-  border-color: #0d6efd;
-  background: #f0f5ff;
-}
-.dropzone.has-file {
-  border-color: #198754;
-  background: #f0fff4;
-}
-.dropzone-inner {
-  text-align: center;
-}
-.dropzone-icon {
-  font-size: 2.5rem;
-  display: block;
-  margin-bottom: 8px;
-}
-.dropzone-text {
-  font-size: 14px;
-  font-weight: 500;
-}
+.dropzone:hover, .dropzone.drag-over { border-color: #0d6efd; background: #f0f5ff; }
+.dropzone.has-file { border-color: #198754; background: #f0fff4; }
+.dropzone-inner { text-align: center; }
+.dropzone-icon { font-size: 2.5rem; display: block; margin-bottom: 8px; }
+.dropzone-text { font-size: 14px; font-weight: 500; }
 
-/* Grid de multiplas fotos */
 .photo-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px;
-  border: 2px dashed #ced4da;
-  border-radius: 12px;
-  background: #f8f9fa;
-  min-height: 120px;
-  transition: border-color 0.15s, background 0.15s;
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 12px;
+  border: 2px dashed #ced4da; border-radius: 12px; background: #f8f9fa;
+  min-height: 120px; transition: border-color 0.15s, background 0.15s;
 }
-.photo-grid.drag-over {
-  border-color: #0d6efd;
-  background: #f0f5ff;
-}
+.photo-grid.drag-over { border-color: #0d6efd; background: #f0f5ff; }
 .photo-thumb {
-  position: relative;
-  width: 96px;
-  height: 96px;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid #dee2e6;
-  flex-shrink: 0;
+  position: relative; width: 96px; height: 96px; border-radius: 8px;
+  overflow: hidden; border: 1px solid #dee2e6; flex-shrink: 0;
 }
-.photo-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .photo-remove-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgba(220, 53, 69, 0.88);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  padding: 0;
-  line-height: 1;
+  position: absolute; top: 4px; right: 4px; width: 22px; height: 22px;
+  border-radius: 50%; background: rgba(220, 53, 69, 0.88); color: #fff;
+  border: none; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; font-size: 10px; padding: 0; line-height: 1;
 }
-.photo-remove-btn:hover {
-  background: #dc3545;
-}
+.photo-remove-btn:hover { background: #dc3545; }
 .photo-add-btn {
-  width: 96px;
-  height: 96px;
-  border-radius: 8px;
-  border: 2px dashed #ced4da;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #6c757d;
-  font-size: 1.5rem;
-  flex-shrink: 0;
+  width: 96px; height: 96px; border-radius: 8px; border: 2px dashed #ced4da;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  color: #6c757d; font-size: 1.5rem; flex-shrink: 0;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
-.photo-add-btn:hover {
-  border-color: #0d6efd;
-  color: #0d6efd;
-  background: #f0f5ff;
-}
-.photo-add-btn--camera:hover {
-  border-color: #198754;
-  color: #198754;
-  background: #f0fff4;
-}
+.photo-add-btn:hover { border-color: #0d6efd; color: #0d6efd; background: #f0f5ff; }
+.photo-add-btn--camera:hover { border-color: #198754; color: #198754; background: #f0fff4; }
 
-/* Review sheets */
-.review-sheet {
-  background: #f8f9fa;
-  border-radius: 10px;
-  padding: 12px;
-  border: 1px solid #e9ecef;
-}
-.review-sheet-header {
-  padding-bottom: 8px;
-}
-.review-sheet-name {
-  font-weight: 600;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  padding: 2px 6px;
-  transition: border-color 0.15s;
-}
-.review-sheet-name:focus {
-  border-color: #86b7fe;
-  background: #fff;
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
-}
-.review-product-link {
-  background: #eef6ff;
-  border-radius: 6px;
-  padding: 8px 12px;
-  border: 1px solid #d0e3f7;
-}
-.review-ingredients {
-  padding-left: 8px;
-}
-.review-ingredients .table {
-  font-size: 13px;
-}
-.review-ingredients .table th {
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  color: #6c757d;
-  border-bottom-width: 2px;
-}
-
-/* Loading overlay */
 .parsing-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.88);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-  border-radius: 0 0 0.375rem 0.375rem;
+  position: absolute; inset: 0; background: rgba(255,255,255,0.92);
+  display: flex; align-items: center; justify-content: center; z-index: 10;
+  border-radius: 0 0 .5rem .5rem;
 }
-
-/* Gap utility fallback */
-.gap-2 { gap: 0.5rem; }
 </style>

@@ -6,6 +6,7 @@ import fs from 'fs'
 import path from 'path'
 import { assertLimit } from '../utils/saas.js'
 import { isCardapioSimplesOnly } from '../modules.js'
+import { generateProductCode } from '../utils/integrationCode.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -338,7 +339,8 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       const sheet = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
       if (!sheet || sheet.companyId !== companyId) return res.status(400).json({ message: 'Ficha técnica inválida' })
     }
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null } })
+    const integrationCode = await generateProductCode(companyId)
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, integrationCode } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL

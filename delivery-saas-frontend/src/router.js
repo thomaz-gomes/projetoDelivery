@@ -71,6 +71,7 @@ import PaymentMethods from './views/PaymentMethods.vue';
 import PaymentMethodForm from './views/PaymentMethodForm.vue';
 import ProductForm from './views/ProductForm.vue';
 import CategoryForm from './views/CategoryForm.vue';
+import IntegrationCodes from './views/IntegrationCodes.vue';
 import Users from './views/Users.vue';
 import AccessControl from './views/AccessControl.vue';
 import SalesHistory from './views/SalesHistory.vue';
@@ -190,6 +191,7 @@ const router = createRouter({
   ,{ path: '/menu/menus', component: Menus, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus/new', component: MenuEdit, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus/:id', component: MenuEdit, meta: { requiresAuth: true } }
+   ,{ path: '/menu/integration', component: IntegrationCodes, meta: { requiresAuth: true } }
    ,{ path: '/menu/options', component: MenuOptions, meta: { requiresAuth: true } }
   ,{ path: '/menu/options/groups/new', component: OptionGroupForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/options/groups/:id', component: OptionGroupForm, meta: { requiresAuth: true } }
@@ -293,6 +295,7 @@ router.beforeEach(async (to) => {
     '/settings/neighborhoods', '/settings/meta-pixel',
     '/financial', '/riders', '/affiliates', '/coupons',
     '/stock-movements', '/ingredient-groups', '/settings/cashback',
+    '/menu/integration',
   ]
   if (token) {
     const isBlocked = SIMPLES_BLOCKED_PREFIXES.some(p => to.path === p || to.path.startsWith(p + '/'))

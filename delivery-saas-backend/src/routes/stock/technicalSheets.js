@@ -84,14 +84,16 @@ technicalSheetsRouter.post('/:id/items', requireRole('ADMIN'), async (req, res) 
   const sheet = await prisma.technicalSheet.findFirst({ where: { id, companyId } });
   if (!sheet) return res.status(404).json({ message: 'Ficha técnica não encontrada' });
 
-  const { ingredientId, quantity } = req.body || {};
+  const { ingredientId, quantity, unit } = req.body || {};
   if (!ingredientId) return res.status(400).json({ message: 'ingredientId é obrigatório' });
   if (!quantity || Number(quantity) <= 0) return res.status(400).json({ message: 'Quantidade deve ser > 0' });
 
+  const ALLOWED_UNITS = ['UN', 'GR', 'KG', 'ML', 'L'];
   const ing = await prisma.ingredient.findFirst({ where: { id: ingredientId, companyId } });
   if (!ing) return res.status(400).json({ message: 'Ingrediente inválido' });
 
-  const created = await prisma.technicalSheetItem.create({ data: { technicalSheetId: id, ingredientId, quantity: Number(quantity) } });
+  const itemUnit = unit && ALLOWED_UNITS.includes(String(unit).toUpperCase()) ? String(unit).toUpperCase() : null;
+  const created = await prisma.technicalSheetItem.create({ data: { technicalSheetId: id, ingredientId, quantity: Number(quantity), unit: itemUnit } });
   res.status(201).json(created);
 });
 
@@ -105,10 +107,15 @@ technicalSheetsRouter.patch('/:id/items/:itemId', requireRole('ADMIN'), async (r
   const existing = await prisma.technicalSheetItem.findUnique({ where: { id: itemId } });
   if (!existing || existing.technicalSheetId !== id) return res.status(404).json({ message: 'Item não encontrado' });
 
-  const { quantity } = req.body || {};
+  const { quantity, unit } = req.body || {};
   if (quantity !== undefined && Number(quantity) <= 0) return res.status(400).json({ message: 'Quantidade deve ser > 0' });
 
-  const updated = await prisma.technicalSheetItem.update({ where: { id: itemId }, data: { quantity: quantity !== undefined ? Number(quantity) : existing.quantity } });
+  const ALLOWED_UNITS = ['UN', 'GR', 'KG', 'ML', 'L'];
+  const data = {};
+  if (quantity !== undefined) data.quantity = Number(quantity);
+  if (unit !== undefined) data.unit = unit && ALLOWED_UNITS.includes(String(unit).toUpperCase()) ? String(unit).toUpperCase() : null;
+
+  const updated = await prisma.technicalSheetItem.update({ where: { id: itemId }, data: Object.keys(data).length ? data : { quantity: existing.quantity } });
   res.json(updated);
 });
 

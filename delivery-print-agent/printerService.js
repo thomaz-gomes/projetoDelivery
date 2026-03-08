@@ -316,13 +316,18 @@ function renderJsonBlocks(blocks, context) {
 
         case 'qr': {
           const qrUrl = context.qr_url;
+          console.log(`[QR-DEBUG] v2 qr block: qr_url=${qrUrl || '(empty)'}`);
           if (!qrUrl) break;
           try {
             ntp.alignCenter();
+            const bufBefore = ntp.getBuffer ? ntp.getBuffer().length : -1;
             ntp.printQR(qrUrl, { cellSize: 6, correction: 'M', model: 2 });
+            const bufAfter = ntp.getBuffer ? ntp.getBuffer().length : -1;
+            console.log(`[QR-DEBUG] v2 printQR done, buffer ${bufBefore} -> ${bufAfter} bytes`);
             ntp.println('Escaneie para despachar');
             ntp.alignLeft();
           } catch (qrErr) {
+            console.error(`[QR-DEBUG] v2 printQR error:`, qrErr.message);
             ntp.println('[QR:' + qrUrl + ']');
           }
           break;
@@ -479,9 +484,15 @@ async function printOrder(order, opts = {}) {
   const copies = Math.max(1, Math.min(10, Number(opts.copies || DEFAULT_COPIES)));
   const realPrinterName = resolveRealPrinterName(opts);
 
+  // QR diagnostic logging
+  console.log(`[QR-DEBUG] order.qrText=${order.qrText || '(empty)'} order.qrUrl=${order.qrUrl || '(empty)'}`);
+  console.log(`[QR-DEBUG] payload.qrText=${(order.payload && order.payload.qrText) || '(empty)'}`);
+  console.log(`[QR-DEBUG] context.qr_url=${context.qr_url || '(empty)'}`);
+
   // Detectar se é template JSON v2
   const jsonBlocks = parseJsonTemplate(template);
   const isJsonTemplate = !!jsonBlocks;
+  console.log(`[QR-DEBUG] template: ${opts.receiptTemplate ? 'CUSTOM' : 'DEFAULT'}, format: ${isJsonTemplate ? 'json-v2' : 'plain-v1'}, length: ${template.length}`);
 
   // Texto plano para fallback/dry-run - respeita template v2 se disponível
   const renderedText = isJsonTemplate
@@ -516,12 +527,17 @@ async function printOrder(order, opts = {}) {
         for (const line of lines) {
           const qrMatch = line.trim().match(QR_PATTERN);
           if (qrMatch && qrMatch[1]) {
+            console.log(`[QR-DEBUG] v1 QR pattern matched: ${qrMatch[1]}`);
             try {
               ntp.alignCenter();
+              const bufBefore = ntp.getBuffer ? ntp.getBuffer().length : -1;
               ntp.printQR(qrMatch[1], { cellSize: 6, correction: 'M', model: 2 });
+              const bufAfter = ntp.getBuffer ? ntp.getBuffer().length : -1;
+              console.log(`[QR-DEBUG] v1 printQR done, buffer ${bufBefore} -> ${bufAfter} bytes`);
               ntp.println('Escaneie para despachar');
               ntp.alignLeft();
             } catch (qrErr) {
+              console.error(`[QR-DEBUG] v1 printQR error:`, qrErr.message);
               ntp.println(line);
             }
           } else {
@@ -534,6 +550,7 @@ async function printOrder(order, opts = {}) {
 
     // Obter o buffer ESC/POS construído
     escposBuffer = ntp.getBuffer();
+    console.log(`[QR-DEBUG] Final ESC/POS buffer: ${escposBuffer ? escposBuffer.length : 0} bytes`);
     ntp.clear();
   } catch (err) {
     logFile(`ESC/POS buffer build failed: ${err.message}`);

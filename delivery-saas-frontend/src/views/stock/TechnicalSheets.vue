@@ -2,9 +2,11 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../../api';
+import Swal from 'sweetalert2';
 import ListCard from '../../components/ListCard.vue';
 import TechnicalSheetForm from '../../components/TechnicalSheetForm.vue';
 import TechnicalSheetAiImportModal from '../../components/TechnicalSheetAiImportModal.vue';
+import { normalizeToIngredientUnit } from '../../utils/unitConversion.js';
 
 const list = ref([]);
 const showAiImport = ref(false);
@@ -29,6 +31,16 @@ const selectedIngredient = computed(() => {
 function fmtMoney(v){
   if (v === null || v === undefined || Number.isNaN(Number(v))) return '-';
   return Number(v).toFixed(2);
+}
+
+function sheetCost(s) {
+  if (!s.items || !s.items.length) return 0;
+  return s.items.reduce((acc, it) => {
+    const cost = Number(it.ingredient?.avgCost) || 0;
+    const rawQty = Number(it.quantity) || 0;
+    const qty = normalizeToIngredientUnit(rawQty, it.unit, it.ingredient?.unit);
+    return acc + cost * qty;
+  }, 0);
 }
 
 async function fetch(){
@@ -89,6 +101,25 @@ const displayed = computed(() => {
   return (list.value || []).filter(s => (s.name || '').toLowerCase().includes(term))
 })
 
+async function deleteSheet(s) {
+  const { isConfirmed } = await Swal.fire({
+    title: 'Excluir ficha técnica?',
+    text: `"${s.name}" será removida permanentemente.`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'Excluir',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!isConfirmed) return;
+  try {
+    await api.delete(`/technical-sheets/${s.id}`);
+    await fetch();
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao excluir' });
+  }
+}
+
 function onQuickSearch(val){ q.value = val }
 function onQuickClear(){ q.value = '' }
 </script>
@@ -110,16 +141,21 @@ function onQuickClear(){ q.value = '' }
             <thead>
               <tr>
                 <th>Nome</th>
+                <th>Rendimento</th>
                 <th class="text-end">Itens</th>
+                <th class="text-end">Custo</th>
                 <th class="text-end">Ações</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="s in displayed" :key="s.id">
                 <td>{{ s.name }}</td>
+                <td class="text-muted">{{ s.yield || '-' }}</td>
                 <td class="text-end">{{ s.itemCount || 0 }}</td>
+                <td class="text-end">R$ {{ fmtMoney(sheetCost(s)) }}</td>
                 <td class="text-end">
-                  <button class="btn btn-sm btn-outline-secondary" @click="edit(s)">Editar</button>
+                  <button class="btn btn-sm btn-outline-secondary me-1" @click="edit(s)">Editar</button>
+                  <button class="btn btn-sm btn-outline-danger" @click="deleteSheet(s)" title="Excluir"><i class="bi bi-trash"></i></button>
                 </td>
               </tr>
             </tbody>
@@ -176,10 +212,10 @@ function onQuickClear(){ q.value = '' }
           <tbody>
             <tr v-for="it in selected.items" :key="it.id">
               <td>{{ it.ingredient.description }}</td>
-              <td>{{ it.ingredient.unit || '-' }}</td>
-              <td>{{ fmtMoney(it.ingredient.avgCost) }}</td>
+              <td>{{ it.unit || it.ingredient.unit || '-' }}</td>
+              <td>{{ fmtMoney(it.ingredient.avgCost) }}/{{ it.ingredient.unit }}</td>
               <td>{{ it.quantity }}</td>
-              <td>{{ fmtMoney((it.ingredient.avgCost || 0) * (it.quantity || 0)) }}</td>
+              <td>{{ fmtMoney((it.ingredient.avgCost || 0) * normalizeToIngredientUnit(Number(it.quantity || 0), it.unit, it.ingredient?.unit)) }}</td>
               <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(it.id)">Remover</button></td>
             </tr>
           </tbody>

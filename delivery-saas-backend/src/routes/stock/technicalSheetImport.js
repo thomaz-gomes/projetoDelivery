@@ -115,10 +115,16 @@ async function runParseJob(jobId, method, files, companyId) {
 
   try {
     // Load company's existing ingredients for matching
-    const ingredients = await prisma.ingredient.findMany({
-      where: { companyId },
-      select: { id: true, description: true, unit: true },
-    });
+    const [ingredients, existingProducts] = await Promise.all([
+      prisma.ingredient.findMany({
+        where: { companyId },
+        select: { id: true, description: true, unit: true },
+      }),
+      prisma.product.findMany({
+        where: { companyId, isActive: true },
+        select: { id: true, name: true, technicalSheetId: true },
+      }),
+    ]);
 
     const systemPrompt = buildSystemPrompt(ingredients);
     const allSheets = [];
@@ -220,9 +226,39 @@ async function runParseJob(jobId, method, files, companyId) {
       })).filter(item => item.description),
     })).filter(sheet => sheet.name && sheet.items.length > 0);
 
+    // Try to match each sheet to an existing product by name similarity
+    for (const sheet of sheets) {
+      const sheetNameLower = sheet.name.toLowerCase().trim();
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const product of existingProducts) {
+        const productNameLower = product.name.toLowerCase().trim();
+        // Exact match
+        if (sheetNameLower === productNameLower) {
+          bestMatch = product;
+          bestScore = 1;
+          break;
+        }
+        // Contains match (one contains the other)
+        if (sheetNameLower.includes(productNameLower) || productNameLower.includes(sheetNameLower)) {
+          const score = Math.min(sheetNameLower.length, productNameLower.length) / Math.max(sheetNameLower.length, productNameLower.length);
+          if (score > bestScore) {
+            bestMatch = product;
+            bestScore = score;
+          }
+        }
+      }
+
+      sheet.matchedProductId = bestScore >= 0.5 ? bestMatch?.id || null : null;
+      sheet.matchedProductName = bestScore >= 0.5 ? bestMatch?.name || null : null;
+      sheet.productConfidence = Math.round(bestScore * 100);
+    }
+
     job.done = true;
     job.sheets = sheets;
     job.sheetCount = sheets.length;
+    job.existingProducts = existingProducts;
     job.stage = 'done';
     job.creditEstimate = {
       sheetCount: sheets.length,
@@ -349,9 +385,18 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
     });
     const validIngredientIds = new Set(companyIngredients.map(i => i.id));
 
+    // Pre-load valid product IDs for this company
+    const companyProducts = await prisma.product.findMany({
+      where: { companyId },
+      select: { id: true },
+    });
+    const validProductIds = new Set(companyProducts.map(p => p.id));
+
     let createdSheets = 0;
     let createdIngredients = 0;
     let createdItems = 0;
+    let linkedProducts = 0;
+    let createdProducts = 0;
 
     for (const sheet of sheets) {
       const sheetName = String(sheet.name || '').trim();
@@ -391,7 +436,8 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
         if (!ingredientId || !validIngredientIds.has(ingredientId)) continue;
 
         const quantity = parseFloat(item.quantity) || 1;
-        resolvedItems.push({ ingredientId, quantity });
+        const itemUnit = ALLOWED_UNITS.includes(String(item.unit || '').toUpperCase()) ? String(item.unit).toUpperCase() : null;
+        resolvedItems.push({ ingredientId, quantity, unit: itemUnit });
       }
 
       if (!resolvedItems.length) continue;
@@ -406,10 +452,33 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
             create: resolvedItems.map(ri => ({
               ingredientId: ri.ingredientId,
               quantity: ri.quantity,
+              unit: ri.unit,
             })),
           },
         },
       });
+
+      // Handle product linking
+      const productAction = sheet.productAction; // 'link', 'create', or 'none'
+      if (productAction === 'link' && sheet.productId && validProductIds.has(sheet.productId)) {
+        await prisma.product.update({
+          where: { id: sheet.productId },
+          data: { technicalSheetId: newSheet.id },
+        });
+        linkedProducts++;
+      } else if (productAction === 'create') {
+        const newProduct = await prisma.product.create({
+          data: {
+            companyId,
+            name: sheetName,
+            technicalSheetId: newSheet.id,
+            price: 0,
+            isActive: true,
+          },
+        });
+        validProductIds.add(newProduct.id);
+        createdProducts++;
+      }
 
       createdSheets++;
       createdItems += resolvedItems.length;
@@ -421,6 +490,8 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
         sheets: createdSheets,
         ingredients: createdIngredients,
         items: createdItems,
+        linkedProducts,
+        createdProducts,
       },
     });
 

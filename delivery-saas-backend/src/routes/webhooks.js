@@ -9,6 +9,7 @@ import printQueue from '../printQueue.js'
 import { enrichOrderForAgent } from '../enrichOrderForAgent.js'
 import { determineStatusFromIFoodEvent } from '../services/ifoodWebhookProcessor.js';
 import { canTransition } from '../stateMachine.js';
+import { matchItemsToLocalProducts } from '../utils/integrationMatcher.js';
 
 // Helper: try to process the print queue for the provided storeIds with a
 // small retry/backoff strategy. Returns the final result from processForStores.
@@ -285,18 +286,27 @@ webhooksRouter.post("/ifood", async (req, res) => {
       longitude,
       total,
       deliveryFee,
-      payload: order,
       displaySimple: displaySimpleForCreate,
       histories: {
         create: [{ from: null, to: (inferredStatus2 || 'EM_PREPARO'), reason: "Webhook iFood" }],
       },
-      items: {
-        create: (order.items || []).map((it) => ({
-          name: it.name || "Item",
-          quantity: Number(it.quantity || 1),
-          price: Number(it.totalPrice || it.price || 0),
-        })),
-      },
+    };
+
+    // Match integration items to local products by integrationCode
+    // Local product name replaces integration name; price kept from integration
+    const matchedItems = await matchItemsToLocalProducts(order.items || [], companyId)
+
+    // Update payload items with matched local names for print agent
+    const enrichedPayload = { ...order, items: matchedItems }
+    createObj.payload = enrichedPayload
+
+    createObj.items = {
+      create: matchedItems.map((it) => ({
+        name: it.name || "Item",
+        quantity: Number(it.quantity || 1),
+        price: Number(it.totalPrice || it.price || 0),
+        productId: it._matchedProductId || null,
+      })),
     };
 
     // update object mirrors previous update but only sets status when transition allowed
@@ -313,7 +323,7 @@ webhooksRouter.post("/ifood", async (req, res) => {
       longitude,
       total,
       deliveryFee,
-      payload: order,
+      payload: enrichedPayload,
     };
 
     // If we have an existing order and an inferred status, decide whether to apply it
@@ -585,7 +595,17 @@ webhooksRouter.post("/ifood", async (req, res) => {
 
             const ACK_TIMEOUT_MS = process.env.PRINT_ACK_TIMEOUT_MS ? Number(process.env.PRINT_ACK_TIMEOUT_MS) : 10000;
             // Enrich order with printer settings before sending to agent
-            try { await enrichOrderForAgent(saved); } catch (e) { /* non-fatal */ }
+            try { await enrichOrderForAgent(saved); } catch (e) { console.warn('Auto-print: enrichOrderForAgent failed:', e && e.message); }
+            // Safety net: ensure qrText for DELIVERY orders
+            if (!saved.qrText && saved.id) {
+              const ot = String(saved.orderType || (saved.payload && (saved.payload.orderType || saved.payload.order_type)) || '').toUpperCase();
+              if (ot === 'DELIVERY' || (saved.payload && (saved.payload.delivery || saved.payload.deliveryAddress))) {
+                const fe = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+                saved.qrText = `${fe}/orders/${saved.id}`;
+                console.log('Auto-print: qrText safety net for iFood order:', saved.qrText);
+              }
+            }
+            console.log('Auto-print: sending to agent — qrText:', saved.qrText || '(none)', 'printerName:', saved.printerName || '(none)');
             let delivered = false;
             let deliveredInfo = null;
             for (const s of sorted) {
@@ -697,6 +717,11 @@ webhooksRouter.get("/generate-test", async (req, res) => {
     // Compute displaySimple for today
     const displaySimple = (await prisma.order.count({ where: { companyId: company.id, createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) } } })) + 1;
 
+    // Match integration items to local products by integrationCode
+    if (orderPayload.items && orderPayload.items.length > 0) {
+      orderPayload.items = await matchItemsToLocalProducts(orderPayload.items, company.id)
+    }
+
     // Use upsert to avoid unique constraint failures when sample.externalId already exists
     const saved = await prisma.order.upsert({
       where: { externalId },
@@ -731,7 +756,7 @@ webhooksRouter.get("/generate-test", async (req, res) => {
         deliveryFee: Number(orderPayload.total?.deliveryFee ?? orderPayload.deliveryFee ?? 0),
         payload: orderPayload,
         items: {
-          create: (orderPayload.items || []).map((it) => ({ name: it.name || 'Item', quantity: Number(it.quantity || it.qtd || 1), price: Number(it.totalPrice || it.unitPrice || it.price || 0) }))
+          create: (orderPayload.items || []).map((it) => ({ name: it.name || 'Item', quantity: Number(it.quantity || it.qtd || 1), price: Number(it.totalPrice || it.unitPrice || it.price || 0), productId: it._matchedProductId || null }))
         },
         histories: { create: [{ to: 'EM_PREPARO', reason: 'Teste iFood (generate-test)' }] }
       },
