@@ -110,7 +110,7 @@ router.patch('/menus/:id', requireRole('ADMIN'), async (req, res) => {
   const existing = await prisma.menu.findUnique({ where: { id }, include: { store: true } })
   if (!existing) return res.status(404).json({ message: 'Menu não encontrado' })
   if (existing.store && existing.store.companyId !== companyId) return res.status(404).json({ message: 'Menu não encontrado' })
-  const { name, description, storeId, logoUrl, isActive, position, slug = undefined, address, phone, whatsapp, timezone, weeklySchedule, open24Hours, allowDelivery, allowPickup, catalogMode } = req.body || {}
+  const { name, description, storeId, logoUrl, bannerUrl, isActive, position, slug = undefined, address, phone, whatsapp, timezone, weeklySchedule, open24Hours, allowDelivery, allowPickup, catalogMode } = req.body || {}
   if (storeId) {
     const st = await prisma.store.findUnique({ where: { id: storeId } })
     if (!st || st.companyId !== companyId) return res.status(400).json({ message: 'Loja inválida' })
@@ -135,7 +135,7 @@ router.patch('/menus/:id', requireRole('ADMIN'), async (req, res) => {
   const finalAllowPickup   = simplesOnly ? false : (allowPickup   !== undefined ? !!allowPickup   : existing.allowPickup)
   const finalCatalogMode   = simplesOnly ? true  : (catalogMode   !== undefined ? !!catalogMode   : existing.catalogMode)
 
-  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule, open24Hours: open24Hours !== undefined ? !!open24Hours : existing.open24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
+  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, bannerUrl: bannerUrl ?? existing.bannerUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule, open24Hours: open24Hours !== undefined ? !!open24Hours : existing.open24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
 
   // Emit real-time socket event so public menus react immediately when a menu is toggled
   try {

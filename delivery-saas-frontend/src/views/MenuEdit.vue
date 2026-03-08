@@ -322,6 +322,7 @@ async function save(){
           if (form.value.open24Hours !== undefined) menuPayload.open24Hours = !!form.value.open24Hours
           if (Array.isArray(weeklySchedule.value) && weeklySchedule.value.length === 7) menuPayload.weeklySchedule = weeklySchedule.value.map(w=>({ day: Number(w.day)||0, enabled: !!w.enabled, from: String(w.from||''), to: String(w.to||'') }))
           if (form.value.logoUrl !== undefined) menuPayload.logoUrl = form.value.logoUrl || null
+          if (form.value.bannerUrl !== undefined) menuPayload.bannerUrl = form.value.bannerUrl || null
           if (form.value.allowDelivery !== undefined) menuPayload.allowDelivery = !!form.value.allowDelivery
           if (form.value.allowPickup !== undefined) menuPayload.allowPickup = !!form.value.allowPickup
           if (form.value.catalogMode !== undefined) menuPayload.catalogMode = !!form.value.catalogMode

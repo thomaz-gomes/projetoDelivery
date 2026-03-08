@@ -514,6 +514,7 @@ model Menu {
   slug           String?        @unique
   description    String?
   logoUrl        String?
+  bannerUrl      String?
   // menu-specific contact/location/schedule fields
   address        String?
   phone          String?
