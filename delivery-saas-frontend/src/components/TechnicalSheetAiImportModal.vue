@@ -350,15 +350,13 @@
                   <div class="input-group input-group-sm" style="width: 160px;">
                     <span class="input-group-text">Rend.</span>
                     <input
-                      v-model.number="sheet.yield"
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      v-model="sheet.yield"
+                      type="text"
                       class="form-control"
-                      placeholder="0"
+                      placeholder="Ex: 10 porções"
                     />
                   </div>
-                  <span class="badge bg-light text-dark border">{{ sheet.ingredients.length }}</span>
+                  <span class="badge bg-light text-dark border">{{ sheet.items.length }}</span>
                   <button class="btn btn-sm btn-outline-danger" @click="removeSheet(si)" title="Remover ficha">
                     <i class="bi bi-trash"></i>
                   </button>
@@ -380,10 +378,10 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="(ing, ii) in sheet.ingredients" :key="ii">
+                      <tr v-for="(ing, ii) in sheet.items" :key="ii">
                         <!-- Extracted name -->
                         <td>
-                          <span class="small text-muted">{{ ing.extractedName }}</span>
+                          <span class="small text-muted">{{ ing.description }}</span>
                         </td>
                         <!-- Match select -->
                         <td>
@@ -411,7 +409,7 @@
                                 :key="existIng.id"
                                 :value="existIng.id"
                               >
-                                {{ existIng.name }}
+                                {{ existIng.description }}
                               </option>
                             </select>
                           </template>
@@ -615,7 +613,7 @@ const canParse = computed(() => {
 })
 
 const totalIngredients = computed(() =>
-  sheets.value.reduce((acc, s) => acc + (s.ingredients?.length || 0), 0)
+  sheets.value.reduce((acc, s) => acc + (s.items?.length || 0), 0)
 )
 
 const canImport = computed(() => {
@@ -719,7 +717,9 @@ const jobStage = ref('pending')
 const _stageLabelMap = {
   pending:              { label: 'Iniciando...', hint: 'Preparando o processamento' },
   loading_ingredients:  { label: 'Carregando ingredientes...', hint: 'Buscando ingredientes cadastrados para matching' },
-  ai_analyzing:         { label: 'Analisando com IA...', hint: 'Extraindo fichas tecnicas e ingredientes' },
+  parsing_file:         { label: 'Processando arquivo...', hint: 'Lendo e preparando o conteúdo do arquivo' },
+  processing:           { label: 'Processando...', hint: 'Preparando dados para análise' },
+  ai_analyzing:         { label: 'Analisando com IA...', hint: 'Extraindo fichas técnicas e ingredientes' },
 }
 const parsingStageLabel = computed(() =>
   _stageLabelMap[jobStage.value]?.label || 'Analisando com IA...'
@@ -786,15 +786,15 @@ async function parseContent() {
     }).then(data => {
       sheets.value = (data.sheets || []).map(s => ({
         name: s.name || '',
-        yield: s.yield ?? 1,
-        ingredients: (s.ingredients || []).map(ing => ({
-          extractedName: ing.extractedName || '',
-          ingredientId: ing.ingredientId || null,
-          newIngredient: !ing.ingredientId,
-          _selectMode: !!ing.ingredientId,
-          confidence: ing.confidence ?? 0,
-          quantity: ing.quantity ?? 0,
-          unit: ing.unit || 'UN',
+        yield: s.yield ?? null,
+        items: (s.items || []).map(item => ({
+          description: item.description || '',
+          ingredientId: item.matchedIngredientId || null,
+          newIngredient: !item.matchedIngredientId,
+          _selectMode: !!item.matchedIngredientId,
+          confidence: item.confidence ?? 0,
+          quantity: item.quantity ?? 0,
+          unit: item.unit || 'UN',
         })),
       }))
       sheets.value.forEach((_, i) => { sheetCollapsed[i] = false })
@@ -831,7 +831,7 @@ function removeSheet(si) {
 }
 
 function removeIngredient(si, ii) {
-  sheets.value[si].ingredients.splice(ii, 1)
+  sheets.value[si].items.splice(ii, 1)
 }
 
 function onIngredientSelect(ing) {
@@ -851,12 +851,12 @@ async function doImport() {
     const cleanSheets = sheets.value.map(s => ({
       name: s.name,
       yield: s.yield,
-      ingredients: s.ingredients.map(ing => ({
-        extractedName: ing.extractedName,
-        ingredientId: ing.newIngredient ? null : ing.ingredientId,
-        newIngredient: ing.newIngredient,
-        quantity: ing.quantity,
-        unit: ing.unit,
+      items: s.items.map(item => ({
+        description: item.description,
+        ingredientId: item.newIngredient ? null : item.ingredientId,
+        newIngredient: item.newIngredient,
+        quantity: item.quantity,
+        unit: item.unit,
       })),
     }))
 

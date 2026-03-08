@@ -224,6 +224,12 @@ async function runParseJob(jobId, method, files, companyId) {
     job.sheets = sheets;
     job.sheetCount = sheets.length;
     job.stage = 'done';
+    job.creditEstimate = {
+      sheetCount: sheets.length,
+      serviceKey: 'TECHNICAL_SHEET_IMPORT_ITEM',
+      costPerUnit: AI_SERVICE_COSTS.TECHNICAL_SHEET_IMPORT_ITEM ?? 1,
+      totalCost: sheets.length * (AI_SERVICE_COSTS.TECHNICAL_SHEET_IMPORT_ITEM ?? 1),
+    };
 
   } catch (e) {
     console.error(`[techSheetImport:${jobId}] Erro:`, e.message);
