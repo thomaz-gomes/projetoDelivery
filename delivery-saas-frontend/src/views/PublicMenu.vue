@@ -3800,6 +3800,27 @@ function isMobileDevice() {
   try { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) } catch { return false }
 }
 
+// Capture beforeinstallprompt EARLY (before onMounted) to avoid missing the event
+// Chrome fires it as soon as PWA criteria are met, which can happen before Vue mounts
+try {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault()
+    pwaInstallEvent.value = e
+    // show banner only if mobile and not dismissed
+    if (isMobileDevice() && !window.matchMedia('(display-mode: standalone)').matches) {
+      try {
+        if (!localStorage.getItem(`pwa_dismissed_${companyId}`)) {
+          showPwaInstallBanner.value = true
+        }
+      } catch { showPwaInstallBanner.value = true }
+    }
+  })
+  window.addEventListener('appinstalled', () => {
+    showPwaInstallBanner.value = false
+    pwaInstallEvent.value = null
+  })
+} catch {}
+
 function setupPwaInstall() {
   try {
     // detect iOS
@@ -3813,23 +3834,17 @@ function setupPwaInstall() {
     const dismissedKey = `pwa_dismissed_${companyId}`
     if (localStorage.getItem(dismissedKey)) return
 
+    // if beforeinstallprompt already fired (captured above), banner is already visible
+    if (pwaInstallEvent.value) {
+      showPwaInstallBanner.value = true
+      return
+    }
+
     if (isIos.value) {
       // iOS doesn't fire beforeinstallprompt — show manual instructions
       showPwaInstallBanner.value = true
       return
     }
-
-    // Android/Chrome: capture beforeinstallprompt
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault()
-      pwaInstallEvent.value = e
-      showPwaInstallBanner.value = true
-    })
-
-    window.addEventListener('appinstalled', () => {
-      showPwaInstallBanner.value = false
-      pwaInstallEvent.value = null
-    })
   } catch (e) {
     console.warn('[PWA] setup failed', e)
   }
@@ -3862,7 +3877,10 @@ function injectDynamicManifest() {
     const params = []
     if (storeId.value) params.push(`storeId=${encodeURIComponent(storeId.value)}`)
     if (menuId.value) params.push(`menuId=${encodeURIComponent(menuId.value)}`)
-    const manifestUrl = `/api/public/${companyId}/manifest.json${params.length ? '?' + params.join('&') : ''}`
+    // Manifest must be same-origin for PWA install prompt to work.
+    // In production, nginx proxies /public/{id}/manifest.json to the backend.
+    // In dev, Vite has no proxy for this — use API_URL as fallback.
+    const manifestUrl = `/public/${companyId}/manifest.json${params.length ? '?' + params.join('&') : ''}`
 
     const link = document.createElement('link')
     link.rel = 'manifest'

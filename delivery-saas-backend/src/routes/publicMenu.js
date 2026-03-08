@@ -87,10 +87,18 @@ publicMenuRouter.get('/:companyId/manifest.json', async (req, res) => {
       }
     }
 
-    // resolve logo to full URL
-    let iconUrl = '/favico.png'
+    // resolve logo to a URL accessible by the browser
+    // The manifest is served same-origin (via nginx proxy in prod), so icon paths must
+    // be resolvable from the frontend domain. Use /api/ prefix so nginx proxies the
+    // static file request to the backend which serves uploads.
+    let iconUrl = '/api/favico.png'
     if (logoUrl) {
-      iconUrl = logoUrl.startsWith('http') ? logoUrl : logoUrl
+      if (logoUrl.startsWith('http')) {
+        iconUrl = logoUrl
+      } else {
+        const path = logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl
+        iconUrl = '/api' + path
+      }
     }
 
     // build start_url with query params
