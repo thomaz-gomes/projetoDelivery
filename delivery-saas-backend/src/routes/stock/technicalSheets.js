@@ -27,7 +27,7 @@ technicalSheetsRouter.get('/:id', async (req, res) => {
 // create
 technicalSheetsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user?.companyId;
-  const { name, notes = '' } = req.body || {};
+  const { name, notes = '', yield: yieldValue } = req.body || {};
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' });
   if (!companyId) return res.status(400).json({ message: 'Usuário não está associado a uma empresa (companyId ausente)' });
 
@@ -36,7 +36,7 @@ technicalSheetsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   if (!company) return res.status(400).json({ message: 'Empresa não encontrada para o usuário' });
 
   try {
-    const created = await prisma.technicalSheet.create({ data: { companyId, name, notes } });
+    const created = await prisma.technicalSheet.create({ data: { companyId, name, notes, yield: yieldValue || null } });
     res.status(201).json(created);
   } catch (err) {
     console.error('technicalSheets.create error', err);
@@ -52,8 +52,15 @@ technicalSheetsRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   const existing = await prisma.technicalSheet.findFirst({ where: { id, companyId } });
   if (!existing) return res.status(404).json({ message: 'Ficha técnica não encontrada' });
 
-  const { name, notes } = req.body || {};
-  const updated = await prisma.technicalSheet.update({ where: { id }, data: { name: name ?? existing.name, notes: notes ?? existing.notes } });
+  const { name, notes, yield: yieldValue } = req.body || {};
+  const updated = await prisma.technicalSheet.update({
+    where: { id },
+    data: {
+      name: name ?? existing.name,
+      notes: notes ?? existing.notes,
+      yield: yieldValue !== undefined ? (yieldValue || null) : existing.yield,
+    },
+  });
   res.json(updated);
 });
 

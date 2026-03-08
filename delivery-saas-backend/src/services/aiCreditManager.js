@@ -38,6 +38,8 @@ export const AI_SERVICE_COSTS = {
   GENERATE_DESCRIPTION:  2, // por descrição gerada por IA
   OCR_PHOTO:             5, // por foto processada via OCR
   AI_STUDIO_ENHANCE:    10, // por aprimoramento de imagem no AI Studio (visão + geração)
+  TECHNICAL_SHEET_IMPORT_PARSE: 5,  // por arquivo processado
+  TECHNICAL_SHEET_IMPORT_ITEM:  1,  // por ficha técnica aplicada
 }
 
 // ─── Cache de custos de serviços lidos do banco ────────────────────────────────
