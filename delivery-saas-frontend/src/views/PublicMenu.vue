@@ -3878,9 +3878,9 @@ function injectDynamicManifest() {
     if (storeId.value) params.push(`storeId=${encodeURIComponent(storeId.value)}`)
     if (menuId.value) params.push(`menuId=${encodeURIComponent(menuId.value)}`)
     // Manifest must be same-origin for PWA install prompt to work.
-    // In production, nginx proxies /public/{id}/manifest.json to the backend.
-    // In dev, Vite has no proxy for this — use API_URL as fallback.
-    const manifestUrl = `/public/${companyId}/manifest.json${params.length ? '?' + params.join('&') : ''}`
+    // In production, nginx proxies /pwa-manifest/{companyId} to backend /public/{companyId}/manifest.json.
+    // Using a dedicated /pwa-manifest/ path avoids conflict with SPA try_files fallback.
+    const manifestUrl = `/pwa-manifest/${companyId}${params.length ? '?' + params.join('&') : ''}`
 
     const link = document.createElement('link')
     link.rel = 'manifest'
