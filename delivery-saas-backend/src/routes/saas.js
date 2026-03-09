@@ -346,6 +346,21 @@ saasRouter.post('/module-subscriptions', requireRole('ADMIN'), async (req, res) 
   }
 })
 
+// List module subscriptions for a company (SUPER_ADMIN)
+saasRouter.get('/module-subscriptions/admin/:companyId', requireRole('SUPER_ADMIN'), async (req, res) => {
+  const { companyId } = req.params
+  try {
+    const subs = await prisma.saasModuleSubscription.findMany({
+      where: { companyId },
+      include: { module: true },
+      orderBy: { startedAt: 'desc' }
+    })
+    res.json(subs)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao listar assinaturas', error: e?.message })
+  }
+})
+
 // Assign module to company (SUPER_ADMIN)
 saasRouter.post('/module-subscriptions/assign', requireRole('SUPER_ADMIN'), async (req, res) => {
   const { companyId, moduleId, period = 'MONTHLY' } = req.body || {}

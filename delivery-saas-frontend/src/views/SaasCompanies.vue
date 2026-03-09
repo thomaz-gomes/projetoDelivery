@@ -10,6 +10,113 @@ const plans = ref([])
 const loading = ref(true)
 const search = ref('')
 
+// Module management modal
+const showModulesModal = ref(false)
+const modulesCompany = ref(null)
+const allModules = ref([])
+const companySubs = ref([])
+const companyPlanModuleKeys = ref([])
+const modulesLoading = ref(false)
+const selectedModuleId = ref('')
+const selectedPeriod = ref('MONTHLY')
+const activating = ref(false)
+
+async function openModulesModal(c) {
+  modulesCompany.value = c
+  showModulesModal.value = true
+  modulesLoading.value = true
+  try {
+    const [modsRes, subsRes] = await Promise.all([
+      api.get('/saas/modules'),
+      api.get(`/saas/module-subscriptions/admin/${c.id}`)
+    ])
+    allModules.value = (modsRes.data || []).filter(m => m.isActive)
+    companySubs.value = subsRes.data || []
+
+    // Get plan modules if company has a subscription
+    if (c.saasSubscription?.plan?.id) {
+      const planRes = await api.get('/saas/plans')
+      const plan = (planRes.data || []).find(p => p.id === c.saasSubscription.plan.id)
+      companyPlanModuleKeys.value = (plan?.modules || []).map(pm => pm.module?.key).filter(Boolean)
+    } else {
+      companyPlanModuleKeys.value = []
+    }
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: 'Erro ao carregar módulos' })
+  } finally {
+    modulesLoading.value = false
+  }
+}
+
+function closeModulesModal() {
+  showModulesModal.value = false
+  modulesCompany.value = null
+  companySubs.value = []
+  selectedModuleId.value = ''
+}
+
+const availableModules = computed(() => {
+  const activeSubModuleIds = companySubs.value
+    .filter(s => s.status === 'ACTIVE')
+    .map(s => s.moduleId)
+  return allModules.value.filter(m =>
+    !activeSubModuleIds.includes(m.id) &&
+    !companyPlanModuleKeys.value.includes(m.key)
+  )
+})
+
+const activeSubs = computed(() => companySubs.value.filter(s => s.status === 'ACTIVE'))
+
+const planModules = computed(() =>
+  allModules.value.filter(m => companyPlanModuleKeys.value.includes(m.key))
+)
+
+async function activateModule() {
+  if (!selectedModuleId.value || !modulesCompany.value) return
+  activating.value = true
+  try {
+    await api.post('/saas/module-subscriptions/assign', {
+      companyId: modulesCompany.value.id,
+      moduleId: selectedModuleId.value,
+      period: selectedPeriod.value
+    })
+    const subsRes = await api.get(`/saas/module-subscriptions/admin/${modulesCompany.value.id}`)
+    companySubs.value = subsRes.data || []
+    selectedModuleId.value = ''
+    Swal.fire({ icon: 'success', text: 'Módulo ativado', timer: 1500, showConfirmButton: false })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao ativar módulo' })
+  } finally {
+    activating.value = false
+  }
+}
+
+async function cancelModule(sub) {
+  const result = await Swal.fire({
+    title: `Remover "${sub.module?.name || 'módulo'}"?`,
+    text: 'O módulo será desativado para esta empresa.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'Sim, remover',
+    cancelButtonText: 'Cancelar'
+  })
+  if (!result.isConfirmed) return
+  try {
+    await api.delete(`/saas/module-subscriptions/assign/${modulesCompany.value.id}/${sub.moduleId}`)
+    const subsRes = await api.get(`/saas/module-subscriptions/admin/${modulesCompany.value.id}`)
+    companySubs.value = subsRes.data || []
+    Swal.fire({ icon: 'success', text: 'Módulo removido', timer: 1500, showConfirmButton: false })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao remover módulo' })
+  }
+}
+
+function periodLabel(p) {
+  const map = { MONTHLY: 'Mensal', ANNUAL: 'Anual', BIMONTHLY: 'Bimestral', QUARTERLY: 'Trimestral' }
+  return map[p] || p
+}
+
 async function load() {
   loading.value = true
   try {
@@ -216,6 +323,9 @@ async function changePassword(c) {
                   <button class="btn btn-outline-secondary" @click="editCompany(c)" title="Editar">
                     <i class="bi bi-pencil"></i>
                   </button>
+                  <button class="btn btn-outline-primary" @click="openModulesModal(c)" title="Módulos">
+                    <i class="bi bi-puzzle"></i>
+                  </button>
                   <button class="btn btn-outline-secondary" @click="changePassword(c)" title="Trocar senha">
                     <i class="bi bi-key"></i>
                   </button>
@@ -240,5 +350,107 @@ async function changePassword(c) {
         </table>
       </div>
     </div>
+    <!-- Modal Módulos -->
+    <Teleport to="body">
+      <div v-if="showModulesModal" class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);" @click.self="closeModulesModal">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">
+                <i class="bi bi-puzzle me-2"></i>Módulos — {{ modulesCompany?.name }}
+              </h5>
+              <button type="button" class="btn-close" @click="closeModulesModal"></button>
+            </div>
+            <div class="modal-body">
+              <div v-if="modulesLoading" class="text-center py-4">
+                <div class="spinner-border text-primary"></div>
+              </div>
+              <template v-else>
+                <!-- Ativar módulo -->
+                <div class="card mb-3">
+                  <div class="card-body">
+                    <h6 class="mb-3"><i class="bi bi-plus-circle me-1"></i>Ativar módulo</h6>
+                    <div class="row g-2 align-items-end">
+                      <div class="col-sm-5">
+                        <label class="form-label small text-muted">Módulo</label>
+                        <select v-model="selectedModuleId" class="form-select form-select-sm">
+                          <option value="">Selecione um módulo...</option>
+                          <option v-for="m in availableModules" :key="m.id" :value="m.id">{{ m.name }}</option>
+                        </select>
+                      </div>
+                      <div class="col-sm-4">
+                        <label class="form-label small text-muted">Período</label>
+                        <select v-model="selectedPeriod" class="form-select form-select-sm">
+                          <option value="MONTHLY">Mensal</option>
+                          <option value="ANNUAL">Anual</option>
+                        </select>
+                      </div>
+                      <div class="col-sm-3">
+                        <button
+                          class="btn btn-primary btn-sm w-100"
+                          :disabled="!selectedModuleId || activating"
+                          @click="activateModule"
+                        >
+                          <span v-if="activating" class="spinner-border spinner-border-sm me-1"></span>
+                          <i v-else class="bi bi-check-lg me-1"></i>Ativar
+                        </button>
+                      </div>
+                    </div>
+                    <div v-if="availableModules.length === 0" class="text-muted small mt-2">
+                      <i class="bi bi-info-circle me-1"></i>Todos os módulos já estão ativos ou incluídos no plano.
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Módulos incluídos no plano -->
+                <div v-if="planModules.length" class="mb-3">
+                  <h6 class="text-muted mb-2"><i class="bi bi-box-seam me-1"></i>Incluídos no plano</h6>
+                  <div class="d-flex flex-wrap gap-2">
+                    <span v-for="m in planModules" :key="m.id" class="badge bg-light text-dark border">
+                      <i class="bi bi-check-circle-fill text-success me-1"></i>{{ m.name }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Módulos avulsos ativos -->
+                <h6 class="text-muted mb-2"><i class="bi bi-puzzle me-1"></i>Módulos avulsos</h6>
+                <div v-if="activeSubs.length === 0" class="text-muted small">
+                  Nenhum módulo avulso ativo.
+                </div>
+                <div v-else class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th>Módulo</th>
+                        <th>Período</th>
+                        <th>Início</th>
+                        <th>Próx. vencimento</th>
+                        <th class="text-end">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="sub in activeSubs" :key="sub.id">
+                        <td class="fw-medium">{{ sub.module?.name || '—' }}</td>
+                        <td><span class="badge bg-primary">{{ periodLabel(sub.period) }}</span></td>
+                        <td><small>{{ sub.startedAt ? new Date(sub.startedAt).toLocaleDateString('pt-BR') : '—' }}</small></td>
+                        <td><small>{{ sub.nextDueAt ? new Date(sub.nextDueAt).toLocaleDateString('pt-BR') : '—' }}</small></td>
+                        <td class="text-end">
+                          <button class="btn btn-outline-danger btn-sm" @click="cancelModule(sub)" title="Remover">
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-outline-secondary btn-sm" @click="closeModulesModal">Fechar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
