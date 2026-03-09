@@ -1048,12 +1048,13 @@ const uncategorized = ref([]);
 const paymentMethods = ref([]);
 const company = ref(null)
 const menu = ref(null)
-const isCatalogMode = computed(() => !!(menu.value && menu.value.catalogMode))
-
 // Offline mode state
 const isOffline = ref(false);         // true when network is unavailable and we're showing cached data
 const dataSource = ref('network');    // 'cache' | 'network'
 const cacheTimestamp = ref(null);     // ms timestamp of the last successful sync
+
+// Catalog mode: forced when offline so user sees view-only menu with WhatsApp shortcut
+const isCatalogMode = computed(() => !!(menu.value && menu.value.catalogMode) || isOffline.value)
 
 // PWA install prompt state
 const pwaInstallEvent = ref(null)     // captured beforeinstallprompt event
