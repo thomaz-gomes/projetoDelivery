@@ -117,15 +117,22 @@ function mapIFoodOrder(payload) {
     Number(order?.total) ||
     0;
 
-  // Itens
-  const items = (order?.items || []).map((it) => ({
-    name: it?.name || it?.description || 'Item',
-    quantity: Number(it?.quantity || 1),
-    price: Number(it?.price || it?.unitPrice || 0),
-    notes: it?.observations || null,
-    externalCode: it?.externalCode || null,
-    subItems: it?.subItems || it?.subitems || it?.garnishItems || it?.options || null,
-  }));
+  // Itens — iFood sends unitPrice (per-unit) and totalPrice (unit * qty).
+  // We always store the UNIT price so the frontend can multiply by quantity consistently.
+  const items = (order?.items || []).map((it) => {
+    const qty = Number(it?.quantity || 1)
+    let unitPrice = Number(it?.unitPrice || it?.price || 0)
+    // if only totalPrice is available, derive unit price
+    if (!unitPrice && it?.totalPrice) unitPrice = Number(it.totalPrice) / (qty || 1)
+    return {
+      name: it?.name || it?.description || 'Item',
+      quantity: qty,
+      price: unitPrice,
+      notes: it?.observations || null,
+      externalCode: it?.externalCode || null,
+      subItems: it?.subItems || it?.subitems || it?.garnishItems || it?.options || null,
+    }
+  });
 
   // Cliente
   const customer = order?.customer || {};
@@ -339,7 +346,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
             const options = subs.length > 0 ? subs.map(s => ({
               name: s.name,
               quantity: Number(s.quantity || 1),
-              price: Number(s.totalPrice || s.price || 0),
+              price: Number(s.unitPrice || s.price || 0) || (Number(s.totalPrice || 0) / (Number(s.quantity || 1) || 1)),
               _matchedProductId: s._matchedProductId || null,
             })) : null
             return {
