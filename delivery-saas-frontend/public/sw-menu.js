@@ -12,7 +12,7 @@ const SHELL_CACHE  = 'app-shell-v1';
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 const isImageRequest = (url) =>
-  url.includes('/public/uploads/') || url.includes('/uploads/');
+  url.includes('/public/uploads/') || url.includes('/uploads/') || url.includes('/settings/stores/');
 
 // Não interceptar: HMR interno do Vite (quebraria hot-reload em dev)
 const isViteHmr = (url) =>
@@ -148,7 +148,9 @@ async function handleImage(request) {
     if (cached) return cached;
 
     const response = await fetch(request);
-    if (response && response.ok) {
+    // Cache both normal (ok) and opaque (cross-origin no-cors) responses.
+    // Opaque responses have status 0 and ok=false but contain valid image data.
+    if (response && (response.ok || response.type === 'opaque')) {
       cache.put(request, response.clone()).catch(() => {});
     }
     return response;
