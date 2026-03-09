@@ -139,6 +139,22 @@ function mapIFoodOrder(payload) {
   // Prefer explicit `orderId` or nested `order.id`/`referenceId` over the event `id` to avoid mixing event vs order identifiers.
   const externalId = payload?.orderId || order?.id || order?.referenceId || null;
 
+  // Extrair desconto dos benefits do iFood (cupons/promoções do parceiro)
+  let couponDiscount = 0;
+  let couponCode = null;
+  const benefits = order?.benefits || [];
+  if (Array.isArray(benefits) && benefits.length > 0) {
+    for (const b of benefits) {
+      const val = Number(b.value || 0);
+      if (val > 0) couponDiscount += val;
+    }
+    // Tentar extrair nome/código do benefício
+    const firstBenefit = benefits[0];
+    if (firstBenefit?.description || firstBenefit?.title) {
+      couponCode = firstBenefit.description || firstBenefit.title;
+    }
+  }
+
   return {
     externalId,
     displayId: order?.displayId || order?.shortCode || null,
@@ -151,6 +167,8 @@ function mapIFoodOrder(payload) {
     longitude,
     total,
     deliveryFee: Number(order?.total?.deliveryFee || 0) || null,
+    couponDiscount: couponDiscount > 0 ? couponDiscount : null,
+    couponCode,
     items,
     // payment troco (changeFor) extraction — prefer payments.methods[*].changeFor (iFood)
     payment: (function(){
@@ -252,6 +270,8 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     longitude: mapped.longitude,
     total: mapped.total,
     deliveryFee: mapped.deliveryFee,
+    couponDiscount: mapped.couponDiscount || null,
+    couponCode: mapped.couponCode || null,
     payload: mapped.raw,
   };
 

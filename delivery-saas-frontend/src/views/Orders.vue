@@ -1100,6 +1100,13 @@ function normalizeOrder(o){
                o.payload?.customer?.phone?.localizer || null;
       } catch (e) { return null; }
     })(),
+    subtotal: (function() {
+      try {
+        if (o.subtotal) return Number(o.subtotal);
+        return (items || []).reduce((s, it) => s + (Number(it.unitPrice || it.price || 0) * Number(it.quantity || 1)), 0);
+      } catch (e) { return 0; }
+    })(),
+    deliveryFee: Number(o.deliveryFee || 0),
   };
 
   // Do not cache normalization on the order object here because orders may be
@@ -3135,9 +3142,10 @@ function pulseButton() {
                     </div>
                   </li>
                 </ul>
-                <div v-if="normalizeOrder(o).couponCode || normalizeOrder(o).couponDiscount" class="mt-2 small">
-                  <div v-if="normalizeOrder(o).couponCode"><strong>Cupom:</strong> {{ normalizeOrder(o).couponCode }}</div>
-                  <div v-if="normalizeOrder(o).couponDiscount"><strong>Desconto:</strong> -{{ formatCurrency(normalizeOrder(o).couponDiscount) }}</div>
+                <div v-if="normalizeOrder(o).couponCode || normalizeOrder(o).couponDiscount" class="mt-2 small" style="color: #198754;">
+                  <i class="bi bi-ticket-perforated me-1"></i>
+                  <strong>{{ normalizeOrder(o).couponCode ? `Voucher (${normalizeOrder(o).couponCode})` : 'Voucher Desconto' }}:</strong>
+                  -{{ formatCurrency(normalizeOrder(o).couponDiscount) }}
                 </div>
                 <div v-if="normalizeOrder(o).paymentChange" class="mt-2 small">
                   <strong>Troco:</strong> {{ formatCurrency(normalizeOrder(o).paymentChange) }}
@@ -3297,16 +3305,23 @@ function pulseButton() {
                 <span class="od-pay-label">Forma</span>
                 <span class="od-pay-value">{{ selectedNormalized ? (selectedNormalized.paymentMethod || '—') : normalizeOrder(selectedOrder).paymentMethod }}</span>
               </div>
-              <div class="od-pay-row" v-if="selectedNormalized?.couponCode">
-                <span class="od-pay-label">Cupom</span>
-                <span class="od-pay-value">{{ selectedNormalized.couponCode }}</span>
+              <div class="od-pay-row" v-if="selectedNormalized?.subtotal">
+                <span class="od-pay-label">Subtotal</span>
+                <span class="od-pay-value">{{ formatCurrency(selectedNormalized.subtotal) }}</span>
               </div>
               <div class="od-pay-row" v-if="selectedNormalized?.couponDiscount">
-                <span class="od-pay-label">Desconto</span>
-                <span class="od-pay-value text-danger">
+                <span class="od-pay-label">
+                  <i class="bi bi-ticket-perforated me-1"></i>
+                  {{ selectedNormalized.couponCode ? `Voucher (${selectedNormalized.couponCode})` : 'Voucher Desconto' }}
+                </span>
+                <span class="od-pay-value text-success">
                   -{{ formatCurrency(selectedNormalized.couponDiscount) }}
                   <span v-if="selectedNormalized.couponSponsor" class="text-muted small ms-1">({{ selectedNormalized.couponSponsor }})</span>
                 </span>
+              </div>
+              <div class="od-pay-row" v-if="selectedOrder?.orderType === 'DELIVERY'">
+                <span class="od-pay-label">Taxa de entrega</span>
+                <span class="od-pay-value">{{ Number(selectedNormalized?.deliveryFee || selectedOrder?.deliveryFee || 0) > 0 ? formatCurrency(selectedNormalized?.deliveryFee || selectedOrder?.deliveryFee) : 'Grátis' }}</span>
               </div>
               <div class="od-pay-row" v-if="selectedNormalized?.paymentChange">
                 <span class="od-pay-label">Troco</span>

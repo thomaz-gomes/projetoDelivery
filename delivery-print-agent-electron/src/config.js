@@ -15,6 +15,7 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 const DEFAULT_CONFIG = {
   serverUrl: '',         // Ex: https://meudelivery.com
+  frontendUrl: '',       // Ex: https://app.meudelivery.com.br (para QR Code de rastreio)
   token: '',             // Token JWT do agente (recebido no pareamento)
   storeIds: [],          // IDs das lojas (obrigatório no auth Socket.IO)
   companyId: null,       // ID da empresa

@@ -51,7 +51,12 @@
                 <td>{{ o.customerName || o.customer?.fullName || o.customer?.name || o.customer?.contact || '-' }}</td>
                 <td>{{ formatDate(o.createdAt) }}</td>
                 <td>{{ o.rider?.name || '-' }}</td>
-                <td>{{ getPaymentMethod(o) || '-' }}</td>
+                <td>
+                  {{ getPaymentMethod(o) || '-' }}
+                  <span v-if="o.couponCode || Number(o.couponDiscount || 0) > 0" class="badge bg-success ms-1" :title="o.couponCode ? `Cupom: ${o.couponCode}` : 'Cupom aplicado'">
+                    <i class="bi bi-ticket-perforated"></i> {{ o.couponCode || '' }}
+                  </span>
+                </td>
                 <td>
                   <span v-if="o.payload?.nfe?.nProt" class="badge bg-success" title="NF-e emitida">
                     <i class="bi bi-check-circle"></i>

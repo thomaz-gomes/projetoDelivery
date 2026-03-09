@@ -5,7 +5,7 @@
     </div>
     <div v-if="qrSrc" class="qr-wrap mt-2 text-center">
       <img :src="qrSrc" alt="qr" style="width:160px; height:160px;"/>
-      <div class="small text-muted mt-1">Escaneie para despachar</div>
+      <div class="small text-muted mt-1">Rastreie seu pedido</div>
     </div>
   </div>
 </template>
@@ -69,7 +69,7 @@ function fmtBRL(v) {
   return 'R$ ' + fmtN(v)
 }
 
-// ── Construção do contexto (chaves do ReceiptTemplateEditor) ──────────────────
+// ── Construção do contexto (alinhado com templateEngine.js do agente) ────────
 function buildContext(order) {
   const createdAt = order.createdAt ? new Date(order.createdAt) : new Date()
   const pad2 = n => String(n).padStart(2, '0')
@@ -79,7 +79,7 @@ function buildContext(order) {
     : rawType === 'pickup' ? 'RETIRADA'
     : rawType === 'mesa'   ? 'MESA'
     : rawType              ? rawType.toUpperCase()
-    : ''
+    : 'PEDIDO'
 
   const pl = order.payload || {}
   // iFood: payload pode ser envelope { order: {...} } ou objeto direto
@@ -113,7 +113,10 @@ function buildContext(order) {
 
   // iFood: campos específicos
   const codigo_coleta = ip.delivery?.pickupCode || pl.delivery?.pickupCode || ''
-  const localizador   = ip.customer?.phone?.localizer || pl.customer?.phone?.localizer || ''
+  const localizador   = ip.customer?.phone?.localizer || ip.customer?.phones?.[0]?.localizer || pl.customer?.phone?.localizer || ''
+
+  // Canal / origem
+  const canal = ip.salesChannel || pl.salesChannel || order.customerSource || ''
 
   // Pagamentos — iFood usa { methods: [], prepaid }, outros usam array direto
   const resolvedPayments = ip.payments || pl.payments || null
@@ -137,15 +140,41 @@ function buildContext(order) {
   }, 0)
 
   const taxaVal     = toNum(order.deliveryFee || 0)
-  const descontoVal = toNum(order.discount || order.couponDiscount || 0)
+
+  // Desconto: order.couponDiscount > order.discount > iFood benefits
+  let descontoVal = toNum(order.discount || order.couponDiscount || 0)
+  if (descontoVal <= 0 && Array.isArray(ip.benefits) && ip.benefits.length > 0) {
+    for (const b of ip.benefits) descontoVal += toNum(b.value || 0)
+  }
+
   const subtotalVal = toNum(order.subtotal) || itemsTotal
   const totalVal    = toNum(order.total)
+
+  // Total de itens (contagem de unidades)
+  const totalItensCount = items.reduce((s, i) => s + (i.quantity || 1), 0)
+
+  // Voucher / cupom como pagamento
+  let voucherLabel = ''
+  if (descontoVal > 0) {
+    if (order.couponCode) {
+      voucherLabel = `Voucher (${order.couponCode})`
+    } else if (ip.benefits?.[0]?.description || ip.benefits?.[0]?.title) {
+      voucherLabel = `Voucher (${ip.benefits[0].description || ip.benefits[0].title})`
+    } else {
+      voucherLabel = 'Voucher Desconto'
+    }
+  }
+
+  // Pagamentos completos (incluindo voucher se houver)
+  const allPayments = descontoVal > 0
+    ? [...rawPayments, { method: voucherLabel, amount: descontoVal }]
+    : rawPayments
 
   return {
     // Placeholders do ReceiptTemplateEditor
     header_name:       settingsHeaderName.value || order.headerName || order.storeName || order.store?.name || 'Delivery',
     header_city:       settingsHeaderCity.value || order.headerCity || '',
-    display_id:        String(order.displayId || order.displaySimple || order.id || '---'),
+    display_id:        String(order.displaySimple || order.displayId || order.id || '---'),
     data_pedido:       `${pad2(createdAt.getDate())}/${pad2(createdAt.getMonth()+1)}/${createdAt.getFullYear()}`,
     hora_pedido:       `${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}`,
     tipo_pedido,
@@ -154,15 +183,20 @@ function buildContext(order) {
     endereco_cliente,
     codigo_coleta,
     localizador,
+    canal,
     subtotal:          subtotalVal > 0 ? fmtN(subtotalVal) : '0,00',
     taxa_entrega:      taxaVal > 0     ? fmtN(taxaVal)     : '',
     desconto:          descontoVal > 0 ? fmtN(descontoVal) : '',
     total:             totalVal > 0    ? fmtN(totalVal)    : '0,00',
     observacoes:       order.notes || order.observation || '',
-    total_itens_count: String(items.reduce((s, i) => s + (i.quantity || 1), 0)),
+    total_itens_count: String(totalItensCount),
+    tem_desconto:      descontoVal > 0,
     // Internos (usados pelo renderizador de blocos, não expostos no template texto)
     _items:       items,
     _rawPayments: rawPayments,
+    _allPayments: allPayments,
+    _descontoVal: descontoVal,
+    _voucherLabel: voucherLabel,
   }
 }
 
@@ -179,6 +213,12 @@ const COL = 42   // colunas do preview (browser usa fonte monoespaçada)
 function renderBlocks(blocks, order) {
   const ctx   = buildContext(order)
   const lines = []
+
+  // Garantir que o bloco QR existe (igual ao templateEngine.js)
+  const hasQrBlock = blocks.some(b => b.t === 'qr')
+  if (!hasQrBlock) {
+    blocks = [...blocks, { t: 'qr' }]
+  }
 
   function sep() { lines.push('-'.repeat(COL)) }
   function center(text) {
@@ -239,16 +279,16 @@ function renderBlocks(blocks, order) {
       }
 
       case 'payments': {
-        for (const p of (ctx._rawPayments || [])) {
+        for (const p of (ctx._allPayments || [])) {
           const method = p.method || p.name || p.tipo || p.paymentMethod || ''
           const value  = toNum(p.value || p.amount || p.valor || 0)
-          lines.push(`${method}: ${fmtBRL(value)}`)
+          padRight(method, fmtBRL(value))
         }
         break
       }
 
       case 'qr':
-        // QR é renderizado visualmente abaixo do texto; aqui apenas espaço
+        // QR é renderizado visualmente abaixo do texto (img)
         break
     }
   }
@@ -262,22 +302,40 @@ function renderFallback(order) {
   const lines = []
 
   function sep() { lines.push('-'.repeat(COL)) }
+  function center(text) {
+    const t   = String(text || '')
+    const pad = Math.max(0, Math.floor((COL - t.length) / 2))
+    lines.push(' '.repeat(pad) + t)
+  }
   function padRight(left, right) {
     const gap = Math.max(1, COL - left.length - right.length)
     lines.push(left + ' '.repeat(gap) + right)
   }
 
-  lines.push(`#${ctx.display_id}  ${ctx.data_pedido} ${ctx.hora_pedido}`)
-  if (ctx.tipo_pedido) lines.push(`Tipo: ${ctx.tipo_pedido}`)
+  // Cabeçalho
   sep()
-  lines.push(`Cliente:   ${ctx.nome_cliente || '—'}`)
-  lines.push(`Telefone:  ${ctx.telefone_cliente || '—'}`)
-  if (ctx.localizador)     lines.push(`Localizador: ${ctx.localizador}`)
-  if (ctx.endereco_cliente) lines.push(`Endereço:  ${ctx.endereco_cliente}`)
-  if (ctx.codigo_coleta)   lines.push(`Cod. Coleta: ${ctx.codigo_coleta}`)
+  center(ctx.header_name)
+  if (ctx.header_city) center(ctx.header_city)
   sep()
-  lines.push('ITENS')
-  lines.push('')
+
+  // Tipo do pedido em destaque
+  center(ctx.tipo_pedido)
+  center(`${ctx.data_pedido}  ${ctx.hora_pedido}`)
+  sep()
+
+  lines.push(`Pedido #${ctx.display_id}`)
+  sep()
+
+  // Cliente
+  if (ctx.nome_cliente) lines.push(ctx.nome_cliente)
+  if (ctx.telefone_cliente) lines.push(`Tel: ${ctx.telefone_cliente}`)
+  if (ctx.localizador) lines.push(`Localizador: ${ctx.localizador}`)
+  if (ctx.endereco_cliente) lines.push(ctx.endereco_cliente)
+  if (ctx.observacoes) lines.push(`Obs: ${ctx.observacoes}`)
+  if (ctx.codigo_coleta) lines.push(`Codigo Coleta: ${ctx.codigo_coleta}`)
+  sep()
+
+  // Itens
   for (const item of (ctx._items || [])) {
     const qty   = item.quantity || 1
     const base  = toNum(item.price ?? item.unitPrice ?? 0)
@@ -295,20 +353,33 @@ function renderFallback(order) {
     if (obs) lines.push(`   Obs: ${obs}`)
   }
   sep()
-  lines.push(`Sub-total: ${fmtBRL(toNum(ctx.subtotal.replace(',', '.')))}`)
-  if (ctx.taxa_entrega) lines.push(`Entrega:   ${fmtBRL(toNum(ctx.taxa_entrega.replace(',', '.')))}`)
-  if (ctx.desconto)     lines.push(`Desconto:  -${fmtBRL(toNum(ctx.desconto.replace(',', '.')))}`)
-  lines.push(`TOTAL:     ${fmtBRL(toNum(ctx.total.replace(',', '.')))}`)
+
+  // Contagem de itens
+  lines.push(`Quantidade de itens:    ${ctx.total_itens_count}`)
   sep()
-  if (ctx._rawPayments.length > 0) {
-    for (const p of ctx._rawPayments) {
-      const method = p.method || p.name || p.tipo || p.paymentMethod || ''
-      const value  = toNum(p.value || p.amount || p.valor || 0)
-      lines.push(`${method}: ${fmtBRL(value)}`)
-    }
+
+  // Totais
+  padRight('Total itens(=):', `R$ ${ctx.subtotal}`)
+  if (ctx.taxa_entrega) padRight('Taxa entrega(+):', `R$ ${ctx.taxa_entrega}`)
+  if (ctx.desconto) padRight('Desconto(-):', `R$ ${ctx.desconto}`)
+  sep()
+  padRight('TOTAL(=):', `R$ ${ctx.total}`)
+  sep()
+
+  // Pagamentos
+  center('FORMA DE PAGAMENTO')
+  for (const p of (ctx._allPayments || [])) {
+    const method = p.method || p.name || p.tipo || p.paymentMethod || ''
+    const value  = toNum(p.value || p.amount || p.valor || 0)
+    padRight(method, fmtBRL(value))
+  }
+  sep()
+
+  // Canal
+  if (ctx.canal) {
+    center(`Op: ${ctx.canal}`)
     sep()
   }
-  if (ctx.observacoes) lines.push(`Obs: ${ctx.observacoes}`)
 
   return lines.join('\n')
 }

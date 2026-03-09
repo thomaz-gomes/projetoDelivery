@@ -109,10 +109,16 @@ async function _handleJob(item) {
       if (!o.headerName && cfg.headerName) o.headerName = cfg.headerName;
       if (!o.headerCity && cfg.headerCity) o.headerCity = cfg.headerCity;
 
-      // Gerar qrText de fallback a partir do serverUrl configurado
-      if (!o.qrText && o.id && cfg.serverUrl) {
-        const base = cfg.serverUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
-        if (base) o.qrText = `${base}/orders/${o.id}`;
+      // Gerar qrText de fallback: frontendUrl (preferido) ou serverUrl
+      if (!o.qrText && o.id) {
+        const fe = cfg.frontendUrl || o.frontendUrl || '';
+        if (fe) {
+          const base = fe.replace(/\/$/, '');
+          o.qrText = `${base}/orders/${o.id}`;
+        } else if (cfg.serverUrl) {
+          const base = cfg.serverUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+          if (base) o.qrText = `${base}/orders/${o.id}`;
+        }
       }
 
       // ── DEBUG: loga campos relevantes para diagnóstico ───────────────────────

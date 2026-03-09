@@ -100,6 +100,13 @@ const ESCPos = {
   },
 
   /**
+   * GS B n — Modo invertido (branco sobre preto): 1=on, 0=off.
+   */
+  invert(on) {
+    return buf([GS, 0x42, on ? 1 : 0]);
+  },
+
+  /**
    * ESC ! n — Modo de impressão combinado.
    * Bit 3: bold, Bit 4: double height, Bit 5: double width
    * Bit 0: fonte B (menor)
@@ -184,7 +191,9 @@ const ESCPos = {
    * @param {string} char   caractere (padrão: '-')
    */
   separator(width, char) {
-    return Buffer.from((char || '-').repeat(width) + '\n');
+    const pattern = char || '-';
+    const repeats = Math.ceil(width / pattern.length);
+    return Buffer.from(pattern.repeat(repeats).slice(0, width) + '\n');
   },
 
   /**

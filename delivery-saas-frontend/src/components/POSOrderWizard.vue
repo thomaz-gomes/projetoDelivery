@@ -401,7 +401,6 @@ async function searchCustomer(){
         fetchingFullCustomer.value = false;
       }
       newCustomerName.value = foundCustomer.value.fullName;
-      orderType.value='BALCAO';
       console.log('Endereços do cliente:', savedAddresses.value);
     } else {
       customerNotFound.value = true;

@@ -136,13 +136,13 @@
               <span class="text-muted">Subtotal:</span>
               <strong>{{ formatCurrency(calculateSubtotal()) }}</strong>
             </div>
-            <div v-if="order.deliveryFee" class="d-flex justify-content-between mb-2">
-              <span class="text-muted">Taxa de entrega:</span>
-              <strong>{{ formatCurrency(order.deliveryFee) }}</strong>
-            </div>
             <div v-if="order.couponDiscount" class="d-flex justify-content-between mb-2">
-              <span class="text-muted">Desconto:</span>
+              <span class="text-muted">{{ order.couponCode ? `Cupom (${order.couponCode})` : 'Cupom' }}:</span>
               <strong class="text-success">- {{ formatCurrency(order.couponDiscount) }}</strong>
+            </div>
+            <div v-if="order.orderType === 'DELIVERY'" class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Taxa de entrega:</span>
+              <strong>{{ Number(order.deliveryFee || 0) > 0 ? formatCurrency(order.deliveryFee) : 'Grátis' }}</strong>
             </div>
             <div class="d-flex justify-content-between pt-2 border-top">
               <span class="fw-semibold">Total:</span>
@@ -176,6 +176,15 @@
                 <span class="text-muted small d-block">Troco</span>
                 <strong>{{ formatCurrency(Number(getChangeFor(order)) - Number(getPaymentAmount(order))) }}</strong>
               </div>
+            </div>
+          </div>
+          <div v-if="order.couponDiscount && Number(order.couponDiscount) > 0" class="border-top pt-3 mt-2">
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="text-muted">
+                <i class="bi bi-ticket-perforated me-1"></i>
+                {{ order.couponCode ? `Voucher Parceiro (${order.couponCode})` : 'Voucher Parceiro Desconto' }}
+              </span>
+              <strong class="text-success">{{ formatCurrency(order.couponDiscount) }}</strong>
             </div>
           </div>
         </div>
@@ -300,9 +309,15 @@ function formatCurrency(value) {
 }
 
 function calculateSubtotal() {
-  if (!order.value?.items) return 0;
+  if (!order.value?.items) return order.value?.subtotal || 0;
   return order.value.items.reduce((sum, item) => {
-    return sum + (Number(item.price || 0) * Number(item.quantity || 1));
+    let itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
+    if (item.options && item.options.length) {
+      for (const opt of item.options) {
+        itemTotal += Number(opt.price || 0) * Number(opt.quantity || 1) * Number(item.quantity || 1);
+      }
+    }
+    return sum + itemTotal;
   }, 0);
 }
 

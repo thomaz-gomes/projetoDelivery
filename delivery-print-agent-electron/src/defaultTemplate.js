@@ -14,165 +14,131 @@
  *  [FEED:n]             → avançar n linhas
  *  [QR:url]             → QR Code
  *  [CUT]                → cortar papel
+ *  [INV:on/off]         → modo invertido (branco sobre preto)
+ *  [ROW:esq|dir]        → linha com texto esquerdo e direito alinhados
+ *
+ * Nota: Para alterar o tamanho da fonte nas formas de pagamento,
+ *       troque [SIZE:1] por [SIZE:2] (ou outro) antes do bloco [INV:on].
  *
  * Variáveis disponíveis no contexto:
- *  loja_nome, display_id, data, hora, tipo
+ *  loja_nome, display_id, data, data_curta, hora, tipo
  *  tipo_delivery         → true somente para DELIVERY
  *  cliente_nome, cliente_tel
+ *  localizador, localizador_suffix → ", Localizador: XXX" (para concat com tel)
  *  endereco_rua, endereco_num, endereco_comp, endereco_bairro, endereco_cidade, endereco_ref
  *  endereco_completo     → endereço como string única (fallback)
- *  items[].qtd, .nome, .obs, .preco, .subtotal
- *  pagamentos[].metodo, .valor
- *  subtotal, taxa, desconto, total
+ *  items[].qtd, .nome, .obs, .preco, .preco_val, .subtotal
+ *  pagamentos[].metodo, .valor, .valor_num
+ *  subtotal, subtotal_val, taxa, taxa_val, desconto, desconto_val, total, total_val
  *  tem_taxa, tem_desconto, tem_obs, obs_pedido
- *  link_pedido, tem_qr
+ *  link_pedido, tem_qr, canal, codigo_coleta
  */
 
 // ─── 80mm (48 colunas) ────────────────────────────────────────────────────────
-const DEFAULT_TEMPLATE_80 = `
-[ALIGN:center]
+const DEFAULT_TEMPLATE_80 = `[ALIGN:center]
 [BOLD:on]
 [SIZE:2]
 {{tipo}}
 [SIZE:1]
 [BOLD:off]
-{{data}}  {{hora}}
-[SEP:=]
+[ALIGN:right]
+{{data_curta}}
 [ALIGN:left]
 [BOLD:on]
-{{loja_nome}}
+Pedido: #{{display_id}}
 [BOLD:off]
-Pedido #{{display_id}}
-[SEP]
 {{cliente_nome}}
-Tel: {{cliente_tel}}
-{{#if localizador}}
-Loc: {{localizador}}
-{{/if}}
+Telefone: {{cliente_tel}}{{localizador_suffix}}
 {{#if tipo_delivery}}
-{{endereco_rua}}, {{endereco_num}} {{endereco_comp}}
-{{endereco_bairro}} - {{endereco_cidade}}
-{{/if}}
-{{#if endereco_ref}}
-Ref: {{endereco_ref}}
-{{/if}}
-{{#if tem_obs}}
-[SEP]
+{{endereco_completo}}
+{{/if}}{{#if tem_obs}}
 Obs: {{obs_pedido}}
-{{/if}}
-{{#if codigo_coleta}}
-[SEP]
-Codigo Coleta: {{codigo_coleta}}
-{{/if}}
-[SEP]
-{{#each items}}
-{{qtd}}x {{nome}}
-{{#if tem_opcoes}}
-{{opcoes}}
-{{/if}}
-{{#if obs}}
-   Obs: {{obs}}
-{{/if}}
-   {{preco}}
-{{/each}}
-[SEP]
-Quantidade de itens:    {{total_itens_count}}
-[SEP:=]
-Total itens(=):         {{subtotal}}
-{{#if tem_taxa}}
-Taxa entrega(+):        {{taxa}}
-{{/if}}
-{{#if tem_desconto}}
-Desconto(-):           -{{desconto}}
-{{/if}}
-[SEP:=]
-[BOLD:on]
-TOTAL(=):               {{total}}
+{{/if}}[SEP]
+[ROW:Qt.Descricao|Valor]
+
+{{#each items}}[BOLD:on]
+[ROW:{{qtd}}  {{nome}}|{{preco_val}}]
 [BOLD:off]
+{{#if tem_opcoes}}{{opcoes}}
+{{/if}}{{#if obs}}   Obs: {{obs}}
+{{/if}}
+{{/each}}[SEP]
+[ROW:Quantidade de itens:|{{total_itens_count}}]
+
+[ROW:Total Itens(=)|{{subtotal_val}}]
+[ROW:Acrescimo(+)|{{taxa_val}}]
+[ROW:Desconto(-)|{{desconto_val}}]
+[ROW:TOTAL(=)|{{total_val}}]
+
 [SEP]
-[ALIGN:center]
+[SIZE:1]
+[INV:on]
 [BOLD:on]
-FORMA DE PAGAMENTO
+Forma de pagamento
 [BOLD:off]
-[ALIGN:left]
-{{#each pagamentos}}
-{{metodo}}:             {{valor}}
-{{/each}}
+{{#each pagamentos}}[ROW:{{metodo}}|{{valor_num}}]
+{{/each}}[INV:off]
+[SIZE:1]
+[SEP:- ]
+{{loja_nome}}
 {{#if canal}}
-[SEP]
-[ALIGN:center]
 Op: {{canal}}
-[ALIGN:left]
-{{/if}}
-{{#if tem_qr}}
-[SEP]
-[ALIGN:center]
+{{/if}}{{#if tem_qr}}[ALIGN:center]
 Rastreie seu pedido:
 [QR:{{link_pedido}}]
 [ALIGN:left]
-{{/if}}
-[FEED:3]
-[CUT]
-`.trim();
+{{/if}}[FEED:3]
+[CUT]`.trim();
 
 // ─── 58mm (32 colunas) ────────────────────────────────────────────────────────
-const DEFAULT_TEMPLATE_58 = `
-[ALIGN:center]
+const DEFAULT_TEMPLATE_58 = `[ALIGN:center]
 [BOLD:on]
 [SIZE:2]
 {{tipo}}
 [SIZE:1]
 [BOLD:off]
-{{data}} {{hora}}
-[SEP:=]
+[ALIGN:right]
+{{data_curta}}
 [ALIGN:left]
-[BOLD:on]{{loja_nome}}[BOLD:off]
-Pedido #{{display_id}}
-[SEP]
-{{cliente_nome}}
-{{cliente_tel}}
-{{#if localizador}}Loc: {{localizador}}{{/if}}
-{{#if tipo_delivery}}
-{{endereco_rua}}, {{endereco_num}}
-{{endereco_bairro}}
-{{/if}}
-{{#if tem_obs}}
-Obs: {{obs_pedido}}
-{{/if}}
-{{#if codigo_coleta}}Coleta: {{codigo_coleta}}{{/if}}
-[SEP]
-{{#each items}}
-{{qtd}}x {{nome}}
-{{#if tem_opcoes}}
-{{opcoes}}
-{{/if}}
-{{#if obs}}
- -> {{obs}}
-{{/if}}
-   {{preco}}
-{{/each}}
-[SEP]
-Qtd: {{total_itens_count}}
-[SEP:=]
-Total: {{subtotal}}
-{{#if tem_taxa}}
-Entrega(+): {{taxa}}
-{{/if}}
-{{#if tem_desconto}}
-Desc(-): {{desconto}}
-{{/if}}
-[SEP:=]
 [BOLD:on]
-TOTAL: {{total}}
+Pedido: #{{display_id}}
 [BOLD:off]
+{{cliente_nome}}
+Telefone: {{cliente_tel}}{{localizador_suffix}}
+{{#if tipo_delivery}}
+{{endereco_completo}}
+{{/if}}{{#if tem_obs}}
+Obs: {{obs_pedido}}
+{{/if}}[SEP]
+[ROW:Qt.Descr.|Valor]
+
+{{#each items}}[BOLD:on]
+[ROW:{{qtd}} {{nome}}|{{preco_val}}]
+[BOLD:off]
+{{#if tem_opcoes}}{{opcoes}}
+{{/if}}{{#if obs}} -> {{obs}}
+{{/if}}
+{{/each}}[SEP]
+[ROW:Qtd itens:|{{total_itens_count}}]
+
+[ROW:Itens(=)|{{subtotal_val}}]
+[ROW:Acresc(+)|{{taxa_val}}]
+[ROW:Desc(-)|{{desconto_val}}]
+[ROW:TOTAL(=)|{{total_val}}]
+
 [SEP]
-[BOLD:on]PAGAMENTO[BOLD:off]
-{{#each pagamentos}}
-{{metodo}}: {{valor}}
-{{/each}}
-[FEED:3]
-[CUT]
-`.trim();
+[SIZE:1]
+[INV:on]
+[BOLD:on]Pagamento[BOLD:off]
+{{#each pagamentos}}[ROW:{{metodo}}|{{valor_num}}]
+{{/each}}[INV:off]
+[SIZE:1]
+[SEP:- ]
+{{loja_nome}}
+{{#if canal}}
+Op: {{canal}}
+{{/if}}[FEED:3]
+[CUT]`.trim();
 
 // Exporta o template de 80mm como padrão.
 // O templateEngine escolhe com base em printer.width.

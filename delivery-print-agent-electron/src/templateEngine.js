@@ -12,7 +12,8 @@
  *    {{variavel}}, {{#if}}, {{#each}}, [SEP], [CUT], [QR:url], [BOLD:on/off],
  *    [SIZE:2], [ALIGN:center], [FEED:3]
  *
- * Prioridade: printer.template (local) > order.receiptTemplate (JSON painel) > defaultTemplate (texto)
+ * Prioridade: printer.template (local) > defaultTemplate (texto)
+ * NOTA: order.receiptTemplate (JSON v2 do banco) é ignorado para usar o template texto padrão
  */
 const ESCPos = require('./printing/escpos');
 const { DEFAULT_TEMPLATE_80, DEFAULT_TEMPLATE_58 } = require('./defaultTemplate');
@@ -30,13 +31,15 @@ function render(order, printer) {
     ESCPos.codepage(charset),
     ESCPos.density(printer.density ?? 8),
     ESCPos.lineSpacingDefault(),
+    ESCPos.printMode({ bold: false, doubleH: false, doubleW: false, smallFont: false }), // Font A padrão
+    ESCPos.charSize(1, 1),
   ];
 
-  // Verificar se algum template disponível é formato JSON de blocos (v2)
-  const templateSources = [printer.template, order.receiptTemplate].filter(Boolean);
-  for (const src of templateSources) {
+  // Verificar se o template LOCAL do agente (printer.template) é formato JSON v2
+  // NOTA: order.receiptTemplate (JSON v2 do banco) é IGNORADO — usar sempre o template texto padrão
+  if (printer.template) {
     try {
-      const parsed = JSON.parse(src);
+      const parsed = JSON.parse(printer.template);
       if (parsed && parsed.v === 2 && Array.isArray(parsed.blocks)) {
         return _renderBlocks(parsed.blocks, order, printer, header, cols, margin, charset);
       }
@@ -65,10 +68,21 @@ function render(order, printer) {
     } else if (line.type === 'size') {
       const m = line.mult || 1;
       parts.push(ESCPos.charSize(m, m));
+      if (m === 1) parts.push(ESCPos.printMode({ bold: false, doubleH: false, doubleW: false, smallFont: false }));
     } else if (line.type === 'align') {
       parts.push(ESCPos.align(line.value));
     } else if (line.type === 'feed') {
       parts.push(ESCPos.feed(line.lines));
+    } else if (line.type === 'invert') {
+      parts.push(ESCPos.invert(line.on));
+    } else if (line.type === 'row') {
+      const total = cols - margin;
+      const left = line.left;
+      const right = line.right;
+      const pad = total - left.length - right.length;
+      const formatted = pad > 0 ? left + ' '.repeat(pad) + right : left + ' ' + right;
+      if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+      parts.push(ESCPos.text(formatted, charset));
     } else if (line.type === 'qr') {
       parts.push(ESCPos.align('center'));
       parts.push(ESCPos.qrCode(line.data, 4, 1));
@@ -86,6 +100,12 @@ function render(order, printer) {
 
 // ─── Renderizador de blocos JSON (formato do painel) ──────────────────────────
 function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
+  // Garantir que o bloco QR existe — templates salvos antes da feature não o incluem
+  const hasQrBlock = blocks.some(b => b.t === 'qr' || b.type === 'qr');
+  if (!hasQrBlock) {
+    blocks = [...blocks, { t: 'qr' }];
+  }
+
   const ctx = buildBlockContext(order, printer);
   const pl  = order.payload || {};
   // iFood: desempacotar envelope { order: { ... } } ou usar payload direto
@@ -93,12 +113,36 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
 
   // Extrai pagamentos — iFood usa { methods: [], prepaid } dentro de ifoodPl.payments
   const ifoodPmts = ifoodPl.payments || null;
-  const rawPayments = Array.isArray(order.payments)                                   ? order.payments
+  const rawPaymentsBase = Array.isArray(order.payments)                               ? order.payments
     : (ifoodPmts && ifoodPmts.methods && Array.isArray(ifoodPmts.methods))            ? ifoodPmts.methods
     : Array.isArray(ifoodPmts)                                                        ? ifoodPmts
     : Array.isArray(pl.paymentConfirmed)                                              ? pl.paymentConfirmed
     : (pl.payment && typeof pl.payment === 'object')                                  ? [pl.payment]
     : [];
+
+  // Adicionar cupom/voucher como forma de pagamento se houver desconto
+  // Tentar: order.couponDiscount > order.discount > iFood benefits
+  let couponVal = _toNum(order.couponDiscount || order.discount || 0);
+  let couponLabel = order.couponCode ? `Voucher (${order.couponCode})` : 'Voucher Desconto';
+
+  // Fallback: extrair desconto dos benefits do iFood (quando couponDiscount não está no order)
+  if (couponVal <= 0 && Array.isArray(ifoodPl.benefits) && ifoodPl.benefits.length > 0) {
+    for (const b of ifoodPl.benefits) {
+      couponVal += _toNum(b.value || 0);
+    }
+    const desc = ifoodPl.benefits[0]?.description || ifoodPl.benefits[0]?.title || '';
+    if (desc) couponLabel = `Voucher (${desc})`;
+  }
+
+  logger.info('[tpl] voucher debug', {
+    couponDiscount: order.couponDiscount, discount: order.discount,
+    couponCode: order.couponCode, couponVal,
+    benefits: ifoodPl.benefits,
+  });
+
+  const rawPayments = couponVal > 0
+    ? [...rawPaymentsBase, { method: couponLabel, amount: couponVal }]
+    : rawPaymentsBase;
 
   const parts = [...header];
 
@@ -144,7 +188,6 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
               quantity: Number(it.quantity || 1),
               price:    Number(it.unitPrice || it.price || 0),
               notes:    it.observations || it.notes || '',
-              // Preserva quantity do subitem para renderizar como "-Nx Nome" (formato iFood)
               options:  (it.subitems || it.garnishItems || it.options || []).map(s => ({
                 name:     s.name || s.description || '',
                 price:    Number(s.unitPrice || s.price || 0),
@@ -152,51 +195,10 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
               })),
             }))
           : (order.items || []);
-        const itemBold = block.itemBold;
-        const itemBig  = block.itemSize === 'lg';
 
         for (const item of items) {
-          if (itemBold) parts.push(ESCPos.bold(true));
-          if (itemBig)  parts.push(ESCPos.charSize(2, 2));
-
           const qty  = item.quantity || 1;
           const name = item.name || item.productName || '';
-          if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-          parts.push(ESCPos.text(`${qty}x ${name}`, charset));
-
-          if (itemBold) parts.push(ESCPos.bold(false));
-          if (itemBig)  parts.push(ESCPos.charSize(1, 1));
-
-          // Complementos / opções do item — altura dupla (maior que texto normal, menor que nome do item)
-          if (Array.isArray(item.options) && item.options.length > 0) {
-            parts.push(ESCPos.charSize(1, 2));
-            for (const opt of item.options) {
-              const optName  = opt.name || '';
-              const optPrice = _toNum(opt.price || 0);
-              let optLine;
-              if (opt.quantity != null) {
-                // iFood subitems/garnish: formato "-Nx Nome" (quantity vem do payload)
-                const oqty = Number(opt.quantity) || 1;
-                optLine = optPrice > 0
-                  ? `   -${oqty}x ${optName}: R$ ${_fmtN(optPrice)}`
-                  : `   -${oqty}x ${optName}`;
-              } else {
-                // Opções do sistema interno: formato "+ Nome"
-                optLine = optPrice > 0
-                  ? `   + ${optName}: R$ ${_fmtN(optPrice)}`
-                  : `   + ${optName}`;
-              }
-              if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-              parts.push(ESCPos.text(optLine, charset));
-            }
-            parts.push(ESCPos.charSize(1, 1));
-          }
-
-          const obs = item.notes || item.observation || '';
-          if (obs) {
-            if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-            parts.push(ESCPos.text(`   Obs: ${obs}`, charset));
-          }
 
           // Preço total do item (base + opções) × quantidade
           const basePrice  = _toNum(item.price);
@@ -204,31 +206,84 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
             ? item.options.reduce((s, o) => s + _toNum(o.price || 0), 0)
             : 0;
           const unitPrice  = basePrice + optsTotal;
-          const subtotal   = unitPrice * qty;
-          const priceStr   = qty > 1
-            ? `   R$ ${_fmtN(unitPrice)}  (${qty}x = R$ ${_fmtN(subtotal)})`
-            : `   R$ ${_fmtN(unitPrice)}`;
+          const itemTotal  = unitPrice * qty;
+          const priceVal   = _fmtN(itemTotal);
+
+          // Linha do item: nome à esquerda, preço à direita (ROW)
+          parts.push(ESCPos.bold(true));
+          const leftText  = `${qty}  ${name}`;
+          const rightText = priceVal;
+          const totalCols = cols - margin;
+          const padLen    = totalCols - leftText.length - rightText.length;
+          const rowLine   = padLen > 0 ? leftText + ' '.repeat(padLen) + rightText : leftText + ' ' + rightText;
           if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-          parts.push(ESCPos.text(priceStr, charset));
+          parts.push(ESCPos.text(rowLine, charset));
+          parts.push(ESCPos.bold(false));
+
+          // Complementos / opções do item
+          if (Array.isArray(item.options) && item.options.length > 0) {
+            for (const opt of item.options) {
+              const optName  = opt.name || '';
+              const optPrice = _toNum(opt.price || 0);
+              let optLine;
+              if (opt.quantity != null) {
+                const oqty = Number(opt.quantity) || 1;
+                optLine = optPrice > 0
+                  ? `   -${oqty}x ${optName}: R$ ${_fmtN(optPrice)}`
+                  : `   -${oqty}x ${optName}`;
+              } else {
+                optLine = optPrice > 0
+                  ? `   + ${optName}: R$ ${_fmtN(optPrice)}`
+                  : `   + ${optName}`;
+              }
+              if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+              parts.push(ESCPos.text(optLine, charset));
+            }
+          }
+
+          const obs = item.notes || item.observation || '';
+          if (obs) {
+            if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+            parts.push(ESCPos.text(`   Obs: ${obs}`, charset));
+          }
         }
         break;
       }
 
       case 'payments': {
+        // Tamanho da fonte configurável: normal, lg (2x altura), xl (2x largura+altura)
+        const pSize = block.paymentSize || 'normal';
+        if (pSize === 'xl')      parts.push(ESCPos.charSize(2, 2));
+        else if (pSize === 'lg') parts.push(ESCPos.charSize(1, 2));
+
+        // Colunas efetivas (se fonte dobrada em largura, metade das colunas)
+        const payCols = pSize === 'xl' ? Math.floor((cols - margin) / 2) : (cols - margin);
+
+        parts.push(ESCPos.invert(true));
         for (const p of rawPayments) {
           const method = p.method || p.name || p.tipo || p.paymentMethod || '';
-          const value  = _toNum(p.value || p.amount || p.valor || 0);
+          const value  = _fmtN(_toNum(p.value || p.amount || p.valor || 0));
+          const padLen    = payCols - method.length - value.length;
+          const rowLine   = padLen > 0 ? method + ' '.repeat(padLen) + value : method + ' ' + value;
           if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-          parts.push(ESCPos.text(`${method}: R$ ${_fmtN(value)}`, charset));
+          parts.push(ESCPos.text(rowLine, charset));
+        }
+        parts.push(ESCPos.invert(false));
+
+        // Reset tamanho
+        if (pSize !== 'normal') {
+          parts.push(ESCPos.charSize(1, 1));
+          parts.push(ESCPos.printMode({ bold: false, doubleH: false, doubleW: false, smallFont: false }));
         }
         break;
       }
 
       case 'qr': {
-        const url = order.qrText || order.trackingUrl || '';
+        const url = order.qrText || order.trackingUrl || ctx.link_pedido || '';
         if (url) {
           parts.push(ESCPos.align('center'));
           parts.push(ESCPos.qrCode(url, 7, 1));
+          parts.push(ESCPos.text('Rastreie seu pedido', charset));
           parts.push(ESCPos.align('left'));
         }
         break;
@@ -345,15 +400,20 @@ function buildBlockContext(order) {
   // iFood: campos específicos (localizador, código de coleta)
   const _plBc = order.payload || {};
   const _ifBc = _plBc.order || _plBc;
-  const localizador   = _ifBc.customer?.phones?.[0]?.localizer || _ifBc.customer?.phone?.localizer || '';
+  const localizadorBc   = _ifBc.customer?.phones?.[0]?.localizer || _ifBc.customer?.phone?.localizer || '';
   const codigo_coleta = _ifBc.delivery?.pickupCode || '';
+
+  // Data curta: "07/mar - 13:21"
+  const mesesBc = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const horaBc = `${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}`;
 
   return {
     header_name:       order.headerName || order.store?.name || order.storeName || 'Delivery',
     header_city:       order.headerCity || '',
     display_id:        String(order.displayId || order.displaySimple || order.id || '---'),
     data_pedido:       `${pad2(createdAt.getDate())}/${pad2(createdAt.getMonth()+1)}/${createdAt.getFullYear()}`,
-    hora_pedido:       `${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}`,
+    data_curta:        `${pad2(createdAt.getDate())}/${mesesBc[createdAt.getMonth()]} - ${horaBc}`,
+    hora_pedido:       horaBc,
     tipo_pedido,
     nome_cliente:      order.customer?.name || order.customerName || '',
     telefone_cliente:  order.customer?.phone || order.customerPhone || '',
@@ -364,8 +424,10 @@ function buildBlockContext(order) {
     total:             totalVal > 0     ? _fmtN(totalVal)     : '0,00',
     observacoes:       order.notes || order.observation || '',
     total_itens_count: String((order.items || []).reduce((s, i) => s + (i.quantity || 1), 0)),
-    localizador,
+    localizador:       localizadorBc,
+    localizador_suffix: localizadorBc ? `, Localizador: ${localizadorBc}` : '',
     codigo_coleta,
+    link_pedido:       _resolveQrUrl(order, tipo_pedido),
   };
 }
 
@@ -382,15 +444,7 @@ function processTemplate(template, context) {
   return result;
 }
 
-function resolveBlocks(tmpl, ctx) {
-  // {{#each array}} ... {{/each}}
-  tmpl = tmpl.replace(/\{\{#each (\w+)\}\}([\s\S]*?)\{\{\/each\}\}/g, (_, key, body) => {
-    const arr = ctx[key];
-    if (!Array.isArray(arr) || arr.length === 0) return '';
-    return arr.map((item) => substituteVars(body, { ...ctx, ...item })).join('');
-  });
-
-  // {{#if key}} ... {{/if}} — iterativo para suportar aninhamento
+function resolveIfBlocks(tmpl, ctx) {
   let prev;
   do {
     prev = tmpl;
@@ -398,6 +452,23 @@ function resolveBlocks(tmpl, ctx) {
       return ctx[key] ? body : '';
     });
   } while (tmpl !== prev);
+  return tmpl;
+}
+
+function resolveBlocks(tmpl, ctx) {
+  // {{#each array}} ... {{/each}} — resolve {{#if}} aninhado com contexto do item
+  tmpl = tmpl.replace(/\{\{#each (\w+)\}\}([\s\S]*?)\{\{\/each\}\}/g, (_, key, body) => {
+    const arr = ctx[key];
+    if (!Array.isArray(arr) || arr.length === 0) return '';
+    return arr.map((item) => {
+      const merged = { ...ctx, ...item };
+      const resolved = resolveIfBlocks(body, merged);
+      return substituteVars(resolved, merged);
+    }).join('');
+  });
+
+  // {{#if key}} ... {{/if}} — iterativo para suportar aninhamento
+  tmpl = resolveIfBlocks(tmpl, ctx);
 
   return tmpl;
 }
@@ -421,6 +492,8 @@ function parseLine(line) {
     result.push({ type: 'sep', char: '-' });
   } else if (trimmed === '[SEP:=]') {
     result.push({ type: 'sep', char: '=' });
+  } else if (trimmed === '[SEP:- ]') {
+    result.push({ type: 'sep', char: '- ' });
   } else if (trimmed === '[CUT]') {
     result.push({ type: 'cut' });
   } else if (/^\[BOLD:(on|off)\]$/i.test(trimmed)) {
@@ -434,6 +507,16 @@ function parseLine(line) {
   } else if (/^\[FEED:(\d+)\]$/.test(trimmed)) {
     const n = parseInt(trimmed.match(/\[FEED:(\d+)\]/)[1]);
     result.push({ type: 'feed', lines: n });
+  } else if (/^\[INV:(on|off)\]$/i.test(trimmed)) {
+    result.push({ type: 'invert', on: trimmed.toLowerCase().includes('on') });
+  } else if (/^\[ROW:(.+)\]$/.test(trimmed)) {
+    const content = trimmed.match(/^\[ROW:(.+)\]$/)[1];
+    const lastPipe = content.lastIndexOf('|');
+    if (lastPipe > 0) {
+      result.push({ type: 'row', left: content.slice(0, lastPipe), right: content.slice(lastPipe + 1) });
+    } else {
+      result.push({ type: 'text', content: content });
+    }
   } else if (/^\[QR:(.+)\]$/.test(trimmed)) {
     const data = trimmed.match(/^\[QR:(.+)\]$/)[1].trim();
     if (data) result.push({ type: 'qr', data });
@@ -442,6 +525,39 @@ function parseLine(line) {
   }
 
   return result;
+}
+
+// ─── QR Code URL ─────────────────────────────────────────────────────────────
+/**
+ * Resolve QR code URL: ordem direta > payload > fallback gerado.
+ * Para pedidos DELIVERY sem URL, gera automaticamente {frontendUrl}/orders/{id}.
+ */
+function _resolveQrUrl(order, tipo) {
+  const pl = order.payload || {};
+  const ifPl = pl.order || pl;
+  const url = order.qrText || order.trackingUrl || pl.qrText || ifPl.qrText || order.qrUrl || '';
+  if (url) {
+    logger.info('[QR] url encontrada', { url });
+    return url;
+  }
+
+  // Fallback: gerar URL se pedido DELIVERY
+  const isPickup = ['RETIRADA', 'PICKUP', 'TAKEOUT', 'MESA', 'INDOOR'].includes(String(tipo).toUpperCase());
+  if (!isPickup && order.id) {
+    const fe = order.frontendUrl || (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '');
+    if (fe) {
+      const fallbackUrl = `${fe}/orders/${order.id}`;
+      logger.info('[QR] fallback gerado', { url: fallbackUrl });
+      return fallbackUrl;
+    }
+    logger.warn('[QR] sem URL: frontendUrl ausente', {
+      orderId: order.id,
+      frontendUrl: order.frontendUrl || null,
+      env_PUBLIC: process.env.PUBLIC_FRONTEND_URL || null,
+      env_FRONTEND: process.env.FRONTEND_URL || null,
+    });
+  }
+  return '';
 }
 
 // ─── Construção do contexto (template texto) ──────────────────────────────────
@@ -485,12 +601,35 @@ function buildContext(order, printer) {
   // Cálculo de total de itens (contagem de unidades)
   const totalItensCount = (order.items || []).reduce((s, i) => s + (i.quantity || 1), 0);
 
+  // Data curta: "07/mar - 13:21"
+  const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const hora = `${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}`;
+  const data_curta = `${pad2(createdAt.getDate())}/${meses[createdAt.getMonth()]} - ${hora}`;
+
+  // Localizador suffix para linha combinada com telefone
+  const localizador_bc = ifoodPl.customer?.phones?.[0]?.localizer || ifoodPl.customer?.phone?.localizer || '';
+  const localizador_suffix = localizador_bc ? `, Localizador: ${localizador_bc}` : '';
+
+  // Totais numéricos
+  const subtotalVal = _toNum(order.subtotal) || (order.items || []).reduce((s, i) => {
+    const u = _toNum(i.price) + (Array.isArray(i.options) ? i.options.reduce((os, o) => os + _toNum(o.price || 0), 0) : 0);
+    return s + u * (i.quantity || 1);
+  }, 0);
+  const taxaVal     = _toNum(order.deliveryFee || 0);
+  let descontoVal = _toNum(order.discount || order.couponDiscount || 0);
+  // Fallback: extrair desconto dos benefits do iFood
+  if (descontoVal <= 0 && Array.isArray(ifoodPl.benefits) && ifoodPl.benefits.length > 0) {
+    for (const b of ifoodPl.benefits) descontoVal += _toNum(b.value || 0);
+  }
+  const totalVal    = _toNum(order.total);
+
   return {
     loja_nome,
     loja_cnpj:    order.store?.cnpj || pl.storeCnpj || '',
     display_id:   order.displayId || order.id || '---',
     data:         `${pad2(createdAt.getDate())}/${pad2(createdAt.getMonth()+1)}/${createdAt.getFullYear()}`,
-    hora:         `${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}`,
+    data_curta,
+    hora,
     tipo,
 
     cliente_nome:    order.customer?.name || order.customerName || pl.customerName || '',
@@ -532,36 +671,52 @@ function buildContext(order, printer) {
         nome:       item.name || item.productName || '',
         obs:        item.notes || item.observation || '',
         preco:      _fmt(unit),
+        preco_val:  _fmtN(unit * qty),
         subtotal:   _fmt(unit * qty),
         tem_opcoes: !!(Array.isArray(item.options) && item.options.length > 0),
         opcoes:     optLines,
       };
     }),
 
-    pagamentos: rawPayments.map((p) => ({
-      metodo: p.method || p.name || p.tipo || p.paymentMethod || '',
-      valor:  _fmt(p.value || p.amount || p.valor || 0),
-    })),
+    pagamentos: [
+      // Pagamentos normais
+      ...rawPayments.map((p) => ({
+        metodo: p.method || p.name || p.tipo || p.paymentMethod || '',
+        valor:  _fmt(p.value || p.amount || p.valor || 0),
+        valor_num: _fmtN(p.value || p.amount || p.valor || 0),
+      })),
+      // Cupom/voucher como forma de pagamento (se houver desconto)
+      ...(descontoVal > 0 ? [{
+        metodo: order.couponCode ? `Voucher (${order.couponCode})`
+          : (ifoodPl.benefits?.[0]?.description || ifoodPl.benefits?.[0]?.title)
+            ? `Voucher (${ifoodPl.benefits[0].description || ifoodPl.benefits[0].title})`
+            : 'Voucher Desconto',
+        valor:  _fmt(descontoVal),
+        valor_num: _fmtN(descontoVal),
+      }] : []),
+    ],
 
-    // Subtotal não existe no schema — calcular da soma dos itens
-    subtotal:    _fmt((order.items || []).reduce((s, i) => {
-      const u = _toNum(i.price) + (Array.isArray(i.options) ? i.options.reduce((os, o) => os + _toNum(o.price || 0), 0) : 0);
-      return s + u * (i.quantity || 1);
-    }, 0) || _toNum(order.subtotal)),
-    taxa:        _fmt(order.deliveryFee || 0),
-    desconto:    _fmt(order.discount || order.couponDiscount || 0),
-    total:       _fmt(order.total),
+    // Subtotal com e sem prefixo "R$ "
+    subtotal:     _fmt(subtotalVal),
+    subtotal_val: _fmtN(subtotalVal),
+    taxa:         _fmt(taxaVal),
+    taxa_val:     _fmtN(taxaVal),
+    desconto:     _fmt(descontoVal),
+    desconto_val: _fmtN(descontoVal),
+    total:        _fmt(totalVal),
+    total_val:    _fmtN(totalVal),
 
-    tem_taxa:    _toNum(order.deliveryFee) > 0,
-    tem_desconto: _toNum(order.discount || order.couponDiscount) > 0,
+    tem_taxa:    taxaVal > 0,
+    tem_desconto: descontoVal > 0,
     tem_obs:     !!(order.notes || order.observation),
     obs_pedido:  order.notes || order.observation || '',
 
-    link_pedido: order.qrText || order.trackingUrl || '',
-    tem_qr:      !!(order.qrText || order.trackingUrl),
+    link_pedido: _resolveQrUrl(order, tipo),
+    tem_qr:      !!_resolveQrUrl(order, tipo),
 
     // iFood: campos específicos
-    localizador:   ifoodPl.customer?.phones?.[0]?.localizer || ifoodPl.customer?.phone?.localizer || '',
+    localizador:   localizador_bc,
+    localizador_suffix,
     codigo_coleta: ifoodPl.delivery?.pickupCode || '',
 
     // Canal/operador (ex: IFOOD, WHATSAPP, SISTEMA)

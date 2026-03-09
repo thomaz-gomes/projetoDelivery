@@ -40,7 +40,8 @@
               </div>
               <div class="totals-box mt-3">
                 <div class="d-flex justify-content-between mb-1"><span class="text-muted">Subtotal</span><span>{{ formatCurrency(subtotal) }}</span></div>
-                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Taxa de entrega</span><span>{{ formatCurrency(deliveryFee) }}</span></div>
+                <div v-if="couponDiscount > 0" class="d-flex justify-content-between mb-1" style="color: #198754;"><span>{{ order?.couponCode ? `Cupom (${order.couponCode})` : 'Cupom' }}</span><span>-{{ formatCurrency(couponDiscount) }}</span></div>
+                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Taxa de entrega</span><span>{{ deliveryFee > 0 ? formatCurrency(deliveryFee) : 'Grátis' }}</span></div>
                 <div v-if="appliedCashback > 0" class="d-flex justify-content-between mb-1" style="color: #198754;"><span>Cashback usado</span><span>-{{ formatCurrency(appliedCashback) }}</span></div>
                 <div class="d-flex justify-content-between total-line pt-2 mt-1"><span class="fw-semibold">Total</span><span class="fw-semibold">{{ formatCurrency(Number(order?.total||0)) }}</span></div>
                 <div v-if="cashbackEarned > 0" class="d-flex justify-content-between mt-2 small" style="color: #198754;"><span><i class="bi bi-cash-stack me-1"></i>Cashback recebido</span><span>+{{ formatCurrency(cashbackEarned) }}</span></div>
@@ -148,6 +149,7 @@ const hasStoredPhone = computed(()=> {
 })
 const subtotal = computed(()=> (order.value?.items||[]).reduce((s,it)=> s + (Number(it.price||0)*Number(it.quantity||1)),0))
 const deliveryFee = computed(()=> Number(order.value?.deliveryFee||0))
+const couponDiscount = computed(()=> Number(order.value?.couponDiscount||0))
 const appliedCashback = computed(() => Number(order.value?.payload?.appliedCashback || 0))
 const cashbackEarned = computed(() => Number(order.value?.cashbackEarned || 0))
 

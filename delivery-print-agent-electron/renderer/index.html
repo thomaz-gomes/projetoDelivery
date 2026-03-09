@@ -283,6 +283,13 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
       </div>
       <div class="form-row single">
         <div class="field">
+          <label>URL do Frontend (para QR Code de rastreio)</label>
+          <input id="frontendUrl" type="text" placeholder="https://app.meudelivery.com.br" />
+          <small style="color:#666;font-size:11px">URL do site onde o cliente rastreia o pedido. Usada para gerar o QR Code na comanda.</small>
+        </div>
+      </div>
+      <div class="form-row single">
+        <div class="field">
           <label>Token do Agente</label>
           <input id="token" type="password" placeholder="Token gerado no Painel → Impressoras" />
         </div>
@@ -518,16 +525,18 @@ async function refreshStatus() {
 
 // ── Server Form ───────────────────────────────────────────────────────────
 function loadServerForm() {
-  document.getElementById('serverUrl').value = config.serverUrl || '';
-  document.getElementById('token').value     = config.token     || '';
+  document.getElementById('serverUrl').value   = config.serverUrl   || '';
+  document.getElementById('frontendUrl').value = config.frontendUrl || '';
+  document.getElementById('token').value       = config.token       || '';
 }
 
 async function saveServer() {
-  const serverUrl = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
-  const token     = document.getElementById('token').value.trim();
-  const autoStart = document.getElementById('autoStart').checked;
+  const serverUrl   = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+  const frontendUrl = document.getElementById('frontendUrl').value.trim().replace(/\/$/, '');
+  const token       = document.getElementById('token').value.trim();
+  const autoStart   = document.getElementById('autoStart').checked;
 
-  config = { ...config, serverUrl, token };
+  config = { ...config, serverUrl, frontendUrl, token };
   await api.saveConfig(config);
   await api.setAutoStart(autoStart);
   notify('Configurações salvas!', 'ok');
@@ -768,6 +777,7 @@ const DEFAULT_BLOCKS = [
   { t: 'sep' },
   { t: 'cond', key: 'canal', c: 'Op: {{canal}}', a: 'center' },
   { t: 'sep' },
+  { t: 'qr' },
 ];
 
 const PLACEHOLDER_CATS = [
@@ -890,7 +900,9 @@ function renderOneBlock(block, idx) {
     inner = `<div class="tpl-fixed">&#9776; Itens do pedido${boldBadge}${sizeBadge}</div>`;
 
   } else if (block.t === 'payments') {
-    inner = '<div class="tpl-fixed">&#9679; Formas de pagamento</div>';
+    const pSizeBadge = block.paymentSize && block.paymentSize !== 'normal'
+      ? `<span class="tpl-fmt-badge">${sizeLabel(block.paymentSize)}</span>` : '';
+    inner = `<div class="tpl-fixed">&#9679; Formas de pagamento${pSizeBadge}</div>`;
 
   } else if (block.t === 'qr') {
     inner = '<div class="tpl-fixed">&#9638; QR Code (despacho)</div>';
@@ -961,6 +973,14 @@ function renderTplToolbar() {
     const ib = !!block.itemBold, il = block.itemSize === 'lg';
     html += `<button class="btn btn-sm ${ib?'btn-primary':'btn-ghost'}" onclick="tplToggleItemBold()" title="Itens em negrito" style="font-weight:700;font-family:serif">N</button>`;
     html += `<button class="btn btn-sm ${il?'btn-primary':'btn-ghost'}" onclick="tplToggleItemSize()" title="Itens grandes" style="font-size:15px">A</button>`;
+  }
+
+  if (block.t === 'payments') {
+    const ps = block.paymentSize || 'normal';
+    html += `<span style="color:#888;font-size:12px;margin-right:4px">Fonte:</span>`;
+    html += `<button class="btn btn-sm ${ps==='normal'?'btn-primary':'btn-ghost'}" onclick="tplSetPaymentSize('normal')" title="Normal">N</button>`;
+    html += `<button class="btn btn-sm ${ps==='lg'    ?'btn-primary':'btn-ghost'}" onclick="tplSetPaymentSize('lg')"     title="Grande" style="font-size:15px">A</button>`;
+    html += `<button class="btn btn-sm ${ps==='xl'    ?'btn-primary':'btn-ghost'}" onclick="tplSetPaymentSize('xl')"     title="Extra grande" style="font-size:17px">A</button>`;
   }
 
   // Delete (always, pushed right)
@@ -1095,6 +1115,12 @@ function tplToggleItemSize() {
   if (tplSelIdx < 0) return;
   const cur = tplBlocks[tplSelIdx].itemSize;
   tplBlocks[tplSelIdx].itemSize = cur === 'lg' ? 'normal' : 'lg';
+  renderBlockEditor();
+}
+
+function tplSetPaymentSize(s) {
+  if (tplSelIdx < 0) return;
+  tplBlocks[tplSelIdx].paymentSize = s;
   renderBlockEditor();
 }
 
