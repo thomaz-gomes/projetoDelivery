@@ -648,6 +648,7 @@ function computeDisplayedTotal(o){
     const paymentAmount = Number(
       o.payload?.payment?.amount ??
       o.payload?.rawPayload?.payment?.amount ??
+      o.payload?.order?.total?.orderAmount ??
       o.payload?.total?.orderAmount ??
       o.total ??
       o.amount ??
@@ -677,6 +678,16 @@ function computeDisplayedTotal(o){
   }catch(e){
     try { return Number(o.total || o.amount || 0) || 0; } catch(e2) { return 0; }
   }
+}
+
+// Total of an item line: (unitPrice + sum of option prices per unit) * quantity
+function itemLineTotal(it) {
+  const qty = Number(it.quantity || 1) || 1;
+  const unit = Number(it.unitPrice || it.price || 0) || 0;
+  // opt.price from iFood subitems is already the line total per parent unit
+  // (e.g. 4x Coca @R$5 = R$20), so do NOT multiply by opt.quantity again
+  const optsPerUnit = extractItemOptions(it).reduce((s, o) => s + Number(o.price || 0), 0);
+  return (unit + optsPerUnit) * qty;
 }
 
 // Normalize various option shapes to a common array of {name, price, quantity}
@@ -1103,7 +1114,25 @@ function normalizeOrder(o){
     subtotal: (function() {
       try {
         if (o.subtotal) return Number(o.subtotal);
-        return (items || []).reduce((s, it) => s + (Number(it.unitPrice || it.price || 0) * Number(it.quantity || 1)), 0);
+        // iFood: use total.subTotal from payload (authoritative, avoids double-counting options)
+        const ip = (o.payload?.order || o.payload || {});
+        const ifoodSubTotal = ip.total?.subTotal;
+        if (ifoodSubTotal != null && Number(ifoodSubTotal) > 0) return Number(ifoodSubTotal);
+        return (items || []).reduce((s, it) => {
+          const qty = Number(it.quantity || 1) || 1;
+          const unit = Number(it.unitPrice || it.price || 0) || 0;
+          let optsSum = 0;
+          for (const opt of (it.options || [])) {
+            optsSum += (Number(opt.price || 0) || 0) * (Number(opt.quantity || 1) || 1);
+          }
+          return s + (unit * qty) + (optsSum * qty);
+        }, 0);
+      } catch (e) { return 0; }
+    })(),
+    additionalFees: (function() {
+      try {
+        const ip = (o.payload?.order || o.payload || {});
+        return Number(ip.total?.additionalFees ?? 0) || 0;
       } catch (e) { return 0; }
     })(),
     deliveryFee: Number(o.deliveryFee || 0),
@@ -2317,6 +2346,7 @@ async function cancelOrderFromDetails() {
 }
 
 const STATUS_LABEL = {
+  PENDENTE_ACEITE: 'Pendente de aceite',
   EM_PREPARO: 'Em preparo',
   PRONTO: 'Pronto p/ retirada',
   SAIU_PARA_ENTREGA: 'Saiu para entrega',
@@ -2355,6 +2385,45 @@ function columnOrders(key) {
       if (created && (nowTs - created.getTime() > dayMs)) return false;
       return true;
     });
+  }
+}
+
+// Pending orders (awaiting manual acceptance)
+const pendingOrders = computed(() => {
+  return (store.orders || []).filter(o => o && (o.status || '').toUpperCase() === 'PENDENTE_ACEITE');
+});
+
+async function acceptPendingOrder(o) {
+  try {
+    o._accepting = true;
+    await api.post(`/orders/${o.id}/accept`);
+  } catch (e) {
+    console.error('Accept failed:', e);
+    Swal.fire({ icon: 'error', title: 'Erro ao aceitar', text: e?.response?.data?.message || e.message, toast: true, timer: 4000, position: 'top-end', showConfirmButton: false });
+  } finally {
+    o._accepting = false;
+  }
+}
+
+async function rejectPendingOrder(o) {
+  const r = await Swal.fire({
+    title: 'Recusar pedido?',
+    text: `#${formatDisplay(o)} - ${o.customerName || 'Cliente'}`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Recusar',
+    cancelButtonText: 'Voltar',
+    confirmButtonColor: '#dc3545',
+  });
+  if (!r.isConfirmed) return;
+  try {
+    o._accepting = true;
+    await api.post(`/orders/${o.id}/reject`);
+  } catch (e) {
+    console.error('Reject failed:', e);
+    Swal.fire({ icon: 'error', title: 'Erro ao recusar', text: e?.response?.data?.message || e.message, toast: true, timer: 4000, position: 'top-end', showConfirmButton: false });
+  } finally {
+    o._accepting = false;
   }
 }
 
@@ -3063,6 +3132,34 @@ function pulseButton() {
     </div>
     <!-- 🔍 Filtros + Som -->
     
+    <!-- Pending acceptance box (iFood orders awaiting manual accept) -->
+    <div v-if="pendingOrders.length > 0" class="pending-acceptance-box mb-3">
+      <div class="pending-header">
+        <i class="bi bi-bell-fill"></i>
+        <span class="fw-semibold">{{ pendingOrders.length }} pedido(s) aguardando aceite</span>
+      </div>
+      <div v-for="o in pendingOrders" :key="o.id" class="pending-card">
+        <div class="pending-card-info">
+          <div class="fw-semibold">#{{ formatDisplay(o) }} - {{ o.customerName || 'Cliente' }}</div>
+          <div class="small text-muted">
+            {{ normalizeOrder(o).address ? normalizeOrder(o).address.substring(0, 60) : '' }}
+            <span v-if="normalizeOrder(o).channelLabel" class="ms-2 badge bg-light text-dark">{{ normalizeOrder(o).channelLabel }}</span>
+          </div>
+          <div class="small text-muted">
+            {{ normalizeOrder(o).items?.length || 0 }} item(ns) · {{ formatCurrency(normalizeOrder(o).total || 0) }}
+          </div>
+        </div>
+        <div class="pending-card-actions">
+          <button class="btn btn-success btn-sm" @click="acceptPendingOrder(o)" :disabled="o._accepting">
+            <i class="bi bi-check-lg"></i> Aceitar
+          </button>
+          <button class="btn btn-outline-danger btn-sm" @click="rejectPendingOrder(o)" :disabled="o._accepting">
+            <i class="bi bi-x-lg"></i> Recusar
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Orders board: columns with drag & drop -->
     <div v-if="store.orders && store.orders.length > 0" class="orders-board">
       <div class="boards d-flex gap-3 overflow-auto justify-content-between">
@@ -3134,10 +3231,11 @@ function pulseButton() {
                 <div class="fw-semibold">Itens</div>
                 <ul class="mb-1">
                   <li v-for="it in normalizeOrderItems(o)" :key="it.id + it.name">
-                    <div class="fw-semibold">{{ it.quantity || 1 }}x {{ it.name }} <span class="text-success ms-2">{{ formatCurrency(it.unitPrice || 0) }}</span></div>
-                    <div v-if="extractItemOptions(it).length" class="small text-muted ms-3 mt-1">
-                      <div v-for="(opt, idx) in extractItemOptions(it)" :key="(opt.name || idx) + idx">
-                        <span v-if="opt.quantity">{{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }}x&nbsp;</span>{{ opt.name }}<span v-if="opt.price"> — {{ formatCurrency(opt.price) }}</span>
+                    <div class="fw-semibold">{{ it.quantity || 1 }}x {{ it.name }} <span class="text-success ms-2">{{ formatCurrency(itemLineTotal(it)) }}</span></div>
+                    <div v-if="(it.quantity || 1) > 1" class="small text-muted ms-3">{{ formatCurrency(it.unitPrice || 0) }} /un</div>
+                    <div v-if="extractItemOptions(it).length" class="small ms-3 mt-1">
+                      <div v-for="(opt, idx) in extractItemOptions(it)" :key="(opt.name || idx) + idx" style="color: #495057;">
+                        <span class="text-muted">+</span> <strong style="font-size:0.75rem;background:#e9ecef;border-radius:4px;padding:1px 4px;">{{ Number(opt.quantity || 1) }}/un</strong> {{ opt.name }}<span v-if="(it.quantity || 1) > 1" class="text-muted"> ({{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }} total)</span><span v-if="opt.price" class="text-success"> {{ formatCurrency(opt.price) }} /un</span>
                       </div>
                     </div>
                   </li>
@@ -3277,11 +3375,20 @@ function pulseButton() {
                 <div class="od-item-main">
                   <span class="od-item-qty">{{ it.quantity || 1 }}x</span>
                   <span class="od-item-name">{{ it.name }}</span>
-                  <span class="od-item-price">{{ formatCurrency(it.unitPrice || it.price || 0) }}</span>
+                  <span class="od-item-price">{{ formatCurrency(itemLineTotal(it)) }}</span>
+                </div>
+                <div v-if="(it.quantity || 1) > 1" class="od-item-unit-hint">
+                  {{ formatCurrency(it.unitPrice || it.price || 0) }} /un
                 </div>
                 <div v-if="extractItemOptions(it).length" class="od-item-options">
                   <div v-for="(opt, i) in extractItemOptions(it)" :key="(opt.name||i)+'opt'" class="od-item-option">
-                    <span v-if="opt.quantity">{{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }}x </span>{{ opt.name }}<span v-if="opt.price" class="od-opt-price"> {{ formatCurrency(opt.price) }}</span>
+                    <i class="bi bi-plus-circle od-opt-icon"></i>
+                    <span class="od-opt-detail">
+                      <span>{{ Number(opt.quantity || 1) }}/un</span>
+                      {{ opt.name }}
+                      <span v-if="(it.quantity || 1) > 1" class="od-opt-total">({{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }} total)</span>
+                    </span>
+                    <span v-if="opt.price" class="od-opt-price">{{ formatCurrency(opt.price) }} /un</span>
                   </div>
                 </div>
                 <div v-if="it.notes || it.observations" class="od-item-notes text-muted small fst-italic ps-3">
@@ -3322,6 +3429,10 @@ function pulseButton() {
               <div class="od-pay-row" v-if="selectedOrder?.orderType === 'DELIVERY'">
                 <span class="od-pay-label">Taxa de entrega</span>
                 <span class="od-pay-value">{{ Number(selectedNormalized?.deliveryFee || selectedOrder?.deliveryFee || 0) > 0 ? formatCurrency(selectedNormalized?.deliveryFee || selectedOrder?.deliveryFee) : 'Grátis' }}</span>
+              </div>
+              <div class="od-pay-row" v-if="selectedNormalized?.additionalFees > 0">
+                <span class="od-pay-label">Taxa de serviço</span>
+                <span class="od-pay-value">{{ formatCurrency(selectedNormalized.additionalFees) }}</span>
               </div>
               <div class="od-pay-row" v-if="selectedNormalized?.paymentChange">
                 <span class="od-pay-label">Troco</span>
@@ -3416,6 +3527,39 @@ function pulseButton() {
 </template>
 
 <style scoped>
+/* Pending acceptance box */
+.pending-acceptance-box {
+  border: 2px solid #ffc107;
+  border-radius: 12px;
+  background: #fff8e1;
+  overflow: hidden;
+}
+.pending-header {
+  background: #ffc107;
+  color: #333;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+}
+.pending-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid #ffe082;
+}
+.pending-card:first-of-type { border-top: none; }
+.pending-card-info { flex: 1; min-width: 0; }
+.pending-card-actions { display: flex; gap: 8px; flex-shrink: 0; margin-left: 12px; }
+
+@keyframes pending-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+  50% { box-shadow: 0 0 12px 4px rgba(255, 193, 7, 0.25); }
+}
+.pending-acceptance-box { animation: pending-pulse 2s ease-in-out infinite; }
+
 /* 🔄 Animação de "pulse" do botão de som */
 @keyframes pulse {
   0% {
@@ -3699,9 +3843,14 @@ button.btn.advance {
 }
 .od-item-name { flex: 1; font-size: 0.88rem; color: #212529; }
 .od-item-price { font-weight: 600; font-size: 0.85rem; color: #198754; white-space: nowrap; }
-.od-item-options { margin-top: 4px; padding-left: 36px; }
-.od-item-option { font-size: 0.78rem; color: #6c757d; line-height: 1.5; }
-.od-opt-price { color: #198754; margin-left: 4px; }
+.od-item-unit-hint { font-size: 0.75rem; color: var(--text-secondary, #6c757d); padding-left: 36px; margin-top: 1px; }
+.od-item-options { margin-top: 6px; padding-left: 28px; display: flex; flex-direction: column; gap: 3px; }
+.od-item-option { font-size: 0.8rem; color: #495057; display: flex; align-items: baseline; gap: 5px; line-height: 1.4; }
+.od-opt-icon { font-size: 0.65rem; color: var(--text-muted, #adb5bd); flex-shrink: 0; position: relative; top: 1px; }
+.od-opt-detail { flex: 1; }
+.od-opt-detail > span:first-child { font-weight: 600; font-size: 0.75rem; color: #495057; background: #e9ecef; border-radius: 4px; padding: 1px 5px; margin-right: 4px; }
+.od-opt-total { font-size: 0.72rem; color: var(--text-secondary, #6c757d); font-weight: 500; }
+.od-opt-price { color: #198754; font-size: 0.78rem; white-space: nowrap; flex-shrink: 0; }
 .od-notes {
   margin-top: 10px;
   padding: 8px 12px;

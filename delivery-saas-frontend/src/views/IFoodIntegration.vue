@@ -251,6 +251,16 @@ async function unlinkInteg(integ) {
   }
 }
 
+async function toggleAutoAccept(integ) {
+  const newVal = !integ.autoAccept;
+  try {
+    await api.put(`/integrations/${integ.id}`, { autoAccept: newVal });
+    integ.autoAccept = newVal;
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao atualizar aceite automático' });
+  }
+}
+
 async function deleteInteg(integ) {
   const res = await Swal.fire({
     title: 'Remover integração',
@@ -340,6 +350,18 @@ onUnmounted(() => { clearRefreshTimers(); });
                 </div>
                 <span v-if="isActive(integ)" class="badge bg-success">Conectado</span>
                 <span v-else class="badge bg-secondary">Desconectado</span>
+              </div>
+              <!-- Auto-accept toggle -->
+              <div v-if="isActive(integ)" class="d-flex align-items-center gap-2">
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" role="switch"
+                    :id="'autoAccept-' + integ.id"
+                    :checked="integ.autoAccept"
+                    @change="toggleAutoAccept(integ)" />
+                  <label class="form-check-label small" :for="'autoAccept-' + integ.id">
+                    Aceite automático
+                  </label>
+                </div>
               </div>
               <div class="d-flex gap-2">
                 <button v-if="!isActive(integ)" class="btn btn-sm btn-outline-primary" @click="openWizardRelink(integ)">

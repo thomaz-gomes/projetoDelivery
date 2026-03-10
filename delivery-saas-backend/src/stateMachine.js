@@ -3,6 +3,8 @@
 // integrations, but prioritize the current pipeline used by the frontend:
 // EM_PREPARO -> SAIU_PARA_ENTREGA -> CONFIRMACAO_PAGAMENTO -> CONCLUIDO
 export const ALLOWED = {
+  // iFood pending acceptance (awaiting manual accept when autoAccept is off)
+  PENDENTE_ACEITE: ['EM_PREPARO', 'CANCELADO'],
   // New pipeline
   EM_PREPARO: ['SAIU_PARA_ENTREGA', 'PRONTO', 'CANCELADO'],
   SAIU_PARA_ENTREGA: ['CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO'],

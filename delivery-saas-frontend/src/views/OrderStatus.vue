@@ -42,6 +42,7 @@
                 <div class="d-flex justify-content-between mb-1"><span class="text-muted">Subtotal</span><span>{{ formatCurrency(subtotal) }}</span></div>
                 <div v-if="couponDiscount > 0" class="d-flex justify-content-between mb-1" style="color: #198754;"><span>{{ order?.couponCode ? `Cupom (${order.couponCode})` : 'Cupom' }}</span><span>-{{ formatCurrency(couponDiscount) }}</span></div>
                 <div class="d-flex justify-content-between mb-1"><span class="text-muted">Taxa de entrega</span><span>{{ deliveryFee > 0 ? formatCurrency(deliveryFee) : 'Grátis' }}</span></div>
+                <div v-if="additionalFees > 0" class="d-flex justify-content-between mb-1"><span class="text-muted">Taxa de serviço</span><span>{{ formatCurrency(additionalFees) }}</span></div>
                 <div v-if="appliedCashback > 0" class="d-flex justify-content-between mb-1" style="color: #198754;"><span>Cashback usado</span><span>-{{ formatCurrency(appliedCashback) }}</span></div>
                 <div class="d-flex justify-content-between total-line pt-2 mt-1"><span class="fw-semibold">Total</span><span class="fw-semibold">{{ formatCurrency(Number(order?.total||0)) }}</span></div>
                 <div v-if="cashbackEarned > 0" class="d-flex justify-content-between mt-2 small" style="color: #198754;"><span><i class="bi bi-cash-stack me-1"></i>Cashback recebido</span><span>+{{ formatCurrency(cashbackEarned) }}</span></div>
@@ -147,8 +148,18 @@ const socket = ref(null)
 const hasStoredPhone = computed(()=> {
   try { return !!(JSON.parse(localStorage.getItem(`public_customer_${companyId}`)||'null')||{}).contact } catch { return false }
 })
-const subtotal = computed(()=> (order.value?.items||[]).reduce((s,it)=> s + (Number(it.price||0)*Number(it.quantity||1)),0))
+const subtotal = computed(()=> {
+  // iFood: prefer total.subTotal from payload (avoids double-counting option prices)
+  const ip = order.value?.payload?.order || order.value?.payload || {};
+  const ifoodSub = ip.total?.subTotal;
+  if (ifoodSub != null && Number(ifoodSub) > 0) return Number(ifoodSub);
+  return (order.value?.items||[]).reduce((s,it)=> s + (Number(it.price||0)*Number(it.quantity||1)),0);
+})
 const deliveryFee = computed(()=> Number(order.value?.deliveryFee||0))
+const additionalFees = computed(()=> {
+  const ip = order.value?.payload?.order || order.value?.payload || {};
+  return Number(ip.total?.additionalFees ?? 0) || 0;
+})
 const couponDiscount = computed(()=> Number(order.value?.couponDiscount||0))
 const appliedCashback = computed(() => Number(order.value?.payload?.appliedCashback || 0))
 const cashbackEarned = computed(() => Number(order.value?.cashbackEarned || 0))

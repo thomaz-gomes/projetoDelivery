@@ -225,7 +225,11 @@ export function determineStatusFromIFoodEvent(payload, orderObj) {
   }
 
   // Delivery mappings
-  if (code === 'PLACED') return 'EM_PREPARO';
+  // PLACED = order just arrived, NOT yet accepted — always starts as PENDENTE_ACEITE.
+  // Auto-accept (when enabled) will call confirm + startPreparation and move to EM_PREPARO.
+  if (code === 'PLACED') return 'PENDENTE_ACEITE';
+  // CONFIRMED = merchant accepted the order on iFood — move to EM_PREPARO
+  if (code === 'CONFIRMED' || code === 'CFM') return 'EM_PREPARO';
   if (code === 'DISPATCHED' || code === 'DSP') return 'SAIU_PARA_ENTREGA';
   if (code === 'CONCLUDED' || code === 'CON') {
     // if payment is ONLINE -> mark as CONCLUIDO directly, otherwise confirmation step
@@ -279,6 +283,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     deliveryFee: mapped.deliveryFee,
     couponDiscount: mapped.couponDiscount || null,
     couponCode: mapped.couponCode || null,
+    orderType: mapped.orderType || null,
     payload: mapped.raw,
   };
 
@@ -329,15 +334,25 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
   }
 
   if (!exists) {
+    // Do not create new orders for terminal statuses (CANCELADO, CONCLUIDO, etc.)
+    // These events refer to orders that were never in our system — no point creating them.
+    const terminalStatuses = ['CANCELADO', 'CONCLUIDO', 'CONFIRMACAO_PAGAMENTO'];
+    if (terminalStatuses.includes(mapped.status)) {
+      console.log('[iFood Processor] skipping creation of order with terminal status:', mapped.status, 'externalId:', mapped.externalId);
+      return { order: null, created: false, statusChanged: false, from: null, to: null };
+    }
+
     // compute displaySimple for today's orders for this company
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const existingCount = await prisma.order.count({ where: { companyId, createdAt: { gte: startOfDay } } });
     const displaySimple = existingCount + 1;
 
+    const initialStatus = mapped.status || 'EM_PREPARO';
     const created = await prisma.order.create({
       data: {
         ...baseData,
+        status: initialStatus,
         storeId: storeId || null,
         displaySimple,
         items: {
@@ -360,12 +375,12 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
           }),
         },
         histories: {
-          create: [{ from: null, to: 'EM_PREPARO', reason: 'iFood webhook' }],
+          create: [{ from: null, to: initialStatus, reason: 'iFood webhook' }],
         },
       },
       include: { items: true, histories: true },
     });
-    return { order: created, created: true, statusChanged: true, from: null, to: 'EM_PREPARO' };
+    return { order: created, created: true, statusChanged: true, from: null, to: initialStatus };
   }
 
   // se já existe, atualizamos campos principais — mas NÃO sobrescrevemos o
@@ -459,6 +474,24 @@ export async function processIFoodWebhook(eventId) {
         throw new Error('Não foi possível determinar companyId a partir do payload (merchantId ausente).');
       }
       const { companyId, storeId } = resolved;
+
+      // Auto-populate merchantId on the integration if missing (fixes x-polling-merchants warning)
+      try {
+        const payloadMerchantId = payload?.merchantId || payload?.order?.merchant?.id || null;
+        if (payloadMerchantId) {
+          const integ = await prisma.apiIntegration.findFirst({
+            where: { companyId, provider: 'IFOOD' },
+            select: { id: true, merchantId: true, merchantUuid: true },
+          });
+          if (integ && !integ.merchantId && !integ.merchantUuid) {
+            await prisma.apiIntegration.update({
+              where: { id: integ.id },
+              data: { merchantId: String(payloadMerchantId) },
+            });
+            console.log('[iFood Processor] auto-populated merchantId:', payloadMerchantId);
+          }
+        }
+      } catch (e) { /* non-fatal */ }
 
       // If payload lacks full order details but has an orderId, try fetching full details
       const orderId = payload?.orderId || payload?.order?.id || payload?.id || null;
@@ -618,8 +651,77 @@ export async function processIFoodWebhook(eventId) {
         console.warn('[iFood Processor] integration code matching failed (continuing):', e?.message || e)
       }
 
+      // Check autoAccept setting
+      let autoAcceptEnabled = false;
+      try {
+        const integWhere = { companyId, provider: 'IFOOD' };
+        if (storeId) integWhere.storeId = storeId;
+        const integ = await prisma.apiIntegration.findFirst({
+          where: integWhere,
+          select: { autoAccept: true },
+        });
+        autoAcceptEnabled = !!(integ && integ.autoAccept);
+      } catch (e) { /* default false */ }
+
+      // PLACED always maps to PENDENTE_ACEITE (order not yet accepted on iFood).
+      // The status stays PENDENTE_ACEITE for upsert — auto-accept will promote to EM_PREPARO after confirming on iFood.
+
       const res = await upsertOrder({ companyId, mapped, storeId });
       const savedOrder = res && res.order ? res.order : res;
+
+      // If upsertOrder skipped creation (e.g. terminal status for non-existing order), mark as processed and return
+      if (!savedOrder || !savedOrder.id) {
+        await prisma.webhookEvent.update({ where: { id: evt.id }, data: { status: 'PROCESSED', processedAt: new Date(), error: null } });
+        return;
+      }
+
+      // Auto-accept on iFood: if enabled and order is PENDENTE_ACEITE (just placed),
+      // call confirm + startPreparation on iFood API, then update internal status to EM_PREPARO
+      console.log('[iFood Auto-accept] check:', { autoAcceptEnabled, orderStatus: savedOrder.status, externalId: savedOrder.externalId, created: res.created });
+      if (autoAcceptEnabled && savedOrder.status === 'PENDENTE_ACEITE' && savedOrder.externalId) {
+        let confirmOk = false;
+        try {
+          const { getIFoodAccessToken } = await import('../integrations/ifood/oauth.js');
+          const token = await getIFoodAccessToken(companyId);
+          console.log('[iFood Auto-accept] token obtained, length:', token ? token.length : 0);
+          const { default: axios } = await import('axios');
+          const baseUrl = (process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br').replace(/\/+$/, '');
+          const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+          const oid = encodeURIComponent(savedOrder.externalId);
+          try {
+            const r1 = await axios.post(`${baseUrl}/order/v1.0/orders/${oid}/confirm`, {}, { headers, timeout: 15000 });
+            console.log('[iFood Auto-accept] confirm OK, status:', r1.status);
+            confirmOk = true;
+          } catch (e) { console.warn('[iFood Auto-accept] confirm failed:', e?.response?.status, JSON.stringify(e?.response?.data)); }
+          if (confirmOk) {
+            try {
+              const r2 = await axios.post(`${baseUrl}/order/v1.0/orders/${oid}/startPreparation`, {}, { headers, timeout: 15000 });
+              console.log('[iFood Auto-accept] startPreparation OK, status:', r2.status);
+            } catch (e) { console.warn('[iFood Auto-accept] startPreparation failed:', e?.response?.status, JSON.stringify(e?.response?.data)); }
+          }
+        } catch (e) {
+          console.error('[iFood Auto-accept] exception:', e?.message);
+        }
+
+        // After successful confirm, update internal status to EM_PREPARO
+        if (confirmOk) {
+          try {
+            const freshOrder = await prisma.order.update({
+              where: { id: savedOrder.id },
+              data: {
+                status: 'EM_PREPARO',
+                histories: { create: { from: 'PENDENTE_ACEITE', to: 'EM_PREPARO', reason: 'iFood auto-accept' } },
+              },
+              include: { items: true, histories: true, rider: true },
+            });
+            // Replace savedOrder reference so socket emit uses the updated object
+            Object.assign(savedOrder, freshOrder);
+            console.log('[iFood Auto-accept] internal status updated to EM_PREPARO for order', savedOrder.id);
+          } catch (e) {
+            console.warn('[iFood Auto-accept] failed to update internal status:', e?.message);
+          }
+        }
+      }
 
       // attempt to decrement stock for items that reference technical sheets (best-effort)
       try {
@@ -631,7 +733,7 @@ export async function processIFoodWebhook(eventId) {
       // Emit socket events depending on create vs update
       try {
         if (res && res.created) {
-          console.log('[iFood Processor] emitting novo-pedido for created order', savedOrder && savedOrder.id);
+          console.log('[iFood Processor] emitting novo-pedido for created order', savedOrder && savedOrder.id, 'status:', savedOrder && savedOrder.status);
           emitirNovoPedido(savedOrder);
           // Notify customer with order summary on new orders
           try { await notifyCustomerOrderSummary(savedOrder.id); } catch (e) { console.warn('[iFood Processor] notifyCustomerOrderSummary failed', e && e.message); }

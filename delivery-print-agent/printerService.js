@@ -280,18 +280,25 @@ function renderJsonBlocks(blocks, context) {
           if (!Array.isArray(items) || items.length === 0) break;
           for (const item of items) {
             const merged = Object.assign({}, context, item);
-            // Linha do item
+            // Linha do item (total incluindo adicionais)
             if (block.itemBold) ntp.bold(true);
             if (block.itemSize === 'lg') ntp.setTextDoubleHeight();
             else if (block.itemSize === 'xl') ntp.setTextQuadArea();
-            ntp.println(replacePlaceholders('{{item_qty}}x  {{item_name}}  R$ {{item_price}}', merged));
+            ntp.println(replacePlaceholders('{{item_qty}}x {{item_name}}  R${{item_price}}', merged));
             ntp.setTextNormal();
             ntp.bold(false);
-            // Opções
+            // Hint de preço unitário quando qty > 1
+            if (item.item_has_unit_hint) {
+              ntp.println(replacePlaceholders('  (R${{item_unit_price}}/un)', merged));
+            }
+            // Opções: qty por unidade + total
             if (Array.isArray(item.item_options)) {
               for (const opt of item.item_options) {
                 const optMerged = Object.assign({}, merged, opt);
-                ntp.println(replacePlaceholders('  -- {{option_qty}}x {{option_name}}  R$ {{option_price}}', optMerged));
+                ntp.println(replacePlaceholders(' +{{option_qty}}/un {{option_name}} R${{option_price}}/un', optMerged));
+                if (opt.has_total) {
+                  ntp.println(replacePlaceholders('  (={{option_total_qty}} total)', optMerged));
+                }
               }
             }
             // Observação do item
@@ -428,11 +435,17 @@ function renderV2AsText(blocks, context, width) {
           if (!Array.isArray(items) || items.length === 0) break;
           for (const item of items) {
             const merged = Object.assign({}, context, item);
-            lines.push(replacePlaceholders('{{item_qty}}x  {{item_name}}  R$ {{item_price}}', merged));
+            lines.push(replacePlaceholders('{{item_qty}}x {{item_name}}  R${{item_price}}', merged));
+            if (item.item_has_unit_hint) {
+              lines.push(replacePlaceholders('  (R${{item_unit_price}}/un)', merged));
+            }
             if (Array.isArray(item.item_options)) {
               for (const opt of item.item_options) {
                 const optMerged = Object.assign({}, merged, opt);
-                lines.push(replacePlaceholders('  -- {{option_qty}}x {{option_name}}  R$ {{option_price}}', optMerged));
+                lines.push(replacePlaceholders(' +{{option_qty}}/un {{option_name}} R${{option_price}}/un', optMerged));
+                if (opt.has_total) {
+                  lines.push(replacePlaceholders('  (={{option_total_qty}} total)', optMerged));
+                }
               }
             }
             if (item.notes) lines.push('  OBS: ' + item.notes);

@@ -306,6 +306,116 @@ ordersRouter.patch('/:id', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (re
   return res.json(updated);
 });
 
+// Accept or reject a pending iFood order (PENDENTE_ACEITE -> EM_PREPARO or CANCELADO)
+ordersRouter.post('/:id/accept', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  try {
+    const order = await prisma.order.findFirst({ where: { id, companyId } });
+    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+    if (order.status !== 'PENDENTE_ACEITE') return res.status(400).json({ message: 'Pedido não está pendente de aceite' });
+
+    // Confirm on iFood
+    let ifoodAcceptResult = null;
+    if (order.externalId) {
+      try {
+        const { getIFoodAccessToken } = await import('../integrations/ifood/oauth.js');
+        const token = await getIFoodAccessToken(companyId);
+        console.log('[Orders] iFood accept: got token, length:', token ? token.length : 0, 'externalId:', order.externalId);
+        const { default: axios } = await import('axios');
+        const baseUrl = (process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br').replace(/\/+$/, '');
+        const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+        const oid = encodeURIComponent(order.externalId);
+
+        // Step 1: confirm
+        try {
+          const r1 = await axios.post(`${baseUrl}/order/v1.0/orders/${oid}/confirm`, {}, { headers, timeout: 15000 });
+          console.log('[Orders] iFood confirm OK, status:', r1.status);
+        } catch (e1) {
+          console.warn('[Orders] iFood confirm failed:', e1?.response?.status, JSON.stringify(e1?.response?.data));
+          ifoodAcceptResult = { step: 'confirm', status: e1?.response?.status, data: e1?.response?.data };
+        }
+
+        // Step 2: startPreparation
+        try {
+          const r2 = await axios.post(`${baseUrl}/order/v1.0/orders/${oid}/startPreparation`, {}, { headers, timeout: 15000 });
+          console.log('[Orders] iFood startPreparation OK, status:', r2.status);
+        } catch (e2) {
+          console.warn('[Orders] iFood startPreparation failed:', e2?.response?.status, JSON.stringify(e2?.response?.data));
+          if (!ifoodAcceptResult) ifoodAcceptResult = { step: 'startPreparation', status: e2?.response?.status, data: e2?.response?.data };
+        }
+
+        if (!ifoodAcceptResult) console.log('[Orders] iFood accept OK for', order.externalId);
+      } catch (e) {
+        console.warn('[Orders] iFood accept failed:', e?.message);
+        ifoodAcceptResult = { step: 'auth', error: e?.message };
+      }
+    } else {
+      console.log('[Orders] accept: no externalId, skipping iFood notification');
+    }
+
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        status: 'EM_PREPARO',
+        histories: { create: { from: 'PENDENTE_ACEITE', to: 'EM_PREPARO', byUserId: req.user.id, reason: 'Aceite manual' } },
+      },
+      include: { items: true, histories: true, rider: true },
+    });
+
+    try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) {}
+    res.json(updated);
+  } catch (e) {
+    console.error('[Orders] accept failed:', e);
+    res.status(500).json({ message: e.message });
+  }
+});
+
+// Reject a pending iFood order (PENDENTE_ACEITE -> CANCELADO)
+ordersRouter.post('/:id/reject', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  try {
+    const order = await prisma.order.findFirst({ where: { id, companyId } });
+    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+    if (order.status !== 'PENDENTE_ACEITE') return res.status(400).json({ message: 'Pedido não está pendente de aceite' });
+
+    // Cancel on iFood (request cancellation)
+    if (order.externalId) {
+      try {
+        const { getIFoodAccessToken } = await import('../integrations/ifood/oauth.js');
+        const token = await getIFoodAccessToken(companyId);
+        const { default: axios } = await import('axios');
+        const baseUrl = (process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br').replace(/\/+$/, '');
+        const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+        const oid = encodeURIComponent(order.externalId);
+        await axios.post(`${baseUrl}/order/v1.0/orders/${oid}/requestCancellation`, {
+          reason: 'Pedido recusado pelo estabelecimento',
+          cancellationCode: '501',
+        }, { headers, timeout: 15000 });
+        console.log('[Orders] iFood reject OK for', order.externalId);
+      } catch (e) {
+        console.warn('[Orders] iFood reject failed (continuing):', e?.response?.status, e?.response?.data || e?.message);
+      }
+    }
+
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        status: 'CANCELADO',
+        histories: { create: { from: 'PENDENTE_ACEITE', to: 'CANCELADO', byUserId: req.user.id, reason: 'Recusado manualmente' } },
+      },
+      include: { items: true, histories: true, rider: true },
+    });
+
+    try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) {}
+    res.json(updated);
+  } catch (e) {
+    console.error('[Orders] reject failed:', e);
+    res.status(500).json({ message: e.message });
+  }
+});
+
 // Admin: patch order status (manual change)
 // allow ADMIN and store-level users to change status from the admin panel / PDV
 ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (req, res) => {

@@ -198,38 +198,59 @@ function buildContext(order, settings = {}) {
     const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
     totalItensCount += qty;
     const price = Number(it.price ?? it.unitPrice ?? it.unit_price ?? it.amount ?? 0) || 0;
-    subtotal += price * qty;
 
     // iFood usa "subitems" para complementos/adicionais; outros usam options/extras
     const rawOptions = it.subitems || it.garnishItems || it.garnishes
       || it.options || it.extras || it.modifiers || it.addons || it.subItems || [];
+    let optsPerUnit = 0;
     const itemOptions = Array.isArray(rawOptions) ? rawOptions.map(ex => {
       const inner = ex && ex.option ? ex.option : ex;
       const optQty = Number(inner.quantity ?? inner.qty ?? ex.quantity ?? ex.qty ?? 1) || 1;
-      const optPrice = Number(inner.unitPrice ?? inner.price ?? inner.amount ?? ex.unitPrice ?? ex.price ?? ex.amount ?? 0) || 0;
+      // iFood subitems: unitPrice = per-unit, price/totalPrice = line total per parent unit
+      // Try unitPrice first (true per-unit); if not available, derive from price/totalPrice
+      let optUnitPrice = Number(inner.unitPrice ?? 0) || 0;
+      if (!optUnitPrice) {
+        const rawPrice = Number(inner.price ?? inner.amount ?? ex.price ?? ex.amount ?? 0) || 0;
+        // If totalPrice also exists and equals rawPrice, it's likely the line total — derive unit
+        const rawTotal = Number(inner.totalPrice ?? ex.totalPrice ?? 0) || 0;
+        if (rawTotal && rawTotal === rawPrice && optQty > 1) {
+          optUnitPrice = rawPrice / optQty;
+        } else {
+          optUnitPrice = rawPrice;
+        }
+      }
+      optsPerUnit += optUnitPrice * optQty;
       const totalOptQty = optQty * qty;
-      subtotal += optPrice * optQty * qty;
       return {
-        option_qty: String(totalOptQty),
+        option_qty: String(optQty),
+        option_total_qty: String(totalOptQty),
         option_name: (inner.name || inner.title || inner.description || '').slice(0, 40),
-        option_price: optPrice.toFixed(2)
+        option_price: optUnitPrice.toFixed(2),
+        has_total: qty > 1 ? '1' : ''
       };
     }) : [];
+
+    const lineTotal = (price + optsPerUnit) * qty;
+    subtotal += lineTotal;
 
     return {
       item_qty: String(qty),
       item_name: (it.name || it.title || it.productName || '').slice(0, 30),
-      item_price: (price * qty).toFixed(2),
+      item_price: lineTotal.toFixed(2),
       item_unit_price: price.toFixed(2),
+      item_has_unit_hint: qty > 1 ? '1' : '',
       item_options: itemOptions,
       notes: it.notes || it.observations || it.observation || ''
     };
   });
 
-  // Totais
-  const taxaEntrega = Number(o.deliveryFee ?? payload.deliveryFee ?? 0) || 0;
-  const desconto = Number(o.couponDiscount ?? o.discount ?? o.discountAmount ?? 0) || 0;
-  const total = Number(o.total ?? o.amount ?? o.orderAmount ?? (subtotal + taxaEntrega - desconto)) || 0;
+  // Totais — preferir subTotal do iFood quando disponível (evita recalcular)
+  const ifoodSubTotal = Number(ifoodPayload.total?.subTotal ?? 0) || 0;
+  if (ifoodSubTotal > 0) subtotal = ifoodSubTotal;
+  const taxaEntrega = Number(o.deliveryFee ?? payload.deliveryFee ?? ifoodPayload.total?.deliveryFee ?? 0) || 0;
+  const additionalFees = Number(ifoodPayload.total?.additionalFees ?? 0) || 0;
+  const desconto = Number(o.couponDiscount ?? o.discount ?? o.discountAmount ?? ifoodPayload.total?.benefits ?? 0) || 0;
+  const total = Number(o.total ?? o.amount ?? o.orderAmount ?? (subtotal + taxaEntrega + additionalFees - desconto)) || 0;
 
   // Pagamentos — iFood usa { methods: [], prepaid } (envelope ou direto)
   const ifoodPayments = ifoodPayload.payments || null;
@@ -330,6 +351,7 @@ function buildContext(order, settings = {}) {
     total_itens_count: String(totalItensCount),
     subtotal: subtotal.toFixed(2),
     taxa_entrega: taxaEntrega ? taxaEntrega.toFixed(2) : '',
+    taxa_servico: additionalFees ? additionalFees.toFixed(2) : '',
     desconto: desconto ? desconto.toFixed(2) : '',
     total: total.toFixed(2),
     pagamentos,

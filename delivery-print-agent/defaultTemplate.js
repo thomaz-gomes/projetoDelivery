@@ -28,14 +28,18 @@
  *
  * Blocos iteráveis:
  *   {{#each items}} ... {{/each}}
- *     {{item_qty}}    - Quantidade
- *     {{item_name}}   - Nome do item
- *     {{item_price}}  - Preço total do item
- *     {{notes}}       - Observação do item
+ *     {{item_qty}}          - Quantidade
+ *     {{item_name}}         - Nome do item
+ *     {{item_price}}        - Preco total da linha (item + adicionais) x qty
+ *     {{item_unit_price}}   - Preco unitario do item
+ *     {{item_has_unit_hint}}- "1" quando qty > 1 (para exibir /un)
+ *     {{notes}}             - Observacao do item
  *     {{#each item_options}} ... {{/each}}
- *       {{option_qty}}   - Quantidade da opção
- *       {{option_name}}  - Nome da opção
- *       {{option_price}} - Preço da opção
+ *       {{option_qty}}       - Qtd por unidade do item pai
+ *       {{option_total_qty}} - Qtd total (option_qty x item_qty)
+ *       {{option_name}}      - Nome da opcao
+ *       {{option_price}}     - Preco unitario da opcao
+ *       {{has_total}}        - "1" quando item pai qty > 1
  *
  *   {{#each pagamentos}} ... {{/each}}
  *     {{payment_method}} - Método de pagamento
@@ -70,9 +74,15 @@ Cod. Coleta: {{codigo_coleta}}
 
 QT  Descricao                        Valor
 {{#each items}}
-{{item_qty}}x  {{item_name}}  R$ {{item_price}}
+{{item_qty}}x {{item_name}}  R${{item_price}}
+{{#if item_has_unit_hint}}
+  (R${{item_unit_price}}/un)
+{{/if}}
 {{#each item_options}}
-  -- {{option_qty}}x {{option_name}}  R$ {{option_price}}
+ +{{option_qty}}/un {{option_name}} R${{option_price}}/un
+{{#if has_total}}
+  (={{option_total_qty}} total)
+{{/if}}
 {{/each}}
 {{#if notes}}
   OBS: {{notes}}
@@ -84,6 +94,9 @@ Qtd itens: {{total_itens_count}}
 Subtotal:              R$ {{subtotal}}
 {{#if taxa_entrega}}
 Taxa entrega:          R$ {{taxa_entrega}}
+{{/if}}
+{{#if taxa_servico}}
+Taxa servico:          R$ {{taxa_servico}}
 {{/if}}
 {{#if desconto}}
 Desconto:              R$ {{desconto}}
@@ -136,6 +149,7 @@ const DEFAULT_TEMPLATE_V2 = {
     { t: 'text', c: 'Qtd itens: {{total_itens_count}}' },
     { t: 'text', c: 'Subtotal: R$ {{subtotal}}' },
     { t: 'cond', key: 'taxa_entrega', c: 'Taxa entrega: R$ {{taxa_entrega}}' },
+    { t: 'cond', key: 'taxa_servico', c: 'Taxa servico: R$ {{taxa_servico}}' },
     { t: 'cond', key: 'desconto', c: 'Desconto: R$ {{desconto}}' },
     { t: 'text', c: 'TOTAL: R$ {{total}}', b: true, s: 'lg' },
     { t: 'sep' },

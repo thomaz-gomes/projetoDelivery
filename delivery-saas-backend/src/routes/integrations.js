@@ -78,6 +78,7 @@ integrationsRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       merchantId: body.merchantId ?? existing.merchantId,
       merchantUuid: body.merchantUuid ?? existing.merchantUuid,
       enabled: body.enabled ?? existing.enabled,
+      autoAccept: body.autoAccept ?? existing.autoAccept,
       storeId: body.storeId ?? existing.storeId,
       authMode: body.authMode ?? existing.authMode,
     } });
