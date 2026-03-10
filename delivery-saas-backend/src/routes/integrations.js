@@ -229,6 +229,14 @@ integrationsRouter.post('/ifood/poll', requireRole('ADMIN'), async (req, res) =>
       try {
         // upsert webhook event by provider event id
         const eventId = ev.id || ev.eventId || null;
+        // Check if event was already processed (ACK failed on previous poll)
+        const existingEvent = eventId ? await prisma.webhookEvent.findUnique({ where: { eventId } }) : null;
+        if (existingEvent && existingEvent.status === 'PROCESSED') {
+          console.log('[iFood Poll] skipping already-processed event:', eventId);
+          processed.push(existingEvent);
+          continue;
+        }
+
         const we = await prisma.webhookEvent.upsert({
           where: { eventId: eventId || '' },
           update: { payload: ev, status: 'RECEIVED' },

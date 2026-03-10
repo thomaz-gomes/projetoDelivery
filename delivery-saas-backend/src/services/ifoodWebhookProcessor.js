@@ -455,6 +455,11 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
 export async function processIFoodWebhook(eventId) {
   const evt = await prisma.webhookEvent.findUnique({ where: { id: eventId } });
   if (!evt) return;
+  // Skip events that were already successfully processed (prevents re-emit on ACK failure + re-poll)
+  if (evt.status === 'PROCESSED') {
+    console.log('[iFood Processor] skipping already-processed event', eventId, 'eventId:', evt.eventId);
+    return;
+  }
 
   try {
     const payload = evt.payload;
