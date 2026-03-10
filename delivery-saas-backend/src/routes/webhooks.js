@@ -304,7 +304,7 @@ webhooksRouter.post("/ifood", async (req, res) => {
       create: matchedItems.map((it) => ({
         name: it.name || "Item",
         quantity: Number(it.quantity || 1),
-        price: Number(it.totalPrice || it.price || 0),
+        price: Number(it.unitPrice || it.price || 0) || (Number(it.totalPrice || 0) / (Number(it.quantity || 1) || 1)),
         productId: it._matchedProductId || null,
       })),
     };
@@ -756,7 +756,7 @@ webhooksRouter.get("/generate-test", async (req, res) => {
         deliveryFee: Number(orderPayload.total?.deliveryFee ?? orderPayload.deliveryFee ?? 0),
         payload: orderPayload,
         items: {
-          create: (orderPayload.items || []).map((it) => ({ name: it.name || 'Item', quantity: Number(it.quantity || it.qtd || 1), price: Number(it.totalPrice || it.unitPrice || it.price || 0), productId: it._matchedProductId || null }))
+          create: (orderPayload.items || []).map((it) => ({ name: it.name || 'Item', quantity: Number(it.quantity || it.qtd || 1), price: Number(it.unitPrice || it.price || 0) || (Number(it.totalPrice || 0) / (Number(it.quantity || 1) || 1)), productId: it._matchedProductId || null }))
         },
         histories: { create: [{ to: 'EM_PREPARO', reason: 'Teste iFood (generate-test)' }] }
       },

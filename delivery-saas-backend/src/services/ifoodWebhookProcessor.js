@@ -421,7 +421,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
           const options = subs.length > 0 ? subs.map(s => ({
             name: s.name,
             quantity: Number(s.quantity || 1),
-            price: Number(s.totalPrice || s.price || 0),
+            price: Number(s.unitPrice || s.price || 0) || (Number(s.totalPrice || 0) / (Number(s.quantity || 1) || 1)),
             _matchedProductId: s._matchedProductId || null,
           })) : null
           return {

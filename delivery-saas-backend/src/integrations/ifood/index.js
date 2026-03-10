@@ -98,14 +98,14 @@ async function upsertIFoodOrder(companyId, orderData) {
         update: {
           name: item.name,
           quantity: item.quantity,
-          price: Number(item.totalPrice || item.unitPrice || 0),
+          price: Number(item.unitPrice || item.price || 0) || (Number(item.totalPrice || 0) / (Number(item.quantity || 1) || 1)),
         },
         create: {
           id: `${externalId}_${item.id}`,
           orderId: order.id,
           name: item.name,
           quantity: item.quantity,
-          price: Number(item.totalPrice || item.unitPrice || 0),
+          price: Number(item.unitPrice || item.price || 0) || (Number(item.totalPrice || 0) / (Number(item.quantity || 1) || 1)),
         },
       });
     }

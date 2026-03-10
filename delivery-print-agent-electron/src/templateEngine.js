@@ -68,7 +68,6 @@ function render(order, printer) {
     } else if (line.type === 'size') {
       const m = line.mult || 1;
       parts.push(ESCPos.charSize(m, m));
-      if (m === 1) parts.push(ESCPos.printMode({ bold: false, doubleH: false, doubleW: false, smallFont: false }));
     } else if (line.type === 'align') {
       parts.push(ESCPos.align(line.value));
     } else if (line.type === 'feed') {
@@ -200,13 +199,12 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
           const qty  = item.quantity || 1;
           const name = item.name || item.productName || '';
 
-          // Preço total do item (base + opções) × quantidade
+          // Preço: item.price × qty + SUM(opt.price × opt.qty) × qty  (mesmo cálculo do SaleDetails.vue)
           const basePrice  = _toNum(item.price);
           const optsTotal  = Array.isArray(item.options)
-            ? item.options.reduce((s, o) => s + _toNum(o.price || 0), 0)
+            ? item.options.reduce((s, o) => s + _toNum(o.price || 0) * (Number(o.quantity || 1)), 0)
             : 0;
-          const unitPrice  = basePrice + optsTotal;
-          const itemTotal  = unitPrice * qty;
+          const itemTotal  = (basePrice * qty) + (optsTotal * qty);
           const priceVal   = _fmtN(itemTotal);
 
           // Linha do item: nome à esquerda, preço à direita (ROW)
@@ -220,14 +218,14 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
           parts.push(ESCPos.text(rowLine, charset));
           parts.push(ESCPos.bold(false));
 
-          // Complementos / opções do item
+          // Complementos / opções do item (exibe preço unitário da opção, como no SaleDetails.vue)
           if (Array.isArray(item.options) && item.options.length > 0) {
             for (const opt of item.options) {
               const optName  = opt.name || '';
               const optPrice = _toNum(opt.price || 0);
+              const oqty     = Number(opt.quantity || 1);
               let optLine;
-              if (opt.quantity != null) {
-                const oqty = Number(opt.quantity) || 1;
+              if (oqty > 1) {
                 optLine = optPrice > 0
                   ? `   -${oqty}x ${optName}: R$ ${_fmtN(optPrice)}`
                   : `   -${oqty}x ${optName}`;
@@ -273,7 +271,6 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         // Reset tamanho
         if (pSize !== 'normal') {
           parts.push(ESCPos.charSize(1, 1));
-          parts.push(ESCPos.printMode({ bold: false, doubleH: false, doubleW: false, smallFont: false }));
         }
         break;
       }
@@ -383,11 +380,12 @@ function buildBlockContext(order) {
   // ── Subtotal ─────────────────────────────────────────────────────────────────
   // Order não tem campo subtotal no schema — calcular da soma dos itens.
   // Inclui preço base dos itens × quantidade.
+  // Mesmo cálculo do SaleDetails.vue: item.price × qty + SUM(opt.price × opt.qty) × qty
   const itemsTotal = (order.items || []).reduce((s, i) => {
-    const base = _toNum(i.price) * (i.quantity || 1);
-    // Soma opções/complementos do item
+    const qty = i.quantity || 1;
+    const base = _toNum(i.price) * qty;
     const optsTotal = Array.isArray(i.options)
-      ? i.options.reduce((os, o) => os + _toNum(o.price || 0), 0) * (i.quantity || 1)
+      ? i.options.reduce((os, o) => os + _toNum(o.price || 0) * Number(o.quantity || 1), 0) * qty
       : 0;
     return s + base + optsTotal;
   }, 0);
@@ -610,10 +608,14 @@ function buildContext(order, printer) {
   const localizador_bc = ifoodPl.customer?.phones?.[0]?.localizer || ifoodPl.customer?.phone?.localizer || '';
   const localizador_suffix = localizador_bc ? `, Localizador: ${localizador_bc}` : '';
 
-  // Totais numéricos
+  // Totais numéricos — mesmo cálculo do SaleDetails.vue
   const subtotalVal = _toNum(order.subtotal) || (order.items || []).reduce((s, i) => {
-    const u = _toNum(i.price) + (Array.isArray(i.options) ? i.options.reduce((os, o) => os + _toNum(o.price || 0), 0) : 0);
-    return s + u * (i.quantity || 1);
+    const qty = i.quantity || 1;
+    const base = _toNum(i.price) * qty;
+    const opts = Array.isArray(i.options)
+      ? i.options.reduce((os, o) => os + _toNum(o.price || 0) * Number(o.quantity || 1), 0) * qty
+      : 0;
+    return s + base + opts;
   }, 0);
   const taxaVal     = _toNum(order.deliveryFee || 0);
   let descontoVal = _toNum(order.discount || order.couponDiscount || 0);
@@ -647,20 +649,19 @@ function buildContext(order, printer) {
     endereco_rua_ok: !!(street || flatAddress),
 
     // Itens com complementos/opções incluídos no preço
+    // Mesmo cálculo do SaleDetails.vue: item.price × qty + SUM(opt.price × opt.qty) × qty
     items: (order.items || []).map((item) => {
       const qty     = item.quantity || 1;
       const base    = _toNum(item.price);
       const optsSum = Array.isArray(item.options)
-        ? item.options.reduce((s, o) => s + _toNum(o.price || 0), 0)
+        ? item.options.reduce((s, o) => s + _toNum(o.price || 0) * Number(o.quantity || 1), 0)
         : 0;
-      const unit    = base + optsSum;
+      const itemTotal = (base * qty) + (optsSum * qty);
       const optLines = Array.isArray(item.options) && item.options.length > 0
         ? item.options.map(o => {
-            const op  = _toNum(o.price || 0);
-            // Se a opção tem quantidade explícita (iFood garnish/subitem), usa formato "-Nx Nome"
-            // Caso contrário, usa "+ Nome" (opções do sistema interno)
-            if (o.quantity != null) {
-              const oqty = Number(o.quantity) || 1;
+            const op   = _toNum(o.price || 0);
+            const oqty = Number(o.quantity || 1);
+            if (oqty > 1) {
               return `   -${oqty}x ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}`;
             }
             return `   + ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}`;
@@ -670,9 +671,9 @@ function buildContext(order, printer) {
         qtd:        String(qty),
         nome:       item.name || item.productName || '',
         obs:        item.notes || item.observation || '',
-        preco:      _fmt(unit),
-        preco_val:  _fmtN(unit * qty),
-        subtotal:   _fmt(unit * qty),
+        preco:      _fmt(base + optsSum),
+        preco_val:  _fmtN(itemTotal),
+        subtotal:   _fmt(itemTotal),
         tem_opcoes: !!(Array.isArray(item.options) && item.options.length > 0),
         opcoes:     optLines,
       };
