@@ -10,7 +10,7 @@
               <i class="bi bi-box-seam me-2 text-primary"></i>Importar Nota / Compra
             </h5>
           </div>
-          <button type="button" class="btn-close" @click="$emit('close')" :disabled="processing"></button>
+          <button type="button" class="btn-close" @click="$emit('close')" :disabled="processing || applying"></button>
         </div>
 
         <!-- Progress Steps -->
@@ -283,15 +283,104 @@
 
           </div>
 
-          <!-- STEP 3: Review (placeholder) -->
+          <!-- STEP 3: Review & Apply -->
           <div v-if="step === 3">
-            <div class="text-center py-5">
-              <i class="bi bi-tools" style="font-size:3rem;color:#6c757d"></i>
-              <h5 class="mt-3 text-muted">Em construcao</h5>
-              <p class="text-muted small">A etapa de revisao sera implementada em breve.</p>
-              <div v-if="importIds.length > 0" class="mt-3">
-                <span class="badge bg-success">{{ importIds.length }} nota(s) processada(s)</span>
-              </div>
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <h6 class="mb-0"><i class="bi bi-list-check me-2"></i>Revisao dos Itens</h6>
+              <span class="badge bg-info">{{ reviewItems.length }} item(ns)</span>
+            </div>
+
+            <!-- Review table -->
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th style="min-width:180px">Item NFe</th>
+                    <th style="width:80px">Qtd</th>
+                    <th style="width:80px">Und</th>
+                    <th style="width:110px">Custo Unit.</th>
+                    <th style="min-width:200px">Match Estoque</th>
+                    <th style="width:80px">Confianca</th>
+                    <th style="width:120px">Acao</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in reviewItems" :key="item._idx" :class="{ 'table-warning': item.createNew }">
+                    <td>
+                      <span class="small fw-semibold">{{ item.xProd }}</span>
+                      <div v-if="item.ncm" class="text-muted" style="font-size:11px">NCM: {{ item.ncm }}</div>
+                    </td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm" v-model.number="item.qCom" min="0" step="0.01" />
+                    </td>
+                    <td>
+                      <select class="form-select form-select-sm" v-model="item.uCom">
+                        <option value="UN">UN</option>
+                        <option value="GR">GR</option>
+                        <option value="KG">KG</option>
+                        <option value="ML">ML</option>
+                        <option value="L">L</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm" v-model.number="item.vUnCom" min="0" step="0.01" />
+                    </td>
+                    <td>
+                      <!-- Matched ingredient -->
+                      <div v-if="!item.createNew">
+                        <select class="form-select form-select-sm" v-model="item.matchedIngredientId">
+                          <option value="">-- Nenhum --</option>
+                          <option v-for="ing in ingredients" :key="ing.id" :value="ing.id">{{ ing.description }}</option>
+                        </select>
+                      </div>
+                      <!-- Create new inline -->
+                      <div v-else>
+                        <input type="text" class="form-control form-control-sm mb-1" v-model="item.newName" placeholder="Nome do ingrediente" />
+                        <div class="d-flex gap-1">
+                          <select class="form-select form-select-sm" v-model="item.newUnit" style="width:70px">
+                            <option value="UN">UN</option>
+                            <option value="GR">GR</option>
+                            <option value="KG">KG</option>
+                            <option value="ML">ML</option>
+                            <option value="L">L</option>
+                          </select>
+                          <select class="form-select form-select-sm" v-model="item.newGroupId">
+                            <option value="">Grupo</option>
+                            <option v-for="g in ingredientGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+                          </select>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <!-- Confidence indicator -->
+                      <div v-if="!item.createNew && item.confidence != null">
+                        <div class="progress" style="height:6px">
+                          <div
+                            class="progress-bar"
+                            :class="confidenceClass(item.confidence)"
+                            :style="{ width: Math.round(item.confidence * 100) + '%' }"
+                          ></div>
+                        </div>
+                        <span class="small" :class="confidenceTextClass(item.confidence)">{{ Math.round(item.confidence * 100) }}%</span>
+                      </div>
+                      <span v-else class="text-muted small">-</span>
+                    </td>
+                    <td>
+                      <button
+                        class="btn btn-sm"
+                        :class="item.createNew ? 'btn-outline-warning' : 'btn-outline-success'"
+                        @click="item.createNew = !item.createNew"
+                      >
+                        <i :class="item.createNew ? 'bi bi-arrow-return-left' : 'bi bi-plus-lg'" class="me-1"></i>
+                        {{ item.createNew ? 'Vincular' : 'Criar novo' }}
+                      </button>
+                    </td>
+                  </tr>
+                  <tr v-if="reviewItems.length === 0">
+                    <td colspan="7" class="text-center text-muted py-4">Nenhum item para revisar</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -313,14 +402,19 @@
 
         <!-- Footer -->
         <div class="modal-footer">
-          <button class="btn btn-outline-secondary" @click="$emit('close')" :disabled="processing">Cancelar</button>
-          <button v-if="step > 1" class="btn btn-outline-secondary" @click="step--" :disabled="processing">Voltar</button>
+          <button class="btn btn-outline-secondary" @click="$emit('close')" :disabled="processing || applying">Cancelar</button>
+          <button v-if="step > 1" class="btn btn-outline-secondary" @click="step--" :disabled="processing || applying">Voltar</button>
           <button v-if="step === 1" class="btn btn-primary" @click="step = 2" :disabled="!method">
             Proximo <i class="bi bi-arrow-right ms-1"></i>
           </button>
           <button v-if="step === 2" class="btn btn-primary" @click="startParse" :disabled="!canParse || processing">
             <span v-if="processing" class="spinner-border spinner-border-sm me-1"></span>
             Analisar
+          </button>
+          <button v-if="step === 3" class="btn btn-success" @click="applyToStock" :disabled="applying || reviewItems.length === 0">
+            <span v-if="applying" class="spinner-border spinner-border-sm me-1"></span>
+            <i v-else class="bi bi-check-lg me-1"></i>
+            Aplicar ao Estoque
           </button>
         </div>
 
@@ -330,7 +424,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import api from '../api'
 import Swal from 'sweetalert2'
 
@@ -379,6 +473,13 @@ const accessKeyDigits = computed(() => accessKey.value.replace(/\D/g, '').length
 // ── Receipt Photo State ──────────────────────────────────────────────────────
 const photoBase64 = ref([])
 const photoPreviews = ref([])
+
+// ── Step 3: Review State ────────────────────────────────────────────────────
+const reviewItems = ref([])
+const ingredientGroups = ref([])
+const ingredients = ref([])
+const applying = ref(false)
+const currentImportId = ref(null)
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 const canParse = computed(() => {
@@ -552,9 +653,93 @@ async function startParse() {
   }
 }
 
+// ── Step 3: Review & Apply ───────────────────────────────────────────────────
+watch(step, async (newStep) => {
+  if (newStep === 3 && importIds.value.length > 0) {
+    await loadReviewData()
+  }
+})
+
+async function loadReviewData() {
+  try {
+    // Load first import (handle one at a time for now)
+    currentImportId.value = importIds.value[0]
+    const { data: imp } = await api.get(`/purchase-imports/${currentImportId.value}`)
+
+    // parsedItems is the array of matched items
+    const items = Array.isArray(imp.parsedItems) ? imp.parsedItems : []
+    reviewItems.value = items.map((it, idx) => ({
+      ...it,
+      _idx: idx,
+      _editing: false,
+      // For createNew inline fields:
+      newName: it.suggestedName || it.xProd || '',
+      newUnit: it.suggestedUnit || 'UN',
+      newGroupId: '',
+    }))
+
+    // Load existing ingredients for autocomplete
+    const { data: ings } = await api.get('/ingredients')
+    ingredients.value = Array.isArray(ings) ? ings : (ings?.items || [])
+
+    // Load ingredient groups for createNew
+    const { data: groups } = await api.get('/ingredient-groups')
+    ingredientGroups.value = Array.isArray(groups) ? groups : (groups?.items || [])
+  } catch (e) {
+    console.error('Failed to load review data', e)
+    Swal.fire({ icon: 'error', text: 'Erro ao carregar dados para revisao' })
+  }
+}
+
+function confidenceClass(c) {
+  if (c >= 0.9) return 'bg-success'
+  if (c >= 0.7) return 'bg-warning'
+  return 'bg-danger'
+}
+
+function confidenceTextClass(c) {
+  if (c >= 0.9) return 'text-success'
+  if (c >= 0.7) return 'text-warning'
+  return 'text-danger'
+}
+
+async function applyToStock() {
+  if (!currentImportId.value) return
+
+  applying.value = true
+  try {
+    const items = reviewItems.value.map(it => ({
+      xProd: it.xProd,
+      qCom: it.qCom,
+      uCom: it.uCom,
+      vUnCom: it.vUnCom,
+      vProd: it.vProd,
+      matchedIngredientId: it.createNew ? null : (it.matchedIngredientId || null),
+      createNew: !!it.createNew,
+      newName: it.newName || it.suggestedName || it.xProd,
+      newUnit: it.newUnit || 'UN',
+      newGroupId: it.newGroupId || null,
+      confidence: it.confidence,
+      suggestedName: it.suggestedName,
+      suggestedUnit: it.suggestedUnit,
+    }))
+
+    await api.post(`/purchase-imports/${currentImportId.value}/apply`, { items })
+
+    Swal.fire({ icon: 'success', text: 'Estoque atualizado com sucesso!', timer: 2000, showConfirmButton: false })
+    emit('imported')
+    emit('close')
+  } catch (e) {
+    const msg = e.response?.data?.message || e.message || 'Erro ao aplicar ao estoque'
+    Swal.fire({ icon: 'error', text: msg })
+  } finally {
+    applying.value = false
+  }
+}
+
 // ── Backdrop ─────────────────────────────────────────────────────────────────
 function handleBackdropClick() {
-  if (!processing.value) emit('close')
+  if (!processing.value && !applying.value) emit('close')
 }
 </script>
 
