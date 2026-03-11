@@ -841,6 +841,8 @@ const CREDIT_SERVICE_LABELS = {
   MENU_IMPORT_ITEM:     'Por item importado via IA (cardápio aplicado)',
   GENERATE_DESCRIPTION: 'Gerar descrição de produto com IA',
   OCR_PHOTO:            'Processar foto via OCR',
+  NFE_IMPORT_MATCH:     'Matching NFe→Estoque com IA',
+  NFE_RECEIPT_PHOTO:    'Importar recibo por foto com IA',
 }
 
 /**

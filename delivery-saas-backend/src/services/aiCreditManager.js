@@ -42,6 +42,8 @@ export const AI_SERVICE_COSTS = {
   TECHNICAL_SHEET_IMPORT_ITEM:  1,  // por ficha técnica aplicada
   INGREDIENT_IMPORT_PARSE:     5,  // por arquivo processado (importação de ingredientes)
   INGREDIENT_IMPORT_ITEM:      1,  // por ingrediente aplicado
+  NFE_IMPORT_MATCH:            1,  // por match NFe→Estoque com IA
+  NFE_RECEIPT_PHOTO:           5,  // por foto de recibo importada com IA
 }
 
 // ─── Cache de custos de serviços lidos do banco ────────────────────────────────

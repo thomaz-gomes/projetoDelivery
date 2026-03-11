@@ -62,6 +62,7 @@ model Company {
   technicalSheets      TechnicalSheet[]
   // stock movements (entries/exits) for this company
   stockMovements       StockMovement[]
+  purchaseImports      PurchaseImport[]
   // operating hours: if alwaysOpen is true the store accepts orders anytime
   alwaysOpen           Boolean               @default(true)
   // Toggle per-company to enable/disable Evolution (WhatsApp) integration
@@ -504,7 +505,8 @@ model Store {
   orders         Order[]
   nfeProtocols   NfeProtocol[]
   // stock movements originating/associated with this store
-  stockMovements StockMovement[]
+  stockMovements   StockMovement[]
+  purchaseImports  PurchaseImport[]
 }
 
 model Menu {
@@ -1249,7 +1251,8 @@ model StockMovement {
   reason    String?
   note      String?
   createdAt DateTime            @default(now())
-  items     StockMovementItem[]
+  items           StockMovementItem[]
+  purchaseImports PurchaseImport[]
 
   @@index([companyId], name: "idx_stockmovement_company")
   @@index([storeId], name: "idx_stockmovement_store")
@@ -1267,6 +1270,39 @@ model StockMovementItem {
 
   @@index([stockMovementId], name: "idx_stockmovementitem_movement")
   @@index([ingredientId], name: "idx_stockmovementitem_ingredient")
+}
+
+model PurchaseImport {
+  id              String         @id @default(uuid())
+  companyId       String
+  company         Company        @relation(fields: [companyId], references: [id])
+  storeId         String
+  store           Store          @relation(fields: [storeId], references: [id])
+  source          String         // MDE | XML | ACCESS_KEY | RECEIPT_PHOTO
+  status          String         @default("PENDING") // PENDING | MATCHED | APPLIED | ERROR
+
+  accessKey       String?        @unique
+  nfeNumber       String?
+  nfeSeries       String?
+  issueDate       DateTime?
+  supplierCnpj    String?
+  supplierName    String?
+  totalValue      Float?
+  rawXml          String?        @db.Text
+
+  photoUrl        String?
+
+  parsedItems     Json?
+
+  stockMovementId String?
+  stockMovement   StockMovement? @relation(fields: [stockMovementId], references: [id])
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([companyId])
+  @@index([storeId])
+  @@index([status])
 }
 
 // =============================
