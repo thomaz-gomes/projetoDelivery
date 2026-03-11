@@ -105,10 +105,36 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
     blocks = [...blocks, { t: 'qr' }];
   }
 
-  const ctx = buildBlockContext(order, printer);
   const pl  = order.payload || {};
   // iFood: desempacotar envelope { order: { ... } } ou usar payload direto
   const ifoodPl = pl.order || pl;
+
+  // Recalcular subtotal usando a MESMA fonte de itens que será exibida (payload iFood se disponível, senão DB)
+  // Evita divergência quando DB tem totalPrice antigo mas payload tem unitPrice correto
+  const ifoodRawItemsForCalc = (ifoodPl.items && ifoodPl.items.length > 0) ? ifoodPl.items : null;
+  let calcSubtotal = 0;
+  if (ifoodRawItemsForCalc) {
+    for (const it of ifoodRawItemsForCalc) {
+      const qty = Number(it.quantity || 1);
+      const base = Number(it.unitPrice || it.price || 0);
+      const opts = (it.subitems || it.garnishItems || it.options || [])
+        .reduce((s, o) => s + Number(o.unitPrice || o.price || 0) * Number(o.quantity || 1), 0);
+      calcSubtotal += (base * qty) + (opts * qty);
+    }
+  } else {
+    for (const it of (order.items || [])) {
+      const qty = it.quantity || 1;
+      const base = _toNum(it.price) * qty;
+      const opts = Array.isArray(it.options)
+        ? it.options.reduce((s, o) => s + _toNum(o.price || 0) * Number(o.quantity || 1), 0) * qty
+        : 0;
+      calcSubtotal += base + opts;
+    }
+  }
+
+  const ctx = buildBlockContext(order, printer);
+  // Sobrescrever subtotal com o valor recalculado da fonte correta
+  if (calcSubtotal > 0) ctx.subtotal = _fmtN(calcSubtotal);
 
   // Extrai pagamentos — iFood usa { methods: [], prepaid } dentro de ifoodPl.payments
   const ifoodPmts = ifoodPl.payments || null;
@@ -224,15 +250,17 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
               const optName  = opt.name || '';
               const optPrice = _toNum(opt.price || 0);
               const oqty     = Number(opt.quantity || 1);
+              const totalQty = oqty * qty;
+              const totalSuffix = qty > 1 ? ` (${totalQty} total)` : '';
               let optLine;
               if (oqty > 1) {
                 optLine = optPrice > 0
-                  ? `   -${oqty}x ${optName}: R$ ${_fmtN(optPrice)}`
-                  : `   -${oqty}x ${optName}`;
+                  ? `   -${oqty}x ${optName}: R$ ${_fmtN(optPrice)}${totalSuffix}`
+                  : `   -${oqty}x ${optName}${totalSuffix}`;
               } else {
                 optLine = optPrice > 0
-                  ? `   + ${optName}: R$ ${_fmtN(optPrice)}`
-                  : `   + ${optName}`;
+                  ? `   + ${optName}: R$ ${_fmtN(optPrice)}${totalSuffix}`
+                  : `   + ${optName}${totalSuffix}`;
               }
               if (margin > 0) parts.push(ESCPos.marginLeft(margin));
               parts.push(ESCPos.text(optLine, charset));
@@ -417,8 +445,8 @@ function buildBlockContext(order) {
     telefone_cliente:  order.customer?.phone || order.customerPhone || '',
     endereco_cliente,
     subtotal:          subtotalVal > 0  ? _fmtN(subtotalVal)  : '0,00',
-    taxa_entrega:      taxaVal > 0      ? _fmtN(taxaVal)      : '',   // '' → cond oculta
-    desconto:          descontoVal > 0  ? _fmtN(descontoVal)  : '',   // '' → cond oculta
+    taxa_entrega:      _fmtN(taxaVal),
+    desconto:          _fmtN(descontoVal),
     total:             totalVal > 0     ? _fmtN(totalVal)     : '0,00',
     observacoes:       order.notes || order.observation || '',
     total_itens_count: String((order.items || []).reduce((s, i) => s + (i.quantity || 1), 0)),
@@ -661,10 +689,12 @@ function buildContext(order, printer) {
         ? item.options.map(o => {
             const op   = _toNum(o.price || 0);
             const oqty = Number(o.quantity || 1);
+            const totalQty = oqty * qty;
+            const totalSuffix = qty > 1 ? ` (${totalQty} total)` : '';
             if (oqty > 1) {
-              return `   -${oqty}x ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}`;
+              return `   -${oqty}x ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}${totalSuffix}`;
             }
-            return `   + ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}`;
+            return `   + ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}${totalSuffix}`;
           }).join('\n')
         : '';
       return {
@@ -707,8 +737,8 @@ function buildContext(order, printer) {
     total:        _fmt(totalVal),
     total_val:    _fmtN(totalVal),
 
-    tem_taxa:    taxaVal > 0,
-    tem_desconto: descontoVal > 0,
+    tem_taxa:    true,
+    tem_desconto: true,
     tem_obs:     !!(order.notes || order.observation),
     obs_pedido:  order.notes || order.observation || '',
 
