@@ -426,6 +426,9 @@ function buildBlockContext(order) {
   // iFood: campos específicos (localizador, código de coleta)
   const _plBc = order.payload || {};
   const _ifBc = _plBc.order || _plBc;
+
+  // Taxas adicionais (taxa de serviço iFood, etc.) — payload.total.additionalFees
+  const acrescimoVal = _toNum(_ifBc.total?.additionalFees ?? 0);
   const localizadorBc   = _ifBc.customer?.phones?.[0]?.localizer || _ifBc.customer?.phone?.localizer || '';
   const codigo_coleta = _ifBc.delivery?.pickupCode || '';
 
@@ -446,6 +449,7 @@ function buildBlockContext(order) {
     endereco_cliente,
     subtotal:          subtotalVal > 0  ? _fmtN(subtotalVal)  : '0,00',
     taxa_entrega:      _fmtN(taxaVal),
+    acrescimo:         _fmtN(acrescimoVal),
     desconto:          _fmtN(descontoVal),
     total:             totalVal > 0     ? _fmtN(totalVal)     : '0,00',
     observacoes:       order.notes || order.observation || '',
@@ -646,6 +650,7 @@ function buildContext(order, printer) {
     return s + base + opts;
   }, 0);
   const taxaVal     = _toNum(order.deliveryFee || 0);
+  const acrescimoVal = _toNum(ifoodPl.total?.additionalFees ?? 0);
   let descontoVal = _toNum(order.discount || order.couponDiscount || 0);
   // Fallback: extrair desconto dos benefits do iFood
   if (descontoVal <= 0 && Array.isArray(ifoodPl.benefits) && ifoodPl.benefits.length > 0) {
@@ -732,6 +737,8 @@ function buildContext(order, printer) {
     subtotal_val: _fmtN(subtotalVal),
     taxa:         _fmt(taxaVal),
     taxa_val:     _fmtN(taxaVal),
+    acrescimo:    _fmt(acrescimoVal),
+    acrescimo_val: _fmtN(acrescimoVal),
     desconto:     _fmt(descontoVal),
     desconto_val: _fmtN(descontoVal),
     total:        _fmt(totalVal),

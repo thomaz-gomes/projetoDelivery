@@ -66,7 +66,8 @@ Obs: {{obs_pedido}}
 [ROW:Quantidade de itens:|{{total_itens_count}}]
 
 [ROW:Total Itens(=)|{{subtotal_val}}]
-[ROW:Acrescimo(+)|{{taxa_val}}]
+[ROW:Taxa entrega(+)|{{taxa_val}}]
+[ROW:Acrescimo(+)|{{acrescimo_val}}]
 [ROW:Desconto(-)|{{desconto_val}}]
 [ROW:TOTAL(=)|{{total_val}}]
 
@@ -122,7 +123,8 @@ Obs: {{obs_pedido}}
 [ROW:Qtd itens:|{{total_itens_count}}]
 
 [ROW:Itens(=)|{{subtotal_val}}]
-[ROW:Acresc(+)|{{taxa_val}}]
+[ROW:Entrega(+)|{{taxa_val}}]
+[ROW:Acresc(+)|{{acrescimo_val}}]
 [ROW:Desc(-)|{{desconto_val}}]
 [ROW:TOTAL(=)|{{total_val}}]
 
