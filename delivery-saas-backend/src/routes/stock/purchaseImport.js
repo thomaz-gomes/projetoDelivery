@@ -16,6 +16,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { parseNfeXml, matchItemsWithAI, parseReceiptPhoto } from '../../services/purchaseImportService.js';
+import { syncMde, getMdeStatus } from '../../services/mdeService.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -68,6 +69,52 @@ router.get('/parse/:jobId', (req, res) => {
     importId: job.importId || null,
     error: job.error || null,
   });
+});
+
+// --- POST /purchase-imports/mde/sync ---
+router.post('/mde/sync', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ message: 'Nao autenticado' });
+
+    const { storeId } = req.body;
+    if (!storeId) return res.status(400).json({ message: 'storeId e obrigatorio' });
+
+    // Validate store belongs to company
+    const store = await prisma.store.findUnique({ where: { id: storeId }, select: { id: true, companyId: true } });
+    if (!store || store.companyId !== companyId) {
+      return res.status(400).json({ message: 'Loja invalida ou nao pertence a empresa' });
+    }
+
+    const result = await syncMde(storeId, companyId);
+    res.json(result);
+  } catch (e) {
+    console.error('[purchaseImport] POST /mde/sync error:', e?.message || e);
+    res.status(500).json({ message: e?.message || 'Erro ao sincronizar MDe' });
+  }
+});
+
+// --- GET /purchase-imports/mde/status ---
+router.get('/mde/status', async (req, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ message: 'Nao autenticado' });
+
+    const { storeId } = req.query;
+    if (!storeId) return res.status(400).json({ message: 'storeId e obrigatorio' });
+
+    // Validate store belongs to company
+    const store = await prisma.store.findUnique({ where: { id: storeId }, select: { id: true, companyId: true } });
+    if (!store || store.companyId !== companyId) {
+      return res.status(400).json({ message: 'Loja invalida ou nao pertence a empresa' });
+    }
+
+    const status = await getMdeStatus(storeId, companyId);
+    res.json(status);
+  } catch (e) {
+    console.error('[purchaseImport] GET /mde/status error:', e?.message || e);
+    res.status(500).json({ message: e?.message || 'Erro ao consultar status MDe' });
+  }
 });
 
 // --- GET /purchase-imports/:id ---
