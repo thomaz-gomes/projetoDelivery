@@ -20,6 +20,7 @@ import TechnicalSheets from './views/stock/TechnicalSheets.vue';
 import TechnicalSheetEdit from './views/stock/TechnicalSheetEdit.vue';
 import StockMovements from './views/stock/StockMovements.vue';
 import StockMovementForm from './views/stock/StockMovementForm.vue';
+import PurchaseImports from './views/stock/PurchaseImports.vue';
 import RiderAccount from './views/RiderAccount.vue';
 import RiderAccountAdmin from './views/RiderAccountAdmin.vue';
 import api from './api';
@@ -147,6 +148,7 @@ const router = createRouter({
   { path: '/stock-movements', component: StockMovements, meta: { requiresAuth: true } },
   { path: '/stock-movements/new', component: StockMovementForm, meta: { requiresAuth: true } },
   { path: '/stock-movements/:id', component: StockMovementForm, meta: { requiresAuth: true } },
+  { path: '/stock/purchase-imports', component: PurchaseImports, meta: { requiresAuth: true } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true } },
   { path: '/settings/ifood', component: IFoodIntegration },
   { path: '/settings/meta-pixel', component: MetaPixelIntegration, meta: { requiresAuth: true } },

@@ -30,7 +30,8 @@ export const nav = [
   { name: 'Ingredientes', to: '/ingredient-groups', icon: 'bi bi-box', moduleKey: 'stock', lockable: true, children: [
     { name: 'Grupos de Ingredientes', to: '/ingredient-groups', icon: 'bi bi-list' },
     { name: 'Ingredientes', to: '/ingredients', icon: 'bi bi-basket' },
-    { name: 'Fichas Técnicas', to: '/technical-sheets', icon: 'bi bi-file-earmark-text' }
+    { name: 'Fichas Técnicas', to: '/technical-sheets', icon: 'bi bi-file-earmark-text' },
+    { name: 'Importação de Compras', to: '/stock/purchase-imports', icon: 'bi bi-receipt' }
   ] },
   { name: 'Financeiro', to: '/financial', icon: 'bi bi-cash-coin', moduleKey: 'financial', lockable: true, children: [
     { name: 'Dashboard', to: '/financial', icon: 'bi bi-speedometer2' },
