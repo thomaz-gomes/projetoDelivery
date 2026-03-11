@@ -403,7 +403,7 @@
         <!-- Footer -->
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" @click="$emit('close')" :disabled="processing || applying">Cancelar</button>
-          <button v-if="step > 1" class="btn btn-outline-secondary" @click="step--" :disabled="processing || applying">Voltar</button>
+          <button v-if="step > 1 && !reviewImportId" class="btn btn-outline-secondary" @click="step--" :disabled="processing || applying">Voltar</button>
           <button v-if="step === 1" class="btn btn-primary" @click="step = 2" :disabled="!method">
             Proximo <i class="bi bi-arrow-right ms-1"></i>
           </button>
@@ -430,6 +430,7 @@ import Swal from 'sweetalert2'
 
 const props = defineProps({
   storeId: { type: String, default: null },
+  reviewImportId: { type: String, default: null },
 })
 const emit = defineEmits(['close', 'imported'])
 
@@ -514,6 +515,12 @@ onMounted(async () => {
     const { data } = await api.get('/stores')
     stores.value = Array.isArray(data) ? data : []
   } catch (_) {}
+
+  // If reviewImportId prop is set, skip to step 3 directly
+  if (props.reviewImportId) {
+    importIds.value = [props.reviewImportId]
+    step.value = 3
+  }
 })
 
 // ── MDe Sync ─────────────────────────────────────────────────────────────────

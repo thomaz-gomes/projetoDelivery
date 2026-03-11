@@ -132,7 +132,7 @@
       </template>
     </ListCard>
 
-    <!-- <PurchaseImportModal v-if="showImportModal" @close="showImportModal = false" @imported="load" /> -->
+    <PurchaseImportModal v-if="showImportModal" :review-import-id="reviewImportId" @close="onModalClose" @imported="onImported" />
   </div>
 </template>
 
@@ -141,11 +141,13 @@ import { ref, computed, onMounted } from 'vue'
 import api from '../../api'
 import DateInput from '../../components/form/date/DateInput.vue'
 import ListCard from '../../components/ListCard.vue'
+import PurchaseImportModal from '../../components/PurchaseImportModal.vue'
 
 const stores = ref([])
 const list = ref([])
 const loading = ref(false)
 const showImportModal = ref(false)
+const reviewImportId = ref(null)
 const syncingStore = ref(null)
 const processingId = ref(null)
 const mdeStatus = ref({})
@@ -243,7 +245,19 @@ async function processMatch(row) {
 }
 
 function reviewImport(row) {
-  alert(`Revisao da importacao #${row.id} — modal sera implementado em breve.`)
+  reviewImportId.value = row.id
+  showImportModal.value = true
+}
+
+function onModalClose() {
+  showImportModal.value = false
+  reviewImportId.value = null
+}
+
+async function onImported() {
+  showImportModal.value = false
+  reviewImportId.value = null
+  await load()
 }
 
 // Source badge helpers
