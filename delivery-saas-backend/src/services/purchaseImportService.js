@@ -139,6 +139,11 @@ Rules:
     }),
   });
 
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`OpenAI API error ${res.status}: ${errBody}`);
+  }
+
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content || '[]';
 
@@ -249,6 +254,11 @@ Return ONLY a JSON array. Extract ALL visible item lines.`;
       ],
     }),
   });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`OpenAI API error ${res.status}: ${errBody}`);
+  }
 
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content || '[]';
