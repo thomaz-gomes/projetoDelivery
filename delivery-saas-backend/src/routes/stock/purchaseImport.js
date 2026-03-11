@@ -255,8 +255,8 @@ router.post('/:id/apply', requireRole('ADMIN'), async (req, res) => {
     const importRecord = await prisma.purchaseImport.findUnique({ where: { id: req.params.id } });
     if (!importRecord) return res.status(404).json({ message: 'Importacao nao encontrada' });
     if (importRecord.companyId !== companyId) return res.status(403).json({ message: 'Acesso negado' });
-    if (importRecord.status === 'APPLIED') {
-      return res.status(400).json({ message: 'Importacao ja foi aplicada' });
+    if (importRecord.status !== 'MATCHED') {
+      return res.status(400).json({ message: 'Importacao precisa estar com status MATCHED para ser aplicada' });
     }
 
     const { items } = req.body;
