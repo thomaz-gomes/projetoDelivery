@@ -3,120 +3,260 @@
     <h2>{{ isEdit ? 'Editar cardápio' : 'Novo cardápio' }}</h2>
     <div class="card p-4 mt-3">
       <form @submit.prevent="save">
-        <div class="mb-3">
-          <label class="form-label">Nome</label>
-          <TextInput v-model="form.name" placeholder="Nome do cardápio" maxlength="120" inputClass="form-control" required />
-        </div>
+        <!-- Tab headers -->
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item">
+            <button :class="['nav-link', { active: activeTab === 'general' }]" type="button" @click="activeTab = 'general'">Geral</button>
+          </li>
+          <li v-if="isEdit" class="nav-item">
+            <button :class="['nav-link', { active: activeTab === 'domain' }]" type="button" @click="activeTab = 'domain'">Domínio Próprio</button>
+          </li>
+        </ul>
 
-        <div class="mb-3">
-          <label class="form-label">Loja</label>
-          <SelectInput   v-model="form.storeId"  class="form-select" required>
-            <option :value="null">-- Selecione uma loja --</option>
-            <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
-          </SelectInput>
-        </div>
+        <!-- Tab content -->
+        <div class="tab-content">
+          <div :class="['tab-pane', { 'show active': activeTab === 'general' }]">
+            <div class="mb-3">
+              <label class="form-label">Nome</label>
+              <TextInput v-model="form.name" placeholder="Nome do cardápio" maxlength="120" inputClass="form-control" required />
+            </div>
 
-        <div class="mb-3">
-          <label class="form-label">Slug público (opcional)</label>
-          <TextInput v-model="form.slug" placeholder="ex: festival-de-verao" maxlength="80" inputClass="form-control" />
-          <div class="form-text">Se preenchido, o cardápio ficará acessível em /public/&lt;slug&gt;</div>
-        </div>
+            <div class="mb-3">
+              <label class="form-label">Loja</label>
+              <SelectInput   v-model="form.storeId"  class="form-select" required>
+                <option :value="null">-- Selecione uma loja --</option>
+                <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+              </SelectInput>
+            </div>
 
-        <div class="mb-3">
-          <label class="form-label">Descrição (opcional)</label>
-          <TextInput v-model="form.description" inputClass="form-control" />
-        </div>
+            <div class="mb-3">
+              <label class="form-label">Slug público (opcional)</label>
+              <TextInput v-model="form.slug" placeholder="ex: festival-de-verao" maxlength="80" inputClass="form-control" />
+              <div class="form-text">Se preenchido, o cardápio ficará acessível em /public/&lt;slug&gt;</div>
+            </div>
 
-        <div class="mb-3">
-          <label class="form-label">Endereço (opcional)</label>
-          <TextInput v-model="form.address" placeholder="Endereço associado a este cardápio" inputClass="form-control" />
-        </div>
+            <div class="mb-3">
+              <label class="form-label">Descrição (opcional)</label>
+              <TextInput v-model="form.description" inputClass="form-control" />
+            </div>
 
-        <div class="mb-3">
-          <label class="form-label">Telefone (opcional)</label>
-          <TextInput v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" />
-        </div>
+            <div class="mb-3">
+              <label class="form-label">Endereço (opcional)</label>
+              <TextInput v-model="form.address" placeholder="Endereço associado a este cardápio" inputClass="form-control" />
+            </div>
 
-        <div class="mb-3">
-          <label class="form-label">WhatsApp (opcional)</label>
-          <TextInput v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" />
-        </div>
+            <div class="mb-3">
+              <label class="form-label">Telefone (opcional)</label>
+              <TextInput v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" />
+            </div>
 
-        <div class="mb-3 border rounded p-3">
-          <label class="form-label">Horário de Funcionamento (opcional)</label>
-          <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" id="open24" v-model="form.open24Hours" />
-            <label class="form-check-label" for="open24">Aberto 24 horas</label>
-          </div>
-            <div class="row gx-2">
-              <div class="col mb-2">
-                <label class="form-label small">Fuso horário</label>
-                    <select class="form-select" v-model="form.timezone">
-                      <option value="">-- Usar padrão da loja --</option>
-                      <option v-for="tz in TIMEZONES" :key="tz" :value="tz">{{ tz }}</option>
-                    </select>
+            <div class="mb-3">
+              <label class="form-label">WhatsApp (opcional)</label>
+              <TextInput v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" />
+            </div>
+
+            <div class="mb-3 border rounded p-3">
+              <label class="form-label">Horário de Funcionamento (opcional)</label>
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="open24" v-model="form.open24Hours" />
+                <label class="form-check-label" for="open24">Aberto 24 horas</label>
+              </div>
+                <div class="row gx-2">
+                  <div class="col mb-2">
+                    <label class="form-label small">Fuso horário</label>
+                        <select class="form-select" v-model="form.timezone">
+                          <option value="">-- Usar padrão da loja --</option>
+                          <option v-for="tz in TIMEZONES" :key="tz" :value="tz">{{ tz }}</option>
+                        </select>
+                  </div>
+                </div>
+              <div class="mt-2">
+                <label class="form-label small">Horário por dia (opcional)</label>
+                <div class="form-text mb-2">Defina dias/intervalos. Se preenchido, terá precedência sobre 'De/Até'.</div>
+                <div v-if="!form.open24Hours" class="table-responsive">
+                  <table class="table table-borderless align-middle">
+                    <thead>
+                      <tr>
+                        <th>Dia</th>
+                        <th class="text-center">Ativo</th>
+                        <th>De</th>
+                        <th>Até</th>
+                        <th style="width:48px"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(d, idx) in weeklySchedule" :key="idx">
+                        <td>{{ dayNames[idx] }}</td>
+                        <td class="text-center"><input class="form-check-input" type="checkbox" v-model="weeklySchedule[idx].enabled" /></td>
+                        <td><input type="time" class="form-control form-control-sm" v-model="weeklySchedule[idx].from" :disabled="!weeklySchedule[idx].enabled" /></td>
+                        <td><input type="time" class="form-control form-control-sm" v-model="weeklySchedule[idx].to" :disabled="!weeklySchedule[idx].enabled" /></td>
+                        <td class="text-end">
+                          <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="idx===0" @click="copyFromPrev(idx)" title="Copiar horário do dia acima">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-files" viewBox="0 0 16 16">
+                              <path d="M13 1a1 1 0 0 1 1 1v9.5a.5.5 0 0 1-.5.5H9.5A1.5 1.5 0 0 1 8 11.5V10H3.5A1.5 1.5 0 0 1 2 8.5V2A1 1 0 0 1 3 1h10z"/>
+                              <path d="M3 2a1 1 0 0 0-1 1v6.5A.5.5 0 0 0 2.5 10H8v1.5A1.5 1.5 0 0 0 9.5 13H13V3a1 1 0 0 0-1-1H3z"/>
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-          <div class="mt-2">
-            <label class="form-label small">Horário por dia (opcional)</label>
-            <div class="form-text mb-2">Defina dias/intervalos. Se preenchido, terá precedência sobre 'De/Até'.</div>
-            <div v-if="!form.open24Hours" class="table-responsive">
-              <table class="table table-borderless align-middle">
-                <thead>
-                  <tr>
-                    <th>Dia</th>
-                    <th class="text-center">Ativo</th>
-                    <th>De</th>
-                    <th>Até</th>
-                    <th style="width:48px"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(d, idx) in weeklySchedule" :key="idx">
-                    <td>{{ dayNames[idx] }}</td>
-                    <td class="text-center"><input class="form-check-input" type="checkbox" v-model="weeklySchedule[idx].enabled" /></td>
-                    <td><input type="time" class="form-control form-control-sm" v-model="weeklySchedule[idx].from" :disabled="!weeklySchedule[idx].enabled" /></td>
-                    <td><input type="time" class="form-control form-control-sm" v-model="weeklySchedule[idx].to" :disabled="!weeklySchedule[idx].enabled" /></td>
-                    <td class="text-end">
-                      <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="idx===0" @click="copyFromPrev(idx)" title="Copiar horário do dia acima">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-files" viewBox="0 0 16 16">
-                          <path d="M13 1a1 1 0 0 1 1 1v9.5a.5.5 0 0 1-.5.5H9.5A1.5 1.5 0 0 1 8 11.5V10H3.5A1.5 1.5 0 0 1 2 8.5V2A1 1 0 0 1 3 1h10z"/>
-                          <path d="M3 2a1 1 0 0 0-1 1v6.5A.5.5 0 0 0 2.5 10H8v1.5A1.5 1.5 0 0 0 9.5 13H13V3a1 1 0 0 0-1-1H3z"/>
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
 
-        <div class="row">
-          <div class="col-12 mb-3">
-            <label class="form-label">Tipos de entrega</label>
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="allowDelivery" v-model="form.allowDelivery" :disabled="isCatalogOnly">
-              <label class="form-check-label" for="allowDelivery">Entrega (Delivery)</label>
-            </div>
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="allowPickup" v-model="form.allowPickup" :disabled="isCatalogOnly">
-              <label class="form-check-label" for="allowPickup">Retirada (Pickup)</label>
-            </div>
-            <div class="form-check form-switch mt-3">
-              <input class="form-check-input" type="checkbox" id="catalogMode" v-model="form.catalogMode" :disabled="isCatalogOnly">
-              <label class="form-check-label" for="catalogMode">Modo catálogo</label>
-              <div class="form-text">Quando ativo, o cliente poderá apenas visualizar os produtos, sem opção de compra.</div>
-            </div>
-            <div v-if="isCatalogOnly" class="form-text text-warning mt-2">
-              <i class="bi bi-lock-fill me-1"></i>Seu plano inclui apenas o modo catálogo. Delivery e retirada não estão disponíveis.
+            <div class="row">
+              <div class="col-12 mb-3">
+                <label class="form-label">Tipos de entrega</label>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="allowDelivery" v-model="form.allowDelivery" :disabled="isCatalogOnly">
+                  <label class="form-check-label" for="allowDelivery">Entrega (Delivery)</label>
+                </div>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="allowPickup" v-model="form.allowPickup" :disabled="isCatalogOnly">
+                  <label class="form-check-label" for="allowPickup">Retirada (Pickup)</label>
+                </div>
+                <div class="form-check form-switch mt-3">
+                  <input class="form-check-input" type="checkbox" id="catalogMode" v-model="form.catalogMode" :disabled="isCatalogOnly">
+                  <label class="form-check-label" for="catalogMode">Modo catálogo</label>
+                  <div class="form-text">Quando ativo, o cliente poderá apenas visualizar os produtos, sem opção de compra.</div>
+                </div>
+                <div v-if="isCatalogOnly" class="form-text text-warning mt-2">
+                  <i class="bi bi-lock-fill me-1"></i>Seu plano inclui apenas o modo catálogo. Delivery e retirada não estão disponíveis.
+                </div>
+              </div>
+              <div class="col-md-6 mb-3">
+                <MediaField v-model="form.bannerUrl" label="Banner" field-id="menu-banner" :crop-aspect="16/9" :target-width="1200" :target-height="675" />
+              </div>
+              <div class="col-md-6 mb-3">
+                <MediaField v-model="form.logoUrl" label="Logotipo" field-id="menu-logo" />
+              </div>
             </div>
           </div>
-          <div class="col-md-6 mb-3">
-            <MediaField v-model="form.bannerUrl" label="Banner" field-id="menu-banner" :crop-aspect="16/9" :target-width="1200" :target-height="675" />
-          </div>
-          <div class="col-md-6 mb-3">
-            <MediaField v-model="form.logoUrl" label="Logotipo" field-id="menu-logo" />
+
+          <div v-if="isEdit" :class="['tab-pane', { 'show active': activeTab === 'domain' }]">
+            <!-- Loading state -->
+            <div v-if="domainLoading" class="text-center py-4">
+              <div class="spinner-border text-primary"></div>
+              <p class="mt-2">Carregando...</p>
+            </div>
+
+            <!-- No pricing available -->
+            <div v-else-if="!domainPricing || !domainPricing.available" class="alert alert-info">
+              Domínio próprio não está disponível no momento.
+            </div>
+
+            <!-- No domain registered yet -->
+            <div v-else-if="!customDomain">
+              <p class="text-muted mb-3">Configure um domínio personalizado para seu cardápio. Ex: <strong>www.meucardapio.com.br</strong></p>
+              <div class="mb-3">
+                <label class="form-label">Domínio</label>
+                <TextInput v-model="domainForm.domain" placeholder="www.meudominio.com.br" inputClass="form-control" disabled />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Ciclo de cobrança</label>
+                <SelectInput v-model="domainForm.billingCycle" class="form-select">
+                  <option value="MONTHLY">Mensal — R$ {{ domainPricing.monthly?.toFixed(2) }}/mês</option>
+                  <option v-if="domainPricing.yearly" value="YEARLY">Anual — R$ {{ domainPricing.yearly?.toFixed(2) }}/ano</option>
+                </SelectInput>
+              </div>
+              <button type="button" class="btn btn-success" @click="subscribeDomain">
+                Assinar Domínio Próprio
+              </button>
+            </div>
+
+            <!-- PENDING_PAYMENT -->
+            <div v-else-if="customDomain.status === 'PENDING_PAYMENT'" class="alert alert-warning">
+              <span class="badge bg-warning me-2">Aguardando pagamento</span>
+              Seu domínio está aguardando confirmação de pagamento.
+              <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-primary" @click="activateDomain">Confirmar Pagamento</button>
+              </div>
+            </div>
+
+            <!-- PENDING_DNS -->
+            <div v-else-if="customDomain.status === 'PENDING_DNS'">
+              <div class="mb-3">
+                <label class="form-label">Domínio</label>
+                <TextInput v-model="domainForm.domain" placeholder="www.meudominio.com.br" inputClass="form-control" />
+                <button type="button" class="btn btn-sm btn-outline-primary mt-1" @click="saveDomain" :disabled="domainLoading">Salvar domínio</button>
+              </div>
+
+              <div class="card bg-light mb-3">
+                <div class="card-body">
+                  <h6 class="card-title">Como configurar seu domínio</h6>
+                  <p class="small text-muted">Siga os passos abaixo para apontar seu domínio para nosso servidor:</p>
+                  <ol class="small">
+                    <li class="mb-2">Acesse o painel do seu provedor de domínio (ex: <strong>Registro.br</strong>, <strong>GoDaddy</strong>, <strong>Hostinger</strong>)</li>
+                    <li class="mb-2">Vá até a seção de <strong>Gerenciamento de DNS</strong> do seu domínio</li>
+                    <li class="mb-2">
+                      Crie um registro do tipo <strong>A</strong> com os seguintes dados:
+                      <table class="table table-sm table-bordered mt-1 mb-0">
+                        <tr><td class="fw-bold" style="width:120px">Nome/Host</td><td><code>@</code> (ou deixe em branco)</td></tr>
+                        <tr><td class="fw-bold">Tipo</td><td><code>A</code></td></tr>
+                        <tr><td class="fw-bold">Valor/Destino</td><td><code>{{ domainPricing.serverIp }}</code></td></tr>
+                        <tr><td class="fw-bold">TTL</td><td><code>3600</code> (ou padrão)</td></tr>
+                      </table>
+                    </li>
+                    <li class="mb-2">
+                      Se deseja usar <strong>www</strong>, crie também um registro <strong>CNAME</strong>:
+                      <table class="table table-sm table-bordered mt-1 mb-0">
+                        <tr><td class="fw-bold" style="width:120px">Nome/Host</td><td><code>www</code></td></tr>
+                        <tr><td class="fw-bold">Tipo</td><td><code>CNAME</code></td></tr>
+                        <tr><td class="fw-bold">Valor/Destino</td><td><code>{{ domainForm.domain || 'seu-dominio.com.br' }}</code></td></tr>
+                      </table>
+                    </li>
+                    <li class="mb-2">Aguarde a propagação do DNS (pode levar até <strong>24 horas</strong>, normalmente menos de 1 hora)</li>
+                    <li>Clique em <strong>Verificar DNS</strong> abaixo quando estiver pronto</li>
+                  </ol>
+                </div>
+              </div>
+
+              <button type="button" class="btn btn-primary" @click="verifyDns" :disabled="domainLoading">
+                <span v-if="domainLoading" class="spinner-border spinner-border-sm me-1"></span>
+                Verificar DNS
+              </button>
+              <span class="badge bg-warning ms-2">Aguardando DNS</span>
+
+              <div v-if="dnsResult" class="alert mt-2" :class="dnsResult.verified ? 'alert-success' : 'alert-danger'">
+                {{ dnsResult.message }}
+              </div>
+            </div>
+
+            <!-- VERIFYING -->
+            <div v-else-if="customDomain.status === 'VERIFYING'" class="text-center py-4">
+              <div class="spinner-border text-primary"></div>
+              <p class="mt-2">Gerando certificado SSL para <strong>{{ customDomain.domain }}</strong>...</p>
+              <span class="badge bg-info">Verificando</span>
+              <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="loadDomainData">Atualizar status</button>
+              </div>
+            </div>
+
+            <!-- ACTIVE -->
+            <div v-else-if="customDomain.status === 'ACTIVE'">
+              <div class="d-flex align-items-center mb-3">
+                <span class="badge bg-success me-2">Ativo</span>
+                <a :href="'https://' + customDomain.domain" target="_blank" class="text-decoration-none">
+                  https://{{ customDomain.domain }}
+                </a>
+              </div>
+              <div class="mb-3">
+                <strong>Válido até:</strong> {{ formatDate(customDomain.paidUntil) }}
+              </div>
+              <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="autoRenew" :checked="customDomain.autoRenew" @change="toggleAutoRenew">
+                <label class="form-check-label" for="autoRenew">Renovação automática</label>
+              </div>
+              <button type="button" class="btn btn-outline-danger btn-sm" @click="removeDomain">Remover domínio</button>
+            </div>
+
+            <!-- SUSPENDED -->
+            <div v-else-if="customDomain.status === 'SUSPENDED'">
+              <span class="badge bg-danger me-2">Suspenso — pagamento vencido</span>
+              <p class="mt-2">Seu domínio <strong>{{ customDomain.domain }}</strong> foi suspenso por falta de pagamento.</p>
+              <button type="button" class="btn btn-success" @click="renewDomain">Renovar</button>
+            </div>
           </div>
         </div>
 
@@ -193,6 +333,13 @@ function copyFromPrev(idx){
 const stores = ref([])
 const saving = ref(false)
 const error = ref('')
+const activeTab = ref('general')
+const customDomain = ref(null)
+const domainPricing = ref(null)
+const domainForm = ref({ domain: '', billingCycle: 'MONTHLY' })
+const domainLoading = ref(false)
+const domainError = ref('')
+const dnsResult = ref(null)
 
 async function load(){
   try{
@@ -348,6 +495,141 @@ async function save(){
   finally{ saving.value = false }
 }
 
+async function loadDomainData() {
+  if (!isEdit) return
+  domainLoading.value = true
+  try {
+    const [domainsRes, pricingRes] = await Promise.all([
+      api.get('/custom-domains'),
+      api.get('/custom-domains/pricing')
+    ])
+    domainPricing.value = pricingRes.data
+    // Find domain for this menu
+    const domains = domainsRes.data || []
+    customDomain.value = domains.find(d => d.menuId === id) || null
+    if (customDomain.value) {
+      domainForm.value.domain = customDomain.value.domain
+      domainForm.value.billingCycle = customDomain.value.billingCycle
+    }
+  } catch (e) {
+    console.error('Failed to load domain data:', e)
+  } finally {
+    domainLoading.value = false
+  }
+}
+
+async function subscribeDomain() {
+  domainLoading.value = true
+  domainError.value = ''
+  try {
+    const res = await api.post('/custom-domains', {
+      domain: domainForm.value.domain || 'pendente.configurar',
+      menuId: id,
+      billingCycle: domainForm.value.billingCycle
+    })
+    customDomain.value = res.data
+    // For now, immediately activate (payment integration comes later)
+    await activateDomain()
+  } catch (e) {
+    domainError.value = e.response?.data?.message || 'Erro ao assinar domínio'
+    Swal.fire({ icon: 'error', text: domainError.value })
+  } finally {
+    domainLoading.value = false
+  }
+}
+
+async function activateDomain() {
+  if (!customDomain.value) return
+  try {
+    const res = await api.post(`/custom-domains/${customDomain.value.id}/activate`)
+    customDomain.value = res.data
+    Swal.fire({ icon: 'success', text: 'Domínio ativado! Configure o DNS.' })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao ativar' })
+  }
+}
+
+async function saveDomain() {
+  if (!customDomain.value || !domainForm.value.domain) return
+  domainLoading.value = true
+  try {
+    const res = await api.patch(`/custom-domains/${customDomain.value.id}`, {
+      domain: domainForm.value.domain
+    })
+    customDomain.value = res.data
+    Swal.fire({ icon: 'success', text: 'Domínio salvo!' })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao salvar domínio' })
+  } finally {
+    domainLoading.value = false
+  }
+}
+
+async function verifyDns() {
+  if (!customDomain.value) return
+  domainLoading.value = true
+  dnsResult.value = null
+  try {
+    // Save domain first if changed
+    if (domainForm.value.domain && domainForm.value.domain !== customDomain.value.domain) {
+      await saveDomain()
+    }
+    const res = await api.post(`/custom-domains/${customDomain.value.id}/verify`)
+    dnsResult.value = res.data
+    if (res.data.verified) {
+      // Reload to get updated status
+      await loadDomainData()
+    }
+  } catch (e) {
+    dnsResult.value = { verified: false, message: e.response?.data?.message || 'Erro na verificação' }
+  } finally {
+    domainLoading.value = false
+  }
+}
+
+async function toggleAutoRenew() {
+  if (!customDomain.value) return
+  try {
+    const res = await api.patch(`/custom-domains/${customDomain.value.id}`, {
+      autoRenew: !customDomain.value.autoRenew
+    })
+    customDomain.value = res.data
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: 'Erro ao alterar renovação automática' })
+  }
+}
+
+async function removeDomain() {
+  if (!customDomain.value) return
+  const result = await Swal.fire({
+    title: 'Remover domínio?',
+    text: `O domínio ${customDomain.value.domain} será desvinculado deste cardápio.`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    confirmButtonText: 'Sim, remover',
+    cancelButtonText: 'Cancelar'
+  })
+  if (!result.isConfirmed) return
+  try {
+    await api.delete(`/custom-domains/${customDomain.value.id}`)
+    customDomain.value = null
+    domainForm.value = { domain: '', billingCycle: 'MONTHLY' }
+    Swal.fire({ icon: 'success', text: 'Domínio removido' })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: 'Erro ao remover domínio' })
+  }
+}
+
+async function renewDomain() {
+  await activateDomain()
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—'
+  return new Date(dateStr).toLocaleDateString('pt-BR')
+}
+
 onMounted(async () => {
   await saas.fetchMySubscription().catch(() => {})
   await load()
@@ -356,6 +638,7 @@ onMounted(async () => {
     form.value.allowPickup = false
     form.value.catalogMode = true
   }
+  await loadDomainData()
 })
 
 function openStructure(){
