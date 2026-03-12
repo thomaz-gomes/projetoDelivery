@@ -121,6 +121,8 @@ model Company {
   managedCompanies  Company[]          @relation("CompanyManager")
   // Mercado Pago config for this company (if it's a SaaS manager)
   mercadoPagoConfig MercadoPagoConfig?
+  // ---- Custom Domains ----
+  customDomains     CustomDomain[]
 }
 
 model User {
@@ -539,6 +541,25 @@ model Menu {
   products       Product[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+  customDomain   CustomDomain?
+}
+
+model CustomDomain {
+  id           String              @id @default(uuid())
+  domain       String              @unique
+  menuId       String
+  menu         Menu                @relation(fields: [menuId], references: [id])
+  companyId    String
+  company      Company             @relation(fields: [companyId], references: [id])
+  status       CustomDomainStatus  @default(PENDING_PAYMENT)
+  sslStatus    SslStatus           @default(NONE)
+  verifiedAt   DateTime?
+  price        Decimal
+  billingCycle BillingCycle        @default(MONTHLY)
+  paidUntil    DateTime?
+  autoRenew    Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 }
 
 // File system based order sources (local folder monitored by backend)
@@ -876,6 +897,7 @@ enum ModuleKey {
   WHATSAPP
   FINANCIAL
   FISCAL
+  CUSTOM_DOMAIN
 }
 
 // Feature module that plans can enable/disable
@@ -1713,6 +1735,26 @@ enum CashMovementType {
   WITHDRAWAL
   REINFORCEMENT
   ADJUSTMENT
+}
+
+enum CustomDomainStatus {
+  PENDING_PAYMENT
+  PENDING_DNS
+  VERIFYING
+  ACTIVE
+  SUSPENDED
+}
+
+enum SslStatus {
+  NONE
+  PROVISIONING
+  SSL_ACTIVE
+  FAILED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
 }
 
 model CashSession {
