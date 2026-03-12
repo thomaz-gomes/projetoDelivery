@@ -149,6 +149,9 @@ function statusLabel(s) {
                 <button class="btn btn-outline-secondary text-start" @click="go('/saas/settings')">
                   <i class="bi bi-gear me-2"></i>Configurações do Sistema
                 </button>
+                <router-link to="/saas/ai-usage" class="btn btn-outline-info text-start">
+                  <i class="bi bi-graph-up me-2"></i>Uso de IA & Tokens
+                </router-link>
                 <button class="btn btn-outline-warning text-start" @click="resetAllCredits" :disabled="resettingCredits">
                   <span v-if="resettingCredits" class="spinner-border spinner-border-sm me-2"></span>
                   <i v-else class="bi bi-arrow-clockwise me-2"></i>Resetar Créditos de IA

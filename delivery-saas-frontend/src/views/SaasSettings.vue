@@ -221,9 +221,66 @@ async function saveProviders() {
   }
 }
 
+// ── Pricing de Modelos de IA ─────────────────────────────────────────────
+const providerPricings = ref([])
+const loadingPricings = ref(false)
+const newPricing = ref({ provider: 'openai', model: '', inputPricePerMillion: '', outputPricePerMillion: '' })
+const showNewPricingForm = ref(false)
+const savingPricing = ref(false)
+
+async function loadPricings() {
+  loadingPricings.value = true
+  try {
+    const { data } = await api.get('/saas/ai-provider-pricing')
+    providerPricings.value = data
+  } catch (e) {
+    console.error('Erro ao carregar pricings:', e)
+  } finally {
+    loadingPricings.value = false
+  }
+}
+
+async function savePricing(p) {
+  savingPricing.value = true
+  try {
+    if (p.id) {
+      await api.put(`/saas/ai-provider-pricing/${p.id}`, {
+        inputPricePerMillion: parseFloat(p.inputPricePerMillion),
+        outputPricePerMillion: parseFloat(p.outputPricePerMillion),
+        isActive: p.isActive,
+      })
+    } else {
+      await api.post('/saas/ai-provider-pricing', {
+        provider: p.provider,
+        model: p.model,
+        inputPricePerMillion: parseFloat(p.inputPricePerMillion),
+        outputPricePerMillion: parseFloat(p.outputPricePerMillion),
+      })
+      newPricing.value = { provider: 'openai', model: '', inputPricePerMillion: '', outputPricePerMillion: '' }
+      showNewPricingForm.value = false
+    }
+    await loadPricings()
+  } catch (e) {
+    alert(e?.response?.data?.message || 'Erro ao salvar pricing')
+  } finally {
+    savingPricing.value = false
+  }
+}
+
+async function deletePricing(id) {
+  if (!confirm('Remover este modelo de pricing?')) return
+  try {
+    await api.delete(`/saas/ai-provider-pricing/${id}`)
+    await loadPricings()
+  } catch (e) {
+    alert(e?.response?.data?.message || 'Erro ao remover')
+  }
+}
+
 onMounted(async () => {
   await load()
   await loadCredits()
+  await loadPricings()
 })
 </script>
 
@@ -418,6 +475,104 @@ onMounted(async () => {
             <i v-else class="bi bi-floppy me-2"></i>
             Salvar provedores
           </button>
+        </div>
+      </div>
+
+      <!-- Pricing de Modelos de IA -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h5 class="card-title mb-1">
+            <i class="bi bi-tags me-2 text-success"></i>Pricing de Modelos de IA
+          </h5>
+          <p class="text-muted small mb-4">
+            Configure o custo por milhão de tokens (USD) de cada modelo de IA.
+            Usado para calcular o custo real das operações.
+          </p>
+
+          <div v-if="loadingPricings" class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-primary"></div>
+          </div>
+
+          <template v-else>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-3">
+                <thead class="table-light">
+                  <tr>
+                    <th>Provider</th>
+                    <th>Modelo</th>
+                    <th style="width: 160px;">Input (USD/M)</th>
+                    <th style="width: 160px;">Output (USD/M)</th>
+                    <th style="width: 100px;" class="text-end">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="p in providerPricings" :key="p.id">
+                    <td>
+                      <span class="badge" :class="p.provider === 'openai' ? 'bg-dark' : 'bg-info'">
+                        {{ p.provider }}
+                      </span>
+                    </td>
+                    <td><code class="small">{{ p.model }}</code></td>
+                    <td>
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        v-model="p.inputPricePerMillion"
+                        min="0"
+                        step="0.01"
+                        @change="savePricing(p)"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        v-model="p.outputPricePerMillion"
+                        min="0"
+                        step="0.01"
+                        @change="savePricing(p)"
+                      />
+                    </td>
+                    <td class="text-end">
+                      <button class="btn btn-outline-danger btn-sm" @click="deletePricing(p.id)" title="Remover">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  <!-- New row form -->
+                  <tr v-if="showNewPricingForm">
+                    <td>
+                      <select class="form-select form-select-sm" v-model="newPricing.provider">
+                        <option value="openai">openai</option>
+                        <option value="gemini">gemini</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input type="text" class="form-control form-control-sm" v-model="newPricing.model" placeholder="ex: gpt-4o-mini" />
+                    </td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm" v-model="newPricing.inputPricePerMillion" min="0" step="0.01" placeholder="0.15" />
+                    </td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm" v-model="newPricing.outputPricePerMillion" min="0" step="0.01" placeholder="0.60" />
+                    </td>
+                    <td class="text-end">
+                      <button class="btn btn-success btn-sm" @click="savePricing(newPricing)" :disabled="!newPricing.model || savingPricing">
+                        <i class="bi bi-check"></i>
+                      </button>
+                      <button class="btn btn-outline-secondary btn-sm ms-1" @click="showNewPricingForm = false">
+                        <i class="bi bi-x"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <button v-if="!showNewPricingForm" class="btn btn-outline-primary btn-sm" @click="showNewPricingForm = true">
+              <i class="bi bi-plus me-1"></i>Adicionar modelo
+            </button>
+          </template>
         </div>
       </div>
 
