@@ -71,6 +71,7 @@ import aiStudioRouter from './routes/aiStudio.js'
 import { paymentRouter } from './routes/payment.js'
 import leadsRouter from './routes/leads.js'
 import customDomainRouter from './routes/customDomain.js'
+import { customDomainResolver } from './middleware/customDomainResolver.js'
 import './cron.js'
 
 const app = express();
@@ -164,6 +165,9 @@ app.use((err, req, res, next) => {
   }
   return next(err);
 });
+
+// Custom domain resolver — must be before routes
+app.use(customDomainResolver());
 
 // ==============================
 // 🚏 Rotas principais
