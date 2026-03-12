@@ -1,27 +1,14 @@
-// Minimal AI-based parser that calls OpenAI Chat Completions API to transform
+// Minimal AI-based parser that calls the unified AI provider to transform
 // arbitrary Saipos/printRows content into a strict JSON object compatible with
 // the system's normalized order shape.
 //
-// Usage: set environment variable OPENAI_API_KEY with a valid key and
-// set USE_AI_PARSER=true to enable. The function returns the parsed object
-// or throws on fatal errors.
+// Usage: set environment variable OPENAI_API_KEY (or GOOGLE_AI_API_KEY) with a
+// valid key and set USE_AI_PARSER=true to enable. The provider is controlled by
+// the ai_provider_map setting for the POS_PARSER service key.
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-
-let _getSetting = null;
-async function getSettingFn() {
-  if (!_getSetting) {
-    const mod = await import('./services/systemSettings.js');
-    _getSetting = mod.getSetting;
-  }
-  return _getSetting;
-}
+import { callTextAI } from './services/aiProvider.js';
 
 async function parseSaiposWithAI(content, filename = 'unknown') {
-  const getSetting = await getSettingFn();
-  const key = await getSetting('openai_api_key', 'OPENAI_API_KEY');
-  if (!key) throw new Error('Chave da API OpenAI não configurada. Acesse Painel SaaS → Configurações.');
-
   // system prompt: instruct model to return strict JSON only and provide a concrete example
   const system = `You are a parser that receives raw content exported from a POS (Saipos) file
 or its printed rows. Your task is to return a single valid JSON object (no surrounding
@@ -83,35 +70,8 @@ Example expected JSON output for the 'printRows' excerpt above (ONLY the JSON ob
 
   const user = `Filename: ${filename}\n---BEGIN CONTENT---\n${String(content).slice(0, 20000)}\n---END CONTENT---\n\nPlease parse the content and return the JSON object described in the system prompt.`;
 
-  const model = await getSetting('openai_model', 'OPENAI_MODEL') || 'gpt-4o-mini';
-  const body = {
-    model,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user }
-    ],
-    temperature: 0,
-    max_tokens: 1500
-  };
-
-  const res = await fetch(OPENAI_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${key}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`OpenAI API error ${res.status}: ${txt}`);
-  }
-
-  const json = await res.json();
-  const choice = json?.choices?.[0];
-  const text = choice?.message?.content ?? choice?.text ?? null;
-  if (!text) throw new Error('OpenAI returned empty response');
+  const text = await callTextAI('POS_PARSER', system, user, { temperature: 0, maxTokens: 1500 });
+  if (!text) throw new Error('IA returned empty response');
 
   // Try to extract JSON from the model response (it may include wrappers)
   let parsed = null;

@@ -114,6 +114,12 @@
 
             <!-- XML Upload -->
             <div v-if="method === 'xml'">
+              <label class="form-label fw-semibold">Loja</label>
+              <select v-model="selectedStoreId" class="form-select mb-3">
+                <option value="">Selecione a loja...</option>
+                <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+              </select>
+
               <label class="form-label fw-semibold">Arquivos XML de NFe</label>
               <input
                 ref="xmlInput"
@@ -485,7 +491,7 @@ const currentImportId = ref(null)
 // ── Computed ─────────────────────────────────────────────────────────────────
 const canParse = computed(() => {
   if (method.value === 'mde') return selectedMdeImports.value.length > 0
-  if (method.value === 'xml') return xmlFiles.value.length > 0
+  if (method.value === 'xml') return xmlFiles.value.length > 0 && !!selectedStoreId.value
   if (method.value === 'access_key') return accessKeyDigits.value === 44 && !!selectedStoreId.value
   if (method.value === 'receipt_photo') return photoBase64.value.length > 0 && !!selectedStoreId.value
   return false
@@ -673,8 +679,12 @@ async function loadReviewData() {
     currentImportId.value = importIds.value[0]
     const { data: imp } = await api.get(`/purchase-imports/${currentImportId.value}`)
 
-    // parsedItems is the array of matched items
-    const items = Array.isArray(imp.parsedItems) ? imp.parsedItems : []
+    // parsedItems can be a flat array (XML upload / after match) or object with .items (MDE procNFe)
+    let rawItems = imp.parsedItems
+    if (rawItems && !Array.isArray(rawItems) && Array.isArray(rawItems.items)) {
+      rawItems = rawItems.items
+    }
+    const items = Array.isArray(rawItems) ? rawItems : []
     reviewItems.value = items.map((it, idx) => ({
       ...it,
       _idx: idx,

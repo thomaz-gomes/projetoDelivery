@@ -79,7 +79,10 @@ Forma de pagamento
 [BOLD:off]
 {{#each pagamentos}}[ROW:{{metodo}}|{{valor_num}}]
 {{/each}}[INV:off]
-[SIZE:1]
+{{#if tem_troco}}[BOLD:on]
+Troco para R$ {{troco}}
+[BOLD:off]
+{{/if}}[SIZE:1]
 [SEP:- ]
 {{loja_nome}}
 {{#if canal}}
@@ -134,7 +137,10 @@ Obs: {{obs_pedido}}
 [BOLD:on]Pagamento[BOLD:off]
 {{#each pagamentos}}[ROW:{{metodo}}|{{valor_num}}]
 {{/each}}[INV:off]
-[SIZE:1]
+{{#if tem_troco}}[BOLD:on]
+Troco p/ R$ {{troco}}
+[BOLD:off]
+{{/if}}[SIZE:1]
 [SEP:- ]
 {{loja_nome}}
 {{#if canal}}

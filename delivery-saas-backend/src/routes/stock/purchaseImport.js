@@ -16,7 +16,8 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { parseNfeXml, matchItemsWithAI, parseReceiptPhoto } from '../../services/purchaseImportService.js';
-import { syncMde, getMdeStatus } from '../../services/mdeService.js';
+import { getMdeStatus, activateMde } from '../../services/mdeService.js';
+import { enqueueSync, enqueueFetchXml, getQueueStatus } from '../../services/mdeQueue.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -33,7 +34,11 @@ router.get('/', async (req, res) => {
     const take = Math.min(parseInt(limit) || 20, 100);
     const skip = (Math.max(parseInt(page) || 1, 1) - 1) * take;
 
-    const where = { companyId };
+    const where = {
+      companyId,
+      // Exclude MDe activation marker records
+      NOT: { parsedItems: { path: ['_mdeActivation'], equals: true } },
+    };
     if (storeId) where.storeId = storeId;
     if (status) where.status = status;
     if (from || to) {
@@ -71,6 +76,28 @@ router.get('/parse/:jobId', (req, res) => {
   });
 });
 
+// --- POST /purchase-imports/mde/activate ---
+router.post('/mde/activate', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ message: 'Nao autenticado' });
+
+    const { storeId } = req.body;
+    if (!storeId) return res.status(400).json({ message: 'storeId e obrigatorio' });
+
+    const store = await prisma.store.findUnique({ where: { id: storeId }, select: { id: true, companyId: true } });
+    if (!store || store.companyId !== companyId) {
+      return res.status(400).json({ message: 'Loja invalida ou nao pertence a empresa' });
+    }
+
+    const result = await activateMde(storeId, companyId);
+    res.json(result);
+  } catch (e) {
+    console.error('[purchaseImport] POST /mde/activate error:', e?.message || e);
+    res.status(500).json({ message: e?.message || 'Erro ao ativar MDe' });
+  }
+});
+
 // --- POST /purchase-imports/mde/sync ---
 router.post('/mde/sync', requireRole('ADMIN'), async (req, res) => {
   try {
@@ -86,7 +113,10 @@ router.post('/mde/sync', requireRole('ADMIN'), async (req, res) => {
       return res.status(400).json({ message: 'Loja invalida ou nao pertence a empresa' });
     }
 
-    const result = await syncMde(storeId, companyId);
+    const result = enqueueSync(storeId, companyId);
+    if (!result.queued) {
+      return res.status(429).json({ message: `Loja em backoff — aguarde ${result.waitMinutes} minuto(s)`, ...result });
+    }
     res.json(result);
   } catch (e) {
     console.error('[purchaseImport] POST /mde/sync error:', e?.message || e);
@@ -109,11 +139,30 @@ router.get('/mde/status', async (req, res) => {
       return res.status(400).json({ message: 'Loja invalida ou nao pertence a empresa' });
     }
 
-    const status = await getMdeStatus(storeId, companyId);
-    res.json(status);
+    const dbStatus = await getMdeStatus(storeId, companyId);
+    const queueStatus = getQueueStatus(storeId);
+    res.json({ ...dbStatus, ...queueStatus });
   } catch (e) {
     console.error('[purchaseImport] GET /mde/status error:', e?.message || e);
     res.status(500).json({ message: e?.message || 'Erro ao consultar status MDe' });
+  }
+});
+
+// --- POST /purchase-imports/:id/fetch-xml --- (fetch full procNFe for resNFe summaries)
+router.post('/:id/fetch-xml', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ message: 'Nao autenticado' });
+
+    const importRecord = await prisma.purchaseImport.findUnique({ where: { id: req.params.id }, select: { id: true, companyId: true, storeId: true } });
+    if (!importRecord) return res.status(404).json({ message: 'Importacao nao encontrada' });
+    if (importRecord.companyId !== companyId) return res.status(403).json({ message: 'Acesso negado' });
+
+    const result = enqueueFetchXml(req.params.id, companyId, importRecord.storeId);
+    res.json(result);
+  } catch (e) {
+    console.error('[purchaseImport] POST /:id/fetch-xml error:', e?.message || e);
+    res.status(500).json({ message: e?.message || 'Erro ao buscar XML completo' });
   }
 });
 
@@ -146,8 +195,8 @@ router.delete('/:id', requireRole('ADMIN'), async (req, res) => {
     const item = await prisma.purchaseImport.findUnique({ where: { id: req.params.id } });
     if (!item) return res.status(404).json({ message: 'Importacao nao encontrada' });
     if (item.companyId !== companyId) return res.status(403).json({ message: 'Acesso negado' });
-    if (!['PENDING', 'ERROR'].includes(item.status)) {
-      return res.status(400).json({ message: 'Somente importacoes com status PENDING ou ERROR podem ser removidas' });
+    if (!['PENDING', 'ERROR', 'MATCHED'].includes(item.status)) {
+      return res.status(400).json({ message: 'Somente importacoes com status PENDING, MATCHED ou ERROR podem ser removidas' });
     }
 
     await prisma.purchaseImport.delete({ where: { id: req.params.id } });
@@ -241,10 +290,25 @@ async function runParseJob(jobId, method, storeId, companyId, input, userId) {
       importData.status = 'MATCHED';
     }
 
-    const record = await prisma.purchaseImport.create({ data: importData });
+    // If accessKey exists, delete old record first to avoid unique constraint
+    let record;
+    if (importData.accessKey) {
+      const existing = await prisma.purchaseImport.findUnique({ where: { accessKey: importData.accessKey } });
+      if (existing && existing.status !== 'APPLIED') {
+        await prisma.purchaseImport.delete({ where: { id: existing.id } });
+      } else if (existing && existing.status === 'APPLIED') {
+        // Already applied — reuse instead of re-importing
+        job.done = true;
+        job.importId = existing.id;
+        console.log(`[purchaseImport:${jobId}] Reusing already-applied import ${existing.id}`);
+        return;
+      }
+    }
+    record = await prisma.purchaseImport.create({ data: importData });
+
     job.done = true;
     job.importId = record.id;
-    console.log(`[purchaseImport:${jobId}] Created import ${record.id} (${method})`);
+    console.log(`[purchaseImport:${jobId}] Created/updated import ${record.id} (${method})`);
   } catch (e) {
     console.error(`[purchaseImport:${jobId}] Error:`, e?.message || e);
     job.done = true;
@@ -268,7 +332,11 @@ router.post('/:id/match', requireRole('ADMIN'), async (req, res) => {
       return res.status(400).json({ message: 'Somente importacoes com status PENDING podem ser matched' });
     }
 
-    const nfeItems = importRecord.parsedItems;
+    // parsedItems can be a flat array (XML upload) or an object with .items (MDE procNFe)
+    let nfeItems = importRecord.parsedItems;
+    if (nfeItems && !Array.isArray(nfeItems) && Array.isArray(nfeItems.items)) {
+      nfeItems = nfeItems.items;
+    }
     if (!Array.isArray(nfeItems) || nfeItems.length === 0) {
       return res.status(400).json({ message: 'Importacao sem itens para match' });
     }

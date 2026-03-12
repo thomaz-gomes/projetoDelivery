@@ -35,6 +35,30 @@ function padNsu(nsu) {
 }
 
 /**
+ * Build SOAP 1.2 envelope for NFeDistribuicaoDFe (consulta por chave de acesso).
+ */
+function buildConsChNFeEnvelope({ cnpj, chNFe, cUFAutor, tpAmb }) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
+  <soap12:Header/>
+  <soap12:Body>
+    <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+      <nfeDadosMsg>
+        <distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
+          <tpAmb>${tpAmb}</tpAmb>
+          <cUFAutor>${cUFAutor}</cUFAutor>
+          <CNPJ>${cnpj}</CNPJ>
+          <consChNFe>
+            <chNFe>${chNFe}</chNFe>
+          </consChNFe>
+        </distDFeInt>
+      </nfeDadosMsg>
+    </nfeDistDFeInteresse>
+  </soap12:Body>
+</soap12:Envelope>`;
+}
+
+/**
  * Build SOAP 1.2 envelope for NFeDistribuicaoDFe (consulta por último NSU).
  */
 function buildDistDFeEnvelope({ cnpj, ultNSU, cUFAutor, tpAmb }) {
@@ -280,7 +304,20 @@ export async function syncMde(storeId, companyId) {
   if (cStat !== '137' && cStat !== '138') {
     // Other statuses may indicate errors
     if (cStat === '656' || cStat === '657') {
-      throw new Error(`SEFAZ MDe: Consumo indevido (${cStat}) — ${xMotivo}. Aguarde antes de tentar novamente.`);
+      // Save maxNSU even on 656 so next sync doesn't restart from 0
+      const numericMax = parseInt(maxNSU, 10) || 0;
+      if (numericMax > 0) {
+        try {
+          await prisma.purchaseImport.create({
+            data: {
+              companyId, storeId, source: 'MDE', status: 'APPLIED',
+              parsedItems: { _mdeActivation: true, _mdeMaxNSU: maxNSU, _mdeNsu: maxNSU },
+            },
+          });
+          console.log(`[MDe] Saved maxNSU=${maxNSU} on 656 for store ${storeId}`);
+        } catch { /* ignore duplicate */ }
+      }
+      throw new Error(`SEFAZ MDe: Consumo indevido (${cStat}) — ${xMotivo}. Aguarde 1 hora antes de tentar novamente.`);
     }
     throw new Error(`SEFAZ MDe retornou cStat ${cStat}: ${xMotivo}`);
   }
@@ -409,7 +446,225 @@ export async function syncMde(storeId, companyId) {
 }
 
 /**
- * Get MDe sync status for a store — last sync time and pending count.
+ * Fetch the full procNFe XML from SEFAZ for a resNFe (summary) import.
+ * Uses consChNFe to request the document by access key.
+ *
+ * @param {string} importId - PurchaseImport ID
+ * @param {string} companyId
+ * @returns {{ ok: boolean, itemCount: number }}
+ */
+export async function fetchFullNFe(importId, companyId) {
+  const importRecord = await prisma.purchaseImport.findUnique({ where: { id: importId } });
+  if (!importRecord) throw new Error('Importacao nao encontrada');
+  if (importRecord.companyId !== companyId) throw new Error('Acesso negado');
+  if (!importRecord.accessKey) throw new Error('Importacao sem chave de acesso');
+
+  const parsedItems = importRecord.parsedItems || {};
+  if (parsedItems._type !== 'resNFe') {
+    throw new Error('Esta importacao ja possui o XML completo');
+  }
+
+  const storeId = importRecord.storeId;
+  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { id: true, cnpj: true } });
+  if (!store) throw new Error('Loja nao encontrada');
+
+  let cnpj = store.cnpj ? store.cnpj.replace(/\D/g, '') : null;
+  if (!cnpj) {
+    const emitenteConfig = getEmitenteConfig(companyId, storeId);
+    cnpj = emitenteConfig.cnpj ? emitenteConfig.cnpj.replace(/\D/g, '') : null;
+  }
+  if (!cnpj || cnpj.length !== 14) {
+    throw new Error('CNPJ nao configurado para esta loja');
+  }
+
+  // Load certificate
+  const certConfig = await loadCertConfig(companyId);
+  const base = process.cwd();
+  const storeCertCandidates = [
+    path.join(base, 'settings', 'stores', storeId, 'settings.json'),
+    path.join(base, 'public', 'uploads', 'store', storeId, 'settings.json'),
+  ];
+  for (const settingsPath of storeCertCandidates) {
+    try {
+      if (fs.existsSync(settingsPath)) {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8') || '{}');
+        if (settings.certFilename) {
+          const cp = path.join(base, 'secure', 'certs', String(settings.certFilename));
+          if (fs.existsSync(cp)) {
+            certConfig.certPath = cp;
+            certConfig.certBuffer = fs.readFileSync(cp);
+          }
+        }
+        if (settings.certPasswordEnc) {
+          try {
+            const { decryptText } = await import('../utils/secretStore.js');
+            certConfig.certPassword = decryptText(settings.certPasswordEnc);
+          } catch (e) {
+            console.warn('[MDe] Failed to decrypt store cert password:', e?.message);
+          }
+        }
+        if (certConfig.certPath) break;
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (!certConfig.certPath && !certConfig.certBuffer) {
+    throw new Error('Certificado digital nao encontrado');
+  }
+
+  const httpsAgent = loadCertAndCreateAgent(certConfig);
+  const emitenteConfig = getEmitenteConfig(companyId, storeId);
+  const tpAmb = emitenteConfig.nfeEnvironment === 'production' ? '1' : '2';
+  const environment = tpAmb === '1' ? 'production' : 'homologation';
+  const endpoint = MDE_ENDPOINTS[environment];
+
+  console.log(`[MDe] Fetching full NFe for chNFe=${importRecord.accessKey}, store=${storeId}`);
+
+  const envelope = buildConsChNFeEnvelope({
+    cnpj,
+    chNFe: importRecord.accessKey,
+    cUFAutor: DEFAULT_CUFAUTOR,
+    tpAmb,
+  });
+
+  const headers = {
+    'Content-Type': `application/soap+xml; charset=utf-8; action="${SOAP_ACTION}"`,
+  };
+
+  let responseText;
+  try {
+    const res = await axios.post(endpoint, envelope, { headers, httpsAgent, timeout: 60000 });
+    responseText = typeof res.data === 'string' ? res.data : res.data.toString();
+  } catch (err) {
+    const msg = err?.response
+      ? `SEFAZ retornou HTTP ${err.response.status}`
+      : `Falha na comunicacao com SEFAZ: ${err?.message || String(err)}`;
+    throw new Error(msg);
+  }
+
+  const parsed = await parseStringPromise(responseText, { explicitArray: false, ignoreAttrs: false });
+  const body = findKey(parsed, 'retDistDFeInt');
+  if (!body) throw new Error('Resposta inesperada do SEFAZ');
+
+  const cStat = body.cStat || '';
+  const xMotivo = body.xMotivo || '';
+
+  if (cStat === '656' || cStat === '657') {
+    throw new Error(`SEFAZ: Consumo indevido (${cStat}) — Aguarde 1 hora antes de tentar novamente.`);
+  }
+
+  if (cStat !== '138') {
+    throw new Error(`SEFAZ retornou cStat ${cStat}: ${xMotivo}`);
+  }
+
+  // Extract the docZip
+  const loteDistDFeInt = body.loteDistDFeInt;
+  if (!loteDistDFeInt) throw new Error('Resposta sem documentos');
+
+  let docZipEntries = loteDistDFeInt.docZip;
+  if (!Array.isArray(docZipEntries)) docZipEntries = docZipEntries ? [docZipEntries] : [];
+
+  for (const docZip of docZipEntries) {
+    const base64Content = typeof docZip === 'string' ? docZip : (docZip._ || docZip['$value'] || '');
+    if (!base64Content) continue;
+
+    const xmlStr = decompressDocZip(base64Content);
+    const isProcNFe = xmlStr.includes('<procNFe') || xmlStr.includes('<nfeProc') || xmlStr.includes(':nfeProc');
+
+    if (isProcNFe) {
+      const nfeData = await parseNfeXml(xmlStr);
+
+      // Update the import record with full data
+      await prisma.purchaseImport.update({
+        where: { id: importId },
+        data: {
+          rawXml: xmlStr,
+          nfeNumber: nfeData.nfeNumber || importRecord.nfeNumber,
+          nfeSeries: nfeData.nfeSeries || importRecord.nfeSeries,
+          issueDate: nfeData.issueDate || importRecord.issueDate,
+          supplierCnpj: nfeData.supplierCnpj || importRecord.supplierCnpj,
+          supplierName: nfeData.supplierName || importRecord.supplierName,
+          totalValue: nfeData.totalValue || importRecord.totalValue,
+          parsedItems: {
+            ...(nfeData.items ? { items: nfeData.items } : {}),
+            _mdeNsu: parsedItems._mdeNsu,
+            _mdeMaxNSU: parsedItems._mdeMaxNSU,
+            _type: 'procNFe',
+          },
+        },
+      });
+
+      console.log(`[MDe] Updated import ${importId} with full procNFe (${nfeData.items?.length || 0} items)`);
+      return { ok: true, itemCount: nfeData.items?.length || 0 };
+    }
+  }
+
+  throw new Error('SEFAZ retornou o documento mas nao continha o XML completo da NFe. Pode ser necessario manifestar ciencia da operacao primeiro.');
+}
+
+/**
+ * Activate MDe sync for a store — validates config (CNPJ + certificate)
+ * and creates a local marker record. Does NOT call SEFAZ to avoid
+ * consuming the 1-hour rate limit window before the first real sync.
+ */
+export async function activateMde(storeId, companyId) {
+  // 1. Validate store + CNPJ
+  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { id: true, companyId: true, cnpj: true } });
+  if (!store) throw new Error('Loja nao encontrada');
+  if (store.companyId !== companyId) throw new Error('Loja nao pertence a esta empresa');
+
+  let cnpj = store.cnpj ? store.cnpj.replace(/\D/g, '') : null;
+  if (!cnpj) {
+    const emitenteConfig = getEmitenteConfig(companyId, storeId);
+    cnpj = emitenteConfig.cnpj ? emitenteConfig.cnpj.replace(/\D/g, '') : null;
+  }
+  if (!cnpj || cnpj.length !== 14) {
+    throw new Error('CNPJ nao configurado para esta loja. Configure o CNPJ nas configuracoes da loja.');
+  }
+
+  // 2. Validate certificate exists
+  const certConfig = await loadCertConfig(companyId);
+  const base = process.cwd();
+  const storeCertCandidates = [
+    path.join(base, 'settings', 'stores', storeId, 'settings.json'),
+    path.join(base, 'public', 'uploads', 'store', storeId, 'settings.json'),
+  ];
+  for (const settingsPath of storeCertCandidates) {
+    try {
+      if (fs.existsSync(settingsPath)) {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8') || '{}');
+        if (settings.certFilename) {
+          const cp = path.join(base, 'secure', 'certs', String(settings.certFilename));
+          if (fs.existsSync(cp)) {
+            certConfig.certPath = cp;
+          }
+        }
+        if (certConfig.certPath) break;
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (!certConfig.certPath && !certConfig.certBuffer) {
+    throw new Error('Certificado digital A1 (.pfx) nao encontrado. Configure o certificado nas configuracoes fiscais.');
+  }
+
+  // 3. Create activation marker (no SEFAZ call — first sync will handle it)
+  await prisma.purchaseImport.create({
+    data: {
+      companyId,
+      storeId,
+      source: 'MDE',
+      status: 'APPLIED',
+      parsedItems: { _mdeActivation: true, _mdeMaxNSU: '0', _mdeNsu: '0' },
+    },
+  });
+
+  console.log(`[MDe] Activated for store ${storeId}, CNPJ ${cnpj} — ready for first sync`);
+  return { activated: true };
+}
+
+/**
+ * Get MDe sync status for a store — last sync time, pending count, and activation state.
  */
 export async function getMdeStatus(storeId, companyId) {
   const [lastSync, pendingCount, totalCount] = await Promise.all([
@@ -426,11 +681,15 @@ export async function getMdeStatus(storeId, companyId) {
     }),
   ]);
 
+  // Check if MDe has been activated (has any MDE record at all)
+  const activated = totalCount > 0;
+
   return {
     lastSyncAt: lastSync?.createdAt || null,
     lastNSU: lastSync?.parsedItems?._mdeNsu || lastSync?.parsedItems?._mdeMaxNSU || '0',
     pendingCount,
     totalCount,
+    activated,
   };
 }
 
@@ -447,4 +706,4 @@ function findKey(obj, key) {
   return null;
 }
 
-export default { syncMde, getMdeStatus };
+export default { syncMde, getMdeStatus, activateMde, fetchFullNFe };

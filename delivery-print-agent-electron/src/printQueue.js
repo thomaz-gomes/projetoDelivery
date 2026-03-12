@@ -9,6 +9,7 @@
 const logger = require('./logger');
 const templateEngine = require('./templateEngine');
 const configManager  = require('./config');
+const pdfPrinter     = require('./printing/pdf');
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5000;
@@ -94,6 +95,33 @@ async function _handleJob(item) {
 
   // Ler config local uma vez por job (para injetar template e cabeçalho locais)
   const cfg = configManager.load();
+  const testMode = cfg.testMode || {};
+
+  // ── Modo Teste: desviar para PDF em vez de impressoras reais ─────────────
+  if (testMode.enabled && testMode.outputDir) {
+    // Usar a primeira impressora habilitada como referência de largura/template
+    const refPrinter = targets.find(p => p.enabled) || targets[0] || { width: 80 };
+    const p = refPrinter.template
+      ? refPrinter
+      : { ...refPrinter, template: cfg.receiptTemplate || refPrinter.template };
+
+    const o = { ...order };
+    if (!o.headerName && cfg.headerName) o.headerName = cfg.headerName;
+    if (!o.headerCity && cfg.headerCity) o.headerCity = cfg.headerCity;
+    if (!o.qrText && o.id) {
+      const fe = cfg.frontendUrl || o.frontendUrl || '';
+      if (fe) o.qrText = `${fe.replace(/\/$/, '')}/orders/${o.id}`;
+    }
+
+    try {
+      const filePath = await pdfPrinter.print(o, p, testMode.outputDir);
+      logger.info(`[queue] Modo teste: PDF gerado → ${filePath}`);
+    } catch (err) {
+      logger.error(`[queue] Modo teste: falha ao gerar PDF: ${err.message}`);
+      throw err;
+    }
+    return;
+  }
 
   for (const printer of targets) {
     if (!printer.enabled) continue;
@@ -210,9 +238,17 @@ function size() {
   return _queue.length;
 }
 
+function clear() {
+  const removed = _queue.length;
+  _queue.length = 0;
+  _recentIds.clear();
+  logger.info(`[queue] Fila limpa manualmente (${removed} itens removidos)`);
+  return removed;
+}
+
 function shutdown() {
   _queue.length = 0;
   _processing = false;
 }
 
-module.exports = { init, enqueue, enqueueTest, size, shutdown };
+module.exports = { init, enqueue, enqueueTest, size, clear, shutdown };

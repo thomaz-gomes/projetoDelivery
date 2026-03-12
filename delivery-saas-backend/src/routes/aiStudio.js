@@ -25,6 +25,7 @@ import { authMiddleware, requireRole } from '../auth.js'
 import { requireModuleStrict } from '../modules.js'
 import { checkCredits, debitCredits } from '../services/aiCreditManager.js'
 import { getSetting } from '../services/systemSettings.js'
+import { callVisionAI } from '../services/aiProvider.js'
 import path from 'path'
 import fs from 'fs'
 import { randomUUID } from 'crypto'
@@ -512,8 +513,6 @@ router.post('/generate-description', requireRole('ADMIN'), async (req, res) => {
       })
     }
 
-    const apiKey = await getGoogleAIKey()
-
     // Carrega a imagem do produto (disco ou URL externa)
     let imageBuffer
     let mimeType = 'image/jpeg'
@@ -541,54 +540,27 @@ router.post('/generate-description', requireRole('ADMIN'), async (req, res) => {
 
     const imageBase64 = imageBuffer.toString('base64')
 
-    // Chama Gemini Flash Vision para gerar descrição concisa dos ingredientes
-    const visionRes = await fetch(
-      `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { inlineData: { mimeType, data: imageBase64 } },
-              {
-                text:
-                  `You are writing a short menu description for a Brazilian food delivery app.\n` +
-                  `Product name: "${name.trim()}"\n\n` +
-                  `Look at this food photo and write a concise description listing the main ingredients and cooking method visible.\n\n` +
-                  `RULES:\n` +
-                  `- Write in Portuguese (Brazil)\n` +
-                  `- Maximum 120 characters\n` +
-                  `- List ingredients and cooking method separated by commas\n` +
-                  `- No marketing language, no emojis, no exclamation marks\n` +
-                  `- No phrases like "Aproveite!", "Delicioso", "Peça agora", "Experimente"\n` +
-                  `- Start directly with the ingredients/description, no introduction\n` +
-                  `- Capitalize only the first word\n\n` +
-                  `GOOD examples:\n` +
-                  `"Iscas de frango grelhadas, arroz integral com cenoura picada e legumes (cenoura, brócolis e vagem)"\n` +
-                  `"Filé de frango grelhado, batata frita crocante e salada de alface com tomate"\n` +
-                  `"Macarrão ao molho bolonhesa com carne moída temperada e queijo parmesão ralado"\n\n` +
-                  `BAD examples (do NOT write like this):\n` +
-                  `"Aproveite nosso Completão! Filé suculento com cebolas na chapa, batatas fritas... Peça agora!"\n\n` +
-                  `Output ONLY the description text, nothing else.`,
-              },
-            ],
-          }],
-          generationConfig: { maxOutputTokens: 400, temperature: 0.2 },
-          thinkingConfig: { thinkingBudget: 0 },
-        }),
-        signal: AbortSignal.timeout(30_000),
-      }
-    )
+    const textPrompt =
+      `You are writing a short menu description for a Brazilian food delivery app.\n` +
+      `Product name: "${name.trim()}"\n\n` +
+      `Look at this food photo and write a concise description listing the main ingredients and cooking method visible.\n\n` +
+      `RULES:\n` +
+      `- Write in Portuguese (Brazil)\n` +
+      `- Maximum 120 characters\n` +
+      `- List ingredients and cooking method separated by commas\n` +
+      `- No marketing language, no emojis, no exclamation marks\n` +
+      `- No phrases like "Aproveite!", "Delicioso", "Peça agora", "Experimente"\n` +
+      `- Start directly with the ingredients/description, no introduction\n` +
+      `- Capitalize only the first word\n\n` +
+      `GOOD examples:\n` +
+      `"Iscas de frango grelhadas, arroz integral com cenoura picada e legumes (cenoura, brócolis e vagem)"\n` +
+      `"Filé de frango grelhado, batata frita crocante e salada de alface com tomate"\n` +
+      `"Macarrão ao molho bolonhesa com carne moída temperada e queijo parmesão ralado"\n\n` +
+      `BAD examples (do NOT write like this):\n` +
+      `"Aproveite nosso Completão! Filé suculento com cebolas na chapa, batatas fritas... Peça agora!"\n\n` +
+      `Output ONLY the description text, nothing else.`
 
-    if (!visionRes.ok) {
-      const errText = await visionRes.text().catch(() => '')
-      throw new Error(`Gemini Vision error ${visionRes.status}: ${errText.slice(0, 200)}`)
-    }
-
-    const visionData = await visionRes.json()
-    const parts = visionData.candidates?.[0]?.content?.parts || []
-    const description = parts.find(p => p.text)?.text?.trim() || ''
+    const description = await callVisionAI('GENERATE_DESCRIPTION', null, textPrompt, imageBase64, mimeType, { temperature: 0.2, maxTokens: 400, timeoutMs: 30_000 })
     if (!description) throw new Error('Modelo não retornou descrição')
 
     await debitCredits(companyId, 'GENERATE_DESCRIPTION', 1, {

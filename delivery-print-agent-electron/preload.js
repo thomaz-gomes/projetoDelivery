@@ -43,4 +43,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Reconnect ────────────────────────────────────────────────────────────
   // Força nova tentativa de conexão sem resetar configurações.
   reconnect: () => ipcRenderer.invoke('socket:reconnect'),
+
+  // ── Queue ──────────────────────────────────────────────────────────────────
+  clearQueue: () => ipcRenderer.invoke('queue:clear'),
+
+  // ── Test Mode ──────────────────────────────────────────────────────────────
+  toggleTestMode: (enabled) => ipcRenderer.invoke('testmode:toggle', enabled),
+  selectTestDir: () => ipcRenderer.invoke('testmode:select-dir'),
+  openTestDir: () => ipcRenderer.invoke('testmode:open-dir'),
+
+  // ── Regenerate Token ───────────────────────────────────────────────────────
+  regenerateToken: (code) => ipcRenderer.invoke('agent:regenerate-token', { code }),
 });

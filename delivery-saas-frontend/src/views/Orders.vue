@@ -2557,9 +2557,11 @@ async function viewReceipt(order) {
 
     // 1) generate ticket QR on the server so token is fresh/unique
     let qrDataUrl = null;
+    let ticketQrUrl = null;
     try {
       const { data: t } = await api.post(`/orders/${order.id}/tickets`);
       if (t && t.qrUrl) {
+        ticketQrUrl = t.qrUrl;
         qrDataUrl = await QRCode.toDataURL(t.qrUrl, { width: 220, margin: 2 });
       }
     } catch (e) {
@@ -2574,14 +2576,10 @@ async function viewReceipt(order) {
       printerSetting = agentData.printerSetting || null;
     } catch (_) { /* sem configurações de impressora */ }
 
-    // use printService's formatter when available
-    const text = (printService && printService.formatOrderText) ? printService.formatOrderText(order) : null;
-    const content = text || (`Comanda: ${formatDisplay(order)}\n\n` + JSON.stringify(order, null, 2));
-
     // show QR and receipt using the Vue ticket component mounted inside the Swal modal
     try {
       // if server returned an explicit QR URL token, attach to order so component can build QR
-      if (qrDataUrl && t && t.qrUrl) order.url = t.qrUrl;
+      if (ticketQrUrl) order.url = ticketQrUrl;
       const rootId = `ticket-root-${Date.now()}`;
       let appInstance = null;
       await Swal.fire({

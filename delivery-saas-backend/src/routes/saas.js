@@ -4,6 +4,7 @@ import { authMiddleware, requireRole } from '../auth.js'
 import { AI_SERVICE_COSTS, clearServiceCostCache } from '../services/aiCreditManager.js'
 import { calculateProRation } from '../services/proRation.js'
 import { encrypt, decrypt } from '../services/encryption.js'
+import { invalidateSetting } from '../services/systemSettings.js'
 
 export const saasRouter = express.Router()
 saasRouter.use(authMiddleware)
@@ -226,16 +227,29 @@ saasRouter.get('/subscription/:companyId', requireRole('SUPER_ADMIN'), async (re
 })
 
 // Get enabled modules for current user's company (ADMIN)
+// Merges modules from plan + add-on subscriptions
 saasRouter.get('/modules/me', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   try {
-    const subs = await prisma.saasModuleSubscription.findMany({
+    // 1. Modules from add-on subscriptions
+    const addonSubs = await prisma.saasModuleSubscription.findMany({
       where: { companyId, status: 'ACTIVE' },
       include: { module: true }
     })
-    const enabled = subs
+    const addonKeys = addonSubs
       .filter(s => s.module && s.module.isActive !== false)
       .map(s => s.module.key)
+
+    // 2. Modules included in the company's plan
+    const subscription = await prisma.saasSubscription.findUnique({
+      where: { companyId },
+      include: { plan: { include: { modules: { include: { module: true } } } } }
+    })
+    const planKeys = (subscription?.plan?.modules || [])
+      .filter(pm => pm.module && pm.module.isActive !== false)
+      .map(pm => pm.module.key)
+
+    const enabled = [...new Set([...planKeys, ...addonKeys])]
     res.json({ companyId, enabled })
   } catch (e) {
     res.status(500).json({ message: 'Erro ao obter módulos', error: e?.message || String(e) })
@@ -427,14 +441,20 @@ saasRouter.delete('/module-subscriptions/:moduleId', requireRole('ADMIN'), async
 saasRouter.get('/store/modules', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   try {
-    const [allModules, companySubs] = await Promise.all([
+    const [allModules, companySubs, subscription] = await Promise.all([
       prisma.saasModule.findMany({ where: { isActive: true }, orderBy: { name: 'asc' }, include: { prices: true } }),
-      prisma.saasModuleSubscription.findMany({ where: { companyId, status: 'ACTIVE' } })
+      prisma.saasModuleSubscription.findMany({ where: { companyId, status: 'ACTIVE' } }),
+      prisma.saasSubscription.findUnique({
+        where: { companyId },
+        include: { plan: { include: { modules: true } } }
+      })
     ])
     const subMap = new Map(companySubs.map(s => [s.moduleId, s]))
+    const planModuleIds = new Set((subscription?.plan?.modules || []).map(pm => pm.moduleId))
     const result = allModules.map(mod => ({
       ...mod,
-      isSubscribed: subMap.has(mod.id),
+      isSubscribed: subMap.has(mod.id) || planModuleIds.has(mod.id),
+      includedInPlan: planModuleIds.has(mod.id),
       subscription: subMap.get(mod.id) || null
     }))
     res.json(result)
@@ -764,7 +784,7 @@ saasRouter.delete('/companies/:id', requireRole('SUPER_ADMIN'), async (_req, res
 // -------- System Settings (SUPER_ADMIN) --------
 
 // Chaves expostas na API (whitelist). Valores de chaves *_key são mascarados na leitura.
-const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price', 'google_ai_api_key']
+const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price', 'google_ai_api_key', 'ai_provider_map']
 const SENSITIVE_KEYS = new Set(['openai_api_key', 'google_ai_api_key'])
 
 function maskValue(key, value) {
@@ -821,6 +841,7 @@ saasRouter.put('/settings', requireRole('SUPER_ADMIN'), async (req, res) => {
           create: { key, value: val, updatedBy: userId },
         })
       }
+      invalidateSetting(key)
     }
 
     res.json({ message: 'Configurações salvas com sucesso' })

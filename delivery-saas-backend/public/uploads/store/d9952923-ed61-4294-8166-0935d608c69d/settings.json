@@ -7,5 +7,19 @@
       "allowDelivery": false,
       "allowPickup": false
     }
-  }
+  },
+  "nfeSerie": "1",
+  "nfeEnvironment": "homologation",
+  "enderEmit": {
+    "xLgr": "",
+    "nro": "",
+    "xBairro": "",
+    "cMun": "",
+    "xMun": "",
+    "UF": "",
+    "CEP": ""
+  },
+  "certFilename": "d9952923-ed61-4294-8166-0935d608c69d.pfx",
+  "certExists": true,
+  "certPasswordEnc": "Lvr83+r+yZrF1cvi:asC38eLu97hb2rm2p/3cjQ==:YuirUGboVt/lqg=="
 }

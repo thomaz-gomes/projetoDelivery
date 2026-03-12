@@ -43,22 +43,51 @@
     <!-- MDe sync card -->
     <div class="card mb-3" v-if="stores.length">
       <div class="card-body">
-        <h6 class="mb-3"><i class="bi bi-cloud-download me-2"></i>Sincronizacao MDe</h6>
+        <h6 class="mb-3"><i class="bi bi-cloud-download me-2"></i>Sincronizacao MDe <span class="badge bg-success ms-2" style="font-size:10px">Auto 30min</span></h6>
         <div class="row g-2">
           <div v-for="s in stores" :key="'mde-' + s.id" class="col-md-4">
-            <div class="border rounded p-2 d-flex justify-content-between align-items-center">
-              <div>
-                <strong>{{ s.name }}</strong>
-                <div class="small text-muted" v-if="mdeStatus[s.id]">
-                  <span v-if="mdeStatus[s.id].lastSync">Ultima sync: {{ formatDate(mdeStatus[s.id].lastSync) }}</span>
-                  <span v-else>Nunca sincronizado</span>
-                  <span v-if="mdeStatus[s.id].pendingCount" class="ms-2 badge bg-warning">{{ mdeStatus[s.id].pendingCount }} pendentes</span>
+            <div class="border rounded p-2">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <strong>{{ s.name }}</strong>
+                  <div class="small text-muted" v-if="mdeStatus[s.id]">
+                    <span v-if="mdeStatus[s.id].lastSyncAt">Ultima sync: {{ formatDate(mdeStatus[s.id].lastSyncAt) }}</span>
+                    <span v-else-if="mdeStatus[s.id].lastSync">Ultima sync: {{ formatDate(mdeStatus[s.id].lastSync) }}</span>
+                    <span v-else>Nunca sincronizado</span>
+                    <span v-if="mdeStatus[s.id].pendingCount" class="ms-2 badge bg-warning">{{ mdeStatus[s.id].pendingCount }} pendentes</span>
+                  </div>
+                  <div class="small text-muted" v-else>Sem dados de sync</div>
                 </div>
-                <div class="small text-muted" v-else>Sem dados de sync</div>
+                <button
+                  v-if="mdeStatus[s.id]?.activated"
+                  class="btn btn-sm btn-outline-primary"
+                  :disabled="mdeStatus[s.id]?.status === 'syncing' || mdeStatus[s.id]?.status === 'queued'"
+                  @click="syncMde(s.id)"
+                >
+                  <i class="bi bi-arrow-repeat me-1" :class="{ 'spin': mdeStatus[s.id]?.status === 'syncing' }"></i>Sincronizar
+                </button>
+                <button
+                  v-else
+                  class="btn btn-sm btn-primary"
+                  :disabled="syncingStore === s.id"
+                  @click="activateMde(s.id)"
+                >
+                  <i class="bi bi-power me-1" :class="{ 'spin': syncingStore === s.id }"></i>Ativar
+                </button>
               </div>
-              <button class="btn btn-sm btn-outline-primary" :disabled="syncingStore === s.id" @click="syncMde(s.id)">
-                <i class="bi bi-arrow-repeat me-1" :class="{ 'spin': syncingStore === s.id }"></i>Sincronizar NFe
-              </button>
+              <!-- Queue status indicators -->
+              <div v-if="mdeStatus[s.id]?.status === 'syncing'" class="small text-primary mt-1">
+                <i class="bi bi-arrow-repeat spin me-1"></i>Sincronizando com SEFAZ...
+              </div>
+              <div v-else-if="mdeStatus[s.id]?.status === 'queued'" class="small text-info mt-1">
+                <i class="bi bi-clock me-1"></i>Na fila (posicao {{ mdeStatus[s.id].queuePosition }})
+              </div>
+              <div v-else-if="mdeStatus[s.id]?.status === 'backoff'" class="small text-warning mt-1">
+                <i class="bi bi-exclamation-triangle me-1"></i>Limite SEFAZ — aguardando {{ mdeStatus[s.id].backoffMinutes }}min
+              </div>
+              <div v-if="mdeStatus[s.id]?.lastError && mdeStatus[s.id]?.status !== 'backoff'" class="small text-danger mt-1">
+                <i class="bi bi-x-circle me-1"></i>{{ mdeStatus[s.id].lastError }}
+              </div>
             </div>
           </div>
         </div>
@@ -91,19 +120,32 @@
                 <td>{{ row.nfeNumber || '-' }}</td>
                 <td>{{ formatCurrency(row.totalValue) }}</td>
                 <td><span :class="statusBadgeClass(row.status)">{{ statusLabel(row.status) }}</span></td>
-                <td>
-                  <button v-if="row.status === 'PENDING'" class="btn btn-sm btn-outline-primary" :disabled="processingId === row.id" @click="processMatch(row)">
-                    <i class="bi bi-robot me-1"></i>Processar com IA
-                  </button>
-                  <button v-else-if="row.status === 'MATCHED'" class="btn btn-sm btn-outline-info" @click="reviewImport(row)">
-                    <i class="bi bi-eye me-1"></i>Revisar
-                  </button>
-                  <router-link v-else-if="row.status === 'APPLIED' && row.stockMovementId" class="btn btn-sm btn-outline-success" :to="`/stock-movements/${row.stockMovementId}`">
-                    <i class="bi bi-box-arrow-up-right me-1"></i>Ver Movimento
-                  </router-link>
-                  <span v-else-if="row.status === 'ERROR'" class="text-danger small">
-                    <i class="bi bi-exclamation-triangle me-1"></i>{{ row.errorMessage || 'Erro' }}
-                  </span>
+                <td class="text-end">
+                  <div class="d-flex gap-1 justify-content-end">
+                    <button v-if="row.status === 'PENDING' && isResNFe(row)" class="btn btn-sm btn-outline-warning" :disabled="processingId === row.id" @click="fetchXml(row)">
+                      <i class="bi bi-cloud-download me-1"></i>Buscar XML
+                    </button>
+                    <button v-else-if="row.status === 'PENDING'" class="btn btn-sm btn-outline-primary" :disabled="processingId === row.id" @click="processMatch(row)">
+                      <i class="bi bi-robot me-1"></i>Processar com IA
+                    </button>
+                    <button v-else-if="row.status === 'MATCHED'" class="btn btn-sm btn-outline-info" @click="reviewImport(row)">
+                      <i class="bi bi-eye me-1"></i>Revisar
+                    </button>
+                    <router-link v-else-if="row.status === 'APPLIED' && row.stockMovementId" class="btn btn-sm btn-outline-success" :to="`/stock-movements/${row.stockMovementId}`">
+                      <i class="bi bi-box-arrow-up-right me-1"></i>Ver Movimento
+                    </router-link>
+                    <span v-else-if="row.status === 'ERROR'" class="text-danger small">
+                      <i class="bi bi-exclamation-triangle me-1"></i>{{ row.errorMessage || 'Erro' }}
+                    </span>
+                    <button
+                      v-if="['PENDING', 'ERROR', 'MATCHED'].includes(row.status)"
+                      class="btn btn-sm btn-outline-danger"
+                      title="Excluir importacao"
+                      @click="deleteImport(row)"
+                    >
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="!paged.length">
@@ -137,7 +179,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import Swal from 'sweetalert2'
 import api from '../../api'
 import DateInput from '../../components/form/date/DateInput.vue'
 import ListCard from '../../components/ListCard.vue'
@@ -212,22 +255,89 @@ function reset() {
   list.value = []
 }
 
-async function syncMde(storeId) {
+async function activateMde(storeId) {
   syncingStore.value = storeId
+  Swal.fire({ title: 'Ativando sincronizacao...', text: 'Validando configuracao da loja', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
   try {
-    await api.post('/purchase-imports/mde/sync', { storeId })
-    // reload MDe status for this store
+    await api.post('/purchase-imports/mde/activate', { storeId })
     try {
       const { data } = await api.get('/purchase-imports/mde/status', { params: { storeId } })
       mdeStatus.value[storeId] = data
     } catch { /* ignore */ }
-    // reload list
-    await load()
+    Swal.fire({ icon: 'success', title: 'Sincronizacao ativada', text: 'Clique em "Iniciar sincronizacao" para buscar as notas fiscais.', confirmButtonColor: '#105784' })
   } catch (e) {
-    console.error('MDe sync failed', e?.message || e)
-    alert('Falha ao sincronizar MDe: ' + (e?.response?.data?.error || e?.message || 'Erro desconhecido'))
+    console.error('MDe activate failed', e?.message || e)
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || e?.message || 'Erro ao ativar MDe' })
   } finally {
     syncingStore.value = null
+  }
+}
+
+async function syncMde(storeId) {
+  try {
+    const { data: result } = await api.post('/purchase-imports/mde/sync', { storeId })
+    if (result.queued) {
+      // Update local status immediately
+      mdeStatus.value[storeId] = { ...mdeStatus.value[storeId], status: 'queued', queuePosition: result.position }
+      Swal.fire({
+        icon: 'info',
+        title: 'Sincronizacao agendada',
+        text: result.reason === 'already_queued'
+          ? 'Ja existe uma sincronizacao na fila para esta loja.'
+          : `Posicao na fila: ${result.position}. O processo roda em segundo plano.`,
+        timer: 3000,
+        showConfirmButton: false,
+      })
+      startStatusPolling(storeId)
+    }
+  } catch (e) {
+    console.error('MDe sync failed', e?.message || e)
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || e?.message || 'Erro ao sincronizar MDe' })
+  }
+}
+
+async function deleteImport(row) {
+  const result = await Swal.fire({
+    title: 'Excluir importacao?',
+    text: row.supplierName ? `Fornecedor: ${row.supplierName}` : 'Esta acao e irreversivel.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Excluir',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#dc3545',
+  })
+  if (!result.isConfirmed) return
+  try {
+    await api.delete(`/purchase-imports/${row.id}`)
+    Swal.fire({ icon: 'success', text: 'Importacao excluida', timer: 1500, showConfirmButton: false })
+    await load()
+  } catch (e) {
+    console.error('Delete import failed', e?.message || e)
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || e?.message || 'Erro ao excluir' })
+  }
+}
+
+function isResNFe(row) {
+  // resNFe imports have parsedItems._type === 'resNFe' (no item details)
+  return row.parsedItems?._type === 'resNFe'
+}
+
+async function fetchXml(row) {
+  try {
+    const { data } = await api.post(`/purchase-imports/${row.id}/fetch-xml`)
+    if (data.queued) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Busca de XML agendada',
+        text: 'A busca sera processada em segundo plano.',
+        timer: 2000,
+        showConfirmButton: false,
+      })
+      if (row.storeId) startStatusPolling(row.storeId)
+    }
+  } catch (e) {
+    console.error('Fetch XML failed', e?.message || e)
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || e?.message || 'Erro ao buscar XML completo' })
   }
 }
 
@@ -238,7 +348,7 @@ async function processMatch(row) {
     await load()
   } catch (e) {
     console.error('AI match failed', e?.message || e)
-    alert('Falha ao processar matching: ' + (e?.response?.data?.error || e?.message || 'Erro desconhecido'))
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Erro ao processar matching' })
   } finally {
     processingId.value = null
   }
@@ -284,12 +394,63 @@ function formatDate(d) {
   try { return new Date(d).toLocaleString() } catch { return d }
 }
 
+// ── Status polling for background sync ──────────────────────────────────────
+const pollingTimers = new Map() // storeId -> intervalId
+
+function startStatusPolling(storeId) {
+  if (pollingTimers.has(storeId)) return // already polling
+  const timer = setInterval(async () => {
+    try {
+      const { data } = await api.get('/purchase-imports/mde/status', { params: { storeId } })
+      const prevStatus = mdeStatus.value[storeId]?.status
+      mdeStatus.value[storeId] = data
+
+      // If transitioned from syncing/queued to idle, refresh list and stop polling
+      if ((prevStatus === 'syncing' || prevStatus === 'queued') && data.status === 'idle') {
+        await load()
+        if (data.newImports > 0) {
+          Swal.fire({ icon: 'success', title: `${data.newImports} nota(s) importada(s)`, timer: 3000, showConfirmButton: false })
+        }
+        if (data.fetchXmlResult?.itemCount > 0) {
+          Swal.fire({ icon: 'success', title: 'XML obtido', text: `${data.fetchXmlResult.itemCount} item(ns) encontrado(s)`, timer: 3000, showConfirmButton: false })
+        }
+        stopStatusPolling(storeId)
+      }
+    } catch { /* ignore */ }
+  }, 5000)
+  pollingTimers.set(storeId, timer)
+}
+
+function stopStatusPolling(storeId) {
+  const timer = pollingTimers.get(storeId)
+  if (timer) {
+    clearInterval(timer)
+    pollingTimers.delete(storeId)
+  }
+}
+
+function stopAllPolling() {
+  for (const [storeId] of pollingTimers) stopStatusPolling(storeId)
+}
+
 // Expose load for external components (e.g., modal triggering reload)
 defineExpose({ load })
 
 onMounted(async () => {
   await loadStores()
   await Promise.all([load(), loadMdeStatus()])
+
+  // Start polling for any stores that are currently syncing/queued
+  for (const s of stores.value) {
+    const status = mdeStatus.value[s.id]?.status
+    if (status === 'syncing' || status === 'queued') {
+      startStatusPolling(s.id)
+    }
+  }
+})
+
+onUnmounted(() => {
+  stopAllPolling()
 })
 </script>
 

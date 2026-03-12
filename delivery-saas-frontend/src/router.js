@@ -119,42 +119,53 @@ const router = createRouter({
     { path: '/register', component: Register },
     { path: '/verify-email', component: VerifyEmail },
     { path: '/setup', component: SetupCompany, meta: { requiresAuth: true, noSidebar: true } },
-    { path: '/', redirect: '/orders' },
-    { path: '/orders', component: Orders, meta: { requiresAuth: true } },
-    { path: '/orders/:id/receipt', component: Receipt, meta: { requiresAuth: true } },
-  { path: '/customers', component: CustomersList, meta: { requiresAuth: true } },
-  { path: '/customers/new', component: CustomerForm, meta: { requiresAuth: true } },
-  { path: '/customers/:id', component: CustomerProfile, meta: { requiresAuth: true } },
-  { path: '/customer-groups', component: CustomerGroupsList, meta: { requiresAuth: true } },
-  { path: '/customer-groups/new', component: CustomerGroupForm, meta: { requiresAuth: true } },
-  { path: '/customer-groups/:id', component: CustomerGroupForm, meta: { requiresAuth: true } },
-  { path: '/riders', component: Riders, meta: { requiresAuth: true } },
-  { path: '/riders/new', component: RiderForm, meta: { requiresAuth: true } },
-  { path: '/riders/:id', component: RiderForm, meta: { requiresAuth: true } },
-  { path: '/riders/:id/account', component: RiderAccountAdmin, meta: { requiresAuth: true, role: 'ADMIN' } },
-  { path: '/rider-adjustments', component: RiderAdjustments, meta: { requiresAuth: true } },
-  { path: '/settings/neighborhoods', component: Neighborhoods, meta: { requiresAuth: true } },
-  { path: '/settings/dados-fiscais', component: DadosFiscaisSettings, meta: { requiresAuth: true } },
-  { path: '/settings/dados-fiscais/new', component: DadosFiscaisForm, meta: { requiresAuth: true } },
-  { path: '/settings/dados-fiscais/:id', component: DadosFiscaisForm, meta: { requiresAuth: true } },
-  { path: '/ingredient-groups', component: IngredientGroups, meta: { requiresAuth: true } },
-  { path: '/ingredient-groups/new', component: IngredientGroupForm, meta: { requiresAuth: true } },
-  { path: '/ingredient-groups/:id/edit', component: IngredientGroupForm, meta: { requiresAuth: true } },
-  { path: '/ingredients', component: Ingredients, meta: { requiresAuth: true } },
-  { path: '/ingredients/new', component: IngredientForm, meta: { requiresAuth: true } },
-  { path: '/ingredients/:id', component: IngredientForm, meta: { requiresAuth: true } },
-  { path: '/technical-sheets', component: TechnicalSheets, meta: { requiresAuth: true } },
-  { path: '/technical-sheets/:id/edit', component: TechnicalSheetEdit, meta: { requiresAuth: true } },
-  { path: '/stock-movements', component: StockMovements, meta: { requiresAuth: true } },
-  { path: '/stock-movements/new', component: StockMovementForm, meta: { requiresAuth: true } },
-  { path: '/stock-movements/:id', component: StockMovementForm, meta: { requiresAuth: true } },
-  { path: '/stock/purchase-imports', component: PurchaseImports, meta: { requiresAuth: true } },
-    { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true } },
-  { path: '/settings/ifood', component: IFoodIntegration },
-  { path: '/settings/meta-pixel', component: MetaPixelIntegration, meta: { requiresAuth: true } },
-  { path: '/integrations', component: Integrations, meta: { requiresAuth: true } },
-  { path: '/integrations/new', component: IntegrationForm, meta: { requiresAuth: true } },
-  { path: '/integrations/:id', component: IntegrationForm, meta: { requiresAuth: true } },
+    { path: '/', beforeEnter: async () => {
+        const token = localStorage.getItem('token')
+        if (!token) return { path: '/login' }
+        const { useModulesStore } = await import('./stores/modules')
+        const modules = useModulesStore()
+        if (!modules.enabled.length) {
+          try { await modules.fetchEnabled() } catch {}
+        }
+        const isSimples = modules.has('CARDAPIO_SIMPLES') && !modules.has('CARDAPIO_COMPLETO')
+        return { path: isSimples ? '/menu/menus' : '/orders' }
+      }
+    },
+    { path: '/orders', component: Orders, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+    { path: '/orders/:id/receipt', component: Receipt, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/customers', component: CustomersList, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/customers/new', component: CustomerForm, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/customers/:id', component: CustomerProfile, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/customer-groups', component: CustomerGroupsList, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/customer-groups/new', component: CustomerGroupForm, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/customer-groups/:id', component: CustomerGroupForm, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/riders', component: Riders, meta: { requiresAuth: true, requiresModule: 'RIDERS' } },
+  { path: '/riders/new', component: RiderForm, meta: { requiresAuth: true, requiresModule: 'RIDERS' } },
+  { path: '/riders/:id', component: RiderForm, meta: { requiresAuth: true, requiresModule: 'RIDERS' } },
+  { path: '/riders/:id/account', component: RiderAccountAdmin, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } },
+  { path: '/rider-adjustments', component: RiderAdjustments, meta: { requiresAuth: true, requiresModule: 'RIDERS' } },
+  { path: '/settings/neighborhoods', component: Neighborhoods, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/settings/dados-fiscais', component: DadosFiscaisSettings, meta: { requiresAuth: true, requiresModule: 'FISCAL' } },
+  { path: '/settings/dados-fiscais/new', component: DadosFiscaisForm, meta: { requiresAuth: true, requiresModule: 'FISCAL' } },
+  { path: '/settings/dados-fiscais/:id', component: DadosFiscaisForm, meta: { requiresAuth: true, requiresModule: 'FISCAL' } },
+  { path: '/ingredient-groups', component: IngredientGroups, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/ingredient-groups/new', component: IngredientGroupForm, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/ingredient-groups/:id/edit', component: IngredientGroupForm, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/ingredients', component: Ingredients, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/ingredients/new', component: IngredientForm, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/ingredients/:id', component: IngredientForm, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/technical-sheets', component: TechnicalSheets, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/technical-sheets/:id/edit', component: TechnicalSheetEdit, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/stock-movements', component: StockMovements, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/stock-movements/new', component: StockMovementForm, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/stock-movements/:id', component: StockMovementForm, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+  { path: '/stock/purchase-imports', component: PurchaseImports, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+    { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true, requiresModule: 'WHATSAPP' } },
+  { path: '/settings/ifood', component: IFoodIntegration, meta: { requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/settings/meta-pixel', component: MetaPixelIntegration, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/integrations', component: Integrations, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/integrations/new', component: IntegrationForm, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/integrations/:id', component: IntegrationForm, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/settings/stores', component: Stores, meta: { requiresAuth: true } },
   { path: '/settings/stores/new', component: StoreForm, meta: { requiresAuth: true } },
   { path: '/settings/stores/:id', component: StoreForm, meta: { requiresAuth: true } },
@@ -163,16 +174,16 @@ const router = createRouter({
   { path: '/settings/agent-token', component: AgentTokenAdmin, meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/file-source', component: FileSourceSettings, meta: { requiresAuth: true } },
   { path: '/settings/file-source/preview', component: FileSourcePreview, meta: { requiresAuth: true } },
-  { path: '/affiliates', component: AffiliateListing, meta: { requiresAuth: true } },
-  { path: '/affiliates/new', component: AffiliateCreate, meta: { requiresAuth: true } },
-  { path: '/affiliates/:id/edit', component: AffiliateEdit, meta: { requiresAuth: true } },
-  { path: '/affiliates/:id/sales/new', component: AffiliateSaleNew, meta: { requiresAuth: true } },
-  { path: '/affiliates/:id/payments/new', component: AffiliatePaymentNew, meta: { requiresAuth: true } },
-  { path: '/affiliates/:id/statement', component: AffiliateStatement, meta: { requiresAuth: true } },
+  { path: '/affiliates', component: AffiliateListing, meta: { requiresAuth: true, requiresModule: 'AFFILIATES' } },
+  { path: '/affiliates/new', component: AffiliateCreate, meta: { requiresAuth: true, requiresModule: 'AFFILIATES' } },
+  { path: '/affiliates/:id/edit', component: AffiliateEdit, meta: { requiresAuth: true, requiresModule: 'AFFILIATES' } },
+  { path: '/affiliates/:id/sales/new', component: AffiliateSaleNew, meta: { requiresAuth: true, requiresModule: 'AFFILIATES' } },
+  { path: '/affiliates/:id/payments/new', component: AffiliatePaymentNew, meta: { requiresAuth: true, requiresModule: 'AFFILIATES' } },
+  { path: '/affiliates/:id/statement', component: AffiliateStatement, meta: { requiresAuth: true, requiresModule: 'AFFILIATES' } },
   { path: '/marketing/studio-ia', component: StudioIA, meta: { requiresAuth: true } },
-  { path: '/coupons', component: CouponsList, meta: { requiresAuth: true } },
-  { path: '/coupons/new', component: CouponForm, meta: { requiresAuth: true } },
-  { path: '/coupons/:id/edit', component: CouponForm, meta: { requiresAuth: true } },
+  { path: '/coupons', component: CouponsList, meta: { requiresAuth: true, requiresModule: 'COUPONS' } },
+  { path: '/coupons/new', component: CouponForm, meta: { requiresAuth: true, requiresModule: 'COUPONS' } },
+  { path: '/coupons/:id/edit', component: CouponForm, meta: { requiresAuth: true, requiresModule: 'COUPONS' } },
   { path: '/claim/:token', component: Claim, meta: { requiresAuth: true } }
    ,{ path: '/rider/claim/:token', component: () => import('./views/RiderClaim.vue'), meta: { requiresAuth: true, noSidebar: true } }
    ,{ path: '/public/:storeSlug', component: PublicSlugResolver }
@@ -193,7 +204,7 @@ const router = createRouter({
   ,{ path: '/menu/menus', component: Menus, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus/new', component: MenuEdit, meta: { requiresAuth: true } }
   ,{ path: '/menu/menus/:id', component: MenuEdit, meta: { requiresAuth: true } }
-   ,{ path: '/menu/integration', component: IntegrationCodes, meta: { requiresAuth: true } }
+   ,{ path: '/menu/integration', component: IntegrationCodes, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
    ,{ path: '/menu/options', component: MenuOptions, meta: { requiresAuth: true } }
   ,{ path: '/menu/options/groups/new', component: OptionGroupForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/options/groups/:id', component: OptionGroupForm, meta: { requiresAuth: true } }
@@ -209,18 +220,18 @@ const router = createRouter({
   ,{ path: '/rider/home', component: RiderQrCode, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/rider/account', component: RiderAccountSelf, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/rider', component: RiderDashboard, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
-  ,{ path: '/riders/map', component: () => import('./views/RiderMap.vue'), meta: { requiresAuth: true } }
-  ,{ path: '/settings/rider-tracking', component: () => import('./views/RiderTracking.vue'), meta: { requiresAuth: true } }
+  ,{ path: '/riders/map', component: () => import('./views/RiderMap.vue'), meta: { requiresAuth: true, requiresModule: 'RIDERS' } }
+  ,{ path: '/settings/rider-tracking', component: () => import('./views/RiderTracking.vue'), meta: { requiresAuth: true, requiresModule: 'RIDERS' } }
   ,{ path: '/affiliate', component: AffiliateHome, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/affiliate/statement', component: AffiliateStatementSelf, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/menu/products/new', component: ProductForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/products/:id', component: ProductForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/categories/new', component: CategoryForm, meta: { requiresAuth: true } }
   ,{ path: '/menu/categories/:id', component: CategoryForm, meta: { requiresAuth: true } }
-  ,{ path: '/sales', component: SalesHistory, meta: { requiresAuth: true } }
-  ,{ path: '/sales/:id', component: SaleDetails, meta: { requiresAuth: true } }
-  ,{ path: '/reports/cash-fronts', component: CashFronts, meta: { requiresAuth: true } }
-  ,{ path: '/reports/products', component: ProductsReport, meta: { requiresAuth: true } }
+  ,{ path: '/sales', component: SalesHistory, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
+  ,{ path: '/sales/:id', component: SaleDetails, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
+  ,{ path: '/reports/cash-fronts', component: CashFronts, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
+  ,{ path: '/reports/products', component: ProductsReport, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/saas/plans', component: SaasPlans, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies', component: SaasCompanies, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies/new', component: SaasCompanyNew, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
@@ -229,18 +240,18 @@ const router = createRouter({
   ,{ path: '/saas/billing', component: SaasBilling, meta: { requiresAuth: true, role: ['ADMIN','SUPER_ADMIN'] } }
   ,{ path: '/saas/settings', component: SaasSettings, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
-    { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true } },
-    { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN' } },
-    { path: '/relatorios/nfe-emissoes', component: NfeEmissoesRelatorio, meta: { requiresAuth: true, role: ['ADMIN', 'SUPER_ADMIN'] } },
+    { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true, requiresModule: 'CASHBACK' } },
+    { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },
+    { path: '/relatorios/nfe-emissoes', component: NfeEmissoesRelatorio, meta: { requiresAuth: true, role: ['ADMIN', 'SUPER_ADMIN'], requiresModule: 'FISCAL' } },
     // ---- Módulo Financeiro ----
-    { path: '/financial', component: FinancialDashboard, meta: { requiresAuth: true, role: 'ADMIN' } },
-    { path: '/financial/accounts', component: FinancialAccounts, meta: { requiresAuth: true, role: 'ADMIN' } },
-    { path: '/financial/transactions', component: FinancialTransactions, meta: { requiresAuth: true, role: 'ADMIN' } },
-    { path: '/financial/cash-flow', component: FinancialCashFlow, meta: { requiresAuth: true, role: 'ADMIN' } },
-    { path: '/financial/dre', component: FinancialDRE, meta: { requiresAuth: true, role: 'ADMIN' } },
-    { path: '/financial/gateways', component: FinancialGateways, meta: { requiresAuth: true, role: 'ADMIN' } },
-    { path: '/financial/ofx', component: FinancialOFX, meta: { requiresAuth: true, role: 'ADMIN' } },
-    { path: '/financial/cost-centers', component: FinancialCostCenters, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/financial', component: FinancialDashboard, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/accounts', component: FinancialAccounts, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/transactions', component: FinancialTransactions, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/cash-flow', component: FinancialCashFlow, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/dre', component: FinancialDRE, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/gateways', component: FinancialGateways, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/ofx', component: FinancialOFX, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/cost-centers', component: FinancialCostCenters, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     // ---- Loja de Complementos ----
     { path: '/store', component: AddOnStore, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/store/credits', component: CreditPackStore, meta: { requiresAuth: true, role: 'ADMIN' } },
@@ -291,28 +302,19 @@ router.beforeEach(async (to) => {
     }
   }
 
-  // CARDAPIO_SIMPLES guard: bloqueia rotas que exigem plano completo
-  const SIMPLES_BLOCKED_PREFIXES = [
-    '/orders', '/reports', '/customers', '/integrations',
-    '/settings/neighborhoods', '/settings/meta-pixel',
-    '/financial', '/riders', '/affiliates', '/coupons',
-    '/stock-movements', '/ingredient-groups', '/settings/cashback',
-    '/menu/integration',
-  ]
-  if (token) {
-    const isBlocked = SIMPLES_BLOCKED_PREFIXES.some(p => to.path === p || to.path.startsWith(p + '/'))
-    if (isBlocked) {
-      const auth = useAuthStore()
-      const userRole = String(auth.user?.role || '').toUpperCase()
-      if (userRole === 'ADMIN') {
-        const { useModulesStore } = await import('./stores/modules')
-        const modules = useModulesStore()
-        if (!modules.enabled.length) {
-          try { await modules.fetchEnabled() } catch {}
-        }
-        const hasSimples = modules.has('CARDAPIO_SIMPLES')
-        const hasCompleto = modules.has('CARDAPIO_COMPLETO')
-        if (hasSimples && !hasCompleto) return { path: '/menu/menus' }
+  // Module guard: block routes requiring a module the user doesn't have
+  if (token && to.meta.requiresModule) {
+    const auth = useAuthStore()
+    const userRole = String(auth.user?.role || '').toUpperCase()
+    if (userRole === 'ADMIN') {
+      const { useModulesStore } = await import('./stores/modules')
+      const modules = useModulesStore()
+      if (!modules.enabled.length) {
+        try { await modules.fetchEnabled() } catch {}
+      }
+      if (!modules.has(to.meta.requiresModule)) {
+        const isSimples = modules.has('CARDAPIO_SIMPLES') && !modules.has('CARDAPIO_COMPLETO')
+        return { path: isSimples ? '/menu/menus' : '/orders' }
       }
     }
   }

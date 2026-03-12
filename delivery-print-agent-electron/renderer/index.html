@@ -325,8 +325,50 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
       <div class="btn-row" style="margin-top:16px">
         <button class="btn btn-ghost" onclick="refreshStatus()">Atualizar</button>
         <button class="btn btn-ghost" onclick="window.electronAPI.openLogs()">Abrir Log</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearQueue()">Limpar Fila</button>
         <button class="btn btn-primary btn-sm" onclick="reconnect()">&#8635; Reconectar</button>
         <button class="btn btn-danger btn-sm" onclick="resetConfig()" style="margin-left:auto">Resetar Pareamento</button>
+      </div>
+    </div>
+
+    <!-- Gerar Novo Token -->
+    <div class="card">
+      <h2>Gerar Novo Token</h2>
+      <p style="font-size:13px;color:#888;margin-bottom:12px">Insira o código de pareamento gerado no painel para obter um novo token sem resetar as configurações.</p>
+      <div class="form-row">
+        <div class="field">
+          <label>Código de Pareamento (6 caracteres)</label>
+          <input id="regenerateCode" placeholder="Ex: A1B2C3" maxlength="6" style="text-transform:uppercase;font-family:monospace;font-size:18px;letter-spacing:4px;text-align:center" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').toUpperCase()" />
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end">
+          <button class="btn btn-primary" onclick="regenerateToken()" id="btnRegenerate">Gerar Novo Token</button>
+        </div>
+      </div>
+      <div id="regenerateStatus" style="font-size:13px;margin-top:8px;display:none"></div>
+    </div>
+
+    <!-- Modo Teste -->
+    <div class="card" id="testModeCard">
+      <h2>Modo Teste (PDF)</h2>
+      <div class="toggle-row">
+        <input type="checkbox" class="toggle" id="testModeToggle" onchange="toggleTestMode(this.checked)" />
+        <label for="testModeToggle" id="testModeLabel">Desativado</label>
+      </div>
+      <div style="font-size:13px;color:#888;margin-bottom:12px">
+        Quando ativo, todos os pedidos geram PDF na pasta selecionada em vez de imprimir nas impressoras reais.
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Pasta de saída</label>
+          <input id="testModeDir" readonly placeholder="Nenhuma pasta selecionada" style="cursor:pointer" onclick="selectTestDir()" />
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="selectTestDir()">Selecionar Pasta</button>
+          <button class="btn btn-ghost btn-sm" onclick="openTestDir()">Abrir Pasta</button>
+        </div>
+      </div>
+      <div id="testModeBanner" style="display:none;background:#3a3000;color:#ffcc00;padding:8px 12px;border-radius:6px;font-size:13px;margin-top:8px">
+        &#9888; Impressoras reais desativadas enquanto o modo teste está ativo
       </div>
     </div>
   </div>
@@ -471,6 +513,7 @@ async function init() {
   const as = await api.getAutoStart();
   document.getElementById('autoStart').checked = as;
 
+  loadTestMode();
   api.onStatusChange(updateStatusBadge);
 }
 
@@ -709,6 +752,70 @@ async function testCurrentPrinter() {
   await testPrinter(editingPrinterId);
 }
 
+// ── Test Mode ─────────────────────────────────────────────────────────────
+function loadTestMode() {
+  const tm = config.testMode || { enabled: false, outputDir: '' };
+  document.getElementById('testModeToggle').checked = tm.enabled;
+  document.getElementById('testModeDir').value = tm.outputDir || '';
+  updateTestModeUI(tm.enabled);
+}
+
+function updateTestModeUI(enabled) {
+  const label = document.getElementById('testModeLabel');
+  const banner = document.getElementById('testModeBanner');
+  const headerBadge = document.getElementById('statusBadge');
+  label.textContent = enabled ? 'Ativado' : 'Desativado';
+  label.style.color = enabled ? '#ffcc00' : '#888';
+  banner.style.display = enabled ? 'block' : 'none';
+  // Indicador no header
+  if (enabled) {
+    let tb = document.getElementById('testModeBadge');
+    if (!tb) {
+      tb = document.createElement('span');
+      tb.id = 'testModeBadge';
+      tb.className = 'badge connecting';
+      tb.textContent = 'MODO TESTE';
+      tb.style.marginLeft = '8px';
+      headerBadge.parentElement.insertBefore(tb, headerBadge.nextSibling);
+    }
+    tb.style.display = '';
+  } else {
+    const tb = document.getElementById('testModeBadge');
+    if (tb) tb.style.display = 'none';
+  }
+}
+
+async function toggleTestMode(enabled) {
+  const dir = document.getElementById('testModeDir').value;
+  if (enabled && !dir) {
+    notify('Selecione uma pasta de saída primeiro', 'err');
+    document.getElementById('testModeToggle').checked = false;
+    return;
+  }
+  const res = await api.toggleTestMode(enabled);
+  if (res.ok) {
+    config.testMode = res.testMode;
+    updateTestModeUI(enabled);
+    notify(enabled ? 'Modo teste ativado — PDFs serão gerados na pasta selecionada' : 'Modo teste desativado — impressões reais restauradas', 'ok');
+  }
+}
+
+async function selectTestDir() {
+  const res = await api.selectTestDir();
+  if (res.ok) {
+    document.getElementById('testModeDir').value = res.dir;
+    config.testMode = config.testMode || {};
+    config.testMode.outputDir = res.dir;
+    notify('Pasta selecionada: ' + res.dir, 'ok');
+  }
+}
+
+async function openTestDir() {
+  const dir = document.getElementById('testModeDir').value;
+  if (!dir) { notify('Nenhuma pasta selecionada', 'err'); return; }
+  await api.openTestDir();
+}
+
 // ── Notification ──────────────────────────────────────────────────────────
 let _notifyTimer;
 function notify(msg, type) {
@@ -728,6 +835,58 @@ async function reconnect() {
   const res = await api.reconnect();
   notify(res.ok ? 'Reconectando…' : ('Falha: ' + (res.error || 'serviço não iniciado')), res.ok ? 'ok' : 'err');
   if (res.ok) setTimeout(refreshStatus, 2000);
+}
+
+// ── Clear Queue ───────────────────────────────────────────────────────────
+async function clearQueue() {
+  const res = await api.clearQueue();
+  if (res.ok) {
+    notify(`Fila limpa (${res.removed} itens removidos)`, 'ok');
+    refreshStatus();
+  } else {
+    notify('Falha: ' + (res.error || 'erro desconhecido'), 'err');
+  }
+}
+
+// ── Regenerate Token ──────────────────────────────────────────────────────
+async function regenerateToken() {
+  const code = (document.getElementById('regenerateCode').value || '').trim().toUpperCase();
+  if (code.length !== 6) {
+    notify('O código deve ter exatamente 6 caracteres', 'err');
+    return;
+  }
+
+  const btn = document.getElementById('btnRegenerate');
+  const statusEl = document.getElementById('regenerateStatus');
+  btn.disabled = true;
+  btn.textContent = 'Conectando…';
+  statusEl.style.display = 'block';
+  statusEl.style.color = '#ffcc00';
+  statusEl.textContent = 'Enviando código ao servidor…';
+
+  try {
+    const res = await api.regenerateToken(code);
+    if (res.ok) {
+      statusEl.style.color = '#4ecca3';
+      statusEl.textContent = 'Token atualizado com sucesso!';
+      document.getElementById('regenerateCode').value = '';
+      notify('Token atualizado!', 'ok');
+      // Reload config to reflect new token in Servidor tab
+      config = await api.loadConfig();
+      loadServerForm();
+      setTimeout(refreshStatus, 2000);
+    } else {
+      statusEl.style.color = '#ff6b6b';
+      statusEl.textContent = res.error || 'Falha ao gerar token';
+      notify('Falha: ' + (res.error || 'erro'), 'err');
+    }
+  } catch (e) {
+    statusEl.style.color = '#ff6b6b';
+    statusEl.textContent = 'Erro: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Gerar Novo Token';
+  }
 }
 
 // ── Reset ─────────────────────────────────────────────────────────────────

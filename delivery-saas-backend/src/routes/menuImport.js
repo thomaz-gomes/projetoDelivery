@@ -18,20 +18,18 @@ import { prisma } from '../prisma.js';
 import { authMiddleware } from '../auth.js';
 import { requireModuleStrict } from '../modules.js';
 import { checkCredits, debitCredits, AI_SERVICE_COSTS } from '../services/aiCreditManager.js';
-import { getSetting } from '../services/systemSettings.js';
+import { callTextAI, callVisionAI } from '../services/aiProvider.js';
 
 const router = express.Router();
 router.use(authMiddleware);
 router.use(requireModuleStrict('CARDAPIO_SIMPLES'));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_MODEL = process.env.OPENAI_IMPORT_MODEL || 'gpt-4o';
 
 // Mapa de jobs em memória: jobId → { done, categories, error }
 const parseJobs = new Map();
 
-// ─── OpenAI ──────────────────────────────────────────────────────────────────
+// ─── AI ─────────────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `Você é um extrator especializado em cardápios de restaurantes e deliveries.
 Analise o conteúdo fornecido e retorne APENAS um JSON válido (sem texto extra, sem markdown) no formato:
@@ -46,47 +44,6 @@ Regras obrigatórias:
 - Se não identificar categorias, use "Geral"
 - Preserve 100% dos itens — não omita nenhum produto
 - Remova apenas caracteres especiais que não sejam letras, números, pontuação padrão`;
-
-async function callOpenAI(messages) {
-  const key = await getSetting('openai_api_key', 'OPENAI_API_KEY');
-  if (!key) throw new Error('Chave da API OpenAI não configurada. Acesse Painel SaaS → Configurações para inserir sua chave.');
-  const model = await getSetting('openai_model', 'OPENAI_IMPORT_MODEL') || OPENAI_MODEL;
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 100_000); // 100s timeout
-
-  let res;
-  try {
-    res = await fetch(OPENAI_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model, temperature: 0, max_tokens: 8192, messages }),
-    });
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error('Timeout: OpenAI não respondeu em 100 segundos');
-    throw e;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`OpenAI API error ${res.status}: ${errText.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
-  const rawContent = data.choices?.[0]?.message?.content || '';
-  const usage = data.usage || {};
-  console.log(`[OpenAI] finish_reason=${data.choices?.[0]?.finish_reason} | tokens: prompt=${usage.prompt_tokens} completion=${usage.completion_tokens}`);
-  console.log(`[OpenAI] raw response (primeiros 1000 chars):\n${rawContent.slice(0, 1000)}`);
-
-  if (data.choices?.[0]?.finish_reason === 'length') {
-    console.warn('[OpenAI] AVISO: resposta cortada (finish_reason=length) — JSON pode estar incompleto');
-  }
-
-  return { json: extractJSON(rawContent), rawContent, usage };
-}
 
 function extractJSON(text) {
   try { return JSON.parse(text.trim()); } catch (_) {}
@@ -485,14 +442,11 @@ async function runParseJob(jobId, method, input) {
         (pageText ? `\nTexto do cardápio (seções separadas por === quando houver múltiplas categorias):\n${pageText.slice(0, 8000)}` : '') +
         detailsSection;
 
-      const userMessages = [{ role: 'user', content: userContent }];
-
-      const aiResult = await callOpenAI([{ role: 'system', content: SYSTEM_PROMPT }, ...userMessages]);
-      parsed = aiResult.json;
+      const rawContent = await callTextAI('MENU_IMPORT_LINK', SYSTEM_PROMPT, userContent, { maxTokens: 8192, timeoutMs: 100_000 });
+      parsed = extractJSON(rawContent);
       if (job.debug) {
-        job.debug.openaiUsage = aiResult.usage;
-        job.debug.finishReason = aiResult.rawContent ? (aiResult.rawContent.length < 100 ? aiResult.rawContent : 'ok') : 'empty';
-        job.debug.rawResponseSample = aiResult.rawContent?.slice(0, 500);
+        job.debug.finishReason = rawContent ? (rawContent.length < 100 ? rawContent : 'ok') : 'empty';
+        job.debug.rawResponseSample = rawContent?.slice(0, 500);
       }
 
     } else if (method === 'photo') {
@@ -509,20 +463,16 @@ async function runParseJob(jobId, method, input) {
       const catIndex = new Map(); // key: nome em lowercase → índice em mergedCategories
 
       for (let i = 0; i < images.length; i++) {
-        console.log(`[menuImport:${jobId}] Foto ${i + 1}/${images.length} — chamando OpenAI...`);
-        const aiResult = await callOpenAI([
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: [
-            {
-              type: 'text',
-              text: images.length > 1
-                ? `Analise esta imagem de cardápio (página ${i + 1} de ${images.length}) e extraia todos os itens com nome, descrição e preço.`
-                : 'Analise esta imagem de cardápio e extraia todos os itens com nome, descrição e preço.',
-            },
-            { type: 'image_url', image_url: { url: images[i], detail: 'high' } },
-          ]},
-        ]);
-        const pageResult = aiResult.json;
+        console.log(`[menuImport:${jobId}] Foto ${i + 1}/${images.length} — chamando IA...`);
+        const dataUrl = images[i];
+        const imgMatch = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+        const imgMime = imgMatch?.[1] || 'image/jpeg';
+        const imgBase64 = imgMatch?.[2] || dataUrl;
+        const textPrompt = images.length > 1
+          ? `Analise esta imagem de cardápio (página ${i + 1} de ${images.length}) e extraia todos os itens com nome, descrição e preço.`
+          : 'Analise esta imagem de cardápio e extraia todos os itens com nome, descrição e preço.';
+        const rawContent = await callVisionAI('MENU_IMPORT_PHOTO', SYSTEM_PROMPT, textPrompt, imgBase64, imgMime, { maxTokens: 8192, timeoutMs: 100_000 });
+        const pageResult = extractJSON(rawContent);
         if (!pageResult?.categories) continue;
 
         for (const cat of pageResult.categories) {
@@ -551,16 +501,13 @@ async function runParseJob(jobId, method, input) {
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
       if (!rows.length) throw new Error('Nenhuma linha encontrada na planilha');
       const headers = Object.keys(rows[0] || {});
-      const aiResult = await callOpenAI([
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content:
-          `Planilha com ${rows.length} linhas.\nColunas: ${headers.join(', ')}\n` +
-          `Exemplos: ${JSON.stringify(rows.slice(0, 3), null, 2)}\n` +
-          `Todos os dados: ${JSON.stringify(rows.slice(0, 200), null, 2)}\n` +
-          `Mapeie as colunas para nome, descrição, preço e categoria.`
-        },
-      ]);
-      parsed = aiResult.json;
+      const sheetContent =
+        `Planilha com ${rows.length} linhas.\nColunas: ${headers.join(', ')}\n` +
+        `Exemplos: ${JSON.stringify(rows.slice(0, 3), null, 2)}\n` +
+        `Todos os dados: ${JSON.stringify(rows.slice(0, 200), null, 2)}\n` +
+        `Mapeie as colunas para nome, descrição, preço e categoria.`;
+      const rawContent = await callTextAI('MENU_IMPORT_PLANILHA', SYSTEM_PROMPT, sheetContent, { maxTokens: 8192, timeoutMs: 100_000 });
+      parsed = extractJSON(rawContent);
     } else {
       throw new Error(`Método desconhecido: ${method}`);
     }

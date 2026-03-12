@@ -24,6 +24,10 @@ const DEFAULT_CONFIG = {
   receiptTemplate: null, // Template de comanda em formato JSON v2 (editado na aba Comanda)
   headerName: '',        // Nome do estabelecimento exibido no cabeçalho
   headerCity: '',        // Cidade/Estado exibido no cabeçalho
+  testMode: {
+    enabled: false,      // Quando ativo, desvia impressões para PDF
+    outputDir: '',       // Pasta onde os PDFs são salvos
+  },
 };
 
 /**

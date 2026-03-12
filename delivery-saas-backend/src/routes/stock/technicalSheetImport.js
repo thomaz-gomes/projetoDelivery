@@ -13,61 +13,15 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { checkCredits, debitCredits, AI_SERVICE_COSTS } from '../../services/aiCreditManager.js';
-import { getSetting } from '../../services/systemSettings.js';
+import { callTextAI, callVisionAI } from '../../services/aiProvider.js';
 
 const router = express.Router();
 router.use(authMiddleware);
-
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_MODEL = process.env.OPENAI_IMPORT_MODEL || 'gpt-4o';
 
 // Mapa de jobs em memoria: jobId -> { done, sheets, error, ... }
 const parseJobs = new Map();
 
 const ALLOWED_UNITS = ['UN', 'GR', 'KG', 'ML', 'L'];
-
-// --- OpenAI ---
-
-async function callOpenAI(messages) {
-  const key = await getSetting('openai_api_key', 'OPENAI_API_KEY');
-  if (!key) throw new Error('Chave da API OpenAI nao configurada. Acesse Painel SaaS -> Configuracoes para inserir sua chave.');
-  const model = await getSetting('openai_model', 'OPENAI_IMPORT_MODEL') || OPENAI_MODEL;
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120_000);
-
-  let res;
-  try {
-    res = await fetch(OPENAI_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model, temperature: 0, max_tokens: 16384, messages }),
-    });
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error('Timeout: OpenAI nao respondeu em 120 segundos');
-    throw e;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`OpenAI API error ${res.status}: ${errText.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
-  const rawContent = data.choices?.[0]?.message?.content || '';
-  const usage = data.usage || {};
-  console.log(`[OpenAI/techSheet] finish_reason=${data.choices?.[0]?.finish_reason} | tokens: prompt=${usage.prompt_tokens} completion=${usage.completion_tokens}`);
-  console.log(`[OpenAI/techSheet] raw response (primeiros 1000 chars):\n${rawContent.slice(0, 1000)}`);
-
-  if (data.choices?.[0]?.finish_reason === 'length') {
-    console.warn('[OpenAI/techSheet] AVISO: resposta cortada (finish_reason=length) — JSON pode estar incompleto');
-  }
-
-  return { json: extractJSON(rawContent), rawContent, usage };
-}
 
 function extractJSON(text) {
   try { return JSON.parse(text.trim()); } catch (_) {}
@@ -134,31 +88,24 @@ async function runParseJob(jobId, method, files, companyId) {
       job.stage = 'processing';
 
       const fileContent = files[i];
-      let messages;
+      let rawContent;
 
       if (method === 'photo' || (typeof fileContent === 'string' && fileContent.startsWith('data:image/'))) {
-        // Image: send as vision content
         job.stage = 'ai_analyzing';
-        messages = [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: [
-            {
-              type: 'text',
-              text: files.length > 1
-                ? `Analise esta imagem de ficha tecnica (pagina ${i + 1} de ${files.length}) e extraia todas as fichas tecnicas/receitas.`
-                : 'Analise esta imagem de ficha tecnica e extraia todas as fichas tecnicas/receitas.',
-            },
-            { type: 'image_url', image_url: { url: fileContent, detail: 'high' } },
-          ]},
-        ];
+        const textPrompt = files.length > 1
+          ? `Analise esta imagem de ficha tecnica (pagina ${i + 1} de ${files.length}) e extraia todas as fichas tecnicas/receitas.`
+          : 'Analise esta imagem de ficha tecnica e extraia todas as fichas tecnicas/receitas.';
+        const imgMatch = fileContent.match(/^data:(image\/\w+);base64,(.+)$/);
+        const imgMime = imgMatch?.[1] || 'image/jpeg';
+        const imgBase64 = imgMatch?.[2] || fileContent;
+        console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (photo) — chamando IA...`);
+        rawContent = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, textPrompt, imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 });
       } else if (method === 'spreadsheet') {
-        // Spreadsheet: parse with XLSX, convert to text
         job.stage = 'parsing_file';
         const base64Data = fileContent.includes(',') ? fileContent.split(',')[1] : fileContent;
         const buffer = Buffer.from(base64Data, 'base64');
         const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-        // Process all sheets in the workbook
         const sheetsText = [];
         for (const sheetName of workbook.SheetNames) {
           const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
@@ -172,39 +119,25 @@ async function runParseJob(jobId, method, files, companyId) {
         if (!sheetsText.length) throw new Error('Planilha vazia ou invalida');
 
         job.stage = 'ai_analyzing';
-        messages = [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content:
-            `Planilha com fichas tecnicas.\n\n${sheetsText.join('\n\n')}\n\nExtraia todas as fichas tecnicas/receitas com seus ingredientes.`
-          },
-        ];
+        const sheetUserContent = `Planilha com fichas tecnicas.\n\n${sheetsText.join('\n\n')}\n\nExtraia todas as fichas tecnicas/receitas com seus ingredientes.`;
+        console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (spreadsheet) — chamando IA...`);
+        rawContent = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, sheetUserContent, { maxTokens: 16384, timeoutMs: 120_000 });
       } else {
-        // PDF / DOCX: received as text content from frontend
-        // If it starts with data:image/, treat as image
+        job.stage = 'ai_analyzing';
         if (typeof fileContent === 'string' && fileContent.startsWith('data:image/')) {
-          job.stage = 'ai_analyzing';
-          messages = [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: [
-              { type: 'text', text: 'Analise esta imagem de ficha tecnica e extraia todas as fichas tecnicas/receitas.' },
-              { type: 'image_url', image_url: { url: fileContent, detail: 'high' } },
-            ]},
-          ];
+          const imgMatch = fileContent.match(/^data:(image\/\w+);base64,(.+)$/);
+          const imgMime = imgMatch?.[1] || 'image/jpeg';
+          const imgBase64 = imgMatch?.[2] || fileContent;
+          console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (image) — chamando IA...`);
+          rawContent = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, 'Analise esta imagem de ficha tecnica e extraia todas as fichas tecnicas/receitas.', imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 });
         } else {
-          // Plain text content
-          job.stage = 'ai_analyzing';
-          messages = [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content:
-              `Documento com fichas tecnicas:\n\n${String(fileContent).slice(0, 24000)}\n\nExtraia todas as fichas tecnicas/receitas com seus ingredientes.`
-            },
-          ];
+          const docContent = `Documento com fichas tecnicas:\n\n${String(fileContent).slice(0, 24000)}\n\nExtraia todas as fichas tecnicas/receitas com seus ingredientes.`;
+          console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (document) — chamando IA...`);
+          rawContent = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, docContent, { maxTokens: 16384, timeoutMs: 120_000 });
         }
       }
 
-      console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (${method}) — chamando OpenAI...`);
-      const aiResult = await callOpenAI(messages);
-      const parsed = aiResult.json;
+      const parsed = extractJSON(rawContent);
 
       if (parsed?.sheets && Array.isArray(parsed.sheets)) {
         allSheets.push(...parsed.sheets);

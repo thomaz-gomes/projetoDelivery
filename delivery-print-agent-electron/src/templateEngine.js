@@ -287,7 +287,7 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
 
         parts.push(ESCPos.invert(true));
         for (const p of rawPayments) {
-          const method = p.method || p.name || p.tipo || p.paymentMethod || '';
+          const method = _paymentLabel(p);
           const value  = _fmtN(_toNum(p.value || p.amount || p.valor || 0));
           const padLen    = payCols - method.length - value.length;
           const rowLine   = padLen > 0 ? method + ' '.repeat(padLen) + value : method + ' ' + value;
@@ -299,6 +299,15 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         // Reset tamanho
         if (pSize !== 'normal') {
           parts.push(ESCPos.charSize(1, 1));
+        }
+
+        // Troco (se pagamento em dinheiro com changeFor)
+        const trocoVal = _toNum(ctx.troco_raw);
+        if (trocoVal > 0) {
+          if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+          parts.push(ESCPos.bold(true));
+          parts.push(ESCPos.text(`Troco para R$ ${_fmtN(trocoVal)}`, charset));
+          parts.push(ESCPos.bold(false));
         }
         break;
       }
@@ -313,6 +322,41 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         }
         break;
       }
+    }
+  }
+
+  // Auto-injetar resumo de totais se nenhum bloco text/cond já renderizou subtotal ou total
+  const blocksHaveTotals = blocks.some(b =>
+    (b.t === 'text' || b.t === 'cond') && b.c && (b.c.includes('{{subtotal}}') || b.c.includes('{{total}}'))
+  );
+
+  const totalCols = cols - margin;
+  const _row = (label, val) => {
+    const pad = totalCols - label.length - val.length;
+    const line = pad > 0 ? label + ' '.repeat(pad) + val : label + ' ' + val;
+    if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+    parts.push(ESCPos.text(line, charset));
+  };
+
+  if (!blocksHaveTotals) {
+    parts.push(ESCPos.align('left'));
+    parts.push(ESCPos.separator(totalCols, '-'));
+
+    _row('Qtd itens:', ctx.total_itens_count || '0');
+    _row('Total Itens(=)', ctx.subtotal || '0,00');
+    _row('Taxa entrega(+)', ctx.taxa_entrega || '0,00');
+    _row('Acrescimo(+)', ctx.acrescimo || '0,00');
+    _row('Desconto(-)', ctx.desconto || '0,00');
+    parts.push(ESCPos.bold(true));
+    _row('TOTAL(=)', ctx.total || '0,00');
+    parts.push(ESCPos.bold(false));
+  } else {
+    // Template de blocos tem totais, mas pode não ter Acrescimo — injetar se ausente
+    const hasAcrescimo = blocks.some(b =>
+      (b.t === 'text' || b.t === 'cond') && b.c && b.c.includes('{{acrescimo}}')
+    );
+    if (!hasAcrescimo) {
+      _row('Acrescimo(+)', ctx.acrescimo || '0,00');
     }
   }
 
@@ -458,6 +502,10 @@ function buildBlockContext(order) {
     localizador_suffix: localizadorBc ? `, Localizador: ${localizadorBc}` : '',
     codigo_coleta,
     link_pedido:       _resolveQrUrl(order, tipo_pedido),
+
+    // Troco (changeFor) — extraído pelo enrichOrderForAgent
+    troco_raw:         _toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0),
+    troco:             _fmtN(_toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0)),
   };
 }
 
@@ -717,7 +765,7 @@ function buildContext(order, printer) {
     pagamentos: [
       // Pagamentos normais
       ...rawPayments.map((p) => ({
-        metodo: p.method || p.name || p.tipo || p.paymentMethod || '',
+        metodo: _paymentLabel(p),
         valor:  _fmt(p.value || p.amount || p.valor || 0),
         valor_num: _fmtN(p.value || p.amount || p.valor || 0),
       })),
@@ -764,7 +812,33 @@ function buildContext(order, printer) {
     total_itens_count: String(totalItensCount),
 
     impressora_alias: printer?.alias || '',
+
+    // Troco (changeFor) — extraído pelo enrichOrderForAgent
+    troco_raw:  _toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0),
+    troco:      _fmtN(_toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0)),
+    tem_troco:  _toNum(order.payment?.changeFor || order.changeFor || 0) > 0,
   };
+}
+
+// ─── Utilitários de pagamento ─────────────────────────────────────────────────
+/**
+ * Resolve label da forma de pagamento com sufixo "Pago Online" ou "Cobrar do cliente".
+ * @param {object} p  — objeto de pagamento (iFood method ou PDV payment)
+ * @returns {string}  ex: "Crédito VISA - Pago Online", "Dinheiro - Cobrar do cliente"
+ */
+function _paymentLabel(p) {
+  // Label base: _systemLabel (enriquecido pelo webhook) > method > name > tipo > paymentMethod
+  const base = p._systemLabel || p.method || p.name || p.tipo || p.paymentMethod || '';
+
+  // Determinar se é pago online ou cobrar do cliente
+  const isPrepaid = p.prepaid === true || String(p.type || '').toUpperCase() === 'ONLINE';
+
+  // Voucher/desconto não precisa de sufixo
+  const isVoucher = String(base).toLowerCase().includes('voucher');
+  if (isVoucher) return base;
+
+  const suffix = isPrepaid ? 'Pago Online' : 'Cobrar do cliente';
+  return `${base} - ${suffix}`;
 }
 
 // ─── Utilitários numéricos ────────────────────────────────────────────────────

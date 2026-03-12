@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Menu, shell, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, session, dialog } = require('electron');
 const path = require('path');
 const os = require('os');
 
@@ -298,6 +298,106 @@ function setupIpcHandlers() {
     if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
     openSetupWindow();
     return { ok: true };
+  });
+
+  // Limpar fila de impressão
+  ipcMain.handle('queue:clear', () => {
+    if (!printQueue) return { ok: false, error: 'Serviço não iniciado' };
+    const removed = printQueue.clear();
+    return { ok: true, removed };
+  });
+
+  // Modo teste: toggle on/off
+  ipcMain.handle('testmode:toggle', (event, enabled) => {
+    const cfg = config.load();
+    const testMode = cfg.testMode || { enabled: false, outputDir: '' };
+    testMode.enabled = !!enabled;
+    config.save({ ...cfg, testMode });
+    logger.info(`[testmode] ${enabled ? 'Ativado' : 'Desativado'} | outputDir=${testMode.outputDir}`);
+    return { ok: true, testMode };
+  });
+
+  // Modo teste: selecionar pasta de saída via diálogo nativo
+  ipcMain.handle('testmode:select-dir', async () => {
+    const win = mainWindow || BrowserWindow.getFocusedWindow();
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Selecionar pasta para PDFs de teste',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || !result.filePaths.length) return { ok: false };
+    const dir = result.filePaths[0];
+    const cfg = config.load();
+    const testMode = cfg.testMode || { enabled: false, outputDir: '' };
+    testMode.outputDir = dir;
+    config.save({ ...cfg, testMode });
+    logger.info(`[testmode] Pasta de saída: ${dir}`);
+    return { ok: true, dir };
+  });
+
+  // Modo teste: abrir pasta de saída no explorador
+  ipcMain.handle('testmode:open-dir', () => {
+    const cfg = config.load();
+    const dir = cfg.testMode?.outputDir;
+    if (dir) shell.openPath(dir);
+    return { ok: !!dir };
+  });
+
+  // Gerar novo token (re-parear sem voltar ao wizard)
+  ipcMain.handle('agent:regenerate-token', async (event, { code }) => {
+    const cfg = config.load();
+    if (!cfg.serverUrl) return { ok: false, error: 'Servidor não configurado' };
+
+    const base = cfg.serverUrl.replace(/\/$/, '');
+    const candidates = [
+      `${base}/agent-setup/pair`,
+      `${base}/api/agent-setup/pair`,
+    ];
+
+    logger.info(`[regenerate] Regenerando token | candidatos=${candidates.length}`);
+
+    for (let i = 0; i < candidates.length; i++) {
+      const url = candidates[i];
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code.trim().toUpperCase() }),
+          signal: AbortSignal.timeout(12000),
+        });
+
+        const bodyText = await res.text().catch(() => '');
+        let data = {};
+        try { data = bodyText ? JSON.parse(bodyText) : {}; } catch (_) {}
+
+        if (res.status === 404) continue;
+        if (!res.ok) return { ok: false, error: data.message || `Servidor retornou ${res.status}` };
+        if (!data.token) return { ok: false, error: 'Resposta inválida — token não recebido' };
+
+        logger.info(`[regenerate] Novo token obtido via ${url}`);
+
+        // Atualizar config com novo token
+        const updated = {
+          ...cfg,
+          token: data.token,
+          socketUrl: data.socketUrl || cfg.serverUrl,
+          storeIds: data.storeIds || cfg.storeIds || [],
+          companyId: data.companyId || cfg.companyId || null,
+        };
+        config.save(updated);
+
+        // Reconectar com novo token
+        if (socketClient) socketClient.disconnect();
+        await startServices(updated);
+
+        return { ok: true };
+      } catch (err) {
+        if (i === candidates.length - 1) {
+          return { ok: false, error: `Erro de rede: ${err.message}` };
+        }
+      }
+    }
+
+    return { ok: false, error: 'Servidor não encontrado (404)' };
   });
 
   // Reconectar: força nova tentativa de conexão sem resetar configurações

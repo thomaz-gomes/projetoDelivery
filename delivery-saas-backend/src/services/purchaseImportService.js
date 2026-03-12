@@ -5,6 +5,17 @@
 
 import { parseStringPromise } from 'xml2js';
 import { checkCredits, debitCredits } from './aiCreditManager.js';
+import { getSetting } from './systemSettings.js';
+import { callTextAI } from './aiProvider.js';
+
+const GOOGLE_AI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+async function getGoogleAIKey() {
+  const key = await getSetting('google_ai_api_key', 'GOOGLE_AI_API_KEY');
+  if (!key) throw Object.assign(new Error('Chave da API Google AI não configurada.'), { statusCode: 503 });
+  return key;
+}
 
 // ─── 1. Parse NFe XML ────────────────────────────────────────────────────────
 
@@ -65,7 +76,7 @@ export async function parseNfeXml(xmlString) {
 // ─── 2. Match Items with AI ──────────────────────────────────────────────────
 
 /**
- * Uses GPT-4o to match NFe item names with existing ingredients.
+ * Uses Gemini to match NFe item names with existing ingredients.
  *
  * @param {string} companyId
  * @param {Array} nfeItems - Items extracted from NFe XML
@@ -122,30 +133,12 @@ Rules:
 - If the catalog is empty, return all with null matchedIngredientId
 - Output ONLY the JSON array, no other text`;
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
-
-  const model = process.env.OPENAI_IMPORT_MODEL || 'gpt-4o';
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      temperature: 0.1,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: JSON.stringify({ nfeItems: nfeItemsJson, catalog: catalogJson }) },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`OpenAI API error ${res.status}: ${errBody}`);
-  }
-
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content || '[]';
+  const content = await callTextAI(
+    'NFE_IMPORT_MATCH',
+    systemPrompt,
+    JSON.stringify({ nfeItems: nfeItemsJson, catalog: catalogJson }),
+    { temperature: 0.1 },
+  ) || '[]';
 
   let matches;
   try {
@@ -178,7 +171,7 @@ Rules:
 // ─── 3. Parse Receipt Photo ──────────────────────────────────────────────────
 
 /**
- * Uses GPT-4o Vision to extract items from receipt photos and match with ingredients.
+ * Uses Gemini Vision to extract items from receipt photos and match with ingredients.
  *
  * @param {string} companyId
  * @param {string|string[]} base64Images - One or more base64-encoded images
@@ -226,42 +219,45 @@ For each item found in the receipt, return:
 
 Return ONLY a JSON array. Extract ALL visible item lines.`;
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
+  const apiKey = await getGoogleAIKey();
 
-  const imageContent = images.map(img => {
+  const imageParts = images.map(img => {
     const isDataUrl = img.startsWith('data:');
-    return {
-      type: 'image_url',
-      image_url: { url: isDataUrl ? img : `data:image/jpeg;base64,${img}` },
-    };
+    let mimeType = 'image/jpeg';
+    let base64Data = img;
+    if (isDataUrl) {
+      const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
+      if (match) {
+        mimeType = match[1];
+        base64Data = match[2];
+      }
+    }
+    return { inlineData: { mimeType, data: base64Data } };
   });
 
-  const model = process.env.OPENAI_IMPORT_MODEL || 'gpt-4o';
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      temperature: 0.1,
-      max_tokens: 4096,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: [
-          ...imageContent,
-          { type: 'text', text: 'Extract all items from this receipt and match with the ingredient catalog.' },
-        ]},
-      ],
-    }),
-  });
+  const res = await fetch(
+    `${GOOGLE_AI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [
+          ...imageParts,
+          { text: 'Extract all items from this receipt and match with the ingredient catalog.' },
+        ] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
+      }),
+    },
+  );
 
   if (!res.ok) {
     const errBody = await res.text();
-    throw new Error(`OpenAI API error ${res.status}: ${errBody}`);
+    throw new Error(`Gemini API error ${res.status}: ${errBody}`);
   }
 
   const data = await res.json();
-  const content = data.choices?.[0]?.message?.content || '[]';
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
 
   let items;
   try {

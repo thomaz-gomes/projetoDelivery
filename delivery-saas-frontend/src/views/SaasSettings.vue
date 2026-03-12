@@ -33,6 +33,26 @@ const savingCredits = ref(false)
 const savedCredits = ref(false)
 const errorCredits = ref(null)
 
+// ── Provedor de IA por serviço ──────────────────────────────────────────────
+const AI_PROVIDER_SERVICES = [
+  { key: 'NFE_IMPORT_MATCH',             label: 'NFe Matching (ingredientes)',      icon: 'bi-receipt',        default: 'gemini'  },
+  { key: 'MENU_IMPORT_LINK',             label: 'Importar cardápio via link',       icon: 'bi-link-45deg',     default: 'openai'  },
+  { key: 'MENU_IMPORT_PHOTO',            label: 'Importar cardápio via foto',       icon: 'bi-camera',         default: 'openai'  },
+  { key: 'MENU_IMPORT_PLANILHA',         label: 'Importar cardápio via planilha',   icon: 'bi-table',          default: 'openai'  },
+  { key: 'MENU_IMPORT_ITEM',             label: 'Por item importado (cardápio)',    icon: 'bi-list-check',     default: 'openai'  },
+  { key: 'INGREDIENT_IMPORT_PARSE',      label: 'Import ingredientes (parse)',      icon: 'bi-box-seam',       default: 'openai'  },
+  { key: 'INGREDIENT_IMPORT_ITEM',       label: 'Por item (ingrediente)',           icon: 'bi-box-seam',       default: 'openai'  },
+  { key: 'TECHNICAL_SHEET_IMPORT_PARSE', label: 'Import fichas técnicas (parse)',   icon: 'bi-journal-text',   default: 'openai'  },
+  { key: 'TECHNICAL_SHEET_IMPORT_ITEM',  label: 'Por item (ficha técnica)',         icon: 'bi-journal-text',   default: 'openai'  },
+  { key: 'GENERATE_DESCRIPTION',         label: 'Gerar descrição de produto',       icon: 'bi-pencil-square',  default: 'gemini'  },
+  { key: 'POS_PARSER',                   label: 'Parser de POS (Saipos)',           icon: 'bi-printer',        default: 'openai'  },
+]
+
+const providerMap = ref({})
+const savingProviders = ref(false)
+const savedProviders = ref(false)
+const errorProviders = ref(null)
+
 const brlPrice = computed(() => {
   const v = parseFloat(String(settings.value.credit_brl_price).replace(',', '.'))
   return isNaN(v) || v <= 0 ? 0 : v
@@ -99,6 +119,14 @@ async function load() {
     const brlRow = data.find(r => r.key === 'credit_brl_price')
     if (brlRow && brlRow.isSet) {
       settings.value.credit_brl_price = brlRow.value
+    }
+    // Carrega mapa de provedores
+    const providerRow = data.find(r => r.key === 'ai_provider_map')
+    if (providerRow && providerRow.isSet && providerRow.value) {
+      try { providerMap.value = JSON.parse(providerRow.value) } catch { /* ignore */ }
+    }
+    for (const svc of AI_PROVIDER_SERVICES) {
+      if (!providerMap.value[svc.key]) providerMap.value[svc.key] = svc.default
     }
   } catch (e) {
     error.value = e?.response?.data?.message || 'Erro ao carregar configurações'
@@ -167,6 +195,21 @@ async function clearGoogleKey() {
     error.value = e?.response?.data?.message || 'Erro ao remover chave'
   } finally {
     saving.value = false
+  }
+}
+
+async function saveProviders() {
+  savingProviders.value = true
+  savedProviders.value = false
+  errorProviders.value = null
+  try {
+    await api.put('/saas/settings', [{ key: 'ai_provider_map', value: JSON.stringify(providerMap.value) }])
+    savedProviders.value = true
+    setTimeout(() => { savedProviders.value = false }, 3000)
+  } catch (e) {
+    errorProviders.value = e?.response?.data?.message || 'Erro ao salvar provedores de IA'
+  } finally {
+    savingProviders.value = false
   }
 }
 
@@ -318,6 +361,54 @@ onMounted(async () => {
             <span v-if="saving" class="spinner-border spinner-border-sm me-2"></span>
             <i v-else class="bi bi-floppy me-2"></i>
             Salvar configurações
+          </button>
+        </div>
+      </div>
+
+      <!-- Provedor de IA por serviço -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h5 class="card-title mb-1">
+            <i class="bi bi-shuffle me-2 text-info"></i>Provedor de IA por Serviço
+          </h5>
+          <p class="text-muted small mb-4">
+            Escolha qual provedor de IA (Gemini ou OpenAI) será usado para cada operação de texto/matching.
+            Serviços de imagem (AI Studio) usam sempre Gemini.
+          </p>
+
+          <div v-if="errorProviders" class="alert alert-danger py-2 small">{{ errorProviders }}</div>
+          <div v-if="savedProviders" class="alert alert-success py-2 small">Provedores salvos com sucesso.</div>
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-3">
+              <thead class="table-light">
+                <tr>
+                  <th>Serviço</th>
+                  <th style="width: 180px;">Provedor</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="svc in AI_PROVIDER_SERVICES" :key="svc.key">
+                  <td>
+                    <i class="bi me-2 text-primary" :class="svc.icon"></i>
+                    {{ svc.label }}
+                    <code class="ms-2 text-muted" style="font-size: 0.7rem;">{{ svc.key }}</code>
+                  </td>
+                  <td>
+                    <select class="form-select form-select-sm" v-model="providerMap[svc.key]">
+                      <option value="gemini">Gemini</option>
+                      <option value="openai">OpenAI</option>
+                    </select>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <button class="btn btn-primary" @click="saveProviders" :disabled="savingProviders">
+            <span v-if="savingProviders" class="spinner-border spinner-border-sm me-2"></span>
+            <i v-else class="bi bi-floppy me-2"></i>
+            Salvar provedores
           </button>
         </div>
       </div>
