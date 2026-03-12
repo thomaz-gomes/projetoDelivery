@@ -70,6 +70,7 @@ import aiCreditsRouter from './routes/aiCredits.js'
 import aiStudioRouter from './routes/aiStudio.js'
 import { paymentRouter } from './routes/payment.js'
 import leadsRouter from './routes/leads.js'
+import customDomainRouter from './routes/customDomain.js'
 import './cron.js'
 
 const app = express();
@@ -217,6 +218,7 @@ app.use('/ai-credits', aiCreditsRouter);
 app.use('/ai-studio', aiStudioRouter);
 // Payment webhook (gateway-agnostic, no auth — validated by paymentId)
 app.use('/payment', paymentRouter);
+app.use('/custom-domains', customDomainRouter);
 // Simple admin endpoint to view/update printer settings for a company or store
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
