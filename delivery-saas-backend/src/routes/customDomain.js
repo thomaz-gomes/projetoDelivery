@@ -1,5 +1,7 @@
 import express from 'express'
 import dns from 'dns'
+import { exec } from 'child_process'
+import path from 'path'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
 
@@ -240,18 +242,29 @@ router.post('/:id/verify', requireRole('ADMIN'), async (req, res) => {
       },
     })
 
-    // Placeholder: simulate SSL provisioning (marks as ACTIVE after 2s)
-    setTimeout(async () => {
+    // Trigger SSL provisioning asynchronously
+    const scriptPath = path.join(process.cwd(), 'scripts', 'provision-ssl.sh')
+    const backendPort = process.env.PORT || '3000'
+
+    exec(`bash "${scriptPath}" "${record.domain}" "${backendPort}"`, async (err, stdout, stderr) => {
       try {
+        if (err) {
+          console.error('SSL provisioning failed for', record.domain, ':', stderr || err.message)
+          await prisma.customDomain.update({
+            where: { id: record.id },
+            data: { sslStatus: 'FAILED' }
+          })
+          return
+        }
+        console.log('SSL provisioned for', record.domain, ':', stdout)
         await prisma.customDomain.update({
-          where: { id },
-          data: { status: 'ACTIVE', sslStatus: 'SSL_ACTIVE' },
+          where: { id: record.id },
+          data: { status: 'ACTIVE', sslStatus: 'SSL_ACTIVE' }
         })
-        console.log(`SSL provisioned for domain ${record.domain} (placeholder)`)
       } catch (e) {
-        console.error(`SSL provisioning placeholder failed for ${record.domain}:`, e?.message)
+        console.error('SSL post-provision update failed:', e)
       }
-    }, 2000)
+    })
 
     res.json({ verified: true, status: updated.status, sslStatus: updated.sslStatus })
   } catch (e) {
