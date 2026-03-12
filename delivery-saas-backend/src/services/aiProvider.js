@@ -84,7 +84,18 @@ async function geminiText(systemPrompt, userContent, opts) {
   }
 
   const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const usage = data.usageMetadata;
+  return {
+    text,
+    tokenUsage: {
+      provider: 'gemini',
+      model: GEMINI_MODEL,
+      inputTokens: usage?.promptTokenCount || 0,
+      outputTokens: usage?.candidatesTokenCount || 0,
+      totalTokens: usage?.totalTokenCount || 0,
+    },
+  };
 }
 
 async function geminiVision(systemPrompt, textPrompt, imageBase64, mimeType, opts) {
@@ -121,7 +132,18 @@ async function geminiVision(systemPrompt, textPrompt, imageBase64, mimeType, opt
   }
 
   const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const usage = data.usageMetadata;
+  return {
+    text,
+    tokenUsage: {
+      provider: 'gemini',
+      model: GEMINI_MODEL,
+      inputTokens: usage?.promptTokenCount || 0,
+      outputTokens: usage?.candidatesTokenCount || 0,
+      totalTokens: usage?.totalTokenCount || 0,
+    },
+  };
 }
 
 // ─── OpenAI callers ──────────────────────────────────────────────────────────
@@ -157,21 +179,24 @@ async function openaiText(systemPrompt, userContent, opts) {
   }
 
   const data = await res.json();
-
-  // Log token usage
-  if (data.usage) {
-    console.log(
-      `[aiProvider] OpenAI tokens — prompt: ${data.usage.prompt_tokens}, ` +
-      `completion: ${data.usage.completion_tokens}, total: ${data.usage.total_tokens}`,
-    );
-  }
+  const usage = data.usage;
 
   const choice = data.choices?.[0];
   if (choice?.finish_reason === 'length') {
     console.warn('[aiProvider] OpenAI response truncated (finish_reason=length)');
   }
 
-  return choice?.message?.content || '';
+  const text = choice?.message?.content || '';
+  return {
+    text,
+    tokenUsage: {
+      provider: 'openai',
+      model,
+      inputTokens: usage?.prompt_tokens || 0,
+      outputTokens: usage?.completion_tokens || 0,
+      totalTokens: usage?.total_tokens || 0,
+    },
+  };
 }
 
 async function openaiVision(systemPrompt, textPrompt, imageBase64, mimeType, opts) {
@@ -216,20 +241,24 @@ async function openaiVision(systemPrompt, textPrompt, imageBase64, mimeType, opt
   }
 
   const data = await res.json();
-
-  if (data.usage) {
-    console.log(
-      `[aiProvider] OpenAI vision tokens — prompt: ${data.usage.prompt_tokens}, ` +
-      `completion: ${data.usage.completion_tokens}, total: ${data.usage.total_tokens}`,
-    );
-  }
+  const usage = data.usage;
 
   const choice = data.choices?.[0];
   if (choice?.finish_reason === 'length') {
     console.warn('[aiProvider] OpenAI vision response truncated (finish_reason=length)');
   }
 
-  return choice?.message?.content || '';
+  const text = choice?.message?.content || '';
+  return {
+    text,
+    tokenUsage: {
+      provider: 'openai',
+      model,
+      inputTokens: usage?.prompt_tokens || 0,
+      outputTokens: usage?.completion_tokens || 0,
+      totalTokens: usage?.total_tokens || 0,
+    },
+  };
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -256,7 +285,7 @@ export async function getProviderForService(serviceKey) {
  * @param {string} systemPrompt
  * @param {string} userContent
  * @param {{ temperature?: number, maxTokens?: number, timeoutMs?: number }} [options]
- * @returns {Promise<string>} Raw text response
+ * @returns {Promise<{ text: string, tokenUsage: { provider: string, model: string, inputTokens: number, outputTokens: number, totalTokens: number } }>}
  */
 export async function callTextAI(serviceKey, systemPrompt, userContent, options = {}) {
   const provider = await getProviderForService(serviceKey);
@@ -273,7 +302,7 @@ export async function callTextAI(serviceKey, systemPrompt, userContent, options 
  * @param {string} imageBase64 - Raw base64 string (no data: prefix)
  * @param {string} mimeType - e.g. 'image/jpeg', 'image/png'
  * @param {{ temperature?: number, maxTokens?: number, timeoutMs?: number }} [options]
- * @returns {Promise<string>} Raw text response
+ * @returns {Promise<{ text: string, tokenUsage: { provider: string, model: string, inputTokens: number, outputTokens: number, totalTokens: number } }>}
  */
 export async function callVisionAI(serviceKey, systemPrompt, textPrompt, imageBase64, mimeType, options = {}) {
   const provider = await getProviderForService(serviceKey);

@@ -133,16 +133,15 @@ Rules:
 - If the catalog is empty, return all with null matchedIngredientId
 - Output ONLY the JSON array, no other text`;
 
-  const content = await callTextAI(
+  const { text: content, tokenUsage } = await callTextAI(
     'NFE_IMPORT_MATCH',
     systemPrompt,
     JSON.stringify({ nfeItems: nfeItemsJson, catalog: catalogJson }),
     { temperature: 0.1 },
-  ) || '[]';
-
+  );
   let matches;
   try {
-    const cleaned = content.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    const cleaned = (content || '[]').replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     matches = JSON.parse(cleaned);
   } catch {
     matches = nfeItems.map((_, idx) => ({
@@ -152,7 +151,7 @@ Rules:
   }
 
   await debitCredits(companyId, 'NFE_IMPORT_MATCH', itemCount, {
-    source: 'nfe_import', itemCount,
+    source: 'nfe_import', itemCount, tokenUsage,
   }, userId);
 
   return nfeItems.map((item, idx) => {

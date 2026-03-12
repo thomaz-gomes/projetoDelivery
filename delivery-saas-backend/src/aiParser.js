@@ -70,7 +70,7 @@ Example expected JSON output for the 'printRows' excerpt above (ONLY the JSON ob
 
   const user = `Filename: ${filename}\n---BEGIN CONTENT---\n${String(content).slice(0, 20000)}\n---END CONTENT---\n\nPlease parse the content and return the JSON object described in the system prompt.`;
 
-  const text = await callTextAI('POS_PARSER', system, user, { temperature: 0, maxTokens: 1500 });
+  const { text } = await callTextAI('POS_PARSER', system, user, { temperature: 0, maxTokens: 1500 });
   if (!text) throw new Error('IA returned empty response');
 
   // Try to extract JSON from the model response (it may include wrappers)

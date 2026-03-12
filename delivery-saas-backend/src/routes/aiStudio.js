@@ -560,12 +560,13 @@ router.post('/generate-description', requireRole('ADMIN'), async (req, res) => {
       `"Aproveite nosso Completão! Filé suculento com cebolas na chapa, batatas fritas... Peça agora!"\n\n` +
       `Output ONLY the description text, nothing else.`
 
-    const description = await callVisionAI('GENERATE_DESCRIPTION', null, textPrompt, imageBase64, mimeType, { temperature: 0.2, maxTokens: 400, timeoutMs: 30_000 })
+    const { text: description, tokenUsage } = await callVisionAI('GENERATE_DESCRIPTION', null, textPrompt, imageBase64, mimeType, { temperature: 0.2, maxTokens: 400, timeoutMs: 30_000 })
     if (!description) throw new Error('Modelo não retornou descrição')
 
     await debitCredits(companyId, 'GENERATE_DESCRIPTION', 1, {
       productName: name.trim().slice(0, 100),
       imageUrl: imageUrl.slice(0, 200),
+      tokenUsage,
     }, userId)
 
     res.json({ description })

@@ -442,7 +442,7 @@ async function runParseJob(jobId, method, input) {
         (pageText ? `\nTexto do cardápio (seções separadas por === quando houver múltiplas categorias):\n${pageText.slice(0, 8000)}` : '') +
         detailsSection;
 
-      const rawContent = await callTextAI('MENU_IMPORT_LINK', SYSTEM_PROMPT, userContent, { maxTokens: 8192, timeoutMs: 100_000 });
+      const { text: rawContent } = await callTextAI('MENU_IMPORT_LINK', SYSTEM_PROMPT, userContent, { maxTokens: 8192, timeoutMs: 100_000 });
       parsed = extractJSON(rawContent);
       if (job.debug) {
         job.debug.finishReason = rawContent ? (rawContent.length < 100 ? rawContent : 'ok') : 'empty';
@@ -471,7 +471,7 @@ async function runParseJob(jobId, method, input) {
         const textPrompt = images.length > 1
           ? `Analise esta imagem de cardápio (página ${i + 1} de ${images.length}) e extraia todos os itens com nome, descrição e preço.`
           : 'Analise esta imagem de cardápio e extraia todos os itens com nome, descrição e preço.';
-        const rawContent = await callVisionAI('MENU_IMPORT_PHOTO', SYSTEM_PROMPT, textPrompt, imgBase64, imgMime, { maxTokens: 8192, timeoutMs: 100_000 });
+        const { text: rawContent } = await callVisionAI('MENU_IMPORT_PHOTO', SYSTEM_PROMPT, textPrompt, imgBase64, imgMime, { maxTokens: 8192, timeoutMs: 100_000 });
         const pageResult = extractJSON(rawContent);
         if (!pageResult?.categories) continue;
 
@@ -506,7 +506,7 @@ async function runParseJob(jobId, method, input) {
         `Exemplos: ${JSON.stringify(rows.slice(0, 3), null, 2)}\n` +
         `Todos os dados: ${JSON.stringify(rows.slice(0, 200), null, 2)}\n` +
         `Mapeie as colunas para nome, descrição, preço e categoria.`;
-      const rawContent = await callTextAI('MENU_IMPORT_PLANILHA', SYSTEM_PROMPT, sheetContent, { maxTokens: 8192, timeoutMs: 100_000 });
+      const { text: rawContent } = await callTextAI('MENU_IMPORT_PLANILHA', SYSTEM_PROMPT, sheetContent, { maxTokens: 8192, timeoutMs: 100_000 });
       parsed = extractJSON(rawContent);
     } else {
       throw new Error(`Método desconhecido: ${method}`);

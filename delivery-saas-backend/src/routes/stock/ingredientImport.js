@@ -103,7 +103,7 @@ async function runParseJob(jobId, method, files, companyId) {
         const imgMime = imgMatch?.[1] || 'image/jpeg';
         const imgBase64 = imgMatch?.[2] || fileContent;
         console.log(`[ingredientImport:${jobId}] Arquivo ${i + 1}/${files.length} (photo) — chamando IA...`);
-        rawContent = await callVisionAI('INGREDIENT_IMPORT_PARSE', systemPrompt, textPrompt, imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 });
+        ({ text: rawContent } = await callVisionAI('INGREDIENT_IMPORT_PARSE', systemPrompt, textPrompt, imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 }));
       } else if (method === 'spreadsheet') {
         job.stage = 'parsing_file';
         const base64Data = fileContent.includes(',') ? fileContent.split(',')[1] : fileContent;
@@ -125,12 +125,12 @@ async function runParseJob(jobId, method, files, companyId) {
         job.stage = 'ai_analyzing';
         const sheetUserContent = `Planilha com ingredientes/insumos.\n\n${sheetsText.join('\n\n')}\n\nExtraia todos os ingredientes/insumos listados.`;
         console.log(`[ingredientImport:${jobId}] Arquivo ${i + 1}/${files.length} (spreadsheet) — chamando IA...`);
-        rawContent = await callTextAI('INGREDIENT_IMPORT_PARSE', systemPrompt, sheetUserContent, { maxTokens: 16384, timeoutMs: 120_000 });
+        ({ text: rawContent } = await callTextAI('INGREDIENT_IMPORT_PARSE', systemPrompt, sheetUserContent, { maxTokens: 16384, timeoutMs: 120_000 }));
       } else {
         job.stage = 'ai_analyzing';
         const docContent = `Documento com ingredientes/insumos:\n\n${String(fileContent).slice(0, 24000)}\n\nExtraia todos os ingredientes/insumos listados.`;
         console.log(`[ingredientImport:${jobId}] Arquivo ${i + 1}/${files.length} (document) — chamando IA...`);
-        rawContent = await callTextAI('INGREDIENT_IMPORT_PARSE', systemPrompt, docContent, { maxTokens: 16384, timeoutMs: 120_000 });
+        ({ text: rawContent } = await callTextAI('INGREDIENT_IMPORT_PARSE', systemPrompt, docContent, { maxTokens: 16384, timeoutMs: 120_000 }));
       }
 
       const parsed = extractJSON(rawContent);

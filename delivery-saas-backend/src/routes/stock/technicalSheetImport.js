@@ -99,7 +99,7 @@ async function runParseJob(jobId, method, files, companyId) {
         const imgMime = imgMatch?.[1] || 'image/jpeg';
         const imgBase64 = imgMatch?.[2] || fileContent;
         console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (photo) — chamando IA...`);
-        rawContent = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, textPrompt, imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 });
+        ({ text: rawContent } = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, textPrompt, imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 }));
       } else if (method === 'spreadsheet') {
         job.stage = 'parsing_file';
         const base64Data = fileContent.includes(',') ? fileContent.split(',')[1] : fileContent;
@@ -121,7 +121,7 @@ async function runParseJob(jobId, method, files, companyId) {
         job.stage = 'ai_analyzing';
         const sheetUserContent = `Planilha com fichas tecnicas.\n\n${sheetsText.join('\n\n')}\n\nExtraia todas as fichas tecnicas/receitas com seus ingredientes.`;
         console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (spreadsheet) — chamando IA...`);
-        rawContent = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, sheetUserContent, { maxTokens: 16384, timeoutMs: 120_000 });
+        ({ text: rawContent } = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, sheetUserContent, { maxTokens: 16384, timeoutMs: 120_000 }));
       } else {
         job.stage = 'ai_analyzing';
         if (typeof fileContent === 'string' && fileContent.startsWith('data:image/')) {
@@ -129,11 +129,11 @@ async function runParseJob(jobId, method, files, companyId) {
           const imgMime = imgMatch?.[1] || 'image/jpeg';
           const imgBase64 = imgMatch?.[2] || fileContent;
           console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (image) — chamando IA...`);
-          rawContent = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, 'Analise esta imagem de ficha tecnica e extraia todas as fichas tecnicas/receitas.', imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 });
+          ({ text: rawContent } = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, 'Analise esta imagem de ficha tecnica e extraia todas as fichas tecnicas/receitas.', imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 }));
         } else {
           const docContent = `Documento com fichas tecnicas:\n\n${String(fileContent).slice(0, 24000)}\n\nExtraia todas as fichas tecnicas/receitas com seus ingredientes.`;
           console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (document) — chamando IA...`);
-          rawContent = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, docContent, { maxTokens: 16384, timeoutMs: 120_000 });
+          ({ text: rawContent } = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, docContent, { maxTokens: 16384, timeoutMs: 120_000 }));
         }
       }
 

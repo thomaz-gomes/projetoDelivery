@@ -165,6 +165,14 @@ export async function debitCredits(companyId, serviceKey, quantity = 1, metadata
         metadata: { ...metadata, unlimited: true },
       },
     })
+    // Auto-log token usage if present in metadata
+    if (metadata?.tokenUsage) {
+      const tu = metadata.tokenUsage
+      const cleanMeta = { ...metadata }
+      delete cleanMeta.tokenUsage
+      await logTokenUsage(companyId, serviceKey, 0, tu, userId, Object.keys(cleanMeta).length > 0 ? cleanMeta : null)
+    }
+
     return { newBalance: currentBalance, spent: 0 }
   }
 
@@ -211,6 +219,14 @@ export async function debitCredits(companyId, serviceKey, quantity = 1, metadata
 
     return [updated]
   })
+
+  // Auto-log token usage if present in metadata
+  if (metadata?.tokenUsage) {
+    const tu = metadata.tokenUsage
+    const cleanMeta = { ...metadata }
+    delete cleanMeta.tokenUsage
+    await logTokenUsage(companyId, serviceKey, totalCost, tu, userId, Object.keys(cleanMeta).length > 0 ? cleanMeta : null)
+  }
 
   return {
     newBalance: updatedCompany.aiCreditsBalance,
@@ -308,4 +324,36 @@ export async function getTransactions(companyId, page = 1, limit = 20) {
   ])
 
   return { transactions, total, page, limit, pages: Math.ceil(total / limit) }
+}
+
+/**
+ * Logs token usage for a specific AI call into AiTokenUsage table.
+ *
+ * @param {string} companyId
+ * @param {string} serviceKey
+ * @param {number} creditsSpent
+ * @param {object} tokenUsage - { provider, model, inputTokens, outputTokens, totalTokens }
+ * @param {string} [userId]
+ * @param {object} [metadata]
+ */
+export async function logTokenUsage(companyId, serviceKey, creditsSpent, tokenUsage, userId = null, metadata = null) {
+  if (!tokenUsage || !tokenUsage.provider) return
+  try {
+    await prisma.aiTokenUsage.create({
+      data: {
+        companyId,
+        userId,
+        serviceKey,
+        provider: tokenUsage.provider,
+        model: tokenUsage.model || 'unknown',
+        inputTokens: tokenUsage.inputTokens || 0,
+        outputTokens: tokenUsage.outputTokens || 0,
+        totalTokens: tokenUsage.totalTokens || 0,
+        creditsSpent,
+        metadata,
+      },
+    })
+  } catch (err) {
+    console.error('[aiCreditManager] logTokenUsage error:', err.message)
+  }
 }
