@@ -522,14 +522,39 @@ async function subscribeDomain() {
   domainLoading.value = true
   domainError.value = ''
   try {
-    const res = await api.post('/custom-domains', {
+    // 1. Create the domain record
+    const domainRes = await api.post('/custom-domains', {
       domain: domainForm.value.domain || 'pendente.configurar',
       menuId: id,
       billingCycle: domainForm.value.billingCycle
     })
-    customDomain.value = res.data
-    // For now, immediately activate (payment integration comes later)
-    await activateDomain()
+    customDomain.value = domainRes.data
+
+    // 2. Create payment preference
+    const period = domainForm.value.billingCycle === 'YEARLY' ? 'ANNUAL' : 'MONTHLY'
+    try {
+      const payRes = await api.post('/payment/create-preference', {
+        type: 'MODULE',
+        referenceId: domainPricing.value.moduleId,
+        period
+      })
+
+      if (payRes.data.checkoutUrl) {
+        // Save domain ID for activation on return
+        localStorage.setItem('pendingCustomDomainId', customDomain.value.id)
+        window.location.href = payRes.data.checkoutUrl
+        return
+      }
+
+      // No MP config — manual payment flow
+      Swal.fire({ icon: 'info', text: 'Pagamento pendente de confirmação manual. Entre em contato com o suporte.' })
+      await loadDomainData()
+    } catch (payErr) {
+      // Payment creation failed but domain was created
+      // Activate anyway for now (fallback for environments without MP)
+      console.warn('Payment preference failed, activating directly:', payErr)
+      await activateDomain()
+    }
   } catch (e) {
     domainError.value = e.response?.data?.message || 'Erro ao assinar domínio'
     Swal.fire({ icon: 'error', text: domainError.value })
@@ -631,6 +656,22 @@ function formatDate(dateStr) {
 }
 
 onMounted(async () => {
+  // Check if returning from a payment
+  const urlParams = new URLSearchParams(window.location.search)
+  const paymentStatus = urlParams.get('status')
+  if (paymentStatus === 'success') {
+    const pendingDomainId = localStorage.getItem('pendingCustomDomainId')
+    if (pendingDomainId) {
+      localStorage.removeItem('pendingCustomDomainId')
+      // Activate the domain after successful payment
+      try {
+        await api.post(`/custom-domains/${pendingDomainId}/activate`)
+      } catch (e) {
+        console.warn('Failed to activate domain after payment:', e)
+      }
+    }
+  }
+
   await saas.fetchMySubscription().catch(() => {})
   await load()
   if (isCatalogOnly.value) {
