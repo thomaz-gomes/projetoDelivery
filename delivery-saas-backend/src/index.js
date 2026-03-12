@@ -69,6 +69,7 @@ import productReportsRouter from './routes/reports/products.js'
 import aiCreditsRouter from './routes/aiCredits.js'
 import aiStudioRouter from './routes/aiStudio.js'
 import { paymentRouter } from './routes/payment.js'
+import leadsRouter from './routes/leads.js'
 import './cron.js'
 
 const app = express();
@@ -180,6 +181,7 @@ app.use("/wa", requireModule('WHATSAPP'), waRouter);
 app.use("/affiliates", affiliatesRouter);
 app.use('/coupons', requireModule('COUPONS'), couponsRouter);
 app.use('/public', publicMenuRouter);
+app.use('/public', leadsRouter);
 // Public cart endpoints (evaluations) for a given companyId
 app.use('/public/:companyId/cart', publicCartRouter);
 app.use('/menu', menuAdminRouter);

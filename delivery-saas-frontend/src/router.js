@@ -120,9 +120,9 @@ const router = createRouter({
     { path: '/register', component: Register },
     { path: '/verify-email', component: VerifyEmail },
     { path: '/setup', component: SetupCompany, meta: { requiresAuth: true, noSidebar: true } },
-    { path: '/', beforeEnter: async () => {
+    { path: '/', component: () => import('./views/LandingPage.vue'), beforeEnter: async () => {
         const token = localStorage.getItem('token')
-        if (!token) return { path: '/login' }
+        if (!token) return true
         const { useModulesStore } = await import('./stores/modules')
         const modules = useModulesStore()
         if (!modules.enabled.length) {

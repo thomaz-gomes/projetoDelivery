@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url';
 import { prisma } from '../prisma.js';
 import { authMiddleware } from '../auth.js';
 import { requireModuleStrict } from '../modules.js';
-import { checkCredits, debitCredits, AI_SERVICE_COSTS } from '../services/aiCreditManager.js';
+import { checkCredits, debitCredits, AI_SERVICE_COSTS, logTokenUsage } from '../services/aiCreditManager.js';
 import { callTextAI, callVisionAI } from '../services/aiProvider.js';
 
 const router = express.Router();
@@ -352,7 +352,7 @@ function stripHtml(html) {
 
 // ─── Processamento assíncrono do parse ───────────────────────────────────────
 
-async function runParseJob(jobId, method, input) {
+async function runParseJob(jobId, method, input, companyId, userId) {
   const job = parseJobs.get(jobId);
   if (!job) return;
 
@@ -442,7 +442,8 @@ async function runParseJob(jobId, method, input) {
         (pageText ? `\nTexto do cardápio (seções separadas por === quando houver múltiplas categorias):\n${pageText.slice(0, 8000)}` : '') +
         detailsSection;
 
-      const { text: rawContent } = await callTextAI('MENU_IMPORT_LINK', SYSTEM_PROMPT, userContent, { maxTokens: 8192, timeoutMs: 100_000 });
+      const { text: rawContent, tokenUsage } = await callTextAI('MENU_IMPORT_LINK', SYSTEM_PROMPT, userContent, { maxTokens: 8192, timeoutMs: 100_000 });
+      if (tokenUsage) await logTokenUsage(companyId, 'MENU_IMPORT_LINK', AI_SERVICE_COSTS.MENU_IMPORT_LINK ?? 5, tokenUsage, userId);
       parsed = extractJSON(rawContent);
       if (job.debug) {
         job.debug.finishReason = rawContent ? (rawContent.length < 100 ? rawContent : 'ok') : 'empty';
@@ -471,7 +472,8 @@ async function runParseJob(jobId, method, input) {
         const textPrompt = images.length > 1
           ? `Analise esta imagem de cardápio (página ${i + 1} de ${images.length}) e extraia todos os itens com nome, descrição e preço.`
           : 'Analise esta imagem de cardápio e extraia todos os itens com nome, descrição e preço.';
-        const { text: rawContent } = await callVisionAI('MENU_IMPORT_PHOTO', SYSTEM_PROMPT, textPrompt, imgBase64, imgMime, { maxTokens: 8192, timeoutMs: 100_000 });
+        const { text: rawContent, tokenUsage } = await callVisionAI('MENU_IMPORT_PHOTO', SYSTEM_PROMPT, textPrompt, imgBase64, imgMime, { maxTokens: 8192, timeoutMs: 100_000 });
+        if (tokenUsage) await logTokenUsage(companyId, 'MENU_IMPORT_PHOTO', AI_SERVICE_COSTS.MENU_IMPORT_PHOTO ?? 5, tokenUsage, userId);
         const pageResult = extractJSON(rawContent);
         if (!pageResult?.categories) continue;
 
@@ -506,7 +508,8 @@ async function runParseJob(jobId, method, input) {
         `Exemplos: ${JSON.stringify(rows.slice(0, 3), null, 2)}\n` +
         `Todos os dados: ${JSON.stringify(rows.slice(0, 200), null, 2)}\n` +
         `Mapeie as colunas para nome, descrição, preço e categoria.`;
-      const { text: rawContent } = await callTextAI('MENU_IMPORT_PLANILHA', SYSTEM_PROMPT, sheetContent, { maxTokens: 8192, timeoutMs: 100_000 });
+      const { text: rawContent, tokenUsage } = await callTextAI('MENU_IMPORT_PLANILHA', SYSTEM_PROMPT, sheetContent, { maxTokens: 8192, timeoutMs: 100_000 });
+      if (tokenUsage) await logTokenUsage(companyId, 'MENU_IMPORT_PLANILHA', AI_SERVICE_COSTS.MENU_IMPORT_PLANILHA ?? 2, tokenUsage, userId);
       parsed = extractJSON(rawContent);
     } else {
       throw new Error(`Método desconhecido: ${method}`);
@@ -592,7 +595,7 @@ router.post('/ai-import/parse', async (req, res) => {
   // Responde imediatamente — processa em segundo plano (igual customers/import)
   res.json({ jobId });
 
-  runParseJob(jobId, method, input).catch(e => {
+  runParseJob(jobId, method, input, companyId, req.user?.id).catch(e => {
     const job = parseJobs.get(jobId);
     if (job) { job.done = true; job.error = e.message; }
   });

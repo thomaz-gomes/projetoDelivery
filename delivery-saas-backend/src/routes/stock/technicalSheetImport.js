@@ -12,7 +12,7 @@ import * as XLSX from 'xlsx';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
-import { checkCredits, debitCredits, AI_SERVICE_COSTS } from '../../services/aiCreditManager.js';
+import { checkCredits, debitCredits, AI_SERVICE_COSTS, logTokenUsage } from '../../services/aiCreditManager.js';
 import { callTextAI, callVisionAI } from '../../services/aiProvider.js';
 
 const router = express.Router();
@@ -63,7 +63,7 @@ ${ingredientList || '(nenhum ingrediente cadastrado)'}
 
 // --- Processamento assincrono do parse ---
 
-async function runParseJob(jobId, method, files, companyId) {
+async function runParseJob(jobId, method, files, companyId, userId) {
   const job = parseJobs.get(jobId);
   if (!job) return;
 
@@ -81,6 +81,7 @@ async function runParseJob(jobId, method, files, companyId) {
     ]);
 
     const systemPrompt = buildSystemPrompt(ingredients);
+    const costPerFile = AI_SERVICE_COSTS.TECHNICAL_SHEET_IMPORT_PARSE ?? 5;
     const allSheets = [];
 
     for (let i = 0; i < files.length; i++) {
@@ -88,7 +89,7 @@ async function runParseJob(jobId, method, files, companyId) {
       job.stage = 'processing';
 
       const fileContent = files[i];
-      let rawContent;
+      let rawContent, tokenUsage;
 
       if (method === 'photo' || (typeof fileContent === 'string' && fileContent.startsWith('data:image/'))) {
         job.stage = 'ai_analyzing';
@@ -99,7 +100,8 @@ async function runParseJob(jobId, method, files, companyId) {
         const imgMime = imgMatch?.[1] || 'image/jpeg';
         const imgBase64 = imgMatch?.[2] || fileContent;
         console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (photo) — chamando IA...`);
-        ({ text: rawContent } = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, textPrompt, imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 }));
+        ({ text: rawContent, tokenUsage } = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, textPrompt, imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 }));
+        if (tokenUsage) await logTokenUsage(companyId, 'TECHNICAL_SHEET_IMPORT_PARSE', costPerFile, tokenUsage, userId);
       } else if (method === 'spreadsheet') {
         job.stage = 'parsing_file';
         const base64Data = fileContent.includes(',') ? fileContent.split(',')[1] : fileContent;
@@ -121,7 +123,8 @@ async function runParseJob(jobId, method, files, companyId) {
         job.stage = 'ai_analyzing';
         const sheetUserContent = `Planilha com fichas tecnicas.\n\n${sheetsText.join('\n\n')}\n\nExtraia todas as fichas tecnicas/receitas com seus ingredientes.`;
         console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (spreadsheet) — chamando IA...`);
-        ({ text: rawContent } = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, sheetUserContent, { maxTokens: 16384, timeoutMs: 120_000 }));
+        ({ text: rawContent, tokenUsage } = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, sheetUserContent, { maxTokens: 16384, timeoutMs: 120_000 }));
+        if (tokenUsage) await logTokenUsage(companyId, 'TECHNICAL_SHEET_IMPORT_PARSE', costPerFile, tokenUsage, userId);
       } else {
         job.stage = 'ai_analyzing';
         if (typeof fileContent === 'string' && fileContent.startsWith('data:image/')) {
@@ -129,11 +132,13 @@ async function runParseJob(jobId, method, files, companyId) {
           const imgMime = imgMatch?.[1] || 'image/jpeg';
           const imgBase64 = imgMatch?.[2] || fileContent;
           console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (image) — chamando IA...`);
-          ({ text: rawContent } = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, 'Analise esta imagem de ficha tecnica e extraia todas as fichas tecnicas/receitas.', imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 }));
+          ({ text: rawContent, tokenUsage } = await callVisionAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, 'Analise esta imagem de ficha tecnica e extraia todas as fichas tecnicas/receitas.', imgBase64, imgMime, { maxTokens: 16384, timeoutMs: 120_000 }));
+          if (tokenUsage) await logTokenUsage(companyId, 'TECHNICAL_SHEET_IMPORT_PARSE', costPerFile, tokenUsage, userId);
         } else {
           const docContent = `Documento com fichas tecnicas:\n\n${String(fileContent).slice(0, 24000)}\n\nExtraia todas as fichas tecnicas/receitas com seus ingredientes.`;
           console.log(`[techSheetImport:${jobId}] Arquivo ${i + 1}/${files.length} (document) — chamando IA...`);
-          ({ text: rawContent } = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, docContent, { maxTokens: 16384, timeoutMs: 120_000 }));
+          ({ text: rawContent, tokenUsage } = await callTextAI('TECHNICAL_SHEET_IMPORT_PARSE', systemPrompt, docContent, { maxTokens: 16384, timeoutMs: 120_000 }));
+          if (tokenUsage) await logTokenUsage(companyId, 'TECHNICAL_SHEET_IMPORT_PARSE', costPerFile, tokenUsage, userId);
         }
       }
 
@@ -264,7 +269,7 @@ router.post('/ai-import/parse', requireRole('ADMIN'), async (req, res) => {
   // Responde imediatamente — processa em segundo plano
   res.json({ jobId });
 
-  runParseJob(jobId, method, files, companyId).catch(e => {
+  runParseJob(jobId, method, files, companyId, req.user?.id).catch(e => {
     const job = parseJobs.get(jobId);
     if (job) { job.done = true; job.error = e.message; job.stage = 'error'; }
   });

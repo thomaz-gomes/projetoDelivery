@@ -4,7 +4,7 @@
  */
 
 import { parseStringPromise } from 'xml2js';
-import { checkCredits, debitCredits } from './aiCreditManager.js';
+import { checkCredits, debitCredits, logTokenUsage } from './aiCreditManager.js';
 import { getSetting } from './systemSettings.js';
 import { callTextAI } from './aiProvider.js';
 
@@ -258,6 +258,16 @@ Return ONLY a JSON array. Extract ALL visible item lines.`;
   const data = await res.json();
   const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
 
+  // Extract token usage from Gemini response
+  const usageMeta = data.usageMetadata;
+  const receiptTokenUsage = usageMeta ? {
+    provider: 'gemini',
+    model: GEMINI_MODEL,
+    inputTokens: usageMeta.promptTokenCount || 0,
+    outputTokens: usageMeta.candidatesTokenCount || 0,
+    totalTokens: usageMeta.totalTokenCount || 0,
+  } : null;
+
   let items;
   try {
     const cleaned = content.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
@@ -267,7 +277,7 @@ Return ONLY a JSON array. Extract ALL visible item lines.`;
   }
 
   await debitCredits(companyId, 'NFE_RECEIPT_PHOTO', photoCount, {
-    source: 'receipt_photo', photoCount,
+    source: 'receipt_photo', photoCount, tokenUsage: receiptTokenUsage,
   }, userId);
 
   return items.map(item => ({

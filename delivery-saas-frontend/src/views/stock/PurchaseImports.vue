@@ -289,6 +289,14 @@ async function syncMde(storeId) {
         showConfirmButton: false,
       })
       startStatusPolling(storeId)
+    } else if (result.reason === 'backoff') {
+      mdeStatus.value[storeId] = { ...mdeStatus.value[storeId], status: 'backoff', backoffMinutes: result.waitMinutes }
+      Swal.fire({
+        icon: 'warning',
+        title: 'Aguardando cooldown',
+        text: `A SEFAZ exige intervalo entre consultas. Tente novamente em ${result.waitMinutes} minuto(s).`,
+        confirmButtonColor: '#105784',
+      })
     }
   } catch (e) {
     console.error('MDe sync failed', e?.message || e)
@@ -410,9 +418,10 @@ function startStatusPolling(storeId) {
         await load()
         if (data.newImports > 0) {
           Swal.fire({ icon: 'success', title: `${data.newImports} nota(s) importada(s)`, timer: 3000, showConfirmButton: false })
-        }
-        if (data.fetchXmlResult?.itemCount > 0) {
+        } else if (data.fetchXmlResult?.itemCount > 0) {
           Swal.fire({ icon: 'success', title: 'XML obtido', text: `${data.fetchXmlResult.itemCount} item(ns) encontrado(s)`, timer: 3000, showConfirmButton: false })
+        } else {
+          Swal.fire({ icon: 'info', title: 'Sincronizacao concluida', text: 'Nenhum documento novo encontrado na SEFAZ.', timer: 3000, showConfirmButton: false })
         }
         stopStatusPolling(storeId)
       }

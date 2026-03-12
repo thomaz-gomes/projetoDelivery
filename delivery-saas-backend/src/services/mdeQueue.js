@@ -173,8 +173,16 @@ async function executeJob(job) {
     let result;
     if (type === 'sync') {
       result = await syncMde(storeId, companyId);
-      // Clear backoff on success
-      backoffState.delete(storeId);
+
+      // cStat 137 = no documents found — SEFAZ requires 1 hour wait
+      if (result.cStat === '137') {
+        const oneHourMs = 60 * 60 * 1000;
+        backoffState.set(storeId, { retryAfter: Date.now() + oneHourMs, consecutiveErrors: 0 });
+        console.log(`[MDeQueue] Store ${storeId} in 1h cooldown (cStat=137, no documents)`);
+      } else {
+        // Clear backoff on success with documents
+        backoffState.delete(storeId);
+      }
 
       updateStatus(storeId, {
         status: 'idle',

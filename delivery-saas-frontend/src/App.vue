@@ -124,6 +124,7 @@ const route = useRoute();
 const showLayout = computed(() => {
   // hide layout for login, register, verify, setup and for any public routes (start with /public)
   if(!route || !route.path) return true
+  if(route.path === '/') return false
   if(route.path.startsWith('/login')) return false
   if(route.path === '/register') return false
   if(route.path === '/verify-email') return false
