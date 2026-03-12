@@ -7,6 +7,7 @@ const settings = ref({
   openai_model: '',
   credit_brl_price: '',
   google_ai_api_key: '',
+  usd_to_brl: '',
 })
 const settingsMeta = ref([])  // { key, isSet, updatedAt }
 const loading = ref(true)
@@ -87,7 +88,10 @@ async function saveCredits() {
   errorCredits.value = null
   try {
     // Salva o preço BRL por crédito junto com as configurações gerais
-    await api.put('/saas/settings', [{ key: 'credit_brl_price', value: String(settings.value.credit_brl_price).replace(',', '.') }])
+    await api.put('/saas/settings', [
+      { key: 'credit_brl_price', value: String(settings.value.credit_brl_price).replace(',', '.') },
+      { key: 'usd_to_brl', value: String(settings.value.usd_to_brl).replace(',', '.') },
+    ])
 
     // Salva os custos de cada serviço
     const payload = SERVICE_DEFS.map(def => ({
@@ -119,6 +123,10 @@ async function load() {
     const brlRow = data.find(r => r.key === 'credit_brl_price')
     if (brlRow && brlRow.isSet) {
       settings.value.credit_brl_price = brlRow.value
+    }
+    const usdRow = data.find(r => r.key === 'usd_to_brl')
+    if (usdRow && usdRow.isSet) {
+      settings.value.usd_to_brl = usdRow.value
     }
     // Carrega mapa de provedores
     const providerRow = data.find(r => r.key === 'ai_provider_map')
@@ -445,6 +453,29 @@ onMounted(async () => {
             </div>
             <div class="form-text">
               Exemplo: <code>0.0496</code> → 25 créditos = R$ 1,24
+            </div>
+          </div>
+
+          <!-- Cotação USD→BRL -->
+          <div class="mb-4 p-3 rounded-3 bg-light border">
+            <label class="form-label fw-semibold mb-1">
+              <i class="bi bi-currency-exchange me-1"></i>Cotação USD → BRL
+            </label>
+            <div class="input-group" style="max-width: 240px;">
+              <span class="input-group-text">US$ 1 =</span>
+              <input
+                type="number"
+                class="form-control"
+                v-model="settings.usd_to_brl"
+                min="0"
+                step="0.01"
+                placeholder="ex: 5.80"
+              />
+              <span class="input-group-text">BRL</span>
+            </div>
+            <div class="form-text">
+              Taxa de câmbio para calcular custo real dos tokens em reais.
+              Atualize manualmente conforme necessário.
             </div>
           </div>
 

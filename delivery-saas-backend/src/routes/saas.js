@@ -784,7 +784,7 @@ saasRouter.delete('/companies/:id', requireRole('SUPER_ADMIN'), async (_req, res
 // -------- System Settings (SUPER_ADMIN) --------
 
 // Chaves expostas na API (whitelist). Valores de chaves *_key são mascarados na leitura.
-const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price', 'google_ai_api_key', 'ai_provider_map']
+const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price', 'google_ai_api_key', 'ai_provider_map', 'usd_to_brl']
 const SENSITIVE_KEYS = new Set(['openai_api_key', 'google_ai_api_key'])
 
 function maskValue(key, value) {
@@ -1110,6 +1110,164 @@ saasRouter.put('/mercadopago-config', requireRole('SUPER_ADMIN'), async (req, re
   } catch (e) {
     res.status(500).json({ message: 'Erro ao salvar configuração MP', error: e?.message })
   }
+})
+
+// -------- AI Token Usage Log (SUPER_ADMIN) --------
+saasRouter.get('/ai-usage', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const { page = 1, limit = 25, companyId, serviceKey, provider, dateFrom, dateTo } = req.query
+    const where = {}
+    if (companyId) where.companyId = companyId
+    if (serviceKey) where.serviceKey = serviceKey
+    if (provider) where.provider = provider
+    if (dateFrom || dateTo) {
+      where.createdAt = {}
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom)
+      if (dateTo) where.createdAt.lte = new Date(dateTo + 'T23:59:59.999Z')
+    }
+
+    const skip = (Number(page) - 1) * Number(limit)
+    const [rows, total] = await Promise.all([
+      prisma.aiTokenUsage.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Number(limit),
+        include: {
+          company: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true } },
+        },
+      }),
+      prisma.aiTokenUsage.count({ where }),
+    ])
+
+    res.json({ rows, total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / Number(limit)) })
+  } catch (err) {
+    console.error('[saas] GET /ai-usage error:', err)
+    res.status(500).json({ message: 'Erro ao buscar log de uso de tokens' })
+  }
+})
+
+saasRouter.get('/ai-usage/summary', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const { months = 6 } = req.query
+    const since = new Date()
+    since.setMonth(since.getMonth() - Number(months))
+
+    const rows = await prisma.aiTokenUsage.findMany({
+      where: { createdAt: { gte: since } },
+      select: {
+        inputTokens: true,
+        outputTokens: true,
+        totalTokens: true,
+        creditsSpent: true,
+        serviceKey: true,
+        provider: true,
+        model: true,
+        createdAt: true,
+      },
+    })
+
+    const [pricings, settings] = await Promise.all([
+      prisma.aiProviderPricing.findMany({ where: { isActive: true } }),
+      prisma.systemSetting.findMany({
+        where: { key: { in: ['credit_brl_price', 'usd_to_brl'] } },
+      }),
+    ])
+
+    const creditBrlPrice = parseFloat(settings.find(s => s.key === 'credit_brl_price')?.value || '0')
+    const usdToBrl = parseFloat(settings.find(s => s.key === 'usd_to_brl')?.value || '5.80')
+
+    const pricingMap = {}
+    for (const p of pricings) {
+      pricingMap[`${p.provider}:${p.model}`] = {
+        input: parseFloat(p.inputPricePerMillion),
+        output: parseFloat(p.outputPricePerMillion),
+      }
+    }
+
+    const monthly = {}
+    const byService = {}
+    const totals = { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, costBrl: 0, revenueBrl: 0, creditsSpent: 0 }
+
+    for (const row of rows) {
+      const key = `${row.provider}:${row.model}`
+      const pricing = pricingMap[key] || { input: 0, output: 0 }
+      const costUsd = (row.inputTokens / 1_000_000 * pricing.input) + (row.outputTokens / 1_000_000 * pricing.output)
+      const costBrl = costUsd * usdToBrl
+      const revenueBrl = row.creditsSpent * creditBrlPrice
+
+      const monthKey = `${row.createdAt.getFullYear()}-${String(row.createdAt.getMonth() + 1).padStart(2, '0')}`
+      if (!monthly[monthKey]) monthly[monthKey] = { costBrl: 0, revenueBrl: 0, creditsSpent: 0, totalTokens: 0 }
+      monthly[monthKey].costBrl += costBrl
+      monthly[monthKey].revenueBrl += revenueBrl
+      monthly[monthKey].creditsSpent += row.creditsSpent
+      monthly[monthKey].totalTokens += row.totalTokens
+
+      if (!byService[row.serviceKey]) byService[row.serviceKey] = { costBrl: 0, revenueBrl: 0, creditsSpent: 0, count: 0 }
+      byService[row.serviceKey].costBrl += costBrl
+      byService[row.serviceKey].revenueBrl += revenueBrl
+      byService[row.serviceKey].creditsSpent += row.creditsSpent
+      byService[row.serviceKey].count++
+
+      totals.inputTokens += row.inputTokens
+      totals.outputTokens += row.outputTokens
+      totals.totalTokens += row.totalTokens
+      totals.costUsd += costUsd
+      totals.costBrl += costBrl
+      totals.revenueBrl += revenueBrl
+      totals.creditsSpent += row.creditsSpent
+    }
+
+    totals.profitBrl = totals.revenueBrl - totals.costBrl
+    totals.marginPct = totals.revenueBrl > 0 ? ((totals.profitBrl / totals.revenueBrl) * 100) : 0
+
+    res.json({ totals, monthly, byService, creditBrlPrice, usdToBrl })
+  } catch (err) {
+    console.error('[saas] GET /ai-usage/summary error:', err)
+    res.status(500).json({ message: 'Erro ao gerar sumário de uso de IA' })
+  }
+})
+
+// -------- AI Provider Pricing (SUPER_ADMIN) --------
+saasRouter.get('/ai-provider-pricing', requireRole('SUPER_ADMIN'), async (_req, res) => {
+  const rows = await prisma.aiProviderPricing.findMany({ orderBy: [{ provider: 'asc' }, { model: 'asc' }] })
+  res.json(rows)
+})
+
+saasRouter.post('/ai-provider-pricing', requireRole('SUPER_ADMIN'), async (req, res) => {
+  const { provider, model, inputPricePerMillion, outputPricePerMillion } = req.body
+  if (!provider || !model) return res.status(400).json({ message: 'provider e model são obrigatórios' })
+  try {
+    const row = await prisma.aiProviderPricing.upsert({
+      where: { provider_model: { provider, model } },
+      update: { inputPricePerMillion, outputPricePerMillion, isActive: true },
+      create: { provider, model, inputPricePerMillion, outputPricePerMillion },
+    })
+    res.json(row)
+  } catch (err) {
+    console.error('[saas] POST /ai-provider-pricing error:', err)
+    res.status(500).json({ message: 'Erro ao salvar pricing' })
+  }
+})
+
+saasRouter.put('/ai-provider-pricing/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
+  const { inputPricePerMillion, outputPricePerMillion, isActive } = req.body
+  try {
+    const row = await prisma.aiProviderPricing.update({
+      where: { id: req.params.id },
+      data: { inputPricePerMillion, outputPricePerMillion, isActive },
+    })
+    res.json(row)
+  } catch (err) {
+    console.error('[saas] PUT /ai-provider-pricing error:', err)
+    res.status(500).json({ message: 'Erro ao atualizar pricing' })
+  }
+})
+
+saasRouter.delete('/ai-provider-pricing/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
+  await prisma.aiProviderPricing.delete({ where: { id: req.params.id } })
+  res.json({ ok: true })
 })
 
 export default saasRouter
