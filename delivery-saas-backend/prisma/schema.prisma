@@ -547,7 +547,7 @@ model Menu {
 model CustomDomain {
   id           String              @id @default(uuid())
   domain       String              @unique
-  menuId       String
+  menuId       String              @unique
   menu         Menu                @relation(fields: [menuId], references: [id])
   companyId    String
   company      Company             @relation(fields: [companyId], references: [id])
