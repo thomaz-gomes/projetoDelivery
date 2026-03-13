@@ -28,11 +28,19 @@ export class MercadoPagoAdapter {
       }],
       marketplace_fee: platformFee ?? this.platformFee,
       external_reference: externalRef,
-      notification_url: notificationUrl,
-      back_urls: backUrls,
-      auto_return: 'approved',
       statement_descriptor: 'CoreDelivery',
     }
+
+    // MP rejects localhost URLs for back_urls/notification_url
+    const hasValidUrls = backUrls?.success && !backUrls.success.includes('localhost')
+    if (hasValidUrls) {
+      body.back_urls = backUrls
+      body.auto_return = 'approved'
+    }
+    if (notificationUrl && !notificationUrl.includes('localhost')) {
+      body.notification_url = notificationUrl
+    }
+
     const result = await preference.create({ body })
     return { checkoutUrl: result.init_point, preferenceId: result.id }
   }
