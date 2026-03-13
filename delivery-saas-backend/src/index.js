@@ -101,9 +101,13 @@ if (ALLOW_ALL_CORS) {
   console.warn('⚠️ ALLOW_ALL_CORS is enabled — allowing all origins (for debugging only).');
   app.use(cors({ origin: true, credentials: true }));
 } else {
+  // Cache of verified custom domain origins: origin -> { allowed: bool, ts: number }
+  const _corsCustomDomainCache = new Map();
+  const CORS_CACHE_TTL = 5 * 60 * 1000; // 5 min
+
   app.use(
     cors({
-      origin: (origin, cb) => {
+      origin: async (origin, cb) => {
         // DEV convenience: allow any origin when not in production to avoid frequent CORS pain
         if (process.env.NODE_ENV !== 'production') {
           try { console.log('CORS check (dev) - incoming Origin:', origin); } catch(_){ }
@@ -111,6 +115,31 @@ if (ALLOW_ALL_CORS) {
         }
         // allow requests with no origin (mobile apps, curl) or if origin is in the list
         if (!origin || allowedOrigins.indexOf(origin) !== -1) return cb(null, true);
+
+        // Check if origin is a custom domain (e.g. https://www.almocaidelivery.com.br)
+        try {
+          const now = Date.now();
+          const cached = _corsCustomDomainCache.get(origin);
+          if (cached && (now - cached.ts) < CORS_CACHE_TTL) {
+            return cached.allowed ? cb(null, true) : cb(new Error('CORS not allowed for origin: ' + origin));
+          }
+
+          const hostname = new URL(origin).hostname.toLowerCase();
+          // Try exact match, then www variant
+          let record = await prisma.customDomain.findUnique({ where: { domain: hostname }, select: { status: true } });
+          if (!record) {
+            const alt = hostname.startsWith('www.') ? hostname.slice(4) : `www.${hostname}`;
+            record = await prisma.customDomain.findUnique({ where: { domain: alt }, select: { status: true } });
+          }
+
+          const allowed = !!(record && record.status === 'ACTIVE');
+          _corsCustomDomainCache.set(origin, { allowed, ts: now });
+
+          if (allowed) return cb(null, true);
+        } catch (e) {
+          console.error('CORS custom domain check error:', e?.message);
+        }
+
         return cb(new Error('CORS not allowed for origin: ' + origin));
       },
       credentials: true,
@@ -129,11 +158,17 @@ app.use((req, res, next) => {
       res.header('Access-Control-Allow-Origin', origin || '*');
       res.header('Access-Control-Allow-Credentials', 'true');
     } else {
-      // In production, only allow configured origins. If request has no
-      // Origin (curl, server-to-server), do not set Access-Control-Allow-Origin.
+      // In production, only allow configured origins and active custom domains.
       if (origin && allowedOrigins.indexOf(origin) !== -1) {
         res.header('Access-Control-Allow-Origin', origin);
         res.header('Access-Control-Allow-Credentials', 'true');
+      } else if (origin) {
+        // Check if this origin was already validated as a custom domain by the cors() middleware
+        // The cors() middleware sets the header on success; if missing here, trust its cache
+        const existing = res.getHeader('Access-Control-Allow-Origin');
+        if (existing) {
+          // Already set by cors() — keep it
+        }
       }
     }
 
