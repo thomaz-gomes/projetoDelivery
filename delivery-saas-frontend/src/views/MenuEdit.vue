@@ -562,7 +562,12 @@ async function subscribeDomain() {
       return
     }
 
-    // No MP config — activate directly (dev/environments without gateway)
+    if (payRes.data.manual) {
+      Swal.fire({ icon: 'info', title: 'Fatura gerada', text: payRes.data.message || 'Acesse Cobranças para efetuar o pagamento.' })
+      return
+    }
+
+    // No gateway — activate directly (dev/environments without gateway)
     await activateDomain()
   } catch (e) {
     domainError.value = e.response?.data?.message || 'Erro ao assinar domínio'
@@ -689,6 +694,10 @@ async function retryPayment() {
       localStorage.setItem('pendingCustomDomainId', customDomain.value.id)
       localStorage.setItem('pendingCustomDomainReturnUrl', `/menu/menus/${id}`)
       window.location.href = payRes.data.checkoutUrl
+      return
+    }
+    if (payRes.data.manual) {
+      Swal.fire({ icon: 'info', title: 'Fatura gerada', text: payRes.data.message || 'Acesse Cobranças para efetuar o pagamento.' })
       return
     }
     await activateDomain()

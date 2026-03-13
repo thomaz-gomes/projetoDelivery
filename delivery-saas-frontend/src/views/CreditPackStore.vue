@@ -1,8 +1,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAddOnStoreStore } from '../stores/addOnStore'
 import { useAiCreditsStore } from '../stores/aiCredits'
 
+const router = useRouter()
 const store = useAddOnStoreStore()
 const credits = useAiCreditsStore()
 
@@ -17,7 +19,12 @@ async function purchase(pack) {
   if (!confirm(`Confirma a compra de "${pack.name}" por ${formatPrice(pack.price)}? Você será redirecionado para o pagamento.`)) return
   purchasing.value = pack.id
   try {
-    await store.purchaseCreditPack(pack.id)
+    const result = await store.purchaseCreditPack(pack.id)
+    if (result?.manual) {
+      alert(result.message || 'Fatura gerada. Acesse Cobranças para efetuar o pagamento.')
+      router.push('/billing')
+      return
+    }
     await credits.fetch()
   } catch (e) {
     alert(e?.response?.data?.message || 'Erro ao processar pagamento')

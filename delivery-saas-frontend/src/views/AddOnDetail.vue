@@ -1,10 +1,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAddOnStoreStore } from '../stores/addOnStore'
 import { useModulesStore } from '../stores/modules'
 
 const route = useRoute()
+const router = useRouter()
 const store = useAddOnStoreStore()
 const modulesStore = useModulesStore()
 
@@ -44,7 +45,12 @@ async function subscribe() {
   if (!mod.value) return
   subscribing.value = true
   try {
-    await store.subscribeToModule(mod.value.id, selectedPeriod.value)
+    const result = await store.subscribeToModule(mod.value.id, selectedPeriod.value)
+    if (result?.manual) {
+      alert(result.message || 'Fatura gerada. Acesse Cobranças para efetuar o pagamento.')
+      router.push('/billing')
+      return
+    }
     await modulesStore.fetchEnabled(true)
   } catch (e) {
     alert(e?.response?.data?.message || 'Erro ao processar pagamento')
