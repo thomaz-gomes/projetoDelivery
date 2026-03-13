@@ -92,6 +92,7 @@ import SaasAdmin from './views/SaasAdmin.vue';
 import SaasSettings from './views/SaasSettings.vue';
 import SaasAiUsage from './views/SaasAiUsage.vue';
 const SaasGatewayConfig = () => import('./views/SaasGatewayConfig.vue')
+const AdminBilling = () => import('./views/AdminBilling.vue')
 import CashbackSettings from './views/cashback/CashbackSettings.vue';
 import NfeEmissao from './views/NfeEmissao.vue';
 import NfeEmissoesRelatorio from './views/NfeEmissoesRelatorio.vue';
@@ -261,6 +262,7 @@ const router = createRouter({
     { path: '/store/credits', component: CreditPackStore, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/payment/result', component: PaymentResult, meta: { requiresAuth: true } },
     { path: '/store/:moduleKey', component: AddOnDetail, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/billing', component: AdminBilling, meta: { requiresAuth: true } },
   ]
 });
 

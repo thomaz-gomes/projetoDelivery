@@ -636,6 +636,82 @@ saasRouter.post('/jobs/generate-invoices', requireRole('SUPER_ADMIN'), async (re
   }
 })
 
+// ── Billing Dashboard (ADMIN) ─────────────────────────────
+
+saasRouter.get('/billing/dashboard', async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    if (!companyId) return res.status(400).json({ message: 'Empresa não encontrada' })
+
+    const now = new Date()
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+
+    // Pending invoices count
+    const pendingCount = await prisma.saasInvoice.count({
+      where: { subscription: { companyId }, status: { in: ['PENDING', 'OVERDUE'] } },
+    })
+
+    // Next due date
+    const nextInvoice = await prisma.saasInvoice.findFirst({
+      where: { subscription: { companyId }, status: { in: ['PENDING', 'OVERDUE'] } },
+      orderBy: { dueDate: 'asc' },
+      select: { dueDate: true, amount: true },
+    })
+
+    // Total spent this month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const paidThisMonth = await prisma.saasPayment.aggregate({
+      where: { companyId, status: 'PAID', paidAt: { gte: startOfMonth } },
+      _sum: { amount: true },
+    })
+
+    // Last 6 months spending
+    const recentPayments = await prisma.saasPayment.findMany({
+      where: { companyId, status: 'PAID', paidAt: { gte: sixMonthsAgo } },
+      select: { amount: true, paidAt: true },
+    })
+    const monthlySpending = {}
+    for (const p of recentPayments) {
+      const key = `${p.paidAt.getFullYear()}-${String(p.paidAt.getMonth() + 1).padStart(2, '0')}`
+      monthlySpending[key] = (monthlySpending[key] || 0) + Number(p.amount)
+    }
+
+    // Active subscriptions
+    const subscription = await prisma.saasSubscription.findUnique({
+      where: { companyId },
+      include: { plan: { select: { name: true, price: true } } },
+    })
+    const moduleSubs = await prisma.saasModuleSubscription.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      include: { module: { select: { name: true } } },
+    })
+
+    res.json({
+      pendingCount,
+      nextDueDate: nextInvoice?.dueDate || null,
+      nextDueAmount: nextInvoice?.amount || null,
+      totalSpentThisMonth: paidThisMonth._sum.amount || 0,
+      monthlySpending,
+      plan: subscription ? {
+        name: subscription.plan.name,
+        price: subscription.plan.price,
+        status: subscription.status,
+        nextDueAt: subscription.nextDueAt,
+      } : null,
+      moduleSubscriptions: moduleSubs.map(ms => ({
+        id: ms.id,
+        moduleName: ms.module.name,
+        status: ms.status,
+        period: ms.period,
+        nextDueAt: ms.nextDueAt,
+      })),
+    })
+  } catch (e) {
+    console.error('GET /saas/billing/dashboard error:', e?.message)
+    res.status(500).json({ message: 'Erro ao carregar dashboard' })
+  }
+})
+
 // -------- Company (tenant) management --------
 // List companies (SUPER_ADMIN)
 saasRouter.get('/companies', requireRole('SUPER_ADMIN'), async (_req, res) => {
