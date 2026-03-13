@@ -247,7 +247,7 @@ router.post('/:id/verify', requireRole('ADMIN'), async (req, res) => {
     const scriptPath = path.join(process.cwd(), 'scripts', 'provision-ssl.sh')
     const backendPort = process.env.PORT || '3000'
 
-    exec(`bash "${scriptPath}" "${record.domain}" "${backendPort}" 2>&1`, async (err, stdout, stderr) => {
+    exec(`sh "${scriptPath}" "${record.domain}" "${backendPort}" 2>&1`, async (err, stdout, stderr) => {
       try {
         if (err) {
           console.error(`[SSL] Provisioning FAILED for ${record.domain}:`)

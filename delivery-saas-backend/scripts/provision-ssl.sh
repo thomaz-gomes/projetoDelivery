@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Usage: provision-ssl.sh <domain> <backend_port>
 # Generates Let's Encrypt cert and Nginx config for a custom domain.
 #
@@ -8,7 +8,7 @@
 #   3. Update Nginx config to include HTTPS with the certificate
 #   4. Reload Nginx
 
-set -euo pipefail
+set -eu
 
 DOMAIN="$1"
 BACKEND_PORT="${2:-3000}"
