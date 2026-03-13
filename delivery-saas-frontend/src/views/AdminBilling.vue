@@ -153,9 +153,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '../api.js'
-import { useAddOnStore } from '../stores/addOnStore.js'
+import { useAddOnStoreStore } from '../stores/addOnStore.js'
 
-const addOnStore = useAddOnStore()
+const addOnStore = useAddOnStoreStore()
 const tab = ref('invoices')
 const filter = ref('')
 const invoices = ref([])
@@ -201,7 +201,7 @@ async function loadInvoices() {
     const params = { mine: true }
     if (filter.value) params.status = filter.value
     const { data } = await api.get('/saas/invoices', { params })
-    invoices.value = data.invoices || data
+    invoices.value = data.rows || data.invoices || data
   } catch (e) {
     console.error(e)
   } finally {
