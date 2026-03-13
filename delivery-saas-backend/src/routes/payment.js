@@ -1,16 +1,12 @@
 import express from 'express'
-import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { prisma } from '../prisma.js'
-import { createPreference, getPayment } from '../services/mercadopago.js'
-import { decrypt } from '../services/encryption.js'
 import { calculateProRation } from '../services/proRation.js'
+import { getActiveGateway, getGatewayByProvider, getBillingMode } from '../services/paymentGateway/index.js'
 
 export const paymentRouter = express.Router()
 
 const WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || ''
-const MP_PLATFORM_FEE_DEFAULT = Number(process.env.MP_PLATFORM_FEE || '200') / 100
-const MP_CREDIT_SPLIT_RATE = Number(process.env.MP_CREDIT_SPLIT_RATE || '0.01')
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
@@ -30,55 +26,36 @@ function requireAuth(req, res, next) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: resolve Mercado Pago config for a company (follows managedById)
+// Helper: create checkout via active gateway adapter
 // ---------------------------------------------------------------------------
-async function getMpConfig(companyId) {
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { managedById: true }
-  })
-  const managerId = company?.managedById || companyId
-  const config = await prisma.mercadoPagoConfig.findUnique({
-    where: { companyId: managerId }
-  })
-  if (!config || !config.isActive) return null
-  return { ...config, accessToken: decrypt(config.accessToken) }
-}
+async function createGatewayCheckout(payment, description, platformFeeOverride) {
+  const { adapter, config } = await getActiveGateway()
 
-// ---------------------------------------------------------------------------
-// Helper: build MP preference and save reference
-// ---------------------------------------------------------------------------
-async function buildMpPreference(mpConfig, payment, description, platformFee) {
-  const fee = platformFee != null ? Number(platformFee) : MP_PLATFORM_FEE_DEFAULT
-  const pref = await createPreference(mpConfig.accessToken, {
-    externalReference: payment.id,
-    items: [{
-      title: description,
-      quantity: 1,
-      unit_price: Number(payment.amount),
-      currency_id: 'BRL'
-    }],
-    notificationUrl: `${BACKEND_URL}/payment/webhook/mercadopago`,
+  const result = await adapter.createCheckout({
+    amount: Number(payment.amount),
+    description,
+    externalRef: payment.id,
     backUrls: {
       success: `${FRONTEND_URL}/payment/result?status=success&external_reference=${payment.id}`,
       failure: `${FRONTEND_URL}/payment/result?status=failure&external_reference=${payment.id}`,
-      pending: `${FRONTEND_URL}/payment/result?status=pending&external_reference=${payment.id}`
+      pending: `${FRONTEND_URL}/payment/result?status=pending&external_reference=${payment.id}`,
     },
-    marketplaceFee: fee
+    notificationUrl: `${BACKEND_URL}/payment/webhook/${config.provider.toLowerCase()}`,
+    platformFee: platformFeeOverride != null ? Number(platformFeeOverride) : undefined,
   })
 
-  // Save preference id in payment metadata
   await prisma.saasPayment.update({
     where: { id: payment.id },
     data: {
+      gateway: config.provider.toLowerCase(),
       metadata: {
         ...(typeof payment.metadata === 'object' && payment.metadata !== null ? payment.metadata : {}),
-        preferenceId: pref.id
-      }
-    }
+        preferenceId: result.preferenceId,
+      },
+    },
   })
 
-  return pref
+  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -132,24 +109,23 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
             invoiceId: invoice.id,
             amount: invoice.amount,
             status: 'PENDING',
-            gateway: 'mercadopago'
+            gateway: 'pending'
           }
         })
       }
 
-      const mpConfig = await getMpConfig(companyId)
-      if (!mpConfig) {
+      const description = `Fatura #${invoice.year}/${String(invoice.month).padStart(2, '0')}`
+      try {
+        const checkout = await createGatewayCheckout(payment, description)
+        return res.json({
+          checkoutUrl: checkout.checkoutUrl,
+          preferenceId: checkout.preferenceId,
+          paymentId: payment.id
+        })
+      } catch (e) {
+        console.warn('[create-preference] Gateway not available:', e?.message)
         return res.json({ paymentId: payment.id, manual: true })
       }
-
-      const description = `Fatura #${invoice.year}/${String(invoice.month).padStart(2, '0')}`
-      const pref = await buildMpPreference(mpConfig, payment, description)
-
-      return res.json({
-        checkoutUrl: pref.init_point,
-        preferenceId: pref.id,
-        paymentId: payment.id
-      })
     }
 
     // --- MODULE subscription ---
@@ -226,26 +202,25 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
             invoiceId: invoice.id,
             amount: String(proRatedPrice),
             status: 'PENDING',
-            gateway: 'mercadopago'
+            gateway: 'pending'
           }
         })
 
         return { moduleSub, invoice, payment }
       })
 
-      const mpConfig = await getMpConfig(companyId)
-      if (!mpConfig) {
+      const description = `Módulo ${mod.name} - ${period}`
+      try {
+        const checkout = await createGatewayCheckout(result.payment, description, mod.platformFee)
+        return res.json({
+          checkoutUrl: checkout.checkoutUrl,
+          preferenceId: checkout.preferenceId,
+          paymentId: result.payment.id
+        })
+      } catch (e) {
+        console.warn('[create-preference] Gateway not available:', e?.message)
         return res.json({ paymentId: result.payment.id, manual: true })
       }
-
-      const description = `Módulo ${mod.name} - ${period}`
-      const pref = await buildMpPreference(mpConfig, result.payment, description, mod.platformFee)
-
-      return res.json({
-        checkoutUrl: pref.init_point,
-        preferenceId: pref.id,
-        paymentId: result.payment.id
-      })
     }
 
     // --- CREDIT_PACK purchase ---
@@ -295,7 +270,7 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
             invoiceId: invoice.id,
             amount: pack.price,
             status: 'PENDING',
-            gateway: 'mercadopago',
+            gateway: 'pending',
             metadata: { purchaseId: purchase.id }
           }
         })
@@ -303,20 +278,18 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
         return { purchase, invoice, payment }
       })
 
-      const mpConfig = await getMpConfig(companyId)
-      if (!mpConfig) {
+      const description = `Créditos IA - ${pack.name}`
+      try {
+        const checkout = await createGatewayCheckout(result.payment, description)
+        return res.json({
+          checkoutUrl: checkout.checkoutUrl,
+          preferenceId: checkout.preferenceId,
+          paymentId: result.payment.id
+        })
+      } catch (e) {
+        console.warn('[create-preference] Gateway not available:', e?.message)
         return res.json({ paymentId: result.payment.id, manual: true })
       }
-
-      const description = `Créditos IA - ${pack.name}`
-      const creditPackFee = pack.credits * MP_CREDIT_SPLIT_RATE
-      const pref = await buildMpPreference(mpConfig, result.payment, description, creditPackFee)
-
-      return res.json({
-        checkoutUrl: pref.init_point,
-        preferenceId: pref.id,
-        paymentId: result.payment.id
-      })
     }
 
     return res.status(400).json({ message: 'Informe invoiceId ou type (MODULE / CREDIT_PACK)' })
@@ -402,121 +375,80 @@ paymentRouter.post('/webhook', async (req, res) => {
 })
 
 // ---------------------------------------------------------------------------
-// POST /payment/webhook/mercadopago — MP IPN handler (public, no auth)
+// POST /payment/webhook/:provider — dynamic gateway webhook handler
 // ---------------------------------------------------------------------------
-paymentRouter.post('/webhook/mercadopago', async (req, res) => {
-  // Respond 200 immediately so MP doesn't retry
-  res.status(200).json({ ok: true })
+paymentRouter.post('/webhook/:provider', async (req, res) => {
+  // Respond 200 immediately so gateway doesn't retry
+  res.sendStatus(200)
 
   try {
-    const { type, data } = req.body || {}
-    if (type !== 'payment' || !data?.id) return
-
-    // Validate MP webhook signature if secret is configured
-    const mpWebhookSecret = process.env.MP_WEBHOOK_SECRET || ''
-    if (mpWebhookSecret) {
-      const xSignature = req.headers['x-signature'] || ''
-      const xRequestId = req.headers['x-request-id'] || ''
-      const parts = Object.fromEntries(xSignature.split(',').map(p => p.split('=')))
-      const ts = parts.ts
-      const v1 = parts.v1
-      if (!ts || !v1) {
-        console.warn('[mp webhook] Missing signature parts')
-        return
-      }
-      const manifest = `id:${data.id};request-id:${xRequestId};ts:${ts};`
-      const expected = crypto.createHmac('sha256', mpWebhookSecret).update(manifest).digest('hex')
-      if (expected !== v1) {
-        console.warn('[mp webhook] Invalid signature')
-        return
-      }
+    const provider = req.params.provider.toUpperCase()
+    const result = await getGatewayByProvider(provider)
+    if (!result) {
+      console.warn(`[webhook] Unknown provider: ${provider}`)
+      return
     }
 
-    const mpPaymentId = String(data.id)
+    const { adapter } = result
+    const validation = adapter.validateWebhook(req)
+    if (!validation.valid) {
+      console.warn(`[webhook] Invalid signature for ${provider}`)
+      return
+    }
+    if (!validation.paymentId) return
 
-    // Try to find payment by gatewayRef first
+    // Get payment details from gateway
+    const paymentInfo = await adapter.getPaymentStatus(validation.paymentId)
+
+    // Find our payment record by gatewayRef
     let payment = await prisma.saasPayment.findFirst({
-      where: { gatewayRef: mpPaymentId },
+      where: { gatewayRef: String(validation.paymentId) },
       include: { invoice: { include: { items: true } } }
     })
 
-    // If not found by gatewayRef, try external_reference from query params
-    // MP IPN can include ?external_reference= which is our paymentId
+    // Try by external_reference from gateway raw data
     if (!payment) {
-      const externalRef = req.query.external_reference || req.body?.data?.external_reference
-      if (externalRef) {
+      const extRef = paymentInfo.raw?.external_reference
+      if (extRef) {
         payment = await prisma.saasPayment.findUnique({
-          where: { id: externalRef },
+          where: { id: extRef },
           include: { invoice: { include: { items: true } } }
         })
       }
     }
 
-    // Last resort: use the company's own MP config to query the payment
     if (!payment) {
-      // Find any pending mercadopago payment and query MP using its company's config
-      const pendingPayments = await prisma.saasPayment.findMany({
-        where: { gateway: 'mercadopago', status: { in: ['PENDING', 'PROCESSING'] } },
-        include: { invoice: { include: { items: true } } },
-        take: 50
-      })
-
-      for (const p of pendingPayments) {
-        try {
-          const cfg = await getMpConfig(p.companyId)
-          if (!cfg) continue
-          const mpData = await getPayment(cfg.accessToken, mpPaymentId)
-          if (mpData?.external_reference === p.id) {
-            payment = p
-            await prisma.saasPayment.update({ where: { id: p.id }, data: { gatewayRef: mpPaymentId } })
-            break
-          }
-        } catch { /* try next */ }
-      }
-
-      if (!payment) {
-        console.warn('[mp webhook] No matching payment for MP id:', mpPaymentId)
-        return
-      }
+      console.warn(`[webhook] Payment not found for gateway ref ${validation.paymentId}`)
+      return
     }
 
     // Idempotency: skip if already paid
     if (payment.status === 'PAID') return
 
-    // Resolve MP config for this company to query real status
-    const mpConfig = await getMpConfig(payment.companyId)
-    if (!mpConfig) {
-      console.warn('[mp webhook] No MP config for company:', payment.companyId)
-      return
+    const updateData = {
+      status: paymentInfo.status,
+      method: paymentInfo.method,
+      gatewayRef: String(validation.paymentId),
+      metadata: {
+        ...(typeof payment.metadata === 'object' && payment.metadata !== null ? payment.metadata : {}),
+        gatewayStatus: paymentInfo.raw?.status,
+        gatewayPaymentId: validation.paymentId,
+      },
     }
-
-    const mpPayment = await getPayment(mpConfig.accessToken, mpPaymentId)
-    const ourStatus = mapMpStatus(mpPayment.status)
-
-    // Map MP payment method
-    const method = mapMpMethod(mpPayment.payment_type_id || mpPayment.payment_method_id)
+    if (paymentInfo.status === 'PAID') {
+      updateData.paidAt = new Date()
+    }
 
     await prisma.saasPayment.update({
       where: { id: payment.id },
-      data: {
-        status: ourStatus,
-        gatewayRef: mpPaymentId,
-        method,
-        paidAt: ourStatus === 'PAID' ? new Date() : payment.paidAt,
-        metadata: {
-          ...(typeof payment.metadata === 'object' && payment.metadata !== null ? payment.metadata : {}),
-          mpStatus: mpPayment.status,
-          mpPaymentId
-        }
-      }
+      data: updateData,
     })
 
-    // If paid, process invoice items (activate modules, credit packs, etc.)
-    if (ourStatus === 'PAID' && payment.invoice) {
+    if (paymentInfo.status === 'PAID' && payment.invoice) {
       await processPaymentSuccess(payment)
     }
   } catch (e) {
-    console.error('[mp webhook] Error processing MP notification:', e)
+    console.error('[webhook] Error processing:', e?.message || e)
   }
 })
 
@@ -551,27 +483,3 @@ async function processPaymentSuccess(payment) {
   })
 }
 
-// ---------------------------------------------------------------------------
-// Helpers: map Mercado Pago statuses / methods to our values
-// ---------------------------------------------------------------------------
-function mapMpStatus(mpStatus) {
-  switch (mpStatus) {
-    case 'approved': return 'PAID'
-    case 'pending': return 'PENDING'
-    case 'in_process': return 'PROCESSING'
-    case 'rejected':
-    case 'cancelled': return 'FAILED'
-    case 'refunded':
-    case 'charged_back': return 'REFUNDED'
-    default: return 'PENDING'
-  }
-}
-
-function mapMpMethod(mpMethod) {
-  if (!mpMethod) return null
-  const m = mpMethod.toLowerCase()
-  if (m.includes('pix') || m === 'bank_transfer') return 'PIX'
-  if (m.includes('credit') || m === 'credit_card') return 'CREDIT_CARD'
-  if (m.includes('boleto') || m === 'ticket') return 'BOLETO'
-  return null
-}
