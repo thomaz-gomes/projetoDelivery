@@ -132,7 +132,9 @@ if (ALLOW_ALL_CORS) {
             record = await prisma.customDomain.findUnique({ where: { domain: alt }, select: { status: true } });
           }
 
-          const allowed = !!(record && record.status === 'ACTIVE');
+          // Allow CORS for any known custom domain (regardless of status)
+          // so the SPA can make API calls even during provisioning
+          const allowed = !!record;
           _corsCustomDomainCache.set(origin, { allowed, ts: now });
 
           if (allowed) return cb(null, true);
