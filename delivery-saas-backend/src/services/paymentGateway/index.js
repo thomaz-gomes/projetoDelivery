@@ -18,7 +18,7 @@ export async function getActiveGateway() {
     throw new Error('Nenhum gateway de pagamento configurado. Configure em SaaS > Gateway.')
   }
 
-  const AdapterClass = adapters[config.provider]
+  const AdapterClass = adapters[config.provider.toUpperCase()]
   if (!AdapterClass) {
     throw new Error(`Gateway adapter não encontrado para provider: ${config.provider}`)
   }
@@ -37,7 +37,7 @@ export async function getGatewayByProvider(provider) {
   })
   if (!config) return null
 
-  const AdapterClass = adapters[provider]
+  const AdapterClass = adapters[provider.toUpperCase()]
   if (!AdapterClass) return null
 
   const credentials = JSON.parse(decrypt(config.credentials))
