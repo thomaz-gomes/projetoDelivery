@@ -1019,6 +1019,8 @@ model SaasInvoice {
   status         String           @default("PENDING") // PENDING, PAID, OVERDUE
   dueDate        DateTime?
   paidAt         DateTime?
+  gatewayProvider  String?
+  autoCharge       Boolean  @default(false)
   createdAt      DateTime         @default(now())
 
   items    SaasInvoiceItem[]
@@ -1845,4 +1847,17 @@ model Lead {
   phone     String
   source    String   @default("landing")
   createdAt DateTime @default(now())
+}
+
+model SaasGatewayConfig {
+  id            String   @id @default(uuid())
+  provider      String   // MERCADOPAGO, STRIPE, etc.
+  displayName   String
+  credentials   String   // JSON encrypted with AES-256-GCM
+  isActive      Boolean  @default(true)
+  billingMode   Json     @default("{\"plan\":\"MANUAL\",\"module\":\"MANUAL\",\"credits\":\"MANUAL\"}")
+  webhookSecret String?
+  platformFee   Decimal  @default(2.00)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
