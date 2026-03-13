@@ -22,10 +22,11 @@ const ALL_MODULES = [
   { key: 'WHATSAPP',          name: 'WhatsApp' },
   { key: 'FINANCIAL',         name: 'Financeiro' },
   { key: 'FISCAL',            name: 'Fiscal' },
+  { key: 'CUSTOM_DOMAIN',     name: 'Domínio Próprio' },
 ];
 
 // Modules every company should have active by default
-const DEFAULT_MODULES = ['CARDAPIO_SIMPLES', 'CARDAPIO_COMPLETO', 'RIDERS'];
+const DEFAULT_MODULES = ['CARDAPIO_SIMPLES', 'CARDAPIO_COMPLETO'];
 
 async function main() {
   // 1. Upsert all SaasModule records
