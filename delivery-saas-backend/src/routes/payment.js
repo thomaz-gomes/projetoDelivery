@@ -209,6 +209,24 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
         return { moduleSub, invoice, payment }
       })
 
+      // Check billing mode for modules
+      let gatewayConfig = null
+      try {
+        const gwResult = await getActiveGateway()
+        gatewayConfig = gwResult.config
+      } catch { /* no gateway configured */ }
+
+      const billingMode = gatewayConfig ? getBillingMode(gatewayConfig, 'module') : 'MANUAL'
+
+      if (billingMode === 'MANUAL') {
+        return res.json({
+          manual: true,
+          paymentId: result.payment.id,
+          invoiceId: result.invoice.id,
+          message: 'Fatura gerada. Acesse Cobranças para efetuar o pagamento.',
+        })
+      }
+
       const description = `Módulo ${mod.name} - ${period}`
       try {
         const checkout = await createGatewayCheckout(result.payment, description, mod.platformFee)
@@ -277,6 +295,24 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
 
         return { purchase, invoice, payment }
       })
+
+      // Check billing mode for credits
+      let creditGatewayConfig = null
+      try {
+        const gwResult = await getActiveGateway()
+        creditGatewayConfig = gwResult.config
+      } catch { /* no gateway configured */ }
+
+      const creditBillingMode = creditGatewayConfig ? getBillingMode(creditGatewayConfig, 'credits') : 'MANUAL'
+
+      if (creditBillingMode === 'MANUAL') {
+        return res.json({
+          manual: true,
+          paymentId: result.payment.id,
+          invoiceId: result.invoice.id,
+          message: 'Fatura gerada. Acesse Cobranças para efetuar o pagamento.',
+        })
+      }
 
       const description = `Créditos IA - ${pack.name}`
       try {
