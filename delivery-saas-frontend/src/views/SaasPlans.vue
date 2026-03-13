@@ -209,17 +209,16 @@ const GATEWAYS = [
   // Futuros gateways podem ser adicionados aqui
 ]
 
-// ---- Mercado Pago Config ----
+// ---- Gateway Config ----
 const mpConfig = ref(null)
 const mpForm = ref({ accessToken: '', publicKey: '', isActive: true })
 const mpSaving = ref(false)
 
 async function loadMpConfig() {
   try {
-    const { data } = await api.get('/saas/mercadopago-config')
+    const { data } = await api.get('/saas/gateway')
     mpConfig.value = data
     if (data) {
-      mpForm.value.publicKey = data.publicKey || ''
       mpForm.value.isActive = data.isActive
     }
   } catch (e) { /* ignore */ }
@@ -228,11 +227,15 @@ async function loadMpConfig() {
 async function saveMpConfig() {
   mpSaving.value = true
   try {
-    const payload = {}
-    if (mpForm.value.accessToken) payload.accessToken = mpForm.value.accessToken
-    payload.publicKey = mpForm.value.publicKey
-    payload.isActive = mpForm.value.isActive
-    const { data } = await api.put('/saas/mercadopago-config', payload)
+    const credentials = {}
+    if (mpForm.value.accessToken) credentials.accessToken = mpForm.value.accessToken
+    if (mpForm.value.publicKey) credentials.publicKey = mpForm.value.publicKey
+    const payload = {
+      provider: 'mercadopago',
+      displayName: 'Mercado Pago',
+      credentials,
+    }
+    const { data } = await api.put('/saas/gateway', payload)
     mpConfig.value = data
     mpForm.value.accessToken = ''
     Swal.fire({ icon: 'success', title: 'Salvo', text: 'Configuração do gateway salva com sucesso', timer: 1500, showConfirmButton: false })
@@ -528,7 +531,7 @@ async function saveMpConfig() {
               >
                 <i class="bi" :class="gw.icon"></i>
                 {{ gw.label }}
-                <span v-if="gw.key === 'mercadopago' && mpConfig?.hasAccessToken" class="badge bg-success ms-1">Ativo</span>
+                <span v-if="gw.key === 'mercadopago' && mpConfig?.hasCredentials" class="badge bg-success ms-1">Ativo</span>
                 <span v-else-if="gw.key === 'mercadopago'" class="badge bg-secondary ms-1">Inativo</span>
               </button>
             </li>
