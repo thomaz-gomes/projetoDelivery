@@ -36,7 +36,7 @@ services:
       - /var/www/certbot:/var/www/certbot
     pid: host
     cap_add:
-      - KILL
+      - SYS_PTRACE
     depends_on:
       - delivery_db
     ports:

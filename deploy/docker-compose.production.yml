@@ -79,7 +79,7 @@ services:
         condition: service_completed_successfully
     pid: host
     cap_add:
-      - KILL
+      - SYS_PTRACE
     ports:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped

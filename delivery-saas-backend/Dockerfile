@@ -22,7 +22,7 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 
 # Install runtime utilities + Chromium para Puppeteer (scraping headless)
-# certbot: needed for custom domain SSL provisioning (dirs bind-mounted from host)
+# certbot + util-linux: needed for custom domain SSL provisioning (nsenter + certbot)
 RUN apk add --no-cache \
     curl \
     ca-certificates \
@@ -31,7 +31,8 @@ RUN apk add --no-cache \
     freetype \
     harfbuzz \
     ttf-freefont \
-    certbot
+    certbot \
+    util-linux
 
 # Puppeteer usa o Chromium do Alpine, não o bundled
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

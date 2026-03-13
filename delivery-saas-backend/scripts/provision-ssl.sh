@@ -25,28 +25,11 @@ CERTBOT_EMAIL="${CERTBOT_EMAIL:-admin@deliverysaas.com.br}"
 
 echo "[provision-ssl] Starting for ${DOMAIN} (backend port ${BACKEND_PORT})"
 
-# Helper: reload host Nginx by sending SIGHUP to its master process.
-# Works because container uses pid:host (shares PID namespace).
+# Helper: reload host Nginx by running nginx -s reload via nsenter into PID 1's namespace.
+# This executes the command in the host's mount/PID/net namespace, bypassing container isolation.
 reload_nginx() {
-  NGINX_PID=""
-  for pid_dir in /proc/[0-9]*; do
-    pid=$(basename "$pid_dir")
-    # Skip non-numeric entries
-    case "$pid" in
-      *[!0-9]*) continue ;;
-    esac
-    if cat "$pid_dir/cmdline" 2>/dev/null | tr '\0' ' ' | grep -q 'nginx: master'; then
-      NGINX_PID="$pid"
-      break
-    fi
-  done
-
-  if [ -n "$NGINX_PID" ]; then
-    echo "[provision-ssl] Sending SIGHUP to nginx master (PID $NGINX_PID)"
-    kill -HUP "$NGINX_PID"
-  else
-    echo "[provision-ssl] WARNING: Could not find nginx master PID, skipping reload"
-  fi
+  echo "[provision-ssl] Reloading nginx on host via nsenter..."
+  nsenter -t 1 -m -u -i -n -- nginx -t && nsenter -t 1 -m -u -i -n -- nginx -s reload
 }
 
 # Ensure webroot directory exists
