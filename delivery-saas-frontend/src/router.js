@@ -292,11 +292,16 @@ router.beforeEach(async (to) => {
     const hostname = window.location.hostname
     if (!isSystemDomain(hostname) && !to.path.startsWith('/public/')) {
       try {
-        const { data } = await api.get('/custom-domains/resolve-public', { params: { domain: hostname } })
-        if (data && data.companyId) {
-          const query = {}
-          if (data.menuId) query.menuId = data.menuId
-          return { path: `/public/${data.companyId}/menu`, query }
+        // Use relative /api/ path (proxied by frontend container nginx to backend)
+        // instead of the absolute VITE_API_URL to avoid CORS issues on custom domains
+        const res = await fetch(`/api/custom-domains/resolve-public?domain=${encodeURIComponent(hostname)}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.companyId) {
+            const query = {}
+            if (data.menuId) query.menuId = data.menuId
+            return { path: `/public/${data.companyId}/menu`, query }
+          }
         }
       } catch (e) {
         console.warn('Custom domain resolve failed:', e?.message || e)

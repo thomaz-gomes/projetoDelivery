@@ -63,10 +63,18 @@ router.get('/resolve-public', async (req, res) => {
     const domain = String(req.query.domain || '').toLowerCase().trim()
     if (!domain) return res.status(400).json({ message: 'Parâmetro domain é obrigatório' })
 
-    const record = await prisma.customDomain.findUnique({
+    // Try exact match first, then try with/without www prefix
+    let record = await prisma.customDomain.findUnique({
       where: { domain },
       select: { companyId: true, menuId: true, status: true, paidUntil: true }
     })
+    if (!record) {
+      const alt = domain.startsWith('www.') ? domain.slice(4) : `www.${domain}`
+      record = await prisma.customDomain.findUnique({
+        where: { domain: alt },
+        select: { companyId: true, menuId: true, status: true, paidUntil: true }
+      })
+    }
 
     if (!record || record.status !== 'ACTIVE') {
       return res.status(404).json({ message: 'Domínio não encontrado ou não está ativo' })

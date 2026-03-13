@@ -27,11 +27,18 @@ export function customDomainResolver() {
         return next()
       }
 
-      // DB lookup
-      const record = await prisma.customDomain.findUnique({
+      // DB lookup — try exact match, then with/without www
+      let record = await prisma.customDomain.findUnique({
         where: { domain: host },
         select: { id: true, companyId: true, menuId: true, status: true, paidUntil: true }
       })
+      if (!record) {
+        const alt = host.startsWith('www.') ? host.slice(4) : `www.${host}`
+        record = await prisma.customDomain.findUnique({
+          where: { domain: alt },
+          select: { id: true, companyId: true, menuId: true, status: true, paidUntil: true }
+        })
+      }
 
       if (!record) {
         cache.set(host, { notFound: true, ts: now })
