@@ -1,10 +1,54 @@
 import express from 'express'
 import dns from 'dns'
-import { exec } from 'child_process'
+import fs from 'fs'
 import path from 'path'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { getSetting } from '../services/systemSettings.js'
+
+// Directory where SSL provisioning requests are placed (bind-mounted with host)
+const SSL_PENDING_DIR = '/var/www/certbot/pending'
+
+// Poll for host-side SSL provisioning result (max 5 min)
+function pollSslStatus(domainId, domainName) {
+  const statusFile = path.join(SSL_PENDING_DIR, `${domainId}.status`)
+  let attempts = 0
+  const maxAttempts = 60 // 5 min (every 5s)
+
+  const interval = setInterval(async () => {
+    attempts++
+    try {
+      if (fs.existsSync(statusFile)) {
+        const result = fs.readFileSync(statusFile, 'utf8').trim()
+        clearInterval(interval)
+        fs.unlinkSync(statusFile) // cleanup
+
+        if (result === 'done') {
+          console.log(`[SSL] Host provisioned SSL for ${domainName}`)
+          await prisma.customDomain.update({
+            where: { id: domainId },
+            data: { status: 'ACTIVE', sslStatus: 'SSL_ACTIVE' }
+          })
+        } else {
+          console.error(`[SSL] Host provisioning FAILED for ${domainName}`)
+          await prisma.customDomain.update({
+            where: { id: domainId },
+            data: { sslStatus: 'FAILED' }
+          })
+        }
+      } else if (attempts >= maxAttempts) {
+        clearInterval(interval)
+        console.error(`[SSL] Timeout waiting for host to provision ${domainName}`)
+        await prisma.customDomain.update({
+          where: { id: domainId },
+          data: { sslStatus: 'FAILED' }
+        })
+      }
+    } catch (e) {
+      console.error(`[SSL] Poll error for ${domainName}:`, e.message)
+    }
+  }, 5000)
+}
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -243,32 +287,44 @@ router.post('/:id/verify', requireRole('ADMIN'), async (req, res) => {
       },
     })
 
-    // Trigger SSL provisioning asynchronously
-    const scriptPath = path.join(process.cwd(), 'scripts', 'provision-ssl.sh')
+    // Write HTTP-only nginx config (via bind mount to host)
+    const nginxConf = `/etc/nginx/sites-enabled/${record.domain}.conf`
     const backendPort = process.env.PORT || '3000'
+    const httpConfig = `server {
+    listen 80;
+    server_name ${record.domain};
 
-    exec(`sh "${scriptPath}" "${record.domain}" "${backendPort}" 2>&1`, async (err, stdout, stderr) => {
-      try {
-        if (err) {
-          console.error(`[SSL] Provisioning FAILED for ${record.domain}:`)
-          console.error(`[SSL] exit code: ${err.code}`)
-          console.error(`[SSL] output: ${stdout}`)
-          if (stderr) console.error(`[SSL] stderr: ${stderr}`)
-          await prisma.customDomain.update({
-            where: { id: record.id },
-            data: { sslStatus: 'FAILED' }
-          })
-          return
-        }
-        console.log(`[SSL] Provisioned for ${record.domain}:`, stdout)
-        await prisma.customDomain.update({
-          where: { id: record.id },
-          data: { status: 'ACTIVE', sslStatus: 'SSL_ACTIVE' }
-        })
-      } catch (e) {
-        console.error('[SSL] post-provision update failed:', e)
-      }
-    })
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:${backendPort};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+`
+    try {
+      fs.writeFileSync(nginxConf, httpConfig)
+      console.log(`[SSL] Wrote HTTP nginx config for ${record.domain}`)
+    } catch (e) {
+      console.error(`[SSL] Failed to write nginx config: ${e.message}`)
+    }
+
+    // Create trigger file for host-side cron to process
+    try {
+      fs.mkdirSync(SSL_PENDING_DIR, { recursive: true })
+      fs.writeFileSync(path.join(SSL_PENDING_DIR, `${record.id}.domain`), record.domain)
+      console.log(`[SSL] Trigger file created for ${record.domain} — waiting for host cron`)
+    } catch (e) {
+      console.error(`[SSL] Failed to create trigger file: ${e.message}`)
+    }
+
+    // Start polling for host-side result (cron writes .status file)
+    pollSslStatus(record.id, record.domain)
 
     res.json({ verified: true, status: updated.status, sslStatus: updated.sslStatus })
   } catch (e) {

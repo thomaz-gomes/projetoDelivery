@@ -1,42 +1,33 @@
-#!/bin/sh
-# Usage: provision-ssl.sh <domain> <backend_port>
-# Generates Let's Encrypt cert and Nginx config for a custom domain.
+#!/bin/bash
+# provision-ssl.sh — Runs ON THE HOST (not inside container)
+# Called by a cron job every minute to process pending custom domain SSL requests.
 #
-# Runs INSIDE the backend Docker container with:
-#   - /etc/nginx/sites-enabled bind-mounted from host
-#   - /etc/letsencrypt bind-mounted from host
-#   - /var/www/certbot bind-mounted from host
-#   - pid: host (shares PID namespace with host for nginx reload)
-#
-# Steps:
-#   1. Create HTTP-only Nginx config (needed for certbot validation)
-#   2. Reload host Nginx via SIGHUP
-#   3. Run certbot with --webroot to obtain certificate
-#   4. Update Nginx config to include HTTPS
-#   5. Reload host Nginx again
+# Setup (one-time on VPS):
+#   mkdir -p /var/www/certbot/pending
+#   cp provision-ssl.sh /opt/delivery/provision-ssl.sh
+#   chmod +x /opt/delivery/provision-ssl.sh
+#   crontab -e  →  * * * * * /opt/delivery/provision-ssl.sh >> /var/log/provision-ssl.log 2>&1
 
-set -eu
+set -u
 
-DOMAIN="$1"
-BACKEND_PORT="${2:-3000}"
-NGINX_CONF="/etc/nginx/sites-enabled/${DOMAIN}.conf"
+PENDING_DIR="/var/www/certbot/pending"
 WEBROOT="/var/www/certbot"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-admin@deliverysaas.com.br}"
+BACKEND_PORT="${BACKEND_PORT:-3000}"
 
-echo "[provision-ssl] Starting for ${DOMAIN} (backend port ${BACKEND_PORT})"
+mkdir -p "$PENDING_DIR" "$WEBROOT/.well-known/acme-challenge"
 
-# Helper: reload host Nginx by running nginx -s reload via nsenter into PID 1's namespace.
-# This executes the command in the host's mount/PID/net namespace, bypassing container isolation.
-reload_nginx() {
-  echo "[provision-ssl] Reloading nginx on host via nsenter..."
-  nsenter -t 1 -m -u -i -n -- nginx -t && nsenter -t 1 -m -u -i -n -- nginx -s reload
-}
+for request_file in "$PENDING_DIR"/*.domain; do
+  [ -f "$request_file" ] || continue
 
-# Ensure webroot directory exists
-mkdir -p "${WEBROOT}/.well-known/acme-challenge"
+  DOMAIN=$(cat "$request_file")
+  BASE="${request_file%.domain}"
+  NGINX_CONF="/etc/nginx/sites-enabled/${DOMAIN}.conf"
 
-# 1. Create HTTP-only config so certbot can validate via /.well-known/acme-challenge
-cat > "$NGINX_CONF" <<CONF
+  echo "[provision-ssl] $(date) Processing $DOMAIN..."
+
+  # 1. Create HTTP-only config for certbot validation
+  cat > "$NGINX_CONF" <<CONF
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -55,23 +46,28 @@ server {
 }
 CONF
 
-echo "[provision-ssl] HTTP config created, reloading Nginx..."
-reload_nginx
-sleep 2
+  nginx -t && nginx -s reload
+  sleep 2
 
-# 2. Obtain SSL certificate using webroot validation
-echo "[provision-ssl] Running certbot for ${DOMAIN}..."
-certbot certonly \
-  --webroot \
-  -w "$WEBROOT" \
-  -d "$DOMAIN" \
-  --non-interactive \
-  --agree-tos \
-  --email "$CERTBOT_EMAIL" \
-  --no-eff-email
+  # 2. Run certbot
+  certbot certonly \
+    --webroot \
+    -w "$WEBROOT" \
+    -d "$DOMAIN" \
+    --non-interactive \
+    --agree-tos \
+    --email "$CERTBOT_EMAIL" \
+    --no-eff-email
 
-# 3. Update Nginx config to include HTTPS
-cat > "$NGINX_CONF" <<CONF
+  if [ $? -ne 0 ]; then
+    echo "[provision-ssl] certbot FAILED for $DOMAIN"
+    echo "failed" > "${BASE}.status"
+    rm -f "$request_file"
+    continue
+  fi
+
+  # 3. Update nginx config to HTTPS
+  cat > "$NGINX_CONF" <<CONF
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -95,8 +91,9 @@ server {
 }
 CONF
 
-# 4. Final reload with HTTPS
-echo "[provision-ssl] HTTPS config created, final reload..."
-reload_nginx
+  nginx -t && nginx -s reload
 
-echo "[provision-ssl] SSL provisioned successfully for ${DOMAIN}"
+  echo "[provision-ssl] SSL provisioned for $DOMAIN"
+  echo "done" > "${BASE}.status"
+  rm -f "$request_file"
+done
