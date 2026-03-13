@@ -7,6 +7,7 @@
 import cron from 'node-cron'
 import { resetAllDueCredits } from './services/aiCreditManager.js'
 import { prisma } from './prisma.js'
+import { runRecurringBilling } from './jobs/recurringBilling.js'
 
 /**
  * Reset mensal de créditos de IA: toda empresa tem seus créditos restaurados
@@ -48,4 +49,18 @@ cron.schedule('0 1 * * *', async () => {
   timezone: 'America/Sao_Paulo',
 })
 
-console.log('[Cron] Tarefas agendadas registradas (reset de créditos IA: dia 1 de cada mês; domínios vencidos: diário às 01:00)')
+/**
+ * Recurring billing: gera faturas para assinaturas vencidas e suspende
+ * módulos com faturas inadimplentes. Executa diariamente às 06:00 UTC.
+ */
+cron.schedule('0 6 * * *', async () => {
+  console.log('[Cron] Iniciando cobrança recorrente...')
+  try {
+    await runRecurringBilling()
+    console.log('[Cron] Cobrança recorrente concluída')
+  } catch (err) {
+    console.error('[Cron] Erro na cobrança recorrente:', err)
+  }
+})
+
+console.log('[Cron] Tarefas agendadas registradas (reset de créditos IA: dia 1 de cada mês; domínios vencidos: diário às 01:00; cobrança recorrente: diário às 06:00 UTC)')
