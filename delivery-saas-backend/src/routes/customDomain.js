@@ -247,23 +247,26 @@ router.post('/:id/verify', requireRole('ADMIN'), async (req, res) => {
     const scriptPath = path.join(process.cwd(), 'scripts', 'provision-ssl.sh')
     const backendPort = process.env.PORT || '3000'
 
-    exec(`bash "${scriptPath}" "${record.domain}" "${backendPort}"`, async (err, stdout, stderr) => {
+    exec(`bash "${scriptPath}" "${record.domain}" "${backendPort}" 2>&1`, async (err, stdout, stderr) => {
       try {
         if (err) {
-          console.error('SSL provisioning failed for', record.domain, ':', stderr || err.message)
+          console.error(`[SSL] Provisioning FAILED for ${record.domain}:`)
+          console.error(`[SSL] exit code: ${err.code}`)
+          console.error(`[SSL] output: ${stdout}`)
+          if (stderr) console.error(`[SSL] stderr: ${stderr}`)
           await prisma.customDomain.update({
             where: { id: record.id },
             data: { sslStatus: 'FAILED' }
           })
           return
         }
-        console.log('SSL provisioned for', record.domain, ':', stdout)
+        console.log(`[SSL] Provisioned for ${record.domain}:`, stdout)
         await prisma.customDomain.update({
           where: { id: record.id },
           data: { status: 'ACTIVE', sslStatus: 'SSL_ACTIVE' }
         })
       } catch (e) {
-        console.error('SSL post-provision update failed:', e)
+        console.error('[SSL] post-provision update failed:', e)
       }
     })
 
