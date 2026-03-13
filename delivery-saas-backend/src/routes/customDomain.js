@@ -35,16 +35,16 @@ router.get('/pricing', async (req, res) => {
       where: { key: 'CUSTOM_DOMAIN' },
       include: { prices: true },
     })
-    if (!mod) return res.status(404).json({ message: 'Módulo CUSTOM_DOMAIN não encontrado' })
+    if (!mod || !mod.isActive) return res.json({ available: false })
 
-    const prices = {}
-    for (const p of mod.prices) {
-      prices[p.period] = p.price
-    }
+    const monthly = mod.prices.find(p => p.period === 'MONTHLY')
+    const yearly = mod.prices.find(p => p.period === 'ANNUAL')
 
     res.json({
+      available: true,
       moduleId: mod.id,
-      prices,
+      monthly: monthly ? Number(monthly.price) : null,
+      yearly: yearly ? Number(yearly.price) : null,
       serverIp: process.env.CUSTOM_DOMAIN_SERVER_IP || null,
     })
   } catch (e) {
