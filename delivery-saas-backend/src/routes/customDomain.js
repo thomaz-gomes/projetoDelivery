@@ -309,4 +309,40 @@ router.post('/:id/activate', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+// ---------- POST /custom-domains/:id/retry-ssl ----------
+// Reset domain back to PENDING_DNS so admin can retry DNS verification + SSL provisioning.
+// Only allowed if domain is already paid (paidUntil in the future) — avoids double charge.
+router.post('/:id/retry-ssl', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const record = await prisma.customDomain.findUnique({ where: { id } })
+    if (!record) return res.status(404).json({ message: 'Domínio não encontrado' })
+    if (record.companyId !== req.user.companyId) return res.status(403).json({ message: 'Forbidden' })
+
+    // Only allow retry for stuck statuses (VERIFYING with failed SSL, or SUSPENDED that's still paid)
+    const allowedStatuses = ['VERIFYING', 'SUSPENDED']
+    if (!allowedStatuses.includes(record.status)) {
+      return res.status(400).json({ message: `Não é possível reiniciar a configuração no status ${record.status}` })
+    }
+
+    // Check if already paid — if paidUntil exists and is in the future, skip payment
+    const isPaid = record.paidUntil && new Date(record.paidUntil) > new Date()
+
+    const updated = await prisma.customDomain.update({
+      where: { id },
+      data: {
+        status: isPaid ? 'PENDING_DNS' : 'PENDING_PAYMENT',
+        sslStatus: 'NONE',
+      },
+      include: { menu: { select: { id: true, name: true } } },
+    })
+
+    console.log(`[CustomDomain] Retry for ${record.domain}: isPaid=${isPaid}, newStatus=${updated.status}`)
+    res.json(updated)
+  } catch (e) {
+    console.error('POST /custom-domains/:id/retry-ssl error:', e?.message || e)
+    res.status(500).json({ message: 'Erro ao reiniciar configuração', error: e?.message })
+  }
+})
+
 export default router

@@ -226,12 +226,27 @@
 
             <!-- VERIFYING -->
             <div v-else-if="customDomain.status === 'VERIFYING'" class="text-center py-4">
-              <div class="spinner-border text-primary"></div>
-              <p class="mt-2">Gerando certificado SSL para <strong>{{ customDomain.domain }}</strong>...</p>
-              <span class="badge bg-info">Verificando</span>
-              <div class="mt-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" @click="loadDomainData">Atualizar status</button>
-              </div>
+              <template v-if="customDomain.sslStatus === 'FAILED'">
+                <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 2rem;"></i>
+                <p class="mt-2">Falha ao gerar certificado SSL para <strong>{{ customDomain.domain }}</strong>.</p>
+                <span class="badge bg-danger mb-2">SSL falhou</span>
+                <p class="text-muted small">Verifique se o DNS está apontando corretamente e tente novamente.</p>
+                <button type="button" class="btn btn-primary me-2" @click="retrySsl">
+                  <i class="bi bi-arrow-clockwise me-1"></i>Reiniciar configuração
+                </button>
+                <button type="button" class="btn btn-outline-secondary" @click="loadDomainData">Atualizar status</button>
+              </template>
+              <template v-else>
+                <div class="spinner-border text-primary"></div>
+                <p class="mt-2">Gerando certificado SSL para <strong>{{ customDomain.domain }}</strong>...</p>
+                <span class="badge bg-info">Verificando</span>
+                <div class="mt-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary me-2" @click="loadDomainData">Atualizar status</button>
+                  <button type="button" class="btn btn-sm btn-outline-warning" @click="retrySsl">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Reiniciar configuração
+                  </button>
+                </div>
+              </template>
             </div>
 
             <!-- ACTIVE -->
@@ -637,6 +652,22 @@ async function removeDomain() {
     Swal.fire({ icon: 'success', text: 'Domínio removido' })
   } catch (e) {
     Swal.fire({ icon: 'error', text: 'Erro ao remover domínio' })
+  }
+}
+
+async function retrySsl() {
+  if (!customDomain.value) return
+  domainLoading.value = true
+  try {
+    const res = await api.post(`/custom-domains/${customDomain.value.id}/retry-ssl`)
+    customDomain.value = res.data
+    domainForm.value.domain = res.data.domain
+    dnsResult.value = null
+    Swal.fire({ icon: 'success', text: 'Configuração reiniciada. Configure o DNS novamente.' })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao reiniciar configuração' })
+  } finally {
+    domainLoading.value = false
   }
 }
 
