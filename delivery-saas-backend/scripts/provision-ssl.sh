@@ -13,6 +13,7 @@ set -e
 PENDING_DIR="/var/www/certbot/pending"
 WEBROOT="/var/www/certbot"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-admin@deliverysaas.com.br}"
+FRONTEND_PORT="${FRONTEND_PORT:-8080}"
 BACKEND_PORT="${BACKEND_PORT:-3000}"
 LOCKFILE="/tmp/provision-ssl.lock"
 
@@ -45,12 +46,32 @@ server {
     listen 80;
     server_name ${DOMAIN};
 
+    client_max_body_size 20M;
+
     location /.well-known/acme-challenge/ {
         root ${WEBROOT};
     }
 
+    # Socket.IO → backend (WebSocket upgrade)
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:${BACKEND_PORT}/socket.io/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_buffering off;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    # Frontend (Vue SPA)
     location / {
-        proxy_pass http://127.0.0.1:${BACKEND_PORT};
+        proxy_pass http://127.0.0.1:${FRONTEND_PORT};
+        proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -94,8 +115,28 @@ server {
     ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
+    client_max_body_size 20M;
+
+    # Socket.IO → backend (WebSocket upgrade)
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:${BACKEND_PORT}/socket.io/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_buffering off;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    # Frontend (Vue SPA)
     location / {
-        proxy_pass http://127.0.0.1:${BACKEND_PORT};
+        proxy_pass http://127.0.0.1:${FRONTEND_PORT};
+        proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;

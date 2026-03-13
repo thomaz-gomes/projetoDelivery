@@ -51,10 +51,40 @@ function pollSslStatus(domainId, domainName) {
 }
 
 const router = express.Router()
-router.use(authMiddleware)
 
 // Valid domain regex: allows subdomains, min 2 labels, TLD >= 2 chars
 const DOMAIN_RE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i
+
+// ---------- GET /custom-domains/resolve-public ----------
+// Public (no auth): resolve a custom domain to companyId + menuId
+// Used by the frontend SPA when loaded via a custom domain
+router.get('/resolve-public', async (req, res) => {
+  try {
+    const domain = String(req.query.domain || '').toLowerCase().trim()
+    if (!domain) return res.status(400).json({ message: 'Parâmetro domain é obrigatório' })
+
+    const record = await prisma.customDomain.findUnique({
+      where: { domain },
+      select: { companyId: true, menuId: true, status: true, paidUntil: true }
+    })
+
+    if (!record || record.status !== 'ACTIVE') {
+      return res.status(404).json({ message: 'Domínio não encontrado ou não está ativo' })
+    }
+
+    if (record.paidUntil && new Date(record.paidUntil) < new Date()) {
+      return res.status(403).json({ message: 'Assinatura do domínio vencida' })
+    }
+
+    res.json({ companyId: record.companyId, menuId: record.menuId })
+  } catch (e) {
+    console.error('GET /custom-domains/resolve-public error:', e?.message || e)
+    res.status(500).json({ message: 'Erro ao resolver domínio' })
+  }
+})
+
+// All remaining routes require authentication
+router.use(authMiddleware)
 
 // ---------- GET /custom-domains ----------
 // List company's custom domains

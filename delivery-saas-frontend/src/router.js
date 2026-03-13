@@ -262,7 +262,48 @@ const router = createRouter({
   ]
 });
 
+// Custom domain detection: if the hostname is not a known system domain,
+// resolve it via backend and redirect to the public menu.
+let _customDomainResolved = false
+const SYSTEM_HOSTS = ['localhost', '127.0.0.1']
+
+function isSystemDomain(hostname) {
+  const h = hostname.toLowerCase()
+  if (SYSTEM_HOSTS.includes(h)) return true
+  // IP addresses
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return true
+  // Check VITE_API_URL domain — if the app domain matches the API domain's base, it's system
+  try {
+    const apiUrl = import.meta.env.VITE_API_URL
+    if (apiUrl) {
+      const apiHost = new URL(apiUrl).hostname.toLowerCase()
+      // Same base domain (e.g., api.deliverysaas.com.br → deliverysaas.com.br)
+      const apiBase = apiHost.replace(/^api\./, '')
+      if (h === apiHost || h === apiBase || h.endsWith('.' + apiBase)) return true
+    }
+  } catch {}
+  return false
+}
+
 router.beforeEach(async (to) => {
+  // Custom domain resolution: redirect to public menu if on a custom domain
+  if (!_customDomainResolved && typeof window !== 'undefined') {
+    _customDomainResolved = true // only attempt once per app load
+    const hostname = window.location.hostname
+    if (!isSystemDomain(hostname) && !to.path.startsWith('/public/')) {
+      try {
+        const { data } = await api.get('/custom-domains/resolve-public', { params: { domain: hostname } })
+        if (data && data.companyId) {
+          const query = {}
+          if (data.menuId) query.menuId = data.menuId
+          return { path: `/public/${data.companyId}/menu`, query }
+        }
+      } catch (e) {
+        console.warn('Custom domain resolve failed:', e?.message || e)
+      }
+    }
+  }
+
   const token = localStorage.getItem('token');
   if (to.meta.requiresAuth && !token) {
     return { path: '/login', query: { redirect: to.fullPath } };
