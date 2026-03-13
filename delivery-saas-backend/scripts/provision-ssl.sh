@@ -38,13 +38,21 @@ for request_file in "$PENDING_DIR"/*.domain; do
   BASE="${request_file%.domain}"
   NGINX_CONF="/etc/nginx/sites-enabled/${DOMAIN}.conf"
 
-  echo "[provision-ssl] $(date) Processing $DOMAIN..."
+  # Determine sibling domain (www <-> non-www)
+  if echo "$DOMAIN" | grep -q '^www\.'; then
+    SIBLING="${DOMAIN#www.}"
+  else
+    SIBLING="www.${DOMAIN}"
+  fi
+  ALL_DOMAINS="${DOMAIN} ${SIBLING}"
 
-  # 1. Create HTTP-only config for certbot validation
+  echo "[provision-ssl] $(date) Processing $DOMAIN (+ $SIBLING)..."
+
+  # 1. Create HTTP-only config for certbot validation (both domains)
   cat > "$NGINX_CONF" <<CONF
 server {
     listen 80;
-    server_name ${DOMAIN};
+    server_name ${ALL_DOMAINS};
 
     client_max_body_size 20M;
 
@@ -83,17 +91,34 @@ CONF
   nginx -t && nginx -s reload
   sleep 2
 
-  # 2. Run certbot
+  # 2. Run certbot — try both domains first, fall back to primary only
+  CERTBOT_OK=0
   certbot certonly \
     --webroot \
     -w "$WEBROOT" \
-    -d "$DOMAIN" \
+    -d "$DOMAIN" -d "$SIBLING" \
     --non-interactive \
     --agree-tos \
     --email "$CERTBOT_EMAIL" \
-    --no-eff-email
+    --no-eff-email \
+    && CERTBOT_OK=1
 
-  if [ $? -ne 0 ]; then
+  if [ "$CERTBOT_OK" -eq 0 ]; then
+    echo "[provision-ssl] certbot with both domains failed, trying $DOMAIN only..."
+    certbot certonly \
+      --webroot \
+      -w "$WEBROOT" \
+      -d "$DOMAIN" \
+      --non-interactive \
+      --agree-tos \
+      --email "$CERTBOT_EMAIL" \
+      --no-eff-email \
+      && CERTBOT_OK=1
+    # If only primary domain succeeded, nginx should only serve primary
+    ALL_DOMAINS="${DOMAIN}"
+  fi
+
+  if [ "$CERTBOT_OK" -eq 0 ]; then
     echo "[provision-ssl] certbot FAILED for $DOMAIN"
     echo "failed" > "${BASE}.status"
     rm -f "$request_file"
@@ -104,13 +129,13 @@ CONF
   cat > "$NGINX_CONF" <<CONF
 server {
     listen 80;
-    server_name ${DOMAIN};
+    server_name ${ALL_DOMAINS};
     return 301 https://\$host\$request_uri;
 }
 
 server {
     listen 443 ssl;
-    server_name ${DOMAIN};
+    server_name ${ALL_DOMAINS};
 
     ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
@@ -147,7 +172,7 @@ CONF
 
   nginx -t && nginx -s reload
 
-  echo "[provision-ssl] SSL provisioned for $DOMAIN"
+  echo "[provision-ssl] SSL provisioned for $DOMAIN (server_name: $ALL_DOMAINS)"
   echo "done" > "${BASE}.status"
   rm -f "$request_file"
 done
