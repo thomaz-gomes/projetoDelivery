@@ -227,6 +227,58 @@ async function saveProviders() {
   }
 }
 
+// ── Domínio Próprio (Custom Domain Pricing) ─────────────────────────────
+const domainPricing = ref({ monthly: '', yearly: '' })
+const domainModuleId = ref(null)
+const loadingDomain = ref(false)
+const savingDomain = ref(false)
+const savedDomain = ref(false)
+const errorDomain = ref(null)
+
+async function loadDomainPricing() {
+  loadingDomain.value = true
+  errorDomain.value = null
+  try {
+    const { data } = await api.get('/saas/modules')
+    const mod = data.find(m => m.key === 'CUSTOM_DOMAIN')
+    if (mod) {
+      domainModuleId.value = mod.id
+      const mp = mod.prices || []
+      const monthly = mp.find(p => p.period === 'MONTHLY')
+      const yearly = mp.find(p => p.period === 'ANNUAL')
+      domainPricing.value.monthly = monthly ? Number(monthly.price) : ''
+      domainPricing.value.yearly = yearly ? Number(yearly.price) : ''
+    }
+  } catch (e) {
+    errorDomain.value = e?.response?.data?.message || 'Erro ao carregar preços de domínio'
+  } finally {
+    loadingDomain.value = false
+  }
+}
+
+async function saveDomainPricing() {
+  if (!domainModuleId.value) return
+  savingDomain.value = true
+  savedDomain.value = false
+  errorDomain.value = null
+  try {
+    const prices = []
+    if (domainPricing.value.monthly !== '' && domainPricing.value.monthly !== null) {
+      prices.push({ period: 'MONTHLY', price: parseFloat(domainPricing.value.monthly) || 0 })
+    }
+    if (domainPricing.value.yearly !== '' && domainPricing.value.yearly !== null) {
+      prices.push({ period: 'ANNUAL', price: parseFloat(domainPricing.value.yearly) || 0 })
+    }
+    await api.put(`/saas/modules/${domainModuleId.value}`, { prices })
+    savedDomain.value = true
+    setTimeout(() => { savedDomain.value = false }, 3000)
+  } catch (e) {
+    errorDomain.value = e?.response?.data?.message || 'Erro ao salvar preços de domínio'
+  } finally {
+    savingDomain.value = false
+  }
+}
+
 // ── Pricing de Modelos de IA ─────────────────────────────────────────────
 const providerPricings = ref([])
 const loadingPricings = ref(false)
@@ -287,6 +339,7 @@ onMounted(async () => {
   await load()
   await loadCredits()
   await loadPricings()
+  await loadDomainPricing()
 })
 </script>
 
@@ -579,6 +632,66 @@ onMounted(async () => {
               <i class="bi bi-plus me-1"></i>Adicionar modelo
             </button>
           </template>
+        </div>
+      </div>
+
+      <!-- Domínio Próprio -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h5 class="card-title mb-1">
+            <i class="bi bi-globe2 me-2 text-primary"></i>Domínio Próprio
+          </h5>
+          <p class="text-muted small mb-4">
+            Defina o valor cobrado dos clientes por domínio customizado (mensal e anual).
+          </p>
+
+          <div v-if="errorDomain" class="alert alert-danger py-2 small">{{ errorDomain }}</div>
+          <div v-if="savedDomain" class="alert alert-success py-2 small">Preços de domínio salvos com sucesso.</div>
+
+          <div v-if="loadingDomain" class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-primary"></div>
+          </div>
+          <template v-else-if="domainModuleId">
+            <div class="row g-3 mb-3">
+              <div class="col-6">
+                <label class="form-label fw-semibold mb-1">Mensal (R$)</label>
+                <div class="input-group">
+                  <span class="input-group-text">R$</span>
+                  <input
+                    type="number"
+                    class="form-control"
+                    v-model="domainPricing.monthly"
+                    min="0"
+                    step="0.01"
+                    placeholder="9.90"
+                  />
+                </div>
+              </div>
+              <div class="col-6">
+                <label class="form-label fw-semibold mb-1">Anual (R$)</label>
+                <div class="input-group">
+                  <span class="input-group-text">R$</span>
+                  <input
+                    type="number"
+                    class="form-control"
+                    v-model="domainPricing.yearly"
+                    min="0"
+                    step="0.01"
+                    placeholder="99.00"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button class="btn btn-primary" @click="saveDomainPricing" :disabled="savingDomain">
+              <span v-if="savingDomain" class="spinner-border spinner-border-sm me-2"></span>
+              <i v-else class="bi bi-floppy me-2"></i>
+              Salvar preços de domínio
+            </button>
+          </template>
+          <div v-else class="text-muted small">
+            Módulo CUSTOM_DOMAIN não encontrado. Execute o seed de módulos primeiro.
+          </div>
         </div>
       </div>
 
