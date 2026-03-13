@@ -30,6 +30,11 @@ services:
     # Persist uploads outside the ephemeral container filesystem
     volumes:
       - backend_uploads:/app/public/uploads
+      # Custom domain SSL provisioning — bind mount host Nginx + Certbot dirs
+      - /etc/nginx/sites-enabled:/etc/nginx/sites-enabled
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/www/certbot:/var/www/certbot
+    pid: host
     depends_on:
       - delivery_db
     ports:

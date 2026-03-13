@@ -2,11 +2,18 @@
 # Usage: provision-ssl.sh <domain> <backend_port>
 # Generates Let's Encrypt cert and Nginx config for a custom domain.
 #
+# Runs INSIDE the backend Docker container with:
+#   - /etc/nginx/sites-enabled bind-mounted from host
+#   - /etc/letsencrypt bind-mounted from host
+#   - /var/www/certbot bind-mounted from host
+#   - pid: host (shares PID namespace with host for nginx reload)
+#
 # Steps:
 #   1. Create HTTP-only Nginx config (needed for certbot validation)
-#   2. Run certbot with --webroot to obtain certificate
-#   3. Update Nginx config to include HTTPS with the certificate
-#   4. Reload Nginx
+#   2. Reload host Nginx via SIGHUP
+#   3. Run certbot with --webroot to obtain certificate
+#   4. Update Nginx config to include HTTPS
+#   5. Reload host Nginx again
 
 set -eu
 
@@ -17,6 +24,29 @@ WEBROOT="/var/www/certbot"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-admin@deliverysaas.com.br}"
 
 echo "[provision-ssl] Starting for ${DOMAIN} (backend port ${BACKEND_PORT})"
+
+# Helper: reload host Nginx by sending SIGHUP to its master process.
+# Works because container uses pid:host (shares PID namespace).
+reload_nginx() {
+  NGINX_PID=$(cat /proc/*/cmdline 2>/dev/null | tr '\0' ' ' | grep -m1 'nginx: master' | awk '{print $NF}' || true)
+  if [ -z "$NGINX_PID" ]; then
+    # Fallback: find PID from /proc
+    for pid_dir in /proc/[0-9]*; do
+      pid=$(basename "$pid_dir")
+      if cat "$pid_dir/cmdline" 2>/dev/null | tr '\0' ' ' | grep -q 'nginx: master'; then
+        NGINX_PID="$pid"
+        break
+      fi
+    done
+  fi
+
+  if [ -n "$NGINX_PID" ]; then
+    echo "[provision-ssl] Sending SIGHUP to nginx master (PID $NGINX_PID)"
+    kill -HUP "$NGINX_PID"
+  else
+    echo "[provision-ssl] WARNING: Could not find nginx master PID, skipping reload"
+  fi
+}
 
 # Ensure webroot directory exists
 mkdir -p "${WEBROOT}/.well-known/acme-challenge"
@@ -41,8 +71,9 @@ server {
 }
 CONF
 
-echo "[provision-ssl] HTTP config created, testing and reloading Nginx..."
-nginx -t && nginx -s reload
+echo "[provision-ssl] HTTP config created, reloading Nginx..."
+reload_nginx
+sleep 2
 
 # 2. Obtain SSL certificate using webroot validation
 echo "[provision-ssl] Running certbot for ${DOMAIN}..."
@@ -82,6 +113,6 @@ CONF
 
 # 4. Final reload with HTTPS
 echo "[provision-ssl] HTTPS config created, final reload..."
-nginx -t && nginx -s reload
+reload_nginx
 
 echo "[provision-ssl] SSL provisioned successfully for ${DOMAIN}"
