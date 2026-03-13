@@ -28,17 +28,18 @@ echo "[provision-ssl] Starting for ${DOMAIN} (backend port ${BACKEND_PORT})"
 # Helper: reload host Nginx by sending SIGHUP to its master process.
 # Works because container uses pid:host (shares PID namespace).
 reload_nginx() {
-  NGINX_PID=$(cat /proc/*/cmdline 2>/dev/null | tr '\0' ' ' | grep -m1 'nginx: master' | awk '{print $NF}' || true)
-  if [ -z "$NGINX_PID" ]; then
-    # Fallback: find PID from /proc
-    for pid_dir in /proc/[0-9]*; do
-      pid=$(basename "$pid_dir")
-      if cat "$pid_dir/cmdline" 2>/dev/null | tr '\0' ' ' | grep -q 'nginx: master'; then
-        NGINX_PID="$pid"
-        break
-      fi
-    done
-  fi
+  NGINX_PID=""
+  for pid_dir in /proc/[0-9]*; do
+    pid=$(basename "$pid_dir")
+    # Skip non-numeric entries
+    case "$pid" in
+      *[!0-9]*) continue ;;
+    esac
+    if cat "$pid_dir/cmdline" 2>/dev/null | tr '\0' ' ' | grep -q 'nginx: master'; then
+      NGINX_PID="$pid"
+      break
+    fi
+  done
 
   if [ -n "$NGINX_PID" ]; then
     echo "[provision-ssl] Sending SIGHUP to nginx master (PID $NGINX_PID)"
