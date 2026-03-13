@@ -8,12 +8,25 @@
 #   chmod +x /opt/delivery/provision-ssl.sh
 #   crontab -e  →  * * * * * /opt/delivery/provision-ssl.sh >> /var/log/provision-ssl.log 2>&1
 
-set -u
+set -e
 
 PENDING_DIR="/var/www/certbot/pending"
 WEBROOT="/var/www/certbot"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-admin@deliverysaas.com.br}"
 BACKEND_PORT="${BACKEND_PORT:-3000}"
+LOCKFILE="/tmp/provision-ssl.lock"
+
+# Prevent concurrent runs (e.g. multiple cron entries)
+if [ -f "$LOCKFILE" ]; then
+  LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null)
+  if kill -0 "$LOCK_PID" 2>/dev/null; then
+    echo "[provision-ssl] Already running (PID $LOCK_PID), skipping."
+    exit 0
+  fi
+  rm -f "$LOCKFILE"
+fi
+echo $$ > "$LOCKFILE"
+trap 'rm -f "$LOCKFILE"' EXIT
 
 mkdir -p "$PENDING_DIR" "$WEBROOT/.well-known/acme-challenge"
 
