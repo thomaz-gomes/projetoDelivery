@@ -9,6 +9,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import * as bootstrap from 'bootstrap';
 import AiCreditsWidget from './AiCreditsWidget.vue';
+import { useAddOnStoreStore } from '../stores/addOnStore';
 
 const props = defineProps({
   embedded: { type: Boolean, default: false }
@@ -19,6 +20,7 @@ const props = defineProps({
     const auth = useAuthStore();
 const saas = useSaasStore();
 const modules = useModulesStore();
+const addOnStore = useAddOnStoreStore();
 
 // user helpers
 const userName = computed(() => {
@@ -808,6 +810,7 @@ function selectMenuOption(opt){
               <router-link v-else :to="item.to" :class="['nav-link','title','nav-direct-link','d-flex','align-items-center', item.to === '/orders' ? 'nav-pedidos-link' : '']" @click="offCanvasOpen = false">
                 <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
                 <span>{{ item.name }}</span>
+                <span v-if="item.to === '/billing' && addOnStore.pendingInvoiceCount" class="badge bg-danger ms-auto">{{ addOnStore.pendingInvoiceCount }}</span>
                 <i class="bi bi-chevron-right ms-auto" style="font-size:0.75rem;opacity:0.6;" aria-hidden="true"></i>
               </router-link>
               <ul v-if="item.children" class="nav flex-column ms-3">

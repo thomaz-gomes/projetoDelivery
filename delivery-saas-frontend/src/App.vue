@@ -6,6 +6,7 @@ import { assetUrl } from './utils/assetUrl.js'
 import { useAuthStore } from './stores/auth';
 import { useSaasStore } from './stores/saas';
 import { useModulesStore } from './stores/modules';
+import { useAddOnStoreStore } from './stores/addOnStore';
 import { buildVisibleNav } from './utils/navVisibility.js'
 import Sidebar from './components/Sidebar.vue';
 import { nav } from './config/nav.js'
@@ -112,8 +113,14 @@ async function onOnboardingDone() {
   await loadMenusWidget().catch(() => {})
 }
 
-watch(() => auth.user, (user) => { checkOnboarding(user) }, { immediate: true })
+const addOnStore = useAddOnStoreStore()
 
+watch(() => auth.user, (user) => {
+  checkOnboarding(user)
+  if (user?.role === 'ADMIN') {
+    addOnStore.fetchPendingInvoiceCount()
+  }
+}, { immediate: true })
 onMounted(() => { loadMenusWidget().catch(()=>{}); });
 
 // compute visible nav applying same filters as Sidebar.vue (role + enabled modules)
@@ -234,7 +241,7 @@ const showMobileHeader = computed(() => {
                           </ul>
                         </template>
                         <template v-else>
-                          <router-link :to="item.to" class="d-block py-1 text-dark"><i :class="item.icon + ' me-2'"></i>{{ item.name }}</router-link>
+                          <router-link :to="item.to" class="d-block py-1 text-dark d-flex align-items-center"><i :class="item.icon + ' me-2'"></i>{{ item.name }}<span v-if="item.to === '/billing' && addOnStore.pendingInvoiceCount" class="badge bg-danger ms-auto">{{ addOnStore.pendingInvoiceCount }}</span></router-link>
                         </template>
                   </li>
                 </ul>

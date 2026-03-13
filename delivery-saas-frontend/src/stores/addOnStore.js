@@ -6,7 +6,8 @@ export const useAddOnStoreStore = defineStore('addOnStore', {
     modules: [],
     creditPacks: [],
     loading: false,
-    error: null
+    error: null,
+    pendingInvoiceCount: 0,
   }),
 
   actions: {
@@ -76,6 +77,15 @@ export const useAddOnStoreStore = defineStore('addOnStore', {
     async checkPaymentStatus(paymentId) {
       const { data } = await api.get(`/payment/status/${paymentId}`)
       return data
+    },
+
+    async fetchPendingInvoiceCount() {
+      try {
+        const { data } = await api.get('/saas/billing/dashboard')
+        this.pendingInvoiceCount = data.pendingCount || 0
+      } catch {
+        // silently ignore
+      }
     }
   }
 })
