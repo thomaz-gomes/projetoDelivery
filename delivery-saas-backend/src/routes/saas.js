@@ -1112,6 +1112,96 @@ saasRouter.put('/mercadopago-config', requireRole('SUPER_ADMIN'), async (req, re
   }
 })
 
+// ── Gateway Config (SUPER_ADMIN) ──────────────────────────
+
+// GET /saas/gateway — get active gateway config
+saasRouter.get('/gateway', async (req, res) => {
+  if (req.user.role !== 'SUPER_ADMIN') return res.sendStatus(403)
+  try {
+    const config = await prisma.saasGatewayConfig.findFirst({ where: { isActive: true } })
+    if (!config) return res.json(null)
+    const { credentials, ...safe } = config
+    safe.hasCredentials = !!credentials
+    res.json(safe)
+  } catch (e) {
+    console.error('GET /saas/gateway error:', e?.message)
+    res.status(500).json({ message: 'Erro ao buscar config do gateway' })
+  }
+})
+
+// PUT /saas/gateway — create or update gateway config
+saasRouter.put('/gateway', async (req, res) => {
+  if (req.user.role !== 'SUPER_ADMIN') return res.sendStatus(403)
+  try {
+    const { provider, displayName, credentials, billingMode, webhookSecret, platformFee } = req.body
+    if (!provider || !displayName) {
+      return res.status(400).json({ message: 'provider e displayName são obrigatórios' })
+    }
+
+    let encryptedCreds
+    if (credentials && typeof credentials === 'object' && credentials.accessToken) {
+      encryptedCreds = encrypt(JSON.stringify(credentials))
+    }
+
+    // Deactivate all existing configs
+    await prisma.saasGatewayConfig.updateMany({
+      where: { isActive: true },
+      data: { isActive: false },
+    })
+
+    const existing = await prisma.saasGatewayConfig.findFirst({ where: { provider } })
+    const data = {
+      provider,
+      displayName,
+      isActive: true,
+      billingMode: billingMode || { plan: 'MANUAL', module: 'MANUAL', credits: 'MANUAL' },
+    }
+    if (encryptedCreds) data.credentials = encryptedCreds
+    if (webhookSecret !== undefined) data.webhookSecret = webhookSecret
+    if (platformFee !== undefined) data.platformFee = platformFee
+
+    let config
+    if (existing) {
+      config = await prisma.saasGatewayConfig.update({
+        where: { id: existing.id },
+        data,
+      })
+    } else {
+      if (!encryptedCreds) {
+        return res.status(400).json({ message: 'Credenciais são obrigatórias para novo gateway' })
+      }
+      data.credentials = encryptedCreds
+      config = await prisma.saasGatewayConfig.create({ data })
+    }
+
+    const { credentials: _, ...safe } = config
+    safe.hasCredentials = true
+    res.json(safe)
+  } catch (e) {
+    console.error('PUT /saas/gateway error:', e?.message)
+    res.status(500).json({ message: 'Erro ao salvar config do gateway' })
+  }
+})
+
+// POST /saas/gateway/test — test gateway credentials
+saasRouter.post('/gateway/test', async (req, res) => {
+  if (req.user.role !== 'SUPER_ADMIN') return res.sendStatus(403)
+  try {
+    const { getActiveGateway } = await import('../services/paymentGateway/index.js')
+    const { adapter } = await getActiveGateway()
+    try {
+      await adapter.getPaymentStatus('1')
+    } catch (e) {
+      if (e?.message?.includes('unauthorized') || e?.message?.includes('401') || e?.status === 401) {
+        return res.json({ success: false, message: 'Credenciais inválidas (401 Unauthorized)' })
+      }
+    }
+    res.json({ success: true, message: 'Conexão com gateway OK' })
+  } catch (e) {
+    res.json({ success: false, message: e?.message || 'Erro ao testar gateway' })
+  }
+})
+
 // -------- AI Token Usage Log (SUPER_ADMIN) --------
 saasRouter.get('/ai-usage', requireRole('SUPER_ADMIN'), async (req, res) => {
   try {
