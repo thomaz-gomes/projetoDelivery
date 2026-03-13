@@ -1,14 +1,16 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 
 const route = useRoute()
+const router = useRouter()
 
 const status = computed(() => route.query.status || 'unknown')
 const paymentId = computed(() => route.query.payment_id || route.query.external_reference || null)
 const polling = ref(false)
 const paymentStatus = ref(null)
+const redirecting = ref(false)
 let intervalId = null
 
 const statusConfig = computed(() => {
@@ -36,16 +38,41 @@ async function pollStatus() {
     paymentStatus.value = data.status
     if (data.status === 'PAID' || data.status === 'FAILED') {
       if (intervalId) clearInterval(intervalId)
+      if (data.status === 'PAID') await handlePaymentSuccess()
     }
   } catch (e) { /* ignore */ }
   finally { polling.value = false }
 }
 
-onMounted(() => {
+// Auto-activate custom domain and redirect back after successful payment
+async function handlePaymentSuccess() {
+  const pendingDomainId = localStorage.getItem('pendingCustomDomainId')
+  const returnUrl = localStorage.getItem('pendingCustomDomainReturnUrl')
+
+  if (pendingDomainId) {
+    redirecting.value = true
+    localStorage.removeItem('pendingCustomDomainId')
+    localStorage.removeItem('pendingCustomDomainReturnUrl')
+    try {
+      await api.post(`/custom-domains/${pendingDomainId}/activate`)
+    } catch (e) {
+      console.warn('Failed to activate custom domain:', e)
+    }
+    if (returnUrl) {
+      router.push(returnUrl)
+      return
+    }
+  }
+}
+
+onMounted(async () => {
   if (paymentId.value) {
     pollStatus()
     intervalId = setInterval(pollStatus, 5000)
     setTimeout(() => { if (intervalId) clearInterval(intervalId) }, 120000)
+  } else if (status.value === 'success' || status.value === 'approved') {
+    // MP sometimes returns without payment_id but with status=success
+    await handlePaymentSuccess()
   }
 })
 
@@ -67,7 +94,12 @@ onUnmounted(() => { if (intervalId) clearInterval(intervalId) })
       Pagamento confirmado!
     </div>
 
-    <div class="d-flex flex-column gap-2">
+    <div v-if="redirecting" class="mb-3">
+      <div class="spinner-border spinner-border-sm text-success me-2"></div>
+      <span class="text-muted">Ativando domínio e redirecionando...</span>
+    </div>
+
+    <div v-else class="d-flex flex-column gap-2">
       <router-link to="/store" class="btn btn-primary">Voltar para a loja</router-link>
       <router-link to="/orders" class="btn btn-outline-secondary">Ir para pedidos</router-link>
     </div>

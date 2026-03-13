@@ -170,7 +170,8 @@
               <span class="badge bg-warning me-2">Aguardando pagamento</span>
               Seu domínio está aguardando confirmação de pagamento.
               <div class="mt-2">
-                <button type="button" class="btn btn-sm btn-primary" @click="activateDomain">Confirmar Pagamento</button>
+                <button type="button" class="btn btn-sm btn-primary" @click="retryPayment">Retomar pagamento</button>
+                <button type="button" class="btn btn-sm btn-outline-danger ms-2" @click="removeDomain">Cancelar</button>
               </div>
             </div>
 
@@ -530,31 +531,24 @@ async function subscribeDomain() {
     })
     customDomain.value = domainRes.data
 
-    // 2. Create payment preference
+    // 2. Create payment preference and go straight to checkout
     const period = domainForm.value.billingCycle === 'YEARLY' ? 'ANNUAL' : 'MONTHLY'
-    try {
-      const payRes = await api.post('/payment/create-preference', {
-        type: 'MODULE',
-        referenceId: domainPricing.value.moduleId,
-        period
-      })
+    const payRes = await api.post('/payment/create-preference', {
+      type: 'MODULE',
+      referenceId: domainPricing.value.moduleId,
+      period
+    })
 
-      if (payRes.data.checkoutUrl) {
-        // Save domain ID for activation on return
-        localStorage.setItem('pendingCustomDomainId', customDomain.value.id)
-        window.location.href = payRes.data.checkoutUrl
-        return
-      }
-
-      // No MP config — manual payment flow
-      Swal.fire({ icon: 'info', text: 'Pagamento pendente de confirmação manual. Entre em contato com o suporte.' })
-      await loadDomainData()
-    } catch (payErr) {
-      // Payment creation failed but domain was created
-      // Activate anyway for now (fallback for environments without MP)
-      console.warn('Payment preference failed, activating directly:', payErr)
-      await activateDomain()
+    if (payRes.data.checkoutUrl) {
+      // Save domain ID + return URL so PaymentResult can activate and redirect back
+      localStorage.setItem('pendingCustomDomainId', customDomain.value.id)
+      localStorage.setItem('pendingCustomDomainReturnUrl', `/menu/menus/${id}`)
+      window.location.href = payRes.data.checkoutUrl
+      return
     }
+
+    // No MP config — activate directly (dev/environments without gateway)
+    await activateDomain()
   } catch (e) {
     domainError.value = e.response?.data?.message || 'Erro ao assinar domínio'
     Swal.fire({ icon: 'error', text: domainError.value })
@@ -650,28 +644,36 @@ async function renewDomain() {
   await activateDomain()
 }
 
+async function retryPayment() {
+  if (!customDomain.value) return
+  domainLoading.value = true
+  try {
+    const period = customDomain.value.billingCycle === 'YEARLY' ? 'ANNUAL' : 'MONTHLY'
+    const payRes = await api.post('/payment/create-preference', {
+      type: 'MODULE',
+      referenceId: domainPricing.value.moduleId,
+      period
+    })
+    if (payRes.data.checkoutUrl) {
+      localStorage.setItem('pendingCustomDomainId', customDomain.value.id)
+      localStorage.setItem('pendingCustomDomainReturnUrl', `/menu/menus/${id}`)
+      window.location.href = payRes.data.checkoutUrl
+      return
+    }
+    await activateDomain()
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao retomar pagamento' })
+  } finally {
+    domainLoading.value = false
+  }
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('pt-BR')
 }
 
 onMounted(async () => {
-  // Check if returning from a payment
-  const urlParams = new URLSearchParams(window.location.search)
-  const paymentStatus = urlParams.get('status')
-  if (paymentStatus === 'success') {
-    const pendingDomainId = localStorage.getItem('pendingCustomDomainId')
-    if (pendingDomainId) {
-      localStorage.removeItem('pendingCustomDomainId')
-      // Activate the domain after successful payment
-      try {
-        await api.post(`/custom-domains/${pendingDomainId}/activate`)
-      } catch (e) {
-        console.warn('Failed to activate domain after payment:', e)
-      }
-    }
-  }
-
   await saas.fetchMySubscription().catch(() => {})
   await load()
   if (isCatalogOnly.value) {
