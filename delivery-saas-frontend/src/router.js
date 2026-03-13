@@ -91,6 +91,7 @@ import SaasModules from './views/SaasModules.vue';
 import SaasAdmin from './views/SaasAdmin.vue';
 import SaasSettings from './views/SaasSettings.vue';
 import SaasAiUsage from './views/SaasAiUsage.vue';
+const SaasGatewayConfig = () => import('./views/SaasGatewayConfig.vue')
 import CashbackSettings from './views/cashback/CashbackSettings.vue';
 import NfeEmissao from './views/NfeEmissao.vue';
 import NfeEmissoesRelatorio from './views/NfeEmissoesRelatorio.vue';
@@ -241,6 +242,7 @@ const router = createRouter({
   ,{ path: '/saas/billing', component: SaasBilling, meta: { requiresAuth: true, role: ['ADMIN','SUPER_ADMIN'] } }
   ,{ path: '/saas/settings', component: SaasSettings, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/ai-usage', component: SaasAiUsage, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/gateway', component: SaasGatewayConfig, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
     { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true, requiresModule: 'CASHBACK' } },
     { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },

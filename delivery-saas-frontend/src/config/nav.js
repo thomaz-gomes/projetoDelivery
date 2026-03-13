@@ -58,7 +58,8 @@ export const nav = [
   { name: 'SaaS', to: '/saas', icon: 'bi bi-grid-3x3-gap', role: 'SUPER_ADMIN', children: [
     { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
     { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },
-    { name: 'Empresas', to: '/saas/companies', icon: 'bi bi-building' }
+    { name: 'Empresas', to: '/saas/companies', icon: 'bi bi-building' },
+    { name: 'Gateway', to: '/saas/gateway', icon: 'bi bi-credit-card-2-front' }
   ] }
 ];
 
