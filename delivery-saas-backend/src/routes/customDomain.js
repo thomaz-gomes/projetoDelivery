@@ -4,6 +4,7 @@ import { exec } from 'child_process'
 import path from 'path'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
+import { getSetting } from '../services/systemSettings.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -45,7 +46,7 @@ router.get('/pricing', async (req, res) => {
       moduleId: mod.id,
       monthly: monthly ? Number(monthly.price) : null,
       yearly: yearly ? Number(yearly.price) : null,
-      serverIp: process.env.CUSTOM_DOMAIN_SERVER_IP || null,
+      serverIp: await getSetting('custom_domain_server_ip', 'CUSTOM_DOMAIN_SERVER_IP') || null,
     })
   } catch (e) {
     console.error('GET /custom-domains/pricing error:', e?.message || e)
@@ -204,8 +205,8 @@ router.post('/:id/verify', requireRole('ADMIN'), async (req, res) => {
     if (!record) return res.status(404).json({ message: 'Domínio não encontrado' })
     if (record.companyId !== req.user.companyId) return res.status(403).json({ message: 'Forbidden' })
 
-    const serverIp = process.env.CUSTOM_DOMAIN_SERVER_IP
-    if (!serverIp) return res.status(500).json({ message: 'CUSTOM_DOMAIN_SERVER_IP não configurado' })
+    const serverIp = await getSetting('custom_domain_server_ip', 'CUSTOM_DOMAIN_SERVER_IP')
+    if (!serverIp) return res.status(500).json({ message: 'IP do servidor não configurado. Configure em Configurações SaaS.' })
 
     // Resolve DNS
     let addresses

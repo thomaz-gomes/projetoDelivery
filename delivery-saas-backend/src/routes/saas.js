@@ -784,7 +784,7 @@ saasRouter.delete('/companies/:id', requireRole('SUPER_ADMIN'), async (_req, res
 // -------- System Settings (SUPER_ADMIN) --------
 
 // Chaves expostas na API (whitelist). Valores de chaves *_key são mascarados na leitura.
-const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price', 'google_ai_api_key', 'ai_provider_map', 'usd_to_brl']
+const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price', 'google_ai_api_key', 'ai_provider_map', 'usd_to_brl', 'custom_domain_server_ip']
 const SENSITIVE_KEYS = new Set(['openai_api_key', 'google_ai_api_key'])
 
 function maskValue(key, value) {

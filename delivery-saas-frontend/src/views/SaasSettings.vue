@@ -8,6 +8,7 @@ const settings = ref({
   credit_brl_price: '',
   google_ai_api_key: '',
   usd_to_brl: '',
+  custom_domain_server_ip: '',
 })
 const settingsMeta = ref([])  // { key, isSet, updatedAt }
 const loading = ref(true)
@@ -91,6 +92,7 @@ async function saveCredits() {
     await api.put('/saas/settings', [
       { key: 'credit_brl_price', value: String(settings.value.credit_brl_price).replace(',', '.') },
       { key: 'usd_to_brl', value: String(settings.value.usd_to_brl).replace(',', '.') },
+      { key: 'custom_domain_server_ip', value: String(settings.value.custom_domain_server_ip || '').trim() },
     ])
 
     // Salva os custos de cada serviço
@@ -127,6 +129,10 @@ async function load() {
     const usdRow = data.find(r => r.key === 'usd_to_brl')
     if (usdRow && usdRow.isSet) {
       settings.value.usd_to_brl = usdRow.value
+    }
+    const ipRow = data.find(r => r.key === 'custom_domain_server_ip')
+    if (ipRow && ipRow.isSet) {
+      settings.value.custom_domain_server_ip = ipRow.value
     }
     // Carrega mapa de provedores
     const providerRow = data.find(r => r.key === 'ai_provider_map')
@@ -631,6 +637,23 @@ onMounted(async () => {
             <div class="form-text">
               Taxa de câmbio para calcular custo real dos tokens em reais.
               Atualize manualmente conforme necessário.
+            </div>
+          </div>
+
+          <!-- IP do Servidor para Domínios Customizados -->
+          <div class="mb-4 p-3 rounded-3 bg-light border">
+            <label class="form-label fw-semibold mb-1">
+              <i class="bi bi-globe me-1"></i>IP do Servidor (Domínios Customizados)
+            </label>
+            <input
+              type="text"
+              class="form-control"
+              style="max-width: 240px;"
+              v-model="settings.custom_domain_server_ip"
+              placeholder="ex: 123.45.67.89"
+            />
+            <div class="form-text">
+              IP do servidor exibido nas instruções de DNS para clientes que configuram domínio próprio.
             </div>
           </div>
 
