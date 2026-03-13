@@ -768,6 +768,13 @@ function selectMenuOption(opt){
             </li>
             <li><hr class="dropdown-divider"></li>
             <li>
+              <router-link to="/billing" class="dropdown-item d-flex align-items-center" @click="quickMenuOpen = false">
+                <i class="bi bi-receipt-cutoff me-2"></i> Cobranças
+                <span v-if="addOnStore.pendingInvoiceCount" class="badge bg-danger ms-auto">{{ addOnStore.pendingInvoiceCount }}</span>
+              </router-link>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
               <button class="dropdown-item" @click.prevent="logout()">Sair</button>
             </li>
           </ul>
@@ -843,6 +850,10 @@ function selectMenuOption(opt){
           </li>
           <li class="mt-auto pt-2">
             <hr class="text-white opacity-25">
+            <router-link to="/billing" class="nav-link d-flex align-items-center mb-2" @click="offCanvasOpen = false">
+              <i class="bi bi-receipt-cutoff me-2"></i> Cobranças
+              <span v-if="addOnStore.pendingInvoiceCount" class="badge bg-danger ms-2">{{ addOnStore.pendingInvoiceCount }}</span>
+            </router-link>
             <AiCreditsWidget compact v-if="auth.user?.companyId" />
           </li>
         </ul>

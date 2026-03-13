@@ -50,7 +50,6 @@ export const nav = [
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp', lockable: true },
     { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' }
   ] },
-  { name: 'Cobranças', to: '/billing', icon: 'bi bi-receipt-cutoff' },
   {
     name: 'Loja de Add-ons',
     to: '/store',
