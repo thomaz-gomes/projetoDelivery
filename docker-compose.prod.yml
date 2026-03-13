@@ -35,6 +35,8 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt
       - /var/www/certbot:/var/www/certbot
     pid: host
+    cap_add:
+      - SYS_KILL
     depends_on:
       - delivery_db
     ports:

@@ -78,6 +78,8 @@ services:
       migrate:
         condition: service_completed_successfully
     pid: host
+    cap_add:
+      - SYS_KILL
     ports:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
