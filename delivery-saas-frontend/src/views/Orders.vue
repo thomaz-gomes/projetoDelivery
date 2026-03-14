@@ -876,11 +876,13 @@ function normalizeOrder(o){
         if (methods.length > 0) {
           paymentMethod = methods.map(m => {
             // Prefer backend-resolved label from iFood payment mapping
-            if (m._systemLabel) return m._systemLabel;
-            return translatePaymentMethod(m.method || m.type || '', m.card?.brand);
+            let label = m._systemLabel || translatePaymentMethod(m.method || m.type || '', m.card?.brand);
+            if (m.prepaid === true) label += ' (pago online)';
+            else if (m.prepaid === false) label += ' (cobrar do cliente)';
+            return label;
           }).filter(Boolean).join(' + ') || paymentMethod;
         } else if (ifoodPay.prepaid) {
-          paymentMethod = 'Pré-pago';
+          paymentMethod = 'Pré-pago (pago online)';
         }
       } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0]) {
         // Legacy: payments as an array
