@@ -147,6 +147,13 @@
         </div>
       </template>
     </div>
+    <!-- Payment loading overlay -->
+    <div v-if="paying" class="payment-overlay">
+      <div class="text-center text-white">
+        <div class="spinner-border mb-3" style="width:3rem;height:3rem" role="status"></div>
+        <div class="fs-5">Iniciando pagamento...</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -261,3 +268,15 @@ function statusLabel(status) {
   }[status] || status
 }
 </script>
+
+<style scoped>
+.payment-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+</style>
