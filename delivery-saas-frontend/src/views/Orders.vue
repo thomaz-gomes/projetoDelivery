@@ -3454,6 +3454,12 @@ function pulseButton() {
             </div>
             <div v-else class="text-muted">Nenhum entregador atribuído</div>
           </div>
+
+          <!-- DEBUG: Raw payload -->
+          <div class="od-section" style="background:#1e1e1e;color:#d4d4d4;border-left:4px solid #f44336">
+            <div class="od-section-title" style="color:#f44336"><i class="bi bi-bug"></i> DEBUG — Payload completo</div>
+            <pre style="white-space:pre-wrap;word-break:break-all;font-size:0.75rem;max-height:400px;overflow-y:auto;margin:0">{{ JSON.stringify(selectedOrder, null, 2) }}</pre>
+          </div>
         </div>
 
         <div class="od-modal-footer">
