@@ -17,18 +17,66 @@ export class MercadoPagoAdapter {
   /**
    * Create a Checkout Pro preference.
    */
-  async createCheckout({ amount, description, externalRef, backUrls, notificationUrl, platformFee }) {
+  async createCheckout({ amount, description, externalRef, backUrls, notificationUrl, platformFee, payer, items }) {
     const preference = new Preference(this._client)
-    const body = {
-      items: [{
+
+    // Build enriched items array (quality: id, title, quantity, unit_price, currency_id, category_id, description)
+    const enrichedItems = items?.length
+      ? items.map(item => ({
+        id: item.id || externalRef,
+        title: item.title || description,
+        description: item.description || description,
+        quantity: item.quantity || 1,
+        unit_price: Number(item.unit_price || amount),
+        currency_id: 'BRL',
+        category_id: item.category_id || 'services',
+      }))
+      : [{
+        id: externalRef,
         title: description,
+        description,
         quantity: 1,
         unit_price: Number(amount),
         currency_id: 'BRL',
-      }],
+        category_id: 'services',
+      }]
+
+    const body = {
+      items: enrichedItems,
       marketplace_fee: platformFee ?? this.platformFee,
       external_reference: externalRef,
       statement_descriptor: 'CoreDelivery',
+      binary_mode: true,
+    }
+
+    // Payer info (quality: email, name, identification, phone, address)
+    if (payer) {
+      body.payer = {}
+      if (payer.email) body.payer.email = payer.email
+      if (payer.firstName) body.payer.name = payer.firstName
+      if (payer.lastName) body.payer.surname = payer.lastName
+      if (payer.firstName && !payer.lastName) {
+        const parts = payer.firstName.trim().split(/\s+/)
+        if (parts.length > 1) {
+          body.payer.name = parts[0]
+          body.payer.surname = parts.slice(1).join(' ')
+        }
+      }
+      if (payer.identificationType && payer.identificationNumber) {
+        body.payer.identification = {
+          type: payer.identificationType,
+          number: payer.identificationNumber,
+        }
+      }
+      if (payer.phone) {
+        const digits = payer.phone.replace(/\D/g, '')
+        if (digits.length >= 10) {
+          body.payer.phone = {
+            area_code: digits.slice(0, 2),
+            number: digits.slice(2),
+          }
+        }
+      }
     }
 
     // MP rejects localhost URLs for back_urls/notification_url

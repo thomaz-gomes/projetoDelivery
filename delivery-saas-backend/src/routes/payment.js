@@ -28,7 +28,7 @@ function requireAuth(req, res, next) {
 // ---------------------------------------------------------------------------
 // Helper: create checkout via active gateway adapter
 // ---------------------------------------------------------------------------
-async function createGatewayCheckout(payment, description, platformFeeOverride) {
+async function createGatewayCheckout(payment, description, { platformFeeOverride, payer, items } = {}) {
   const { adapter, config } = await getActiveGateway()
 
   const result = await adapter.createCheckout({
@@ -42,6 +42,8 @@ async function createGatewayCheckout(payment, description, platformFeeOverride) 
     },
     notificationUrl: `${BACKEND_URL}/payment/webhook/${config.provider.toLowerCase()}`,
     platformFee: platformFeeOverride != null ? Number(platformFeeOverride) : undefined,
+    payer,
+    items,
   })
 
   await prisma.saasPayment.update({
@@ -75,12 +77,27 @@ async function ensureSubscription(companyId) {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: build payer object from authenticated user for gateway quality score
+// ---------------------------------------------------------------------------
+async function buildPayerInfo(userId) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true, whatsapp: true } })
+  if (!user) return undefined
+  return {
+    email: user.email,
+    firstName: user.name,
+    phone: user.whatsapp || undefined,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // POST /payment/create-preference
 // ---------------------------------------------------------------------------
 paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
   try {
     const companyId = req.user.companyId
     if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa associada' })
+
+    const payer = await buildPayerInfo(req.user.id)
 
     const { invoiceId, type, referenceId, period } = req.body || {}
 
@@ -115,8 +132,16 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
       }
 
       const description = `Fatura #${invoice.year}/${String(invoice.month).padStart(2, '0')}`
+      const invoiceItems = (invoice.items || []).map(item => ({
+        id: item.referenceId || item.id,
+        title: item.description || description,
+        description: item.description,
+        quantity: 1,
+        unit_price: Number(item.amount),
+        category_id: item.type === 'MODULE' ? 'services' : 'virtual_goods',
+      }))
       try {
-        const checkout = await createGatewayCheckout(payment, description)
+        const checkout = await createGatewayCheckout(payment, description, { payer, items: invoiceItems.length ? invoiceItems : undefined })
         return res.json({
           checkoutUrl: checkout.checkoutUrl,
           preferenceId: checkout.preferenceId,
@@ -228,8 +253,16 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
       }
 
       const description = `Módulo ${mod.name} - ${period}`
+      const moduleItems = [{
+        id: mod.id,
+        title: mod.name,
+        description: `Assinatura ${mod.name} (${period})`,
+        quantity: 1,
+        unit_price: Number(proRatedPrice),
+        category_id: 'services',
+      }]
       try {
-        const checkout = await createGatewayCheckout(result.payment, description, mod.platformFee)
+        const checkout = await createGatewayCheckout(result.payment, description, { platformFeeOverride: mod.platformFee, payer, items: moduleItems })
         return res.json({
           checkoutUrl: checkout.checkoutUrl,
           preferenceId: checkout.preferenceId,
@@ -315,8 +348,16 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
       }
 
       const description = `Créditos IA - ${pack.name}`
+      const creditItems = [{
+        id: pack.id,
+        title: pack.name,
+        description: `${pack.name} (${pack.credits} créditos IA)`,
+        quantity: 1,
+        unit_price: Number(pack.price),
+        category_id: 'virtual_goods',
+      }]
       try {
-        const checkout = await createGatewayCheckout(result.payment, description)
+        const checkout = await createGatewayCheckout(result.payment, description, { payer, items: creditItems })
         return res.json({
           checkoutUrl: checkout.checkoutUrl,
           preferenceId: checkout.preferenceId,
