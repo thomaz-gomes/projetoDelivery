@@ -27,6 +27,15 @@ export const useSaasStore = defineStore('saas', {
       const mods = this.enabledModules.map(k => String(k).toUpperCase())
       if (!mods.length) return false
       return mods.includes('CARDAPIO_SIMPLES') && !mods.includes('CARDAPIO_COMPLETO')
+    },
+    isOnTrial: (s) => {
+      return s.subscription?.activeTrial?.status === 'ACTIVE' || false
+    },
+    trialDaysRemaining: (s) => {
+      const trial = s.subscription?.activeTrial
+      if (!trial || trial.status !== 'ACTIVE') return 0
+      const diff = new Date(trial.expiresAt) - new Date()
+      return Math.max(0, Math.ceil(diff / 86400000))
     }
   },
   actions: {

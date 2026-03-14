@@ -226,6 +226,26 @@ async function changePassword(c) {
     Swal.fire({ icon: 'error', title: 'Erro', text: 'Falha ao atualizar senha.' })
   }
 }
+
+async function resetTrial(c) {
+  const result = await Swal.fire({
+    title: `Resetar trial de "${c.name}"?`,
+    text: 'O trial atual será cancelado (se ativo) e a empresa poderá ativar novamente.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'Sim, resetar',
+    cancelButtonText: 'Cancelar'
+  })
+  if (!result.isConfirmed) return
+  try {
+    await api.post(`/saas/companies/${c.id}/reset-trial`)
+    await load()
+    Swal.fire({ icon: 'success', title: 'Trial resetado', timer: 1500, showConfirmButton: false })
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Falha ao resetar trial' })
+  }
+}
 </script>
 
 <template>
@@ -309,6 +329,12 @@ async function changePassword(c) {
               <td>
                 <span v-if="c.saasSubscription?.plan" class="fw-medium">{{ c.saasSubscription.plan.name }}</span>
                 <span v-else class="text-muted">—</span>
+                <div v-if="c.companyTrials && c.companyTrials.length > 0" class="mt-1">
+                  <span class="badge bg-warning text-dark">
+                    <i class="bi bi-clock-history me-1"></i>Trial
+                    ({{ Math.max(0, Math.ceil((new Date(c.companyTrials[0].expiresAt) - new Date()) / 86400000)) }}d restantes)
+                  </span>
+                </div>
               </td>
               <td>
                 <span class="badge" :class="subStatus(c).cls">{{ subStatus(c).label }}</span>
@@ -336,6 +362,9 @@ async function changePassword(c) {
                     :title="c.saasSubscription?.status === 'SUSPENDED' ? 'Reativar' : 'Suspender'"
                   >
                     <i class="bi" :class="c.saasSubscription?.status === 'SUSPENDED' ? 'bi-play-circle' : 'bi-pause-circle'"></i>
+                  </button>
+                  <button class="btn btn-outline-info" @click="resetTrial(c)" title="Resetar Trial">
+                    <i class="bi bi-arrow-counterclockwise"></i>
                   </button>
                   <button class="btn btn-outline-danger" @click="deleteCompany(c)" title="Excluir">
                     <i class="bi bi-trash"></i>
