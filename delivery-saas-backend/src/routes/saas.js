@@ -1450,7 +1450,10 @@ saasRouter.delete('/ai-provider-pricing/:id', requireRole('SUPER_ADMIN'), async 
 saasRouter.get('/trial/eligibility', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId
-    const trialPlan = await prisma.saasPlan.findFirst({ where: { isTrial: true, isActive: true } })
+    const trialPlan = await prisma.saasPlan.findFirst({
+      where: { isTrial: true, isActive: true },
+      include: { modules: { include: { module: true } } }
+    })
     if (!trialPlan) {
       return res.json({ eligible: false, reason: 'Plano trial não disponível' })
     }
@@ -1462,7 +1465,7 @@ saasRouter.get('/trial/eligibility', requireRole('ADMIN'), async (req, res) => {
     if (previousTrial) {
       return res.json({ eligible: false, reason: 'Empresa já utilizou o período de trial' })
     }
-    res.json({ eligible: true, trialPlan: { id: trialPlan.id, name: trialPlan.name, durationDays: trialPlan.trialDurationDays, price: trialPlan.price } })
+    res.json({ eligible: true, trialPlan: { id: trialPlan.id, name: trialPlan.name, trialDurationDays: trialPlan.trialDurationDays, price: trialPlan.price, modules: trialPlan.modules } })
   } catch (e) {
     res.status(500).json({ message: 'Erro ao verificar elegibilidade', error: e?.message || String(e) })
   }

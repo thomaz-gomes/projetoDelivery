@@ -112,6 +112,7 @@ import AddOnStore from './views/AddOnStore.vue';
 import AddOnDetail from './views/AddOnDetail.vue';
 import CreditPackStore from './views/CreditPackStore.vue';
 import PaymentResult from './views/PaymentResult.vue';
+import TrialActivationWizard from './views/TrialActivationWizard.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -261,6 +262,7 @@ const router = createRouter({
     { path: '/store', component: AddOnStore, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/store/credits', component: CreditPackStore, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/payment/result', component: PaymentResult, meta: { requiresAuth: true } },
+    { path: '/trial/activate', component: TrialActivationWizard, meta: { requiresAuth: true, noSidebar: true } },
     { path: '/store/:moduleKey', component: AddOnDetail, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/billing', component: AdminBilling, meta: { requiresAuth: true } },
     { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('./views/NotFound.vue') },
