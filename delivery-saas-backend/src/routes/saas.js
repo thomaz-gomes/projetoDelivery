@@ -72,10 +72,10 @@ saasRouter.get('/plans', requireRole('SUPER_ADMIN'), async (_req, res) => {
 })
 
 saasRouter.post('/plans', requireRole('SUPER_ADMIN'), async (req, res) => {
-  const { name, price = 0, menuLimit = null, storeLimit = null, unlimitedMenus = false, unlimitedStores = false, aiCreditsMonthlyLimit = 100, unlimitedAiCredits = false, moduleIds = [] } = req.body || {}
+  const { name, price = 0, menuLimit = null, storeLimit = null, unlimitedMenus = false, unlimitedStores = false, aiCreditsMonthlyLimit = 100, unlimitedAiCredits = false, moduleIds = [], isTrial, trialDurationDays } = req.body || {}
   if (!name) return res.status(400).json({ message: 'name é obrigatório' })
   try {
-    const plan = await prisma.saasPlan.create({ data: { name, price: Number(price || 0), menuLimit, storeLimit, unlimitedMenus: Boolean(unlimitedMenus), unlimitedStores: Boolean(unlimitedStores), aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit || 100), unlimitedAiCredits: Boolean(unlimitedAiCredits) } })
+    const plan = await prisma.saasPlan.create({ data: { name, price: Number(price || 0), menuLimit, storeLimit, unlimitedMenus: Boolean(unlimitedMenus), unlimitedStores: Boolean(unlimitedStores), aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit || 100), unlimitedAiCredits: Boolean(unlimitedAiCredits), isTrial: Boolean(isTrial), ...(trialDurationDays != null && { trialDurationDays: Number(trialDurationDays) }) } })
     if (Array.isArray(moduleIds) && moduleIds.length) {
       const effectiveModuleIds = await ensureCardapioSimplesIncluded(moduleIds)
       const data = effectiveModuleIds.map(mid => ({ planId: plan.id, moduleId: String(mid) }))
@@ -95,13 +95,13 @@ saasRouter.post('/plans', requireRole('SUPER_ADMIN'), async (req, res) => {
 
 saasRouter.put('/plans/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
-  const { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, aiCreditsMonthlyLimit, unlimitedAiCredits, moduleIds, isDefault } = req.body || {}
+  const { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, aiCreditsMonthlyLimit, unlimitedAiCredits, moduleIds, isDefault, trialDurationDays } = req.body || {}
   try {
     // Se marcando como padrão, desmarcar o anterior
     if (isDefault === true) {
       await prisma.saasPlan.updateMany({ where: { isDefault: true, NOT: { id } }, data: { isDefault: false } })
     }
-    const updated = await prisma.saasPlan.update({ where: { id }, data: { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, ...(aiCreditsMonthlyLimit !== undefined && { aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit) }), ...(unlimitedAiCredits !== undefined && { unlimitedAiCredits: Boolean(unlimitedAiCredits) }), ...(isDefault !== undefined && { isDefault: Boolean(isDefault) }) } })
+    const updated = await prisma.saasPlan.update({ where: { id }, data: { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, ...(aiCreditsMonthlyLimit !== undefined && { aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit) }), ...(unlimitedAiCredits !== undefined && { unlimitedAiCredits: Boolean(unlimitedAiCredits) }), ...(isDefault !== undefined && { isDefault: Boolean(isDefault) }), ...(trialDurationDays !== undefined && { trialDurationDays: Number(trialDurationDays) }) } })
     if (Array.isArray(moduleIds)) {
       // replace module assignments
       await prisma.saasPlanModule.deleteMany({ where: { planId: id } })
@@ -211,8 +211,11 @@ saasRouter.post('/subscriptions', requireRole('SUPER_ADMIN'), async (req, res) =
 // Get subscription for current user's company (ADMIN)
 saasRouter.get('/subscription/me', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
-  const sub = await prisma.saasSubscription.findUnique({ where: { companyId }, include: { plan: { include: { modules: { include: { module: true } } } } } })
-  res.json(sub)
+  const [sub, activeTrial] = await Promise.all([
+    prisma.saasSubscription.findUnique({ where: { companyId }, include: { plan: { include: { modules: { include: { module: true } } } } } }),
+    prisma.companyTrial.findFirst({ where: { companyId, status: 'ACTIVE' } })
+  ])
+  res.json({ ...sub, activeTrial: activeTrial || null })
 })
 
 // Admin/Super: Get subscription for a given company (SUPER_ADMIN)
@@ -722,8 +725,13 @@ saasRouter.get('/companies', requireRole('SUPER_ADMIN'), async (_req, res) => {
       saasSubscription: {
         select: {
           id: true, status: true, period: true,
-          plan: { select: { id: true, name: true, price: true } }
+          plan: { select: { id: true, name: true, price: true, isTrial: true } }
         }
+      },
+      companyTrials: {
+        where: { status: 'ACTIVE' },
+        select: { id: true, status: true, expiresAt: true, durationDays: true, startedAt: true },
+        take: 1
       },
       _count: { select: { stores: true, users: true } }
     }
@@ -1434,6 +1442,125 @@ saasRouter.put('/ai-provider-pricing/:id', requireRole('SUPER_ADMIN'), async (re
 saasRouter.delete('/ai-provider-pricing/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   await prisma.aiProviderPricing.delete({ where: { id: req.params.id } })
   res.json({ ok: true })
+})
+
+// -------- Trial Management --------
+
+// Check trial eligibility (ADMIN)
+saasRouter.get('/trial/eligibility', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    const trialPlan = await prisma.saasPlan.findFirst({ where: { isTrial: true, isActive: true } })
+    if (!trialPlan) {
+      return res.json({ eligible: false, reason: 'Plano trial não disponível' })
+    }
+    const activeTrial = await prisma.companyTrial.findFirst({ where: { companyId, status: 'ACTIVE' } })
+    if (activeTrial) {
+      return res.json({ eligible: false, reason: 'Empresa já possui um trial ativo' })
+    }
+    const previousTrial = await prisma.companyTrial.findFirst({ where: { companyId, status: { in: ['EXPIRED', 'CANCELED'] } } })
+    if (previousTrial) {
+      return res.json({ eligible: false, reason: 'Empresa já utilizou o período de trial' })
+    }
+    res.json({ eligible: true, trialPlan: { id: trialPlan.id, name: trialPlan.name, durationDays: trialPlan.trialDurationDays, price: trialPlan.price } })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao verificar elegibilidade', error: e?.message || String(e) })
+  }
+})
+
+// Activate trial (ADMIN)
+saasRouter.post('/trial/activate', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    const trialPlan = await prisma.saasPlan.findFirst({ where: { isTrial: true, isActive: true } })
+    if (!trialPlan) {
+      return res.status(400).json({ message: 'Plano trial não disponível' })
+    }
+    const activeTrial = await prisma.companyTrial.findFirst({ where: { companyId, status: 'ACTIVE' } })
+    if (activeTrial) {
+      return res.status(400).json({ message: 'Empresa já possui um trial ativo' })
+    }
+    const previousTrial = await prisma.companyTrial.findFirst({ where: { companyId, status: { in: ['EXPIRED', 'CANCELED'] } } })
+    if (previousTrial) {
+      return res.status(400).json({ message: 'Empresa já utilizou o período de trial' })
+    }
+    const currentSub = await prisma.saasSubscription.findUnique({ where: { companyId } })
+    const durationDays = trialPlan.trialDurationDays || 7
+    const now = new Date()
+    const expiresAt = new Date(now)
+    expiresAt.setDate(expiresAt.getDate() + durationDays)
+
+    const trial = await prisma.companyTrial.create({
+      data: {
+        companyId,
+        trialPlanId: trialPlan.id,
+        originalPlanId: currentSub?.planId || null,
+        originalPeriod: currentSub?.period || null,
+        durationDays,
+        priceAfterTrial: trialPlan.price,
+        expiresAt
+      }
+    })
+
+    // Update subscription to point to trial plan
+    if (currentSub) {
+      await prisma.saasSubscription.update({ where: { id: currentSub.id }, data: { planId: trialPlan.id } })
+    }
+
+    res.status(201).json(trial)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao ativar trial', error: e?.message || String(e) })
+  }
+})
+
+// Reset trial for a company (SUPER_ADMIN)
+saasRouter.post('/companies/:id/reset-trial', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.params.id
+    const activeTrial = await prisma.companyTrial.findFirst({ where: { companyId, status: 'ACTIVE' } })
+    if (activeTrial) {
+      // Revert subscription to original plan/period
+      if (activeTrial.originalPlanId) {
+        await prisma.saasSubscription.updateMany({
+          where: { companyId },
+          data: { planId: activeTrial.originalPlanId, ...(activeTrial.originalPeriod && { period: activeTrial.originalPeriod }) }
+        })
+      }
+      await prisma.companyTrial.update({ where: { id: activeTrial.id }, data: { status: 'CANCELED' } })
+    }
+    // Delete ALL trial records for this company
+    await prisma.companyTrial.deleteMany({ where: { companyId } })
+    res.json({ ok: true, message: 'Trial resetado. Empresa pode ativar novamente.' })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao resetar trial', error: e?.message || String(e) })
+  }
+})
+
+// Job: expire trials (SUPER_ADMIN)
+saasRouter.post('/jobs/expire-trials', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const now = new Date()
+    const expiredTrials = await prisma.companyTrial.findMany({ where: { status: 'ACTIVE', expiresAt: { lte: now } } })
+    let expiredCount = 0
+    for (const trial of expiredTrials) {
+      try {
+        // Revert subscription to original plan/period
+        if (trial.originalPlanId) {
+          await prisma.saasSubscription.updateMany({
+            where: { companyId: trial.companyId },
+            data: { planId: trial.originalPlanId, ...(trial.originalPeriod && { period: trial.originalPeriod }) }
+          })
+        }
+        await prisma.companyTrial.update({ where: { id: trial.id }, data: { status: 'EXPIRED', expiredAt: now } })
+        expiredCount++
+      } catch (err) {
+        console.error('expire-trial error for trial', trial.id, err)
+      }
+    }
+    res.json({ ok: true, expired: expiredCount, total: expiredTrials.length })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao expirar trials', error: e?.message || String(e) })
+  }
 })
 
 export default saasRouter
