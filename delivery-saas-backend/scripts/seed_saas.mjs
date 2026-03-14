@@ -95,6 +95,33 @@ async function main() {
     }
   }
 
+  // ── Plano Trial (isSystem + isTrial, começa inativo) ───────────────────
+  let trialPlan = await prisma.saasPlan.findFirst({ where: { isTrial: true } });
+  if (!trialPlan) {
+    trialPlan = await prisma.saasPlan.create({
+      data: {
+        name: 'Trial',
+        price: '0',
+        menuLimit: null,
+        storeLimit: null,
+        unlimitedMenus: true,
+        unlimitedStores: true,
+        isActive: false,
+        isDefault: false,
+        isSystem: true,
+        isTrial: true,
+        trialDurationDays: 7,
+      }
+    });
+    console.log('Plano "Trial" criado (inativo — configure módulos e ative manualmente).');
+  } else {
+    await prisma.saasPlan.update({
+      where: { id: trialPlan.id },
+      data: { isSystem: true, isTrial: true }
+    });
+    console.log('Plano "Trial" já existe — atualizado.');
+  }
+
   // ── Garante subscription para empresas sem plano ───────────────────────
   const companies = await prisma.company.findMany({});
   let assigned = 0;
