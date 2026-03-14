@@ -123,6 +123,8 @@ model Company {
   mercadoPagoConfig MercadoPagoConfig?
   // ---- Custom Domains ----
   customDomains     CustomDomain[]
+  // ---- Trials ----
+  companyTrials     CompanyTrial[]
 }
 
 model User {
@@ -932,11 +934,15 @@ model SaasPlan {
   isDefault             Boolean  @default(false)
   // isSystem: protege contra exclusão (planos de sistema)
   isSystem              Boolean  @default(false)
+  isTrial               Boolean  @default(false)
+  trialDurationDays     Int?
   createdAt             DateTime @default(now())
 
-  modules       SaasPlanModule[]
-  prices        SaasPlanPrice[]
-  subscriptions SaasSubscription[]
+  modules              SaasPlanModule[]
+  prices               SaasPlanPrice[]
+  subscriptions        SaasSubscription[]
+  trialsAsTrialPlan    CompanyTrial[] @relation("TrialPlan")
+  trialsAsOriginalPlan CompanyTrial[] @relation("OriginalPlan")
 }
 
 // Pricing tiers for plans (periodic prices)
@@ -1006,6 +1012,27 @@ model SaasSubscription {
   updatedAt DateTime  @updatedAt
 
   invoices SaasInvoice[]
+}
+
+// Company trial tracking — one active trial per company at a time
+model CompanyTrial {
+  id               String    @id @default(cuid())
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id])
+  trialPlanId      String
+  trialPlan        SaasPlan  @relation("TrialPlan", fields: [trialPlanId], references: [id])
+  originalPlanId   String
+  originalPlan     SaasPlan  @relation("OriginalPlan", fields: [originalPlanId], references: [id])
+  originalPeriod   String?
+  durationDays     Int
+  priceAfterTrial  Decimal   @default(0)
+  status           String    @default("ACTIVE") // ACTIVE, EXPIRED, CANCELED
+  startedAt        DateTime  @default(now())
+  expiresAt        DateTime
+  expiredAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([companyId, status])
 }
 
 // Monthly invoice (mensalidade)
