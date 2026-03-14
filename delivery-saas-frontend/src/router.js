@@ -263,6 +263,7 @@ const router = createRouter({
     { path: '/payment/result', component: PaymentResult, meta: { requiresAuth: true } },
     { path: '/store/:moduleKey', component: AddOnDetail, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/billing', component: AdminBilling, meta: { requiresAuth: true } },
+    { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('./views/NotFound.vue') },
   ]
 });
 
