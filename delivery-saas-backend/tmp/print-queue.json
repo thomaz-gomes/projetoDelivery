@@ -2910,5 +2910,411 @@
       "rider": null
     },
     "storeId": "d9952923-ed61-4294-8166-0935d608c69d"
+  },
+  {
+    "id": "1773507156889-627810",
+    "createdAt": 1773507156889,
+    "order": {
+      "id": "6cacd850-ef28-4e3d-b519-331c1e7f1c4b",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "d9952923-ed61-4294-8166-0935d608c69d",
+      "externalId": "36681938-8f6b-4951-bb5d-f82d5c471a34",
+      "displayId": "3191",
+      "displaySimple": 3,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Flávia queiroz menezes",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "f87d98c9-2c0b-4714-bcc3-f6080e15e372",
+      "address": "Rua TESTE, 999999",
+      "latitude": 0,
+      "longitude": 0,
+      "total": "5.99",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": null,
+      "payload": {
+        "id": "10b6bf40-e94d-43d5-8531-c08d1ebfd2ec",
+        "code": "CFM",
+        "order": {
+          "id": "36681938-8f6b-4951-bb5d-f82d5c471a34",
+          "items": [
+            {
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "ean": "",
+              "name": "Água mineral 500ml",
+              "type": "DEFAULT",
+              "unit": "UN",
+              "index": 1,
+              "price": 5,
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg",
+              "quantity": 1,
+              "uniqueId": "b050bf70-6731-4601-90d5-bc1b456a02ab",
+              "unitPrice": 5,
+              "totalPrice": 5,
+              "externalCode": "P-HS5D",
+              "observations": "",
+              "optionsPrice": 0,
+              "_matchedProductId": "a73290fe-37cb-4c7e-a5b3-e60eb7aa2616",
+              "customizationPrice": 0
+            }
+          ],
+          "total": {
+            "benefits": 0,
+            "subTotal": 5,
+            "deliveryFee": 0,
+            "orderAmount": 5.99,
+            "additionalFees": 0.99
+          },
+          "isTest": true,
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "category": "FOOD",
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Flávia queiroz menezes",
+            "phone": {
+              "number": "0800 705 3040",
+              "localizer": "11430952",
+              "localizerExpiration": "2026-03-14T20:54:08.363Z"
+            },
+            "documentType": "CPF",
+            "segmentation": "Cliente",
+            "documentNumber": "02900213592",
+            "ordersCountOnMerchant": 0
+          },
+          "delivery": {
+            "mode": "DEFAULT",
+            "pickupCode": "1869",
+            "deliveredBy": "MERCHANT",
+            "description": "Padrão",
+            "deliveryAddress": {
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "streetName": "Rua TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              },
+              "neighborhood": "Bairro TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999"
+            },
+            "deliveryDateTime": "2026-03-14T17:34:08.363Z"
+          },
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "payments": {
+            "methods": [
+              {
+                "card": {
+                  "brand": "VISA"
+                },
+                "type": "ONLINE",
+                "value": 5.99,
+                "method": "CREDIT",
+                "prepaid": true,
+                "currency": "BRL"
+              }
+            ],
+            "pending": 0,
+            "prepaid": 5.99
+          },
+          "createdAt": "2026-03-14T16:54:08.363Z",
+          "displayId": "3191",
+          "orderType": "DELIVERY",
+          "orderTiming": "IMMEDIATE",
+          "salesChannel": "IFOOD",
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "value": 0.99,
+              "description": "Taxa de serviço",
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ],
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação."
+            }
+          ],
+          "additionalInfo": {
+            "metadata": {
+              "cartId": "6883a862-e5ca-4eaf-bd08-39b9f47b7cc4",
+              "deliveryProduct": "SELF_DELIVERY",
+              "logisticProvider": "MERCHANT"
+            }
+          },
+          "preparationStartDateTime": "2026-03-14T16:54:08.363Z"
+        },
+        "orderId": "36681938-8f6b-4951-bb5d-f82d5c471a34",
+        "payment": {
+          "amount": 5.99,
+          "method": "CREDIT",
+          "changeFor": null
+        },
+        "fullCode": "CONFIRMED",
+        "metadata": {
+          "ORIGIN": "ORDER_API",
+          "appName": "t-campos-gomes-cia-ltda-teste-d",
+          "CLIENT_ID": "thmz-negocios-digita:t-campos-gomes-cia-ltda-teste-d",
+          "ownerName": "thmz-negocios-digita"
+        },
+        "createdAt": "2026-03-14T16:54:13.036Z",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "salesChannel": "IFOOD",
+        "_extractedPayment": {
+          "amount": 5.99,
+          "method": "CREDIT",
+          "changeFor": null
+        },
+        "_upsertedCustomer": {
+          "id": "f87d98c9-2c0b-4714-bcc3-f6080e15e372",
+          "fullName": "PEDIDO DE TESTE - Flávia queiroz menezes",
+          "whatsapp": "73991429676"
+        }
+      },
+      "createdAt": "2026-03-14T16:52:36.705Z",
+      "updatedAt": "2026-03-14T16:52:36.705Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "0e3619bb-9ae1-4179-97ee-4eab26711332",
+          "orderId": "6cacd850-ef28-4e3d-b519-331c1e7f1c4b",
+          "productId": "a73290fe-37cb-4c7e-a5b3-e60eb7aa2616",
+          "name": "Água mineral 500ml",
+          "quantity": 1,
+          "price": "5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "cb14beef-e561-476f-968b-e3f39db63035",
+          "orderId": "6cacd850-ef28-4e3d-b519-331c1e7f1c4b",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-03-14T16:52:36.705Z"
+        }
+      ]
+    },
+    "storeId": "d9952923-ed61-4294-8166-0935d608c69d"
+  },
+  {
+    "id": "1773507156914-618534",
+    "createdAt": 1773507156914,
+    "order": {
+      "id": "6cacd850-ef28-4e3d-b519-331c1e7f1c4b",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "d9952923-ed61-4294-8166-0935d608c69d",
+      "externalId": "36681938-8f6b-4951-bb5d-f82d5c471a34",
+      "displayId": "3191",
+      "displaySimple": 3,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "PEDIDO DE TESTE - Flávia queiroz menezes",
+      "customerPhone": "73991429676",
+      "customerSource": "MANUAL",
+      "customerId": "f87d98c9-2c0b-4714-bcc3-f6080e15e372",
+      "address": "Rua TESTE, 999999",
+      "latitude": 0,
+      "longitude": 0,
+      "total": "5.99",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": null,
+      "deliveryFee": null,
+      "payload": {
+        "id": "10b6bf40-e94d-43d5-8531-c08d1ebfd2ec",
+        "code": "CFM",
+        "order": {
+          "id": "36681938-8f6b-4951-bb5d-f82d5c471a34",
+          "items": [
+            {
+              "id": "6a153927-5796-455f-9bb1-055ed180cda4",
+              "ean": "",
+              "name": "Água mineral 500ml",
+              "type": "DEFAULT",
+              "unit": "UN",
+              "index": 1,
+              "price": 5,
+              "imageUrl": "https://static-images.ifood.com.br/image/upload/t_high/pratos/e078d2e1-0af0-49c3-ba0d-ea4effffbd54/202305121137_XIHJ_i.jpg",
+              "quantity": 1,
+              "uniqueId": "b050bf70-6731-4601-90d5-bc1b456a02ab",
+              "unitPrice": 5,
+              "totalPrice": 5,
+              "externalCode": "P-HS5D",
+              "observations": "",
+              "optionsPrice": 0,
+              "_matchedProductId": "a73290fe-37cb-4c7e-a5b3-e60eb7aa2616",
+              "customizationPrice": 0
+            }
+          ],
+          "total": {
+            "benefits": 0,
+            "subTotal": 5,
+            "deliveryFee": 0,
+            "orderAmount": 5.99,
+            "additionalFees": 0.99
+          },
+          "isTest": true,
+          "picking": {
+            "picker": "DEFAULT"
+          },
+          "category": "FOOD",
+          "customer": {
+            "id": "936eb2e7-53c9-45e3-8e0c-d9a4fe8c1758",
+            "name": "PEDIDO DE TESTE - Flávia queiroz menezes",
+            "phone": {
+              "number": "0800 705 3040",
+              "localizer": "11430952",
+              "localizerExpiration": "2026-03-14T20:54:08.363Z"
+            },
+            "documentType": "CPF",
+            "segmentation": "Cliente",
+            "documentNumber": "02900213592",
+            "ordersCountOnMerchant": 0
+          },
+          "delivery": {
+            "mode": "DEFAULT",
+            "pickupCode": "1869",
+            "deliveredBy": "MERCHANT",
+            "description": "Padrão",
+            "deliveryAddress": {
+              "city": "TESTE",
+              "state": "XX",
+              "country": "XX",
+              "reference": "TESTE",
+              "complement": "Complemento TESTE",
+              "postalCode": "99999999",
+              "streetName": "Rua TESTE",
+              "coordinates": {
+                "latitude": 0,
+                "longitude": 0
+              },
+              "neighborhood": "Bairro TESTE",
+              "streetNumber": "999999",
+              "formattedAddress": "Rua TESTE, 999999"
+            },
+            "deliveryDateTime": "2026-03-14T17:34:08.363Z"
+          },
+          "merchant": {
+            "id": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+            "name": "Teste - T. CAMPOS GOMES & CIA LTDA"
+          },
+          "payments": {
+            "methods": [
+              {
+                "card": {
+                  "brand": "VISA"
+                },
+                "type": "ONLINE",
+                "value": 5.99,
+                "method": "CREDIT",
+                "prepaid": true,
+                "currency": "BRL"
+              }
+            ],
+            "pending": 0,
+            "prepaid": 5.99
+          },
+          "createdAt": "2026-03-14T16:54:08.363Z",
+          "displayId": "3191",
+          "orderType": "DELIVERY",
+          "orderTiming": "IMMEDIATE",
+          "salesChannel": "IFOOD",
+          "additionalFees": [
+            {
+              "type": "RESTAURANT_SERVICE_FEE_BRASIL_099_LESS_THAN_100",
+              "value": 0.99,
+              "description": "Taxa de serviço",
+              "liabilities": [
+                {
+                  "name": "IFOOD",
+                  "percentage": 100
+                }
+              ],
+              "fullDescription": "A cobrança da taxa de serviço inclui o licenciamento de uso da Plataforma e contribui com custos operacionais, como desenvolvimento, atualização e suporte, além de viabilizar investimentos contínuos em segurança e inovação."
+            }
+          ],
+          "additionalInfo": {
+            "metadata": {
+              "cartId": "6883a862-e5ca-4eaf-bd08-39b9f47b7cc4",
+              "deliveryProduct": "SELF_DELIVERY",
+              "logisticProvider": "MERCHANT"
+            }
+          },
+          "preparationStartDateTime": "2026-03-14T16:54:08.363Z"
+        },
+        "orderId": "36681938-8f6b-4951-bb5d-f82d5c471a34",
+        "payment": {
+          "amount": 5.99,
+          "method": "CREDIT",
+          "changeFor": null
+        },
+        "fullCode": "CONFIRMED",
+        "metadata": {
+          "ORIGIN": "ORDER_API",
+          "appName": "t-campos-gomes-cia-ltda-teste-d",
+          "CLIENT_ID": "thmz-negocios-digita:t-campos-gomes-cia-ltda-teste-d",
+          "ownerName": "thmz-negocios-digita"
+        },
+        "createdAt": "2026-03-14T16:54:13.036Z",
+        "merchantId": "747df710-dbb1-4a4e-ac30-9f0de0a2f9d4",
+        "salesChannel": "IFOOD",
+        "_extractedPayment": {
+          "amount": 5.99,
+          "method": "CREDIT",
+          "changeFor": null
+        },
+        "_upsertedCustomer": {
+          "id": "f87d98c9-2c0b-4714-bcc3-f6080e15e372",
+          "fullName": "PEDIDO DE TESTE - Flávia queiroz menezes",
+          "whatsapp": "73991429676"
+        }
+      },
+      "createdAt": "2026-03-14T16:52:36.705Z",
+      "updatedAt": "2026-03-14T16:52:36.705Z",
+      "riderId": null,
+      "items": [
+        {
+          "id": "0e3619bb-9ae1-4179-97ee-4eab26711332",
+          "orderId": "6cacd850-ef28-4e3d-b519-331c1e7f1c4b",
+          "productId": "a73290fe-37cb-4c7e-a5b3-e60eb7aa2616",
+          "name": "Água mineral 500ml",
+          "quantity": 1,
+          "price": "5",
+          "notes": null,
+          "options": null
+        }
+      ],
+      "histories": [
+        {
+          "id": "cb14beef-e561-476f-968b-e3f39db63035",
+          "orderId": "6cacd850-ef28-4e3d-b519-331c1e7f1c4b",
+          "from": null,
+          "to": "EM_PREPARO",
+          "byUserId": null,
+          "byRiderId": null,
+          "reason": "iFood webhook",
+          "createdAt": "2026-03-14T16:52:36.705Z"
+        }
+      ]
+    },
+    "storeId": "d9952923-ed61-4294-8166-0935d608c69d"
   }
 ]
