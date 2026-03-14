@@ -154,6 +154,7 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '../api.js'
 import { useAddOnStoreStore } from '../stores/addOnStore.js'
+import Swal from 'sweetalert2'
 
 const addOnStore = useAddOnStoreStore()
 const tab = ref('invoices')
@@ -228,10 +229,10 @@ async function payInvoice(invoiceId) {
     if (result?.checkoutUrl) {
       window.location.href = result.checkoutUrl
     } else if (result?.manual) {
-      alert('Pagamento manual. Entre em contato com o administrador.')
+      Swal.fire({ icon: 'info', text: 'Pagamento manual. Entre em contato com o administrador.' })
     }
   } catch (e) {
-    alert(e.response?.data?.message || 'Erro ao processar pagamento')
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao processar pagamento' })
   } finally {
     paying.value = null
   }

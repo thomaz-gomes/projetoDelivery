@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAddOnStoreStore } from '../stores/addOnStore'
 import { useModulesStore } from '../stores/modules'
+import Swal from 'sweetalert2'
 
 const route = useRoute()
 const router = useRouter()
@@ -47,13 +48,13 @@ async function subscribe() {
   try {
     const result = await store.subscribeToModule(mod.value.id, selectedPeriod.value)
     if (result?.manual) {
-      alert(result.message || 'Fatura gerada. Acesse Cobranças para efetuar o pagamento.')
+      Swal.fire({ icon: 'info', text: result.message || 'Fatura gerada. Acesse Cobranças para efetuar o pagamento.' })
       router.push('/billing')
       return
     }
     await modulesStore.fetchEnabled(true)
   } catch (e) {
-    alert(e?.response?.data?.message || 'Erro ao processar pagamento')
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao processar pagamento' })
   } finally {
     subscribing.value = false
   }
@@ -61,13 +62,14 @@ async function subscribe() {
 
 async function cancel() {
   if (!mod.value) return
-  if (!confirm(`Deseja realmente cancelar a assinatura do módulo "${mod.value.name}"?`)) return
+  const { isConfirmed } = await Swal.fire({ icon: 'warning', title: 'Cancelar assinatura', text: `Deseja realmente cancelar a assinatura do módulo "${mod.value.name}"?`, showCancelButton: true, confirmButtonText: 'Sim, cancelar', cancelButtonText: 'Não' })
+  if (!isConfirmed) return
   cancelling.value = true
   try {
     await store.cancelModuleSubscription(mod.value.id)
     await modulesStore.fetchEnabled(true)
   } catch (e) {
-    alert(e?.response?.data?.message || 'Erro ao cancelar módulo')
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao cancelar módulo' })
   } finally {
     cancelling.value = false
   }

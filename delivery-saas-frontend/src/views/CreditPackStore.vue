@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAddOnStoreStore } from '../stores/addOnStore'
 import { useAiCreditsStore } from '../stores/aiCredits'
+import Swal from 'sweetalert2'
 
 const router = useRouter()
 const store = useAddOnStoreStore()
@@ -16,18 +17,19 @@ function formatPrice(val) {
 }
 
 async function purchase(pack) {
-  if (!confirm(`Confirma a compra de "${pack.name}" por ${formatPrice(pack.price)}? Você será redirecionado para o pagamento.`)) return
+  const { isConfirmed } = await Swal.fire({ icon: 'question', title: 'Confirmar compra', text: `Confirma a compra de "${pack.name}" por ${formatPrice(pack.price)}? Você será redirecionado para o pagamento.`, showCancelButton: true, confirmButtonText: 'Confirmar', cancelButtonText: 'Cancelar' })
+  if (!isConfirmed) return
   purchasing.value = pack.id
   try {
     const result = await store.purchaseCreditPack(pack.id)
     if (result?.manual) {
-      alert(result.message || 'Fatura gerada. Acesse Cobranças para efetuar o pagamento.')
+      Swal.fire({ icon: 'info', text: result.message || 'Fatura gerada. Acesse Cobranças para efetuar o pagamento.' })
       router.push('/billing')
       return
     }
     await credits.fetch()
   } catch (e) {
-    alert(e?.response?.data?.message || 'Erro ao processar pagamento')
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao processar pagamento' })
   } finally {
     purchasing.value = null
   }
