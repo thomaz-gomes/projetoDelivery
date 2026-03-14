@@ -77,7 +77,71 @@ async function main() {
     }
   }
 
-  console.log('Seed de modulos concluido.');
+  // 3. Ensure default plan exists (isSystem + isDefault)
+  const cardapioSimples = await prisma.saasModule.findFirst({ where: { key: 'CARDAPIO_SIMPLES' } });
+  let defaultPlan = await prisma.saasPlan.findFirst({ where: { isSystem: true, isDefault: true } });
+  if (!defaultPlan) {
+    defaultPlan = await prisma.saasPlan.create({
+      data: {
+        name: 'Cardápio Simples',
+        price: '0',
+        menuLimit: null,
+        storeLimit: null,
+        unlimitedMenus: true,
+        unlimitedStores: true,
+        isActive: true,
+        isDefault: true,
+        isSystem: true,
+        modules: cardapioSimples ? { create: [{ module: { connect: { id: cardapioSimples.id } } }] } : undefined,
+      },
+    });
+    console.log(`  Plano padrão "${defaultPlan.name}" criado.`);
+  } else {
+    console.log(`  Plano padrão "${defaultPlan.name}" já existe.`);
+  }
+
+  // 4. Ensure Trial plan exists (isSystem + isTrial)
+  let trialPlan = await prisma.saasPlan.findFirst({ where: { isTrial: true } });
+  if (!trialPlan) {
+    trialPlan = await prisma.saasPlan.create({
+      data: {
+        name: 'Trial',
+        price: '0',
+        menuLimit: null,
+        storeLimit: null,
+        unlimitedMenus: true,
+        unlimitedStores: true,
+        isActive: false,
+        isDefault: false,
+        isSystem: true,
+        isTrial: true,
+        trialDurationDays: 7,
+      },
+    });
+    console.log(`  Plano Trial criado (inativo — configure módulos e ative manualmente).`);
+  } else {
+    await prisma.saasPlan.update({
+      where: { id: trialPlan.id },
+      data: { isSystem: true, isTrial: true },
+    });
+    console.log(`  Plano Trial já existe — atualizado.`);
+  }
+
+  // 5. Ensure all companies have a subscription
+  const companies = await prisma.company.findMany({});
+  let assigned = 0;
+  for (const c of companies) {
+    const exists = await prisma.saasSubscription.findUnique({ where: { companyId: c.id } });
+    if (!exists && defaultPlan) {
+      await prisma.saasSubscription.create({
+        data: { companyId: c.id, planId: defaultPlan.id, status: 'ACTIVE', nextDueAt: null },
+      });
+      assigned++;
+    }
+  }
+  if (assigned > 0) console.log(`  ${assigned} empresas receberam plano padrão.`);
+
+  console.log('Seed de modulos e planos concluido.');
 }
 
 main()
