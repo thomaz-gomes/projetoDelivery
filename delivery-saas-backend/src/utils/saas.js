@@ -9,10 +9,25 @@ export async function getSubscription(companyId) {
 }
 
 export async function isModuleEnabled(companyId, key) {
-  const sub = await getSubscription(companyId)
-  if (!sub || !sub.plan || !sub.plan.modules) return false
   const k = String(key).toUpperCase()
-  return sub.plan.modules.some(pm => pm.module && String(pm.module.key).toUpperCase() === k)
+
+  // 1. Check modules included in the plan
+  const sub = await getSubscription(companyId)
+  if (sub && sub.plan && sub.plan.modules) {
+    if (sub.plan.modules.some(pm => pm.module && String(pm.module.key).toUpperCase() === k)) {
+      return true
+    }
+  }
+
+  // 2. Check add-on module subscriptions
+  const addon = await prisma.saasModuleSubscription.findFirst({
+    where: {
+      companyId,
+      status: 'ACTIVE',
+      module: { key: k }
+    }
+  })
+  return !!addon
 }
 
 export async function assertModuleEnabled(companyId, key) {

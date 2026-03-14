@@ -282,10 +282,15 @@ function buildContext(order, settings = {}) {
     return label;
   }
 
-  const pagamentos = paymentsList.map(p => ({
-    payment_method: p._systemLabel || translatePay(p.method || p.type || p.name || p.paymentMethod, p.card?.brand),
-    payment_value: (Number(p.amount ?? p.value ?? p.paymentAmount ?? 0) || 0).toFixed(2)
-  }));
+  const pagamentos = paymentsList.map(p => {
+    let label = p._systemLabel || translatePay(p.method || p.type || p.name || p.paymentMethod, p.card?.brand);
+    if (p.prepaid === true) label += ' (pago online)';
+    else if (p.prepaid === false) label += ' (cobrar do cliente)';
+    return {
+      payment_method: label,
+      payment_value: (Number(p.amount ?? p.value ?? p.paymentAmount ?? 0) || 0).toFixed(2)
+    };
+  });
 
   // Observações
   const observacoes = o.observation || o.notes || payload.observation || payload.notes || '';
