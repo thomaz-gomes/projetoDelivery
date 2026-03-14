@@ -30,7 +30,7 @@ const loading = ref(true)
 const showPlanForm = ref(false)
 const editingPlanId = ref(null)
 
-const emptyPlanForm = () => ({ name: '', price: 0, menuLimit: null, storeLimit: null, unlimitedMenus: false, unlimitedStores: false, aiCreditsMonthlyLimit: 100, unlimitedAiCredits: false, prices: [] })
+const emptyPlanForm = () => ({ name: '', price: 0, menuLimit: null, storeLimit: null, unlimitedMenus: false, unlimitedStores: false, aiCreditsMonthlyLimit: 100, unlimitedAiCredits: false, prices: [], trialDurationDays: null, moduleIds: [] })
 const planForm = ref(emptyPlanForm())
 
 // --- Modules ---
@@ -76,8 +76,16 @@ function openEditPlan(p) {
     unlimitedStores: p.unlimitedStores || false,
     aiCreditsMonthlyLimit: p.aiCreditsMonthlyLimit ?? 100,
     unlimitedAiCredits: p.unlimitedAiCredits || false,
-    prices: (p.prices || []).map(pr => ({ period: pr.period, price: String(Number(pr.price || 0)) }))
+    prices: (p.prices || []).map(pr => ({ period: pr.period, price: String(Number(pr.price || 0)) })),
+    trialDurationDays: p.trialDurationDays ?? null,
+    moduleIds: (p.modules || []).map(pm => pm.moduleId || pm.module?.id).filter(Boolean)
   }
+  showPlanForm.value = true
+}
+
+function openCreatePlan() {
+  editingPlanId.value = null
+  planForm.value = emptyPlanForm()
   showPlanForm.value = true
 }
 
@@ -90,8 +98,8 @@ async function savePlan() {
   if (!planForm.value.name) return
   const payload = { ...planForm.value, price: Number(planForm.value.price || 0) }
   if (Array.isArray(payload.prices)) payload.prices = payload.prices.map(p => ({ period: p.period, price: String(Number(p.price || 0)) }))
-  // Remove moduleIds — modules are now individual subscriptions
-  delete payload.moduleIds
+  payload.trialDurationDays = planForm.value.trialDurationDays ? Number(planForm.value.trialDurationDays) : null
+  payload.moduleIds = planForm.value.moduleIds || []
   try {
     if (editingPlanId.value) {
       await api.put(`/saas/plans/${editingPlanId.value}`, payload)
@@ -103,6 +111,26 @@ async function savePlan() {
     await loadAll()
   } catch (e) {
     Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Falha ao salvar' })
+  }
+}
+
+async function deletePlan(p) {
+  if (p.isSystem) return
+  const result = await Swal.fire({
+    title: `Remover plano "${p.name}"?`,
+    text: 'Esta ação não pode ser desfeita.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'Sim, remover',
+    cancelButtonText: 'Cancelar'
+  })
+  if (!result.isConfirmed) return
+  try {
+    await api.delete(`/saas/plans/${p.id}`)
+    await loadAll()
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Falha ao remover plano' })
   }
 }
 
@@ -260,17 +288,18 @@ async function saveMpConfig() {
     </div>
 
     <template v-else>
-      <!-- ====== SECTION 1: Plan ====== -->
+      <!-- ====== SECTION 1: Plans ====== -->
       <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-          <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Plano Base</h5>
-          <button v-if="plan && !showPlanForm" class="btn btn-sm btn-outline-primary" @click="openEditPlan(plan)">
-            <i class="bi bi-pencil me-1"></i>Editar
+          <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Planos</h5>
+          <button v-if="!showPlanForm" class="btn btn-sm btn-primary" @click="openCreatePlan">
+            <i class="bi bi-plus-lg me-1"></i>Novo plano
           </button>
         </div>
         <div class="card-body">
           <!-- Plan Form -->
-          <div v-if="showPlanForm">
+          <div v-if="showPlanForm" class="border border-primary rounded p-3 mb-3">
+            <h6>{{ editingPlanId ? 'Editar plano' : 'Criar plano' }}</h6>
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Nome do plano</label>
@@ -280,6 +309,14 @@ async function saveMpConfig() {
                 <label class="form-label">Preço padrão (R$)</label>
                 <input v-model.number="planForm.price" type="number" step="0.01" class="form-control" />
                 <small class="text-muted">Usado se não houver preços por período</small>
+              </div>
+            </div>
+
+            <!-- Trial duration (only for trial plans) -->
+            <div v-if="editingPlanId && plans.find(p => p.id === editingPlanId)?.isTrial" class="row g-3 mt-2">
+              <div class="col-md-4">
+                <label class="form-label"><i class="bi bi-clock-history me-1"></i>Duração do Trial (dias)</label>
+                <input v-model.number="planForm.trialDurationDays" type="number" min="1" class="form-control" placeholder="Ex: 14" />
               </div>
             </div>
 
@@ -339,33 +376,81 @@ async function saveMpConfig() {
               </div>
             </div>
 
+            <!-- Módulos incluídos -->
+            <div class="mt-3" v-if="modules.length">
+              <label class="form-label">Módulos incluídos no plano</label>
+              <div class="d-flex flex-wrap gap-2">
+                <div v-for="mod in modules" :key="mod.id" class="form-check">
+                  <input class="form-check-input" type="checkbox" :value="mod.id" v-model="planForm.moduleIds" :id="'planMod_' + mod.id" />
+                  <label class="form-check-label" :for="'planMod_' + mod.id">
+                    <i class="bi me-1" :class="keyMeta(mod.key).icon"></i>{{ mod.name }}
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <div class="mt-3 d-flex gap-2">
               <button class="btn btn-primary" @click="savePlan">
-                <i class="bi bi-check-lg me-1"></i>Salvar
+                <i class="bi bi-check-lg me-1"></i>{{ editingPlanId ? 'Salvar' : 'Criar' }}
               </button>
               <button class="btn btn-outline-secondary" @click="cancelPlanForm">Cancelar</button>
             </div>
           </div>
 
-          <!-- Plan display -->
-          <div v-else-if="plan">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-              <h5 class="mb-0">{{ plan.name }}</h5>
-              <span class="h5 mb-0 text-primary">R$ {{ Number(plan.price).toFixed(2) }}</span>
-            </div>
-            <div class="d-flex gap-3 mb-2 small text-muted flex-wrap">
-              <span><i class="bi bi-journal-text me-1"></i>Cardápios: {{ plan.unlimitedMenus ? 'Ilimitado' : (plan.menuLimit ?? '--') }}</span>
-              <span><i class="bi bi-shop me-1"></i>Lojas: {{ plan.unlimitedStores ? 'Ilimitado' : (plan.storeLimit ?? '--') }}</span>
-              <span><i class="bi bi-stars me-1"></i>IA: {{ plan.unlimitedAiCredits ? 'Ilimitado' : ((plan.aiCreditsMonthlyLimit ?? 100) + ' créditos/mês') }}</span>
-            </div>
-            <div v-if="plan.prices && plan.prices.length" class="mb-2">
-              <span v-for="pr in plan.prices" :key="pr.id" class="badge bg-info text-dark me-1">
-                {{ periodLabel(pr.period) }}: R$ {{ Number(pr.price).toFixed(2) }}
-              </span>
+          <!-- Plans grid -->
+          <div v-if="plans.length && !showPlanForm" class="row g-3">
+            <div v-for="p in plans" :key="p.id" class="col-md-6 col-lg-4">
+              <div class="card h-100" :class="{ 'border-primary': p.isDefault, 'border-warning': p.isTrial }">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                      <h6 class="mb-1">{{ p.name }}</h6>
+                      <div class="d-flex flex-wrap gap-1">
+                        <span v-if="p.isSystem" class="badge bg-secondary">Sistema</span>
+                        <span v-if="p.isDefault" class="badge bg-primary">Padrao</span>
+                        <span v-if="p.isTrial" class="badge bg-warning text-dark">Trial</span>
+                        <span v-if="p.isActive === false" class="badge bg-danger">Inativo</span>
+                      </div>
+                    </div>
+                    <span class="h6 mb-0 text-primary">R$ {{ Number(p.price).toFixed(2) }}</span>
+                  </div>
+
+                  <div class="small text-muted mb-2">
+                    <div><i class="bi bi-journal-text me-1"></i>Cardapios: {{ p.unlimitedMenus ? 'Ilimitado' : (p.menuLimit ?? '--') }}</div>
+                    <div><i class="bi bi-shop me-1"></i>Lojas: {{ p.unlimitedStores ? 'Ilimitado' : (p.storeLimit ?? '--') }}</div>
+                    <div><i class="bi bi-stars me-1"></i>IA: {{ p.unlimitedAiCredits ? 'Ilimitado' : ((p.aiCreditsMonthlyLimit ?? 100) + ' creditos/mes') }}</div>
+                    <div v-if="p.isTrial && p.trialDurationDays"><i class="bi bi-clock-history me-1"></i>Trial: {{ p.trialDurationDays }} dias</div>
+                  </div>
+
+                  <!-- Modules included -->
+                  <div v-if="p.modules && p.modules.length" class="mb-2">
+                    <small class="text-muted d-block mb-1">Modulos:</small>
+                    <span v-for="pm in p.modules" :key="pm.id" class="badge me-1 mb-1" :class="`bg-${keyMeta(pm.module?.key || pm.key).color}`">
+                      <i class="bi me-1" :class="keyMeta(pm.module?.key || pm.key).icon"></i>{{ pm.module?.name || pm.name }}
+                    </span>
+                  </div>
+
+                  <!-- Period prices -->
+                  <div v-if="p.prices && p.prices.length" class="mb-2">
+                    <span v-for="pr in p.prices" :key="pr.id" class="badge bg-info text-dark me-1">
+                      {{ periodLabel(pr.period) }}: R$ {{ Number(pr.price).toFixed(2) }}
+                    </span>
+                  </div>
+
+                  <div class="d-flex gap-1 mt-auto">
+                    <button class="btn btn-sm btn-outline-primary" @click="openEditPlan(p)">
+                      <i class="bi bi-pencil me-1"></i>Editar
+                    </button>
+                    <button v-if="!p.isSystem" class="btn btn-sm btn-outline-danger" @click="deletePlan(p)">
+                      <i class="bi bi-trash me-1"></i>Remover
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div v-else class="text-center py-3 text-muted">
+          <div v-else-if="!plans.length && !showPlanForm" class="text-center py-3 text-muted">
             <p>Nenhum plano cadastrado.</p>
           </div>
         </div>
