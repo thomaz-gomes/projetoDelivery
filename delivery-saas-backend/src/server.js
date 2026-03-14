@@ -9,6 +9,7 @@ import { sha256 } from './utils.js';
 import { startWatching } from './fileWatcher.js';
 import { startIFoodPollingWorker } from './jobs/ifoodPollWorker.js';
 import { startScheduler as startMdeScheduler } from './services/mdeQueue.js';
+import { initEncryptionKey } from './services/encryption.js';
 
 // Ensure CERT_STORE_KEY is available for certificate password encryption.
 // In development, auto-generate a key and persist it to .env so it survives restarts.
@@ -219,8 +220,9 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
   });
 }
 
-// Ensure token file (if present) is registered, ensure default cash payment methods, then start the server
+// Ensure token file (if present) is registered, init encryption, ensure default cash payment methods, then start the server
 ensureAgentTokenFromFile()
+  .then(() => initEncryptionKey())
   .then(() => ensureDefaultCashForCompanies())
   .then(() => startServer())
   .catch(e => {

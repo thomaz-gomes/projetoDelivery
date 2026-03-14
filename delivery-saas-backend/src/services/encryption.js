@@ -1,13 +1,61 @@
 import crypto from 'crypto'
+import { prisma } from '../prisma.js'
 
 const ALGORITHM = 'aes-256-gcm'
+const DB_KEY_NAME = 'payment_encrypt_key'
+
+/** In-memory cache — populated by initEncryptionKey() at startup */
+let _cachedKey = null
+
+/**
+ * Initialize the encryption key. Called once at server startup.
+ * Priority: env var → SystemSetting in DB → auto-generate and save to DB.
+ */
+export async function initEncryptionKey() {
+  // 1. Check env var
+  const envHex = process.env.PAYMENT_ENCRYPT_KEY || ''
+  if (envHex && envHex.length >= 64) {
+    _cachedKey = Buffer.from(envHex, 'hex')
+    console.log('🔑 PAYMENT_ENCRYPT_KEY loaded from environment variable')
+    return
+  }
+
+  // 2. Check SystemSetting in DB
+  try {
+    const row = await prisma.systemSetting.findUnique({ where: { key: DB_KEY_NAME } })
+    if (row?.value && row.value.length >= 64) {
+      _cachedKey = Buffer.from(row.value, 'hex')
+      console.log('🔑 PAYMENT_ENCRYPT_KEY loaded from SystemSetting (database)')
+      return
+    }
+  } catch (e) {
+    // Table might not exist yet during migrations — fall through
+    console.warn('⚠️  Could not read SystemSetting for encryption key:', e?.message)
+  }
+
+  // 3. Auto-generate and persist to DB
+  const newHex = crypto.randomBytes(32).toString('hex')
+  try {
+    await prisma.systemSetting.upsert({
+      where: { key: DB_KEY_NAME },
+      update: { value: newHex },
+      create: { key: DB_KEY_NAME, value: newHex },
+    })
+    console.log('🔑 PAYMENT_ENCRYPT_KEY auto-generated and saved to SystemSetting')
+  } catch (e) {
+    console.warn('⚠️  Could not persist encryption key to DB:', e?.message)
+    console.log('   Using in-memory key (will be lost on restart)')
+  }
+  _cachedKey = Buffer.from(newHex, 'hex')
+}
 
 function getKey() {
-  const hex = process.env.PAYMENT_ENCRYPT_KEY || ''
-  if (!hex || hex.length < 64) {
-    throw new Error('PAYMENT_ENCRYPT_KEY must be a 64-char hex string (32 bytes)')
+  if (!_cachedKey) {
+    throw new Error(
+      'Encryption key not initialized. Call initEncryptionKey() at startup before using encrypt/decrypt.'
+    )
   }
-  return Buffer.from(hex, 'hex')
+  return _cachedKey
 }
 
 export function encrypt(plaintext) {
