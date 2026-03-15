@@ -369,7 +369,115 @@ paymentRouter.post('/create-preference', requireAuth, async (req, res) => {
       }
     }
 
-    return res.status(400).json({ message: 'Informe invoiceId ou type (MODULE / CREDIT_PACK)' })
+    // --- PLAN subscription ---
+    if (type === 'PLAN') {
+      if (!referenceId) {
+        return res.status(400).json({ message: 'referenceId (planId) é obrigatório' })
+      }
+
+      const plan = await prisma.saasPlan.findUnique({ where: { id: referenceId } })
+      if (!plan || !plan.isActive) return res.status(404).json({ message: 'Plano não encontrado' })
+      if (plan.isTrial) return res.status(400).json({ message: 'Plano trial não pode ser adquirido via pagamento' })
+
+      // Determine price: use period-based price if available, otherwise plan.price
+      let finalPrice = Number(plan.price)
+      const selectedPeriod = period || 'MONTHLY'
+
+      if (period) {
+        const planPrice = await prisma.saasPlanPrice.findFirst({
+          where: { planId: referenceId, period: selectedPeriod }
+        })
+        if (planPrice) finalPrice = Number(planPrice.price)
+      }
+
+      if (finalPrice <= 0) {
+        // Free plan — just switch directly
+        await prisma.saasSubscription.upsert({
+          where: { companyId },
+          create: { companyId, planId: referenceId, status: 'ACTIVE', period: selectedPeriod },
+          update: { planId: referenceId, status: 'ACTIVE', period: selectedPeriod }
+        })
+        return res.json({ free: true, message: 'Plano ativado com sucesso' })
+      }
+
+      const sub = await ensureSubscription(companyId)
+      const now = new Date()
+
+      const result = await prisma.$transaction(async (tx) => {
+        const invoice = await tx.saasInvoice.create({
+          data: {
+            subscriptionId: sub.id,
+            year: now.getFullYear(),
+            month: now.getMonth() + 1,
+            amount: String(finalPrice),
+            status: 'PENDING',
+            dueDate: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
+            items: {
+              create: {
+                type: 'PLAN',
+                referenceId,
+                description: `Plano ${plan.name} (${selectedPeriod})`,
+                amount: String(finalPrice)
+              }
+            }
+          }
+        })
+
+        const payment = await tx.saasPayment.create({
+          data: {
+            companyId,
+            invoiceId: invoice.id,
+            amount: String(finalPrice),
+            status: 'PENDING',
+            gateway: 'pending',
+            metadata: { planId: referenceId, period: selectedPeriod }
+          }
+        })
+
+        return { invoice, payment }
+      })
+
+      // Check billing mode for plans
+      let planGatewayConfig = null
+      try {
+        const gwResult = await getActiveGateway()
+        planGatewayConfig = gwResult.config
+      } catch { /* no gateway configured */ }
+
+      const planBillingMode = planGatewayConfig ? getBillingMode(planGatewayConfig, 'plan') : 'MANUAL'
+
+      if (planBillingMode === 'MANUAL') {
+        return res.json({
+          manual: true,
+          paymentId: result.payment.id,
+          invoiceId: result.invoice.id,
+          message: 'Fatura gerada. Acesse Cobranças para efetuar o pagamento.',
+        })
+      }
+
+      const description = `Plano ${plan.name} - ${selectedPeriod}`
+      const planItems = [{
+        id: plan.id,
+        title: plan.name,
+        description: `Assinatura Plano ${plan.name} (${selectedPeriod})`,
+        quantity: 1,
+        unit_price: finalPrice,
+        category_id: 'services',
+      }]
+      try {
+        const checkout = await createGatewayCheckout(result.payment, description, { payer, items: planItems })
+        return res.json({
+          checkoutUrl: checkout.checkoutUrl,
+          preferenceId: checkout.preferenceId,
+          paymentId: result.payment.id
+        })
+      } catch (e) {
+        console.warn('[create-preference] Gateway not available:', e?.message)
+        return res.json({ paymentId: result.payment.id, manual: true })
+      }
+    }
+
+    return res.status(400).json({ message: 'Informe invoiceId ou type (MODULE / CREDIT_PACK / PLAN)' })
   } catch (e) {
     console.error('[create-preference]', e)
     res.status(500).json({ message: 'Erro ao criar preferência de pagamento', error: e?.message })
@@ -542,7 +650,31 @@ async function processPaymentSuccess(payment) {
     })
 
     for (const item of (payment.invoice.items || [])) {
-      if (item.type === 'MODULE') {
+      if (item.type === 'PLAN') {
+        const period = payment.metadata?.period || 'MONTHLY'
+        const now = new Date()
+        let nextDueAt = new Date(now)
+        if (period === 'ANNUAL') nextDueAt.setFullYear(nextDueAt.getFullYear() + 1)
+        else if (period === 'QUARTERLY') nextDueAt.setMonth(nextDueAt.getMonth() + 3)
+        else nextDueAt.setMonth(nextDueAt.getMonth() + 1)
+
+        await tx.saasSubscription.upsert({
+          where: { companyId: payment.companyId },
+          create: {
+            companyId: payment.companyId,
+            planId: item.referenceId,
+            status: 'ACTIVE',
+            period,
+            nextDueAt
+          },
+          update: {
+            planId: item.referenceId,
+            status: 'ACTIVE',
+            period,
+            nextDueAt
+          }
+        })
+      } else if (item.type === 'MODULE') {
         await tx.saasModuleSubscription.updateMany({
           where: { companyId: payment.companyId, moduleId: item.referenceId },
           data: { status: 'ACTIVE' }

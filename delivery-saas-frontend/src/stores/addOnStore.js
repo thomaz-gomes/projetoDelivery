@@ -33,6 +33,20 @@ export const useAddOnStoreStore = defineStore('addOnStore', {
       }
     },
 
+    async subscribeToPlan(planId, period = 'MONTHLY') {
+      const { data } = await api.post('/payment/create-preference', {
+        type: 'PLAN',
+        referenceId: planId,
+        period
+      })
+      if (data.free) return data
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+        return data
+      }
+      return data
+    },
+
     async subscribeToModule(moduleId, period = 'MONTHLY') {
       const { data } = await api.post('/payment/create-preference', {
         type: 'MODULE',
