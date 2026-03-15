@@ -174,7 +174,7 @@
               {{ loading ? 'Enviando...' : 'Garantir meu cardápio — R$ 47/ano' }}
             </button>
             <p v-if="error" class="form-error">{{ error }}</p>
-            <p class="form-micro">🔒 Pagamento seguro via Kiwify. Acesso imediato após a confirmação.</p>
+            <p class="form-micro">🔒 Pagamento seguro. Acesso imediato após a confirmação.</p>
           </form>
         </div>
       </div>
@@ -274,8 +274,13 @@ async function submitLead() {
   if (digits.length < 10) { error.value = 'WhatsApp inválido'; return }
   loading.value = true
   try {
-    await api.post('/public/leads', { name: name.value.trim(), phone: digits })
-    window.location.href = 'https://pay.kiwify.com.br/YmuEZ57'
+    const { data } = await api.post('/public/leads', { name: name.value.trim(), phone: digits })
+    if (data.checkoutUrl) {
+      window.location.href = data.checkoutUrl
+    } else {
+      // Manual flow or no gateway — redirect to register
+      window.location.href = '/register'
+    }
   } catch {
     error.value = 'Erro ao enviar. Tente novamente.'
   } finally {

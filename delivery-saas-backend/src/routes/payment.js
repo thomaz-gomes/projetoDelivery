@@ -602,6 +602,31 @@ paymentRouter.post('/webhook/:provider', async (req, res) => {
       }
     }
 
+    // Check if this is a lead payment (external_reference = "lead_<id>")
+    if (!payment) {
+      const extRef = paymentInfo.raw?.external_reference
+      if (extRef && typeof extRef === 'string' && extRef.startsWith('lead_')) {
+        const leadId = parseInt(extRef.replace('lead_', ''), 10)
+        if (!isNaN(leadId)) {
+          try {
+            const lead = await prisma.lead.findUnique({ where: { id: leadId } })
+            if (lead && lead.paymentStatus !== 'PAID') {
+              const updateData = {
+                paymentStatus: paymentInfo.status === 'PAID' ? 'PAID' : paymentInfo.status === 'FAILED' ? 'FAILED' : 'PENDING',
+                gatewayRef: String(validation.paymentId),
+              }
+              if (paymentInfo.status === 'PAID') updateData.paidAt = new Date()
+              await prisma.lead.update({ where: { id: leadId }, data: updateData })
+              console.log(`[webhook] Lead ${leadId} payment updated: ${updateData.paymentStatus}`)
+            }
+          } catch (leadErr) {
+            console.error('[webhook] Lead payment processing error:', leadErr?.message)
+          }
+        }
+        return
+      }
+    }
+
     if (!payment) {
       console.warn(`[webhook] Payment not found for gateway ref ${validation.paymentId}`)
       return

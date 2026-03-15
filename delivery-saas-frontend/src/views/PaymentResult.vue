@@ -8,17 +8,23 @@ const router = useRouter()
 
 const status = computed(() => route.query.status || 'unknown')
 const paymentId = computed(() => route.query.payment_id || route.query.external_reference || null)
+const leadId = computed(() => route.query.lead_id || null)
 const polling = ref(false)
 const paymentStatus = ref(null)
+const leadStatus = ref(null)
 const redirecting = ref(false)
 let intervalId = null
 
+// Detect if this is a lead payment (from landing page, no auth)
+const isLeadPayment = computed(() => !!leadId.value)
+
 const statusConfig = computed(() => {
-  const s = paymentStatus.value === 'PAID' ? 'success' : paymentStatus.value === 'FAILED' ? 'failure' : status.value
+  const resolved = leadStatus.value || paymentStatus.value
+  const s = resolved === 'PAID' ? 'success' : resolved === 'FAILED' ? 'failure' : status.value
   switch (s) {
     case 'success':
     case 'approved':
-      return { icon: 'bi-check-circle-fill', color: 'text-success', title: 'Pagamento aprovado!', desc: 'Seu pagamento foi processado com sucesso.' }
+      return { icon: 'bi-check-circle-fill', color: 'text-success', title: 'Pagamento aprovado!', desc: isLeadPayment.value ? 'Seu pagamento foi confirmado. Crie sua conta para começar!' : 'Seu pagamento foi processado com sucesso.' }
     case 'pending':
     case 'in_process':
       return { icon: 'bi-clock-fill', color: 'text-warning', title: 'Pagamento pendente', desc: 'Estamos aguardando a confirmação do pagamento.' }
@@ -29,6 +35,24 @@ const statusConfig = computed(() => {
       return { icon: 'bi-question-circle-fill', color: 'text-muted', title: 'Status desconhecido', desc: 'Não foi possível determinar o status do pagamento.' }
   }
 })
+
+const isSuccess = computed(() => {
+  const s = leadStatus.value || paymentStatus.value || status.value
+  return s === 'PAID' || s === 'success' || s === 'approved'
+})
+
+async function pollLeadStatus() {
+  if (!leadId.value) return
+  polling.value = true
+  try {
+    const { data } = await api.get(`/public/leads/${leadId.value}/status`)
+    leadStatus.value = data.status
+    if (data.status === 'PAID' || data.status === 'FAILED') {
+      if (intervalId) clearInterval(intervalId)
+    }
+  } catch { /* ignore */ }
+  finally { polling.value = false }
+}
 
 async function pollStatus() {
   if (!paymentId.value) return
@@ -66,13 +90,22 @@ async function handlePaymentSuccess() {
 }
 
 onMounted(async () => {
-  if (paymentId.value) {
+  if (isLeadPayment.value) {
+    // Lead payment: poll lead status
+    pollLeadStatus()
+    intervalId = setInterval(pollLeadStatus, 5000)
+    setTimeout(() => { if (intervalId) clearInterval(intervalId) }, 120000)
+  } else if (paymentId.value) {
     pollStatus()
     intervalId = setInterval(pollStatus, 5000)
     setTimeout(() => { if (intervalId) clearInterval(intervalId) }, 120000)
   } else if (status.value === 'success' || status.value === 'approved') {
     // MP sometimes returns without payment_id but with status=success
-    await handlePaymentSuccess()
+    if (leadId.value) {
+      leadStatus.value = 'PAID'
+    } else {
+      await handlePaymentSuccess()
+    }
   }
 })
 
@@ -85,12 +118,12 @@ onUnmounted(() => { if (intervalId) clearInterval(intervalId) })
     <h2 class="mt-3 mb-2">{{ statusConfig.title }}</h2>
     <p class="text-muted mb-4">{{ statusConfig.desc }}</p>
 
-    <div v-if="polling && paymentStatus !== 'PAID'" class="mb-3">
+    <div v-if="polling && !isSuccess" class="mb-3">
       <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
       <span class="text-muted">Verificando status...</span>
     </div>
 
-    <div v-if="paymentStatus === 'PAID'" class="alert alert-success">
+    <div v-if="isSuccess" class="alert alert-success">
       Pagamento confirmado!
     </div>
 
@@ -99,9 +132,22 @@ onUnmounted(() => { if (intervalId) clearInterval(intervalId) })
       <span class="text-muted">Ativando domínio e redirecionando...</span>
     </div>
 
-    <div v-else class="d-flex flex-column gap-2">
-      <router-link to="/store" class="btn btn-primary">Voltar para a loja</router-link>
-      <router-link to="/orders" class="btn btn-outline-secondary">Ir para pedidos</router-link>
-    </div>
+    <!-- Lead payment: direct to register -->
+    <template v-else-if="isLeadPayment">
+      <div class="d-flex flex-column gap-2">
+        <router-link v-if="isSuccess" to="/register" class="btn btn-primary btn-lg">
+          <i class="bi-person-plus me-2"></i>Criar minha conta
+        </router-link>
+        <router-link v-else to="/" class="btn btn-outline-secondary">Voltar ao início</router-link>
+      </div>
+    </template>
+
+    <!-- Authenticated payment: back to store/orders -->
+    <template v-else>
+      <div class="d-flex flex-column gap-2">
+        <router-link to="/store" class="btn btn-primary">Voltar para a loja</router-link>
+        <router-link to="/orders" class="btn btn-outline-secondary">Ir para pedidos</router-link>
+      </div>
+    </template>
   </div>
 </template>

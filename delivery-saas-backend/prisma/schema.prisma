@@ -1869,11 +1869,19 @@ model MercadoPagoConfig {
 }
 
 model Lead {
-  id        Int      @id @default(autoincrement())
-  name      String
-  phone     String
-  source    String   @default("landing")
-  createdAt DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  name            String
+  phone           String
+  source          String   @default("landing")
+  planId          String?
+  period          String?  // MONTHLY, ANNUAL
+  paymentStatus   String   @default("NONE") // NONE, PENDING, PAID, FAILED
+  gatewayRef      String?  // external payment ID from gateway
+  gatewayProvider String?
+  preferenceId    String?  // checkout preference ID
+  amount          Decimal? // payment amount
+  paidAt          DateTime?
+  createdAt       DateTime @default(now())
 }
 
 model SaasGatewayConfig {
