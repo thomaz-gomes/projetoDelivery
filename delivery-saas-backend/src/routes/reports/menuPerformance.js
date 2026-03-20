@@ -16,6 +16,12 @@ function parseDateRange(query) {
   return { from, to }
 }
 
+async function resolveStoreId(menuId) {
+  if (!menuId) return undefined
+  const menu = await prisma.menu.findUnique({ where: { id: menuId }, select: { storeId: true } })
+  return menu?.storeId || undefined
+}
+
 function getPreviousPeriod(from, to) {
   const diff = to.getTime() - from.getTime()
   const prevTo = new Date(from.getTime() - 1)
@@ -74,17 +80,21 @@ router.get('/sales', async (req, res) => {
     const { from, to } = parseDateRange(req.query)
     const prev = getPreviousPeriod(from, to)
 
+    const storeId = await resolveStoreId(menuId)
+
     const orderWhere = {
       companyId,
       status: { not: 'CANCELADO' },
       createdAt: { gte: from, lte: to },
     }
+    if (storeId) orderWhere.storeId = storeId
 
     const prevOrderWhere = {
       companyId,
       status: { not: 'CANCELADO' },
       createdAt: { gte: prev.from, lte: prev.to },
     }
+    if (storeId) prevOrderWhere.storeId = storeId
 
     const [orders, prevOrders] = await Promise.all([
       prisma.order.findMany({
@@ -155,10 +165,15 @@ router.get('/sales', async (req, res) => {
 router.get('/by-hour', async (req, res) => {
   try {
     const { companyId } = req.user
+    const { menuId } = req.query
     const { from, to } = parseDateRange(req.query)
+    const storeId = await resolveStoreId(menuId)
+
+    const where = { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } }
+    if (storeId) where.storeId = storeId
 
     const orders = await prisma.order.findMany({
-      where: { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } },
+      where,
       select: { createdAt: true },
     })
 
@@ -186,10 +201,15 @@ router.get('/by-hour', async (req, res) => {
 router.get('/by-weekday', async (req, res) => {
   try {
     const { companyId } = req.user
+    const { menuId } = req.query
     const { from, to } = parseDateRange(req.query)
+    const storeId = await resolveStoreId(menuId)
+
+    const where = { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } }
+    if (storeId) where.storeId = storeId
 
     const orders = await prisma.order.findMany({
-      where: { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } },
+      where,
       select: { createdAt: true },
     })
 
@@ -215,10 +235,15 @@ router.get('/by-weekday', async (req, res) => {
 router.get('/product-ranking', async (req, res) => {
   try {
     const { companyId } = req.user
+    const { menuId } = req.query
     const { from, to } = parseDateRange(req.query)
+    const storeId = await resolveStoreId(menuId)
+
+    const where = { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } }
+    if (storeId) where.storeId = storeId
 
     const orders = await prisma.order.findMany({
-      where: { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } },
+      where,
       select: { id: true },
     })
 
