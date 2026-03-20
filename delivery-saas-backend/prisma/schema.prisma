@@ -125,6 +125,10 @@ model Company {
   customDomains     CustomDomain[]
   // ---- Trials ----
   companyTrials     CompanyTrial[]
+
+  // ---- Menu Analytics ----
+  menuEvents              MenuEvent[]
+  menuEventDailySummaries MenuEventDailySummary[]
 }
 
 model User {
@@ -547,21 +551,21 @@ model Menu {
 }
 
 model CustomDomain {
-  id           String              @id @default(uuid())
-  domain       String              @unique
-  menuId       String              @unique
-  menu         Menu                @relation(fields: [menuId], references: [id])
+  id           String             @id @default(uuid())
+  domain       String             @unique
+  menuId       String             @unique
+  menu         Menu               @relation(fields: [menuId], references: [id])
   companyId    String
-  company      Company             @relation(fields: [companyId], references: [id])
-  status       CustomDomainStatus  @default(PENDING_PAYMENT)
-  sslStatus    SslStatus           @default(NONE)
+  company      Company            @relation(fields: [companyId], references: [id])
+  status       CustomDomainStatus @default(PENDING_PAYMENT)
+  sslStatus    SslStatus          @default(NONE)
   verifiedAt   DateTime?
   price        Decimal
-  billingCycle BillingCycle        @default(MONTHLY)
+  billingCycle BillingCycle       @default(MONTHLY)
   paidUntil    DateTime?
-  autoRenew    Boolean             @default(true)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  autoRenew    Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 }
 
 // File system based order sources (local folder monitored by backend)
@@ -941,8 +945,8 @@ model SaasPlan {
   modules              SaasPlanModule[]
   prices               SaasPlanPrice[]
   subscriptions        SaasSubscription[]
-  trialsAsTrialPlan    CompanyTrial[] @relation("TrialPlan")
-  trialsAsOriginalPlan CompanyTrial[] @relation("OriginalPlan")
+  trialsAsTrialPlan    CompanyTrial[]     @relation("TrialPlan")
+  trialsAsOriginalPlan CompanyTrial[]     @relation("OriginalPlan")
 }
 
 // Pricing tiers for plans (periodic prices)
@@ -1016,39 +1020,39 @@ model SaasSubscription {
 
 // Company trial tracking — one active trial per company at a time
 model CompanyTrial {
-  id               String    @id @default(cuid())
-  companyId        String
-  company          Company   @relation(fields: [companyId], references: [id])
-  trialPlanId      String
-  trialPlan        SaasPlan  @relation("TrialPlan", fields: [trialPlanId], references: [id])
-  originalPlanId   String
-  originalPlan     SaasPlan  @relation("OriginalPlan", fields: [originalPlanId], references: [id])
-  originalPeriod   String?
-  durationDays     Int
-  priceAfterTrial  Decimal   @default(0)
-  status           String    @default("ACTIVE") // ACTIVE, EXPIRED, CANCELED
-  startedAt        DateTime  @default(now())
-  expiresAt        DateTime
-  expiredAt        DateTime?
-  createdAt        DateTime  @default(now())
+  id              String    @id @default(cuid())
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id])
+  trialPlanId     String
+  trialPlan       SaasPlan  @relation("TrialPlan", fields: [trialPlanId], references: [id])
+  originalPlanId  String
+  originalPlan    SaasPlan  @relation("OriginalPlan", fields: [originalPlanId], references: [id])
+  originalPeriod  String?
+  durationDays    Int
+  priceAfterTrial Decimal   @default(0)
+  status          String    @default("ACTIVE") // ACTIVE, EXPIRED, CANCELED
+  startedAt       DateTime  @default(now())
+  expiresAt       DateTime
+  expiredAt       DateTime?
+  createdAt       DateTime  @default(now())
 
   @@index([companyId, status])
 }
 
 // Monthly invoice (mensalidade)
 model SaasInvoice {
-  id             String           @id @default(uuid())
-  subscriptionId String
-  subscription   SaasSubscription @relation(fields: [subscriptionId], references: [id])
-  year           Int
-  month          Int // 1..12
-  amount         Decimal
-  status         String           @default("PENDING") // PENDING, PAID, OVERDUE
-  dueDate        DateTime?
-  paidAt         DateTime?
-  gatewayProvider  String?
-  autoCharge       Boolean  @default(false)
-  createdAt      DateTime         @default(now())
+  id              String           @id @default(uuid())
+  subscriptionId  String
+  subscription    SaasSubscription @relation(fields: [subscriptionId], references: [id])
+  year            Int
+  month           Int // 1..12
+  amount          Decimal
+  status          String           @default("PENDING") // PENDING, PAID, OVERDUE
+  dueDate         DateTime?
+  paidAt          DateTime?
+  gatewayProvider String?
+  autoCharge      Boolean          @default(false)
+  createdAt       DateTime         @default(now())
 
   items    SaasInvoiceItem[]
   payments SaasPayment[]
@@ -1869,30 +1873,74 @@ model MercadoPagoConfig {
 }
 
 model Lead {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   name            String
   phone           String
-  source          String   @default("landing")
+  source          String    @default("landing")
   planId          String?
-  period          String?  // MONTHLY, ANNUAL
-  paymentStatus   String   @default("NONE") // NONE, PENDING, PAID, FAILED
-  gatewayRef      String?  // external payment ID from gateway
+  period          String? // MONTHLY, ANNUAL
+  paymentStatus   String    @default("NONE") // NONE, PENDING, PAID, FAILED
+  gatewayRef      String? // external payment ID from gateway
   gatewayProvider String?
-  preferenceId    String?  // checkout preference ID
+  preferenceId    String? // checkout preference ID
   amount          Decimal? // payment amount
   paidAt          DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 }
 
 model SaasGatewayConfig {
   id            String   @id @default(uuid())
-  provider      String   // MERCADOPAGO, STRIPE, etc.
+  provider      String // MERCADOPAGO, STRIPE, etc.
   displayName   String
-  credentials   String   // JSON encrypted with AES-256-GCM
+  credentials   String // JSON encrypted with AES-256-GCM
   isActive      Boolean  @default(true)
   billingMode   Json     @default("{\"plan\":\"MANUAL\",\"module\":\"MANUAL\",\"credits\":\"MANUAL\"}")
   webhookSecret String?
   platformFee   Decimal  @default(2.00)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+enum MenuEventType {
+  VISIT
+  ITEM_VIEW
+  ADD_TO_CART
+  CHECKOUT_START
+  ORDER_COMPLETE
+}
+
+model MenuEvent {
+  id         String        @id @default(uuid())
+  companyId  String
+  company    Company       @relation(fields: [companyId], references: [id])
+  menuId     String
+  sessionId  String
+  customerId String?
+  eventType  MenuEventType
+  productId  String?
+  metadata   Json?
+  createdAt  DateTime      @default(now())
+
+  @@index([companyId, menuId, createdAt])
+  @@index([companyId, menuId, eventType, createdAt])
+  @@index([sessionId])
+}
+
+model MenuEventDailySummary {
+  id              String   @id @default(uuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id])
+  menuId          String
+  date            DateTime @db.Date
+  visits          Int      @default(0)
+  itemViews       Int      @default(0)
+  addToCarts      Int      @default(0)
+  checkoutStarts  Int      @default(0)
+  orderCompletes  Int      @default(0)
+  uniqueCustomers Int      @default(0)
+  newCustomers    Int      @default(0)
+  totalRevenue    Decimal  @default(0)
+  avgTicket       Decimal  @default(0)
+
+  @@unique([companyId, menuId, date])
 }
