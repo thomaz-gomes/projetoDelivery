@@ -7,6 +7,7 @@ export const nav = [
     { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
     { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
     { name: 'Produtos mais vendidos', to: '/reports/products', icon: 'bi bi-bar-chart-line' },
+    { name: 'Desempenho do Cardápio', to: '/reports/menu-performance', icon: 'bi bi-graph-up' },
     { name: 'Notas Fiscais', to: '/relatorios/nfe-emissoes', icon: 'bi bi-receipt', moduleKey: 'fiscal', lockable: true },
     { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat', moduleKey: 'stock', lockable: true }
   ] },

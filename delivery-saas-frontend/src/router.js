@@ -107,6 +107,7 @@ import FinancialGateways from './views/financial/FinancialGateways.vue';
 import FinancialOFX from './views/financial/FinancialOFX.vue';
 import FinancialCostCenters from './views/financial/FinancialCostCenters.vue';
 import ProductsReport from './views/reports/ProductsReport.vue';
+import MenuPerformanceReport from './views/reports/MenuPerformanceReport.vue';
 import StudioIA from './views/StudioIA.vue';
 import AddOnStore from './views/AddOnStore.vue';
 import AddOnDetail from './views/AddOnDetail.vue';
@@ -236,6 +237,7 @@ const router = createRouter({
   ,{ path: '/sales/:id', component: SaleDetails, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/reports/cash-fronts', component: CashFronts, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/reports/products', component: ProductsReport, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
+  ,{ path: '/reports/menu-performance', component: MenuPerformanceReport, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/saas/plans', component: SaasPlans, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies', component: SaasCompanies, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies/new', component: SaasCompanyNew, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
