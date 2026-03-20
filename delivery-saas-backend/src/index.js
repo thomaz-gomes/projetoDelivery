@@ -26,6 +26,7 @@ import { affiliatesRouter } from "./routes/affiliates/affiliates.js";
 import { couponsRouter } from "./routes/coupons/coupons.js";
 import publicMenuRouter from './routes/publicMenu.js'
 import publicCartRouter from './routes/publicCart.js'
+import { publicTrackingRouter } from './routes/publicTracking.js'
 import menuAdminRouter from './routes/menu.js'
 import menuOptionsRouter from './routes/menuOptions.js'
 import menuImportRouter from './routes/menuImport.js'
@@ -226,6 +227,7 @@ app.use('/public', publicMenuRouter);
 app.use('/public', leadsRouter);
 // Public cart endpoints (evaluations) for a given companyId
 app.use('/public/:companyId/cart', publicCartRouter);
+app.use('/public/tracking', publicTrackingRouter);
 app.use('/menu', menuAdminRouter);
 app.use('/menu/options', menuOptionsRouter);
 app.use('/menu', menuImportRouter);
