@@ -93,7 +93,7 @@ router.get('/sales', async (req, res) => {
       }),
       prisma.order.findMany({
         where: prevOrderWhere,
-        select: { id: true, total: true, customerId: true },
+        select: { id: true, total: true, createdAt: true, customerId: true },
       }),
     ])
 
