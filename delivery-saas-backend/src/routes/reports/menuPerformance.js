@@ -39,22 +39,23 @@ router.get('/funnel', async (req, res) => {
     const prevWhere = { companyId, createdAt: { gte: prev.from, lte: prev.to } }
     if (menuId) prevWhere.menuId = menuId
 
+    // Count DISTINCT sessions per event type (not total events)
+    const buildQuery = (w) => {
+      const params = [w.companyId, w.createdAt.gte, w.createdAt.lte]
+      let sql = `SELECT "eventType", COUNT(DISTINCT "sessionId") as count FROM "MenuEvent" WHERE "companyId" = $1 AND "createdAt" >= $2 AND "createdAt" <= $3`
+      if (w.menuId) { sql += ` AND "menuId" = $${params.length + 1}`; params.push(w.menuId) }
+      sql += ` GROUP BY "eventType"`
+      return prisma.$queryRawUnsafe(sql, ...params)
+    }
+
     const [current, previous] = await Promise.all([
-      prisma.menuEvent.groupBy({
-        by: ['eventType'],
-        where,
-        _count: { sessionId: true },
-      }),
-      prisma.menuEvent.groupBy({
-        by: ['eventType'],
-        where: prevWhere,
-        _count: { sessionId: true },
-      }),
+      buildQuery(where),
+      buildQuery(prevWhere),
     ])
 
     const toMap = (rows) => {
       const m = {}
-      for (const r of rows) m[r.eventType] = r._count.sessionId
+      for (const r of rows) m[r.eventType] = Number(r.count)
       return m
     }
 
