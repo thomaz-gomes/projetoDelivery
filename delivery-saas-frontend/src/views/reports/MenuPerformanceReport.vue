@@ -23,7 +23,7 @@
             <div class="btn-group w-100">
               <button v-for="p in periods" :key="p.key"
                 class="btn btn-sm"
-                :class="filters.period === p.key ? 'btn-danger' : 'btn-outline-secondary'"
+                :class="filters.period === p.key ? 'btn-primary' : 'btn-outline-secondary'"
                 @click="setPeriod(p.key)">
                 {{ p.label }}
               </button>
@@ -40,7 +40,7 @@
             </div>
           </template>
           <div class="col-md-1">
-            <button class="btn btn-danger w-100" @click="loadReport" :disabled="loading">
+            <button class="btn btn-primary w-100" @click="loadReport" :disabled="loading">
               <span v-if="loading" class="spinner-border spinner-border-sm me-1"></span>
               Gerar
             </button>
@@ -51,7 +51,7 @@
     </div>
 
     <div v-if="loading" class="text-center py-5">
-      <div class="spinner-border text-danger"></div>
+      <div class="spinner-border text-primary"></div>
     </div>
 
     <template v-if="!loading && loaded">
@@ -61,16 +61,18 @@
         <div class="card-body">
           <div class="row g-3">
             <div class="col" v-for="step in funnelSteps" :key="step.key">
-              <div class="border rounded p-3 text-center">
-                <small class="text-muted">{{ step.label }}</small>
-                <h3 class="mb-1">{{ step.value.toLocaleString('pt-BR') }}</h3>
-                <span :class="step.changeClass" style="font-size:0.85rem">
-                  {{ step.changeIcon }} {{ step.changePercent }}
-                </span>
-                <div class="mt-2" style="height:6px;background:#eee;border-radius:3px">
-                  <div :style="{width:step.barPercent+'%',height:'100%',background:'#e74c3c',borderRadius:'3px'}"></div>
+              <div class="border rounded overflow-hidden d-flex flex-column" style="min-height:220px">
+                <div class="p-3 pb-2 text-start flex-shrink-0">
+                  <div class="fw-semibold" style="font-size:0.85rem;color:var(--text-primary)">{{ step.label }}</div>
+                  <div class="fw-bold mt-1" style="font-size:1.75rem;line-height:1.1">{{ step.value.toLocaleString('pt-BR') }}</div>
+                  <div class="mt-1" style="font-size:0.78rem;color:var(--text-secondary)">{{ step.description }}</div>
+                  <div class="mt-1" style="font-size:0.78rem">
+                    <span :class="step.changeClass">{{ step.changeIcon }} {{ step.changePercent }}</span>
+                  </div>
                 </div>
-                <small class="text-muted">{{ step.barPercent }}%</small>
+                <div class="mt-auto position-relative" :style="{height: Math.max(step.barPercent * 0.8, 12) + 'px', background: 'var(--primary)', borderRadius: '0 0 0 0'}">
+                  <span class="position-absolute w-100 text-center text-white fw-bold" style="font-size:0.85rem;bottom:4px">{{ step.barPercent }}%</span>
+                </div>
               </div>
             </div>
           </div>
@@ -99,8 +101,8 @@
             <div class="card-header d-flex align-items-center gap-2">
               <strong>Horários com mais vendas</strong>
               <div class="btn-group btn-group-sm ms-auto">
-                <button class="btn" :class="hourFilter==='week'?'btn-danger':'btn-outline-secondary'" @click="hourFilter='week'">Semana</button>
-                <button class="btn" :class="hourFilter==='weekend'?'btn-danger':'btn-outline-secondary'" @click="hourFilter='weekend'">Fim de semana</button>
+                <button class="btn" :class="hourFilter==='week'?'btn-primary':'btn-outline-secondary'" @click="hourFilter='week'">Semana</button>
+                <button class="btn" :class="hourFilter==='weekend'?'btn-primary':'btn-outline-secondary'" @click="hourFilter='weekend'">Fim de semana</button>
               </div>
             </div>
             <div class="card-body">
@@ -124,7 +126,8 @@
       <div class="card mb-4">
         <div class="card-header"><strong>Ranking de Itens do Cardápio</strong></div>
         <div class="card-body p-0">
-          <table class="table table-hover mb-0">
+          <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
             <thead>
               <tr>
                 <th>#</th>
@@ -145,6 +148,7 @@
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </template>
@@ -220,11 +224,11 @@ const funnelSteps = computed(() => {
   const c = funnel.value.current || {}
   const p = funnel.value.previous || {}
   const steps = [
-    { key: 'VISIT', label: 'Visitas' },
-    { key: 'ITEM_VIEW', label: 'Visualizações' },
-    { key: 'ADD_TO_CART', label: 'Carrinho' },
-    { key: 'CHECKOUT_START', label: 'Revisão' },
-    { key: 'ORDER_COMPLETE', label: 'Concluídos' },
+    { key: 'VISIT', label: 'Visitas', description: 'visitaram seu cardápio' },
+    { key: 'ITEM_VIEW', label: 'Visualizações', description: 'visualizaram algum item' },
+    { key: 'ADD_TO_CART', label: 'Carrinho', description: 'adicionaram itens ao carrinho' },
+    { key: 'CHECKOUT_START', label: 'Revisão', description: 'iniciaram o checkout' },
+    { key: 'ORDER_COMPLETE', label: 'Concluídos', description: 'concluíram o pedido' },
   ]
   const maxVal = Math.max(...steps.map(s => c[s.key] || 0), 1)
   return steps.map(s => ({
@@ -291,7 +295,7 @@ function renderCharts() {
       data: {
         labels: labels.map(d => d.slice(5)),
         datasets: [
-          { label: 'Período atual', data: labels.map(d => daily[d]?.count || 0), borderColor: '#e74c3c', tension: 0.3, fill: false },
+          { label: 'Período atual', data: labels.map(d => daily[d]?.count || 0), borderColor: '#105784', tension: 0.3, fill: false },
           { label: 'Período anterior', data: prevLabels.map(d => prevDaily[d]?.count || 0), borderColor: '#ccc', borderDash: [5, 5], tension: 0.3, fill: false },
         ],
       },
@@ -306,7 +310,7 @@ function renderCharts() {
       type: 'bar',
       data: {
         labels: byHourData.value.labels,
-        datasets: [{ data: byHourData.value.data, backgroundColor: '#e74c3c' }],
+        datasets: [{ data: byHourData.value.data, backgroundColor: '#105784' }],
       },
       options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } } },
     })
@@ -319,7 +323,7 @@ function renderCharts() {
       type: 'bar',
       data: {
         labels: byWeekdayData.value.labels,
-        datasets: [{ data: byWeekdayData.value.data, backgroundColor: '#e74c3c' }],
+        datasets: [{ data: byWeekdayData.value.data, backgroundColor: '#105784' }],
       },
       options: { responsive: true, plugins: { legend: { display: false } } },
     })

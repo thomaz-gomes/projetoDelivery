@@ -3405,7 +3405,6 @@ function goToDelivery(){ checkoutStep.value = 'delivery' }
 function goToReview(){
   // Meta Pixel: track payment info added
   try{ const pm = (paymentMethods.value || []).find(m => m.code === paymentMethod.value); trackAddPaymentInfo(pm ? pm.name : paymentMethod.value) }catch(e){}
-  try{ trackMenuEvent(companyId, menuId.value, 'CHECKOUT_START') }catch(e){}
   checkoutStep.value = 'review'
 }
 function backFromReview(){ checkoutStep.value = (orderType.value === 'DELIVERY' ? 'payment' : 'delivery') }
@@ -4004,6 +4003,8 @@ async function submitOrder(){
   clientError.value = '';
   submitting.value = true;
   orderResponse.value = null;
+  // Track checkout start (covers both goToReview and performOrderFromModal paths)
+  try{ trackMenuEvent(companyId, menuId.value, 'CHECKOUT_START') }catch(e){}
   try{
     if(!isOpen.value){
       clientError.value = 'Loja fechada no momento. Não é possível enviar pedidos fora do horário de funcionamento.'
