@@ -76,13 +76,13 @@ router.get('/sales', async (req, res) => {
 
     const orderWhere = {
       companyId,
-      status: 'CONCLUIDO',
+      status: { not: 'CANCELADO' },
       createdAt: { gte: from, lte: to },
     }
 
     const prevOrderWhere = {
       companyId,
-      status: 'CONCLUIDO',
+      status: { not: 'CANCELADO' },
       createdAt: { gte: prev.from, lte: prev.to },
     }
 
@@ -106,7 +106,7 @@ router.get('/sales', async (req, res) => {
         where: {
           companyId,
           customerId: { in: customerIds },
-          status: 'CONCLUIDO',
+          status: { not: 'CANCELADO' },
           createdAt: { lt: from },
         },
         _count: true,
@@ -158,7 +158,7 @@ router.get('/by-hour', async (req, res) => {
     const { from, to } = parseDateRange(req.query)
 
     const orders = await prisma.order.findMany({
-      where: { companyId, status: 'CONCLUIDO', createdAt: { gte: from, lte: to } },
+      where: { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } },
       select: { createdAt: true },
     })
 
@@ -189,7 +189,7 @@ router.get('/by-weekday', async (req, res) => {
     const { from, to } = parseDateRange(req.query)
 
     const orders = await prisma.order.findMany({
-      where: { companyId, status: 'CONCLUIDO', createdAt: { gte: from, lte: to } },
+      where: { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } },
       select: { createdAt: true },
     })
 
