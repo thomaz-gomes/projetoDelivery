@@ -8,6 +8,7 @@ import cron from 'node-cron'
 import { resetAllDueCredits } from './services/aiCreditManager.js'
 import { prisma } from './prisma.js'
 import { runRecurringBilling } from './jobs/recurringBilling.js'
+import { aggregateMenuEvents } from './jobs/aggregateMenuEvents.js'
 
 /**
  * Reset mensal de créditos de IA: toda empresa tem seus créditos restaurados
@@ -63,4 +64,20 @@ cron.schedule('0 6 * * *', async () => {
   }
 })
 
-console.log('[Cron] Tarefas agendadas registradas (reset de créditos IA: dia 1 de cada mês; domínios vencidos: diário às 01:00; cobrança recorrente: diário às 06:00 UTC)')
+/**
+ * Agregação diária de eventos de menu: agrega os eventos do dia anterior
+ * em resumos diários e remove eventos brutos com mais de 90 dias.
+ */
+cron.schedule('30 2 * * *', async () => {
+  console.log('[Cron] Iniciando agregação de eventos de menu...')
+  try {
+    await aggregateMenuEvents()
+    console.log('[Cron] Agregação de eventos de menu concluída')
+  } catch (err) {
+    console.error('[Cron] Erro na agregação de eventos de menu:', err)
+  }
+}, {
+  timezone: 'America/Sao_Paulo',
+})
+
+console.log('[Cron] Tarefas agendadas registradas (reset de créditos IA: dia 1 de cada mês; domínios vencidos: diário às 01:00; cobrança recorrente: diário às 06:00 UTC; agregação eventos menu: diário às 02:30)')
