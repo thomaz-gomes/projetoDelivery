@@ -1000,6 +1000,7 @@
 import { ref, onMounted, onBeforeUnmount, computed, reactive, watch, nextTick, onUnmounted } from 'vue';
 import { bindLoading } from '../state/globalLoading.js';
 import api from '../api';
+import { trackMenuEvent, flushEvents } from '../services/menuTracking.js'
 import { useRoute, useRouter } from 'vue-router';
 import { assetUrl } from '../utils/assetUrl.js';
 import { applyPhoneMask, removePhoneMask } from '../utils/phoneMask';
@@ -2509,6 +2510,7 @@ function addToCartWithOptions(p, selections, qty=1){
   else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, categoryId: p.categoryId || null }) }
   // Meta Pixel: track add to cart
   try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: p.price, options: selectedOptions }, qty) }catch(e){}
+  try{ trackMenuEvent(companyId, menuId.value, 'ADD_TO_CART', { productId: p.id }) }catch(e){}
 }
 
 function openProductModal(p, force = false){
@@ -2520,6 +2522,7 @@ function openProductModal(p, force = false){
   }
 
   selectedProduct.value = p
+  try{ trackMenuEvent(companyId, menuId.value, 'ITEM_VIEW', { productId: p.id }) }catch(e){}
   // Meta Pixel: track product view
   try{ trackViewContent(p) }catch(e){}
   modalQty.value = 1
@@ -3402,6 +3405,7 @@ function goToDelivery(){ checkoutStep.value = 'delivery' }
 function goToReview(){
   // Meta Pixel: track payment info added
   try{ const pm = (paymentMethods.value || []).find(m => m.code === paymentMethod.value); trackAddPaymentInfo(pm ? pm.name : paymentMethod.value) }catch(e){}
+  try{ trackMenuEvent(companyId, menuId.value, 'CHECKOUT_START') }catch(e){}
   checkoutStep.value = 'review'
 }
 function backFromReview(){ checkoutStep.value = (orderType.value === 'DELIVERY' ? 'payment' : 'delivery') }
@@ -3504,6 +3508,14 @@ onMounted(async ()=>{
   try{
     // TEMP LOG: indicate component mounted and parameters
     try{ console.log('[PublicMenu] mounted', { companyId: companyId, menuId: menuId && menuId.value, storeId: storeId && storeId.value }) }catch(e){}
+    // Track visit (once per session)
+    try {
+      const _vtk = 'mt_visited_' + companyId
+      if (!sessionStorage.getItem(_vtk)) {
+        trackMenuEvent(companyId, menuId.value, 'VISIT')
+        sessionStorage.setItem(_vtk, '1')
+      }
+    } catch(e){}
     const res = await api.get(menuUrl);
     const data = res.data || {};
     // store last-loaded storeId so updates can be applied selectively
@@ -3759,6 +3771,7 @@ onMounted(() => {
   }
 })
 onBeforeUnmount(() => { try{ _publicMenuSocket && _publicMenuSocket.disconnect() }catch(e){} })
+onBeforeUnmount(() => { try{ flushEvents() }catch(e){} })
 
 // Update favicon dynamically when logo changes
 function updateFavicon(logoUrl) {
@@ -4162,6 +4175,7 @@ try{
   orderResponse.value = res.data;
   // Meta Pixel: track successful purchase
   try{ trackPurchase(res.data?.id, totalBeforeReset, cartItemsBeforeReset) }catch(e){}
+  try{ trackMenuEvent(companyId, menuId.value, 'ORDER_COMPLETE', { metadata: { total: Number(totalBeforeReset || 0) } }); flushEvents() }catch(e){}
   cart.value = [];
   // persist customer contact so user can view history/status later
   saveCustomerToLocal()
