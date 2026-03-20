@@ -101,17 +101,17 @@ router.get('/sales', async (req, res) => {
     const customerIds = [...new Set(orders.filter(o => o.customerId).map(o => o.customerId))]
     let newCustomers = 0
     if (customerIds.length > 0) {
-      const existingCustomers = await prisma.order.groupBy({
-        by: ['customerId'],
+      const existing = await prisma.order.findMany({
         where: {
           companyId,
           customerId: { in: customerIds },
           status: { not: 'CANCELADO' },
           createdAt: { lt: from },
         },
-        _count: true,
+        select: { customerId: true },
+        distinct: ['customerId'],
       })
-      const existingSet = new Set(existingCustomers.map(c => c.customerId))
+      const existingSet = new Set(existing.map(c => c.customerId))
       newCustomers = customerIds.filter(id => !existingSet.has(id)).length
     }
 
