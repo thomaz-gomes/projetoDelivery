@@ -67,6 +67,7 @@ import metaPixelRouter from './routes/metaPixel.js'
 import mediaRouter from './routes/media.js'
 import dadosFiscaisRouter from './routes/dadosFiscais.js'
 import productReportsRouter from './routes/reports/products.js'
+import menuPerformanceRouter from './routes/reports/menuPerformance.js'
 import aiCreditsRouter from './routes/aiCredits.js'
 import aiStudioRouter from './routes/aiStudio.js'
 import { paymentRouter } from './routes/payment.js'
@@ -270,6 +271,7 @@ app.use('/qr-action', qrActionRouter);
 app.use('/cashback', requireModule('CASHBACK'), cashbackRouter);
 app.use('/financial', requireModule('FINANCIAL'), financialRouter);
 app.use('/reports/products', productReportsRouter);
+app.use('/reports/menu-performance', menuPerformanceRouter);
 app.use('/meta-pixel', metaPixelRouter);
 app.use('/media', mediaRouter);
 app.use('/settings', dadosFiscaisRouter);
