@@ -677,6 +677,32 @@ webhooksRouter.post("/ifood", async (req, res) => {
   }
 });
 
+// ───── aiqfome webhook ─────
+import { processAiqfomeWebhook } from '../integrations/aiqfome/webhookProcessor.js';
+
+webhooksRouter.post('/aiqfome', async (req, res) => {
+  try {
+    const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const order = payload.data || payload;
+    const eventId = order.id ? `aiqfome-${order.id}` : null;
+
+    const we = await prisma.webhookEvent.upsert({
+      where: { eventId: eventId || `aiqfome-${Date.now()}` },
+      update: { payload, status: 'RECEIVED' },
+      create: { provider: 'AIQFOME', eventId, payload, status: 'RECEIVED' },
+    });
+
+    processAiqfomeWebhook(we.id).catch(e => {
+      console.error('[aiqfome webhook] processing error:', e?.message);
+    });
+
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('[aiqfome webhook] error:', e?.message);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 /**
  * 🧪 Endpoint de teste manual
  */
