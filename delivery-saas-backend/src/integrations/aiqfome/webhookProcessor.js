@@ -275,7 +275,13 @@ export async function processAiqfomeWebhook(eventId) {
     const deliveryFee = Number(pm.delivery_tax || 0) || null;
     const couponDiscount = Number(pm.coupon_value || 0) || null;
     const changeFor = pm.change != null ? Number(pm.change) : null;
-    const paymentMethodName = pm.name || null;
+    let paymentMethodName = pm.name || null;
+    try {
+      const mapping = await prisma.aiqfomePaymentMapping.findFirst({
+        where: { integrationId, aiqfomeCode: pm.name },
+      });
+      if (mapping) paymentMethodName = mapping.systemName;
+    } catch (e) {}
     const prePaid = !!pm.pre_paid;
 
     // Customer info
@@ -400,7 +406,7 @@ export async function processAiqfomeWebhook(eventId) {
         let acceptOk = false;
         try {
           // aiqfome API: PUT /v2/orders/{orderId}/read (or similar endpoint)
-          await aiqfomePost(integrationId, `/v2/orders/${externalId}/read`, {});
+          await aiqfomePost(integrationId, '/api/v2/orders/mark-as-read', { orders: [Number(externalId)] });
           acceptOk = true;
           console.log('[aiqfome Auto-accept] marked as read on aiqfome, orderId:', externalId);
         } catch (e) {

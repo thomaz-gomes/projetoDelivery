@@ -21,9 +21,8 @@ import { ifoodPoll, ifoodAck } from '../integrations/ifood/client.js';
 import { processIFoodWebhook } from '../services/ifoodWebhookProcessor.js';
 
 import { startAiqfomeAuth, exchangeAiqfomeCode, refreshAiqfomeToken } from '../integrations/aiqfome/oauth.js';
-import { updateAiqfomeOrderStatus } from '../integrations/aiqfome/orders.js';
 import { syncMenuToAiqfome } from '../integrations/aiqfome/menu.js';
-import { aiqfomeGet, aiqfomePost } from '../integrations/aiqfome/client.js';
+import { aiqfomeGet, aiqfomePost, aiqfomePut } from '../integrations/aiqfome/client.js';
 
 export const integrationsRouter = express.Router();
 
@@ -53,11 +52,11 @@ aiqfomeCallbackRouter.get('/aiqfome/callback', async (req, res) => {
     }
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/integrations?aiqfome=linked`);
+    res.redirect(`${frontendUrl}/settings/integrations/aiqfome?connected=true`);
   } catch (e) {
     console.error('[aiqfome callback] error:', e?.message);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/integrations?aiqfome=error&message=${encodeURIComponent(e?.message || 'Unknown error')}`);
+    res.redirect(`${frontendUrl}/settings/integrations/aiqfome?error=${encodeURIComponent(e?.message || 'Unknown error')}`);
   }
 });
 
@@ -591,7 +590,8 @@ integrationsRouter.post('/ifood/action', requireRole('ADMIN'), async (req, res) 
 integrationsRouter.post('/aiqfome/link/start', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const r = await startAiqfomeAuth({ companyId });
+    const { clientId, clientSecret, storeId } = req.body;
+    const r = await startAiqfomeAuth({ companyId, storeId, clientId, clientSecret });
     res.json(r); // { authorizationUrl, integrationId }
   } catch (e) {
     console.error('[aiqfome link/start] error:', e?.response?.data ?? e?.message ?? e);
@@ -606,8 +606,15 @@ integrationsRouter.post('/aiqfome/link/start', requireRole('ADMIN'), async (req,
 integrationsRouter.post('/aiqfome/token/refresh', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const r = await refreshAiqfomeToken({ companyId });
-    res.json(r);
+    const { integrationId } = req.body;
+    if (!integrationId) {
+      const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' } });
+      if (!integ) return res.status(404).json({ message: 'Sem integração aiqfome' });
+      await refreshAiqfomeToken(integ.id);
+    } else {
+      await refreshAiqfomeToken(integrationId);
+    }
+    res.json({ ok: true });
   } catch (e) {
     console.error('[aiqfome token/refresh] error:', e?.response?.data ?? e?.message ?? e);
     res.status(500).json({ message: 'Falha ao renovar token aiqfome', error: e?.message || String(e) });
@@ -718,7 +725,9 @@ integrationsRouter.put('/aiqfome/:integrationId/payment-mappings', requireRole('
 integrationsRouter.post('/aiqfome/menu/sync', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const r = await syncMenuToAiqfome({ companyId });
+    const { integrationId, menuId } = req.body;
+    if (!integrationId || !menuId) return res.status(400).json({ message: 'integrationId e menuId são obrigatórios' });
+    const r = await syncMenuToAiqfome(integrationId, menuId);
     res.json(r);
   } catch (e) {
     console.error('[aiqfome menu/sync] error:', e?.message);
@@ -744,7 +753,15 @@ integrationsRouter.post('/aiqfome/store/:action', requireRole('ADMIN'), async (r
     const merchantId = integration.merchantId;
     if (!merchantId) return res.status(400).json({ message: 'merchantId não configurado na integração' });
 
-    const data = await aiqfomePost(integration.id, `/api/v2/store/${merchantId}/status`, { status: action });
+    const actionMap = {
+      open: { method: 'post', path: `/api/v2/store/${merchantId}/open` },
+      close: { method: 'post', path: `/api/v2/store/${merchantId}/close` },
+      standby: { method: 'put', path: `/api/v2/store/${merchantId}/stand-by` },
+    };
+    const { method, path } = actionMap[action];
+    const data = method === 'put'
+      ? await aiqfomePut(integration.id, path, {})
+      : await aiqfomePost(integration.id, path, {});
     res.json({ ok: true, data });
   } catch (e) {
     console.error('[aiqfome store/:action] error:', e?.message);
