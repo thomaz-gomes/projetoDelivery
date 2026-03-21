@@ -138,6 +138,8 @@ const showLayout = computed(() => {
   if(route.path === '/setup') return false
   if(route.path.startsWith && route.path.startsWith('/public')) return false
   if(route.path.startsWith('/trial')) return false
+  if(route.path === '/termos-de-servico') return false
+  if(route.path === '/politica-de-privacidade') return false
   return true
 });
 
