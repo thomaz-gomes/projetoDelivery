@@ -225,6 +225,7 @@ const DEFAULT_BLOCKS = [
   { t: 'text', c: 'Qtd itens: {{total_itens_count}}' },
   { t: 'text', c: 'Subtotal: R$ {{subtotal}}' },
   { t: 'cond', key: 'taxa_entrega', c: 'Taxa entrega: R$ {{taxa_entrega}}' },
+  { t: 'cond', key: 'taxa_servico', c: 'Taxa servico: R$ {{taxa_servico}}' },
   { t: 'cond', key: 'desconto', c: 'Desconto: R$ {{desconto}}' },
   { t: 'text', c: 'TOTAL: R$ {{total}}', b: true, s: 'lg' },
   { t: 'sep' },
@@ -269,6 +270,7 @@ const placeholderCategories = [
       { key: 'total_itens_count', label: 'Qtd de itens' },
       { key: 'subtotal', label: 'Subtotal' },
       { key: 'taxa_entrega', label: 'Taxa de entrega' },
+      { key: 'taxa_servico', label: 'Taxa de servico (acrescimo)' },
       { key: 'desconto', label: 'Desconto' },
       { key: 'total', label: 'Total' }
     ]
@@ -285,21 +287,31 @@ const placeholderCategories = [
 // Parse initial value
 const blocks = ref(parseModelValue(props.modelValue));
 
-// Migrates v2 blocks to add missing iFood fields (localizador, codigo_coleta)
+// Migrates v2 blocks to add missing fields (localizador, codigo_coleta, taxa_servico)
 // so existing saved templates are silently upgraded on load.
 function migrateBlocks(blks) {
   const result = JSON.parse(JSON.stringify(blks));
   const hasLocalizador = result.some(b => b.t === 'cond' && b.key === 'localizador');
   const hasCodigoColeta = result.some(b => b.t === 'cond' && b.key === 'codigo_coleta');
-  if (hasLocalizador && hasCodigoColeta) return result;
-  // Insert after the telefone_cliente line, or after nome_cliente as fallback
-  const telIdx = result.findIndex(b => b.c && b.c.includes('telefone_cliente'));
-  const nameIdx = result.findIndex(b => b.c && b.c.includes('nome_cliente'));
-  const insertAfter = telIdx >= 0 ? telIdx : nameIdx >= 0 ? nameIdx : result.length - 1;
-  const toInsert = [];
-  if (!hasLocalizador) toInsert.push({ t: 'cond', key: 'localizador', c: 'Localizador: {{localizador}}' });
-  if (!hasCodigoColeta) toInsert.push({ t: 'cond', key: 'codigo_coleta', c: 'Cod. Coleta: {{codigo_coleta}}' });
-  result.splice(insertAfter + 1, 0, ...toInsert);
+  if (!hasLocalizador || !hasCodigoColeta) {
+    // Insert after the telefone_cliente line, or after nome_cliente as fallback
+    const telIdx = result.findIndex(b => b.c && b.c.includes('telefone_cliente'));
+    const nameIdx = result.findIndex(b => b.c && b.c.includes('nome_cliente'));
+    const insertAfter = telIdx >= 0 ? telIdx : nameIdx >= 0 ? nameIdx : result.length - 1;
+    const toInsert = [];
+    if (!hasLocalizador) toInsert.push({ t: 'cond', key: 'localizador', c: 'Localizador: {{localizador}}' });
+    if (!hasCodigoColeta) toInsert.push({ t: 'cond', key: 'codigo_coleta', c: 'Cod. Coleta: {{codigo_coleta}}' });
+    result.splice(insertAfter + 1, 0, ...toInsert);
+  }
+  // Migrate: inject taxa_servico (acrescimo) between taxa_entrega and desconto if missing
+  const hasTaxaServico = result.some(b => b.t === 'cond' && b.key === 'taxa_servico');
+  if (!hasTaxaServico) {
+    const taxaEntregaIdx = result.findIndex(b => b.t === 'cond' && b.key === 'taxa_entrega');
+    const descontoIdx = result.findIndex(b => (b.t === 'cond' && b.key === 'desconto') || (b.c && b.c.includes('{{desconto}}')));
+    const totalIdx = result.findIndex(b => b.c && b.c.includes('{{total}}'));
+    const insertAt = taxaEntregaIdx >= 0 ? taxaEntregaIdx + 1 : descontoIdx >= 0 ? descontoIdx : totalIdx >= 0 ? totalIdx : result.length;
+    result.splice(insertAt, 0, { t: 'cond', key: 'taxa_servico', c: 'Taxa servico: R$ {{taxa_servico}}' });
+  }
   return result;
 }
 

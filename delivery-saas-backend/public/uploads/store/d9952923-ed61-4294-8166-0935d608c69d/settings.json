@@ -3,9 +3,10 @@
   "logo": "/public/uploads/store/d9952923-ed61-4294-8166-0935d608c69d/logo.png",
   "menus": {
     "e1ab9318-ee40-4259-b474-5ebd32924be0": {
-      "open24Hours": false,
-      "allowDelivery": false,
-      "allowPickup": false
+      "open24Hours": true,
+      "allowDelivery": true,
+      "allowPickup": true,
+      "forceOpen": true
     }
   },
   "nfeSerie": "1",

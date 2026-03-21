@@ -357,6 +357,7 @@ function buildContext(order, settings = {}) {
     subtotal: subtotal.toFixed(2),
     taxa_entrega: taxaEntrega ? taxaEntrega.toFixed(2) : '',
     taxa_servico: additionalFees ? additionalFees.toFixed(2) : '',
+    acrescimo_val: additionalFees ? additionalFees.toFixed(2) : '',
     desconto: desconto ? desconto.toFixed(2) : '',
     total: total.toFixed(2),
     pagamentos,

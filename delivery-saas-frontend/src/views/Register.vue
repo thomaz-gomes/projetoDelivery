@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import api from '../api'
 
 const router = useRouter()
-const form = ref({ name: '', email: '', password: '', confirmPassword: '' })
+const form = ref({ name: '', email: '', password: '', confirmPassword: '', acceptTerms: false })
 const loading = ref(false)
 const error = ref('')
 
@@ -21,6 +21,10 @@ async function onSubmit() {
   }
   if (form.value.password !== form.value.confirmPassword) {
     error.value = 'As senhas não conferem'
+    return
+  }
+  if (!form.value.acceptTerms) {
+    error.value = 'Voce deve aceitar os Termos de Servico para continuar'
     return
   }
 
@@ -98,6 +102,18 @@ async function onSubmit() {
               placeholder="Repita a senha"
               required
             />
+          </div>
+
+          <div class="mb-3">
+            <div class="form-check">
+              <input v-model="form.acceptTerms" class="form-check-input" type="checkbox" id="acceptTerms">
+              <label class="form-check-label small" for="acceptTerms">
+                Ao se cadastrar voce aceita os
+                <router-link to="/termos-de-servico" target="_blank">Termos de Servico</router-link>
+                e a
+                <router-link to="/politica-de-privacidade" target="_blank">Politica de Privacidade</router-link>
+              </label>
+            </div>
           </div>
 
           <div v-if="error" class="alert alert-danger py-2 small">
