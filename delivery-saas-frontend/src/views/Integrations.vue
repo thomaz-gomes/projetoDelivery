@@ -36,6 +36,14 @@ const integrationTypes = [
     route: '/settings/ifood',
   },
   {
+    key: 'AIQFOME',
+    name: 'aiqfome',
+    description: 'Receba pedidos do aiqfome, sincronize cardápio e gerencie sua loja.',
+    icon: 'https://aiqfome.com/favicon.ico',
+    iconType: 'img',
+    route: '/settings/integrations/aiqfome',
+  },
+  {
     key: 'META_PIXEL',
     name: 'Meta Pixel (Facebook)',
     description: 'Rastreie eventos de conversão no seu cardápio online para otimizar campanhas.',
@@ -243,7 +251,7 @@ function showToggleHelp() {
         <button class="btn-close" @click="showTypeModal = false"></button>
       </div>
       <div class="row g-3">
-        <div v-for="t in integrationTypes" :key="t.key" class="col-12 col-sm-6">
+        <div v-for="t in integrationTypes" :key="t.key" class="col-12 col-sm-4">
           <div class="type-option-card" @click="selectType(t)">
             <div class="d-flex align-items-center gap-3 mb-2">
               <img v-if="t.iconType === 'img'" :src="t.icon" :alt="t.name" style="height:32px" />
@@ -272,7 +280,7 @@ function showToggleHelp() {
   background: #fff;
   border-radius: 12px;
   padding: 24px;
-  max-width: 520px;
+  max-width: 680px;
   width: 90%;
   box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 }
