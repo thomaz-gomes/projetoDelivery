@@ -17,9 +17,11 @@ const configManager = require('../config');
 const { DEFAULT_TEMPLATE_80, DEFAULT_TEMPLATE_58 } = require('../defaultTemplate');
 
 // Dimensões em pontos (1mm ≈ 2.835pt)
-const PAPER_80MM = 226;
-const PAPER_58MM = 165;
-const MARGIN = 8;
+// Escala 1.3× para melhor legibilidade no PDF (não afeta impressão térmica)
+const PDF_SCALE = 1.3;
+const PAPER_80MM = Math.round(226 * PDF_SCALE);
+const PAPER_58MM = Math.round(165 * PDF_SCALE);
+const MARGIN = Math.round(8 * PDF_SCALE);
 
 // Courier: largura de cada caractere ≈ 0.6 × fontSize
 const COURIER_RATIO = 0.6;
@@ -253,16 +255,9 @@ function _renderBlockLines(blocks, order, printer, cols, addLine, addSep, addRow
               const oqty = Number(opt.quantity || 1);
               const totalQty = oqty * qty;
               const totalSuffix = qty > 1 ? ` (${totalQty} total)` : '';
-              let line;
-              if (oqty > 1) {
-                line = optPrice > 0
-                  ? `   -${oqty}x ${opt.name}: R$ ${_fmtN(optPrice)}${totalSuffix}`
-                  : `   -${oqty}x ${opt.name}${totalSuffix}`;
-              } else {
-                line = optPrice > 0
-                  ? `   + ${opt.name}: R$ ${_fmtN(optPrice)}${totalSuffix}`
-                  : `   + ${opt.name}${totalSuffix}`;
-              }
+              const line = optPrice > 0
+                ? `   ${oqty}x ${opt.name}: R$ ${_fmtN(optPrice)}${totalSuffix}`
+                : `   ${oqty}x ${opt.name}${totalSuffix}`;
               addLine(line);
             }
           }
@@ -276,7 +271,11 @@ function _renderBlockLines(blocks, order, printer, cols, addLine, addSep, addRow
         for (const p of rawPayments) {
           const method = _paymentLabel(p);
           const value = _fmtN(_toNum(p.value || p.amount || p.valor || 0));
-          addRow(method, value, { inverted: true });
+          // Padding interno para não encostar nas bordas do fundo invertido
+          const innerCols = cols - 2;
+          const padLen = innerCols - method.length - value.length;
+          const paddedLine = ' ' + (padLen > 0 ? method + ' '.repeat(padLen) + value : method + ' ' + value) + ' ';
+          addLine(paddedLine, { inverted: true });
         }
         break;
       }
@@ -299,19 +298,11 @@ function _renderBlockLines(blocks, order, printer, cols, addLine, addSep, addRow
   if (!blocksHaveTotals) {
     addSep('-');
     addRow('Qtd itens:', ctx.total_itens_count || '0');
-    addRow('Total Itens(=)', ctx.subtotal || '0,00');
-    addRow('Taxa entrega(+)', ctx.taxa_entrega || '0,00');
-    addRow('Acrescimo(+)', ctx.acrescimo || '0,00');
-    addRow('Desconto(-)', ctx.desconto || '0,00');
-    addRow('TOTAL(=)', ctx.total || '0,00', { bold: true });
-  } else {
-    // Template de blocos tem totais, mas pode não ter Acrescimo — injetar se ausente
-    const hasAcrescimo = blocks.some(b =>
-      (b.t === 'text' || b.t === 'cond') && b.c && b.c.includes('{{acrescimo}}')
-    );
-    if (!hasAcrescimo) {
-      addRow('Acrescimo(+)', ctx.acrescimo || '0,00');
-    }
+    addRow('Total Itens(=)', ctx.subtotal || ctx.subtotal_val || '0,00');
+    addRow('Taxa entrega(+)', ctx.taxa_entrega || ctx.taxa_val || '0,00');
+    addRow('Acrescimo(+)', ctx.acrescimo || ctx.acrescimo_val || '0,00');
+    addRow('Desconto(-)', ctx.desconto || ctx.desconto_val || '0,00');
+    addRow('TOTAL(=)', ctx.total || ctx.total_val || '0,00', { bold: true });
   }
 }
 
@@ -385,16 +376,36 @@ function _renderTextLines(tpl, widthMm, order, printer, cols, addLine, addSep, a
  * Resolve label da forma de pagamento com brand e sufixo "Pago Online" / "Cobrar do cliente".
  * Replica _paymentLabel() do templateEngine.js.
  */
+const _PAY_MAP = {
+  'CASH': 'Dinheiro', 'CREDIT': 'Credito', 'DEBIT': 'Debito',
+  'CREDIT_CARD': 'Credito', 'DEBIT_CARD': 'Debito',
+  'MEAL_VOUCHER': 'Vale Refeicao', 'FOOD_VOUCHER': 'Vale Alimentacao',
+  'GIFT_CARD': 'Gift Card', 'PIX': 'PIX', 'PREPAID': 'Pre-pago',
+  'ONLINE': 'Pago Online', 'WALLET': 'Carteira Digital', 'VOUCHER': 'Voucher',
+  'DINHEIRO': 'Dinheiro', 'CREDITO': 'Credito', 'DEBITO': 'Debito',
+};
+
 function _paymentLabel(p) {
-  const base = p._systemLabel || p.method || p.name || p.tipo || p.paymentMethod || '';
+  const raw = p._systemLabel || p.method || p.name || p.tipo || p.paymentMethod || '';
+  const upper = String(raw).toUpperCase().trim();
+
+  if (upper.includes('VOUCHER')) return raw;
+
+  let label = _PAY_MAP[upper] || null;
+  if (!label) {
+    for (const [k, v] of Object.entries(_PAY_MAP)) {
+      if (upper.startsWith(k)) { label = v; break; }
+    }
+  }
+  if (!label) label = raw;
+
+  const brand = p.card?.brand;
+  if (brand) label += ` ${brand}`;
 
   const isPrepaid = p.prepaid === true || String(p.type || '').toUpperCase() === 'ONLINE';
+  label += isPrepaid ? ' (pago online)' : ' (cobrar do cliente)';
 
-  const isVoucher = String(base).toLowerCase().includes('voucher');
-  if (isVoucher) return base;
-
-  const suffix = isPrepaid ? 'Pago Online' : 'Cobrar do cliente';
-  return `${base} - ${suffix}`;
+  return label;
 }
 
 function _substituteVars(str, ctx) {

@@ -1,4 +1,5 @@
 import api from '../api.js'
+import { API_URL } from '../config.js'
 
 let buffer = []
 let flushTimer = null
@@ -51,7 +52,7 @@ if (typeof window !== 'undefined') {
     if (buffer.length > 0) {
       const events = buffer.splice(0)
       const blob = new Blob([JSON.stringify({ events })], { type: 'application/json' })
-      navigator.sendBeacon('/api/public/tracking/events', blob)
+      navigator.sendBeacon((API_URL || '') + '/public/tracking/events', blob)
     }
   })
 }

@@ -122,6 +122,8 @@ const router = createRouter({
     { path: '/login/rider', component: LoginRider },
     { path: '/login/affiliate', component: LoginAffiliate },
     { path: '/register', component: Register },
+    { path: '/termos-de-servico', component: () => import('./views/TermosDeServico.vue') },
+    { path: '/politica-de-privacidade', component: () => import('./views/PoliticaDePrivacidade.vue') },
     { path: '/verify-email', component: VerifyEmail },
     { path: '/setup', component: SetupCompany, meta: { requiresAuth: true, noSidebar: true } },
     { path: '/', component: () => import('./views/LandingPage.vue'), beforeEnter: async () => {
@@ -167,6 +169,7 @@ const router = createRouter({
   { path: '/stock/purchase-imports', component: PurchaseImports, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true, requiresModule: 'WHATSAPP' } },
   { path: '/settings/ifood', component: IFoodIntegration, meta: { requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/settings/integrations/aiqfome', component: () => import('./components/AiqfomeConfig.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/meta-pixel', component: MetaPixelIntegration, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/integrations/new', component: IntegrationForm, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },

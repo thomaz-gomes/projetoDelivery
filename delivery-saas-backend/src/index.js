@@ -15,7 +15,7 @@ import { webhooksRouter } from "./routes/webhooks.js";
 import { authRouter } from "./routes/auth.js";
 import { ordersRouter } from "./routes/orders.js";
 import { ticketsRouter } from "./routes/tickets.js";
-import { integrationsRouter } from "./routes/integrations.js";
+import { integrationsRouter, aiqfomeCallbackRouter } from "./routes/integrations.js";
 import { fileSourcesRouter } from "./routes/fileSources.js";
 import { ifoodRouter } from "./routes/ifood.js";
 import { ridersRouter } from "./routes/riders.js";
@@ -215,6 +215,7 @@ app.use("/auth", authRouter);
 app.use("/webhooks", webhooksRouter);
 app.use("/orders", ordersRouter);
 app.use("/tickets", ticketsRouter);
+app.use("/integrations", aiqfomeCallbackRouter); // aiqfome OAuth callback (no auth)
 app.use("/integrations", integrationsRouter);
 app.use('/file-sources', fileSourcesRouter);
 app.use("/ifood", requireModule('ifood'), ifoodRouter);

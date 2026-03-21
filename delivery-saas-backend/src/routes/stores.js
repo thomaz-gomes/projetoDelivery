@@ -39,6 +39,23 @@ async function persistStoreSettings(storeId, toSave) {
   }
 }
 
+async function syncStoreStatusToAiqfome(companyId, storeId, action) {
+  try {
+    const integ = await prisma.apiIntegration.findFirst({
+      where: { companyId, provider: 'AIQFOME', storeId, enabled: true },
+    });
+    if (!integ || !integ.merchantId || !integ.accessToken) return;
+    const { aiqfomePost, aiqfomePut } = await import('../integrations/aiqfome/client.js');
+    const aiqStoreId = integ.merchantId;
+    if (action === 'open') await aiqfomePost(integ.id, `/api/v2/store/${aiqStoreId}/open`);
+    else if (action === 'close') await aiqfomePost(integ.id, `/api/v2/store/${aiqStoreId}/close`);
+    else if (action === 'standby') await aiqfomePut(integ.id, `/api/v2/store/${aiqStoreId}/stand-by`);
+    console.log(`[aiqfome] Store ${action} synced for store ${aiqStoreId}`);
+  } catch (e) {
+    console.warn(`[aiqfome] Store sync failed (${action}):`, e?.message);
+  }
+}
+
 export const storesRouter = express.Router()
 storesRouter.use(authMiddleware)
 
@@ -333,6 +350,11 @@ storesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       }
     }
 
+    // Sync store open/close status to aiqfome when isActive changes
+    if (body.isActive !== undefined && body.isActive !== existing.isActive) {
+      syncStoreStatusToAiqfome(companyId, id, body.isActive ? 'open' : 'close').catch(() => {});
+    }
+
     res.json(updated)
   } catch (e) {
     console.error('PUT /stores/:id failed', e)
@@ -476,6 +498,8 @@ storesRouter.post('/:id/settings/upload', requireRole('ADMIN'), async (req, res)
     // support top-level forceOpen flag to manually override open/closed state for the store
     if (typeof forceOpen !== 'undefined') {
       try { saved.forceOpen = forceOpen } catch (e) { /* ignore */ }
+      // Sync forceOpen state to aiqfome
+      syncStoreStatusToAiqfome(companyId, id, forceOpen ? 'open' : 'close').catch(() => {});
     }
 
     // Persist settings: merge into existing settings so menus mapping is preserved

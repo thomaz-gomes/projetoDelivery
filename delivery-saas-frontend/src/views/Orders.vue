@@ -118,6 +118,8 @@ const statusFiltersMobile = computed(() => statusFilters.filter(s => s.value !==
 // extra filters
 const searchOrderNumber = ref('');
 const searchCustomerName = ref('');
+const filterEntrega = ref(true);
+const filterRetirada = ref(true);
 let audio = null;
 const now = ref(Date.now());
 // connection state for a dev-friendly badge (moved to module scope so computed can access it)
@@ -1224,7 +1226,11 @@ const filteredOrders = computed(() => {
     const qName = String(searchCustomerName.value || '').trim().toLowerCase();
     const customerMatch = !qName || String(o.customerName || '').toLowerCase().includes(qName);
 
-    if (!statusMatch || !riderMatch || !orderNumberMatch || !customerMatch) return false;
+    // filtro por tipo de pedido (entrega / retirada)
+    const oType = getOrderType(o);
+    const typeMatch = (oType === 'DELIVERY' && filterEntrega.value) || (oType === 'RETIRADA' && filterRetirada.value);
+
+    if (!statusMatch || !riderMatch || !orderNumberMatch || !customerMatch || !typeMatch) return false;
 
     // filtro: pedidos com mais de 24h não devem ser exibidos
     const created = getCreatedAt(o);
@@ -1276,7 +1282,7 @@ const selectedOrderIds = ref(new Set());
 
 function getOrderType(o) {
   const raw = (o.orderType || o.payload?.orderType || '').toUpperCase();
-  if (raw === 'RETIRADA') return 'RETIRADA';
+  if (['RETIRADA', 'TAKEOUT', 'PICKUP', 'TAKE-OUT', 'PICK-UP', 'BALCAO', 'BALCÃO', 'INDOOR'].includes(raw)) return 'RETIRADA';
   if (raw === 'DELIVERY') return 'DELIVERY';
   // Fallback: detect by customer name pattern for PDV "balcão" orders
   const name = (o.customerName || '').toLowerCase();
@@ -3126,6 +3132,18 @@ function pulseButton() {
     </div>
     <!-- 🔍 Filtros + Som -->
     
+    <!-- Filtros por tipo de pedido -->
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <label class="form-check form-check-inline d-flex align-items-center gap-1 mb-0" style="cursor:pointer">
+        <input type="checkbox" class="form-check-input" v-model="filterEntrega" />
+        <span class="form-check-label" style="font-size:0.85rem"><i class="bi bi-bicycle me-1"></i>Entrega</span>
+      </label>
+      <label class="form-check form-check-inline d-flex align-items-center gap-1 mb-0" style="cursor:pointer">
+        <input type="checkbox" class="form-check-input" v-model="filterRetirada" />
+        <span class="form-check-label" style="font-size:0.85rem"><i class="bi bi-bag me-1"></i>Retirada</span>
+      </label>
+    </div>
+
     <!-- Pending acceptance box (iFood orders awaiting manual accept) -->
     <div v-if="pendingOrders.length > 0" class="pending-acceptance-box mb-3">
       <div class="pending-header">
@@ -3325,6 +3343,10 @@ function pulseButton() {
                 'bg-success': selectedOrder.status === 'CONCLUIDO',
                 'bg-danger': selectedOrder.status === 'CANCELADO'
               }">{{ STATUS_LABEL[selectedOrder.status] || selectedOrder.status }}</span>
+            </div>
+            <div class="od-info-item" v-if="selectedOrder">
+              <i :class="getOrderType(selectedOrder) === 'RETIRADA' ? 'bi bi-bag' : 'bi bi-bicycle'"></i>
+              <span>{{ getOrderType(selectedOrder) === 'RETIRADA' ? 'Retirada' : 'Entrega' }}</span>
             </div>
           </div>
 

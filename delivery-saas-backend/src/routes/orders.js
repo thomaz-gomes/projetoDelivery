@@ -144,6 +144,19 @@ ordersRouter.post('/:id/assign', requireRole('ADMIN', 'ATTENDANT', 'STORE'), asy
     })();
   }
 
+  // If status changed to SAIU_PARA_ENTREGA and order is from aiqfome, notify aiqfome
+  if (newStatus === 'SAIU_PARA_ENTREGA' && order.customerSource === 'AIQFOME' && order.externalId) {
+    (async () => {
+      try {
+        const { updateAiqfomeOrderStatus } = await import('../integrations/aiqfome/orders.js');
+        await updateAiqfomeOrderStatus(order.companyId, order.externalId, 'SAIU_PARA_ENTREGA');
+        console.log('[aiqfome] Notified dispatch for order', order.externalId);
+      } catch (e) {
+        console.warn('[aiqfome] failed to notify dispatch:', e?.message);
+      }
+    })();
+  }
+
   return res.json({ ok: true, order });
 });
 
@@ -549,6 +562,15 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
         }
       }
     } catch (e) { console.warn('iFood notify attempt failed:', e && e.message); }
+
+    // If this order belongs to an AIQFOME integration, notify aiqfome of the status change
+    try {
+      if (updated.customerSource === 'AIQFOME' && updated.externalId) {
+        const { updateAiqfomeOrderStatus } = await import('../integrations/aiqfome/orders.js');
+        await updateAiqfomeOrderStatus(companyId, updated.externalId, status);
+        console.log('[aiqfome] Notified status change for order', updated.externalId, '->', status);
+      }
+    } catch (e) { console.warn('[aiqfome] notify attempt failed:', e?.message); }
 
     // If order was completed and has a rider, credit rider's account
     try {

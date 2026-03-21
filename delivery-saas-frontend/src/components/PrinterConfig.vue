@@ -10,28 +10,16 @@
           </div>
 
           <div class="modal-body">
-            <!-- Tabs -->
-            <ul class="nav nav-tabs mb-3">
-              <li class="nav-item">
-                <a class="nav-link" :class="{ active: activeTab === 'agent' }" href="#"
-                   @click.prevent="activeTab = 'agent'">
-                  Agente de Impressão
-                  <span class="ms-1 badge rounded-pill"
-                        :class="agentConnected ? 'bg-success' : 'bg-secondary'">
-                    {{ agentConnected ? '● Conectado' : '○ Desconectado' }}
-                  </span>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" :class="{ active: activeTab === 'template' }" href="#"
-                   @click.prevent="activeTab = 'template'">
-                  Template da Comanda
-                </a>
-              </li>
-            </ul>
+            <!-- Header: status badge -->
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <span class="badge rounded-pill"
+                    :class="agentConnected ? 'bg-success' : 'bg-secondary'">
+                {{ agentConnected ? '● Conectado' : '○ Desconectado' }}
+              </span>
+            </div>
 
-            <!-- ─── Tab: Agente ─────────────────────────────────────────────── -->
-            <div v-show="activeTab === 'agent'">
+            <!-- ─── Agente de Impressão ────────────────────────────────────── -->
+            <div>
 
               <!-- Barra superior: URL + Baixar -->
               <div class="d-flex align-items-start gap-3 mb-3">
@@ -103,25 +91,6 @@
               </div>
             </div>
 
-            <!-- ─── Tab: Template ───────────────────────────────────────────── -->
-            <div v-show="activeTab === 'template'">
-              <!-- Cabeçalho do cupom -->
-              <div class="row g-2 mb-3">
-                <div class="col-md-6">
-                  <label class="form-label small fw-semibold">Nome do estabelecimento</label>
-                  <input v-model="headerName" type="text" class="form-control form-control-sm"
-                         placeholder="Ex: Pizzaria Bella Nápoles" />
-                  <div class="form-text">Aparece no topo do cupom</div>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label small fw-semibold">Cidade / Estado</label>
-                  <input v-model="headerCity" type="text" class="form-control form-control-sm"
-                         placeholder="Ex: Salvador - BA" />
-                </div>
-              </div>
-
-              <ReceiptTemplateEditor v-model="receiptTemplate" @test-print="testPrint" />
-            </div>
           </div>
 
           <!-- Footer -->
@@ -135,13 +104,10 @@
                 Aguardando o agente digitar o código...
               </div>
               <div v-else class="small text-muted">
-                Agente não conectado. Vá para a aba "Agente de Impressão" para parear.
+                Agente não conectado. Gere um código de pareamento acima.
               </div>
             </div>
             <button class="btn btn-secondary" @click="close">Fechar</button>
-            <button class="btn btn-primary" @click="save" :disabled="saving">
-              {{ saving ? 'Salvando...' : 'Salvar template' }}
-            </button>
           </div>
         </div>
       </div>
@@ -208,15 +174,12 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import api from '../api';
-import ReceiptTemplateEditor from './ReceiptTemplateEditor.vue';
 
 const props = defineProps({ visible: Boolean });
 const emit  = defineEmits(['update:visible', 'saved']);
 
 // ── State ─────────────────────────────────────────────────────────────────
 const visible         = ref(false);
-const activeTab       = ref('agent');
-const saving          = ref(false);
 
 // Agente
 const printers        = ref([]);
@@ -231,11 +194,6 @@ const pairingCountdown = ref(0);
 const pairingLoading  = ref(false);
 let pairingTimer      = null;
 let pairingPollTimer  = null;
-
-// Template / Cabeçalho
-const receiptTemplate = ref('');
-const headerName      = ref('');
-const headerCity      = ref('');
 
 // ── Computed ──────────────────────────────────────────────────────────────
 const currentServerUrl = computed(() => {
@@ -262,7 +220,6 @@ function formatCountdown(seconds) {
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 onMounted(() => {
   visible.value = props.visible;
-  loadFromBackend();
   if (visible.value) discoverPrinters();
 });
 
@@ -275,20 +232,6 @@ watch(() => props.visible, (v) => {
   visible.value = v;
   if (v) discoverPrinters();
 });
-
-// ── Dados do backend ─────────────────────────────────────────────────────
-async function loadFromBackend() {
-  try {
-    const { data } = await api.get('/agent-setup');
-    if (data.printerSetting) {
-      receiptTemplate.value = data.printerSetting.receiptTemplate || '';
-      headerName.value      = data.printerSetting.headerName      || '';
-      headerCity.value      = data.printerSetting.headerCity      || '';
-    }
-  } catch (e) {
-    // fallback silencioso — usuário pode não estar autenticado ainda
-  }
-}
 
 // ── Descoberta de impressoras ─────────────────────────────────────────────
 async function discoverPrinters() {
@@ -326,8 +269,6 @@ function startPairingPoll() {
         agentConnected.value = true;
         pushLog('✅ Agente conectado com sucesso!');
         stopPairingPoll();
-        // muda para a aba de template após parear
-        activeTab.value = 'template';
       }
     } catch (_) { /* silencioso */ }
   }, 4000);
@@ -371,43 +312,6 @@ async function generatePairingCode() {
     pushLog('Erro ao gerar código: ' + (e?.response?.data?.message || e?.message || String(e)));
   } finally {
     pairingLoading.value = false;
-  }
-}
-
-// ── Teste de impressão ────────────────────────────────────────────────────
-async function testPrint() {
-  try {
-    pushLog('Enviando impressão de teste...');
-    const { data } = await api.post('/agent-setup/print-test', {
-      receiptTemplate: receiptTemplate.value || undefined,
-      headerName:      headerName.value      || undefined,
-      headerCity:      headerCity.value      || undefined,
-    });
-    if (data?.ok) pushLog('✅ Teste enviado com sucesso');
-    else pushLog('Falha no teste: ' + JSON.stringify(data));
-  } catch (e) {
-    pushLog('Erro no teste: ' + (e?.response?.data?.message || e?.message || String(e)));
-    // muda para aba do agente para mostrar erro
-    if (e?.response?.status === 404) activeTab.value = 'agent';
-  }
-}
-
-// ── Salvar ────────────────────────────────────────────────────────────────
-async function save() {
-  saving.value = true;
-  try {
-    await api.post('/agent-setup/settings', {
-      receiptTemplate: receiptTemplate.value || null,
-      headerName:      headerName.value      || null,
-      headerCity:      headerCity.value      || null,
-    });
-    pushLog('Template salvo no servidor');
-    emit('saved', { receiptTemplate: receiptTemplate.value });
-    emit('update:visible', false);
-  } catch (e) {
-    pushLog('Erro ao salvar: ' + (e?.response?.data?.message || e?.message || String(e)));
-  } finally {
-    saving.value = false;
   }
 }
 

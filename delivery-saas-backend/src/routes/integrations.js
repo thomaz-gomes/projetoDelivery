@@ -20,7 +20,46 @@ import {
 import { ifoodPoll, ifoodAck } from '../integrations/ifood/client.js';
 import { processIFoodWebhook } from '../services/ifoodWebhookProcessor.js';
 
+import { startAiqfomeAuth, exchangeAiqfomeCode, refreshAiqfomeToken } from '../integrations/aiqfome/oauth.js';
+import { syncMenuToAiqfome } from '../integrations/aiqfome/menu.js';
+import { aiqfomeGet, aiqfomePost, aiqfomePut } from '../integrations/aiqfome/client.js';
+
 export const integrationsRouter = express.Router();
+
+// ───── aiqfome OAuth callback (NO auth — redirect from ID Magalu) ─────
+// Exported separately so the main app can mount it outside of authMiddleware.
+export const aiqfomeCallbackRouter = express.Router();
+aiqfomeCallbackRouter.get('/aiqfome/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    if (!code || !state) return res.status(400).send('Missing code or state');
+
+    const integrationId = state;
+    const integration = await prisma.apiIntegration.findUnique({ where: { id: integrationId } });
+    if (!integration) return res.status(404).send('Integration not found');
+
+    const tokens = await exchangeAiqfomeCode({ integrationId, code });
+
+    // Register webhook on aiqfome
+    try {
+      const merchantId = integration.merchantId;
+      const webhookUrl = process.env.AIQFOME_WEBHOOK_URL || `${process.env.BACKEND_URL}/webhooks/aiqfome`;
+      await aiqfomePost(integrationId, `/api/v2/store/${merchantId}/webhooks`, {
+        url: webhookUrl,
+      });
+    } catch (e) {
+      console.error('[aiqfome callback] failed to register webhook:', e?.message);
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/settings/integrations/aiqfome?connected=true`);
+  } catch (e) {
+    console.error('[aiqfome callback] error:', e?.message);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/settings/integrations/aiqfome?error=${encodeURIComponent(e?.message || 'Unknown error')}`);
+  }
+});
+
 integrationsRouter.use(authMiddleware);
 integrationsRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
 
@@ -540,5 +579,192 @@ integrationsRouter.post('/ifood/action', requireRole('ADMIN'), async (req, res) 
     console.error('POST /integrations/ifood/action error', e?.response?.data ?? e?.message ?? e);
     if (e?.response?.data) return res.status(e.response.status || 502).json({ message: 'iFood error', providerError: e.response.data });
     res.status(500).json({ message: 'Failed to call iFood action', error: e?.message || String(e) });
+  }
+});
+
+// ══════════════════════════════════════════════════
+// ───── aiqfome routes (authenticated) ─────
+// ══════════════════════════════════════════════════
+
+// OAuth: start linking
+integrationsRouter.post('/aiqfome/link/start', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { clientId, clientSecret, storeId } = req.body;
+    const r = await startAiqfomeAuth({ companyId, storeId, clientId, clientSecret });
+    res.json(r); // { authorizationUrl, integrationId }
+  } catch (e) {
+    console.error('[aiqfome link/start] error:', e?.response?.data ?? e?.message ?? e);
+    if (e?.response?.data) {
+      return res.status(e.response.status || 502).json({ message: 'Falha ao iniciar vínculo (aiqfome)', providerError: e.response.data });
+    }
+    res.status(500).json({ message: 'Falha ao iniciar vínculo aiqfome', error: e?.message || String(e) });
+  }
+});
+
+// OAuth: refresh token
+integrationsRouter.post('/aiqfome/token/refresh', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { integrationId } = req.body;
+    if (!integrationId) {
+      const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' } });
+      if (!integ) return res.status(404).json({ message: 'Sem integração aiqfome' });
+      await refreshAiqfomeToken(integ.id);
+    } else {
+      await refreshAiqfomeToken(integrationId);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[aiqfome token/refresh] error:', e?.response?.data ?? e?.message ?? e);
+    res.status(500).json({ message: 'Falha ao renovar token aiqfome', error: e?.message || String(e) });
+  }
+});
+
+// Unlink: clear tokens and disable integration
+integrationsRouter.post('/aiqfome/unlink', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const which = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' } });
+    if (!which) return res.status(404).json({ message: 'sem integração aiqfome' });
+    const i = await prisma.apiIntegration.update({
+      where: { id: which.id },
+      data: { accessToken: null, refreshToken: null, tokenExpiresAt: null, enabled: false },
+    });
+    res.json({ ok: true, integration: i });
+  } catch (e) {
+    console.error('[aiqfome unlink] error:', e?.message);
+    res.status(500).json({ message: 'Falha ao desvincular aiqfome', error: e?.message || String(e) });
+  }
+});
+
+// ── aiqfome Payment Method Mappings ──
+
+const AIQFOME_DEFAULT_CODES = [
+  { aiqfomeCode: 'CASH', defaultName: 'Dinheiro' },
+  { aiqfomeCode: 'CREDIT', defaultName: 'Crédito' },
+  { aiqfomeCode: 'DEBIT', defaultName: 'Débito' },
+  { aiqfomeCode: 'MEAL_VOUCHER', defaultName: 'Vale Refeição' },
+  { aiqfomeCode: 'FOOD_VOUCHER', defaultName: 'Vale Alimentação' },
+  { aiqfomeCode: 'PIX', defaultName: 'PIX' },
+  { aiqfomeCode: 'WALLET', defaultName: 'Carteira Digital' },
+  { aiqfomeCode: 'OTHER', defaultName: 'Outros' },
+  { aiqfomeCode: 'ONLINE', defaultName: 'Pagamento Online' },
+];
+
+// GET /integrations/aiqfome/:integrationId/payment-mappings
+integrationsRouter.get('/aiqfome/:integrationId/payment-mappings', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { integrationId } = req.params;
+    const integ = await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'AIQFOME' } });
+    if (!integ) return res.status(404).json({ message: 'Integração não encontrada' });
+
+    const mappings = await prisma.aiqfomePaymentMapping.findMany({ where: { integrationId }, orderBy: { aiqfomeCode: 'asc' } });
+
+    // Merge with defaults so frontend always shows all known codes
+    const mapped = new Map(mappings.map(m => [m.aiqfomeCode, m]));
+    const result = AIQFOME_DEFAULT_CODES.map(d => {
+      const existing = mapped.get(d.aiqfomeCode);
+      return {
+        aiqfomeCode: d.aiqfomeCode,
+        defaultName: d.defaultName,
+        systemName: existing ? existing.systemName : '',
+        id: existing ? existing.id : null,
+      };
+    });
+    // Include any extra mappings not in defaults (custom codes)
+    for (const m of mappings) {
+      if (!AIQFOME_DEFAULT_CODES.find(d => d.aiqfomeCode === m.aiqfomeCode)) {
+        result.push({ aiqfomeCode: m.aiqfomeCode, defaultName: m.aiqfomeCode, systemName: m.systemName, id: m.id });
+      }
+    }
+    res.json(result);
+  } catch (e) {
+    console.error('[aiqfome] GET payment-mappings error', e?.message);
+    res.status(500).json({ message: 'Erro ao carregar mapeamentos' });
+  }
+});
+
+// PUT /integrations/aiqfome/:integrationId/payment-mappings (bulk save)
+integrationsRouter.put('/aiqfome/:integrationId/payment-mappings', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { integrationId } = req.params;
+    const integ = await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'AIQFOME' } });
+    if (!integ) return res.status(404).json({ message: 'Integração não encontrada' });
+
+    const mappings = req.body?.mappings;
+    if (!Array.isArray(mappings)) return res.status(400).json({ message: 'mappings deve ser um array' });
+
+    const ops = [];
+    for (const m of mappings) {
+      if (!m.aiqfomeCode) continue;
+      const code = String(m.aiqfomeCode).toUpperCase().trim();
+      const name = String(m.systemName || '').trim();
+      if (!name) {
+        ops.push(prisma.aiqfomePaymentMapping.deleteMany({ where: { integrationId, aiqfomeCode: code } }));
+      } else {
+        ops.push(prisma.aiqfomePaymentMapping.upsert({
+          where: { integ_aiqfome_code_key: { integrationId, aiqfomeCode: code } },
+          update: { systemName: name },
+          create: { integrationId, aiqfomeCode: code, systemName: name },
+        }));
+      }
+    }
+    await prisma.$transaction(ops);
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[aiqfome] PUT payment-mappings error', e?.message);
+    res.status(500).json({ message: 'Erro ao salvar mapeamentos' });
+  }
+});
+
+// Menu sync
+integrationsRouter.post('/aiqfome/menu/sync', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { integrationId, menuId } = req.body;
+    if (!integrationId || !menuId) return res.status(400).json({ message: 'integrationId e menuId são obrigatórios' });
+    const r = await syncMenuToAiqfome(integrationId, menuId);
+    res.json(r);
+  } catch (e) {
+    console.error('[aiqfome menu/sync] error:', e?.message);
+    res.status(500).json({ message: 'Falha ao sincronizar cardápio com aiqfome', error: e?.message || String(e) });
+  }
+});
+
+// Store management: open / close / standby
+integrationsRouter.post('/aiqfome/store/:action', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { action } = req.params;
+    if (!['open', 'close', 'standby'].includes(action)) {
+      return res.status(400).json({ message: 'action deve ser open, close ou standby' });
+    }
+
+    const integration = await prisma.apiIntegration.findFirst({
+      where: { companyId, provider: 'AIQFOME', enabled: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!integration) return res.status(404).json({ message: 'sem integração aiqfome ativa' });
+
+    const merchantId = integration.merchantId;
+    if (!merchantId) return res.status(400).json({ message: 'merchantId não configurado na integração' });
+
+    const actionMap = {
+      open: { method: 'post', path: `/api/v2/store/${merchantId}/open` },
+      close: { method: 'post', path: `/api/v2/store/${merchantId}/close` },
+      standby: { method: 'put', path: `/api/v2/store/${merchantId}/stand-by` },
+    };
+    const { method, path } = actionMap[action];
+    const data = method === 'put'
+      ? await aiqfomePut(integration.id, path, {})
+      : await aiqfomePost(integration.id, path, {});
+    res.json({ ok: true, data });
+  } catch (e) {
+    console.error('[aiqfome store/:action] error:', e?.message);
+    res.status(500).json({ message: 'Falha ao alterar status da loja no aiqfome', error: e?.message || String(e) });
   }
 });

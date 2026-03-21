@@ -253,15 +253,9 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
               const totalQty = oqty * qty;
               const totalSuffix = qty > 1 ? ` (${totalQty} total)` : '';
               let optLine;
-              if (oqty > 1) {
-                optLine = optPrice > 0
-                  ? `   -${oqty}x ${optName}: R$ ${_fmtN(optPrice)}${totalSuffix}`
-                  : `   -${oqty}x ${optName}${totalSuffix}`;
-              } else {
-                optLine = optPrice > 0
-                  ? `   + ${optName}: R$ ${_fmtN(optPrice)}${totalSuffix}`
-                  : `   + ${optName}${totalSuffix}`;
-              }
+              optLine = optPrice > 0
+                ? `   ${oqty}x ${optName}: R$ ${_fmtN(optPrice)}${totalSuffix}`
+                : `   ${oqty}x ${optName}${totalSuffix}`;
               if (margin > 0) parts.push(ESCPos.marginLeft(margin));
               parts.push(ESCPos.text(optLine, charset));
             }
@@ -289,8 +283,10 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         for (const p of rawPayments) {
           const method = _paymentLabel(p);
           const value  = _fmtN(_toNum(p.value || p.amount || p.valor || 0));
-          const padLen    = payCols - method.length - value.length;
-          const rowLine   = padLen > 0 ? method + ' '.repeat(padLen) + value : method + ' ' + value;
+          // Padding interno para não encostar nas bordas do fundo invertido
+          const innerCols = payCols - 2; // 1 espaço em cada lado
+          const padLen    = innerCols - method.length - value.length;
+          const rowLine   = ' ' + (padLen > 0 ? method + ' '.repeat(padLen) + value : method + ' ' + value) + ' ';
           if (margin > 0) parts.push(ESCPos.marginLeft(margin));
           parts.push(ESCPos.text(rowLine, charset));
         }
@@ -344,20 +340,12 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
 
     _row('Qtd itens:', ctx.total_itens_count || '0');
     _row('Total Itens(=)', ctx.subtotal || '0,00');
-    _row('Taxa entrega(+)', ctx.taxa_entrega || '0,00');
-    _row('Acrescimo(+)', ctx.acrescimo || '0,00');
-    _row('Desconto(-)', ctx.desconto || '0,00');
+    _row('Taxa entrega(+)', ctx.taxa_entrega || ctx.taxa_val || '0,00');
+    _row('Acrescimo(+)', ctx.acrescimo || ctx.acrescimo_val || '0,00');
+    _row('Desconto(-)', ctx.desconto || ctx.desconto_val || '0,00');
     parts.push(ESCPos.bold(true));
-    _row('TOTAL(=)', ctx.total || '0,00');
+    _row('TOTAL(=)', ctx.total || ctx.total_val || '0,00');
     parts.push(ESCPos.bold(false));
-  } else {
-    // Template de blocos tem totais, mas pode não ter Acrescimo — injetar se ausente
-    const hasAcrescimo = blocks.some(b =>
-      (b.t === 'text' || b.t === 'cond') && b.c && b.c.includes('{{acrescimo}}')
-    );
-    if (!hasAcrescimo) {
-      _row('Acrescimo(+)', ctx.acrescimo || '0,00');
-    }
   }
 
   parts.push(ESCPos.feedLines(4));
@@ -494,6 +482,7 @@ function buildBlockContext(order) {
     subtotal:          subtotalVal > 0  ? _fmtN(subtotalVal)  : '0,00',
     taxa_entrega:      _fmtN(taxaVal),
     acrescimo:         _fmtN(acrescimoVal),
+    acrescimo_val:     acrescimoVal > 0 ? _fmtN(acrescimoVal) : '',
     desconto:          _fmtN(descontoVal),
     total:             totalVal > 0     ? _fmtN(totalVal)     : '0,00',
     observacoes:       order.notes || order.observation || '',
@@ -744,10 +733,7 @@ function buildContext(order, printer) {
             const oqty = Number(o.quantity || 1);
             const totalQty = oqty * qty;
             const totalSuffix = qty > 1 ? ` (${totalQty} total)` : '';
-            if (oqty > 1) {
-              return `   -${oqty}x ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}${totalSuffix}`;
-            }
-            return `   + ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}${totalSuffix}`;
+            return `   ${oqty}x ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}${totalSuffix}`;
           }).join('\n')
         : '';
       return {
@@ -821,24 +807,44 @@ function buildContext(order, printer) {
 }
 
 // ─── Utilitários de pagamento ─────────────────────────────────────────────────
+const PAY_METHOD_MAP = {
+  'CASH': 'Dinheiro', 'CREDIT': 'Credito', 'DEBIT': 'Debito',
+  'CREDIT_CARD': 'Credito', 'DEBIT_CARD': 'Debito',
+  'MEAL_VOUCHER': 'Vale Refeicao', 'FOOD_VOUCHER': 'Vale Alimentacao',
+  'GIFT_CARD': 'Gift Card', 'PIX': 'PIX', 'PREPAID': 'Pre-pago',
+  'ONLINE': 'Pago Online', 'WALLET': 'Carteira Digital', 'VOUCHER': 'Voucher',
+  'DINHEIRO': 'Dinheiro', 'CREDITO': 'Credito', 'DEBITO': 'Debito',
+};
+
 /**
- * Resolve label da forma de pagamento com sufixo "Pago Online" ou "Cobrar do cliente".
- * @param {object} p  — objeto de pagamento (iFood method ou PDV payment)
- * @returns {string}  ex: "Crédito VISA - Pago Online", "Dinheiro - Cobrar do cliente"
+ * Resolve label da forma de pagamento no mesmo formato da tela de detalhes:
+ *   "Credito VISA (pago online)", "Dinheiro (cobrar do cliente)", "Voucher desconto"
  */
 function _paymentLabel(p) {
-  // Label base: _systemLabel (enriquecido pelo webhook) > method > name > tipo > paymentMethod
-  const base = p._systemLabel || p.method || p.name || p.tipo || p.paymentMethod || '';
-
-  // Determinar se é pago online ou cobrar do cliente
-  const isPrepaid = p.prepaid === true || String(p.type || '').toUpperCase() === 'ONLINE';
+  const raw = p._systemLabel || p.method || p.name || p.tipo || p.paymentMethod || '';
+  const upper = String(raw).toUpperCase().trim();
 
   // Voucher/desconto não precisa de sufixo
-  const isVoucher = String(base).toLowerCase().includes('voucher');
-  if (isVoucher) return base;
+  if (upper.includes('VOUCHER')) return raw;
 
-  const suffix = isPrepaid ? 'Pago Online' : 'Cobrar do cliente';
-  return `${base} - ${suffix}`;
+  // Traduzir método
+  let label = PAY_METHOD_MAP[upper] || null;
+  if (!label) {
+    for (const [k, v] of Object.entries(PAY_METHOD_MAP)) {
+      if (upper.startsWith(k)) { label = v; break; }
+    }
+  }
+  if (!label) label = raw;
+
+  // Adicionar bandeira do cartão (VISA, MASTERCARD, etc.)
+  const brand = p.card?.brand;
+  if (brand) label += ` ${brand}`;
+
+  // Sufixo: (pago online) ou (cobrar do cliente)
+  const isPrepaid = p.prepaid === true || String(p.type || '').toUpperCase() === 'ONLINE';
+  label += isPrepaid ? ' (pago online)' : ' (cobrar do cliente)';
+
+  return label;
 }
 
 // ─── Utilitários numéricos ────────────────────────────────────────────────────
