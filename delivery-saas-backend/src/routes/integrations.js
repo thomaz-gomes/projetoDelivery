@@ -51,11 +51,11 @@ aiqfomeCallbackRouter.get('/aiqfome/callback', async (req, res) => {
       console.error('[aiqfome callback] failed to register webhook:', e?.message);
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
     res.redirect(`${frontendUrl}/settings/integrations/aiqfome?connected=true`);
   } catch (e) {
     console.error('[aiqfome callback] error:', e?.message);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
     res.redirect(`${frontendUrl}/settings/integrations/aiqfome?error=${encodeURIComponent(e?.message || 'Unknown error')}`);
   }
 });
