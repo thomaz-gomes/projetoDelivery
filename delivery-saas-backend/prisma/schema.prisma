@@ -28,6 +28,7 @@ enum OrderStatus {
 enum CustomerSource {
   PUBLIC
   IFOOD
+  AIQFOME
   MANUAL
 }
 
@@ -471,6 +472,7 @@ model ApiIntegration {
   // previously there was a unique constraint companyId+provider; removed to allow
   // multiple integrations of the same provider per company (multi-store setups)
   paymentMappings IfoodPaymentMapping[]
+  aiqfomePaymentMappings AiqfomePaymentMapping[] @relation("AiqfomePayments")
 }
 
 // Maps iFood payment method codes to company PaymentMethod entries.
@@ -485,6 +487,18 @@ model IfoodPaymentMapping {
   updatedAt     DateTime       @updatedAt
 
   @@unique([integrationId, ifoodCode], name: "integ_ifood_code_key")
+}
+
+model AiqfomePaymentMapping {
+  id            String         @id @default(uuid())
+  integrationId String
+  integration   ApiIntegration @relation("AiqfomePayments", fields: [integrationId], references: [id], onDelete: Cascade)
+  aiqfomeCode   String
+  systemName    String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([integrationId, aiqfomeCode], name: "integ_aiqfome_code_key")
 }
 
 // Optional mapping of an API integration to a specific Store (for multi-store setups)
