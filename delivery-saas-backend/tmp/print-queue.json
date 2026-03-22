@@ -1950,5 +1950,103 @@
       ]
     },
     "storeId": "8433873c-5512-47aa-8847-c2f7282d9788"
+  },
+  {
+    "id": "1774154266970-591475",
+    "createdAt": 1774154266970,
+    "order": {
+      "id": "07de82b6-697f-497d-9cdf-5ce337727496",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "d9952923-ed61-4294-8166-0935d608c69d",
+      "qrDataUrl": "data:image/png;base64,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",
+      "rasterDataUrl": "data:image/png;base64,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",
+      "qrText": "http://localhost:5173/orders/07de82b6-697f-497d-9cdf-5ce337727496",
+      "payload": {
+        "total": 26.99,
+        "payment": {
+          "raw": null,
+          "amount": 26.99,
+          "method": "Pix",
+          "changeFor": null,
+          "methodCode": "Pix"
+        },
+        "delivery": {
+          "deliveryAddress": {
+            "city": null,
+            "state": null,
+            "country": "BR",
+            "latitude": null,
+            "longitude": null,
+            "reference": null,
+            "complement": null,
+            "postalCode": null,
+            "streetName": "av rui barbosa 118",
+            "observation": null,
+            "neighborhood": "Centro",
+            "streetNumber": null,
+            "formattedAddress": "av rui barbosa 118"
+          }
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Frango Grelhado Na Chapa",
+              "notes": null,
+              "price": 21.99,
+              "options": [],
+              "quantity": 1
+            }
+          ],
+          "source": "PDV",
+          "address": {
+            "number": "",
+            "street": "av rui barbosa 118",
+            "formatted": "av rui barbosa 118",
+            "reference": "",
+            "complement": "",
+            "observation": "",
+            "neighborhood": "Centro"
+          },
+          "customer": {
+            "name": "PEDIDO DE TESTE - Flávia queiroz menezes",
+            "contact": "73991429676"
+          }
+        },
+        "computedTotal": 26.99,
+        "qrDataUrl": "data:image/png;base64,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",
+        "qrText": "http://localhost:5173/orders/07de82b6-697f-497d-9cdf-5ce337727496",
+        "rasterDataUrl": "data:image/png;base64,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"
+      },
+      "items": [
+        {
+          "id": "1fdf1ca6-5395-4014-a6c1-77178f5e4aa8",
+          "orderId": "07de82b6-697f-497d-9cdf-5ce337727496",
+          "productId": null,
+          "name": "Frango Grelhado Na Chapa",
+          "quantity": 1,
+          "price": "21.99",
+          "notes": null,
+          "options": []
+        }
+      ],
+      "address": "av rui barbosa 118, Centro",
+      "deliveryAddress": {
+        "city": null,
+        "state": null,
+        "country": "BR",
+        "latitude": null,
+        "longitude": null,
+        "reference": null,
+        "complement": null,
+        "postalCode": null,
+        "streetName": "av rui barbosa 118",
+        "observation": null,
+        "neighborhood": "Centro",
+        "streetNumber": null,
+        "formattedAddress": "av rui barbosa 118"
+      }
+    },
+    "storeId": "d9952923-ed61-4294-8166-0935d608c69d"
   }
 ]

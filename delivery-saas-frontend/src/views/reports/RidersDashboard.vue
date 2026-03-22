@@ -1,0 +1,263 @@
+<template>
+  <div class="container-fluid py-3">
+    <h4 class="mb-3">Dashboard de Entregadores</h4>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-4">
+            <SelectInput
+              v-model="filters.riderId"
+              :options="riderOptions"
+              label="Entregador"
+              placeholder="Todos"
+            />
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Data início</label>
+            <input type="date" v-model="filters.from" class="form-control" />
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Data fim</label>
+            <input type="date" v-model="filters.to" class="form-control" />
+          </div>
+          <div class="col-12 col-md-2 d-flex align-items-end">
+            <BaseButton variant="primary" class="w-100" :loading="loading" @click="load">
+              Gerar
+            </BaseButton>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="loading" class="text-center py-5">
+      <div class="spinner-border text-primary"></div>
+      <p class="mt-2 text-muted">Carregando dados...</p>
+    </div>
+
+    <!-- Sem dados -->
+    <div v-else-if="loaded && !data.totalDeliveries" class="alert alert-info text-center">
+      <i class="bi bi-info-circle me-2"></i>
+      Nenhuma entrega encontrada no período selecionado.
+    </div>
+
+    <!-- Dashboard -->
+    <template v-else-if="loaded && data.totalDeliveries">
+      <!-- Stat Cards -->
+      <div class="stat-grid mb-4">
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--primary"><i class="bi-stopwatch"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Tempo médio</div>
+            <div class="stat-value">{{ data.avgDeliveryTime }} min</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--success"><i class="bi-cash-stack"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Custo médio / entrega</div>
+            <div class="stat-value">{{ formatCurrency(data.avgCostPerDelivery) }}</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--warning"><i class="bi-box-seam"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Total de entregas</div>
+            <div class="stat-value">{{ data.totalDeliveries }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráfico de barras -->
+      <div class="card mb-4" v-if="data.avgDeliveryTimeByRider.length > 1">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-bar-chart-fill text-primary"></i>
+          <strong>Tempo médio por entregador (min)</strong>
+        </div>
+        <div class="card-body">
+          <div style="position: relative; height: 320px;">
+            <canvas ref="chartCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabela detalhada -->
+      <div class="card">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-table text-primary"></i>
+          <strong>Detalhamento por entregador</strong>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Entregador</th>
+                  <th class="text-center">Entregas</th>
+                  <th class="text-center">Tempo médio</th>
+                  <th class="text-end">Custo médio</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in data.avgDeliveryTimeByRider" :key="r.riderId">
+                  <td>{{ r.riderName }}</td>
+                  <td class="text-center">{{ r.totalDeliveries }}</td>
+                  <td class="text-center">{{ r.avgTime }} min</td>
+                  <td class="text-end">{{ formatCurrency(r.avgCost || 0) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { Chart, registerables } from 'chart.js'
+import api from '../../api'
+import SelectInput from '../../components/form/select/SelectInput.vue'
+import BaseButton from '../../components/BaseButton.vue'
+
+Chart.register(...registerables)
+
+const COLORS = [
+  '#105784', '#89D136', '#f5a623', '#e04f4f', '#9b59b6',
+  '#1abc9c', '#e67e22', '#e91e63', '#00bcd4', '#607d8b',
+]
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+function firstDayOfMonthStr() {
+  const d = new Date()
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
+}
+function formatCurrency(val) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
+}
+
+const filters = reactive({
+  riderId: '',
+  from: firstDayOfMonthStr(),
+  to: todayStr(),
+})
+
+const loading = ref(false)
+const loaded = ref(false)
+const data = ref({})
+const riders = ref([])
+const riderOptions = ref([])
+const chartCanvas = ref(null)
+let chartInstance = null
+
+async function fetchRiders() {
+  try {
+    const res = await api.get('/riders')
+    riders.value = res.data || []
+    riderOptions.value = [
+      { value: '', label: 'Todos' },
+      ...riders.value.map(r => ({ value: r.id, label: r.name })),
+    ]
+  } catch (e) {
+    console.error('Failed to fetch riders:', e)
+  }
+}
+
+async function load() {
+  loading.value = true
+  loaded.value = false
+  destroyChart()
+
+  try {
+    const params = { from: filters.from, to: filters.to }
+    if (filters.riderId) params.riderId = filters.riderId
+
+    const res = await api.get('/reports/riders-dashboard', { params })
+    data.value = res.data
+    loaded.value = true
+
+    await nextTick()
+    buildChart()
+  } catch (e) {
+    console.error('RidersDashboard load error:', e)
+    const { default: Swal } = await import('sweetalert2')
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao carregar dashboard' })
+  } finally {
+    loading.value = false
+  }
+}
+
+function destroyChart() {
+  if (chartInstance) {
+    chartInstance.destroy()
+    chartInstance = null
+  }
+}
+
+function buildChart() {
+  const canvas = chartCanvas.value
+  if (!canvas || !data.value.avgDeliveryTimeByRider?.length) return
+
+  const items = data.value.avgDeliveryTimeByRider
+  const labels = items.map(r => r.riderName)
+  const values = items.map(r => r.avgTime)
+  const colors = labels.map((_, i) => COLORS[i % COLORS.length])
+
+  chartInstance = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Tempo médio (min)',
+        data: values,
+        backgroundColor: colors,
+        borderColor: colors.map(c => c + 'cc'),
+        borderWidth: 1,
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` ${ctx.raw} min`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          grid: { color: '#f0f0f0' },
+          title: { display: true, text: 'Minutos' },
+        },
+        y: {
+          ticks: {
+            font: { size: 12 },
+            callback: (val, idx) => {
+              const lbl = labels[idx] || ''
+              return lbl.length > 25 ? lbl.slice(0, 23) + '…' : lbl
+            },
+          },
+        },
+      },
+    },
+  })
+}
+
+onMounted(() => {
+  fetchRiders()
+})
+
+onBeforeUnmount(() => {
+  destroyChart()
+})
+</script>

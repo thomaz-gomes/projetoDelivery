@@ -18,6 +18,7 @@ export const nav = [
   { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', moduleKey: 'riders', lockable: true, children: [
     { name: 'Lista', to: '/riders', icon: 'bi bi-people' },
     { name: 'Créditos/Débitos', to: '/rider-adjustments', icon: 'bi bi-credit-card' },
+    { name: 'Dashboard', to: '/reports/riders-dashboard', icon: 'bi bi-speedometer2' },
     { name: 'Mapa de Entregas', to: '/riders/map', icon: 'bi bi-map' },
     { name: 'Configurações', to: '/settings/rider-tracking', icon: 'bi bi-gear' },
   ] },
