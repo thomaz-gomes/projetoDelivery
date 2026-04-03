@@ -432,6 +432,152 @@ ridersRouter.delete('/bonus-rules/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ==================== RANKING ====================
+
+// GET /riders/ranking
+ridersRouter.get('/ranking', async (req, res) => {
+  const companyId = req.user.companyId;
+  const userId = req.user.id;
+  const isRider = req.user.role === 'RIDER';
+
+  const { from, to } = req.query;
+  const dateFrom = from ? new Date(from) : (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
+  const dateTo = to ? new Date(to) : new Date();
+
+  // All active riders
+  const riders = await prisma.rider.findMany({
+    where: { companyId, active: true },
+    select: { id: true, name: true, userId: true }
+  });
+
+  // Completed orders in period
+  const orders = await prisma.order.findMany({
+    where: {
+      companyId,
+      riderId: { not: null },
+      status: 'CONCLUIDO',
+      updatedAt: { gte: dateFrom, lte: dateTo }
+    },
+    select: {
+      id: true, riderId: true, closedByIfoodCode: true, updatedAt: true,
+      histories: {
+        where: { to: { in: ['SAIU_PARA_ENTREGA', 'CONCLUIDO'] } },
+        select: { to: true, changedAt: true },
+        orderBy: { changedAt: 'asc' }
+      }
+    }
+  });
+
+  // Canceled orders count by rider
+  const canceledCount = await prisma.order.groupBy({
+    by: ['riderId'],
+    where: {
+      companyId,
+      riderId: { not: null },
+      status: 'CANCELADO',
+      updatedAt: { gte: dateFrom, lte: dateTo }
+    },
+    _count: { id: true }
+  });
+  const canceledMap = Object.fromEntries(canceledCount.map(c => [c.riderId, c._count.id]));
+
+  // Check-ins in period
+  const checkins = await prisma.riderCheckin.findMany({
+    where: { companyId, checkinAt: { gte: dateFrom, lte: dateTo } },
+    select: { riderId: true, shiftId: true, checkinAt: true }
+  });
+
+  // Active bonus rules (for punctuality calc)
+  const bonusRules = await prisma.riderBonusRule.findMany({
+    where: { companyId, type: 'EARLY_CHECKIN', active: true }
+  });
+
+  // Calculate metrics per rider
+  const ranking = riders.map(rider => {
+    const riderOrders = orders.filter(o => o.riderId === rider.id);
+    const totalDeliveries = riderOrders.length;
+    const canceled = canceledMap[rider.id] || 0;
+    const completionRate = totalDeliveries + canceled > 0 ? totalDeliveries / (totalDeliveries + canceled) : 0;
+
+    // Average delivery time (minutes)
+    let totalTime = 0, timeCount = 0;
+    for (const o of riderOrders) {
+      const saiu = o.histories.find(h => h.to === 'SAIU_PARA_ENTREGA');
+      const concluido = o.histories.find(h => h.to === 'CONCLUIDO');
+      if (saiu && concluido) {
+        const mins = (new Date(concluido.changedAt) - new Date(saiu.changedAt)) / 60000;
+        if (mins > 0 && mins < 300) { totalTime += mins; timeCount++; }
+      }
+    }
+    const avgDeliveryTime = timeCount > 0 ? Math.round((totalTime / timeCount) * 10) / 10 : null;
+
+    // iFood code rate
+    const withCode = riderOrders.filter(o => o.closedByIfoodCode).length;
+    const ifoodCodeRate = totalDeliveries > 0 ? withCode / totalDeliveries : 0;
+
+    // Punctuality (% check-ins before deadline)
+    const riderCheckins = checkins.filter(c => c.riderId === rider.id);
+    let onTimeCount = 0;
+    for (const c of riderCheckins) {
+      const checkinDate = new Date(c.checkinAt);
+      const checkinMinutes = checkinDate.getHours() * 60 + checkinDate.getMinutes();
+      const isOnTime = bonusRules.some(rule => {
+        if (rule.shiftId && c.shiftId !== rule.shiftId) return false;
+        const [h, m] = rule.deadlineTime.split(':').map(Number);
+        return checkinMinutes <= h * 60 + m;
+      });
+      if (isOnTime) onTimeCount++;
+    }
+    const punctualityRate = riderCheckins.length > 0 ? onTimeCount / riderCheckins.length : 0;
+
+    return {
+      riderId: rider.id,
+      riderName: rider.name,
+      totalDeliveries,
+      avgDeliveryTime,
+      completionRate: Math.round(completionRate * 100),
+      ifoodCodeRate: Math.round(ifoodCodeRate * 100),
+      punctualityRate: Math.round(punctualityRate * 100),
+      totalCheckins: riderCheckins.length,
+      _rawDeliveries: totalDeliveries,
+      _rawAvgTime: avgDeliveryTime
+    };
+  });
+
+  // Normalize and calculate weighted score
+  const maxDeliveries = Math.max(...ranking.map(r => r._rawDeliveries), 1);
+  const times = ranking.filter(r => r._rawAvgTime != null).map(r => r._rawAvgTime);
+  const minTime = times.length > 0 ? Math.min(...times) : 1;
+  const maxTime = times.length > 0 ? Math.max(...times) : 1;
+
+  for (const r of ranking) {
+    const deliveryScore = (r._rawDeliveries / maxDeliveries) * 40;
+    const timeScore = r._rawAvgTime != null && maxTime > minTime
+      ? ((maxTime - r._rawAvgTime) / (maxTime - minTime)) * 20
+      : 0;
+    const punctualityScore = r.punctualityRate * 0.15;
+    const ifoodScore = r.ifoodCodeRate * 0.15;
+    const completionScore = r.completionRate * 0.10;
+    r.score = Math.round(deliveryScore + timeScore + punctualityScore + ifoodScore + completionScore);
+    delete r._rawDeliveries;
+    delete r._rawAvgTime;
+  }
+
+  // Sort by score descending
+  ranking.sort((a, b) => b.score - a.score);
+
+  // Add position
+  ranking.forEach((r, i) => { r.position = i + 1; });
+
+  // If rider, include own rider id for highlighting
+  if (isRider) {
+    const rider = await prisma.rider.findFirst({ where: { userId } });
+    res.json({ ranking, myRiderId: rider?.id || null });
+  } else {
+    res.json({ ranking });
+  }
+});
+
 ridersRouter.get('/:id', async (req, res) => {
   const { id } = req.params;
   const companyId = req.user.companyId;
