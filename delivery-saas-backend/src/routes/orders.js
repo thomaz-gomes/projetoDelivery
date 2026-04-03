@@ -207,50 +207,7 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
       }
     })();
 
-    // credit rider account (reuse same logic as status patch)
-    try {
-      let neighborhoodName = null;
-      function extractAddressTextFromPayload(payload) {
-        if (!payload) return null;
-        try {
-          const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
-          const candidates = [];
-          if (p.delivery && p.delivery.deliveryAddress) {
-            const d = p.delivery.deliveryAddress;
-            if (d.formattedAddress) candidates.push(d.formattedAddress);
-            if (d.formatted_address) candidates.push(d.formatted_address);
-            if (d.address) candidates.push(typeof d.address === 'string' ? d.address : (d.address.formatted || ''));
-          }
-          if (p.formattedAddress) candidates.push(p.formattedAddress);
-          if (p.formatted_address) candidates.push(p.formatted_address);
-          if (p.address) candidates.push(typeof p.address === 'string' ? p.address : (p.address.formatted || ''));
-          const txt = candidates.filter(Boolean).join(' ');
-          return txt || null;
-        } catch (e) { return null; }
-      }
-
-      const addrCandidates = [];
-      if (updated.address) addrCandidates.push(String(updated.address));
-      const payloadText = extractAddressTextFromPayload(updated.payload);
-      if (payloadText) addrCandidates.push(payloadText);
-
-      if (addrCandidates.length) {
-        const addrText = addrCandidates.join(' ').toLowerCase();
-        const neighs = await prisma.neighborhood.findMany({ where: { companyId: updated.companyId } });
-        const matched = neighs.find(n => {
-          if (!n || !n.name) return false;
-          const name = String(n.name).toLowerCase();
-          if (addrText.includes(name)) return true;
-          if (n.aliases) {
-            try { const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases); if (arr.some(a => addrText.includes(String(a||'').toLowerCase()))) return true; } catch (e) {}
-          }
-          return false;
-        });
-        if (matched) neighborhoodName = matched.name;
-      }
-
-      await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId: updated.companyId, riderId: updated.riderId, orderId: updated.id, neighborhoodName, orderDate: updated.updatedAt || new Date() });
-    } catch (e) { console.error('Failed to add rider transaction on complete:', e?.message || e); }
+    // Rider account credit happens only on CONCLUIDO (via PATCH /status), not here
 
     return res.json({ ok: true, order: updated });
   } catch (e) {
