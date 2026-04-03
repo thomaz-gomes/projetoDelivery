@@ -129,7 +129,7 @@ fi
 # =========================================
 echo -e "${YELLOW}[4/6] Reconstruindo imagens Docker...${NC}"
 cd "$PROJECT_DIR"
-docker compose -f "$COMPOSE_FILE" build
+docker compose -f "$COMPOSE_FILE" build --no-cache
 
 # =========================================
 # 5. Reiniciar containers (zero downtime: up recria apenas o que mudou)
