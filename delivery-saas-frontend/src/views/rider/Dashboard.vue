@@ -40,6 +40,16 @@ function go(path) { router.push(path); }
           <div class="badge bg-secondary">Ir</div>
         </div>
       </div>
+
+      <div class="card p-3 nav-card" @click="go('/rider/ranking')" role="button">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="fw-semibold"><i class="bi-trophy me-1"></i>Ranking</div>
+            <div class="small text-muted">Veja sua posicao entre os entregadores</div>
+          </div>
+          <div class="badge bg-secondary">Ir</div>
+        </div>
+      </div>
     </div>
 
     <div style="height:84px"></div>
