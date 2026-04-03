@@ -228,6 +228,8 @@ const router = createRouter({
   ,{ path: '/rider/orders', component: RiderOrders, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/rider/home', component: RiderQrCode, meta: { requiresAuth: true, noSidebar: true } }
   ,{ path: '/rider/account', component: RiderAccountSelf, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
+  ,{ path: '/rider/checkin', component: () => import('./views/rider/Checkin.vue'), meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
+  ,{ path: '/rider/ranking', component: () => import('./views/rider/Ranking.vue'), meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/rider', component: RiderDashboard, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/riders/map', component: () => import('./views/RiderMap.vue'), meta: { requiresAuth: true, requiresModule: 'RIDERS' } }
   ,{ path: '/settings/rider-tracking', component: () => import('./views/RiderTracking.vue'), meta: { requiresAuth: true, requiresModule: 'RIDERS' } }
@@ -246,6 +248,7 @@ const router = createRouter({
   ,{ path: '/reports/menu-performance', component: MenuPerformanceReport, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/reports/riders-dashboard', component: RidersDashboard, meta: { requiresAuth: true, requiresModule: 'RIDERS' } }
   ,{ path: '/reports/rider-checkins', component: () => import('./views/RiderCheckins.vue'), meta: { requiresAuth: true, requiresModule: 'RIDERS' } }
+  ,{ path: '/reports/rider-ranking', component: () => import('./views/RiderRanking.vue'), meta: { requiresAuth: true, requiresModule: 'RIDERS' } }
   ,{ path: '/saas/plans', component: SaasPlans, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies', component: SaasCompanies, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies/new', component: SaasCompanyNew, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
