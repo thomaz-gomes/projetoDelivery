@@ -121,7 +121,26 @@ watch(() => auth.user, (user) => {
     addOnStore.fetchPendingInvoiceCount()
   }
 }, { immediate: true })
-onMounted(() => { loadMenusWidget().catch(()=>{}); });
+onMounted(() => {
+  loadMenusWidget().catch(()=>{});
+  // Inject rider PWA manifest + service worker for /rider/* routes
+  if (route.path === '/rider' || route.path.startsWith('/rider/')) {
+    let link = document.querySelector('link[rel="manifest"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'manifest';
+      document.head.appendChild(link);
+    }
+    link.href = '/rider-manifest.webmanifest';
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = '#198754';
+    document.title = 'Core Delivery — Entregador';
+    // Register rider service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw-rider.js').catch(() => {});
+    }
+  }
+});
 
 // compute visible nav applying same filters as Sidebar.vue (role + enabled modules)
 const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules, nav));

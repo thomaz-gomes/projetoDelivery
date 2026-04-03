@@ -110,25 +110,33 @@ function loadLeaflet() {
   })
 }
 
+function pinSvg(color, label) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40">
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.27 21.73 0 14 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+    <circle cx="14" cy="14" r="7" fill="#fff"/>
+    <text x="14" y="18" text-anchor="middle" font-size="11" font-weight="bold" fill="${color}" font-family="sans-serif">${label}</text>
+  </svg>`
+}
+
 function riderIcon() {
   return L.divIcon({
     className: '',
-    html: '<div style="background:#0d6efd;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,0.35)">🛵</div>',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-    popupAnchor: [0, -18],
+    html: pinSvg('#0d6efd', '🛵'),
+    iconSize: [28, 40],
+    iconAnchor: [14, 40],
+    popupAnchor: [0, -40],
   })
 }
 
 function deliveryIcon(status) {
   const color = status === 'SAIU_PARA_ENTREGA' ? '#dc3545' : '#fd7e14'
-  const emoji = status === 'SAIU_PARA_ENTREGA' ? '🏍️' : '📦'
+  const label = status === 'SAIU_PARA_ENTREGA' ? '🏍' : '📦'
   return L.divIcon({
     className: '',
-    html: `<div style="background:${color};color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.35)">${emoji}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -16],
+    html: pinSvg(color, label),
+    iconSize: [28, 40],
+    iconAnchor: [14, 40],
+    popupAnchor: [0, -40],
   })
 }
 
@@ -248,26 +256,6 @@ function updateMarker(pos) {
 
   // Store last update timestamp for stale detection
   markersMap[riderId]._lastUpdate = new Date(pos.updatedAt || Date.now()).getTime()
-
-  // Accuracy circle
-  if (accuracy && accuracy > 0) {
-    if (circlesMap[riderId]) {
-      circlesMap[riderId].setLatLng([lat, lng])
-      circlesMap[riderId].setRadius(accuracy)
-    } else {
-      circlesMap[riderId] = L.circle([lat, lng], {
-        radius: accuracy,
-        color: '#0d6efd',
-        fillColor: '#0d6efd',
-        fillOpacity: 0.1,
-        weight: 1,
-        opacity: 0.3,
-      }).addTo(map)
-    }
-  } else if (circlesMap[riderId]) {
-    map.removeLayer(circlesMap[riderId])
-    delete circlesMap[riderId]
-  }
 }
 
 function removeStaleMarkers(activeIds) {
