@@ -388,7 +388,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
                     <span :class="{ 'text-primary': isAdmin }" @click="isAdmin ? startEdit(t) : null" style="cursor: pointer">{{ formatCurrency(Number(t.amount || 0)) }}</span>
                   </div>
                 </td>
-                <td>{{ t.order?.displayId || t.displayId || '—' }}</td>
+                <td>{{ t.order?.displaySimple ? `#${t.order.displaySimple}` : (t.order?.displayId || '—') }}</td>
                 <td>{{ t.note || '—' }}</td>
               </tr>
             </tbody>

@@ -101,7 +101,7 @@ onMounted(() => { fetchSummary(); });
         <li v-for="t in transactions" :key="t.id" class="list-group-item py-2 d-flex justify-content-between align-items-center">
           <div>
             <div class="small text-muted">{{ formatDateWithOptionalTime(t.date) }}</div>
-            <div>{{ t.order?.displayId || t.displayId || '—' }} — {{ translateNote(t.note) }}</div>
+            <div>{{ t.order?.displaySimple ? `#${t.order.displaySimple}` : (t.order?.displayId || '—') }} — {{ translateNote(t.note) }}</div>
           </div>
           <div class="fw-bold">{{ formatCurrency(Number(t.amount || 0)) }}</div>
         </li>

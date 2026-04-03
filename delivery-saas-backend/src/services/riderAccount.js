@@ -91,7 +91,8 @@ export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId,
     await addRiderTransaction({ companyId, riderId, orderId: null, amount: daily, type: 'DAILY_RATE', date: orderDate, note: 'Diária' });
   }
 
-  // Check early check-in bonus rules
+  // Check early check-in bonus rules (per delivery, never on daily rate alone)
+  if (riderFee <= 0) return; // no delivery fee = no bonus
   try {
     const bonusDayStart = toDateOnly(orderDate);
     const bonusDayEnd = new Date(bonusDayStart);
@@ -109,7 +110,6 @@ export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId,
     });
 
     for (const rule of bonusRules) {
-      // Check if any checkin satisfies this rule (before deadline, matching shift if specified)
       const [deadlineH, deadlineM] = rule.deadlineTime.split(':').map(Number);
       const qualifies = todayCheckins.some(c => {
         if (rule.shiftId && c.shiftId !== rule.shiftId) return false;
