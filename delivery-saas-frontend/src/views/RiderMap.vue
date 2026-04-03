@@ -358,6 +358,16 @@ function ensureSocket() {
     socket.on('rider-offline', (payload) => {
       if (payload?.riderId) removeMarker(payload.riderId)
     })
+    socket.on('order-updated', (payload) => {
+      const hideStatuses = ['CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO']
+      if (payload?.id && hideStatuses.includes(payload.status)) {
+        if (deliveryMarkersMap[payload.id] && map) {
+          map.removeLayer(deliveryMarkersMap[payload.id])
+          delete deliveryMarkersMap[payload.id]
+        }
+        deliveries.value = deliveries.value.filter(d => d.id !== payload.id)
+      }
+    })
   } catch (e) {
     console.warn('Socket init failed in RiderMap:', e)
   }
