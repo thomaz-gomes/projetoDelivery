@@ -57,6 +57,14 @@ export async function addRiderTransaction({ companyId, riderId, orderId = null, 
 }
 
 export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId, neighborhoodName, orderDate }) {
+  // Skip if delivery fee already credited for this order (prevents double-credit from complete + CONCLUIDO)
+  if (orderId) {
+    const existing = await prisma.riderTransaction.findFirst({
+      where: { riderId, orderId, type: 'DELIVERY_FEE' }
+    });
+    if (existing) return;
+  }
+
   // find neighborhood and amount
   let riderFee = 0;
   const neigh = await findNeighborhoodForName(companyId, neighborhoodName);
