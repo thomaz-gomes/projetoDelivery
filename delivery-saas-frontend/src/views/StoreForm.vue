@@ -28,21 +28,6 @@
             <div class="mb-3">
               <TextInput label="Endereço" labelClass="form-label" v-model="form.address" inputClass="form-control" />
             </div>
-            <div class="row mb-3 align-items-end">
-              <div class="col-5">
-                <TextInput label="Latitude" labelClass="form-label" v-model="form.latitude" type="number" step="any" placeholder="-12.9714" inputClass="form-control" />
-              </div>
-              <div class="col-5">
-                <TextInput label="Longitude" labelClass="form-label" v-model="form.longitude" type="number" step="any" placeholder="-38.5124" inputClass="form-control" />
-              </div>
-              <div class="col-2">
-                <button type="button" class="btn btn-outline-secondary w-100" @click="geocodeAddress" :disabled="geocoding || !form.address" :title="!form.address ? 'Preencha o endereço primeiro' : 'Buscar coordenadas pelo endereço'">
-                  <span v-if="geocoding" class="spinner-border spinner-border-sm"></span>
-                  <i v-else class="bi bi-geo-alt-fill"></i>
-                </button>
-              </div>
-              <div v-if="geocodeError" class="col-12 mt-1"><small class="text-danger">{{ geocodeError }}</small></div>
-            </div>
             <div class="mb-3"><TextInput label="Telefone" labelClass="form-label" v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
             <div class="mb-3"><TextInput label="WhatsApp" labelClass="form-label" v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
             <div class="mb-3"><TextInput label="CNPJ" labelClass="form-label" v-model="form.cnpj" placeholder="00.000.000/0000-00" inputClass="form-control" /></div>
@@ -313,33 +298,6 @@ const TIMEZONES = [
 ]
 const form = ref({ name: '', address: '', latitude: null, longitude: null, phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
 
-// ── Geocoding ──
-const geocoding = ref(false)
-const geocodeError = ref('')
-
-async function geocodeAddress() {
-  if (!form.value.address) return
-  geocoding.value = true
-  geocodeError.value = ''
-  try {
-    const q = encodeURIComponent(form.value.address)
-    const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1`, {
-      headers: { 'User-Agent': 'DeliveryWL/1.0' }
-    })
-    const data = await resp.json()
-    if (data && data.length > 0) {
-      form.value.latitude = parseFloat(data[0].lat)
-      form.value.longitude = parseFloat(data[0].lon)
-    } else {
-      geocodeError.value = 'Endereço não encontrado. Tente ser mais específico.'
-    }
-  } catch (e) {
-    geocodeError.value = 'Falha ao buscar coordenadas.'
-    console.warn('geocode failed:', e)
-  } finally {
-    geocoding.value = false
-  }
-}
 
 // ── Debug diagnóstico do certificado ──
 const debugRunning = ref(false)
