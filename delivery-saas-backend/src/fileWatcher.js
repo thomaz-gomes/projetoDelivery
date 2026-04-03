@@ -5,6 +5,7 @@ import { emitirNovoPedido } from './index.js';
 import { parseSaiposWithAI } from './aiParser.js';
 import { upsertCustomerFromPayloadTx, buildConcatenatedAddress } from './services/customers.js';
 import { trackAffiliateSale } from './services/affiliates.js';
+import { nextDisplaySimple } from './utils/displaySimple.js';
 
 const watchers = new Map(); // companyId -> fs.FSWatcher
 const processing = new Set(); // externalId currently being processed (debounce)
@@ -527,7 +528,8 @@ async function processFile(companyId, filePath) {
       console.error('FileWatcher: failed to create/update order transactionally', filePath, e?.message || e);
       // fallback attempt
       try {
-  const created = await prisma.order.create({ data: { companyId: company, storeId: storeId || null, externalId, customerName: customerName || 'Importado', address: address || null, total: total || 0, payload } });
+  const dsimple = await nextDisplaySimple(company);
+  const created = await prisma.order.create({ data: { companyId: company, storeId: storeId || null, externalId, displaySimple: dsimple, customerName: customerName || 'Importado', address: address || null, total: total || 0, payload } });
         if (items.length) {
           for (const it of items) {
             try { await prisma.orderItem.create({ data: { orderId: created.id, name: it.name || it.title || 'Item', quantity: it.quantity || it.qte || 1, price: it.price ?? it.unitPrice ?? 0 } }); } catch(_){}

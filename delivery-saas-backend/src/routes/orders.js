@@ -13,6 +13,7 @@ import { notifyRiderAssigned, notifyCustomerStatus, notifyCustomerOrderSummary }
 import riderAccountService from '../services/riderAccount.js';
 import { buildAndPersistStockMovementFromOrderItems } from '../services/stockFromOrder.js';
 import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
+import { nextDisplaySimple } from '../utils/displaySimple.js';
 
 export const ordersRouter = express.Router();
 
@@ -851,9 +852,11 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
     const normalizedDelivery = (type === 'DELIVERY' && address && Object.keys(address).length) ? normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: address } }) : null;
     const pdvDenormNeighborhood = (normalizedDelivery && normalizedDelivery.neighborhood) || (address && (address.neighborhood || address.neigh)) || null;
 
+    const displaySimple = await nextDisplaySimple(companyId);
     const created = await prisma.order.create({
       data: {
         companyId,
+        displaySimple,
         customerSource: 'MANUAL',
         customerId: persistedCustomer ? persistedCustomer.id : undefined,
         customerName: customerName || (persistedCustomer ? persistedCustomer.fullName : null),
