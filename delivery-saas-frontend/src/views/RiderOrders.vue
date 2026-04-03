@@ -334,12 +334,11 @@ function formatAddress(o){
 
 function startTracking(orderId = null) {
   if (!navigator.geolocation) return
-  if (watchId !== null) return // already watching
+  if (trackingIntervalId !== null) return // already tracking
   activeOrderForTracking.value = orderId || '__active__'
 
   const sendPosition = (pos) => {
     const { latitude: lat, longitude: lng, heading, accuracy } = pos.coords
-    // Filter out very inaccurate readings (> 1000m = likely no GPS at all)
     if (accuracy && accuracy > 1000) return
     api.post('/riders/me/position', {
       lat,
@@ -350,21 +349,28 @@ function startTracking(orderId = null) {
     }).catch((e) => console.warn('GPS position update failed:', e?.message))
   }
 
+  // Send position immediately on start
+  navigator.geolocation.getCurrentPosition(
+    sendPosition,
+    (err) => console.warn('GPS initial position error:', err?.message),
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+  )
+
+  // Active interval every 10s (more reliable than watchPosition on mobile)
+  trackingIntervalId = setInterval(() => {
+    navigator.geolocation.getCurrentPosition(
+      sendPosition,
+      (err) => console.warn('GPS interval error:', err?.message),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    )
+  }, 10000)
+
+  // watchPosition as complement (fires on significant movement)
   watchId = navigator.geolocation.watchPosition(
     sendPosition,
     (err) => console.warn('GPS watchPosition error:', err?.message),
-    { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
   )
-
-  // Fallback: send every 30s in case watchPosition is suspended (mobile bg)
-  trackingIntervalId = setInterval(() => {
-    if (watchId === null) return
-    navigator.geolocation.getCurrentPosition(
-      sendPosition,
-      (err) => console.warn('GPS fallback error:', err?.message),
-      { enableHighAccuracy: false, maximumAge: 30000, timeout: 15000 }
-    )
-  }, 30000)
 }
 
 function stopTracking() {
