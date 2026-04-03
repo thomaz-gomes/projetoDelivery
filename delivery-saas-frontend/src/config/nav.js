@@ -19,7 +19,11 @@ export const nav = [
     { name: 'Lista', to: '/riders', icon: 'bi bi-people' },
     { name: 'Créditos/Débitos', to: '/rider-adjustments', icon: 'bi bi-credit-card' },
     { name: 'Dashboard', to: '/reports/riders-dashboard', icon: 'bi bi-speedometer2' },
+    { name: 'Ranking', to: '/reports/rider-ranking', icon: 'bi bi-trophy' },
+    { name: 'Check-ins', to: '/reports/rider-checkins', icon: 'bi bi-clock-history' },
     { name: 'Mapa de Entregas', to: '/riders/map', icon: 'bi bi-map' },
+    { name: 'Turnos', to: '/settings/rider-shifts', icon: 'bi bi-calendar-week' },
+    { name: 'Regras de Bônus', to: '/settings/rider-bonus-rules', icon: 'bi bi-gift' },
     { name: 'Configurações', to: '/settings/rider-tracking', icon: 'bi bi-gear' },
   ] },
   { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', children: [

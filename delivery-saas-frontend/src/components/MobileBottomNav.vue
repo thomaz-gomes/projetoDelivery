@@ -8,16 +8,22 @@
         <div class="nav-label small">Meus pedidos</div>
       </button>
 
-      <!-- Leitor de QR -->
-      <button :class="['nav-item btn btn-link text-muted']" @click.prevent="openScanner" aria-label="Leitor QR">
-        <i class="bi bi-upc-scan nav-icon" aria-hidden="true" style="font-size:1.15rem"></i>
-        <div class="nav-label small">Leitor QR</div>
+      <!-- Check-in -->
+      <button :class="['nav-item btn btn-link', isActive('/rider/checkin') ? 'active' : 'text-muted']" @click.prevent="router.push('/rider/checkin')" aria-label="Check-in">
+        <i class="bi bi-geo-alt nav-icon" aria-hidden="true" style="font-size:1.15rem"></i>
+        <div class="nav-label small">Check-in</div>
+      </button>
+
+      <!-- Ranking -->
+      <button :class="['nav-item btn btn-link', isActive('/rider/ranking') ? 'active' : 'text-muted']" @click.prevent="router.push('/rider/ranking')" aria-label="Ranking">
+        <i class="bi bi-trophy nav-icon" aria-hidden="true" style="font-size:1.15rem"></i>
+        <div class="nav-label small">Ranking</div>
       </button>
 
       <!-- Meu Extrato -->
       <button :class="['nav-item btn btn-link', isActive('/rider/account') ? 'active' : 'text-muted']" @click.prevent="goStatement" aria-label="Meu extrato">
         <i class="bi bi-wallet2 nav-icon" aria-hidden="true" style="font-size:1.15rem"></i>
-        <div class="nav-label small">Meu extrato</div>
+        <div class="nav-label small">Extrato</div>
       </button>
 
       <!-- Sair -->
