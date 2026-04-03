@@ -6,6 +6,7 @@ import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPaylo
 import jwt from 'jsonwebtoken'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
 import * as cashbackSvc from '../services/cashback.js'
+import { nextDisplaySimple } from '../utils/displaySimple.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -1409,9 +1410,11 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
       // compute denormalized neighborhood for quick queries/displays
       const denormNeighborhood = (payloadToPersist.delivery && payloadToPersist.delivery.deliveryAddress && payloadToPersist.delivery.deliveryAddress.neighborhood) || neighborhoodFromPayload || (address && (address.neighborhood || address.neigh)) || null
 
+      const displaySimple = await nextDisplaySimple(companyId);
       const created = await prisma.order.create({
         data: {
           companyId,
+          displaySimple,
           customerId: persistedCustomer ? persistedCustomer.id : undefined,
           customerSource: 'PUBLIC',
           customerName: customer.name || null,

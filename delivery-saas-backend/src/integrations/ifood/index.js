@@ -2,6 +2,7 @@
 import { ifoodGet, ifoodPost } from './client.js';
 import { prisma } from '../../prisma.js';
 import { buildConcatenatedAddress, normalizeDeliveryAddressFromPayload } from '../../services/customers.js';
+import { nextDisplaySimple } from '../../utils/displaySimple.js';
 
 /**
  * Faz polling dos eventos do iFood para a empresa
@@ -78,6 +79,7 @@ async function upsertIFoodOrder(companyId, orderData) {
       companyId,
       externalId,
       displayId,
+      displaySimple: await nextDisplaySimple(companyId),
       status: 'EM_PREPARO',
       customerName: customer?.name,
       customerPhone: customer?.phones?.[0]?.number,
