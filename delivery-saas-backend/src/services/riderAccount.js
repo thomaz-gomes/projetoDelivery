@@ -90,6 +90,50 @@ export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId,
   if (!existingDaily) {
     await addRiderTransaction({ companyId, riderId, orderId: null, amount: daily, type: 'DAILY_RATE', date: orderDate, note: 'Diária' });
   }
+
+  // Check early check-in bonus rules
+  try {
+    const bonusDayStart = toDateOnly(orderDate);
+    const bonusDayEnd = new Date(bonusDayStart);
+    bonusDayEnd.setDate(bonusDayEnd.getDate() + 1);
+
+    // Find today's check-ins for this rider
+    const todayCheckins = await prisma.riderCheckin.findMany({
+      where: { riderId, checkinAt: { gte: bonusDayStart, lt: bonusDayEnd } }
+    });
+    if (todayCheckins.length === 0) return;
+
+    // Find active EARLY_CHECKIN bonus rules for this company
+    const bonusRules = await prisma.riderBonusRule.findMany({
+      where: { companyId, type: 'EARLY_CHECKIN', active: true }
+    });
+
+    for (const rule of bonusRules) {
+      // Check if any checkin satisfies this rule (before deadline, matching shift if specified)
+      const [deadlineH, deadlineM] = rule.deadlineTime.split(':').map(Number);
+      const qualifies = todayCheckins.some(c => {
+        if (rule.shiftId && c.shiftId !== rule.shiftId) return false;
+        const checkinDate = new Date(c.checkinAt);
+        const checkinMinutes = checkinDate.getHours() * 60 + checkinDate.getMinutes();
+        const deadlineMinutes = deadlineH * 60 + deadlineM;
+        return checkinMinutes <= deadlineMinutes;
+      });
+
+      if (qualifies) {
+        await addRiderTransaction({
+          companyId,
+          riderId,
+          orderId,
+          amount: Number(rule.bonusAmount),
+          type: 'EARLY_CHECKIN_BONUS',
+          date: orderDate,
+          note: `Bônus: ${rule.name}`
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[riderAccount] bonus check failed:', e?.message || e);
+  }
 }
 
 export async function getRiderBalance(riderId) {
