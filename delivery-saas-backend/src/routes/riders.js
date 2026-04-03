@@ -348,6 +348,24 @@ ridersRouter.post('/me/checkin', async (req, res) => {
   });
   if (existing) return res.status(409).json({ message: 'Você já fez check-in neste turno hoje', checkin: existing });
 
+  // Bloquear check-in se há um turno em andamento (outro turno cujo endTime ainda não passou)
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const todayCheckins = await prisma.riderCheckin.findMany({
+    where: { riderId: rider.id, checkinAt: { gte: today, lt: tomorrow } },
+    include: { shift: true }
+  });
+  for (const c of todayCheckins) {
+    if (!c.shift || c.shift.id === shiftId) continue;
+    const [endH, endM] = c.shift.endTime.split(':').map(Number);
+    const endMinutes = endH * 60 + endM;
+    if (nowMinutes < endMinutes) {
+      return res.status(409).json({
+        message: `Você ainda está no turno "${c.shift.name}" (até ${c.shift.endTime}). Aguarde o término para fazer check-in em outro turno.`
+      });
+    }
+  }
+
   // Buscar local de check-in do turno
   if (!shift.checkinLocationId) {
     return res.status(400).json({ message: 'Turno não possui local de check-in configurado' });

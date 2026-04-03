@@ -63,6 +63,22 @@ function shiftAlreadyChecked(shiftId) {
   return todayCheckins.value.some(c => c.shiftId === shiftId);
 }
 
+function shiftBlocked(shift) {
+  // Já fez check-in neste turno
+  if (shiftAlreadyChecked(shift.id)) return 'Já registrado';
+  // Há outro turno em andamento
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  for (const c of todayCheckins.value) {
+    if (c.shiftId === shift.id) continue;
+    const s = c.shift;
+    if (!s) continue;
+    const [eh, em] = s.endTime.split(':').map(Number);
+    if (nowMin < eh * 60 + em) return `Turno "${s.name}" em andamento (até ${s.endTime})`;
+  }
+  return null;
+}
+
 onMounted(() => {
   updateClock();
   clockInterval = setInterval(updateClock, 1000);
@@ -88,8 +104,8 @@ onUnmounted(() => {
         <label class="form-label fw-semibold">Turno</label>
         <select v-model="selectedShift" class="form-select form-select-lg">
           <option value="" disabled>Selecione um turno</option>
-          <option v-for="s in shifts" :key="s.id" :value="s.id" :disabled="shiftAlreadyChecked(s.id)">
-            {{ s.name }} ({{ s.startTime }} - {{ s.endTime }}){{ shiftAlreadyChecked(s.id) ? ' ✓' : '' }}
+          <option v-for="s in shifts" :key="s.id" :value="s.id" :disabled="!!shiftBlocked(s)">
+            {{ s.name }} ({{ s.startTime }} - {{ s.endTime }}){{ shiftBlocked(s) ? ' — ' + shiftBlocked(s) : '' }}
           </option>
         </select>
         <div v-if="shifts.length === 0" class="form-text text-warning small mt-1">
