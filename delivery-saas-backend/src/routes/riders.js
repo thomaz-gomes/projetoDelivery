@@ -222,6 +222,53 @@ ridersRouter.put('/:riderId/position/hide', requireRole('ADMIN', 'SUPER_ADMIN'),
   }
 });
 
+// ==================== CHECKIN LOCATIONS ====================
+
+// GET /riders/checkin-locations
+ridersRouter.get('/checkin-locations', async (req, res) => {
+  const companyId = req.user.companyId;
+  const locations = await prisma.checkinLocation.findMany({
+    where: { companyId },
+    orderBy: { createdAt: 'desc' }
+  });
+  res.json(locations);
+});
+
+// POST /riders/checkin-locations
+ridersRouter.post('/checkin-locations', async (req, res) => {
+  const companyId = req.user.companyId;
+  const { name, address, latitude, longitude, radius } = req.body;
+  if (!name || latitude == null || longitude == null) {
+    return res.status(400).json({ message: 'name, latitude e longitude são obrigatórios' });
+  }
+  const location = await prisma.checkinLocation.create({
+    data: { companyId, name, address, latitude: Number(latitude), longitude: Number(longitude), radius: radius ? Number(radius) : 200 }
+  });
+  res.status(201).json(location);
+});
+
+// PATCH /riders/checkin-locations/:id
+ridersRouter.patch('/checkin-locations/:id', async (req, res) => {
+  const companyId = req.user.companyId;
+  const loc = await prisma.checkinLocation.findFirst({ where: { id: req.params.id, companyId } });
+  if (!loc) return res.status(404).json({ message: 'Local não encontrado' });
+  const data = { ...req.body };
+  if (data.latitude != null) data.latitude = Number(data.latitude);
+  if (data.longitude != null) data.longitude = Number(data.longitude);
+  if (data.radius != null) data.radius = Number(data.radius);
+  const updated = await prisma.checkinLocation.update({ where: { id: req.params.id }, data });
+  res.json(updated);
+});
+
+// DELETE /riders/checkin-locations/:id
+ridersRouter.delete('/checkin-locations/:id', async (req, res) => {
+  const companyId = req.user.companyId;
+  const loc = await prisma.checkinLocation.findFirst({ where: { id: req.params.id, companyId } });
+  if (!loc) return res.status(404).json({ message: 'Local não encontrado' });
+  await prisma.checkinLocation.update({ where: { id: req.params.id }, data: { active: false } });
+  res.json({ ok: true });
+});
+
 // ==================== SHIFTS ====================
 
 // GET /riders/shifts — listar turnos da empresa
@@ -229,7 +276,8 @@ ridersRouter.get('/shifts', async (req, res) => {
   const companyId = req.user.companyId;
   const shifts = await prisma.riderShift.findMany({
     where: { companyId },
-    orderBy: { startTime: 'asc' }
+    orderBy: { startTime: 'asc' },
+    include: { checkinLocation: { select: { id: true, name: true } } }
   });
   res.json(shifts);
 });
@@ -237,10 +285,10 @@ ridersRouter.get('/shifts', async (req, res) => {
 // POST /riders/shifts — criar turno
 ridersRouter.post('/shifts', async (req, res) => {
   const companyId = req.user.companyId;
-  const { name, startTime, endTime } = req.body;
+  const { name, startTime, endTime, checkinLocationId } = req.body;
   if (!name || !startTime || !endTime) return res.status(400).json({ message: 'name, startTime e endTime são obrigatórios' });
   const shift = await prisma.riderShift.create({
-    data: { companyId, name, startTime, endTime }
+    data: { companyId, name, startTime, endTime, checkinLocationId: checkinLocationId || null }
   });
   res.status(201).json(shift);
 });
@@ -300,18 +348,21 @@ ridersRouter.post('/me/checkin', async (req, res) => {
   });
   if (existing) return res.status(409).json({ message: 'Você já fez check-in neste turno hoje', checkin: existing });
 
-  // Buscar localização da loja principal
-  const store = await prisma.store.findFirst({ where: { companyId }, orderBy: { createdAt: 'asc' } });
-  if (!store || store.latitude == null || store.longitude == null) {
-    return res.status(400).json({ message: 'Loja não possui coordenadas configuradas' });
+  // Buscar local de check-in do turno
+  if (!shift.checkinLocationId) {
+    return res.status(400).json({ message: 'Turno não possui local de check-in configurado' });
+  }
+  const location = await prisma.checkinLocation.findUnique({ where: { id: shift.checkinLocationId } });
+  if (!location) {
+    return res.status(400).json({ message: 'Local de check-in não encontrado' });
   }
 
   // Calcular distância
-  const distanceMeters = haversineMeters(lat, lng, store.latitude, store.longitude);
-  const maxRadius = 200; // metros
+  const distanceMeters = haversineMeters(lat, lng, location.latitude, location.longitude);
+  const maxRadius = location.radius || 200; // metros
   if (distanceMeters > maxRadius) {
     return res.status(400).json({
-      message: `Você está a ${Math.round(distanceMeters)}m da loja. Máximo permitido: ${maxRadius}m.`,
+      message: `Você está a ${Math.round(distanceMeters)}m do local de check-in. Máximo permitido: ${maxRadius}m.`,
       distanceMeters: Math.round(distanceMeters)
     });
   }
