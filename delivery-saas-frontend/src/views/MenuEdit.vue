@@ -487,7 +487,11 @@ async function save(){
           if (form.value.whatsapp !== undefined) menuPayload.whatsapp = form.value.whatsapp || null
           if (form.value.timezone !== undefined) menuPayload.timezone = form.value.timezone || null
           if (form.value.open24Hours !== undefined) menuPayload.open24Hours = !!form.value.open24Hours
-          if (Array.isArray(weeklySchedule.value) && weeklySchedule.value.length === 7) menuPayload.weeklySchedule = weeklySchedule.value.map(w=>({ day: Number(w.day)||0, enabled: !!w.enabled, from: String(w.from||''), to: String(w.to||'') }))
+          if (form.value.open24Hours) {
+            menuPayload.weeklySchedule = null
+          } else if (Array.isArray(weeklySchedule.value) && weeklySchedule.value.length === 7) {
+            menuPayload.weeklySchedule = weeklySchedule.value.map(w=>({ day: Number(w.day)||0, enabled: !!w.enabled, from: String(w.from||''), to: String(w.to||'') }))
+          }
           if (form.value.logoUrl !== undefined) menuPayload.logoUrl = form.value.logoUrl || null
           if (form.value.bannerUrl !== undefined) menuPayload.bannerUrl = form.value.bannerUrl || null
           if (form.value.allowDelivery !== undefined) menuPayload.allowDelivery = !!form.value.allowDelivery

@@ -135,7 +135,12 @@ router.patch('/menus/:id', requireRole('ADMIN'), async (req, res) => {
   const finalAllowPickup   = simplesOnly ? false : (allowPickup   !== undefined ? !!allowPickup   : existing.allowPickup)
   const finalCatalogMode   = simplesOnly ? true  : (catalogMode   !== undefined ? !!catalogMode   : existing.catalogMode)
 
-  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, bannerUrl: bannerUrl ?? existing.bannerUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule, open24Hours: open24Hours !== undefined ? !!open24Hours : existing.open24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
+  // When open24Hours is enabled, clear weeklySchedule to avoid conflicts
+  const finalOpen24Hours = open24Hours !== undefined ? !!open24Hours : existing.open24Hours
+  let finalWeeklySchedule = weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule
+  if (finalOpen24Hours) finalWeeklySchedule = null
+
+  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, bannerUrl: bannerUrl ?? existing.bannerUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: finalWeeklySchedule, open24Hours: finalOpen24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
 
   // Emit real-time socket event so public menus react immediately when a menu is toggled
   try {

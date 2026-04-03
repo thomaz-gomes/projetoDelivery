@@ -885,11 +885,43 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   try { console.log('POST /public/:companyId/orders - incoming rawBody snippet:', (req.rawBody || '').toString().slice(0,2000).replace(/\n/g,'\\n')) } catch(e){}
   try { console.log('POST /public/:companyId/orders - parsed payload keys:', Object.keys(payload || {}).join(', ')) } catch(e){}
   try {
-    // load company to check operating hours
-  const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, alwaysOpen: true, timezone: true, weeklySchedule: true } })
+    // load company + resolve store/menu-level schedule overrides
+    const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, alwaysOpen: true, timezone: true, weeklySchedule: true } })
     if (!company) return res.status(404).json({ message: 'Empresa não encontrada' })
 
-    // if the store is not always open, validate current time against openFrom/openTo using the store timezone if provided
+    // Resolve schedule from menu → store → company (same precedence as public menu endpoint)
+    const menuId = payload.menuId || null
+    const storeId = payload.storeId || null
+    if (menuId) {
+      try {
+        const menu = await prisma.menu.findUnique({ where: { id: menuId }, select: { open24Hours: true, weeklySchedule: true, timezone: true, storeId: true } })
+        if (menu) {
+          if (typeof menu.open24Hours !== 'undefined') company.alwaysOpen = !!menu.open24Hours
+          if (menu.weeklySchedule) company.weeklySchedule = menu.weeklySchedule
+          if (menu.timezone) company.timezone = menu.timezone
+          // Also check store if menu doesn't have schedule
+          if (!menu.weeklySchedule && !menu.open24Hours && menu.storeId) {
+            const store = await prisma.store.findUnique({ where: { id: menu.storeId }, select: { open24Hours: true, weeklySchedule: true, timezone: true } })
+            if (store) {
+              if (store.open24Hours) company.alwaysOpen = true
+              if (store.weeklySchedule) company.weeklySchedule = store.weeklySchedule
+              if (store.timezone) company.timezone = store.timezone
+            }
+          }
+        }
+      } catch (e) { /* fallback to company-level */ }
+    } else if (storeId) {
+      try {
+        const store = await prisma.store.findUnique({ where: { id: storeId }, select: { open24Hours: true, weeklySchedule: true, timezone: true } })
+        if (store) {
+          if (store.open24Hours) company.alwaysOpen = true
+          if (store.weeklySchedule) company.weeklySchedule = store.weeklySchedule
+          if (store.timezone) company.timezone = store.timezone
+        }
+      } catch (e) { /* fallback to company-level */ }
+    }
+
+    // if the store is not always open, validate current time against schedule
     if (!company.alwaysOpen) {
       const parseHM = (s) => {
         if (!s) return null
@@ -929,13 +961,9 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
           const schedule = company.weeklySchedule
           // determine weekday in store timezone
           const tz = company.timezone || 'America/Sao_Paulo'
-          const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'short' }).formatToParts(new Date())
-          // get weekday index 0=Sun..6=Sat by creating a Date in tz and using .getUTCDay fallback
-          // simpler: compute day via Date in tz by formatting full date and building Date
           const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
           // fmt is like 'dd/mm/yyyy'
           const [dayStr, monthStr, yearStr] = fmt.split('/')
-          // create Date from yyyy-mm-dd in tz by constructing UTC date
           const tzDate = new Date(`${yearStr}-${monthStr}-${dayStr}T00:00:00Z`)
           const weekDay = tzDate.getUTCDay()
 
@@ -952,14 +980,15 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
           const to = { hh: toH, mm: toM }
           const open = checkInterval(nowParts, from, to)
           if (!open) return res.status(400).json({ message: 'Fora do horário de funcionamento; não é possível criar pedidos neste momento' })
+          // Schedule validated OK — proceed to create order
         } catch (err) {
-          console.warn('Failed to parse weeklySchedule, falling back to single interval:', err?.message || err)
-          // fallthrough to single-interval handling below
+          console.warn('Failed to parse weeklySchedule, falling back:', err?.message || err)
+          return res.status(400).json({ message: 'Erro ao validar horário de funcionamento' })
         }
+      } else {
+        // No schedule configured and not always open — reject
+        return res.status(400).json({ message: 'Horário de funcionamento não configurado; configure o horário semanal ou marque como "Sempre disponível".' })
       }
-
-      // fallback: if weeklySchedule is not present, reject because there is no configured schedule
-      return res.status(400).json({ message: 'Horário de funcionamento não configurado; configure o horário semanal ou marque como "Sempre disponível".' })
     }
 
   // support both old shape (customerName/customerPhone) and new shape (customer: { name, contact, address })

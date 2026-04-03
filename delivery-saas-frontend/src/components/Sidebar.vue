@@ -266,7 +266,8 @@ async function loadMenusWidget(){
           if(merged.logoUrl && !merged.logoUrl.startsWith('http')) merged.logoUrl = assetUrl(merged.logoUrl)
         }
         const menuMeta = (merged && merged.menus && merged.menus[String(m.id)]) ? merged.menus[String(m.id)] : {}
-        const combined = { ...(merged || {}), ...(menuMeta || {}) }
+        // Merge: store settings < menu-specific settings < DB menu fields (open24Hours, weeklySchedule)
+        const combined = { ...(merged || {}), ...(menuMeta || {}), open24Hours: m.open24Hours, weeklySchedule: m.weeklySchedule || (menuMeta || {}).weeklySchedule || (merged || {}).weeklySchedule }
         let thumb = m.logoUrl || combined.logo || combined.logoUrl || null
         if(thumb && !String(thumb).startsWith('http')) thumb = assetUrl(thumb)
         m._thumb = thumb
