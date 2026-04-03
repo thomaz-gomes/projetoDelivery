@@ -167,7 +167,8 @@ model Rider {
   account      RiderAccount?
   transactions RiderTransaction[]
   position     RiderPosition?
-  checkins     RiderCheckin[]
+  checkins         RiderCheckin[]
+  shiftAssignments RiderShiftAssignment[]
 }
 
 model Order {
@@ -523,6 +524,8 @@ model Store {
   open24Hours        Boolean           @default(false)
   weeklySchedule     Json?
   address            String?
+  latitude           Float?
+  longitude          Float?
   isActive           Boolean           @default(true)
   menus              Menu[]
   // integrations that are bound to this store
@@ -646,10 +649,20 @@ model RiderShift {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  checkins   RiderCheckin[]
-  bonusRules RiderBonusRule[]
+  checkins         RiderCheckin[]
+  bonusRules       RiderBonusRule[]
+  shiftAssignments RiderShiftAssignment[]
 
   @@index([companyId])
+}
+
+model RiderShiftAssignment {
+  riderId String
+  rider   Rider      @relation(fields: [riderId], references: [id])
+  shiftId String
+  shift   RiderShift @relation(fields: [shiftId], references: [id])
+
+  @@id([riderId, shiftId])
 }
 
 model RiderCheckin {

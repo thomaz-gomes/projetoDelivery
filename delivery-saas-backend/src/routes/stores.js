@@ -180,7 +180,7 @@ storesRouter.post('/admin/cleanup-forceopen', requireRole('ADMIN'), async (req, 
 storesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId
-      const { name, cnpj, logoUrl, bannerUrl, timezone, address, isActive, certBase64, certPassword, open24Hours, weeklySchedule, slug, ie, razaoSocial, nfeSerie, nfeEnvironment, csc, cscId, enderEmit } = req.body || {}
+      const { name, cnpj, logoUrl, bannerUrl, timezone, address, latitude, longitude, isActive, certBase64, certPassword, open24Hours, weeklySchedule, slug, ie, razaoSocial, nfeSerie, nfeEnvironment, csc, cscId, enderEmit } = req.body || {}
 
       // slug handling: if provided, normalize and validate
       let normalizedSlug = null
@@ -206,7 +206,7 @@ storesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
         return res.status(status).json({ message: e?.message || 'Limite de lojas atingido para seu plano' })
       }
 
-      const s = await prisma.store.create({ data: { companyId, name, cnpj: cnpj || null, logoUrl: logoUrl || null, bannerUrl: bannerUrl || null, timezone: timezone || null, address: address || null, isActive: isActive ?? true, open24Hours: open24Hours ?? false, weeklySchedule: open24Hours ? null : (weeklySchedule ?? null), slug: normalizedSlug || null } })
+      const s = await prisma.store.create({ data: { companyId, name, cnpj: cnpj || null, logoUrl: logoUrl || null, bannerUrl: bannerUrl || null, timezone: timezone || null, address: address || null, latitude: latitude != null ? Number(latitude) : null, longitude: longitude != null ? Number(longitude) : null, isActive: isActive ?? true, open24Hours: open24Hours ?? false, weeklySchedule: open24Hours ? null : (weeklySchedule ?? null), slug: normalizedSlug || null } })
 
     // handle certificate upload: certBase64 (data URL or raw base64) -> secure/certs/<storeId>.pfx
     if (certBase64) {
@@ -290,7 +290,7 @@ storesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       }
     }
 
-  const updated = await prisma.store.update({ where: { id }, data: { name: body.name ?? existing.name, cnpj: body.cnpj ?? existing.cnpj, logoUrl: body.logoUrl ?? existing.logoUrl, bannerUrl: body.bannerUrl ?? existing.bannerUrl, timezone: body.timezone ?? existing.timezone, address: body.address ?? existing.address, isActive: body.isActive ?? existing.isActive, open24Hours: body.open24Hours ?? existing.open24Hours, weeklySchedule: (body.open24Hours ? null : (body.weeklySchedule !== undefined ? body.weeklySchedule : existing.weeklySchedule)), slug: slugToSet !== undefined ? slugToSet : existing.slug } })
+  const updated = await prisma.store.update({ where: { id }, data: { name: body.name ?? existing.name, cnpj: body.cnpj ?? existing.cnpj, logoUrl: body.logoUrl ?? existing.logoUrl, bannerUrl: body.bannerUrl ?? existing.bannerUrl, timezone: body.timezone ?? existing.timezone, address: body.address ?? existing.address, latitude: body.latitude !== undefined ? (body.latitude != null ? Number(body.latitude) : null) : existing.latitude, longitude: body.longitude !== undefined ? (body.longitude != null ? Number(body.longitude) : null) : existing.longitude, isActive: body.isActive ?? existing.isActive, open24Hours: body.open24Hours ?? existing.open24Hours, weeklySchedule: (body.open24Hours ? null : (body.weeklySchedule !== undefined ? body.weeklySchedule : existing.weeklySchedule)), slug: slugToSet !== undefined ? slugToSet : existing.slug } })
 
     // Emit a company-scoped update so public clients refresh when top-level store fields change
     try {

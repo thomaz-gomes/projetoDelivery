@@ -26,6 +26,14 @@
                 <div class="form-text small">Se preenchido, a URL pública ficará em <code>/public/SEU_SLUG</code>. Caso vazio, o sistema gerará/resolve um slug automaticamente.</div>
               </div>
             <div class="mb-3"><TextInput label="Endereço" labelClass="form-label" v-model="form.address" inputClass="form-control" /></div>
+            <div class="row mb-3">
+              <div class="col-6">
+                <TextInput label="Latitude" labelClass="form-label" v-model="form.latitude" type="number" step="any" placeholder="-12.9714" inputClass="form-control" />
+              </div>
+              <div class="col-6">
+                <TextInput label="Longitude" labelClass="form-label" v-model="form.longitude" type="number" step="any" placeholder="-38.5124" inputClass="form-control" />
+              </div>
+            </div>
             <div class="mb-3"><TextInput label="Telefone" labelClass="form-label" v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
             <div class="mb-3"><TextInput label="WhatsApp" labelClass="form-label" v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
             <div class="mb-3"><TextInput label="CNPJ" labelClass="form-label" v-model="form.cnpj" placeholder="00.000.000/0000-00" inputClass="form-control" /></div>
@@ -294,7 +302,7 @@ const TIMEZONES = [
   'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
   'Asia/Shanghai', 'Australia/Sydney'
 ]
-const form = ref({ name: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
+const form = ref({ name: '', address: '', latitude: null, longitude: null, phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
 
 // ── Debug diagnóstico do certificado ──
 const debugRunning = ref(false)
@@ -376,6 +384,8 @@ async function load() {
       form.value.name = s.name || ''
       form.value.slug = s.slug || ''
       form.value.address = s.address || ''
+      form.value.latitude = s.latitude != null ? s.latitude : null
+      form.value.longitude = s.longitude != null ? s.longitude : null
   form.value.logoUrl = s.logoUrl ? assetUrl(s.logoUrl) : ''
   form.value.bannerUrl = s.bannerUrl ? assetUrl(s.bannerUrl) : ''
       form.value.cnpj = s.cnpj || ''
@@ -517,6 +527,8 @@ async function save(){
       name: form.value.name || undefined,
       slug: form.value.slug !== undefined ? (form.value.slug || undefined) : undefined,
       address: form.value.address || undefined,
+      latitude: form.value.latitude != null && form.value.latitude !== '' ? Number(form.value.latitude) : null,
+      longitude: form.value.longitude != null && form.value.longitude !== '' ? Number(form.value.longitude) : null,
       timezone: form.value.timezone || undefined,
       cnpj: form.value.cnpj || undefined,
       isActive: form.value.isActive,
