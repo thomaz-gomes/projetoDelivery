@@ -14,8 +14,13 @@
     <script type="module" crossorigin src="/src/main.js"></script>
     <link rel="stylesheet" href="/src/assets/main.css" />
     <link rel="favicon" type="image/png" href="/delivery-saas-frontend/public/favico.png" />
-    <!-- manifest is injected dynamically per store by PublicMenu.vue -->
+    <!-- rider PWA manifest (start_url=/rider/orders); menu manifest injected by PublicMenu.vue -->
+    <link rel="manifest" href="/rider-manifest.webmanifest" />
     <meta name="theme-color" content="#105784" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Entregador" />
+    <link rel="apple-touch-icon" href="/icons/rider-192.svg" />
   </head>
 
   <body>

@@ -123,19 +123,11 @@ watch(() => auth.user, (user) => {
 }, { immediate: true })
 onMounted(() => {
   loadMenusWidget().catch(()=>{});
-  // Inject rider PWA manifest + service worker for /rider/* routes
+  // Register rider service worker for /rider/* routes
   if (route.path === '/rider' || route.path.startsWith('/rider/')) {
-    let link = document.querySelector('link[rel="manifest"]');
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'manifest';
-      document.head.appendChild(link);
-    }
-    link.href = '/rider-manifest.webmanifest';
+    document.title = 'Core Delivery — Entregador';
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = '#198754';
-    document.title = 'Core Delivery — Entregador';
-    // Register rider service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw-rider.js').catch(() => {});
     }
