@@ -170,7 +170,6 @@
 <script setup>
 import { ref, onMounted, nextTick, watch } from 'vue'
 import api from '../api'
-import TextInput from '../components/TextInput.vue'
 
 const loading = ref(true)
 const saving = ref(false)
