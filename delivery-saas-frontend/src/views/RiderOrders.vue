@@ -91,6 +91,7 @@ import { io } from 'socket.io-client'
 import { SOCKET_URL } from '@/config'
 import { normalizeOrderItems } from '../utils/orderUtils.js'
 import Swal from 'sweetalert2'
+import { isNativeApp, startNativeTracking, stopNativeTracking } from '../utils/nativeTracking.js'
 
 const orders = ref([])
 const loading = ref(false)
@@ -332,31 +333,47 @@ function formatAddress(o){
   }
 }
 
-function startTracking(orderId = null) {
-  if (!navigator.geolocation) return
-  if (trackingIntervalId !== null) return // already tracking
+let usingNativeTracking = false
+
+function sendPositionToServer(lat, lng, heading, accuracy, orderId) {
+  if (accuracy && accuracy > 1000) return
+  api.post('/riders/me/position', {
+    lat, lng,
+    heading: heading ?? null,
+    orderId: orderId ?? null,
+    accuracy: accuracy ?? null,
+  }).catch((e) => console.warn('GPS position update failed:', e?.message))
+}
+
+async function startTracking(orderId = null) {
+  if (trackingIntervalId !== null || usingNativeTracking) return // already tracking
   activeOrderForTracking.value = orderId || '__active__'
+
+  // Try native Capacitor GPS first (works in background)
+  if (isNativeApp()) {
+    const started = await startNativeTracking((lat, lng, heading, accuracy) => {
+      sendPositionToServer(lat, lng, heading, accuracy, orderId)
+    })
+    if (started) {
+      usingNativeTracking = true
+      return
+    }
+  }
+
+  // Fallback: web geolocation
+  if (!navigator.geolocation) return
 
   const sendPosition = (pos) => {
     const { latitude: lat, longitude: lng, heading, accuracy } = pos.coords
-    if (accuracy && accuracy > 1000) return
-    api.post('/riders/me/position', {
-      lat,
-      lng,
-      heading: heading ?? null,
-      orderId: orderId ?? null,
-      accuracy: accuracy ?? null,
-    }).catch((e) => console.warn('GPS position update failed:', e?.message))
+    sendPositionToServer(lat, lng, heading, accuracy, orderId)
   }
 
-  // Send position immediately on start
   navigator.geolocation.getCurrentPosition(
     sendPosition,
     (err) => console.warn('GPS initial position error:', err?.message),
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
   )
 
-  // Active interval every 10s (more reliable than watchPosition on mobile)
   trackingIntervalId = setInterval(() => {
     navigator.geolocation.getCurrentPosition(
       sendPosition,
@@ -365,7 +382,6 @@ function startTracking(orderId = null) {
     )
   }, 10000)
 
-  // watchPosition as complement (fires on significant movement)
   watchId = navigator.geolocation.watchPosition(
     sendPosition,
     (err) => console.warn('GPS watchPosition error:', err?.message),
@@ -374,6 +390,10 @@ function startTracking(orderId = null) {
 }
 
 function stopTracking() {
+  if (usingNativeTracking) {
+    stopNativeTracking()
+    usingNativeTracking = false
+  }
   if (watchId !== null) {
     try { navigator.geolocation.clearWatch(watchId) } catch (e) {}
     watchId = null

@@ -1,0 +1,24 @@
+{
+  "name": "delivery-rider-app",
+  "version": "1.0.0",
+  "description": "Core Delivery — App nativo do entregador com GPS background",
+  "private": true,
+  "scripts": {
+    "build": "cd ../delivery-saas-frontend && npm run build && cd ../delivery-rider-app && npx cap sync",
+    "open": "npx cap open android",
+    "run:android": "npx cap run android",
+    "sync": "npx cap sync"
+  },
+  "dependencies": {
+    "@capacitor-community/background-geolocation": "^1",
+    "@capacitor/android": "^6",
+    "@capacitor/app": "^6",
+    "@capacitor/core": "^6",
+    "@capacitor/splash-screen": "^6",
+    "@capacitor/status-bar": "^6"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6",
+    "typescript": "^6.0.2"
+  }
+}
