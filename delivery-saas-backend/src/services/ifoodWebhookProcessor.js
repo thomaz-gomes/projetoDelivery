@@ -285,6 +285,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     couponCode: mapped.couponCode || null,
     orderType: mapped.orderType || null,
     payload: mapped.raw,
+    ...(mapped.closedByIfoodCode ? { closedByIfoodCode: true } : {}),
   };
 
   // If the order is linked to an existing customer and the payload contains
@@ -630,6 +631,11 @@ export async function processIFoodWebhook(eventId) {
         }
 
         if (inferred) mapped.status = inferred;
+        // Track when iFood sends the CONCLUDED event so we know the order was
+        // closed via iFood confirmation code (as opposed to manual rider completion).
+        if (eventCode === 'CONCLUDED' || eventCode === 'CON') {
+          mapped.closedByIfoodCode = true;
+        }
         console.log('[iFood Processor] eventCode:', eventCode, '-> inferred status:', inferred, 'mapped.status:', mapped.status);
       } catch (e) {
         console.warn('[iFood Processor] failed to infer status from payload:', e?.message || e);
