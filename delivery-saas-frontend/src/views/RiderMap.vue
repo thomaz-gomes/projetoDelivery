@@ -315,12 +315,6 @@ async function loadPositions() {
       removeStaleMarkers(posRes.data.map(p => p.riderId || p.rider?.id).filter(Boolean))
       delRes.data.forEach(updateDeliveryMarker)
       removeStaleDeliveryMarkers(delRes.data.map(o => o.id))
-      // Fit map to all markers (riders + deliveries)
-      const allMarkers = [...Object.values(markersMap), ...Object.values(deliveryMarkersMap)]
-      if (allMarkers.length > 0) {
-        const group = L.featureGroup(allMarkers)
-        map.fitBounds(group.getBounds().pad(0.3))
-      }
     }
   } catch (e) {
     console.warn('loadPositions error:', e)
