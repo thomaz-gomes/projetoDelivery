@@ -1,4 +1,4 @@
-import { prisma } from '../../prisma.js';
+import { prisma } from '../prisma.js';
 
 async function run() {
   console.log('Starting backfill of displaySimple for orders...');
