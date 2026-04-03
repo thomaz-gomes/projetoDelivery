@@ -19,24 +19,24 @@
       <div v-if="orders.length === 0" class="text-center text-muted">Nenhum pedido disponível.</div>
       <transition-group name="fade-list" tag="div" class="d-grid gap-3">
         <div v-for="o in orders" :key="o.id" class="card">
-          <div class="card-header d-flex justify-content-between align-items-start">
-            <div>
-              <div class="fw-semibold">#{{ o.displayId || o.displaySimple }} — {{ o.customerName || o.customerPhone || 'Cliente' }}</div>
-              <div class="small text-muted d-flex align-items-center gap-2">
-                <span>{{ o.customerPhone || '' }}</span>
-                <div v-if="o.customerPhone" class="d-flex gap-1">
-                  <a :href="'tel:' + o.customerPhone" class="btn btn-sm btn-outline-primary py-0 px-1" title="Ligar">
-                    <i class="bi bi-telephone-fill"></i>
-                  </a>
-                  <a :href="getWhatsAppLink(o.customerPhone)" target="_blank" class="btn btn-sm btn-outline-success py-0 px-1" title="WhatsApp">
-                    <i class="bi bi-whatsapp"></i>
-                  </a>
+          <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="fw-bold">#{{ o.displayId || o.displaySimple }}</span>
+              <span :class="statusBadgeClass(o.status)" class="badge">{{ statusLabel(o.status) }}</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="small">
+                <span class="fw-semibold">{{ o.customerName || 'Cliente' }}</span>
+                <div v-if="o.customerPhone" class="d-flex align-items-center gap-1 mt-1">
+                  <span class="text-muted">{{ o.customerPhone }}</span>
+                  <a :href="'tel:' + o.customerPhone" class="btn btn-sm btn-outline-primary py-0 px-1" title="Ligar"><i class="bi bi-telephone-fill"></i></a>
+                  <a :href="getWhatsAppLink(o.customerPhone)" target="_blank" class="btn btn-sm btn-outline-success py-0 px-1" title="WhatsApp"><i class="bi bi-whatsapp"></i></a>
                 </div>
               </div>
-            </div>
-            <div class="text-end small text-muted">
-              <div>{{ formatDate(o.createdAt) }}</div>
-              <div class="fw-semibold text-success">{{ formatMoney(o.total) }}</div>
+              <div class="text-end">
+                <div class="fw-bold text-success">{{ formatMoney(o.total) }}</div>
+                <div class="text-muted" style="font-size: 0.7rem">{{ formatDate(o.createdAt) }}</div>
+              </div>
             </div>
           </div>
           <div class="card-body">
@@ -58,12 +58,10 @@
               </ul>
             </div>
           </div>
-          <div class="card-footer d-flex justify-content-between">
-            <div>
-              <button v-if="o.status === 'SAIU_PARA_ENTREGA'" class="btn btn-sm btn-success" @click="markDelivered(o)">Marcar entregue</button>
-              <button class="btn btn-sm btn-outline-secondary ms-2" @click="viewOrder(o)">Ver</button>
-            </div>
-            <div class="small text-muted">Comanda: {{ o.displayId || o.displaySimple || o.id.slice(0,6) }}</div>
+          <div v-if="o.status === 'SAIU_PARA_ENTREGA'" class="card-footer">
+            <button class="btn btn-success w-100" @click="markDelivered(o)">
+              <i class="bi bi-check-circle me-1"></i>Marcar entregue
+            </button>
           </div>
         </div>
   </transition-group>
@@ -200,6 +198,14 @@ function externalOpenScannerHandler(){
 }
 
 function formatMoney(v){ try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0)) }catch(e){ return v } }
+function statusLabel(s) {
+  const map = { PENDENTE_ACEITE: 'Pendente', EM_PREPARO: 'Em Preparo', PRONTO: 'Pronto', SAIU_PARA_ENTREGA: 'Em Entrega', CONFIRMACAO_PAGAMENTO: 'Aguardando Pgto' }
+  return map[s] || s
+}
+function statusBadgeClass(s) {
+  const map = { SAIU_PARA_ENTREGA: 'bg-primary', EM_PREPARO: 'bg-warning text-dark', PRONTO: 'bg-info', CONFIRMACAO_PAGAMENTO: 'bg-secondary', PENDENTE_ACEITE: 'bg-light text-dark' }
+  return map[s] || 'bg-secondary'
+}
 function formatDate(d){ if(!d) return ''; try{ return formatDateTime(d) }catch(e){ return d } }
 function getWhatsAppLink(phone) {
   if (!phone) return '#';
@@ -437,11 +443,6 @@ async function markDelivered(o){
       try { Swal && Swal.fire && Swal.fire({ icon: 'error', title: 'Erro', text: 'Falha ao marcar entregue', toast: true, position: 'top-end' }); } catch(e) {}
     }
   }catch(e){ console.error(e); try { Swal && Swal.fire && Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Erro ao marcar entregue', toast: true, position: 'top-end' }); } catch(_){} }
-}
-
-function viewOrder(o){
-  // navigate to order detail page if exists
-  if (o.id) window.location.href = `/orders/${o.id}/receipt`;
 }
 
 function ensureSocket(){
