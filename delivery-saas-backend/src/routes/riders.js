@@ -23,6 +23,16 @@ ridersRouter.use(async (req, res, next) => {
   }
 });
 
+// Haversine distance in meters
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 ridersRouter.get('/', async (req, res) => {
   const companyId = req.user.companyId;
   const riders = await prisma.rider.findMany({
@@ -210,6 +220,216 @@ ridersRouter.put('/:riderId/position/hide', requireRole('ADMIN', 'SUPER_ADMIN'),
     console.error('PUT /:riderId/position/hide error:', e);
     return res.status(500).json({ message: 'Erro ao ocultar entregador' });
   }
+});
+
+// ==================== SHIFTS ====================
+
+// GET /riders/shifts — listar turnos da empresa
+ridersRouter.get('/shifts', async (req, res) => {
+  const companyId = req.user.companyId;
+  const shifts = await prisma.riderShift.findMany({
+    where: { companyId },
+    orderBy: { startTime: 'asc' }
+  });
+  res.json(shifts);
+});
+
+// POST /riders/shifts — criar turno
+ridersRouter.post('/shifts', async (req, res) => {
+  const companyId = req.user.companyId;
+  const { name, startTime, endTime } = req.body;
+  if (!name || !startTime || !endTime) return res.status(400).json({ message: 'name, startTime e endTime são obrigatórios' });
+  const shift = await prisma.riderShift.create({
+    data: { companyId, name, startTime, endTime }
+  });
+  res.status(201).json(shift);
+});
+
+// PATCH /riders/shifts/:id — editar turno
+ridersRouter.patch('/shifts/:id', async (req, res) => {
+  const companyId = req.user.companyId;
+  const shift = await prisma.riderShift.findFirst({ where: { id: req.params.id, companyId } });
+  if (!shift) return res.status(404).json({ message: 'Turno não encontrado' });
+  const updated = await prisma.riderShift.update({
+    where: { id: req.params.id },
+    data: req.body
+  });
+  res.json(updated);
+});
+
+// DELETE /riders/shifts/:id — desativar turno
+ridersRouter.delete('/shifts/:id', async (req, res) => {
+  const companyId = req.user.companyId;
+  const shift = await prisma.riderShift.findFirst({ where: { id: req.params.id, companyId } });
+  if (!shift) return res.status(404).json({ message: 'Turno não encontrado' });
+  await prisma.riderShift.update({ where: { id: req.params.id }, data: { active: false } });
+  res.json({ ok: true });
+});
+
+// ==================== CHECK-IN ====================
+
+// POST /riders/me/checkin — motoboy faz check-in
+ridersRouter.post('/me/checkin', async (req, res) => {
+  const userId = req.user.id;
+  const rider = await prisma.rider.findFirst({ where: { userId } });
+  if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
+
+  const { lat, lng, shiftId } = req.body;
+  if (lat == null || lng == null || !shiftId) return res.status(400).json({ message: 'lat, lng e shiftId são obrigatórios' });
+
+  const companyId = rider.companyId;
+
+  // Validar turno
+  const shift = await prisma.riderShift.findFirst({ where: { id: shiftId, companyId, active: true } });
+  if (!shift) return res.status(400).json({ message: 'Turno não encontrado ou inativo' });
+
+  // Evitar check-in duplicado no mesmo turno/dia
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const existing = await prisma.riderCheckin.findFirst({
+    where: { riderId: rider.id, shiftId, checkinAt: { gte: today, lt: tomorrow } }
+  });
+  if (existing) return res.status(409).json({ message: 'Você já fez check-in neste turno hoje', checkin: existing });
+
+  // Buscar localização da loja principal
+  const store = await prisma.store.findFirst({ where: { companyId }, orderBy: { createdAt: 'asc' } });
+  if (!store || store.latitude == null || store.longitude == null) {
+    return res.status(400).json({ message: 'Loja não possui coordenadas configuradas' });
+  }
+
+  // Calcular distância
+  const distanceMeters = haversineMeters(lat, lng, store.latitude, store.longitude);
+  const maxRadius = 200; // metros
+  if (distanceMeters > maxRadius) {
+    return res.status(400).json({
+      message: `Você está a ${Math.round(distanceMeters)}m da loja. Máximo permitido: ${maxRadius}m.`,
+      distanceMeters: Math.round(distanceMeters)
+    });
+  }
+
+  // Reverse geocode via Nominatim
+  let address = null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'DeliveryWL/1.0' }, signal: AbortSignal.timeout(5000) });
+    const data = await resp.json();
+    address = data.display_name || null;
+  } catch (e) {
+    console.warn('[checkin] reverse geocode failed:', e?.message);
+  }
+
+  const checkin = await prisma.riderCheckin.create({
+    data: {
+      riderId: rider.id,
+      companyId,
+      shiftId,
+      lat,
+      lng,
+      address,
+      checkinAt: new Date(),
+      distanceMeters: Math.round(distanceMeters)
+    }
+  });
+
+  res.status(201).json(checkin);
+});
+
+// GET /riders/me/checkins — histórico de check-ins do motoboy
+ridersRouter.get('/me/checkins', async (req, res) => {
+  const userId = req.user.id;
+  const rider = await prisma.rider.findFirst({ where: { userId } });
+  if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
+
+  const { from, to } = req.query;
+  const where = { riderId: rider.id };
+  if (from || to) {
+    where.checkinAt = {};
+    if (from) where.checkinAt.gte = new Date(from);
+    if (to) where.checkinAt.lte = new Date(to);
+  }
+
+  const checkins = await prisma.riderCheckin.findMany({
+    where,
+    include: { shift: { select: { name: true, startTime: true, endTime: true } } },
+    orderBy: { checkinAt: 'desc' },
+    take: 100
+  });
+  res.json(checkins);
+});
+
+// GET /riders/checkins — relatório admin de check-ins
+ridersRouter.get('/checkins', async (req, res) => {
+  const companyId = req.user.companyId;
+  const { from, to, riderId } = req.query;
+
+  const where = { companyId };
+  if (riderId) where.riderId = riderId;
+  if (from || to) {
+    where.checkinAt = {};
+    if (from) where.checkinAt.gte = new Date(from);
+    if (to) where.checkinAt.lte = new Date(to);
+  }
+
+  const checkins = await prisma.riderCheckin.findMany({
+    where,
+    include: {
+      rider: { select: { id: true, name: true } },
+      shift: { select: { name: true, startTime: true, endTime: true } }
+    },
+    orderBy: { checkinAt: 'desc' },
+    take: 500
+  });
+  res.json(checkins);
+});
+
+// ==================== BONUS RULES ====================
+
+// GET /riders/bonus-rules
+ridersRouter.get('/bonus-rules', async (req, res) => {
+  const companyId = req.user.companyId;
+  const rules = await prisma.riderBonusRule.findMany({
+    where: { companyId },
+    include: { shift: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' }
+  });
+  res.json(rules);
+});
+
+// POST /riders/bonus-rules
+ridersRouter.post('/bonus-rules', async (req, res) => {
+  const companyId = req.user.companyId;
+  const { name, type, deadlineTime, bonusAmount, shiftId } = req.body;
+  if (!name || !type || !deadlineTime || bonusAmount == null) {
+    return res.status(400).json({ message: 'name, type, deadlineTime e bonusAmount são obrigatórios' });
+  }
+  const rule = await prisma.riderBonusRule.create({
+    data: { companyId, name, type, deadlineTime, bonusAmount, shiftId: shiftId || null }
+  });
+  res.status(201).json(rule);
+});
+
+// PATCH /riders/bonus-rules/:id
+ridersRouter.patch('/bonus-rules/:id', async (req, res) => {
+  const companyId = req.user.companyId;
+  const rule = await prisma.riderBonusRule.findFirst({ where: { id: req.params.id, companyId } });
+  if (!rule) return res.status(404).json({ message: 'Regra não encontrada' });
+  const updated = await prisma.riderBonusRule.update({
+    where: { id: req.params.id },
+    data: req.body
+  });
+  res.json(updated);
+});
+
+// DELETE /riders/bonus-rules/:id
+ridersRouter.delete('/bonus-rules/:id', async (req, res) => {
+  const companyId = req.user.companyId;
+  const rule = await prisma.riderBonusRule.findFirst({ where: { id: req.params.id, companyId } });
+  if (!rule) return res.status(404).json({ message: 'Regra não encontrada' });
+  await prisma.riderBonusRule.update({ where: { id: req.params.id }, data: { active: false } });
+  res.json({ ok: true });
 });
 
 ridersRouter.get('/:id', async (req, res) => {
