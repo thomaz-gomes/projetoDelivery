@@ -4,10 +4,11 @@ import api from '../api';
 import ListCard from '../components/ListCard.vue';
 
 const shifts = ref([]);
+const locations = ref([]);
 const loading = ref(false);
 const showModal = ref(false);
 const editing = ref(null);
-const form = ref({ name: '', startTime: '', endTime: '' });
+const form = ref({ name: '', startTime: '', endTime: '', checkinLocationId: '' });
 
 async function load() {
   loading.value = true;
@@ -18,24 +19,35 @@ async function load() {
   finally { loading.value = false; }
 }
 
+async function loadLocations() {
+  try {
+    const { data } = await api.get('/riders/checkin-locations');
+    locations.value = data;
+  } catch (e) { console.error(e); }
+}
+
 function openCreate() {
   editing.value = null;
-  form.value = { name: '', startTime: '', endTime: '' };
+  form.value = { name: '', startTime: '', endTime: '', checkinLocationId: '' };
   showModal.value = true;
 }
 
 function openEdit(s) {
   editing.value = s;
-  form.value = { name: s.name, startTime: s.startTime, endTime: s.endTime };
+  form.value = { name: s.name, startTime: s.startTime, endTime: s.endTime, checkinLocationId: s.checkinLocationId || '' };
   showModal.value = true;
 }
 
 async function save() {
   try {
+    const payload = {
+      ...form.value,
+      checkinLocationId: form.value.checkinLocationId || null,
+    };
     if (editing.value) {
-      await api.patch(`/riders/shifts/${editing.value.id}`, form.value);
+      await api.patch(`/riders/shifts/${editing.value.id}`, payload);
     } else {
-      await api.post('/riders/shifts', form.value);
+      await api.post('/riders/shifts', payload);
     }
     showModal.value = false;
     await load();
@@ -50,7 +62,7 @@ async function remove(s) {
   } catch (e) { alert(e.response?.data?.message || 'Erro ao desativar'); }
 }
 
-onMounted(load);
+onMounted(() => { load(); loadLocations(); });
 </script>
 
 <template>
@@ -69,6 +81,7 @@ onMounted(load);
                 <th>Nome</th>
                 <th>Inicio</th>
                 <th>Fim</th>
+                <th>Local</th>
                 <th>Status</th>
                 <th style="width:120px">Acoes</th>
               </tr>
@@ -78,6 +91,7 @@ onMounted(load);
                 <td><strong>{{ s.name }}</strong></td>
                 <td>{{ s.startTime }}</td>
                 <td>{{ s.endTime }}</td>
+                <td>{{ s.checkinLocation?.name || '-' }}</td>
                 <td>
                   <span v-if="s.active !== false" class="badge bg-success">Ativo</span>
                   <span v-else class="badge bg-danger">Inativo</span>
@@ -90,7 +104,7 @@ onMounted(load);
                 </td>
               </tr>
               <tr v-if="shifts.length === 0">
-                <td colspan="5" class="text-center text-secondary py-4">Nenhum turno cadastrado.</td>
+                <td colspan="6" class="text-center text-secondary py-4">Nenhum turno cadastrado.</td>
               </tr>
             </tbody>
           </table>
@@ -120,6 +134,14 @@ onMounted(load);
           <div class="mb-3">
             <label class="form-label">Horario de Fim</label>
             <input type="time" class="form-control" v-model="form.endTime" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Local de Check-in</label>
+            <SelectInput v-model="form.checkinLocationId" class="form-select">
+              <option value="">Nenhum (check-in desabilitado)</option>
+              <option v-for="loc in locations" :key="loc.id" :value="loc.id">{{ loc.name }}</option>
+            </SelectInput>
+            <div class="form-text small">Local onde o motoboy deste turno poderá fazer check-in.</div>
           </div>
         </div>
         <div class="modal-footer">
