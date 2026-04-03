@@ -3269,10 +3269,10 @@ async function useMyLocation(){
     if(!r.ok) throw new Error('Falha ao consultar serviço de geocodificação')
     const j = await r.json()
     // compute a short, useful formatted address (keep full display_name too)
-    const short = shortAddressFromNominatim(j) || j.display_name || `${lat.toFixed(6)}, ${lon.toFixed(6)}`
-    _newAddrFormatted.value = short
     _newAddrFull.value = j.display_name || ''
     const addr = j.address || {}
+    _newAddrFormatted.value = addr.road || addr.pedestrian || addr.neighbourhood || addr.suburb || j.display_name || `${lat.toFixed(6)}, ${lon.toFixed(6)}`
+    _newAddrNumber.value = addr.house_number || ''
     _newAddrNeighborhood.value = addr.suburb || addr.neighbourhood || addr.city_district || addr.village || addr.town || addr.city || ''
     if(!_newAddrNeighborhood.value && addr.county) _newAddrNeighborhood.value = addr.county
     _newAddrLat.value = lat
@@ -3300,7 +3300,7 @@ async function useMyLocation(){
     // transient form fields so the user can "Usar para este pedido" without
     // forcing a save.
     if(addresses.value && addresses.value.length){
-      addAddress({ label: _newAddrLabel.value || 'Minha localização', formattedAddress: _newAddrFormatted.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, fullDisplay: _newAddrFull.value })
+      addAddress({ label: _newAddrLabel.value || 'Minha localização', formattedAddress: _newAddrFormatted.value, number: _newAddrNumber.value, neighborhood: _newAddrNeighborhood.value, latitude: _newAddrLat.value, longitude: _newAddrLon.value, fullDisplay: _newAddrFull.value })
       // clear transient fields after saving
       clearNewAddress()
       // ensure the new-address form is hidden after auto-saving (keep UX tidy)
