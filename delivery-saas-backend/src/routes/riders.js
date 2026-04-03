@@ -283,6 +283,12 @@ ridersRouter.post('/me/checkin', async (req, res) => {
   const shift = await prisma.riderShift.findFirst({ where: { id: shiftId, companyId, active: true } });
   if (!shift) return res.status(400).json({ message: 'Turno não encontrado ou inativo' });
 
+  // Validar que motoboy está atribuído a este turno
+  const assignment = await prisma.riderShiftAssignment.findUnique({
+    where: { riderId_shiftId: { riderId: rider.id, shiftId } }
+  });
+  if (!assignment) return res.status(403).json({ message: 'Você não está atribuído a este turno' });
+
   // Evitar check-in duplicado no mesmo turno/dia
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -576,6 +582,53 @@ ridersRouter.get('/ranking', async (req, res) => {
   } else {
     res.json({ ranking });
   }
+});
+
+// GET /riders/me/shifts — turnos atribuídos ao motoboy logado
+ridersRouter.get('/me/shifts', async (req, res) => {
+  const userId = req.user.id;
+  const rider = await prisma.rider.findFirst({ where: { userId } });
+  if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
+  const assignments = await prisma.riderShiftAssignment.findMany({
+    where: { riderId: rider.id },
+    include: { shift: true }
+  });
+  res.json(assignments.map(a => a.shift).filter(s => s.active));
+});
+
+// GET /riders/:id/shifts — listar turnos atribuídos ao motoboy
+ridersRouter.get('/:id/shifts', async (req, res) => {
+  const companyId = req.user.companyId;
+  const rider = await prisma.rider.findFirst({ where: { id: req.params.id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+  const assignments = await prisma.riderShiftAssignment.findMany({
+    where: { riderId: rider.id },
+    include: { shift: true }
+  });
+  res.json(assignments.map(a => a.shift));
+});
+
+// PUT /riders/:id/shifts — definir turnos do motoboy (replace all)
+ridersRouter.put('/:id/shifts', async (req, res) => {
+  const companyId = req.user.companyId;
+  const rider = await prisma.rider.findFirst({ where: { id: req.params.id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+  const { shiftIds } = req.body; // array of shift IDs
+  if (!Array.isArray(shiftIds)) return res.status(400).json({ message: 'shiftIds deve ser um array' });
+
+  // Delete existing and create new
+  await prisma.riderShiftAssignment.deleteMany({ where: { riderId: rider.id } });
+  if (shiftIds.length > 0) {
+    await prisma.riderShiftAssignment.createMany({
+      data: shiftIds.map(shiftId => ({ riderId: rider.id, shiftId }))
+    });
+  }
+
+  const assignments = await prisma.riderShiftAssignment.findMany({
+    where: { riderId: rider.id },
+    include: { shift: true }
+  });
+  res.json(assignments.map(a => a.shift));
 });
 
 ridersRouter.get('/:id', async (req, res) => {

@@ -5,6 +5,7 @@ import CurrencyInput from '../components/form/input/CurrencyInput.vue';
 import { useRidersStore } from '../stores/riders';
 import { useRoute, useRouter } from 'vue-router';
 import { applyPhoneMask } from '../utils/phoneMask';
+import api from '../api';
 
 const store = useRidersStore();
 const route = useRoute();
@@ -15,13 +16,26 @@ const loading = ref(false);
 const error = ref('');
 
 const rider = ref({ name: '', whatsapp: '', dailyRate: '', active: true, password: '' });
+const allShifts = ref([]);
+const selectedShiftIds = ref([]);
 
 onMounted(async () => {
+  // Carregar todos os turnos da empresa
+  try {
+    const { data } = await api.get('/riders/shifts');
+    allShifts.value = data.filter(s => s.active);
+  } catch (e) {
+    console.error('Erro ao carregar turnos:', e);
+  }
+
   if (isEdit) {
     loading.value = true;
     try {
       const data = await store.get(route.params.id);
       Object.assign(rider.value, data);
+      // Carregar turnos atribuídos
+      const { data: assignedShifts } = await api.get(`/riders/${route.params.id}/shifts`);
+      selectedShiftIds.value = assignedShifts.map(s => s.id);
     } catch (e) {
       console.error(e);
       error.value = 'Falha ao carregar entregador';
@@ -39,15 +53,22 @@ async function save() {
   loading.value = true;
   error.value = '';
   try {
+    let riderId;
     if (isEdit) {
       // send password only if provided
       const body = { name: rider.value.name, whatsapp: rider.value.whatsapp, dailyRate: rider.value.dailyRate, active: rider.value.active };
       if (rider.value.password) body.password = rider.value.password;
       await store.update(route.params.id, body);
+      riderId = route.params.id;
     } else {
       const body = { name: rider.value.name, whatsapp: rider.value.whatsapp, dailyRate: rider.value.dailyRate, active: rider.value.active };
       if (rider.value.password) body.password = rider.value.password;
-      await store.create(body);
+      const created = await store.create(body);
+      riderId = created?.id;
+    }
+    // Salvar turnos atribuídos
+    if (riderId) {
+      await api.put(`/riders/${riderId}/shifts`, { shiftIds: selectedShiftIds.value });
     }
     router.push('/riders');
   } catch (e) {
@@ -89,6 +110,16 @@ async function save() {
             <div class="form-check">
               <input class="form-check-input" type="checkbox" v-model="rider.active" id="activeCheck" />
               <label class="form-check-label" for="activeCheck">Ativo</label>
+            </div>
+          </div>
+
+          <div class="col-12" v-if="allShifts.length">
+            <label class="form-label">Turnos</label>
+            <div class="d-flex flex-wrap gap-2">
+              <div v-for="shift in allShifts" :key="shift.id" class="form-check">
+                <input class="form-check-input" type="checkbox" :value="shift.id" v-model="selectedShiftIds" :id="'shift-' + shift.id" />
+                <label class="form-check-label" :for="'shift-' + shift.id">{{ shift.name }} ({{ shift.startTime }} - {{ shift.endTime }})</label>
+              </div>
             </div>
           </div>
 

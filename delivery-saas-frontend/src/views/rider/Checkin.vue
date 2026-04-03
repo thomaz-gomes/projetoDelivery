@@ -20,10 +20,10 @@ function updateClock() {
 async function loadData() {
   try {
     const [shiftsRes, checkinsRes] = await Promise.all([
-      api.get('/riders/shifts'),
+      api.get('/riders/me/shifts'),
       api.get('/riders/me/checkins', { params: { from: new Date().toISOString().slice(0, 10) } })
     ]);
-    shifts.value = shiftsRes.data.filter(s => s.active);
+    shifts.value = shiftsRes.data;
     todayCheckins.value = checkinsRes.data;
   } catch (e) { console.error(e); }
 }
