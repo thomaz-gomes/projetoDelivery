@@ -130,6 +130,11 @@ model Company {
   // ---- Menu Analytics ----
   menuEvents              MenuEvent[]
   menuEventDailySummaries MenuEventDailySummary[]
+
+  // ---- Rider Shift / Check-in / Bonus ----
+  riderShifts     RiderShift[]
+  riderCheckins   RiderCheckin[]
+  riderBonusRules RiderBonusRule[]
 }
 
 model User {
@@ -162,6 +167,7 @@ model Rider {
   account      RiderAccount?
   transactions RiderTransaction[]
   position     RiderPosition?
+  checkins     RiderCheckin[]
 }
 
 model Order {
@@ -206,6 +212,7 @@ model Order {
   affiliateSales       AffiliateSale[]
   nfeProtocols         NfeProtocol[]
   cashbackTransactions CashbackTransaction[]
+  closedByIfoodCode    Boolean               @default(false)
 
   // Index to speed up queries by company + couponCode
   @@index([companyId, couponCode], name: "idx_order_company_coupon")
@@ -629,6 +636,57 @@ model RiderPosition {
   rider     Rider    @relation(fields: [riderId], references: [id])
 }
 
+model RiderShift {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  name      String
+  startTime String   // "HH:mm"
+  endTime   String   // "HH:mm"
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  checkins   RiderCheckin[]
+  bonusRules RiderBonusRule[]
+
+  @@index([companyId])
+}
+
+model RiderCheckin {
+  id             String     @id @default(uuid())
+  riderId        String
+  rider          Rider      @relation(fields: [riderId], references: [id])
+  companyId      String
+  company        Company    @relation(fields: [companyId], references: [id])
+  shiftId        String
+  shift          RiderShift @relation(fields: [shiftId], references: [id])
+  lat            Float
+  lng            Float
+  address        String?
+  checkinAt      DateTime
+  distanceMeters Float
+  createdAt      DateTime   @default(now())
+
+  @@index([riderId, checkinAt])
+  @@index([companyId, checkinAt])
+}
+
+model RiderBonusRule {
+  id           String              @id @default(uuid())
+  companyId    String
+  company      Company             @relation(fields: [companyId], references: [id])
+  name         String
+  type         RiderBonusRuleType
+  deadlineTime String              // "HH:mm"
+  bonusAmount  Decimal
+  shiftId      String?
+  shift        RiderShift?         @relation(fields: [shiftId], references: [id])
+  active       Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+
+  @@index([companyId, active])
+}
+
 // ---- Neighborhoods (Bairros) ----
 model Neighborhood {
   id          String   @id @default(uuid())
@@ -647,6 +705,11 @@ enum RiderTransactionType {
   DELIVERY_FEE
   DAILY_RATE
   MANUAL_ADJUSTMENT
+  EARLY_CHECKIN_BONUS
+}
+
+enum RiderBonusRuleType {
+  EARLY_CHECKIN
 }
 
 model RiderAccount {
