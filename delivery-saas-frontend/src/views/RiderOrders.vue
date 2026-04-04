@@ -102,6 +102,7 @@ const trackingEnabled = ref(false)
 const activeOrderForTracking = ref(null)
 let watchId = null
 let trackingIntervalId = null
+let wakeLock = null
 
 // QR Scanner state
 const scanning = ref(false)
@@ -345,9 +346,25 @@ function sendPositionToServer(lat, lng, heading, accuracy, orderId) {
   }).catch((e) => console.warn('GPS position update failed:', e?.message))
 }
 
+async function acquireWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen')
+      wakeLock.addEventListener('release', () => { wakeLock = null })
+    }
+  } catch (e) { /* non-blocking */ }
+}
+
+function releaseWakeLock() {
+  try { if (wakeLock) { wakeLock.release(); wakeLock = null } } catch (e) {}
+}
+
 async function startTracking(orderId = null) {
   if (trackingIntervalId !== null || usingNativeTracking) return // already tracking
   activeOrderForTracking.value = orderId || '__active__'
+
+  // Acquire Wake Lock to keep screen/CPU alive during tracking
+  await acquireWakeLock()
 
   // Try native Capacitor GPS first (works in background)
   if (isNativeApp()) {
@@ -390,6 +407,7 @@ async function startTracking(orderId = null) {
 }
 
 function stopTracking() {
+  releaseWakeLock()
   if (usingNativeTracking) {
     stopNativeTracking()
     usingNativeTracking = false
