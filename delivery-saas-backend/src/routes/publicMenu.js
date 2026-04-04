@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
 import * as cashbackSvc from '../services/cashback.js'
 import { nextDisplaySimple } from '../utils/displaySimple.js'
+import { geocodeOrderIfNeeded } from '../utils/geocode.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -1449,6 +1450,11 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
       })
 
     try { console.log('Order created:', { id: created.id, address: created.address, payloadDelivery: created.payload && created.payload.delivery ? created.payload.delivery : null }) } catch(e){}
+
+    // Async geocode if order has address but no coordinates
+    if (created.address && created.latitude == null) {
+      geocodeOrderIfNeeded(created.id).catch(() => {})
+    }
 
     // emit socket to panel if available (dynamic import to avoid circular dependency)
     try {

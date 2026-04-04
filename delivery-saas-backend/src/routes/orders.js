@@ -14,6 +14,7 @@ import riderAccountService from '../services/riderAccount.js';
 import { buildAndPersistStockMovementFromOrderItems } from '../services/stockFromOrder.js';
 import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
 import { nextDisplaySimple } from '../utils/displaySimple.js';
+import { geocodeOrderIfNeeded } from '../utils/geocode.js';
 
 export const ordersRouter = express.Router();
 
@@ -887,6 +888,11 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       },
       include: { items: true, histories: true }
     });
+
+    // Async geocode if order has address but no coordinates (PDV orders)
+    if (created.address && created.latitude == null) {
+      geocodeOrderIfNeeded(created.id).catch(() => {});
+    }
 
     try {
       // generate QR for delivery orders so agents can print the QR on comanda
