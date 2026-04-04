@@ -360,27 +360,48 @@ function releaseWakeLock() {
 }
 
 let lastPositionSentAt = 0
+let lastWatchFired = 0
+let watchdogId = null
+let currentTrackingOrderId = null
+
+function startWatch(sendPosition) {
+  if (watchId !== null) {
+    try { navigator.geolocation.clearWatch(watchId) } catch (e) {}
+  }
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => { lastWatchFired = Date.now(); sendPosition(pos) },
+    (err) => {
+      console.warn('GPS watchPosition error:', err?.message)
+      // Auto-restart after 3s
+      if (watchId !== null) {
+        try { navigator.geolocation.clearWatch(watchId) } catch (e) {}
+        watchId = null
+      }
+      setTimeout(() => {
+        if (activeOrderForTracking.value && watchId === null) startWatch(sendPosition)
+      }, 3000)
+    },
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+  )
+  lastWatchFired = Date.now()
+}
 
 async function startTracking(orderId = null) {
-  if (watchId !== null || usingNativeTracking) return // already tracking
+  if (watchId !== null || usingNativeTracking) return
   activeOrderForTracking.value = orderId || '__active__'
+  currentTrackingOrderId = orderId
 
   await acquireWakeLock()
 
-  // Try native Capacitor GPS first (works in background)
   if (isNativeApp()) {
     const started = await startNativeTracking((lat, lng, heading, accuracy) => {
       sendPositionToServer(lat, lng, heading, accuracy, orderId)
     })
-    if (started) {
-      usingNativeTracking = true
-      return
-    }
+    if (started) { usingNativeTracking = true; return }
   }
 
   if (!navigator.geolocation) return
 
-  // Throttled sender — max once per 8s to avoid flooding
   const sendPosition = (pos) => {
     const now = Date.now()
     if (now - lastPositionSentAt < 8000) return
@@ -389,40 +410,27 @@ async function startTracking(orderId = null) {
     sendPositionToServer(lat, lng, heading, accuracy, orderId)
   }
 
-  // watchPosition is the PRIMARY mechanism — OS-level, fires on movement
-  watchId = navigator.geolocation.watchPosition(
-    sendPosition,
-    (err) => {
-      console.warn('GPS watchPosition error:', err?.message)
-      // Auto-restart watchPosition on failure
-      if (watchId !== null) {
-        try { navigator.geolocation.clearWatch(watchId) } catch (e) {}
-        watchId = null
-      }
-      setTimeout(() => {
-        if (activeOrderForTracking.value && watchId === null) {
-          watchId = navigator.geolocation.watchPosition(
-            sendPosition,
-            () => {},
-            { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
-          )
-        }
-      }, 3000)
-    },
-    { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
-  )
+  // Start watchPosition
+  startWatch(sendPosition)
 
-  // Heartbeat every 30s — fallback if watchPosition stalls
-  trackingIntervalId = setInterval(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude: lat, longitude: lng, heading, accuracy } = pos.coords
-        sendPositionToServer(lat, lng, heading, accuracy, orderId)
-      },
-      () => {},
-      { enableHighAccuracy: false, maximumAge: 30000, timeout: 15000 }
-    )
-  }, 30000)
+  // Watchdog: if watchPosition goes silent for 20s, force getCurrentPosition + restart watch
+  watchdogId = setInterval(() => {
+    const silent = Date.now() - lastWatchFired
+    if (silent > 20000) {
+      console.warn(`[tracking] watchdog: silent for ${Math.round(silent/1000)}s, forcing position + restart`)
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          lastWatchFired = Date.now()
+          const { latitude: lat, longitude: lng, heading, accuracy } = pos.coords
+          sendPositionToServer(lat, lng, heading, accuracy, orderId)
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      )
+      // Restart watchPosition (may have silently died)
+      startWatch(sendPosition)
+    }
+  }, 15000)
 }
 
 function stopTracking() {
@@ -439,7 +447,12 @@ function stopTracking() {
     clearInterval(trackingIntervalId)
     trackingIntervalId = null
   }
+  if (watchdogId !== null) {
+    clearInterval(watchdogId)
+    watchdogId = null
+  }
   activeOrderForTracking.value = null
+  currentTrackingOrderId = null
 }
 
 async function checkTrackingStatus() {
