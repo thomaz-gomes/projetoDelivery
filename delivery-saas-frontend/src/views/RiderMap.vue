@@ -421,13 +421,14 @@ function checkStaleMarkers() {
   for (const [riderId, marker] of Object.entries(markersMap)) {
     const lastUpdate = marker._lastUpdate || 0
     const ageMs = now - lastUpdate
-    if (ageMs > 5 * 60 * 1000) {
+    if (ageMs > 30 * 60 * 1000) {
+      // 30+ min without update: remove from map
       removeMarker(riderId)
-    } else if (ageMs > 2 * 60 * 1000) {
+    } else if (ageMs > 5 * 60 * 1000) {
+      // 5+ min: fade opacity to indicate stale
       marker.setOpacity(0.5)
-      if (circlesMap[riderId]) {
-        circlesMap[riderId].setStyle({ fillOpacity: 0.05, opacity: 0.15 })
-      }
+    } else {
+      marker.setOpacity(1)
     }
   }
 }
@@ -443,7 +444,7 @@ async function loadPositions() {
     deliveries.value = delRes.data
     if (map) {
       posRes.data.forEach(updateMarker)
-      removeStaleMarkers(posRes.data.map(p => p.riderId || p.rider?.id).filter(Boolean))
+      // Don't aggressively remove markers — let checkStaleMarkers handle expiry by timestamp
 
       // Add store markers for stores with active orders
       const seenStores = new Set()

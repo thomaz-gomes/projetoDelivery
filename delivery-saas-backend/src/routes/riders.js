@@ -147,39 +147,53 @@ ridersRouter.delete('/me/position', requireRole('RIDER'), async (req, res) => {
   }
 });
 
-// GET /riders/map/positions — ADMIN only (only riders with active checkin in current shift)
+// GET /riders/map/positions — ADMIN only
+// Shows riders who checked in today. If ?shiftOnly=true, filters by currently active shift.
 ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
     const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Find today's checkins with their shifts
+    // Find today's checkins
     const checkins = await prisma.riderCheckin.findMany({
       where: { companyId, checkinAt: { gte: today, lt: tomorrow } },
       include: { shift: true },
     });
 
-    // Filter to riders whose checkin shift is currently active
-    const activeRiderIds = checkins
-      .filter(c => {
-        if (!c.shift) return true; // no shift = always show
-        const [sh, sm] = c.shift.startTime.split(':').map(Number);
-        const [eh, em] = c.shift.endTime.split(':').map(Number);
-        const startMin = sh * 60 + sm;
-        const endMin = eh * 60 + em;
-        // Handle overnight shifts (e.g. 22:00 - 06:00)
-        if (endMin <= startMin) {
-          return nowMinutes >= startMin || nowMinutes < endMin;
-        }
-        return nowMinutes >= startMin && nowMinutes < endMin;
-      })
-      .map(c => c.riderId);
+    let activeRiderIds = checkins.map(c => c.riderId);
 
-    if (activeRiderIds.length === 0) return res.json([]);
+    // Optional: filter by active shift only
+    if (req.query.shiftOnly === 'true') {
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      activeRiderIds = checkins
+        .filter(c => {
+          if (!c.shift) return true;
+          const [sh, sm] = c.shift.startTime.split(':').map(Number);
+          const [eh, em] = c.shift.endTime.split(':').map(Number);
+          const startMin = sh * 60 + sm;
+          const endMin = eh * 60 + em;
+          if (endMin <= startMin) return nowMinutes >= startMin || nowMinutes < endMin;
+          return nowMinutes >= startMin && nowMinutes < endMin;
+        })
+        .map(c => c.riderId);
+    }
+
+    // Deduplicate
+    activeRiderIds = [...new Set(activeRiderIds)];
+
+    if (activeRiderIds.length === 0) {
+      // Fallback: show ALL positions updated in last 30 min (riders still sending GPS)
+      const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+      const positions = await prisma.riderPosition.findMany({
+        where: { rider: { companyId }, hidden: false, updatedAt: { gte: cutoff } },
+        include: { rider: { select: { id: true, name: true } } },
+        orderBy: { updatedAt: 'desc' },
+      });
+      return res.json(positions);
+    }
 
     const positions = await prisma.riderPosition.findMany({
       where: { riderId: { in: activeRiderIds }, hidden: false },
