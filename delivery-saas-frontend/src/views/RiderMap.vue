@@ -78,7 +78,7 @@
           </div>
           <div v-for="pos in filteredPositions" :key="pos.riderId" class="sidebar-item" @click="flyToRider(pos)">
             <div class="d-flex align-items-center gap-2">
-              <i class="bi bi-person-fill" style="color:var(--primary)"></i>
+              <i class="bi bi-person-fill" :style="{ color: getRiderColor(pos.riderId || pos.rider?.id) }"></i>
               <div class="flex-grow-1">
                 <div class="small fw-medium">{{ pos.rider?.name || pos.riderName || 'Entregador' }}</div>
                 <div class="text-muted" style="font-size:0.72rem">{{ formatTime(pos.updatedAt) }}</div>
@@ -373,16 +373,32 @@ function pinSvg(color, label) {
   </svg>`
 }
 
+const RIDER_COLORS = [
+  '#0d6efd', '#e6339a', '#6f42c1', '#20c997', '#e65100',
+  '#0dcaf0', '#6610f2', '#d63384', '#198754', '#fd7e14',
+  '#0b5ed7', '#ab47bc', '#00897b', '#e53935', '#ffc107',
+]
+const riderColorMap = {}
+let riderColorIdx = 0
+
+function getRiderColor(riderId) {
+  if (!riderColorMap[riderId]) {
+    riderColorMap[riderId] = RIDER_COLORS[riderColorIdx % RIDER_COLORS.length]
+    riderColorIdx++
+  }
+  return riderColorMap[riderId]
+}
+
 function riderPendingCount(riderId) {
   return deliveries.value.filter(d => d.riderId === riderId).length
 }
 
-
-function riderIcon(count) {
+function riderIcon(riderId, count) {
+  const color = getRiderColor(riderId)
   const label = count > 0 ? String(count) : '🛵'
   return L.divIcon({
     className: '',
-    html: pinSvg('#0d6efd', label),
+    html: pinSvg(color, label),
     iconSize: [28, 40],
     iconAnchor: [14, 40],
     popupAnchor: [0, -40],
@@ -540,7 +556,7 @@ function updateMarker(pos) {
       </button>
     </div>`
 
-  const icon = riderIcon(pending)
+  const icon = riderIcon(riderId, pending)
   if (markersMap[riderId]) {
     markersMap[riderId].setLatLng([lat, lng])
     markersMap[riderId].setIcon(icon)
