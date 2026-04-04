@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Core Delivery Entregador',
   // Use live server — frontend updates reflect instantly without Play Store update
   server: {
-    url: 'https://app.deliverywl.com.br',
+    url: 'https://app.deliverywl.com.br/rider/orders',
     cleartext: false,
     // Allow navigation to the API domain for OAuth callbacks etc.
     allowNavigation: ['app.deliverywl.com.br', 'api.deliverywl.com.br'],

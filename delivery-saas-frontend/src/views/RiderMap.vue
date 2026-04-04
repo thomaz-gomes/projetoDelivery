@@ -1,17 +1,29 @@
 <template>
-  <div class="container-fluid py-3">
-    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div class="rider-map-wrapper">
+    <!-- HEADER BAR -->
+    <div class="rider-map-header">
       <div class="d-flex align-items-center gap-2">
-        <i class="bi bi-map fs-4 text-primary"></i>
+        <i class="bi bi-map fs-5" style="color: var(--primary)"></i>
         <h4 class="mb-0">Mapa de Entregas</h4>
+        <span v-if="trackingEnabled" class="badge bg-success ms-2">
+          <i class="bi bi-broadcast me-1"></i>Ativo
+        </span>
+        <span v-else class="badge bg-secondary ms-2">
+          <i class="bi bi-broadcast-pin me-1"></i>Desligado
+        </span>
       </div>
       <div class="d-flex align-items-center gap-2">
-        <span v-if="trackingEnabled" class="badge bg-success">
-          <i class="bi bi-broadcast me-1"></i>Rastreamento Ativo
-        </span>
-        <span v-else class="badge bg-secondary">
-          <i class="bi bi-broadcast-pin me-1"></i>Rastreamento Desligado
-        </span>
+        <!-- Store filter -->
+        <select
+          v-if="storeOptions.length > 1"
+          v-model="selectedStoreId"
+          class="form-select form-select-sm"
+          style="width: auto; min-width: 180px"
+          @change="onStoreFilterChange"
+        >
+          <option value="">Todas as lojas</option>
+          <option v-for="s in storeOptions" :key="s.id" :value="s.id">{{ s.name }}</option>
+        </select>
         <button class="btn btn-outline-secondary btn-sm" @click="loadPositions" :disabled="loadingPositions">
           <span v-if="loadingPositions" class="spinner-border spinner-border-sm me-1"></span>
           <i v-else class="bi bi-arrow-clockwise me-1"></i>Atualizar
@@ -22,43 +34,88 @@
       </div>
     </div>
 
-    <div v-if="!trackingEnabled" class="alert alert-warning">
+    <div v-if="!trackingEnabled" class="alert alert-warning mb-0 rounded-0 py-2 px-3" style="flex-shrink:0">
       <i class="bi bi-exclamation-triangle me-1"></i>
-      O rastreamento em tempo real está <strong>desligado</strong>.
-      <router-link to="/settings/rider-tracking" class="alert-link ms-1">Ativar nas configurações →</router-link>
+      Rastreamento em tempo real <strong>desligado</strong>.
+      <router-link to="/settings/rider-tracking" class="alert-link ms-1">Ativar →</router-link>
     </div>
 
-    <div class="card shadow-sm">
-      <div class="card-body p-0" style="position: relative">
-        <div v-if="leafletError" class="p-4 text-center text-danger">
-          <i class="bi bi-exclamation-triangle fs-3"></i>
-          <div class="mt-2">Erro ao carregar mapa: {{ leafletError }}</div>
-        </div>
-        <div v-else id="rider-map" style="height: 520px; border-radius: 0.375rem"></div>
-      </div>
-    </div>
-
-    <div class="mt-3">
-      <div class="d-flex align-items-center gap-3 mb-2 small text-muted">
-        <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#0d6efd" class="me-1"></span>Entregadores</span>
-        <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#fd7e14" class="me-1"></span>Em preparo</span>
-        <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#dc3545" class="me-1"></span>Saiu p/ entrega</span>
-      </div>
-      <div v-if="positions.length === 0 && deliveries.length === 0 && !loadingPositions" class="text-muted small text-center py-2">
-        Nenhum entregador ou entrega ativa no momento.
-      </div>
-      <div v-else class="row g-2">
-        <div v-for="pos in positions" :key="pos.riderId" class="col-auto">
-          <div class="badge bg-light text-dark border d-flex align-items-center gap-1 px-2 py-1">
-            <i class="bi bi-person-fill text-primary"></i>
-            <span>{{ pos.rider?.name || pos.riderName || 'Entregador' }}</span>
-            <span class="text-muted small ms-1">{{ formatTime(pos.updatedAt) }}</span>
+    <!-- MAIN CONTENT: map + sidebar -->
+    <div class="rider-map-body">
+      <!-- MAP -->
+      <div class="rider-map-container">
+        <div v-if="leafletError" class="d-flex align-items-center justify-content-center h-100 text-danger">
+          <div class="text-center">
+            <i class="bi bi-exclamation-triangle fs-3"></i>
+            <div class="mt-2">Erro ao carregar mapa: {{ leafletError }}</div>
           </div>
         </div>
-        <div v-for="order in deliveries" :key="order.id" class="col-auto">
-          <div class="badge bg-light text-dark border d-flex align-items-center gap-1 px-2 py-1">
-            <i class="bi bi-geo-alt-fill" :class="order.status === 'SAIU_PARA_ENTREGA' ? 'text-danger' : 'text-warning'"></i>
-            <span>#{{ order.displayId || order.id.slice(0,6) }} {{ order.customerName || '' }}</span>
+        <div v-else id="rider-map" style="width:100%;height:100%"></div>
+      </div>
+
+      <!-- SIDEBAR -->
+      <div class="rider-map-sidebar">
+        <!-- Legend -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Legenda</div>
+          <div class="d-flex flex-column gap-1">
+            <span class="small"><span class="legend-dot" style="background:var(--primary)"></span>Entregadores</span>
+            <span class="small"><span class="legend-dot" style="background:#fd7e14"></span>Em preparo</span>
+            <span class="small"><span class="legend-dot" style="background:#dc3545"></span>Saiu p/ entrega</span>
+            <span class="small"><span class="legend-dot" style="background:#198754"></span>Loja</span>
+          </div>
+        </div>
+
+        <!-- Riders -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">
+            <i class="bi bi-person-fill me-1" style="color:var(--primary)"></i>
+            Entregadores
+            <span class="badge bg-light text-dark ms-1">{{ filteredPositions.length }}</span>
+          </div>
+          <div v-if="filteredPositions.length === 0" class="text-muted small py-1">
+            Nenhum entregador ativo.
+          </div>
+          <div v-for="pos in filteredPositions" :key="pos.riderId" class="sidebar-item" @click="flyToRider(pos)">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-person-fill" style="color:var(--primary)"></i>
+              <div class="flex-grow-1">
+                <div class="small fw-medium">{{ pos.rider?.name || pos.riderName || 'Entregador' }}</div>
+                <div class="text-muted" style="font-size:0.72rem">{{ formatTime(pos.updatedAt) }}</div>
+              </div>
+              <span v-if="riderPendingCount(pos.riderId || pos.rider?.id) > 0" class="badge bg-primary" style="font-size:0.72rem" :title="riderPendingCount(pos.riderId || pos.rider?.id) + ' pedidos pendentes'">
+                {{ riderPendingCount(pos.riderId || pos.rider?.id) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Deliveries -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">
+            <i class="bi bi-bag-fill me-1" style="color:#fd7e14"></i>
+            Pedidos Ativos
+            <span class="badge bg-light text-dark ms-1">{{ filteredDeliveries.length }}</span>
+          </div>
+          <div v-if="filteredDeliveries.length === 0" class="text-muted small py-1">
+            Nenhum pedido ativo.
+          </div>
+          <div v-for="order in filteredDeliveries" :key="order.id" class="sidebar-item" @click="flyToDelivery(order)">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-geo-alt-fill" :style="{ color: order.status === 'SAIU_PARA_ENTREGA' ? '#dc3545' : '#fd7e14' }"></i>
+              <div style="min-width:0">
+                <div class="small fw-medium">
+                  #{{ order.displayId || order.id.slice(0,6) }}
+                  <span v-if="order.store" class="text-muted fw-normal"> · {{ order.store.name }}</span>
+                </div>
+                <div class="text-muted text-truncate" style="font-size:0.72rem">
+                  {{ order.customerName || '' }} {{ order.address ? '— ' + order.address : '' }}
+                </div>
+                <span class="badge" :class="order.status === 'SAIU_PARA_ENTREGA' ? 'bg-danger' : 'bg-warning text-dark'" style="font-size:0.65rem">
+                  {{ order.status === 'SAIU_PARA_ENTREGA' ? 'Saiu p/ entrega' : 'Em preparo' }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -67,7 +124,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api'
 import { io } from 'socket.io-client'
 import { SOCKET_URL } from '@/config'
@@ -77,22 +134,42 @@ const positions = ref([])
 const deliveries = ref([])
 const loadingPositions = ref(false)
 const leafletError = ref('')
+const selectedStoreId = ref('')
 
 let map = null
-let markersMap = {} // riderId -> L.marker
-let circlesMap = {} // riderId -> L.circle (accuracy radius)
-let deliveryMarkersMap = {} // orderId -> L.marker
+let markersMap = {}
+let circlesMap = {}
+let deliveryMarkersMap = {}
+let storeMarkersMap = {}
 let staleCheckInterval = null
 let socket = null
 let pollInterval = null
 let L = null
+let companyCenter = null
+let storesCenterCache = {} // storeId -> [lat, lng]
+
+// Stores that have active orders
+const storeOptions = computed(() => {
+  const seen = new Map()
+  for (const d of deliveries.value) {
+    if (d.store && !seen.has(d.store.id)) {
+      seen.set(d.store.id, { id: d.store.id, name: d.store.name, address: d.store.address })
+    }
+  }
+  return Array.from(seen.values())
+})
+
+const filteredPositions = computed(() => positions.value)
+
+const filteredDeliveries = computed(() => {
+  if (!selectedStoreId.value) return deliveries.value
+  return deliveries.value.filter(d => d.storeId === selectedStoreId.value)
+})
 
 // Load Leaflet CSS + JS from CDN dynamically
 function loadLeaflet() {
   return new Promise((resolve, reject) => {
-    if (window.L) { L = window.L; return resolve(); }
-
-    // CSS
+    if (window.L) { L = window.L; return resolve() }
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link')
       link.id = 'leaflet-css'
@@ -100,11 +177,9 @@ function loadLeaflet() {
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
       document.head.appendChild(link)
     }
-
-    // JS
     const script = document.createElement('script')
     script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-    script.onload = () => { L = window.L; resolve(); }
+    script.onload = () => { L = window.L; resolve() }
     script.onerror = () => reject(new Error('Falha ao carregar Leaflet do CDN'))
     document.head.appendChild(script)
   })
@@ -118,10 +193,16 @@ function pinSvg(color, label) {
   </svg>`
 }
 
-function riderIcon() {
+function riderPendingCount(riderId) {
+  return deliveries.value.filter(d => d.riderId === riderId).length
+}
+
+
+function riderIcon(count) {
+  const label = count > 0 ? String(count) : '🛵'
   return L.divIcon({
     className: '',
-    html: pinSvg('#0d6efd', '🛵'),
+    html: pinSvg('#0d6efd', label),
     iconSize: [28, 40],
     iconAnchor: [14, 40],
     popupAnchor: [0, -40],
@@ -140,6 +221,16 @@ function deliveryIcon(status) {
   })
 }
 
+function storeIcon() {
+  return L.divIcon({
+    className: '',
+    html: '<div style="background:#198754;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,0.35)">🏪</div>',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -18],
+  })
+}
+
 function updateDeliveryMarker(order) {
   if (!map || !L) return
   const lat = Number(order.latitude)
@@ -151,9 +242,11 @@ function updateDeliveryMarker(order) {
   const addr = order.address || ''
   const statusLabel = order.status === 'SAIU_PARA_ENTREGA' ? 'Saiu p/ entrega' : 'Em preparo'
   const riderName = order.rider?.name || ''
+  const storeName = order.store?.name || ''
   const popupHtml = `
     <div style="min-width:160px">
       <strong>#${display}</strong> — ${statusLabel}<br>
+      ${storeName ? `<small>Loja: ${storeName}</small><br>` : ''}
       ${customer ? `<small>${customer}</small><br>` : ''}
       ${addr ? `<small class="text-muted">${addr}</small><br>` : ''}
       ${riderName ? `<small>Entregador: ${riderName}</small>` : ''}
@@ -179,31 +272,43 @@ function removeStaleDeliveryMarkers(activeIds) {
   }
 }
 
-let companyCenter = null // [lat, lng] resolved from company address
-
 function initMap(center) {
   try {
     const startCenter = center || [-12.9714, -38.5014]
-    map = L.map('rider-map').setView(startCenter, 14)
+    map = L.map('rider-map', { zoomControl: false }).setView(startCenter, 14)
+    L.control.zoom({ position: 'topright' }).addTo(map)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
     }).addTo(map)
-    // Mark company location
-    if (center) {
-      L.marker(center, {
-        icon: L.divIcon({
-          className: '',
-          html: '<div style="background:#198754;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,0.35)">🏪</div>',
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
-          popupAnchor: [0, -18],
-        }),
-      }).bindPopup('<strong>Sua empresa</strong>').addTo(map)
-    }
   } catch (e) {
     leafletError.value = e?.message || 'Erro ao inicializar mapa'
   }
+}
+
+function addStoreMarker(storeId, name, coords) {
+  if (!map || !L) return
+  if (storeMarkersMap[storeId]) {
+    storeMarkersMap[storeId].setLatLng(coords)
+    return
+  }
+  storeMarkersMap[storeId] = L.marker(coords, { icon: storeIcon() })
+    .bindPopup(`<strong>${name}</strong>`)
+    .addTo(map)
+}
+
+async function geocodeAddress(address) {
+  if (!address) return null
+  try {
+    const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`)
+    const results = await resp.json()
+    if (results && results.length > 0) {
+      return [parseFloat(results[0].lat), parseFloat(results[0].lon)]
+    }
+  } catch (e) {
+    console.warn('geocode error:', e)
+  }
+  return null
 }
 
 async function resolveCompanyCenter() {
@@ -211,16 +316,53 @@ async function resolveCompanyCenter() {
     const { data } = await api.get('/settings/company')
     const parts = [data.street, data.addressNumber, data.addressNeighborhood, data.city, data.state].filter(Boolean)
     if (parts.length < 2) return null
-    const query = parts.join(', ')
-    const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`)
-    const results = await resp.json()
-    if (results && results.length > 0) {
-      return [parseFloat(results[0].lat), parseFloat(results[0].lon)]
-    }
+    return await geocodeAddress(parts.join(', '))
   } catch (e) {
     console.warn('resolveCompanyCenter error:', e)
   }
   return null
+}
+
+async function resolveStoreCenter(store) {
+  if (!store || !store.address) return null
+  if (storesCenterCache[store.id]) return storesCenterCache[store.id]
+  const coords = await geocodeAddress(store.address)
+  if (coords) {
+    storesCenterCache[store.id] = coords
+    addStoreMarker(store.id, store.name, coords)
+  }
+  return coords
+}
+
+async function onStoreFilterChange() {
+  if (!map) return
+  if (!selectedStoreId.value) {
+    // Show all: fit to company center or show all markers
+    if (companyCenter) {
+      map.setView(companyCenter, 14)
+    }
+    // Show all delivery markers
+    deliveries.value.forEach(updateDeliveryMarker)
+    return
+  }
+  // Hide non-matching delivery markers, show matching
+  for (const id of Object.keys(deliveryMarkersMap)) {
+    const order = deliveries.value.find(d => d.id === id)
+    if (order && order.storeId !== selectedStoreId.value) {
+      map.removeLayer(deliveryMarkersMap[id])
+      delete deliveryMarkersMap[id]
+    }
+  }
+  filteredDeliveries.value.forEach(updateDeliveryMarker)
+
+  // Center on selected store
+  const store = storeOptions.value.find(s => s.id === selectedStoreId.value)
+  if (store) {
+    const coords = await resolveStoreCenter(store)
+    if (coords) {
+      map.setView(coords, 15)
+    }
+  }
 }
 
 function updateMarker(pos) {
@@ -232,10 +374,13 @@ function updateMarker(pos) {
   if (isNaN(lat) || isNaN(lng)) return
 
   const accuracy = pos.accuracy ? Number(pos.accuracy) : null
+  const pending = riderPendingCount(riderId)
+  const pendingLabel = pending > 0 ? `<br><small>Pedidos pendentes: <strong>${pending}</strong></small>` : ''
   const popupHtml = `
     <div style="min-width:140px">
       <strong>${name}</strong><br>
       <small class="text-muted">Atualizado: ${formatTime(pos.updatedAt)}</small>
+      ${pendingLabel}
       ${pos.orderId ? `<br><small>Pedido: ${pos.orderId.slice(0,8)}...</small>` : ''}
       ${accuracy ? `<br><small>Precisão: ~${Math.round(accuracy)}m</small>` : ''}
       <hr style="margin:4px 0">
@@ -244,17 +389,17 @@ function updateMarker(pos) {
       </button>
     </div>`
 
+  const icon = riderIcon(pending)
   if (markersMap[riderId]) {
     markersMap[riderId].setLatLng([lat, lng])
+    markersMap[riderId].setIcon(icon)
     markersMap[riderId].getPopup()?.setContent(popupHtml)
-    markersMap[riderId].setOpacity(1) // reset stale opacity
+    markersMap[riderId].setOpacity(1)
   } else {
-    markersMap[riderId] = L.marker([lat, lng], { icon: riderIcon() })
+    markersMap[riderId] = L.marker([lat, lng], { icon })
       .bindPopup(popupHtml)
       .addTo(map)
   }
-
-  // Store last update timestamp for stale detection
   markersMap[riderId]._lastUpdate = new Date(pos.updatedAt || Date.now()).getTime()
 }
 
@@ -277,10 +422,8 @@ function checkStaleMarkers() {
     const lastUpdate = marker._lastUpdate || 0
     const ageMs = now - lastUpdate
     if (ageMs > 5 * 60 * 1000) {
-      // 5+ minutes: remove from map
       removeMarker(riderId)
     } else if (ageMs > 2 * 60 * 1000) {
-      // 2+ minutes: reduce opacity
       marker.setOpacity(0.5)
       if (circlesMap[riderId]) {
         circlesMap[riderId].setStyle({ fillOpacity: 0.05, opacity: 0.15 })
@@ -301,8 +444,22 @@ async function loadPositions() {
     if (map) {
       posRes.data.forEach(updateMarker)
       removeStaleMarkers(posRes.data.map(p => p.riderId || p.rider?.id).filter(Boolean))
-      delRes.data.forEach(updateDeliveryMarker)
-      removeStaleDeliveryMarkers(delRes.data.map(o => o.id))
+
+      // Add store markers for stores with active orders
+      const seenStores = new Set()
+      for (const order of delRes.data) {
+        if (order.store && !seenStores.has(order.store.id)) {
+          seenStores.add(order.store.id)
+          resolveStoreCenter(order.store) // async, adds marker when resolved
+        }
+      }
+
+      // Apply store filter for delivery markers
+      const ordersToShow = selectedStoreId.value
+        ? delRes.data.filter(d => d.storeId === selectedStoreId.value)
+        : delRes.data
+      ordersToShow.forEach(updateDeliveryMarker)
+      removeStaleDeliveryMarkers(ordersToShow.map(o => o.id))
     }
   } catch (e) {
     console.warn('loadPositions error:', e)
@@ -327,7 +484,6 @@ function ensureSocket() {
   try {
     socket = io(SOCKET_URL, { transports: ['websocket'] })
     socket.on('rider-position', (payload) => {
-      // Update or add position in the list
       const riderId = payload.riderId
       const idx = positions.value.findIndex(p => (p.riderId || p.rider?.id) === riderId)
       if (idx !== -1) {
@@ -343,11 +499,17 @@ function ensureSocket() {
     socket.on('order-updated', (payload) => {
       const hideStatuses = ['CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO']
       if (payload?.id && hideStatuses.includes(payload.status)) {
+        const removed = deliveries.value.find(d => d.id === payload.id)
         if (deliveryMarkersMap[payload.id] && map) {
           map.removeLayer(deliveryMarkersMap[payload.id])
           delete deliveryMarkersMap[payload.id]
         }
         deliveries.value = deliveries.value.filter(d => d.id !== payload.id)
+        // Refresh rider icon to update pending count
+        if (removed?.riderId) {
+          const pos = positions.value.find(p => (p.riderId || p.rider?.id) === removed.riderId)
+          if (pos) updateMarker(pos)
+        }
       }
     })
   } catch (e) {
@@ -362,20 +524,48 @@ function formatTime(d) {
   } catch (e) { return '' }
 }
 
+function flyToRider(pos) {
+  if (!map) return
+  const lat = Number(pos.lat)
+  const lng = Number(pos.lng)
+  if (!isNaN(lat) && !isNaN(lng)) {
+    map.flyTo([lat, lng], 17, { duration: 0.5 })
+    const riderId = pos.riderId || pos.rider?.id
+    if (markersMap[riderId]) markersMap[riderId].openPopup()
+  }
+}
+
+function flyToDelivery(order) {
+  if (!map) return
+  const lat = Number(order.latitude)
+  const lng = Number(order.longitude)
+  if (!isNaN(lat) && !isNaN(lng)) {
+    map.flyTo([lat, lng], 17, { duration: 0.5 })
+    if (deliveryMarkersMap[order.id]) deliveryMarkersMap[order.id].openPopup()
+  }
+}
+
 onMounted(async () => {
-  // Check tracking status
   try {
     const { data } = await api.get('/riders/tracking-status')
     trackingEnabled.value = data.enabled ?? false
   } catch (e) { /* non-blocking */ }
 
-  // Resolve company center and load Leaflet in parallel
   try {
     const [center] = await Promise.all([resolveCompanyCenter(), loadLeaflet()])
     companyCenter = center
     await nextTick()
     initMap(companyCenter)
     await loadPositions()
+
+    // If we have a single store with orders, center on it
+    if (storeOptions.value.length === 1) {
+      const store = storeOptions.value[0]
+      const coords = await resolveStoreCenter(store)
+      if (coords) map.setView(coords, 15)
+    } else if (companyCenter) {
+      addStoreMarker('company', 'Empresa', companyCenter)
+    }
   } catch (e) {
     leafletError.value = e?.message || 'Erro ao inicializar mapa'
     console.error('RiderMap init error:', e)
@@ -383,7 +573,6 @@ onMounted(async () => {
 
   ensureSocket()
 
-  // Global handler for hide button in popup
   window.__hideRider__ = async (riderId) => {
     try {
       await api.put(`/riders/${riderId}/position/hide`, { hidden: true })
@@ -393,7 +582,6 @@ onMounted(async () => {
     }
   }
 
-  // Polling fallback every 15s
   pollInterval = setInterval(loadPositions, 15000)
   staleCheckInterval = setInterval(checkStaleMarkers, 30000)
 })
@@ -406,6 +594,114 @@ onUnmounted(() => {
   markersMap = {}
   circlesMap = {}
   deliveryMarkersMap = {}
+  storeMarkersMap = {}
   delete window.__hideRider__
 })
 </script>
+
+<style scoped>
+.rider-map-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px);
+  overflow: hidden;
+  /* bleed into main-content padding */
+  margin: -1.5rem;
+}
+
+.rider-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.rider-map-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rider-map-container {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.rider-map-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border-left: 1px solid var(--border-color);
+}
+
+.sidebar-section {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color-soft);
+}
+
+.sidebar-section-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-item {
+  padding: 0.5rem 0.5rem;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sidebar-item:hover {
+  background: var(--bg-hover);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+/* Mobile: adjust bleed for smaller padding */
+@media (max-width: 767px) {
+  .rider-map-wrapper {
+    margin: -1rem -0.75rem;
+    margin-top: calc(-0.75rem - 52px);
+    height: calc(100vh);
+  }
+}
+
+/* Tablet/Mobile: sidebar below map */
+@media (max-width: 991px) {
+  .rider-map-body {
+    flex-direction: column;
+  }
+  .rider-map-container {
+    min-height: 50vh;
+  }
+  .rider-map-sidebar {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+    max-height: 40vh;
+  }
+  .rider-map-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+</style>

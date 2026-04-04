@@ -197,7 +197,7 @@ ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN'), async (r
 ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const stores = await prisma.store.findMany({ where: { companyId }, select: { id: true } });
+    const stores = await prisma.store.findMany({ where: { companyId }, select: { id: true, name: true, address: true } });
     const storeIds = stores.map(s => s.id);
     const orders = await prisma.order.findMany({
       where: {
@@ -217,6 +217,8 @@ ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN'), async (
         customerName: true,
         riderId: true,
         rider: { select: { id: true, name: true } },
+        storeId: true,
+        store: { select: { id: true, name: true, address: true } },
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
