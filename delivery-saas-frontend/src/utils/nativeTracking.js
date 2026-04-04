@@ -3,7 +3,10 @@
  *
  * When running inside Capacitor (Android app), uses @capacitor-community/background-geolocation
  * which keeps a Foreground Service alive with a persistent notification.
- * When running in a regular browser, falls back to the existing web geolocation approach.
+ * When running in a regular browser, this module is a no-op.
+ *
+ * The plugin is accessed via Capacitor.Plugins (injected at runtime by Capacitor),
+ * so there is NO npm import — this avoids Vite/Rollup build failures in the web build.
  */
 
 let watcherId = null
@@ -16,6 +19,17 @@ export function isNativeApp() {
 }
 
 /**
+ * Get the BackgroundGeolocation plugin from Capacitor's runtime registry.
+ */
+function getPlugin() {
+  try {
+    return window.Capacitor.Plugins.BackgroundGeolocation
+  } catch (e) {
+    return null
+  }
+}
+
+/**
  * Start native background GPS tracking.
  * Calls onPosition(lat, lng, heading, accuracy) on each update.
  * Returns true if native tracking started, false if not available.
@@ -23,16 +37,20 @@ export function isNativeApp() {
 export async function startNativeTracking(onPosition) {
   if (!isNativeApp()) return false
 
-  try {
-    const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation')
+  const plugin = getPlugin()
+  if (!plugin) {
+    console.warn('[nativeTracking] BackgroundGeolocation plugin not available')
+    return false
+  }
 
-    watcherId = await BackgroundGeolocation.addWatcher(
+  try {
+    watcherId = await plugin.addWatcher(
       {
         backgroundMessage: 'Rastreamento de entrega ativo',
         backgroundTitle: 'Core Delivery',
         requestPermissions: true,
         stale: false,
-        distanceFilter: 10, // meters between updates
+        distanceFilter: 10,
       },
       (location, error) => {
         if (error) {
@@ -66,9 +84,11 @@ export async function startNativeTracking(onPosition) {
 export async function stopNativeTracking() {
   if (watcherId === null) return
 
+  const plugin = getPlugin()
+  if (!plugin) return
+
   try {
-    const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation')
-    await BackgroundGeolocation.removeWatcher({ id: watcherId })
+    await plugin.removeWatcher({ id: watcherId })
     watcherId = null
     console.log('[nativeTracking] Background GPS stopped')
   } catch (e) {
