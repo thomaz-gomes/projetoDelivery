@@ -1,4 +1,6 @@
 import express from 'express';
+import multer from 'multer';
+import XLSX from 'xlsx';
 import { prisma } from '../prisma.js';
 // Note: avoid static import of index.js to prevent circular dependency with index.js
 // When we need to emit socket events, use dynamic import inside async handlers:
@@ -15,6 +17,8 @@ import { buildAndPersistStockMovementFromOrderItems } from '../services/stockFro
 import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
 import { nextDisplaySimple } from '../utils/displaySimple.js';
 import { geocodeOrderIfNeeded } from '../utils/geocode.js';
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 export const ordersRouter = express.Router();
 
@@ -78,6 +82,161 @@ ordersRouter.get('/', async (req, res) => {
   }
 
   return res.json(orders);
+});
+
+// POST /orders/import — import sales from legacy system spreadsheet (.xlsx, .xls, .csv)
+ordersRouter.post('/import', requireRole('ADMIN'), upload.single('file'), async (req, res) => {
+  const companyId = req.user.companyId;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+  if (!req.file) return res.status(400).json({ message: 'Arquivo não enviado' });
+
+  try {
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    const dataRows = rows.slice(1).filter(r => r[0] !== '' && r[0] != null);
+    if (!dataRows.length) return res.status(400).json({ message: 'Planilha vazia ou sem dados' });
+
+    const riderCache = {};
+    const customerCache = {};
+
+    const existingRiders = await prisma.rider.findMany({ where: { companyId } });
+    for (const r of existingRiders) riderCache[r.name.trim().toLowerCase()] = r;
+
+    let created = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (let i = 0; i < dataRows.length; i++) {
+      const r = dataRows[i];
+      try {
+        const canal = String(r[5] || '').trim();
+        const nomeLoja = String(r[2] || '').trim();
+        const salesChannel = nomeLoja ? `${canal} - ${nomeLoja}` : canal;
+
+        const externalId = String(r[6] || '').trim() || null;
+        const displayId = String(r[7] || '').trim() || null;
+
+        let createdAt = new Date();
+        const rawDate = String(r[8] || '').trim();
+        if (rawDate) {
+          const m = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/);
+          if (m) createdAt = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]);
+        }
+
+        const customerName = String(r[9] || '').trim() || null;
+        const isCancelled = String(r[12] || '').trim().toUpperCase() === 'S';
+        const status = isCancelled ? 'CANCELADO' : 'CONCLUIDO';
+
+        const itemsValue = Number(r[14]) || 0;
+        const deliveryFee = Number(r[15]) || 0;
+        const riderFee = Number(r[16]) || 0;
+        const riderName = String(r[17] || '').trim();
+        const bairro = String(r[18] || '').trim() || null;
+        const cep = String(r[19] || '').trim() || null;
+        const acrescimo = Number(r[20]) || 0;
+        const motivoAcrescimo = String(r[21] || '').trim() || null;
+        const desconto = Number(r[22]) || 0;
+        const motivoDesconto = String(r[23] || '').trim() || null;
+        const total = Number(r[24]) || 0;
+        const taxaServico = Number(r[25]) || 0;
+        const pagamento = String(r[11] || '').trim() || null;
+        const motivoCancelamento = String(r[13] || '').trim() || null;
+        const temCupom = String(r[10] || '').trim().toUpperCase() === 'S';
+
+        let riderId = null;
+        if (riderName) {
+          const key = riderName.toLowerCase();
+          if (riderCache[key]) {
+            riderId = riderCache[key].id;
+          } else {
+            const newRider = await prisma.rider.create({
+              data: { companyId, name: riderName, whatsapp: '0000', active: false }
+            });
+            riderCache[key] = newRider;
+            riderId = newRider.id;
+          }
+        }
+
+        let customerId = null;
+        if (customerName) {
+          const ckey = customerName.toLowerCase();
+          if (customerCache[ckey]) {
+            customerId = customerCache[ckey].id;
+          } else {
+            const existing = await prisma.customer.findFirst({
+              where: { companyId, fullName: { equals: customerName, mode: 'insensitive' } }
+            });
+            if (existing) {
+              customerCache[ckey] = existing;
+              customerId = existing.id;
+            } else {
+              const newCust = await prisma.customer.create({
+                data: { companyId, fullName: customerName }
+              });
+              customerCache[ckey] = newCust;
+              customerId = newCust.id;
+            }
+          }
+        }
+
+        const customerSource = canal.toLowerCase().includes('ifood') ? 'IFOOD'
+          : canal.toLowerCase().includes('aiqfome') ? 'AIQFOME'
+          : 'MANUAL';
+
+        await prisma.order.create({
+          data: {
+            companyId,
+            externalId,
+            displayId,
+            status,
+            customerName,
+            customerId,
+            customerSource,
+            deliveryFee,
+            deliveryNeighborhood: bairro,
+            couponDiscount: desconto > 0 ? desconto : undefined,
+            total,
+            riderId,
+            createdAt,
+            payload: {
+              imported: true,
+              salesChannel,
+              turno: String(r[4] || '').trim() || null,
+              pagamento,
+              acrescimo,
+              motivoAcrescimo,
+              desconto,
+              motivoDesconto,
+              motivoCancelamento,
+              taxaServico,
+              riderFee,
+              cep,
+              temCupom,
+            },
+            items: {
+              create: [{
+                name: 'Itens importados',
+                quantity: 1,
+                price: itemsValue
+              }]
+            }
+          }
+        });
+
+        created++;
+      } catch (e) {
+        errors.push({ row: i + 2, error: e.message });
+        skipped++;
+      }
+    }
+
+    res.json({ message: 'Importação concluída', created, skipped, errors: errors.slice(0, 20) });
+  } catch (e) {
+    console.error('[import] failed:', e);
+    res.status(500).json({ message: 'Erro ao processar planilha', error: e.message });
+  }
 });
 
 // POST atribuir entregador manualmente
@@ -978,3 +1137,4 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
     return res.status(500).json({ message: 'Erro interno ao criar pedido PDV' });
   }
 });
+

@@ -130,6 +130,12 @@ const router = createRouter({
     { path: '/', component: () => import('./views/LandingPage.vue'), beforeEnter: async () => {
         const token = localStorage.getItem('token')
         if (!token) return true
+        // Riders should go to their own dashboard, not admin panels
+        const auth = useAuthStore()
+        if (!auth.user && token) {
+          try { const { data } = await api.get('/auth/me'); if (data && data.user) auth.user = data.user } catch {}
+        }
+        if (String(auth.user?.role || '').toUpperCase() === 'RIDER') return { path: '/rider' }
         const { useModulesStore } = await import('./stores/modules')
         const modules = useModulesStore()
         if (!modules.enabled.length) {
@@ -345,6 +351,17 @@ router.beforeEach(async (to) => {
     }
     if (auth.user && !auth.user.companyId && auth.user.role !== 'SUPER_ADMIN') {
       return { path: '/setup' };
+    }
+  }
+
+  // Rider containment: riders may ONLY access /rider/*, /public/*, /login*, and a few utility paths
+  if (token && !to.path.startsWith('/rider') && !to.path.startsWith('/public') && !to.path.startsWith('/login') && to.path !== '/' && to.path !== '/setup') {
+    const auth = useAuthStore();
+    if (!auth.user && token) {
+      try { const { data } = await api.get('/auth/me'); if (data && data.user) auth.user = data.user } catch {}
+    }
+    if (String(auth.user?.role || '').toUpperCase() === 'RIDER') {
+      return { path: '/rider' };
     }
   }
 

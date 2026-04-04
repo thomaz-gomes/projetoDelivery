@@ -122,7 +122,10 @@ watch(() => auth.user, (user) => {
   }
 }, { immediate: true })
 onMounted(() => {
-  loadMenusWidget().catch(()=>{});
+  // Only load admin widgets when NOT on a public route (avoids stale-token 401 → /login redirect)
+  if (!route.path.startsWith('/public')) {
+    loadMenusWidget().catch(()=>{});
+  }
   // Register rider service worker for /rider/* routes
   if (route.path === '/rider' || route.path.startsWith('/rider/')) {
     document.title = 'Core Delivery — Entregador';

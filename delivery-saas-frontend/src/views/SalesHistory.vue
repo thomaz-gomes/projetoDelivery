@@ -20,7 +20,10 @@
           </div>
           <div class="col-md-3 text-end">
             <button class="btn btn-primary me-2" @click="load">Buscar</button>
-            <button class="btn btn-outline-secondary" @click="reset">Limpar</button>
+            <button class="btn btn-outline-secondary me-2" @click="reset">Limpar</button>
+            <button class="btn btn-outline-primary" @click="showImportModal = true" title="Importar vendas de planilha">
+              <i class="bi bi-upload me-1"></i> Importar
+            </button>
           </div>
         </div>
       </div>
@@ -121,6 +124,41 @@
         <button class="btn btn-sm btn-success" @click="bulkEmitNfe" title="Emitir NF-e dos selecionados">
           <i class="bi bi-receipt"></i> Emitir NF-e
         </button>
+      </div>
+    </div>
+
+    <!-- Import modal -->
+    <div v-if="showImportModal" class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-upload me-2"></i>Importar Vendas</h5>
+            <button type="button" class="btn-close" @click="closeImportModal"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted mb-3">Selecione a planilha de vendas do sistema antigo. Formatos aceitos: <strong>.xlsx, .xls, .csv</strong></p>
+            <input type="file" class="form-control" ref="importFileInput" accept=".xlsx,.xls,.csv" @change="onImportFileChange" />
+            <div v-if="importResult" class="mt-3">
+              <div class="alert" :class="importResult.errors?.length ? 'alert-warning' : 'alert-success'">
+                <strong>{{ importResult.message }}</strong><br />
+                <span>{{ importResult.created }} pedido(s) criado(s)</span>
+                <span v-if="importResult.skipped"> — {{ importResult.skipped }} ignorado(s)</span>
+                <div v-if="importResult.errors?.length" class="mt-2">
+                  <small v-for="(e, i) in importResult.errors" :key="i" class="d-block text-danger">
+                    Linha {{ e.row }}: {{ e.error }}
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline-secondary" @click="closeImportModal">Fechar</button>
+            <button class="btn btn-primary" :disabled="!importFile || importing" @click="doImport">
+              <span v-if="importing" class="spinner-border spinner-border-sm me-1"></span>
+              {{ importing ? 'Importando...' : 'Importar' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -287,6 +325,44 @@ const visiblePages = computed(() => {
   
   return pages.filter(p => p !== '...' || pages.indexOf(p) === pages.lastIndexOf(p));
 });
+
+// Import logic
+const showImportModal = ref(false);
+const importFile = ref(null);
+const importing = ref(false);
+const importResult = ref(null);
+const importFileInput = ref(null);
+
+function onImportFileChange(e) {
+  importFile.value = e.target.files?.[0] || null;
+  importResult.value = null;
+}
+
+function closeImportModal() {
+  showImportModal.value = false;
+  importFile.value = null;
+  importResult.value = null;
+  if (importFileInput.value) importFileInput.value.value = '';
+}
+
+async function doImport() {
+  if (!importFile.value) return;
+  importing.value = true;
+  importResult.value = null;
+  try {
+    const formData = new FormData();
+    formData.append('file', importFile.value);
+    const { data } = await api.post('/orders/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    importResult.value = data;
+    if (data.created > 0) load();
+  } catch (e) {
+    importResult.value = { message: e.response?.data?.message || 'Erro ao importar', created: 0, skipped: 0, errors: [] };
+  } finally {
+    importing.value = false;
+  }
+}
 
 onMounted(()=>{ loadRiders(); load(); });
 
