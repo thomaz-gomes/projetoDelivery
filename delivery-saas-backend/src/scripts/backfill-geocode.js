@@ -12,11 +12,11 @@ async function run() {
   const companies = await prisma.company.findMany({ select: { id: true, city: true, state: true } });
   const storeCityMap = {};
   for (const s of stores) {
-    storeCityMap[s.id] = s.city ? [s.city, s.state].filter(Boolean).join(', ') : null;
+    storeCityMap[s.id] = s.city ? { city: s.city, state: s.state } : null;
   }
   const companyCityMap = {};
   for (const c of companies) {
-    companyCityMap[c.id] = c.city ? [c.city, c.state].filter(Boolean).join(', ') : null;
+    companyCityMap[c.id] = c.city ? { city: c.city, state: c.state } : null;
   }
 
   const orders = await prisma.order.findMany({

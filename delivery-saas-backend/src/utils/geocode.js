@@ -1,27 +1,58 @@
 import { prisma } from '../prisma.js';
 
 /**
- * Forward geocode an address string to lat/lng using Nominatim (OpenStreetMap).
- * @param {string} addressText - The address to geocode
- * @param {string} [cityContext] - City + state to append for disambiguation (e.g. "Itabuna, BA")
+ * Forward geocode using Nominatim structured query for precision.
+ * @param {string} addressText - Full address string (street, number, neighborhood)
+ * @param {{ city?: string, state?: string }} [context] - City/state for disambiguation
  * Returns { lat, lng } or null if not found.
  */
-export async function geocodeAddress(addressText, cityContext = null) {
+export async function geocodeAddress(addressText, context = null) {
   if (!addressText || addressText.length < 5) return null;
+
+  // Parse city/state from context (can be string "City, ST" or object { city, state })
+  let city = null, state = null;
+  if (context && typeof context === 'object') {
+    city = context.city;
+    state = context.state;
+  } else if (typeof context === 'string' && context.includes(',')) {
+    const parts = context.split(',').map(s => s.trim());
+    city = parts[0];
+    state = parts[1];
+  }
+
   try {
-    // Append city context to disambiguate common street names
-    const query = cityContext ? `${addressText}, ${cityContext}` : addressText;
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(query)}`;
-    const resp = await fetch(url, {
+    // Strategy 1: Structured query (most precise)
+    if (city) {
+      const params = new URLSearchParams({
+        format: 'json',
+        limit: '1',
+        countrycodes: 'br',
+        street: addressText.split(',')[0].trim(), // first part = street + number
+        city: city,
+      });
+      if (state) params.set('state', state);
+
+      const url = `https://nominatim.openstreetmap.org/search?${params}`;
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'DeliveryWL/1.0' },
+        signal: AbortSignal.timeout(5000),
+      });
+      const results = await resp.json();
+      if (results && results.length > 0) {
+        return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
+      }
+    }
+
+    // Strategy 2: Free-form with city appended (fallback)
+    const query = city ? `${addressText}, ${city}, ${state || 'Brasil'}` : addressText;
+    const url2 = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(query)}`;
+    const resp2 = await fetch(url2, {
       headers: { 'User-Agent': 'DeliveryWL/1.0' },
       signal: AbortSignal.timeout(5000),
     });
-    const results = await resp.json();
-    if (results && results.length > 0) {
-      return {
-        lat: parseFloat(results[0].lat),
-        lng: parseFloat(results[0].lon),
-      };
+    const results2 = await resp2.json();
+    if (results2 && results2.length > 0) {
+      return { lat: parseFloat(results2[0].lat), lng: parseFloat(results2[0].lon) };
     }
   } catch (e) {
     console.warn('[geocode] forward geocode failed:', e?.message || e);
@@ -30,26 +61,24 @@ export async function geocodeAddress(addressText, cityContext = null) {
 }
 
 /**
- * Resolve city context from the store linked to an order.
- * Returns "City, STATE" string or null.
+ * Resolve city/state context from the store linked to an order.
+ * Returns { city, state } object or null.
  */
 async function resolveStoreCity(order) {
   try {
-    // Try store directly
     if (order.storeId) {
       const store = await prisma.store.findUnique({
         where: { id: order.storeId },
         select: { city: true, state: true },
       });
-      if (store?.city) return [store.city, store.state].filter(Boolean).join(', ');
+      if (store?.city) return { city: store.city, state: store.state };
     }
-    // Fallback: company settings
     if (order.companyId) {
       const company = await prisma.company.findUnique({
         where: { id: order.companyId },
         select: { city: true, state: true },
       });
-      if (company?.city) return [company.city, company.state].filter(Boolean).join(', ');
+      if (company?.city) return { city: company.city, state: company.state };
     }
   } catch (e) { /* non-blocking */ }
   return null;
