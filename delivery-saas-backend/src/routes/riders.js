@@ -217,8 +217,6 @@ ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN'), async (
       where: {
         storeId: { in: storeIds },
         status: { in: ['EM_PREPARO', 'SAIU_PARA_ENTREGA'] },
-        latitude: { not: null },
-        longitude: { not: null },
         createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) },
       },
       select: {
