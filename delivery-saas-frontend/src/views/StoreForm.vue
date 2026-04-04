@@ -28,6 +28,22 @@
             <div class="mb-3">
               <TextInput label="Endereço" labelClass="form-label" v-model="form.address" inputClass="form-control" />
             </div>
+            <div class="row g-2 mb-3">
+              <div class="col-md-4">
+                <label class="form-label">Estado</label>
+                <select class="form-select" v-model="form.state" @change="onStateChange">
+                  <option value="">Selecione</option>
+                  <option v-for="uf in ibgeStates" :key="uf.sigla" :value="uf.sigla">{{ uf.sigla }} — {{ uf.nome }}</option>
+                </select>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label">Cidade</label>
+                <select class="form-select" v-model="form.city" @change="onCityChange" :disabled="!form.state || loadingCities">
+                  <option value="">{{ loadingCities ? 'Carregando...' : 'Selecione o estado primeiro' }}</option>
+                  <option v-for="c in ibgeCities" :key="c.id" :value="c.nome">{{ c.nome }}</option>
+                </select>
+              </div>
+            </div>
             <div class="mb-3"><TextInput label="Telefone" labelClass="form-label" v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
             <div class="mb-3"><TextInput label="WhatsApp" labelClass="form-label" v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
             <div class="mb-3"><TextInput label="CNPJ" labelClass="form-label" v-model="form.cnpj" placeholder="00.000.000/0000-00" inputClass="form-control" /></div>
@@ -296,7 +312,42 @@ const TIMEZONES = [
   'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
   'Asia/Shanghai', 'Australia/Sydney'
 ]
-const form = ref({ name: '', address: '', latitude: null, longitude: null, phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
+const form = ref({ name: '', address: '', latitude: null, longitude: null, city: '', state: '', ibgeCode: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
+
+// IBGE API: states and cities
+const ibgeStates = ref([])
+const ibgeCities = ref([])
+const loadingCities = ref(false)
+
+async function loadIbgeStates() {
+  try {
+    const resp = await fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome')
+    ibgeStates.value = await resp.json()
+  } catch (e) { console.warn('Failed to load IBGE states:', e) }
+}
+
+async function loadIbgeCities(uf) {
+  if (!uf) { ibgeCities.value = []; return }
+  loadingCities.value = true
+  try {
+    const resp = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios?orderBy=nome`)
+    ibgeCities.value = await resp.json()
+  } catch (e) { console.warn('Failed to load IBGE cities:', e) }
+  loadingCities.value = false
+}
+
+function onStateChange() {
+  form.value.city = ''
+  form.value.ibgeCode = ''
+  loadIbgeCities(form.value.state)
+}
+
+function onCityChange() {
+  const selected = ibgeCities.value.find(c => c.nome === form.value.city)
+  if (selected) {
+    form.value.ibgeCode = String(selected.id)
+  }
+}
 
 
 // ── Debug diagnóstico do certificado ──
@@ -379,8 +430,13 @@ async function load() {
       form.value.name = s.name || ''
       form.value.slug = s.slug || ''
       form.value.address = s.address || ''
+      form.value.city = s.city || ''
+      form.value.state = s.state || ''
+      form.value.ibgeCode = s.ibgeCode || ''
       form.value.latitude = s.latitude != null ? s.latitude : null
       form.value.longitude = s.longitude != null ? s.longitude : null
+      // Load cities for the state if store already has one
+      if (s.state) loadIbgeCities(s.state)
   form.value.logoUrl = s.logoUrl ? assetUrl(s.logoUrl) : ''
   form.value.bannerUrl = s.bannerUrl ? assetUrl(s.bannerUrl) : ''
       form.value.cnpj = s.cnpj || ''
@@ -522,6 +578,9 @@ async function save(){
       name: form.value.name || undefined,
       slug: form.value.slug !== undefined ? (form.value.slug || undefined) : undefined,
       address: form.value.address || undefined,
+      city: form.value.city || undefined,
+      state: form.value.state || undefined,
+      ibgeCode: form.value.ibgeCode || undefined,
       latitude: form.value.latitude != null && form.value.latitude !== '' ? Number(form.value.latitude) : null,
       longitude: form.value.longitude != null && form.value.longitude !== '' ? Number(form.value.longitude) : null,
       timezone: form.value.timezone || undefined,
@@ -566,7 +625,7 @@ async function save(){
 
 function cancel(){ router.push('/settings/stores') }
 
-onMounted(()=>{ load(); _startPauseTicker(); modulesStore.fetchEnabled() })
+onMounted(()=>{ load(); _startPauseTicker(); modulesStore.fetchEnabled(); loadIbgeStates() })
 onBeforeUnmount(()=>{ _clearPauseTicker(); /* ImageUploader handles object URLs */ })
 </script>
 

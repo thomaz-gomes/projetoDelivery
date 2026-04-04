@@ -525,6 +525,9 @@ model Store {
   open24Hours        Boolean           @default(false)
   weeklySchedule     Json?
   address            String?
+  city               String?
+  state              String?
+  ibgeCode           String?
   isActive           Boolean           @default(true)
   menus              Menu[]
   // integrations that are bound to this store
