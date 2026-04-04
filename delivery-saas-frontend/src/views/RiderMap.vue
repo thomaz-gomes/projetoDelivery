@@ -100,22 +100,182 @@
           <div v-if="filteredDeliveries.length === 0" class="text-muted small py-1">
             Nenhum pedido ativo.
           </div>
-          <div v-for="order in filteredDeliveries" :key="order.id" class="sidebar-item" @click="flyToDelivery(order)">
+          <div v-for="order in filteredDeliveries" :key="order.id" class="sidebar-item">
             <div class="d-flex align-items-center gap-2">
-              <i class="bi bi-geo-alt-fill" :style="{ color: order.status === 'SAIU_PARA_ENTREGA' ? '#dc3545' : '#fd7e14' }"></i>
-              <div style="min-width:0">
+              <i class="bi bi-geo-alt-fill" :style="{ color: order.status === 'SAIU_PARA_ENTREGA' ? '#dc3545' : '#fd7e14' }" style="cursor:pointer" @click="flyToDelivery(order)"></i>
+              <div style="min-width:0;flex:1;cursor:pointer" @click="flyToDelivery(order)">
                 <div class="small fw-medium">
-                  #{{ order.displaySimple ? `#${String(order.displaySimple).padStart(2,'0')}` : (order.displayId || order.id.slice(0,6)) }}
-                  <span v-if="order.store" class="text-muted fw-normal"> · {{ order.store.name }}</span>
+                  <strong>#{{ formatDisplay(order) }} - {{ order.customerName || '' }} </strong> 
+                </div>
+                <div class="small fw-medium">
+                  {{ order.address ? '' + order.address : '' }}
                 </div>
                 <div class="text-muted text-truncate" style="font-size:0.72rem">
-                  {{ order.customerName || '' }} {{ order.address ? '— ' + order.address : '' }}
+                  <span v-if="order.store" class="text-muted fw-normal"> · {{ order.store.name }}</span>
                 </div>
                 <span class="badge" :class="order.status === 'SAIU_PARA_ENTREGA' ? 'bg-danger' : 'bg-warning text-dark'" style="font-size:0.65rem">
                   {{ order.status === 'SAIU_PARA_ENTREGA' ? 'Saiu p/ entrega' : 'Em preparo' }}
                 </span>
               </div>
+              <!-- Actions dropdown -->
+              <div class="position-relative" @click.stop>
+                <button class="btn btn-sm btn-link text-secondary p-0" @click.stop="toggleDropdown($event, order.id)">
+                  <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <ul v-if="openDropdownId === order.id" class="dropdown-menu dropdown-menu-end show" style="position:absolute;right:0;top:100%;z-index:1050">
+                  <li><a class="dropdown-item small" href="#" @click.prevent="openOrderDetails(order)"><i class="bi bi-list-ul me-2"></i>Ver detalhes</a></li>
+                  <li v-if="order.status !== 'SAIU_PARA_ENTREGA'"><a class="dropdown-item small" href="#" @click.prevent="openAssignModal(order)"><i class="bi bi-person-plus me-2"></i>Despachar</a></li>
+                </ul>
+              </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Order Detail Modal -->
+    <div v-if="detailModalVisible" class="modal fade show" style="display:block; background: rgba(0,0,0,0.45); z-index:10000;" @click.self="detailModalVisible = false">
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content od-modal">
+          <div class="od-modal-header">
+            <div class="d-flex align-items-center gap-3">
+              <div class="od-order-badge">#{{ detailOrder ? formatDisplay(detailOrder) : '' }}</div>
+              <div>
+                <div class="od-customer-name">{{ detailOrder?.customerName || '—' }}</div>
+                <div class="od-customer-phone">{{ detailOrder?.customerPhone || '' }}</div>
+              </div>
+            </div>
+            <button type="button" class="btn-close" aria-label="Fechar" @click="detailModalVisible = false"></button>
+          </div>
+          <div class="modal-body p-0">
+            <div v-if="detailLoading" class="text-center py-5">
+              <span class="spinner-border text-primary"></span>
+            </div>
+            <template v-else-if="detailOrder">
+              <!-- Info bar -->
+              <div class="od-info-bar">
+                <div class="od-info-item">
+                  <i class="bi bi-shop"></i>
+                  <span>{{ detailOrder.store?.name || '—' }}</span>
+                </div>
+                <div class="od-info-item">
+                  <i class="bi bi-clock"></i>
+                  <span>{{ formatTime(detailOrder.createdAt) }}</span>
+                </div>
+                <div class="od-info-item">
+                  <span class="badge" :class="{
+                    'bg-warning text-dark': detailOrder.status === 'EM_PREPARO',
+                    'bg-primary': detailOrder.status === 'SAIU_PARA_ENTREGA',
+                    'bg-info': detailOrder.status === 'CONFIRMACAO_PAGAMENTO',
+                    'bg-success': detailOrder.status === 'CONCLUIDO',
+                    'bg-danger': detailOrder.status === 'CANCELADO'
+                  }">{{ statusLabel(detailOrder.status) }}</span>
+                </div>
+                <div class="od-info-item">
+                  <i class="bi bi-bicycle"></i>
+                  <span>Entrega</span>
+                </div>
+              </div>
+
+              <!-- Address -->
+              <div class="od-section">
+                <div class="od-section-title"><i class="bi bi-geo-alt"></i> Endereço</div>
+                <div>{{ detailOrder.address || '—' }}</div>
+              </div>
+
+              <!-- Items -->
+              <div class="od-section">
+                <div class="od-section-title"><i class="bi bi-bag"></i> Itens do pedido</div>
+                <div class="od-items-list">
+                  <div v-for="(it, idx) in detailItems" :key="idx" class="od-item">
+                    <div class="od-item-main">
+                      <span class="od-item-qty">{{ it.quantity }}x</span>
+                      <span class="od-item-name">{{ it.name }}</span>
+                      <span class="od-item-price">{{ formatCurrency(it.unitPrice * it.quantity) }}</span>
+                    </div>
+                    <div v-if="it.options && it.options.length" class="od-item-options">
+                      <div v-for="(opt, oi) in it.options" :key="oi" class="od-item-option">
+                        <i class="bi bi-plus-circle od-opt-icon"></i>
+                        <span>{{ opt.quantity || 1 }}x {{ opt.name }}</span>
+                        <span v-if="opt.price" class="od-opt-price">{{ formatCurrency(opt.price) }}</span>
+                      </div>
+                    </div>
+                    <div v-if="it.notes" class="text-muted small fst-italic ps-3">
+                      <i class="bi bi-chat-left-dots"></i> {{ it.notes }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Payment -->
+              <div class="od-section">
+                <div class="od-section-title"><i class="bi bi-credit-card"></i> Pagamento</div>
+                <div class="od-payment-grid">
+                  <div class="od-pay-row" v-if="detailOrder.payment?.methodCode || detailOrder.payment?.method">
+                    <span class="od-pay-label">Forma</span>
+                    <span class="od-pay-value">{{ detailOrder.payment?.methodCode || detailOrder.payment?.method || '—' }}</span>
+                  </div>
+                  <div class="od-pay-row" v-if="detailOrder.deliveryFee > 0">
+                    <span class="od-pay-label">Taxa de entrega</span>
+                    <span class="od-pay-value">{{ formatCurrency(detailOrder.deliveryFee) }}</span>
+                  </div>
+                  <div class="od-pay-row od-pay-total">
+                    <span class="od-pay-label">Total</span>
+                    <span class="od-pay-value">{{ formatCurrency(detailOrder.total || 0) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Rider -->
+              <div class="od-section">
+                <div class="od-section-title"><i class="bi bi-person-badge"></i> Entregador</div>
+                <div v-if="detailOrder.rider" class="d-flex align-items-center gap-2">
+                  <span>{{ detailOrder.rider.name }}</span>
+                </div>
+                <div v-else class="text-muted">Nenhum entregador atribuído
+                  <a href="#" class="ms-2" @click.prevent="detailModalVisible = false; openAssignModal(detailOrder)">Atribuir →</a>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div class="od-modal-footer">
+            <div></div>
+            <div class="d-flex gap-2">
+              <button v-if="detailOrder && !detailOrder.riderId" type="button" class="btn btn-primary btn-sm" @click="detailModalVisible = false; openAssignModal(detailOrder)">
+                <i class="bi bi-person-plus me-1"></i>Despachar
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" @click="detailModalVisible = false">Fechar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Assign Rider Modal -->
+    <div v-if="assignModalVisible" class="modal fade show" style="display:block; background: rgba(0,0,0,0.45); z-index:20000;" @click.self="assignModalVisible = false">
+      <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Escolher entregador</h5>
+            <button type="button" class="btn-close" aria-label="Fechar" @click="assignModalVisible = false"></button>
+          </div>
+          <div class="modal-body">
+            <div v-if="assignRiders.length">
+              <ListGroup :items="assignRiders" itemKey="id" :selectedId="assignSelectedRider" :showActions="false" @select="assignSelectedRider = $event">
+                <template #primary="{ item }">
+                  <div><strong>{{ item.name }}</strong></div>
+                  <div v-if="item.description" class="small text-muted">{{ item.description }}</div>
+                </template>
+              </ListGroup>
+            </div>
+            <div v-else class="text-muted">Nenhum entregador disponível.</div>
+          </div>
+          <div class="modal-footer d-flex justify-content-between">
+            <div>
+              <button class="btn btn-outline-secondary" type="button" @click="assignModalVisible = false">Cancelar</button>
+              <button class="btn btn-outline-danger ms-2" type="button" @click="dispatchWithoutRider">Despachar sem entregador</button>
+            </div>
+            <button class="btn btn-primary" type="button" :disabled="!assignSelectedRider" @click="assignRiderToOrder">Atribuir</button>
           </div>
         </div>
       </div>
@@ -128,6 +288,12 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api'
 import { io } from 'socket.io-client'
 import { SOCKET_URL } from '@/config'
+import { useOrdersStore } from '@/stores/orders'
+import { normalizeOrderItems } from '@/utils/orderUtils'
+import ListGroup from '@/components/form/list-group/ListGroup.vue'
+import Swal from 'sweetalert2'
+
+const ordersStore = useOrdersStore()
 
 const trackingEnabled = ref(false)
 const positions = ref([])
@@ -135,6 +301,21 @@ const deliveries = ref([])
 const loadingPositions = ref(false)
 const leafletError = ref('')
 const selectedStoreId = ref('')
+
+// Detail modal state
+const detailModalVisible = ref(false)
+const detailOrder = ref(null)
+const detailItems = ref([])
+const detailLoading = ref(false)
+
+// Assign modal state
+const assignModalVisible = ref(false)
+const assignModalOrderId = ref(null)
+const assignRiders = ref([])
+const assignSelectedRider = ref(null)
+
+// Dropdown state
+const openDropdownId = ref(null)
 
 let map = null
 let markersMap = {}
@@ -146,7 +327,6 @@ let socket = null
 let pollInterval = null
 let L = null
 let companyCenter = null
-let storesCenterCache = {} // storeId -> [lat, lng]
 
 // Stores that have active orders
 const storeOptions = computed(() => {
@@ -297,44 +477,17 @@ function addStoreMarker(storeId, name, coords) {
     .addTo(map)
 }
 
-async function geocodeAddress(address) {
-  if (!address) return null
-  try {
-    const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`)
-    const results = await resp.json()
-    if (results && results.length > 0) {
-      return [parseFloat(results[0].lat), parseFloat(results[0].lon)]
-    }
-  } catch (e) {
-    console.warn('geocode error:', e)
-  }
-  return null
-}
-
-async function resolveCompanyCenter() {
-  try {
-    const { data } = await api.get('/settings/company')
-    const parts = [data.street, data.addressNumber, data.addressNeighborhood, data.city, data.state].filter(Boolean)
-    if (parts.length < 2) return null
-    return await geocodeAddress(parts.join(', '))
-  } catch (e) {
-    console.warn('resolveCompanyCenter error:', e)
-  }
-  return null
-}
-
-async function resolveStoreCenter(store) {
-  if (!store || !store.address) return null
-  if (storesCenterCache[store.id]) return storesCenterCache[store.id]
-  const coords = await geocodeAddress(store.address)
-  if (coords) {
-    storesCenterCache[store.id] = coords
+function resolveStoreCenter(store) {
+  if (!store) return null
+  if (store.latitude && store.longitude) {
+    const coords = [store.latitude, store.longitude]
     addStoreMarker(store.id, store.name, coords)
+    return coords
   }
-  return coords
+  return null
 }
 
-async function onStoreFilterChange() {
+function onStoreFilterChange() {
   if (!map) return
   if (!selectedStoreId.value) {
     // Show all: fit to company center or show all markers
@@ -358,10 +511,8 @@ async function onStoreFilterChange() {
   // Center on selected store
   const store = storeOptions.value.find(s => s.id === selectedStoreId.value)
   if (store) {
-    const coords = await resolveStoreCenter(store)
-    if (coords) {
-      map.setView(coords, 15)
-    }
+    const coords = resolveStoreCenter(store)
+    if (coords) map.setView(coords, 15)
   }
 }
 
@@ -451,7 +602,7 @@ async function loadPositions() {
       for (const order of delRes.data) {
         if (order.store && !seenStores.has(order.store.id)) {
           seenStores.add(order.store.id)
-          resolveStoreCenter(order.store) // async, adds marker when resolved
+          resolveStoreCenter(order.store)
         }
       }
 
@@ -546,6 +697,96 @@ function flyToDelivery(order) {
   }
 }
 
+const STATUS_LABEL = {
+  EM_PREPARO: 'Em preparo',
+  PRONTO: 'Pronto',
+  SAIU_PARA_ENTREGA: 'Saiu p/ entrega',
+  CONFIRMACAO_PAGAMENTO: 'Confirmação pgto',
+  CONCLUIDO: 'Concluído',
+  CANCELADO: 'Cancelado',
+}
+
+function statusLabel(s) { return STATUS_LABEL[s] || s }
+
+function formatDisplay(order) {
+  if (order.displaySimple) return String(order.displaySimple).padStart(2, '0')
+  return order.displayId || order.id?.slice(0, 6) || ''
+}
+
+function formatCurrency(v) {
+  return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+// Dropdown management
+function toggleDropdown(event, orderId) {
+  if (openDropdownId.value === orderId) {
+    openDropdownId.value = null
+    return
+  }
+  openDropdownId.value = orderId
+  // Close when clicking outside
+  const close = () => { openDropdownId.value = null; document.removeEventListener('click', close) }
+  setTimeout(() => document.addEventListener('click', close), 0)
+}
+
+// Order detail modal
+async function openOrderDetails(order) {
+  openDropdownId.value = null
+  detailLoading.value = true
+  detailModalVisible.value = true
+  detailOrder.value = order
+  detailItems.value = []
+  try {
+    const full = await ordersStore.fetchOne(order.id)
+    detailOrder.value = full
+    detailItems.value = normalizeOrderItems(full)
+  } catch (e) {
+    console.warn('Failed to load order details:', e)
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+// Assign rider modal
+async function openAssignModal(order) {
+  openDropdownId.value = null
+  assignModalOrderId.value = order.id
+  assignSelectedRider.value = null
+  try {
+    const riders = (await ordersStore.fetchRiders()) || []
+    assignRiders.value = riders.map(r => ({ id: r.id, name: r.name, description: r.whatsapp || 'sem WhatsApp' }))
+  } catch (e) {
+    assignRiders.value = []
+  }
+  assignModalVisible.value = true
+}
+
+async function assignRiderToOrder() {
+  if (!assignSelectedRider.value || !assignModalOrderId.value) return
+  try {
+    await ordersStore.assignOrder(assignModalOrderId.value, { riderId: assignSelectedRider.value, alsoSetStatus: true })
+    assignModalVisible.value = false
+    Swal.fire({ icon: 'success', text: 'Pedido atribuído ao entregador.', timer: 2000, showConfirmButton: false })
+    await loadPositions()
+  } catch (e) {
+    console.error(e)
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Falha ao atribuir entregador.' })
+  }
+}
+
+async function dispatchWithoutRider() {
+  if (!assignModalOrderId.value) return
+  try {
+    await ordersStore.updateStatus(assignModalOrderId.value, 'SAIU_PARA_ENTREGA')
+    assignModalVisible.value = false
+    Swal.fire({ icon: 'success', text: 'Pedido despachado sem entregador.', timer: 2000, showConfirmButton: false })
+    await loadPositions()
+  } catch (e) {
+    console.error(e)
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Falha ao despachar pedido.' })
+  }
+}
+
 onMounted(async () => {
   try {
     const { data } = await api.get('/riders/tracking-status')
@@ -553,19 +794,34 @@ onMounted(async () => {
   } catch (e) { /* non-blocking */ }
 
   try {
-    const [center] = await Promise.all([resolveCompanyCenter(), loadLeaflet()])
-    companyCenter = center
+    // Load stores with coordinates and Leaflet in parallel
+    const [storesRes] = await Promise.all([
+      api.get('/stores').catch(() => ({ data: [] })),
+      loadLeaflet(),
+    ])
+    const stores = storesRes.data || []
+    // Find first store with coordinates as initial center
+    const storeWithCoords = stores.find(s => s.latitude && s.longitude)
+    if (storeWithCoords) {
+      companyCenter = [storeWithCoords.latitude, storeWithCoords.longitude]
+    }
+
     await nextTick()
     initMap(companyCenter)
     await loadPositions()
 
-    // If we have a single store with orders, center on it
+    // Add markers for all stores that have coordinates
+    for (const s of stores) {
+      if (s.latitude && s.longitude) {
+        addStoreMarker(s.id, s.name, [s.latitude, s.longitude])
+      }
+    }
+
+    // Center on single active store if only one has orders
     if (storeOptions.value.length === 1) {
       const store = storeOptions.value[0]
-      const coords = await resolveStoreCenter(store)
+      const coords = resolveStoreCenter(store)
       if (coords) map.setView(coords, 15)
-    } else if (companyCenter) {
-      addStoreMarker('company', 'Empresa', companyCenter)
     }
   } catch (e) {
     leafletError.value = e?.message || 'Erro ao inicializar mapa'
@@ -675,6 +931,55 @@ onUnmounted(() => {
   border-radius: 50%;
   margin-right: 0.4rem;
   vertical-align: middle;
+}
+
+/* Order detail modal styles */
+.od-modal { border-radius: var(--border-radius, 0.75rem); overflow: hidden; }
+.od-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--bg-app, #EEFFED), #e0f0de);
+  border-bottom: 1px solid var(--border-color, #E6E6E6);
+}
+.od-order-badge {
+  background: var(--primary, #105784); color: #fff; font-weight: 700; font-size: 1.1rem;
+  padding: 6px 14px; border-radius: var(--border-radius-sm, 0.5rem); white-space: nowrap;
+}
+.od-customer-name { font-weight: 600; font-size: 1rem; color: #212529; }
+.od-customer-phone { font-size: 0.82rem; color: #6c757d; }
+.od-info-bar {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 20px;
+  background: var(--bg-zebra, #FAFAFA); border-bottom: 1px solid var(--border-color, #E6E6E6);
+}
+.od-info-item { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; color: #555; }
+.od-info-item i { color: #888; }
+.od-section { padding: 14px 20px; border-bottom: 1px solid #f0f0f0; }
+.od-section:last-child { border-bottom: none; }
+.od-section-title {
+  font-weight: 600; font-size: 0.82rem; color: #495057; margin-bottom: 8px;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.od-section-title i { margin-right: 4px; color: #888; }
+.od-items-list { display: flex; flex-direction: column; gap: 6px; }
+.od-item { background: #fafbfc; border-radius: 8px; padding: 8px 12px; }
+.od-item-main { display: flex; align-items: center; gap: 8px; }
+.od-item-qty { font-weight: 600; font-size: 0.82rem; color: #495057; min-width: 28px; }
+.od-item-name { flex: 1; font-size: 0.88rem; color: #212529; }
+.od-item-price { font-weight: 600; font-size: 0.85rem; color: #198754; white-space: nowrap; }
+.od-item-options { margin-top: 6px; padding-left: 28px; display: flex; flex-direction: column; gap: 3px; }
+.od-item-option { font-size: 0.8rem; color: #495057; display: flex; align-items: baseline; gap: 5px; }
+.od-opt-icon { font-size: 0.65rem; color: var(--text-muted, #adb5bd); flex-shrink: 0; }
+.od-opt-price { color: #198754; font-size: 0.78rem; white-space: nowrap; }
+.od-payment-grid { display: flex; flex-direction: column; gap: 4px; }
+.od-pay-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 0.88rem; }
+.od-pay-label { color: #6c757d; }
+.od-pay-value { font-weight: 500; color: #212529; }
+.od-pay-total { border-top: 2px solid #e9ecef; margin-top: 4px; padding-top: 8px; }
+.od-pay-total .od-pay-label { font-weight: 600; color: #212529; font-size: 0.95rem; }
+.od-pay-total .od-pay-value { font-weight: 700; color: #198754; font-size: 1.1rem; }
+.od-modal-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 20px; border-top: 1px solid #eee;
 }
 
 /* Mobile: adjust bleed for smaller padding */

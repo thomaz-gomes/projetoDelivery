@@ -217,6 +217,10 @@ ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN'), async (
       where: {
         storeId: { in: storeIds },
         status: { in: ['EM_PREPARO', 'SAIU_PARA_ENTREGA'] },
+        OR: [
+          { orderType: null },
+          { orderType: { notIn: ['RETIRADA', 'TAKEOUT', 'PICKUP', 'BALCAO', 'BALCÃO', 'INDOOR'] } },
+        ],
         createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) },
       },
       select: {
@@ -228,10 +232,12 @@ ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN'), async (
         latitude: true,
         longitude: true,
         customerName: true,
+        customerPhone: true,
+        orderType: true,
         riderId: true,
         rider: { select: { id: true, name: true } },
         storeId: true,
-        store: { select: { id: true, name: true, address: true } },
+        store: { select: { id: true, name: true, address: true, latitude: true, longitude: true } },
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },

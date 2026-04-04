@@ -20,18 +20,19 @@ export async function geocodeAddress(addressText, context = null) {
     state = parts[1];
   }
 
-  try {
-    // Strategy 1: Structured query (most precise)
-    if (city) {
-      const params = new URLSearchParams({
-        format: 'json',
-        limit: '1',
-        countrycodes: 'br',
-        street: addressText.split(',')[0].trim(), // first part = street + number
-        city: city,
-      });
-      if (state) params.set('state', state);
+  // Extract neighborhood from address patterns like "Street, 123 - Bairro" or "Street, 123, Bairro"
+  function extractNeighborhood(addr) {
+    // Pattern: "... - Bairro, Cidade" or "... - Bairro"
+    const dashMatch = addr.match(/[-–]\s*([^,]+)/);
+    if (dashMatch) return dashMatch[1].trim();
+    // Pattern: "Street, Number, Bairro" (3rd comma-separated part)
+    const parts = addr.split(',').map(s => s.trim());
+    if (parts.length >= 3) return parts[2];
+    return null;
+  }
 
+  async function nominatimSearch(params) {
+    try {
       const url = `https://nominatim.openstreetmap.org/search?${params}`;
       const resp = await fetch(url, {
         headers: { 'User-Agent': 'DeliveryWL/1.0' },
@@ -41,22 +42,51 @@ export async function geocodeAddress(addressText, context = null) {
       if (results && results.length > 0) {
         return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
       }
+    } catch (e) {
+      console.warn('[geocode] nominatim error:', e?.message || e);
     }
-
-    // Strategy 2: Free-form with city appended (fallback)
-    const query = city ? `${addressText}, ${city}, ${state || 'Brasil'}` : addressText;
-    const url2 = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(query)}`;
-    const resp2 = await fetch(url2, {
-      headers: { 'User-Agent': 'DeliveryWL/1.0' },
-      signal: AbortSignal.timeout(5000),
-    });
-    const results2 = await resp2.json();
-    if (results2 && results2.length > 0) {
-      return { lat: parseFloat(results2[0].lat), lng: parseFloat(results2[0].lon) };
-    }
-  } catch (e) {
-    console.warn('[geocode] forward geocode failed:', e?.message || e);
+    return null;
   }
+
+  // Strategy 1: Structured query (most precise — street + city)
+  if (city) {
+    const params = new URLSearchParams({
+      format: 'json', limit: '1', countrycodes: 'br',
+      street: addressText.split(',')[0].trim(),
+      city: city,
+    });
+    if (state) params.set('state', state);
+    const r = await nominatimSearch(params);
+    if (r) return r;
+  }
+
+  // Strategy 2: Free-form with city appended
+  {
+    const query = city ? `${addressText}, ${city}, ${state || 'Brasil'}` : addressText;
+    const params = new URLSearchParams({ format: 'json', limit: '1', countrycodes: 'br', q: query });
+    const r = await nominatimSearch(params);
+    if (r) return r;
+  }
+
+  // Strategy 3: Neighborhood + city fallback (when street not found in Nominatim)
+  if (city) {
+    const neighborhood = extractNeighborhood(addressText);
+    if (neighborhood) {
+      const query = `${neighborhood}, ${city}, ${state || 'Brasil'}`;
+      const params = new URLSearchParams({ format: 'json', limit: '1', countrycodes: 'br', q: query });
+      const r = await nominatimSearch(params);
+      if (r) return r;
+    }
+  }
+
+  // Strategy 4: City-level fallback (last resort — at least pin is in the right city)
+  if (city) {
+    const query = `${city}, ${state || 'Brasil'}`;
+    const params = new URLSearchParams({ format: 'json', limit: '1', countrycodes: 'br', q: query });
+    const r = await nominatimSearch(params);
+    if (r) return r;
+  }
+
   return null;
 }
 

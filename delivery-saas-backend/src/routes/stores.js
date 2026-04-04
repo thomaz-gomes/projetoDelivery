@@ -7,6 +7,16 @@ import { runForceOpenCleanupOnce } from '../cleanupForceOpen.js'
 import { encryptText } from '../utils/secretStore.js'
 import { assertLimit } from '../utils/saas.js'
 
+import { geocodeAddress } from '../utils/geocode.js'
+
+// helper: geocode a store address using the shared geocoder with city+state context
+async function geocodeStoreAddress(address, city, state) {
+  if (!address && !city) return null
+  const coords = await geocodeAddress(address, { city, state })
+  if (coords) return { latitude: coords.lat, longitude: coords.lng }
+  return null
+}
+
 // helper: persist store settings file under public/uploads/store/<storeId>/settings.json
 async function persistStoreSettings(storeId, toSave) {
   try {
@@ -68,6 +78,31 @@ storesRouter.get('/', async (req, res) => {
   } catch (e) {
     console.error('GET /stores failed', e)
     res.status(500).json({ message: 'Erro ao listar lojas', error: e?.message || String(e) })
+  }
+})
+
+// POST /stores/geocode-all — batch geocode all stores missing coordinates
+storesRouter.post('/geocode-all', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    const stores = await prisma.store.findMany({
+      where: { companyId, latitude: null, address: { not: null } },
+      select: { id: true, name: true, address: true, city: true, state: true },
+    })
+    let updated = 0
+    for (const s of stores) {
+      const geo = await geocodeStoreAddress(s.address, s.city, s.state)
+      if (geo) {
+        await prisma.store.update({ where: { id: s.id }, data: { latitude: geo.latitude, longitude: geo.longitude } })
+        updated++
+      }
+      // Nominatim rate limit: 1 req/sec
+      if (stores.indexOf(s) < stores.length - 1) await new Promise(r => setTimeout(r, 1100))
+    }
+    res.json({ total: stores.length, updated })
+  } catch (e) {
+    console.error('POST /stores/geocode-all failed', e)
+    res.status(500).json({ message: 'Erro ao geocodificar lojas' })
   }
 })
 
@@ -207,7 +242,9 @@ storesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       }
 
       const { city, state, ibgeCode } = req.body || {}
-      const s = await prisma.store.create({ data: { companyId, name, cnpj: cnpj || null, logoUrl: logoUrl || null, bannerUrl: bannerUrl || null, timezone: timezone || null, address: address || null, city: city || null, state: state || null, ibgeCode: ibgeCode || null, isActive: isActive ?? true, open24Hours: open24Hours ?? false, weeklySchedule: open24Hours ? null : (weeklySchedule ?? null), slug: normalizedSlug || null } })
+      // Geocode address with city+state context
+      const geo = await geocodeStoreAddress(address, city, state)
+      const s = await prisma.store.create({ data: { companyId, name, cnpj: cnpj || null, logoUrl: logoUrl || null, bannerUrl: bannerUrl || null, timezone: timezone || null, address: address || null, city: city || null, state: state || null, ibgeCode: ibgeCode || null, latitude: geo?.latitude || null, longitude: geo?.longitude || null, isActive: isActive ?? true, open24Hours: open24Hours ?? false, weeklySchedule: open24Hours ? null : (weeklySchedule ?? null), slug: normalizedSlug || null } })
 
     // handle certificate upload: certBase64 (data URL or raw base64) -> secure/certs/<storeId>.pfx
     if (certBase64) {
@@ -291,7 +328,16 @@ storesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       }
     }
 
-  const updated = await prisma.store.update({ where: { id }, data: { name: body.name ?? existing.name, cnpj: body.cnpj ?? existing.cnpj, logoUrl: body.logoUrl ?? existing.logoUrl, bannerUrl: body.bannerUrl ?? existing.bannerUrl, timezone: body.timezone ?? existing.timezone, address: body.address ?? existing.address, city: body.city ?? existing.city, state: body.state ?? existing.state, ibgeCode: body.ibgeCode ?? existing.ibgeCode, isActive: body.isActive ?? existing.isActive, open24Hours: body.open24Hours ?? existing.open24Hours, weeklySchedule: (body.open24Hours ? null : (body.weeklySchedule !== undefined ? body.weeklySchedule : existing.weeklySchedule)), slug: slugToSet !== undefined ? slugToSet : existing.slug } })
+  // Re-geocode if address, city or state changed
+  const addrChanged = (body.address !== undefined && body.address !== existing.address) ||
+    (body.city !== undefined && body.city !== existing.city) ||
+    (body.state !== undefined && body.state !== existing.state)
+  let geoData = {}
+  if (addrChanged) {
+    const geo = await geocodeStoreAddress(body.address ?? existing.address, body.city ?? existing.city, body.state ?? existing.state)
+    geoData = { latitude: geo?.latitude || null, longitude: geo?.longitude || null }
+  }
+  const updated = await prisma.store.update({ where: { id }, data: { name: body.name ?? existing.name, cnpj: body.cnpj ?? existing.cnpj, logoUrl: body.logoUrl ?? existing.logoUrl, bannerUrl: body.bannerUrl ?? existing.bannerUrl, timezone: body.timezone ?? existing.timezone, address: body.address ?? existing.address, city: body.city ?? existing.city, state: body.state ?? existing.state, ibgeCode: body.ibgeCode ?? existing.ibgeCode, ...geoData, isActive: body.isActive ?? existing.isActive, open24Hours: body.open24Hours ?? existing.open24Hours, weeklySchedule: (body.open24Hours ? null : (body.weeklySchedule !== undefined ? body.weeklySchedule : existing.weeklySchedule)), slug: slugToSet !== undefined ? slugToSet : existing.slug } })
 
     // Emit a company-scoped update so public clients refresh when top-level store fields change
     try {

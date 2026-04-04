@@ -528,6 +528,8 @@ model Store {
   city               String?
   state              String?
   ibgeCode           String?
+  latitude           Float?
+  longitude          Float?
   isActive           Boolean           @default(true)
   menus              Menu[]
   // integrations that are bound to this store
