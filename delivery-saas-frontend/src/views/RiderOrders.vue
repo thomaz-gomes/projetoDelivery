@@ -3,11 +3,23 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4>Meus Pedidos</h4>
       <div class="d-flex align-items-center gap-2">
-        <span v-if="trackingEnabled && activeOrderForTracking" class="badge bg-success px-2 py-1">
-          📡 GPS Ativo
+        <span v-if="!trackingEnabled" class="badge bg-secondary px-2 py-1">
+          📡 Desligado
         </span>
-        <span v-else-if="!trackingEnabled" class="badge bg-secondary px-2 py-1">
-          📡 Rastreamento Desligado pelo Admin
+        <span v-else-if="gpsStatus === 'ok'" class="badge bg-success px-2 py-1" :title="gpsLastUpdate ? 'Última: ' + gpsLastUpdate.toLocaleTimeString('pt-BR') : ''">
+          📡 GPS OK
+        </span>
+        <span v-else-if="gpsStatus === 'sending'" class="badge bg-info px-2 py-1">
+          📡 Enviando...
+        </span>
+        <span v-else-if="gpsStatus === 'stale'" class="badge bg-warning text-dark px-2 py-1">
+          📡 Reconectando...
+        </span>
+        <span v-else-if="gpsStatus === 'error'" class="badge bg-danger px-2 py-1">
+          📡 Erro GPS
+        </span>
+        <span v-else-if="activeOrderForTracking" class="badge bg-success px-2 py-1">
+          📡 Iniciando...
         </span>
         <button class="btn btn-outline-secondary btn-sm" @click="load">Recarregar</button>
       </div>
@@ -100,6 +112,8 @@ let socket = null
 // GPS Tracking state
 const trackingEnabled = ref(false)
 const activeOrderForTracking = ref(null)
+const gpsStatus = ref('') // 'ok', 'sending', 'error', 'stale'
+const gpsLastUpdate = ref(null)
 let watchId = null
 let trackingIntervalId = null
 let wakeLock = null
@@ -337,13 +351,20 @@ function formatAddress(o){
 let usingNativeTracking = false
 
 function sendPositionToServer(lat, lng, heading, accuracy, orderId) {
-  if (accuracy && accuracy > 1000) return
+  if (accuracy && accuracy > 1000) { gpsStatus.value = 'error'; return }
+  gpsStatus.value = 'sending'
   api.post('/riders/me/position', {
     lat, lng,
     heading: heading ?? null,
     orderId: orderId ?? null,
     accuracy: accuracy ?? null,
-  }).catch((e) => console.warn('GPS position update failed:', e?.message))
+  }).then(() => {
+    gpsStatus.value = 'ok'
+    gpsLastUpdate.value = new Date()
+  }).catch((e) => {
+    gpsStatus.value = 'error'
+    console.warn('GPS position update failed:', e?.message)
+  })
 }
 
 async function acquireWakeLock() {
@@ -417,6 +438,7 @@ async function startTracking(orderId = null) {
   watchdogId = setInterval(() => {
     const silent = Date.now() - lastWatchFired
     if (silent > 20000) {
+      gpsStatus.value = 'stale'
       console.warn(`[tracking] watchdog: silent for ${Math.round(silent/1000)}s, forcing position + restart`)
       navigator.geolocation.getCurrentPosition(
         (pos) => {
