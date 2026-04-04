@@ -105,7 +105,7 @@
               <i class="bi bi-geo-alt-fill" :style="{ color: order.status === 'SAIU_PARA_ENTREGA' ? '#dc3545' : '#fd7e14' }"></i>
               <div style="min-width:0">
                 <div class="small fw-medium">
-                  #{{ order.displayId || order.id.slice(0,6) }}
+                  #{{ order.displaySimple ? `#${String(order.displaySimple).padStart(2,'0')}` : (order.displayId || order.id.slice(0,6)) }}
                   <span v-if="order.store" class="text-muted fw-normal"> · {{ order.store.name }}</span>
                 </div>
                 <div class="text-muted text-truncate" style="font-size:0.72rem">
