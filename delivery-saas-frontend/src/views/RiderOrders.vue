@@ -431,28 +431,34 @@ async function startTracking(orderId = null) {
     sendPositionToServer(lat, lng, heading, accuracy, orderId)
   }
 
-  // Start watchPosition
+  // Start watchPosition (fires on movement — best case)
   startWatch(sendPosition)
 
-  // Watchdog: if watchPosition goes silent for 20s, force getCurrentPosition + restart watch
+  // Active poll every 15s — guaranteed position update regardless of watchPosition
+  trackingIntervalId = setInterval(() => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        lastWatchFired = Date.now()
+        const { latitude: lat, longitude: lng, heading, accuracy } = pos.coords
+        sendPositionToServer(lat, lng, heading, accuracy, orderId)
+      },
+      (err) => {
+        gpsStatus.value = 'error'
+        console.warn('GPS poll error:', err?.message)
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 12000 }
+    )
+  }, 15000)
+
+  // Watchdog: if no position sent for 45s, restart everything
   watchdogId = setInterval(() => {
     const silent = Date.now() - lastWatchFired
-    if (silent > 20000) {
+    if (silent > 45000) {
       gpsStatus.value = 'stale'
-      console.warn(`[tracking] watchdog: silent for ${Math.round(silent/1000)}s, forcing position + restart`)
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          lastWatchFired = Date.now()
-          const { latitude: lat, longitude: lng, heading, accuracy } = pos.coords
-          sendPositionToServer(lat, lng, heading, accuracy, orderId)
-        },
-        () => {},
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-      )
-      // Restart watchPosition (may have silently died)
+      console.warn(`[tracking] watchdog: silent for ${Math.round(silent/1000)}s, full restart`)
       startWatch(sendPosition)
     }
-  }, 15000)
+  }, 30000)
 }
 
 function stopTracking() {
