@@ -2,8 +2,8 @@
 import { ref, computed, onMounted } from 'vue';
 import Swal from 'sweetalert2';
 import api from '../api';
-import TextInput from './TextInput.vue';
-import SelectInput from './SelectInput.vue';
+import TextInput from './form/input/TextInput.vue';
+import SelectInput from './form/select/SelectInput.vue';
 
 const integrations = ref([]);
 const stores = ref([]);
