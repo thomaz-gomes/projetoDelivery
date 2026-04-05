@@ -44,6 +44,15 @@
     <div class="card mb-3" v-if="stores.length">
       <div class="card-body">
         <h6 class="mb-3"><i class="bi bi-cloud-download me-2"></i>Sincronizacao MDe <span class="badge bg-success ms-2" style="font-size:10px">Auto 30min</span></h6>
+        <div class="alert alert-warning d-flex align-items-start gap-2 mb-3" role="alert">
+          <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+          <div>
+            <strong>Atenção:</strong> Para sincronizar com a SEFAZ, os
+            <router-link to="/settings/dados-fiscais" class="alert-link">dados fiscais</router-link>
+            devem estar corretamente preenchidos e validados, incluindo o
+            <strong>certificado digital</strong>.
+          </div>
+        </div>
         <div class="row g-2">
           <div v-for="s in stores" :key="'mde-' + s.id" class="col-md-4">
             <div class="border rounded p-2">

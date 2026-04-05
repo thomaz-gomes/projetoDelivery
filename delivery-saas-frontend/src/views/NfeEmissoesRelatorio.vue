@@ -7,6 +7,17 @@
       <button type="button" class="btn-close" @click="alert.show = false"></button>
     </div>
 
+    <!-- Aviso dados fiscais -->
+    <div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+      <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+      <div>
+        <strong>Atenção:</strong> Antes de emitir notas fiscais, verifique se os
+        <router-link to="/settings/dados-fiscais" class="alert-link">dados fiscais</router-link>
+        estão corretamente preenchidos e validados, incluindo o
+        <strong>certificado digital</strong>.
+      </div>
+    </div>
+
     <!-- Filtros -->
     <div class="card mb-3">
       <div class="card-body">
