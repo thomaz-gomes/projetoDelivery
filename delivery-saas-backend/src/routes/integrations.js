@@ -32,11 +32,22 @@ export const aiqfomeCallbackRouter = express.Router();
 aiqfomeCallbackRouter.get('/aiqfome/callback', async (req, res) => {
   try {
     const { code, state } = req.query;
-    if (!code || !state) return res.status(400).send('Missing code or state');
+    if (!code) return res.status(400).send('Missing code');
 
-    const integrationId = state;
-    const integration = await prisma.apiIntegration.findUnique({ where: { id: integrationId } });
+    let integration;
+    if (state) {
+      integration = await prisma.apiIntegration.findUnique({ where: { id: state } });
+    }
+    // Fallback: find most recent AIQFOME integration awaiting auth
+    if (!integration) {
+      integration = await prisma.apiIntegration.findFirst({
+        where: { provider: 'AIQFOME', accessToken: null },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
     if (!integration) return res.status(404).send('Integration not found');
+
+    const integrationId = integration.id;
 
     const tokens = await exchangeAiqfomeCode({ integrationId, code });
 
