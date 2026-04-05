@@ -710,8 +710,8 @@ integrationsRouter.post('/aiqfome/store/:action', requireRole('ADMIN'), async (r
     if (!integration) return res.status(404).json({ message: 'sem integração aiqfome ativa' });
 
     // aiqbridge uses iFood-compatible merchant status endpoint
-    const statusMap = { open: 'OPEN', close: 'CLOSED', standby: 'STANDBY' };
-    const data = await aiqfomePost(integration.id, '/merchant/status', { status: statusMap[action] });
+    const statusMap = { open: 'OPEN', close: 'CLOSE', standby: 'STANDBY' };
+    const data = await aiqfomePost(integration.id, '/ifood/merchant/v1.0/merchant/status', { operation: statusMap[action] });
     res.json({ ok: true, data });
   } catch (e) {
     console.error('[aiqbridge store/:action] error:', e?.message);
