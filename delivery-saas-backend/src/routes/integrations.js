@@ -20,7 +20,7 @@ import {
 import { ifoodPoll, ifoodAck } from '../integrations/ifood/client.js';
 import { processIFoodWebhook } from '../services/ifoodWebhookProcessor.js';
 
-import { startAiqfomeAuth, exchangeAiqfomeCode, refreshAiqfomeToken } from '../integrations/aiqfome/oauth.js';
+import { saveAiqbridgeToken, clearAiqbridgeToken } from '../integrations/aiqfome/oauth.js';
 import { syncMenuToAiqfome } from '../integrations/aiqfome/menu.js';
 import { aiqfomeGet, aiqfomePost, aiqfomePut } from '../integrations/aiqfome/client.js';
 
@@ -29,47 +29,16 @@ export const integrationsRouter = express.Router();
 // ───── aiqfome OAuth callback (NO auth — redirect from ID Magalu) ─────
 // Exported separately so the main app can mount it outside of authMiddleware.
 export const aiqfomeCallbackRouter = express.Router();
+// Legacy OAuth callback — no longer used with aiqbridge (token-based auth)
 aiqfomeCallbackRouter.get('/aiqfome/callback', async (req, res) => {
   try {
-    const { code, state } = req.query;
-    if (!code) return res.status(400).send('Missing code');
-
-    let integration;
-    if (state) {
-      integration = await prisma.apiIntegration.findUnique({ where: { id: state } });
-    }
-    // Fallback: find most recent AIQFOME integration awaiting auth
-    if (!integration) {
-      integration = await prisma.apiIntegration.findFirst({
-        where: { provider: 'AIQFOME', accessToken: null },
-        orderBy: { updatedAt: 'desc' },
-      });
-    }
-    if (!integration) return res.status(404).send('Integration not found');
-
-    const integrationId = integration.id;
-
-    const tokens = await exchangeAiqfomeCode({ integrationId, code });
-
-    // Register webhook on aiqfome
-    try {
-      const merchantId = integration.merchantId;
-      const webhookUrl = process.env.AIQFOME_WEBHOOK_URL || `${process.env.BACKEND_URL}/webhooks/aiqfome`;
-      await aiqfomePost(integrationId, `/api/v2/store/${merchantId}/webhooks`, {
-        url: webhookUrl,
-      });
-    } catch (e) {
-      console.error('[aiqfome callback] failed to register webhook:', e?.message);
-    }
-
     const frontendUrl = process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/settings/integrations/aiqfome?connected=true`);
+    return res.redirect(`${frontendUrl}/settings/integrations/aiqfome?info=Use+o+token+do+dashboard+aiqbridge`);
   } catch (e) {
-    console.error('[aiqfome callback] error:', e?.message);
-    const frontendUrl = process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/settings/integrations/aiqfome?error=${encodeURIComponent(e?.message || 'Unknown error')}`);
+    return res.status(200).send('aiqbridge usa token fixo — configure no painel');
   }
 });
+
 
 integrationsRouter.use(authMiddleware);
 integrationsRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
@@ -597,42 +566,21 @@ integrationsRouter.post('/ifood/action', requireRole('ADMIN'), async (req, res) 
 // ───── aiqfome routes (authenticated) ─────
 // ══════════════════════════════════════════════════
 
-// OAuth: start linking
+// Save aiqbridge token (replaces OAuth — just paste the token from aiqbridge dashboard)
 integrationsRouter.post('/aiqfome/link/start', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { clientId, clientSecret, storeId } = req.body;
-    const r = await startAiqfomeAuth({ companyId, storeId, clientId, clientSecret });
-    res.json(r); // { authorizationUrl, integrationId }
+    const { token, storeId, merchantId } = req.body;
+    if (!token) return res.status(400).json({ message: 'Token do aiqbridge é obrigatório' });
+    const integ = await saveAiqbridgeToken({ companyId, storeId, token, merchantId });
+    res.json({ ok: true, integrationId: integ.id });
   } catch (e) {
-    console.error('[aiqfome link/start] error:', e?.response?.data ?? e?.message ?? e);
-    if (e?.response?.data) {
-      return res.status(e.response.status || 502).json({ message: 'Falha ao iniciar vínculo (aiqfome)', providerError: e.response.data });
-    }
-    res.status(500).json({ message: 'Falha ao iniciar vínculo aiqfome', error: e?.message || String(e) });
+    console.error('[aiqbridge link/start] error:', e?.message ?? e);
+    res.status(500).json({ message: 'Falha ao salvar token aiqbridge', error: e?.message || String(e) });
   }
 });
 
-// OAuth: refresh token
-integrationsRouter.post('/aiqfome/token/refresh', requireRole('ADMIN'), async (req, res) => {
-  try {
-    const companyId = req.user.companyId;
-    const { integrationId } = req.body;
-    if (!integrationId) {
-      const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' } });
-      if (!integ) return res.status(404).json({ message: 'Sem integração aiqfome' });
-      await refreshAiqfomeToken(integ.id);
-    } else {
-      await refreshAiqfomeToken(integrationId);
-    }
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('[aiqfome token/refresh] error:', e?.response?.data ?? e?.message ?? e);
-    res.status(500).json({ message: 'Falha ao renovar token aiqfome', error: e?.message || String(e) });
-  }
-});
-
-// Unlink: clear tokens and disable integration
+// Unlink: clear token and disable integration
 integrationsRouter.post('/aiqfome/unlink', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
@@ -746,7 +694,7 @@ integrationsRouter.post('/aiqfome/menu/sync', requireRole('ADMIN'), async (req, 
   }
 });
 
-// Store management: open / close / standby
+// Store management via aiqbridge: open / close / standby
 integrationsRouter.post('/aiqfome/store/:action', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
@@ -761,21 +709,12 @@ integrationsRouter.post('/aiqfome/store/:action', requireRole('ADMIN'), async (r
     });
     if (!integration) return res.status(404).json({ message: 'sem integração aiqfome ativa' });
 
-    const merchantId = integration.merchantId;
-    if (!merchantId) return res.status(400).json({ message: 'merchantId não configurado na integração' });
-
-    const actionMap = {
-      open: { method: 'post', path: `/api/v2/store/${merchantId}/open` },
-      close: { method: 'post', path: `/api/v2/store/${merchantId}/close` },
-      standby: { method: 'put', path: `/api/v2/store/${merchantId}/stand-by` },
-    };
-    const { method, path } = actionMap[action];
-    const data = method === 'put'
-      ? await aiqfomePut(integration.id, path, {})
-      : await aiqfomePost(integration.id, path, {});
+    // aiqbridge uses iFood-compatible merchant status endpoint
+    const statusMap = { open: 'OPEN', close: 'CLOSED', standby: 'STANDBY' };
+    const data = await aiqfomePost(integration.id, '/merchant/status', { status: statusMap[action] });
     res.json({ ok: true, data });
   } catch (e) {
-    console.error('[aiqfome store/:action] error:', e?.message);
-    res.status(500).json({ message: 'Falha ao alterar status da loja no aiqfome', error: e?.message || String(e) });
+    console.error('[aiqbridge store/:action] error:', e?.message);
+    res.status(500).json({ message: 'Falha ao alterar status da loja', error: e?.message || String(e) });
   }
 });

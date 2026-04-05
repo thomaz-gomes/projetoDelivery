@@ -1,456 +1,233 @@
 // src/integrations/aiqfome/webhookProcessor.js
+// Processes webhooks from aiqbridge (iFood-compatible format)
 import { prisma } from '../../prisma.js';
 import { emitirNovoPedido, emitirPedidoAtualizado } from '../../index.js';
 import { canTransition } from '../../stateMachine.js';
-import { findOrCreateCustomer, normalizePhone } from '../../services/customers.js';
+import { findOrCreateCustomer, normalizePhone, buildConcatenatedAddress, normalizeDeliveryAddressFromPayload } from '../../services/customers.js';
 import { matchItemsToLocalProducts } from '../../utils/integrationMatcher.js';
-import { aiqfomePost } from './client.js';
+import { nextDisplaySimple } from '../../utils/displaySimple.js';
+import { aiqfomeGet, aiqfomePost } from './client.js';
 
 /**
- * Determina o status interno a partir dos flags booleanos do pedido aiqfome.
- * Ordem de prioridade: estados terminais primeiro, depois progressivos.
+ * Resolve companyId from merchantId in ApiIntegration
  */
-export function determineStatusFromAiqfome(order) {
-  if (!order) return null;
-  if (order.is_cancelled) return 'CANCELADO';
-  if (order.is_delivered) return 'CONCLUIDO';
-  if (order.is_ready) return 'PRONTO';
-  if (order.is_in_separation) return 'EM_PREPARO';
-  if (order.is_read) return 'EM_PREPARO';
-  // Not read and not cancelled -> pending acceptance
-  return 'PENDENTE_ACEITE';
-}
-
-/**
- * Resolve companyId + storeId a partir do store.id do payload aiqfome.
- * Busca ApiIntegration com provider='AIQFOME' e merchantId correspondente.
- */
-async function resolveCompanyFromAiqfome(aiqfomeStoreId) {
-  if (!aiqfomeStoreId) return null;
-
-  const merchantKey = String(aiqfomeStoreId).trim();
+async function resolveCompany(merchantId) {
+  if (!merchantId) return null;
+  const key = String(merchantId).trim();
 
   const integ = await prisma.apiIntegration.findFirst({
-    where: {
-      provider: 'AIQFOME',
-      merchantId: merchantKey,
-    },
+    where: { provider: 'AIQFOME', merchantId: key },
     select: { id: true, companyId: true, storeId: true, autoAccept: true },
   });
 
   if (integ) {
-    let resolvedStoreId = integ.storeId || null;
-
-    // If no storeId on integration, fallback to first store of the company
-    if (!resolvedStoreId) {
-      try {
-        const firstStore = await prisma.store.findFirst({
-          where: { companyId: integ.companyId },
-          select: { id: true },
-          orderBy: { createdAt: 'asc' },
-        });
-        resolvedStoreId = firstStore?.id || null;
-        if (resolvedStoreId) {
-          console.log('[aiqfome Processor] sem storeId na integração, usando primeira loja:', resolvedStoreId);
-        }
-      } catch (e) { /* ignore */ }
+    let storeId = integ.storeId;
+    if (!storeId) {
+      const first = await prisma.store.findFirst({ where: { companyId: integ.companyId }, select: { id: true }, orderBy: { createdAt: 'asc' } });
+      storeId = first?.id || null;
     }
-
-    return {
-      integrationId: integ.id,
-      companyId: integ.companyId,
-      storeId: resolvedStoreId,
-      autoAccept: !!integ.autoAccept,
-    };
+    return { integrationId: integ.id, companyId: integ.companyId, storeId, autoAccept: !!integ.autoAccept };
   }
 
-  // Fallback: if there is only one AIQFOME integration, assume it
-  try {
-    const all = await prisma.apiIntegration.findMany({
-      where: { provider: 'AIQFOME' },
-      select: { id: true, companyId: true, storeId: true, autoAccept: true },
-    });
-    if (all && all.length === 1) {
-      console.warn('[aiqfome Processor] fallback: only one AIQFOME integration found; assigning companyId', all[0].companyId);
-      return {
-        integrationId: all[0].id,
-        companyId: all[0].companyId,
-        storeId: all[0].storeId || null,
-        autoAccept: !!all[0].autoAccept,
-      };
-    }
-  } catch (e) { /* ignore */ }
-
+  // Fallback: only one AIQFOME integration
+  const all = await prisma.apiIntegration.findMany({ where: { provider: 'AIQFOME' }, select: { id: true, companyId: true, storeId: true, autoAccept: true } });
+  if (all.length === 1) {
+    return { integrationId: all[0].id, companyId: all[0].companyId, storeId: all[0].storeId, autoAccept: !!all[0].autoAccept };
+  }
   return null;
 }
 
 /**
- * Formata endereço a partir dos campos do user.address do aiqfome
+ * Map iFood-format event code to local status
  */
-function formatAiqfomeAddress(addr) {
-  if (!addr) return null;
-  const parts = [
-    addr.street_name,
-    addr.number,
-    addr.complement,
-    addr.neighborhood_name,
-    addr.city_name,
-    addr.state_uf,
-  ].filter(Boolean);
-  return parts.join(', ') || null;
+function mapEventToStatus(eventCode) {
+  const map = {
+    'PLACED': 'PENDENTE_ACEITE',
+    'NEW_ORDER': 'PENDENTE_ACEITE',
+    'CONFIRMED': 'EM_PREPARO',
+    'READY_TO_PICKUP': 'PRONTO',
+    'DISPATCHED': 'SAIU_PARA_ENTREGA',
+    'CONCLUDED': 'CONCLUIDO',
+    'CANCELLED': 'CANCELADO',
+  };
+  return map[String(eventCode).toUpperCase()] || null;
 }
 
 /**
- * Mapeia itens do payload aiqfome para o formato OrderItem local.
- * Agrupa mandatory_items, additional_items e subitems em options (JSON).
- */
-function mapAiqfomeItems(items) {
-  if (!Array.isArray(items)) return [];
-
-  return items.map((it) => {
-    const qty = Number(it.quantity || 1);
-    const unitPrice = Number(it.unit_value || 0);
-
-    // Build options from mandatory_items, additional_items, and subitems
-    const options = [];
-
-    if (Array.isArray(it.order_mandatory_items)) {
-      for (const m of it.order_mandatory_items) {
-        options.push({
-          type: 'mandatory',
-          group: m.group || null,
-          name: m.name || '',
-          quantity: Number(m.quantity || 1),
-          price: Number(m.value || 0),
-          sku: m.sku || null,
-        });
-      }
-    }
-
-    if (Array.isArray(it.order_additional_items)) {
-      for (const a of it.order_additional_items) {
-        options.push({
-          type: 'additional',
-          name: a.name || '',
-          quantity: Number(a.quantity || 1),
-          price: Number(a.value || 0),
-          sku: a.sku || null,
-        });
-      }
-    }
-
-    if (Array.isArray(it.order_item_subitems)) {
-      for (const s of it.order_item_subitems) {
-        options.push({
-          type: 'subitem',
-          name: s.name || '',
-          sku: s.sku || null,
-        });
-      }
-    }
-
-    return {
-      name: it.name || 'Item',
-      quantity: qty,
-      price: unitPrice,
-      notes: it.observations || null,
-      externalCode: it.sku || null,
-      options: options.length > 0 ? options : null,
-      // Keep sub-items in legacy format for matchItemsToLocalProducts compatibility
-      subItems: options.filter(o => o.type !== 'subitem').map(o => ({
-        name: o.name,
-        quantity: o.quantity || 1,
-        price: o.price || 0,
-      })),
-    };
-  });
-}
-
-/**
- * Upsert customer from aiqfome payload.
- * Uses phone as primary matching key, creates if not found.
- */
-async function upsertCustomerFromAiqfome({ companyId, user }) {
-  if (!user) return null;
-
-  const fullName = [user.name, user.surname].filter(Boolean).join(' ') || null;
-  const rawPhone = user.mobile_phone || user.phone_number || null;
-  const phone = rawPhone ? normalizePhone(rawPhone) : null;
-  const cpf = user.document_receipt || null;
-
-  if (!phone && !fullName) return null;
-
-  try {
-    const customer = await findOrCreateCustomer({
-      companyId,
-      fullName,
-      cpf,
-      whatsapp: phone,
-      phone,
-      addressPayload: null,
-      persistPhone: true,
-    });
-    return customer;
-  } catch (e) {
-    console.warn('[aiqfome Processor] upsertCustomer failed:', e?.message || e);
-    return null;
-  }
-}
-
-/**
- * Processa um WebhookEvent do aiqfome salvo no banco.
+ * Process a webhook event from aiqbridge.
+ * aiqbridge sends: { event: "NEW_ORDER", order_id, merchant_id, timestamp }
+ * We fetch full order details via GET /orders/:orderId
  */
 export async function processAiqfomeWebhook(eventId) {
   const evt = await prisma.webhookEvent.findUnique({ where: { id: eventId } });
-  if (!evt) return;
-
-  // Skip already-processed events
-  if (evt.status === 'PROCESSED') {
-    console.log('[aiqfome Processor] skipping already-processed event', eventId);
-    return;
-  }
+  if (!evt || evt.status === 'PROCESSED') return;
 
   try {
     const payload = evt.payload;
-    // Order lives in payload.data or payload directly
-    const order = payload?.data || payload;
+    const eventType = payload?.event || payload?.fullCode || payload?.code || 'NEW_ORDER';
+    const orderId = payload?.order_id || payload?.orderId || payload?.id;
+    const merchantId = payload?.merchant_id || payload?.merchantId;
 
-    if (!order || !order.id) {
-      throw new Error('Payload inválido: sem order.id');
-    }
+    if (!orderId) throw new Error('Payload sem order_id');
 
-    const externalId = String(order.id);
-
-    // Resolve company via store.id
-    const aiqfomeStoreId = order.store?.id || null;
-    const resolved = await resolveCompanyFromAiqfome(aiqfomeStoreId);
-    if (!resolved || !resolved.companyId) {
-      console.error('[aiqfome Processor] falha ao resolver companyId para store.id:', aiqfomeStoreId);
-      throw new Error('Não foi possível determinar companyId a partir do payload (store.id não encontrado em ApiIntegration).');
-    }
-
+    // Resolve company
+    const resolved = await resolveCompany(merchantId);
+    if (!resolved) throw new Error(`Company not found for merchantId: ${merchantId}`);
     const { integrationId, companyId, storeId, autoAccept } = resolved;
 
-    // Determine status from boolean flags
-    const status = determineStatusFromAiqfome(order);
-    console.log('[aiqfome Processor] order', externalId, 'status:', status);
+    const externalId = String(orderId);
+    const status = mapEventToStatus(eventType);
 
-    // Upsert customer
-    let customerId = null;
-    try {
-      const customer = await upsertCustomerFromAiqfome({ companyId, user: order.user });
-      if (customer) {
-        customerId = customer.id;
-        console.log('[aiqfome Processor] customer upserted:', customer.id, customer.fullName);
-      }
-    } catch (e) {
-      console.warn('[aiqfome Processor] customer upsert failed:', e?.message || e);
-    }
-
-    // Format address
-    const addr = order.user?.address || null;
-    const formattedAddress = formatAiqfomeAddress(addr);
-    const latitude = addr?.latitude != null ? Number(addr.latitude) : null;
-    const longitude = addr?.longitude != null ? Number(addr.longitude) : null;
-
-    // Map items
-    let items = mapAiqfomeItems(order.items);
-
-    // Match integration items to local products by integrationCode
-    try {
-      if (items.length > 0) {
-        const matchedItems = await matchItemsToLocalProducts(items, companyId);
-        items = matchedItems.map(it => ({
-          ...it,
-          productId: it._matchedProductId || null,
-        }));
-      }
-    } catch (e) {
-      console.warn('[aiqfome Processor] integration code matching failed:', e?.message || e);
-    }
-
-    // Payment info
-    const pm = order.payment_method || {};
-    const total = Number(pm.total || 0);
-    const deliveryFee = Number(pm.delivery_tax || 0) || null;
-    const couponDiscount = Number(pm.coupon_value || 0) || null;
-    const changeFor = pm.change != null ? Number(pm.change) : null;
-    let paymentMethodName = pm.name || null;
-    try {
-      const mapping = await prisma.aiqfomePaymentMapping.findFirst({
-        where: { integrationId, aiqfomeCode: pm.name },
-      });
-      if (mapping) paymentMethodName = mapping.systemName;
-    } catch (e) {}
-    const prePaid = !!pm.pre_paid;
-
-    // Customer info
-    const customerName = [order.user?.name, order.user?.surname].filter(Boolean).join(' ') || 'Cliente';
-    const customerPhone = order.user?.mobile_phone || order.user?.phone_number || null;
-
-    // Order type
-    const orderType = order.is_pickup ? 'TAKEOUT' : 'DELIVERY';
-
-    // Check if order already exists
-    const existingOrder = await prisma.order.findFirst({
-      where: { externalId, companyId },
-    });
+    // Check if order exists
+    const existingOrder = await prisma.order.findFirst({ where: { externalId, companyId } });
 
     if (existingOrder) {
-      // ---- UPDATE existing order ----
-      const currentStatus = existingOrder.status;
-      let statusChanged = false;
-
-      if (status && status !== currentStatus) {
-        if (canTransition(currentStatus, status)) {
-          await prisma.order.update({
-            where: { id: existingOrder.id },
-            data: {
-              status,
-              payload: order,
-              histories: {
-                create: { from: currentStatus, to: status, reason: 'aiqfome webhook (update)' },
-              },
-            },
-          });
-          statusChanged = true;
-          console.log('[aiqfome Processor] status change allowed:', existingOrder.id, currentStatus, '->', status);
-
-          // Emit update event
-          try {
-            const updatedOrder = await prisma.order.findUnique({
-              where: { id: existingOrder.id },
-              include: { items: true, histories: true },
-            });
-            if (updatedOrder) emitirPedidoAtualizado(updatedOrder);
-          } catch (eEmit) {
-            console.warn('[aiqfome Processor] emit update failed:', eEmit?.message);
-          }
-        } else {
-          console.warn('[aiqfome Processor] status transition NOT allowed:', existingOrder.id, currentStatus, '->', status);
-        }
+      // ---- UPDATE ----
+      if (status && status !== existingOrder.status && canTransition(existingOrder.status, status)) {
+        const updated = await prisma.order.update({
+          where: { id: existingOrder.id },
+          data: {
+            status,
+            histories: { create: { from: existingOrder.status, to: status, reason: `aiqbridge webhook (${eventType})` } },
+          },
+          include: { items: true },
+        });
+        emitirPedidoAtualizado(updated);
+        console.log(`[aiqbridge] Order ${existingOrder.id}: ${existingOrder.status} -> ${status}`);
       }
     } else {
-      // ---- CREATE new order ----
-
-      // Skip creation for terminal statuses
+      // ---- CREATE: fetch full order details from aiqbridge ----
       const terminalStatuses = ['CANCELADO', 'CONCLUIDO'];
       if (terminalStatuses.includes(status)) {
-        console.log('[aiqfome Processor] skipping creation of order with terminal status:', status, 'externalId:', externalId);
-        await prisma.webhookEvent.update({
-          where: { id: evt.id },
-          data: { status: 'PROCESSED', processedAt: new Date(), error: null },
-        });
+        console.log(`[aiqbridge] Skipping creation for terminal status: ${status}`);
+        await prisma.webhookEvent.update({ where: { id: evt.id }, data: { status: 'PROCESSED', processedAt: new Date() } });
         return;
       }
 
-      // Compute displaySimple for today
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const existingCount = await prisma.order.count({
-        where: { companyId, createdAt: { gte: startOfDay } },
-      });
-      const displaySimple = existingCount + 1;
+      let orderData;
+      try {
+        orderData = await aiqfomeGet(integrationId, `/orders/${orderId}`);
+      } catch (e) {
+        console.warn(`[aiqbridge] Failed to fetch order ${orderId}:`, e?.response?.data || e?.message);
+        // Use payload as fallback
+        orderData = payload;
+      }
 
+      // Parse iFood-format order
+      const order = orderData?.order || orderData?.data || orderData;
+      const customer = order?.customer || order?.user || {};
+      const delivery = order?.delivery || {};
+      const deliveryAddr = delivery?.deliveryAddress || customer?.address || {};
+      const payments = order?.payments || [];
+
+      // Customer
+      const customerName = customer?.name || customer?.fullName || [customer?.name, customer?.surname].filter(Boolean).join(' ') || 'Cliente';
+      const customerPhone = normalizePhone(customer?.phone?.number || customer?.phone || customer?.mobile_phone || customer?.phone_number || '');
+      let customerId = null;
+      try {
+        const c = await findOrCreateCustomer({ companyId, fullName: customerName, phone: customerPhone, whatsapp: customerPhone, persistPhone: true });
+        customerId = c?.id || null;
+      } catch (e) { /* non-blocking */ }
+
+      // Address
+      const formattedAddress = buildConcatenatedAddress({ delivery: { deliveryAddress: deliveryAddr } })
+        || deliveryAddr?.formattedAddress
+        || [deliveryAddr?.street_name || deliveryAddr?.streetName, deliveryAddr?.number || deliveryAddr?.streetNumber].filter(Boolean).join(', ')
+        || null;
+      const latitude = Number(deliveryAddr?.latitude ?? deliveryAddr?.coordinates?.latitude ?? null) || null;
+      const longitude = Number(deliveryAddr?.longitude ?? deliveryAddr?.coordinates?.longitude ?? null) || null;
+      const neighborhood = deliveryAddr?.neighborhood_name || deliveryAddr?.neighborhood || null;
+
+      // Items
+      const rawItems = order?.items || [];
+      let items = rawItems.map(it => {
+        const subs = it.subItems || it.subitems || it.garnishItems || it.order_mandatory_items || [];
+        const options = subs.length > 0 ? subs.map(s => ({ name: s.name, quantity: Number(s.quantity || 1), price: Number(s.price || s.value || 0) })) : null;
+        return {
+          name: it.name || 'Item',
+          quantity: Number(it.quantity || 1),
+          price: Number(it.unitPrice || it.unit_value || it.price || 0),
+          notes: it.observations || it.note || null,
+          externalCode: it.externalCode || it.sku || null,
+          options,
+        };
+      });
+
+      // Match to local products
+      try {
+        if (items.length > 0) {
+          const matched = await matchItemsToLocalProducts(items, companyId);
+          items = matched.map(it => ({ ...it, productId: it._matchedProductId || null }));
+        }
+      } catch (e) { /* non-blocking */ }
+
+      // Payment/totals
+      const total = Number(order?.total?.orderAmount ?? order?.totalAmount ?? payments?.[0]?.value ?? order?.payment_method?.total ?? 0);
+      const deliveryFee = Number(order?.total?.deliveryFee ?? order?.deliveryFee ?? order?.payment_method?.delivery_tax ?? 0) || null;
+      const orderType = (order?.orderType === 'TAKEOUT' || order?.is_pickup) ? 'TAKEOUT' : 'DELIVERY';
       const initialStatus = status || 'PENDENTE_ACEITE';
+      const displaySimple = await nextDisplaySimple(companyId);
 
       const savedOrder = await prisma.order.create({
         data: {
           companyId,
           storeId: storeId || null,
           externalId,
-          displayId: `#${externalId.slice(-6)}`,
           displaySimple,
           status: initialStatus,
-          customerId: customerId || null,
+          customerId,
           customerSource: 'AIQFOME',
           customerName,
           customerPhone,
           address: formattedAddress,
-          deliveryNeighborhood: addr?.neighborhood_name || null,
+          deliveryNeighborhood: neighborhood,
           latitude: Number.isFinite(latitude) ? latitude : null,
           longitude: Number.isFinite(longitude) ? longitude : null,
           total,
           deliveryFee,
-          couponDiscount,
           orderType,
           payload: order,
           items: {
-            create: items.map((i) => ({
+            create: items.map(i => ({
               name: i.name,
               quantity: i.quantity,
               price: i.price,
               notes: i.notes || null,
-              productId: i.productId || i._matchedProductId || null,
+              productId: i.productId || null,
               options: i.options || null,
             })),
           },
-          histories: {
-            create: [{ from: null, to: initialStatus, reason: 'aiqfome webhook' }],
-          },
+          histories: { create: [{ from: null, to: initialStatus, reason: `aiqbridge webhook (${eventType})` }] },
         },
         include: { items: true, histories: true },
       });
 
-      console.log('[aiqfome Processor] created order:', savedOrder.id, 'status:', initialStatus, 'externalId:', externalId);
+      console.log(`[aiqbridge] Created order ${savedOrder.id} (${externalId}), status: ${initialStatus}`);
 
-      // Pad displaySimple for emitted object
-      try {
-        if (savedOrder.displaySimple != null) {
-          savedOrder.displaySimple = String(savedOrder.displaySimple).padStart(2, '0');
-        }
-      } catch (e) { /* ignore */ }
-
-      // Auto-accept: if enabled and status is PENDENTE_ACEITE, mark as read on aiqfome
+      // Auto-accept
       if (autoAccept && initialStatus === 'PENDENTE_ACEITE') {
-        let acceptOk = false;
         try {
-          // aiqfome API: PUT /v2/orders/{orderId}/read (or similar endpoint)
-          await aiqfomePost(integrationId, '/api/v2/orders/mark-as-read', { orders: [Number(externalId)] });
-          acceptOk = true;
-          console.log('[aiqfome Auto-accept] marked as read on aiqfome, orderId:', externalId);
+          await aiqfomePost(integrationId, `/orders/${orderId}/confirm`, {});
+          await prisma.order.update({
+            where: { id: savedOrder.id },
+            data: { status: 'EM_PREPARO', histories: { create: { from: 'PENDENTE_ACEITE', to: 'EM_PREPARO', reason: 'aiqbridge auto-accept' } } },
+          });
+          savedOrder.status = 'EM_PREPARO';
+          console.log(`[aiqbridge] Auto-accepted order ${savedOrder.id}`);
         } catch (e) {
-          console.warn('[aiqfome Auto-accept] failed to mark as read:', e?.response?.status, e?.message);
-        }
-
-        if (acceptOk) {
-          try {
-            await prisma.order.update({
-              where: { id: savedOrder.id },
-              data: {
-                status: 'EM_PREPARO',
-                histories: {
-                  create: { from: 'PENDENTE_ACEITE', to: 'EM_PREPARO', reason: 'aiqfome auto-accept' },
-                },
-              },
-            });
-            savedOrder.status = 'EM_PREPARO';
-            console.log('[aiqfome Auto-accept] internal status updated to EM_PREPARO for order', savedOrder.id);
-          } catch (e) {
-            console.warn('[aiqfome Auto-accept] failed to update internal status:', e?.message);
-          }
+          console.warn('[aiqbridge] Auto-accept failed:', e?.message);
         }
       }
 
-      // Emit new order event
-      try {
-        emitirNovoPedido(savedOrder);
-        console.log('[aiqfome Processor] emitted novo-pedido for order', savedOrder.id);
-      } catch (eEmit) {
-        console.warn('[aiqfome Processor] emit novo-pedido failed:', eEmit?.message);
-      }
+      // Pad displaySimple for emit
+      if (savedOrder.displaySimple != null) savedOrder.displaySimple = String(savedOrder.displaySimple).padStart(2, '0');
+
+      emitirNovoPedido(savedOrder);
     }
 
-    // Mark webhook event as processed
-    await prisma.webhookEvent.update({
-      where: { id: evt.id },
-      data: { status: 'PROCESSED', processedAt: new Date(), error: null },
-    });
+    await prisma.webhookEvent.update({ where: { id: evt.id }, data: { status: 'PROCESSED', processedAt: new Date(), error: null } });
   } catch (err) {
-    console.error('[aiqfome Processor] Erro ao processar evento:', err);
-    await prisma.webhookEvent.update({
-      where: { id: evt.id },
-      data: { status: 'ERROR', error: String(err) },
-    });
+    console.error('[aiqbridge] Webhook processing error:', err);
+    await prisma.webhookEvent.update({ where: { id: evt.id }, data: { status: 'ERROR', error: String(err) } });
   }
 }
