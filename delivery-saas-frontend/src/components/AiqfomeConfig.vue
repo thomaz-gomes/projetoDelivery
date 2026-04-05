@@ -40,6 +40,16 @@ function storeName(integ) {
   return s ? s.name : integ.storeId;
 }
 
+const webhookUrl = computed(() => {
+  const origin = window.location.origin || '';
+  const apiBase = origin.replace('app.', 'api.');
+  return `${apiBase}/webhooks/aiqfome`;
+});
+
+function copyWebhook() {
+  navigator.clipboard.writeText(webhookUrl.value).then(() => showStatus('URL copiada!', 'success')).catch(() => {});
+}
+
 const availableStores = computed(() => {
   const usedIds = new Set(integrations.value.map(i => i.storeId).filter(Boolean));
   return stores.value.filter(s => !usedIds.has(s.id));
@@ -228,6 +238,18 @@ onMounted(async () => {
         </div>
 
         <div v-else class="alert alert-info">Nenhuma integração aiqfome configurada.</div>
+
+        <!-- Webhook URL -->
+        <div v-if="integrations.length > 0" class="card mb-3">
+          <div class="card-body py-2 d-flex align-items-center gap-2">
+            <i class="bi bi-globe text-primary"></i>
+            <div>
+              <div class="small text-muted">URL do Webhook (configure no aiqbridge)</div>
+              <code class="small user-select-all">{{ webhookUrl }}</code>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @click="copyWebhook" title="Copiar"><i class="bi bi-clipboard"></i></button>
+          </div>
+        </div>
 
         <button v-if="!showNewForm" class="btn btn-outline-primary" @click="openNewForm" :disabled="availableStores.length === 0">
           <i class="bi bi-plus-circle"></i> Adicionar integração
