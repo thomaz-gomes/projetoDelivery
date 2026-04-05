@@ -29,6 +29,24 @@ fi
 source "$DEPLOY_DIR/.env"
 
 # =========================================
+# 0. Sincronizar .env com .env.example (adicionar novas variáveis sem sobrescrever)
+# =========================================
+echo -e "${YELLOW}[0/6] Sincronizando variáveis de ambiente...${NC}"
+if [ -f "$DEPLOY_DIR/.env.example" ]; then
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+        # Extract variable name
+        varname="${line%%=*}"
+        # Add to .env if not already present
+        if ! grep -q "^${varname}=" "$DEPLOY_DIR/.env" 2>/dev/null; then
+            echo "$line" >> "$DEPLOY_DIR/.env"
+            echo -e "  ${GREEN}+ ${varname}${NC}"
+        fi
+    done < "$DEPLOY_DIR/.env.example"
+fi
+
+# =========================================
 # 1. Backup do banco antes de atualizar
 # =========================================
 echo -e "${YELLOW}[1/6] Fazendo backup do banco...${NC}"

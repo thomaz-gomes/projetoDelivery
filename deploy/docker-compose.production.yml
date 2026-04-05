@@ -57,10 +57,8 @@ services:
       IFOOD_AUTH_BASE: ${IFOOD_AUTH_BASE:-https://merchant-api.ifood.com.br/authentication/v1.0}
       IFOOD_POLL_INTERVAL_MS: ${IFOOD_POLL_INTERVAL_MS:-30000}
       IFOOD_POLL_MAX_CONCURRENCY: ${IFOOD_POLL_MAX_CONCURRENCY:-3}
-      # aiqfome
-      AIQFOME_BASE_URL: ${AIQFOME_BASE_URL:-https://plataforma.aiqfome.io}
-      AIQFOME_REDIRECT_URI: ${AIQFOME_REDIRECT_URI:-}
-      AIQFOME_WEBHOOK_URL: ${AIQFOME_WEBHOOK_URL:-}
+      # aiqfome via aiqbridge
+      AIQBRIDGE_BASE_URL: ${AIQBRIDGE_BASE_URL:-https://api.aiqbridge.com.br}
       # WhatsApp / Evolution API
       EVOLUTION_API_BASE_URL: ${EVOLUTION_API_BASE_URL:-}
       EVOLUTION_API_API_KEY: ${EVOLUTION_API_API_KEY:-}
