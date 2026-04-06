@@ -11,7 +11,7 @@
       </div>
       <div class="mb-2 d-flex align-items-center gap-1">
         <i class="bi bi-whatsapp text-success"></i>
-        <small class="text-muted">{{ customer.whatsapp }}</small>
+        <small class="text-muted">{{ (customer.whatsapp || '').startsWith('55') ? customer.whatsapp.slice(2) : customer.whatsapp }}</small>
       </div>
       <div class="mb-2">
         <label class="form-label small text-muted mb-0">CPF</label>
@@ -46,7 +46,7 @@
         <label class="form-label small text-muted mb-0">WhatsApp</label>
         <div class="d-flex align-items-center gap-1">
           <i class="bi bi-whatsapp text-success"></i>
-          <input type="text" class="form-control form-control-sm bg-light" :value="phone" readonly />
+          <input type="text" class="form-control form-control-sm bg-light" :value="displayPhone" readonly />
         </div>
       </div>
       <div class="mb-3">
@@ -87,6 +87,12 @@ const newCustomer = ref({
 const customer = computed(() => {
   if (!props.customerId) return null;
   return inboxStore.customerCache[props.customerId] || null;
+});
+
+// Display phone without DDI 55
+const displayPhone = computed(() => {
+  const p = props.phone || '';
+  return p.startsWith('55') ? p.slice(2) : p;
 });
 
 // Reset form and refetch when conversation changes
@@ -130,7 +136,22 @@ async function createCustomer() {
       await inboxStore.fetchCustomer(data.id);
     }
   } catch (e) {
-    console.error('Erro ao cadastrar cliente:', e);
+    // 409 = customer already exists with this phone — find and link instead
+    if (e.response?.status === 409) {
+      try {
+        const { data: customers } = await api.get('/customers', { params: { search: props.phone, limit: 5 } });
+        const list = Array.isArray(customers) ? customers : (customers.customers || []);
+        const match = list[0];
+        if (match && props.conversationId) {
+          await inboxStore.linkCustomer(props.conversationId, match.id);
+          await inboxStore.fetchCustomer(match.id);
+        }
+      } catch (linkErr) {
+        console.error('Erro ao vincular cliente existente:', linkErr);
+      }
+    } else {
+      console.error('Erro ao cadastrar cliente:', e);
+    }
   } finally {
     creating.value = false;
   }
