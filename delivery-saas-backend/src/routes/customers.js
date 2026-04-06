@@ -689,6 +689,16 @@ customersRouter.post('/merge', requireRole('ADMIN'), async (req, res) => {
         }
       } catch(e) { /* ignore if no table or other issues */ }
 
+      // Transfer conversations to primary customer
+      try {
+        await tx.conversation.updateMany({ where: { customerId: { in: validIds } }, data: { customerId: primaryId } });
+      } catch (e) { /* ignore if table missing */ }
+
+      // Transfer menu events to primary customer (no FK but keeps data consistent)
+      try {
+        await tx.menuEvent.updateMany({ where: { customerId: { in: validIds } }, data: { customerId: primaryId } });
+      } catch (e) { /* ignore */ }
+
       // Diagnostic: check for any remaining FK references before delete
       const tables = await tx.$queryRawUnsafe(`
         SELECT table_name, column_name
