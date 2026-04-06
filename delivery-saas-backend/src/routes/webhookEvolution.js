@@ -9,15 +9,14 @@ import crypto from 'crypto';
 
 const router = Router();
 
-// ─── Security: validate apikey header ───────────────────────────────────────
+// ─── Security ───────────────────────────────────────────────────────────────
+// Evolution API v2 does NOT send apikey header on webhook calls.
+// Validation is done inside handlers by checking instanceName exists in our DB.
+// If apikey header IS present (e.g. manual test), validate it as extra layer.
 router.use((req, res, next) => {
   const expected = process.env.EVOLUTION_API_API_KEY;
-  if (!expected) {
-    console.warn('[webhookEvolution] EVOLUTION_API_API_KEY not configured — rejecting request');
-    return res.status(500).json({ error: 'Webhook not configured' });
-  }
   const provided = req.headers['apikey'] || req.headers['Apikey'] || req.query.apikey;
-  if (provided !== expected) {
+  if (provided && expected && provided !== expected) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
