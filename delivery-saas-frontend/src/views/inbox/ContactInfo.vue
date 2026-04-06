@@ -3,6 +3,8 @@
     <div v-if="loading" class="text-center py-3">
       <div class="spinner-border spinner-border-sm"></div>
     </div>
+
+    <!-- Customer exists: show editable fields -->
     <div v-else-if="customer">
       <div class="mb-3">
         <input type="text" class="form-control form-control-sm fw-semibold" v-model="customer.fullName" @blur="save('fullName', customer.fullName)" placeholder="Nome do contato" />
@@ -32,8 +34,29 @@
         <div v-if="saved" class="small text-success mt-1"><i class="bi bi-check"></i> Salvo</div>
       </transition>
     </div>
-    <div v-else class="text-center text-muted py-3">
-      <small>Sem cliente vinculado</small>
+
+    <!-- No customer: inline registration form -->
+    <div v-else>
+      <div class="fw-semibold small mb-2"><i class="bi bi-person-plus me-1"></i>Cadastrar cliente</div>
+      <div class="mb-2">
+        <label class="form-label small text-muted mb-0">Nome</label>
+        <input type="text" class="form-control form-control-sm" v-model="newCustomer.fullName" placeholder="Nome do cliente" />
+      </div>
+      <div class="mb-2">
+        <label class="form-label small text-muted mb-0">WhatsApp</label>
+        <div class="d-flex align-items-center gap-1">
+          <i class="bi bi-whatsapp text-success"></i>
+          <input type="text" class="form-control form-control-sm bg-light" :value="phone" readonly />
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small text-muted mb-0">CPF <span class="text-muted">(opcional)</span></label>
+        <input type="text" class="form-control form-control-sm" v-model="newCustomer.cpf" placeholder="000.000.000-00" />
+      </div>
+      <button class="btn btn-sm btn-primary w-100" @click="createCustomer" :disabled="creating || !newCustomer.fullName.trim()">
+        <span v-if="creating" class="spinner-border spinner-border-sm me-1"></span>
+        {{ creating ? 'Cadastrando...' : 'Cadastrar' }}
+      </button>
     </div>
   </div>
 </template>
@@ -41,17 +64,37 @@
 <script setup>
 import { ref, watch, computed } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
+import api from '@/api';
 
-const props = defineProps({ customerId: String });
+const props = defineProps({
+  customerId: String,
+  phone: String,
+  conversationId: String,
+  contactName: String,
+});
+
 const inboxStore = useInboxStore();
 const loading = ref(false);
 const saved = ref(false);
+const creating = ref(false);
 let saveTimer = null;
+
+const newCustomer = ref({
+  fullName: '',
+  cpf: '',
+});
 
 const customer = computed(() => {
   if (!props.customerId) return null;
   return inboxStore.customerCache[props.customerId] || null;
 });
+
+// Pre-fill name from contactName (pushName)
+watch(() => props.contactName, (name) => {
+  if (name && !newCustomer.value.fullName) {
+    newCustomer.value.fullName = name;
+  }
+}, { immediate: true });
 
 watch(() => props.customerId, async (id) => {
   if (!id) return;
@@ -70,6 +113,27 @@ async function save(field, value) {
     saveTimer = setTimeout(() => { saved.value = false; }, 2000);
   } catch (e) {
     console.error('Erro ao salvar:', e);
+  }
+}
+
+async function createCustomer() {
+  if (creating.value || !newCustomer.value.fullName.trim()) return;
+  creating.value = true;
+  try {
+    const { data } = await api.post('/customers', {
+      fullName: newCustomer.value.fullName.trim(),
+      whatsapp: props.phone || '',
+      cpf: newCustomer.value.cpf ? newCustomer.value.cpf.replace(/\D+/g, '') : null,
+    });
+    // Link customer to conversation
+    if (props.conversationId && data.id) {
+      await inboxStore.linkCustomer(props.conversationId, data.id);
+      await inboxStore.fetchCustomer(data.id);
+    }
+  } catch (e) {
+    console.error('Erro ao cadastrar cliente:', e);
+  } finally {
+    creating.value = false;
   }
 }
 

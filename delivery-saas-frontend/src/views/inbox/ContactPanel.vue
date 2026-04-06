@@ -1,6 +1,11 @@
 <template>
   <div class="d-flex flex-column h-100 bg-white overflow-auto">
-    <ContactInfo :customer-id="customerId" />
+    <ContactInfo
+      :customer-id="customerId"
+      :phone="conversation?.channelContactId"
+      :conversation-id="conversationId"
+      :contact-name="conversation?.contactName"
+    />
     <ContactAddress :customer-id="customerId" />
     <InboxOrderWizard
       :conversation-id="conversationId"

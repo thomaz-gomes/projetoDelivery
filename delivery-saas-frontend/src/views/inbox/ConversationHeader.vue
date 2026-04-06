@@ -26,16 +26,6 @@
 
     <!-- Actions -->
     <div class="d-flex align-items-center gap-1">
-      <!-- Link Customer -->
-      <button
-        v-if="conversation && !conversation.customerId"
-        class="btn btn-sm btn-outline-primary"
-        title="Vincular cliente"
-        @click="showLinkCustomer = true"
-      >
-        <i class="bi bi-person-plus"></i>
-      </button>
-
       <!-- Toggle Contact Panel -->
       <button
         class="btn btn-sm btn-outline-secondary"
@@ -74,11 +64,6 @@
     </div>
 
     <!-- Modals -->
-    <LinkCustomerModal
-      v-if="showLinkCustomer"
-      :conversation="conversation"
-      @close="showLinkCustomer = false"
-    />
     <AssignUserModal
       v-if="showAssignUser"
       :conversation="conversation"
@@ -90,7 +75,6 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
-import LinkCustomerModal from './LinkCustomerModal.vue';
 import AssignUserModal from './AssignUserModal.vue';
 
 const props = defineProps({
@@ -100,7 +84,6 @@ const props = defineProps({
 defineEmits(['back', 'toggle-panel']);
 
 const inboxStore = useInboxStore();
-const showLinkCustomer = ref(false);
 const showAssignUser = ref(false);
 
 const displayName = computed(() => {
