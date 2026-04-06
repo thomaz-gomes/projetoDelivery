@@ -83,6 +83,37 @@ function getCustomerStats(o) {
   } catch (e) { return null; }
 }
 
+// iFood Widget
+const ifoodMerchantIds = ref([]);
+
+function initIfoodWidget(merchantIds) {
+  if (!merchantIds.length) return;
+  // remove any previous widget script
+  const prev = document.getElementById('ifood-widget-script');
+  if (prev) prev.remove();
+  const script = document.createElement('script');
+  script.id = 'ifood-widget-script';
+  script.async = true;
+  script.src = 'https://widgets.ifood.com.br/widget.js';
+  script.onload = () => {
+    if (window.iFoodWidget) {
+      window.iFoodWidget.init({
+        widgetId: '4314164a-666f-4032-b02a-9681ac7034d4',
+        merchantIds,
+      });
+    }
+  };
+  document.head.appendChild(script);
+}
+
+function destroyIfoodWidget() {
+  const script = document.getElementById('ifood-widget-script');
+  if (script) script.remove();
+  // remove widget container injected by the script
+  const container = document.getElementById('ifood-widget-container');
+  if (container) container.remove();
+}
+
 function isIfoodOrder(o) {
   if (!o) return false;
   return (
@@ -255,6 +286,10 @@ onMounted(async () => {
           }
         } catch (e) { /* ignore per-integration errors */ }
       }
+      // init iFood Widget with merchant UUIDs from loaded integrations
+      const ids = integs.map(i => i.merchantUuid || i.merchantId).filter(Boolean);
+      ifoodMerchantIds.value = ids;
+      initIfoodWidget(ids);
     } catch (e) { /* ignore */ }
   } catch (e) {
     console.error(e);
@@ -608,6 +643,7 @@ onUnmounted(() => {
   for (const s of sortableInstances) {
     try { s.destroy(); } catch (e) {}
   }
+  destroyIfoodWidget();
 });
 
 function onPrinterSaved(cfg){
