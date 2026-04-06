@@ -112,33 +112,51 @@ async function processSingleMessage(req, msg, instanceName) {
   const storeId = waInstance.stores.length > 0 ? waInstance.stores[0].id : null;
 
   // Normalize phone: always store with DDI 55
+  // Brazilian mobile numbers: WhatsApp may send without the 9th digit
+  // e.g. WA sends 557391429676 but system has 5573991429676 (with extra 9)
   const normalizedPhone = phone.startsWith('55') ? phone : '55' + phone;
-  const phoneVariants = [phone, normalizedPhone];
-  if (phone.startsWith('55')) phoneVariants.push(phone.slice(2));
+  const phoneVariants = new Set([phone, normalizedPhone]);
+  if (phone.startsWith('55')) phoneVariants.add(phone.slice(2));
+
+  // Build variants with/without the 9th digit for Brazilian mobile numbers
+  // Format: 55 + DDD(2) + 9? + number(8) → total 12 or 13 digits
+  const withoutDDI = normalizedPhone.slice(2); // remove 55
+  const ddd = withoutDDI.slice(0, 2);
+  const rest = withoutDDI.slice(2);
+  if (rest.length === 8) {
+    // WA sent without 9 → add 9: 55 + DDD + 9 + 8digits
+    const withNine = `55${ddd}9${rest}`;
+    phoneVariants.add(withNine);
+    phoneVariants.add(withNine.slice(2)); // without DDI
+  } else if (rest.length === 9 && rest.startsWith('9')) {
+    // WA sent with 9 → also search without: 55 + DDD + 8digits
+    const withoutNine = `55${ddd}${rest.slice(1)}`;
+    phoneVariants.add(withoutNine);
+    phoneVariants.add(withoutNine.slice(2)); // without DDI
+  }
+  const phoneVariantsArr = [...phoneVariants];
 
   // Find or create Conversation (search with phone variants)
   let conversation = await prisma.conversation.findFirst({
     where: {
       companyId,
       channel: 'WHATSAPP',
-      channelContactId: { in: phoneVariants },
+      channelContactId: { in: phoneVariantsArr },
     },
   });
 
-  // Auto-link customer if phone matches (try with and without DDI 55)
+  // Auto-link customer if phone matches (try all variants: with/without DDI, with/without 9th digit)
   let customerId = conversation?.customerId || null;
   if (!customerId) {
-    const phoneWithout55 = phone.startsWith('55') ? phone.slice(2) : phone;
-    const phoneWith55 = phone.startsWith('55') ? phone : '55' + phone;
     const customer = await prisma.customer.findFirst({
-      where: { companyId, whatsapp: { in: [phone, phoneWithout55, phoneWith55] } },
+      where: { companyId, whatsapp: { in: phoneVariantsArr } },
       select: { id: true, whatsapp: true },
     });
     if (customer) {
       customerId = customer.id;
-      // Normalize stored whatsapp to full format with DDI
-      if (customer.whatsapp !== phoneWith55) {
-        await prisma.customer.update({ where: { id: customer.id }, data: { whatsapp: phoneWith55 } }).catch(() => {});
+      // Normalize stored whatsapp to full format with DDI + 9 digit
+      if (customer.whatsapp !== normalizedPhone) {
+        await prisma.customer.update({ where: { id: customer.id }, data: { whatsapp: normalizedPhone } }).catch(() => {});
       }
     }
   }
@@ -159,7 +177,7 @@ async function processSingleMessage(req, msg, instanceName) {
     } catch (e) {
       if (e.code === 'P2002') {
         const existing = await prisma.customer.findFirst({
-          where: { companyId, whatsapp: { in: phoneVariants } },
+          where: { companyId, whatsapp: { in: phoneVariantsArr } },
           select: { id: true },
         });
         if (existing) customerId = existing.id;
