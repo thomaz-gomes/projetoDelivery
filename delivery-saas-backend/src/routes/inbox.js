@@ -447,4 +447,94 @@ router.delete('/quick-replies/:id', requireRole('ADMIN'), async (req, res) => {
   }
 });
 
+// ─── 12. GET /customer/:id — Fetch customer with addresses and stats ──────
+
+router.get('/customer/:id', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const customer = await prisma.customer.findFirst({
+      where: { id: req.params.id, companyId },
+      include: {
+        addresses: { orderBy: { isDefault: 'desc' } },
+        _count: { select: { orders: true } },
+      },
+    });
+    if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+    const agg = await prisma.order.aggregate({
+      where: { customerId: customer.id, status: { in: ['CONCLUIDO', 'ENTREGUE'] } },
+      _sum: { total: true },
+    });
+    res.json({ ...customer, orderCount: customer._count.orders, totalSpent: agg._sum.total || 0 });
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao buscar cliente', error: e.message });
+  }
+});
+
+// ─── 13. PATCH /customer/:id — Update customer fields (blur save) ─────────
+
+router.patch('/customer/:id', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const existing = await prisma.customer.findFirst({ where: { id: req.params.id, companyId }, select: { id: true } });
+    if (!existing) return res.status(404).json({ message: 'Cliente não encontrado' });
+    const { fullName, cpf, email, phone } = req.body;
+    const data = {};
+    if (fullName !== undefined) data.fullName = fullName;
+    if (cpf !== undefined) data.cpf = cpf ? cpf.replace(/\D+/g, '') : null;
+    if (email !== undefined) data.email = email || null;
+    if (phone !== undefined) data.phone = phone || null;
+    const updated = await prisma.customer.update({ where: { id: existing.id }, data });
+    res.json(updated);
+  } catch (e) {
+    if (e.code === 'P2002') return res.status(409).json({ message: 'CPF ou telefone já cadastrado' });
+    res.status(500).json({ message: 'Erro ao atualizar cliente', error: e.message });
+  }
+});
+
+// ─── 14. POST /customer/:id/addresses — Create new address ────────────────
+
+router.post('/customer/:id/addresses', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const customer = await prisma.customer.findFirst({ where: { id: req.params.id, companyId }, select: { id: true } });
+    if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+    const { label, street, number, complement, neighborhood, reference, observation, city, state, postalCode } = req.body;
+    const address = await prisma.customerAddress.create({
+      data: { customerId: customer.id, label: label || null, street: street || null, number: number || null, complement: complement || null, neighborhood: neighborhood || null, reference: reference || null, observation: observation || null, city: city || null, state: state || null, postalCode: postalCode || null, isDefault: true },
+    });
+    await prisma.customerAddress.updateMany({ where: { customerId: customer.id, isDefault: true, NOT: { id: address.id } }, data: { isDefault: false } });
+    res.status(201).json(address);
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao criar endereço', error: e.message });
+  }
+});
+
+// ─── 15. PATCH /customer/:id/addresses/:addrId — Update address (blur save)
+
+router.patch('/customer/:id/addresses/:addrId', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const customer = await prisma.customer.findFirst({ where: { id: req.params.id, companyId }, select: { id: true } });
+    if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+    const addr = await prisma.customerAddress.findFirst({ where: { id: req.params.addrId, customerId: customer.id } });
+    if (!addr) return res.status(404).json({ message: 'Endereço não encontrado' });
+    const { label, street, number, complement, neighborhood, reference, observation, city, state, postalCode } = req.body;
+    const data = {};
+    if (label !== undefined) data.label = label || null;
+    if (street !== undefined) data.street = street || null;
+    if (number !== undefined) data.number = number || null;
+    if (complement !== undefined) data.complement = complement || null;
+    if (neighborhood !== undefined) data.neighborhood = neighborhood || null;
+    if (reference !== undefined) data.reference = reference || null;
+    if (observation !== undefined) data.observation = observation || null;
+    if (city !== undefined) data.city = city || null;
+    if (state !== undefined) data.state = state || null;
+    if (postalCode !== undefined) data.postalCode = postalCode || null;
+    const updated = await prisma.customerAddress.update({ where: { id: addr.id }, data });
+    res.json(updated);
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao atualizar endereço', error: e.message });
+  }
+});
+
 export default router;
