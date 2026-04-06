@@ -162,6 +162,25 @@ export const useInboxStore = defineStore('inbox', {
       return data;
     },
 
+    async fetchCustomerByPhone(phone, conversationId) {
+      if (!phone) return null;
+      try {
+        const { data } = await api.get(`/inbox/customer/by-phone/${encodeURIComponent(phone)}`);
+        if (data && data.id) {
+          this.customerCache[data.id] = data;
+          // Auto-link to conversation if provided
+          if (conversationId) {
+            await this.linkCustomer(conversationId, data.id);
+          }
+          return data;
+        }
+      } catch (e) {
+        // 404 = customer not found by phone, that's ok
+        if (e.response?.status !== 404) console.warn('fetchCustomerByPhone error:', e);
+      }
+      return null;
+    },
+
     async updateCustomerField(customerId, field, value) {
       const { data } = await api.patch(`/inbox/customer/${customerId}`, { [field]: value });
       if (this.customerCache[customerId]) {

@@ -447,7 +447,63 @@ router.delete('/quick-replies/:id', requireRole('ADMIN'), async (req, res) => {
   }
 });
 
-// ─── 12. GET /customer/:id — Fetch customer with addresses and stats ──────
+// ─── Helpers: customer stats/tier (same logic as customers.js) ──────────────
+
+function computeCustomerTier(orders) {
+  const now = Date.now();
+  const d30 = now - 30 * 24 * 60 * 60 * 1000;
+  const all = orders || [];
+  if (all.length === 1) return { tier: 'novo', stars: 1, label: 'NOVO' };
+  const completed = all.filter(o => o.status === 'CONCLUIDO');
+  if (!completed.length) return { tier: 'em_risco', stars: 1, label: 'Em Risco' };
+  const last = new Date(completed[0].createdAt).getTime();
+  if (last < d30) return { tier: 'em_risco', stars: 1, label: 'Em Risco' };
+  const orders30d = completed.filter(o => new Date(o.createdAt).getTime() >= d30).length;
+  if (orders30d >= 8) return { tier: 'vip', stars: 4, label: 'VIP' };
+  if (orders30d >= 4) return { tier: 'fiel', stars: 3, label: 'Fiel' };
+  return { tier: 'regular', stars: 2, label: 'Regular' };
+}
+
+function computeCustomerStats(orders) {
+  const completed = (orders || []).filter(o => o.status === 'CONCLUIDO');
+  const totalSpent = completed.reduce((sum, o) => sum + Number(o.total || 0), 0);
+  const totalOrders = (orders || []).length;
+  const lastOrderDate = orders?.length ? orders[0].createdAt : null;
+  const itemCounts = {};
+  for (const o of completed) {
+    for (const item of (o.items || [])) {
+      itemCounts[item.name] = (itemCounts[item.name] || 0) + item.quantity;
+    }
+  }
+  let favoriteItem = null;
+  let maxQty = 0;
+  for (const [name, qty] of Object.entries(itemCounts)) {
+    if (qty > maxQty) { maxQty = qty; favoriteItem = name; }
+  }
+  return { totalSpent, totalOrders, lastOrderDate, favoriteItem, ...computeCustomerTier(orders) };
+}
+
+// Build phone variants for Brazilian numbers (with/without DDI 55, with/without 9th digit)
+function buildPhoneVariants(phone) {
+  if (!phone) return [];
+  const variants = new Set([phone]);
+  const withDDI = phone.startsWith('55') ? phone : '55' + phone;
+  const withoutDDI = phone.startsWith('55') ? phone.slice(2) : phone;
+  variants.add(withDDI);
+  variants.add(withoutDDI);
+  const ddd = withoutDDI.slice(0, 2);
+  const rest = withoutDDI.slice(2);
+  if (rest.length === 8) {
+    variants.add(`55${ddd}9${rest}`);
+    variants.add(`${ddd}9${rest}`);
+  } else if (rest.length === 9 && rest.startsWith('9')) {
+    variants.add(`55${ddd}${rest.slice(1)}`);
+    variants.add(`${ddd}${rest.slice(1)}`);
+  }
+  return [...variants];
+}
+
+// ─── 12. GET /customer/:id — Fetch customer with addresses, orders, stats ───
 
 router.get('/customer/:id', async (req, res) => {
   try {
@@ -456,15 +512,50 @@ router.get('/customer/:id', async (req, res) => {
       where: { id: req.params.id, companyId },
       include: {
         addresses: { orderBy: { isDefault: 'desc' } },
-        _count: { select: { orders: true } },
+        orders: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: {
+            id: true, displayId: true, displaySimple: true,
+            status: true, createdAt: true, total: true, orderType: true,
+            items: { select: { name: true, quantity: true, price: true } },
+          },
+        },
       },
     });
     if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
-    const agg = await prisma.order.aggregate({
-      where: { customerId: customer.id, status: { in: ['CONCLUIDO', 'ENTREGUE'] } },
-      _sum: { total: true },
+    const stats = computeCustomerStats(customer.orders);
+    res.json({ ...customer, stats });
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao buscar cliente', error: e.message });
+  }
+});
+
+// ─── 12b. GET /customer/by-phone/:phone — Find customer by phone variants ───
+
+router.get('/customer/by-phone/:phone', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const variants = buildPhoneVariants(req.params.phone);
+    const customer = await prisma.customer.findFirst({
+      where: { companyId, whatsapp: { in: variants } },
+      include: {
+        addresses: { orderBy: { isDefault: 'desc' } },
+        orders: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: {
+            id: true, displayId: true, displaySimple: true,
+            status: true, createdAt: true, total: true, orderType: true,
+            items: { select: { name: true, quantity: true, price: true } },
+          },
+        },
+      },
     });
-    res.json({ ...customer, orderCount: customer._count.orders, totalSpent: agg._sum.total || 0 });
+    if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+
+    const stats = computeCustomerStats(customer.orders);
+    res.json({ ...customer, stats });
   } catch (e) {
     res.status(500).json({ message: 'Erro ao buscar cliente', error: e.message });
   }
