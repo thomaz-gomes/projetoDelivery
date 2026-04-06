@@ -42,6 +42,34 @@ async function waitForDb(retries = 120, delay = 3000) {
     }
 
     console.log('Database schema synced successfully')
+
+    // Register Evolution API webhooks on all existing WhatsApp instances
+    const EVOLUTION_BASE = process.env.EVOLUTION_API_BASE_URL
+    const EVOLUTION_KEY = process.env.EVOLUTION_API_API_KEY
+    const BACKEND_URL = process.env.BACKEND_URL || process.env.BASE_URL || ''
+    if (EVOLUTION_BASE && EVOLUTION_KEY && BACKEND_URL) {
+      console.log('Registering Evolution webhooks...')
+      const instances = await prisma.whatsAppInstance.findMany()
+      for (const inst of instances) {
+        try {
+          const res = await fetch(`${EVOLUTION_BASE}/webhook/set/${encodeURIComponent(inst.instanceName)}`, {
+            method: 'PUT',
+            headers: { apikey: EVOLUTION_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: `${BACKEND_URL}/webhook/evolution`,
+              webhook_by_events: true,
+              events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'],
+            }),
+          })
+          console.log(`  ${res.ok ? '✅' : '❌'} ${inst.instanceName}`)
+        } catch (e) {
+          console.warn(`  ❌ ${inst.instanceName}: ${e.message}`)
+        }
+      }
+    } else {
+      console.log('Skipping Evolution webhook registration (missing EVOLUTION_API_BASE_URL, EVOLUTION_API_API_KEY, or BACKEND_URL)')
+    }
+
     await prisma.$disconnect()
     process.exit(0)
   } catch (err) {

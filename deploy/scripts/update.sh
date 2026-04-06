@@ -31,7 +31,7 @@ source "$DEPLOY_DIR/.env"
 # =========================================
 # 0. Sincronizar .env com .env.example (adicionar novas variáveis sem sobrescrever)
 # =========================================
-echo -e "${YELLOW}[0/6] Sincronizando variáveis de ambiente...${NC}"
+echo -e "${YELLOW}[0/7] Sincronizando variáveis de ambiente...${NC}"
 if [ -f "$DEPLOY_DIR/.env.example" ]; then
     while IFS= read -r line; do
         # Skip comments and empty lines
@@ -49,13 +49,13 @@ fi
 # =========================================
 # 1. Backup do banco antes de atualizar
 # =========================================
-echo -e "${YELLOW}[1/6] Fazendo backup do banco...${NC}"
+echo -e "${YELLOW}[1/7] Fazendo backup do banco...${NC}"
 bash "$SCRIPT_DIR/backup-db.sh" || echo -e "${YELLOW}Aviso: backup falhou, continuando...${NC}"
 
 # =========================================
 # 2. Puxar código novo
 # =========================================
-echo -e "${YELLOW}[2/6] Atualizando código (git pull)...${NC}"
+echo -e "${YELLOW}[2/7] Atualizando código (git pull)...${NC}"
 cd "$PROJECT_DIR"
 
 # Limpar qualquer merge/stash pendente
@@ -105,7 +105,7 @@ rm -rf "$TEMP_BACKUP"
 # =========================================
 # 3. Atualizar Nginx (se configurado)
 # =========================================
-echo -e "${YELLOW}[3/6] Atualizando configuração do Nginx...${NC}"
+echo -e "${YELLOW}[3/7] Atualizando configuração do Nginx...${NC}"
 
 if [ -n "$API_DOMAIN" ] && [ -n "$APP_DOMAIN" ] && command -v nginx &> /dev/null; then
     # Map WebSocket/polling — necessário para $connection_upgrade
@@ -145,20 +145,26 @@ fi
 # =========================================
 # 4. Rebuild dos containers
 # =========================================
-echo -e "${YELLOW}[4/6] Reconstruindo imagens Docker...${NC}"
+echo -e "${YELLOW}[4/7] Reconstruindo imagens Docker...${NC}"
 cd "$PROJECT_DIR"
 docker compose -f "$COMPOSE_FILE" build --no-cache
 
 # =========================================
-# 5. Reiniciar containers (zero downtime: up recria apenas o que mudou)
+# 5. Aplicar migrações e registrar webhooks
 # =========================================
-echo -e "${YELLOW}[5/6] Reiniciando containers...${NC}"
+echo -e "${YELLOW}[5/7] Aplicando migrações e registrando webhooks...${NC}"
+docker compose -f "$COMPOSE_FILE" run --rm migrate
+
+# =========================================
+# 6. Reiniciar containers (zero downtime: up recria apenas o que mudou)
+# =========================================
+echo -e "${YELLOW}[6/7] Reiniciando containers...${NC}"
 docker compose -f "$COMPOSE_FILE" up -d
 
 # =========================================
-# 6. Limpeza de imagens antigas
+# 7. Limpeza de imagens antigas
 # =========================================
-echo -e "${YELLOW}[6/6] Limpando imagens antigas...${NC}"
+echo -e "${YELLOW}[7/7] Limpando imagens antigas...${NC}"
 docker image prune -f
 
 # =========================================
