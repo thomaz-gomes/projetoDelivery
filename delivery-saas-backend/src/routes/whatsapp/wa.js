@@ -43,9 +43,6 @@ waRouter.post('/instances', requireRole('ADMIN'), async (req, res) => {
 	if (!instanceName) return res.status(400).json({ message: 'instanceName é obrigatório' });
 
 	try {
-		const cmp = await prisma.company.findUnique({ where: { id: companyId }, select: { evolutionEnabled: true } });
-		if (!cmp || !cmp.evolutionEnabled) return res.status(403).json({ ok: false, message: 'Integração Evolution/WhatsApp está desativada para esta empresa' });
-
 		const evo = await evoCreateInstance({
 			instanceName,
 			token,
@@ -192,9 +189,6 @@ waRouter.post('/instances/:name/send-text', requireRole('ADMIN'), async (req, re
 	if (!to || !text) return res.status(400).json({ message: 'to e text são obrigatórios' });
 	const inst = await prisma.whatsAppInstance.findUnique({ where: { instanceName: name }, select: { companyId: true } });
 	if (!inst) return res.status(404).json({ message: 'Instância não encontrada' });
-	const cmp = await prisma.company.findUnique({ where: { id: inst.companyId }, select: { evolutionEnabled: true } });
-	if (!cmp || !cmp.evolutionEnabled) return res.status(403).json({ ok: false, message: 'Integração Evolution/WhatsApp desativada para a empresa desta instância' });
-
 	const r = await evoSendText({ instanceName: name, to, text });
 	res.json({ ok: true, result: r });
 });
