@@ -3,12 +3,25 @@
     <div class="fw-semibold small mb-2"><i class="bi bi-bag me-1"></i>Pedido</div>
 
     <div v-if="!draft || !draft.active">
-      <div class="mb-2">
-        <select class="form-select form-select-sm" v-model="orderType">
-          <option value="BALCAO">Balcao (retirada)</option>
-          <option value="DELIVERY">Entrega</option>
-        </select>
+      <!-- Last order shortcut -->
+      <div v-if="lastOrder" class="mb-2 p-2 bg-light rounded">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="fw-semibold small">Ultimo pedido</span>
+          <small class="text-muted">{{ formatDate(lastOrder.createdAt) }}</small>
+        </div>
+        <div class="small text-muted mb-1">
+          <span v-for="(item, i) in lastOrder.items" :key="i">
+            {{ item.quantity }}x {{ item.name }}<span v-if="i < lastOrder.items.length - 1">, </span>
+          </span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center">
+          <small class="fw-semibold">R$ {{ Number(lastOrder.total || 0).toFixed(2).replace('.', ',') }}</small>
+          <button class="btn btn-sm btn-outline-success py-0 px-2" @click="repeatOrder" title="Repetir pedido">
+            <i class="bi bi-arrow-repeat me-1"></i>Repetir
+          </button>
+        </div>
       </div>
+
       <button class="btn btn-sm btn-success w-100" @click="startOrder" :disabled="!customerId">
         <i class="bi bi-plus me-1"></i>Iniciar Pedido
       </button>
@@ -39,7 +52,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import POSOrderWizard from '@/components/POSOrderWizard.vue';
 
@@ -48,10 +61,11 @@ const props = defineProps({
   customerId: String,
   customerName: String,
   address: Object,
+  orderType: { type: String, default: 'DELIVERY' },
+  lastOrder: Object,
 });
 
 const inboxStore = useInboxStore();
-const orderType = ref('BALCAO');
 const justCreated = ref(false);
 
 const draft = computed(() => inboxStore.getOrderDraft(props.conversationId));
@@ -60,16 +74,35 @@ const wizardPreset = computed(() => ({
   customerId: props.customerId,
   customerName: props.customerName,
   address: props.address,
-  orderType: draft.value?.orderType || orderType.value,
+  orderType: draft.value?.orderType || props.orderType,
   skipCustomer: true,
   skipAddress: true,
+  items: draft.value?.items || null,
 }));
 
-function startOrder() {
+function formatDate(d) {
+  if (!d) return '-';
+  return new Date(d).toLocaleDateString('pt-BR');
+}
+
+function startOrder(items) {
   inboxStore.setOrderDraft(props.conversationId, {
     active: true,
-    orderType: orderType.value,
+    orderType: props.orderType,
+    items: items || null,
   });
+}
+
+function repeatOrder() {
+  if (!props.lastOrder?.items?.length) return;
+  const items = props.lastOrder.items.map(it => ({
+    productId: it.productId,
+    name: it.name,
+    quantity: it.quantity,
+    price: it.price,
+    options: it.options || [],
+  }));
+  startOrder(items);
 }
 
 function cancelOrder() {

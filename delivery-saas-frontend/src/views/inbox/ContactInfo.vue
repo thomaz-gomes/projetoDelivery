@@ -48,25 +48,6 @@
         <div>Pedidos: {{ customer.stats?.totalOrders || 0 }}</div>
       </div>
 
-      <!-- Last order shortcut -->
-      <div v-if="lastOrder" class="mt-3 p-2 bg-light rounded">
-        <div class="d-flex justify-content-between align-items-center mb-1">
-          <span class="fw-semibold small">Ultimo pedido</span>
-          <small class="text-muted">{{ formatDate(lastOrder.createdAt) }}</small>
-        </div>
-        <div class="small text-muted mb-1">
-          <span v-for="(item, i) in lastOrder.items" :key="i">
-            {{ item.quantity }}x {{ item.name }}<span v-if="i < lastOrder.items.length - 1">, </span>
-          </span>
-        </div>
-        <div class="d-flex justify-content-between align-items-center">
-          <small class="fw-semibold">R$ {{ Number(lastOrder.total || 0).toFixed(2).replace('.', ',') }}</small>
-          <button class="btn btn-sm btn-outline-success py-0 px-2" @click="$emit('repeat-order', lastOrder)" title="Repetir pedido">
-            <i class="bi bi-arrow-repeat me-1"></i>Repetir
-          </button>
-        </div>
-      </div>
-
       <transition name="fade">
         <div v-if="saved" class="small text-success mt-1"><i class="bi bi-check"></i> Salvo</div>
       </transition>
@@ -110,8 +91,6 @@ const props = defineProps({
   contactName: String,
 });
 
-const emit = defineEmits(['repeat-order']);
-
 const inboxStore = useInboxStore();
 const loading = ref(false);
 const saved = ref(false);
@@ -123,12 +102,6 @@ const newCustomer = ref({ fullName: '', cpf: '' });
 const customer = computed(() => {
   if (!props.customerId) return null;
   return inboxStore.customerCache[props.customerId] || null;
-});
-
-const lastOrder = computed(() => {
-  const orders = customer.value?.orders;
-  if (!orders?.length) return null;
-  return orders[0];
 });
 
 const tierBadgeClass = computed(() => {

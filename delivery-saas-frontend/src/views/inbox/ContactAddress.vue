@@ -2,7 +2,7 @@
   <div class="p-3 border-top">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <span class="fw-semibold small"><i class="bi bi-geo-alt me-1"></i>Endereco</span>
-      <button class="btn btn-sm btn-link p-0" @click="newAddress">+ Novo</button>
+      <button class="btn btn-sm btn-outline-primary py-0 px-2" @click="toggleNewAddress">+ Novo</button>
     </div>
 
     <!-- Saved addresses radio list -->
@@ -16,7 +16,7 @@
     </div>
 
     <!-- Address form -->
-    <div class="row g-2">
+    <div v-if="showForm" class="row g-2">
       <div class="col-8">
         <input type="text" class="form-control form-control-sm" v-model="form.street" @blur="saveField('street')" placeholder="Rua" />
       </div>
@@ -56,6 +56,7 @@ const inboxStore = useInboxStore();
 const neighborhoods = ref([]);
 const selectedAddrId = ref(null);
 const isNew = ref(false);
+const showForm = ref(false);
 const saved = ref(false);
 let saveTimer = null;
 
@@ -74,7 +75,7 @@ watch(() => props.customerId, () => {
     const def = addrs.find(a => a.isDefault) || addrs[0];
     selectAddress(def);
   } else {
-    newAddress();
+    showForm.value = false;
   }
 }, { immediate: true });
 
@@ -88,6 +89,7 @@ onMounted(async () => {
 function selectAddress(addr) {
   selectedAddrId.value = addr.id;
   isNew.value = false;
+  showForm.value = false;
   form.value = {
     street: addr.street || '',
     number: addr.number || '',
@@ -101,7 +103,16 @@ function selectAddress(addr) {
 function newAddress() {
   selectedAddrId.value = null;
   isNew.value = true;
+  showForm.value = true;
   form.value = { street: '', number: '', neighborhood: '', complement: '', reference: '', observation: '' };
+}
+
+function toggleNewAddress() {
+  if (showForm.value && isNew.value) {
+    showForm.value = false;
+  } else {
+    newAddress();
+  }
 }
 
 async function saveField(field) {
