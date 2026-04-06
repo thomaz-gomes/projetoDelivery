@@ -2,7 +2,7 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
-import { evoCreateInstance, evoGetStatus, evoGetQr, evoSendText, evoSetWebhook } from '../../wa.js';
+import { evoCreateInstance, evoGetStatus, evoGetQr, evoSendText, evoSetWebhook, evoDeleteInstance } from '../../wa.js';
 
 export const waRouter = express.Router();
 waRouter.use(authMiddleware);
@@ -185,21 +185,11 @@ waRouter.delete('/instances/:name', requireRole('ADMIN'), async (req, res) => {
 
 	// Attempt to call Evolution API only if base URL is configured
 	if (process.env.EVOLUTION_API_BASE_URL) {
-		try {
-			const evoUrl = `${process.env.EVOLUTION_API_BASE_URL.replace(/\/$/, '')}/instance/delete/${encodeURIComponent(name)}`;
-			const { data } = await axios.delete(evoUrl, {
-				headers: { apikey: process.env.EVOLUTION_API_API_KEY },
-				timeout: 10000,
-			});
-			evoResult = { ok: true, data };
-		} catch (err) {
-			// capture details but do not fail the whole operation
-			evoError = {
-				message: err.message,
-				status: err.response?.status || null,
-				body: err.response?.data || null,
-			};
-			console.warn('wa: Evolution delete failed for', name, evoError);
+		const result = await evoDeleteInstance(name);
+		if (result.ok) {
+			evoResult = result;
+		} else {
+			evoError = result.error;
 		}
 	} else {
 		evoError = { message: 'EVOLUTION_API_BASE_URL not configured' };

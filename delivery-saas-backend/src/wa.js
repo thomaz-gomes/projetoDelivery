@@ -41,6 +41,7 @@ export function buildWebhookConfig() {
   const backendUrl = process.env.BACKEND_URL || process.env.BASE_URL || '';
   if (!backendUrl) return null;
   return {
+    enabled: true,
     url: `${backendUrl}/webhook/evolution`,
     webhook_by_events: true,
     events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'],
@@ -48,6 +49,7 @@ export function buildWebhookConfig() {
 }
 
 // Explicitly register/update webhook for an existing instance
+// Evolution API v2: POST /webhook/set/{instance} with { webhook: { ... } }
 export async function evoSetWebhook(instanceName) {
   const config = buildWebhookConfig();
   if (!config) {
@@ -55,12 +57,24 @@ export async function evoSetWebhook(instanceName) {
     return null;
   }
   try {
-    const { data } = await http.put(`/webhook/set/${encodeURIComponent(instanceName)}`, config);
+    const { data } = await http.post(`/webhook/set/${encodeURIComponent(instanceName)}`, { webhook: config });
     console.log(`[evo] ✅ Webhook registered for ${instanceName} → ${config.url}`);
     return data;
   } catch (e) {
     console.warn(`[evo] ❌ Failed to register webhook for ${instanceName}:`, e.response?.data || e.message);
     return null;
+  }
+}
+
+// Delete instance from Evolution API
+export async function evoDeleteInstance(instanceName) {
+  try {
+    const { data } = await http.delete(`/instance/delete/${encodeURIComponent(instanceName)}`);
+    return { ok: true, data };
+  } catch (e) {
+    const err = { message: e.message, status: e.response?.status || null, body: e.response?.data || null };
+    console.warn(`[evo] Delete failed for ${instanceName}:`, err);
+    return { ok: false, error: err };
   }
 }
 

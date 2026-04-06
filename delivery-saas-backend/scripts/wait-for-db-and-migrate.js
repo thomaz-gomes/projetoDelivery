@@ -53,12 +53,15 @@ async function waitForDb(retries = 120, delay = 3000) {
       for (const inst of instances) {
         try {
           const res = await fetch(`${EVOLUTION_BASE}/webhook/set/${encodeURIComponent(inst.instanceName)}`, {
-            method: 'PUT',
+            method: 'POST',
             headers: { apikey: EVOLUTION_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              url: `${BACKEND_URL}/webhook/evolution`,
-              webhook_by_events: true,
-              events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'],
+              webhook: {
+                enabled: true,
+                url: `${BACKEND_URL}/webhook/evolution`,
+                webhook_by_events: true,
+                events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'],
+              },
             }),
           })
           console.log(`  ${res.ok ? '✅' : '❌'} ${inst.instanceName}`)

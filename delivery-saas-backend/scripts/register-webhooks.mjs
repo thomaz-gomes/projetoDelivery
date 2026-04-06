@@ -16,18 +16,21 @@ console.log(`Found ${instances.length} instances`);
 
 for (const inst of instances) {
   try {
-    await axios.put(
+    await axios.post(
       `${BASE}/webhook/set/${encodeURIComponent(inst.instanceName)}`,
       {
-        url: `${BACKEND_URL}/webhook/evolution`,
-        webhook_by_events: true,
-        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'],
+        webhook: {
+          enabled: true,
+          url: `${BACKEND_URL}/webhook/evolution`,
+          webhook_by_events: true,
+          events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'],
+        },
       },
       { headers: { apikey: KEY } }
     );
     console.log(`✅ ${inst.instanceName}`);
   } catch (e) {
-    console.error(`❌ ${inst.instanceName}: ${e.message}`);
+    console.error(`❌ ${inst.instanceName}: ${e.response?.data || e.message}`);
   }
 }
 
