@@ -1,7 +1,7 @@
 <template>
-  <div v-if="visible" class="pos-overlay">
-    <div class="pos-panel">
-      <div class="d-flex justify-content-between align-items-center mb-3">
+  <div v-if="visible || embedded" :class="embedded ? '' : 'pos-overlay'">
+    <div :class="embedded ? '' : 'pos-panel'">
+      <div v-if="!embedded" class="d-flex justify-content-between align-items-center mb-3">
         <h5 class="fw-semibold m-0">Novo Pedido (PDV)</h5>
         <button class="btn btn-sm btn-outline-secondary" @click="close">Fechar</button>
       </div>
@@ -157,7 +157,7 @@
             </div>
           </div>
           <div class="mt-3 d-flex justify-content-between">
-            <button class="btn btn-outline-secondary" @click="prev">Voltar</button>
+            <button v-if="!embedded" class="btn btn-outline-secondary" @click="prev">Voltar</button>
             <button class="btn btn-success" :disabled="cart.length===0" @click="next">Escolher pagamento</button>
           </div>
         </div>
@@ -315,10 +315,11 @@ async function resolveCompanyId(){
   return '1';
 }
 // use shared `formatCurrency` helper from `src/utils/formatters.js`
-const props = defineProps({ 
+const props = defineProps({
   visible: { type: Boolean, default: false },
   initialPhone: { type: String, default: '' },
-  preset: { type: Object, default: null }
+  preset: { type: Object, default: null },
+  embedded: { type: Boolean, default: false }
 });
 const emit = defineEmits(['update:visible','created']);
 
@@ -967,6 +968,39 @@ watch(()=>props.visible, async (v)=>{
   } 
 });
 watch(()=>orderType.value,(v)=>{ if(v==='DELIVERY' && neighborhoods.value.length===0) loadNeighborhoods(); });
+
+// Embedded mode: skip customer/address steps and go directly to products
+watch(() => props.preset, async (val) => {
+  if (!props.embedded || !val?.skipCustomer) return;
+  try {
+    // Set customer from preset
+    if (val.customerId) {
+      try {
+        const { data } = await api.get(`/customers/${val.customerId}`);
+        foundCustomer.value = data;
+        savedAddresses.value = data.addresses || [];
+        if (val.customerName) newCustomerName.value = val.customerName;
+      } catch (e) { console.warn('Failed to load preset customer:', e); }
+    } else if (val.customerName) {
+      newCustomerName.value = val.customerName;
+    }
+    // Set order type
+    if (val.orderType) {
+      const ot = String(val.orderType).toUpperCase();
+      if (ot === 'RETIRADA' || ot === 'BALCAO' || ot === 'BALCÃO') orderType.value = 'BALCAO';
+      else orderType.value = ot;
+    }
+    // Set address from preset
+    if (val.address) {
+      const a = val.address;
+      addr.value = { street: a.street || '', number: a.number || '', complement: a.complement || '', neighborhood: a.neighborhood || '', reference: a.reference || '', observation: a.observation || '', city: a.city || '', state: a.state || '' };
+      if (a.id) selectedAddressId.value = a.id;
+    }
+    // Go directly to products
+    await loadMenu();
+    step.value = 3;
+  } catch (e) { console.warn('Failed to initialize embedded POSOrderWizard', e); }
+}, { immediate: true });
 
 
 </script>
