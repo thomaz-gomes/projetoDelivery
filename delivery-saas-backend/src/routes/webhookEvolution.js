@@ -23,7 +23,8 @@ router.use((req, res, next) => {
 });
 
 // ─── Main webhook handler ───────────────────────────────────────────────────
-router.post('/', async (req, res) => {
+// Accept both POST / and POST /:eventName (Evolution API v2 appends event name to URL when webhookByEvents is true)
+router.post('/:eventName?', async (req, res) => {
   try {
     const body = req.body || {};
     const event = body.event;
