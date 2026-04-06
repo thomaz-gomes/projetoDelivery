@@ -36,14 +36,13 @@
         <i class="bi bi-person-plus"></i>
       </button>
 
-      <!-- New Order -->
+      <!-- Toggle Contact Panel -->
       <button
-        v-if="conversation?.customerId"
-        class="btn btn-sm btn-outline-success"
-        title="Novo pedido"
-        @click="newOrder"
+        class="btn btn-sm btn-outline-secondary"
+        title="Painel de contato"
+        @click="$emit('toggle-panel')"
       >
-        <i class="bi bi-bag-plus"></i>
+        <i class="bi bi-layout-sidebar-reverse"></i>
       </button>
 
       <!-- Assign -->
@@ -90,7 +89,6 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
 import { useInboxStore } from '@/stores/inbox';
 import LinkCustomerModal from './LinkCustomerModal.vue';
 import AssignUserModal from './AssignUserModal.vue';
@@ -99,9 +97,8 @@ const props = defineProps({
   conversation: { type: Object, default: null },
 });
 
-defineEmits(['back']);
+defineEmits(['back', 'toggle-panel']);
 
-const router = useRouter();
 const inboxStore = useInboxStore();
 const showLinkCustomer = ref(false);
 const showAssignUser = ref(false);
@@ -111,12 +108,6 @@ const displayName = computed(() => {
   if (!c) return '';
   return c.customer?.fullName || c.contactName || c.channelContactId || 'Desconhecido';
 });
-
-function newOrder() {
-  if (props.conversation?.customerId) {
-    router.push({ path: '/orders', query: { newOrder: '1', customerId: props.conversation.customerId } });
-  }
-}
 
 async function toggleStatus() {
   if (!props.conversation) return;

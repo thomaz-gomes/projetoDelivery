@@ -13,6 +13,7 @@
       <ChatPanel
         :conversation-id="inboxStore.activeConversationId"
         @back="inboxStore.activeConversationId = null"
+        @toggle-panel="showContactPanel = !showContactPanel"
       />
     </div>
     <!-- Empty state on desktop -->
@@ -25,27 +26,45 @@
         <p class="mt-2">Selecione uma conversa</p>
       </div>
     </div>
+
+    <!-- Contact panel (right side) -->
+    <div
+      v-if="inboxStore.activeConversationId && showContactPanel"
+      class="border-start d-none d-md-flex flex-column"
+      style="width: 350px; min-width: 320px; flex-shrink: 0;"
+    >
+      <ContactPanel :conversation-id="inboxStore.activeConversationId" />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { io } from 'socket.io-client';
 import { SOCKET_URL } from '@/config';
 import { useInboxStore } from '@/stores/inbox';
 import { useAuthStore } from '@/stores/auth';
 import ConversationList from './ConversationList.vue';
 import ChatPanel from './ChatPanel.vue';
+import ContactPanel from './ContactPanel.vue';
 
 const inboxStore = useInboxStore();
 const authStore = useAuthStore();
 
+const showContactPanel = ref(true);
+
 let socket = null;
 let beepAudio = null;
 
-function selectConversation(conversationId) {
+async function selectConversation(conversationId) {
   inboxStore.activeConversationId = conversationId;
   inboxStore.markAsRead(conversationId).catch(() => {});
+
+  // Fetch customer data for contact panel
+  const conv = inboxStore.conversations.find(c => c.id === conversationId);
+  if (conv?.customerId && !inboxStore.customerCache[conv.customerId]) {
+    inboxStore.fetchCustomer(conv.customerId).catch(() => {});
+  }
 }
 
 function playBeep() {

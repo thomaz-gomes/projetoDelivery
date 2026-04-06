@@ -4,6 +4,7 @@
     <ConversationHeader
       :conversation="inboxStore.activeConversation"
       @back="$emit('back')"
+      @toggle-panel="$emit('toggle-panel')"
     />
 
     <!-- Messages area -->
@@ -43,7 +44,7 @@ const props = defineProps({
   conversationId: { type: String, required: true },
 });
 
-defineEmits(['back']);
+defineEmits(['back', 'toggle-panel']);
 
 const inboxStore = useInboxStore();
 const messagesContainer = ref(null);
