@@ -89,11 +89,10 @@ const customer = computed(() => {
   return inboxStore.customerCache[props.customerId] || null;
 });
 
-// Pre-fill name from contactName (pushName)
-watch(() => props.contactName, (name) => {
-  if (name && !newCustomer.value.fullName) {
-    newCustomer.value.fullName = name;
-  }
+// Reset form and refetch when conversation changes
+watch(() => props.conversationId, () => {
+  // Reset registration form for new conversation
+  newCustomer.value = { fullName: props.contactName || '', cpf: '' };
 }, { immediate: true });
 
 watch(() => props.customerId, async (id) => {
