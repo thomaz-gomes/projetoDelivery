@@ -2,8 +2,7 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
-import { evoCreateInstance, evoGetStatus, evoGetQr, evoSendText } from '../../wa.js';
-import axios from 'axios';
+import { evoCreateInstance, evoGetStatus, evoGetQr, evoSendText, evoSetWebhook } from '../../wa.js';
 
 export const waRouter = express.Router();
 waRouter.use(authMiddleware);
@@ -77,24 +76,8 @@ waRouter.post('/instances', requireRole('ADMIN'), async (req, res) => {
 			create: { companyId, instanceName, displayName: displayName || instanceName, status: 'QRCODE' }
 		});
 
-		// Auto-register Evolution webhook for this instance
-		const backendUrl = process.env.BACKEND_URL || process.env.BASE_URL || '';
-		if (backendUrl) {
-			try {
-				await axios.put(
-					`${process.env.EVOLUTION_API_BASE_URL}/webhook/set/${encodeURIComponent(instanceName)}`,
-					{
-						url: `${backendUrl}/webhook/evolution`,
-						webhook_by_events: true,
-						events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'],
-					},
-					{ headers: { apikey: process.env.EVOLUTION_API_API_KEY } }
-				);
-				console.log(`[wa] Webhook registered for ${instanceName}`);
-			} catch (e) {
-				console.warn(`[wa] Failed to register webhook for ${instanceName}:`, e.message);
-			}
-		}
+		// Also explicitly set webhook (in case the creation payload didn't apply it)
+		evoSetWebhook(instanceName).catch(() => {});
 
 		res.status(201).json({ ok: true, instance, evo });
 	} catch (err) {

@@ -35,8 +35,39 @@ function normalizePhone(n) {
   return d.startsWith('55') ? d : '55' + d;
 }
 
+// ─── Webhook Registration ────────────────────────────────────────────────────
+// Build the webhook config object used both in instance creation and explicit set
+export function buildWebhookConfig() {
+  const backendUrl = process.env.BACKEND_URL || process.env.BASE_URL || '';
+  if (!backendUrl) return null;
+  return {
+    url: `${backendUrl}/webhook/evolution`,
+    webhook_by_events: true,
+    events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'],
+  };
+}
+
+// Explicitly register/update webhook for an existing instance
+export async function evoSetWebhook(instanceName) {
+  const config = buildWebhookConfig();
+  if (!config) {
+    console.warn(`[evo] Cannot register webhook for ${instanceName}: BACKEND_URL not set`);
+    return null;
+  }
+  try {
+    const { data } = await http.put(`/webhook/set/${encodeURIComponent(instanceName)}`, config);
+    console.log(`[evo] ✅ Webhook registered for ${instanceName} → ${config.url}`);
+    return data;
+  } catch (e) {
+    console.warn(`[evo] ❌ Failed to register webhook for ${instanceName}:`, e.response?.data || e.message);
+    return null;
+  }
+}
+
 /// cria instância (mantém)
 export async function evoCreateInstance(payload) {
+  // Inject webhook config into creation payload so it's set from the start
+  const webhookConfig = buildWebhookConfig();
   const body = {
     qrcode: true,
     integration: 'WHATSAPP-BAILEYS',
@@ -44,6 +75,7 @@ export async function evoCreateInstance(payload) {
     readMessages: true,
     readStatus: true,
     alwaysOnline: true,
+    ...(webhookConfig ? { webhook: webhookConfig } : {}),
     ...payload,
   };
   try {
