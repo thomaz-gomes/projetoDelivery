@@ -136,6 +136,10 @@ model Company {
   riderCheckins      RiderCheckin[]
   riderBonusRules    RiderBonusRule[]
   checkinLocations   CheckinLocation[]
+
+  // ---- Inbox / Messaging ----
+  conversations      Conversation[]
+  quickReplies       QuickReply[]
 }
 
 model User {
@@ -152,6 +156,7 @@ model User {
   updatedAt     DateTime       @default(now()) @updatedAt
   rider         Rider?
   aiTokenUsages AiTokenUsage[]
+  assignedConversations Conversation[] @relation("ConversationAssignee")
 }
 
 model Rider {
@@ -333,6 +338,7 @@ model Customer {
   accounts                       CustomerAccount[]
   cashbackWallets                CashbackWallet[]
   groupMemberships               CustomerGroupMember[]
+  conversations                  Conversation[]
 
   @@unique([companyId, cpf], name: "company_cpf")
   @@unique([companyId, whatsapp], name: "company_whatsapp")
@@ -545,6 +551,7 @@ model Store {
   // stock movements originating/associated with this store
   stockMovements  StockMovement[]
   purchaseImports PurchaseImport[]
+  conversations   Conversation[]
 }
 
 model Menu {
@@ -2056,4 +2063,105 @@ model MenuEventDailySummary {
   avgTicket       Decimal  @default(0)
 
   @@unique([companyId, menuId, date])
+}
+
+// =============================================
+// Inbox / Messaging enums & models
+// =============================================
+
+enum Channel {
+  WHATSAPP
+  FACEBOOK
+  INSTAGRAM
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+  ARCHIVED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  LOCATION
+  STICKER
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Conversation {
+  id               String             @id @default(uuid())
+  companyId        String
+  company          Company            @relation(fields: [companyId], references: [id])
+  storeId          String?
+  store            Store?             @relation(fields: [storeId], references: [id])
+  channel          Channel
+  channelContactId String
+  instanceName     String?
+  customerId       String?
+  customer         Customer?          @relation(fields: [customerId], references: [id])
+  assignedUserId   String?
+  assignedUser     User?              @relation("ConversationAssignee", fields: [assignedUserId], references: [id])
+  status           ConversationStatus @default(OPEN)
+  lastMessageAt    DateTime?
+  unreadCount      Int                @default(0)
+  contactName      String?
+  contactAvatarUrl String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  messages         Message[]
+
+  @@unique([companyId, channel, channelContactId], name: "company_channel_contact")
+  @@index([companyId, status, lastMessageAt])
+  @@index([storeId, status])
+}
+
+model Message {
+  id              String           @id @default(uuid())
+  conversationId  String
+  conversation    Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  externalId      String?
+  direction       MessageDirection
+  type            MessageType
+  body            String?
+  mediaUrl        String?
+  mediaMimeType   String?
+  mediaFileName   String?
+  latitude        Float?
+  longitude       Float?
+  quotedMessageId String?
+  status          MessageStatus    @default(SENT)
+  createdAt       DateTime         @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([externalId])
+}
+
+model QuickReply {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  shortcut  String
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, shortcut])
+  @@index([companyId])
 }
