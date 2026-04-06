@@ -74,6 +74,7 @@ import aiStudioRouter from './routes/aiStudio.js'
 import { paymentRouter } from './routes/payment.js'
 import leadsRouter from './routes/leads.js'
 import customDomainRouter from './routes/customDomain.js'
+import webhookEvolutionRouter from './routes/webhookEvolution.js'
 import { customDomainResolver } from './middleware/customDomainResolver.js'
 import './cron.js'
 
@@ -208,6 +209,11 @@ app.use((err, req, res, next) => {
 
 // Custom domain resolver — must be before routes
 app.use(customDomainResolver());
+
+// ==============================
+// 🔗 Public webhooks (no JWT auth)
+// ==============================
+app.use('/webhook/evolution', webhookEvolutionRouter);
 
 // ==============================
 // 🚏 Rotas principais
@@ -493,6 +499,9 @@ export function attachSocket(server) {
     pingInterval: 25000,
     pingTimeout: 60000,
   });
+
+  // Expose io to Express routes (e.g. webhook handlers) via app.set
+  app.set('io', io);
 
   // Socket-level auth for print agents: if the client provides an auth token
   // we validate it against the per-company hashed token stored in PrinterSetting.
