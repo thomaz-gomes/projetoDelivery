@@ -8,6 +8,8 @@ export const useInboxStore = defineStore('inbox', {
     messages: {}, // { [conversationId]: Message[] }
     unreadTotal: 0,
     quickReplies: [],
+    customerCache: {},   // { [customerId]: customerData }
+    orderDrafts: {},     // { [conversationId]: { active, orderType, ... } }
     loading: false,
     filters: {
       storeId: null,
@@ -150,6 +152,54 @@ export const useInboxStore = defineStore('inbox', {
 
     recalcUnread() {
       this.unreadTotal = this.conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+    },
+
+    // Customer cache actions
+    async fetchCustomer(customerId) {
+      if (!customerId) return null;
+      const { data } = await api.get(`/inbox/customer/${customerId}`);
+      this.customerCache[customerId] = data;
+      return data;
+    },
+
+    async updateCustomerField(customerId, field, value) {
+      const { data } = await api.patch(`/inbox/customer/${customerId}`, { [field]: value });
+      if (this.customerCache[customerId]) {
+        Object.assign(this.customerCache[customerId], data);
+      }
+      return data;
+    },
+
+    async createAddress(customerId, addressData) {
+      const { data } = await api.post(`/inbox/customer/${customerId}/addresses`, addressData);
+      if (this.customerCache[customerId]) {
+        if (!this.customerCache[customerId].addresses) this.customerCache[customerId].addresses = [];
+        this.customerCache[customerId].addresses.unshift(data);
+      }
+      return data;
+    },
+
+    async updateAddressField(customerId, addrId, field, value) {
+      const { data } = await api.patch(`/inbox/customer/${customerId}/addresses/${addrId}`, { [field]: value });
+      if (this.customerCache[customerId]) {
+        const addrs = this.customerCache[customerId].addresses || [];
+        const idx = addrs.findIndex(a => a.id === addrId);
+        if (idx >= 0) Object.assign(addrs[idx], data);
+      }
+      return data;
+    },
+
+    // Order draft actions
+    getOrderDraft(conversationId) {
+      return this.orderDrafts[conversationId] || null;
+    },
+
+    setOrderDraft(conversationId, draft) {
+      this.orderDrafts[conversationId] = draft;
+    },
+
+    clearOrderDraft(conversationId) {
+      delete this.orderDrafts[conversationId];
     },
   },
 });
