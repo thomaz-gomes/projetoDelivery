@@ -111,25 +111,36 @@ async function processSingleMessage(req, msg, instanceName) {
   const companyId = waInstance.companyId;
   const storeId = waInstance.stores.length > 0 ? waInstance.stores[0].id : null;
 
-  // Find or create Conversation
-  let conversation = await prisma.conversation.findUnique({
+  // Normalize phone: always store with DDI 55
+  const normalizedPhone = phone.startsWith('55') ? phone : '55' + phone;
+  const phoneVariants = [phone, normalizedPhone];
+  if (phone.startsWith('55')) phoneVariants.push(phone.slice(2));
+
+  // Find or create Conversation (search with phone variants)
+  let conversation = await prisma.conversation.findFirst({
     where: {
-      company_channel_contact: {
-        companyId,
-        channel: 'WHATSAPP',
-        channelContactId: phone,
-      },
+      companyId,
+      channel: 'WHATSAPP',
+      channelContactId: { in: phoneVariants },
     },
   });
 
-  // Auto-link customer if phone matches
+  // Auto-link customer if phone matches (try with and without DDI 55)
   let customerId = conversation?.customerId || null;
   if (!customerId) {
+    const phoneWithout55 = phone.startsWith('55') ? phone.slice(2) : phone;
+    const phoneWith55 = phone.startsWith('55') ? phone : '55' + phone;
     const customer = await prisma.customer.findFirst({
-      where: { companyId, whatsapp: phone },
-      select: { id: true },
+      where: { companyId, whatsapp: { in: [phone, phoneWithout55, phoneWith55] } },
+      select: { id: true, whatsapp: true },
     });
-    if (customer) customerId = customer.id;
+    if (customer) {
+      customerId = customer.id;
+      // Normalize stored whatsapp to full format with DDI
+      if (customer.whatsapp !== phoneWith55) {
+        await prisma.customer.update({ where: { id: customer.id }, data: { whatsapp: phoneWith55 } }).catch(() => {});
+      }
+    }
   }
 
   // Auto-create customer on first inbound message
@@ -140,15 +151,15 @@ async function processSingleMessage(req, msg, instanceName) {
       const newCustomer = await prisma.customer.create({
         data: {
           companyId,
-          fullName: pushName || phone,
-          whatsapp: phone,
+          fullName: pushName || normalizedPhone,
+          whatsapp: normalizedPhone,
         },
       });
       customerId = newCustomer.id;
     } catch (e) {
       if (e.code === 'P2002') {
         const existing = await prisma.customer.findFirst({
-          where: { companyId, whatsapp: phone },
+          where: { companyId, whatsapp: { in: phoneVariants } },
           select: { id: true },
         });
         if (existing) customerId = existing.id;
@@ -167,7 +178,7 @@ async function processSingleMessage(req, msg, instanceName) {
         companyId,
         storeId,
         channel: 'WHATSAPP',
-        channelContactId: phone,
+        channelContactId: normalizedPhone,
         instanceName,
         customerId,
         contactName,
