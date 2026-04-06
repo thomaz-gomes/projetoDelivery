@@ -9,6 +9,8 @@ import Orders from './views/Orders.vue';
 import Claim from './views/Claim.vue';
 import Receipt from './views/Receipt.vue';
 import WhatsAppConnect from './views/whatsapp/WhatsAppConnect.vue';
+import Inbox from './views/inbox/Inbox.vue';
+const QuickReplies = () => import('./views/inbox/settings/QuickReplies.vue');
 import Riders from './views/Riders.vue';
 import RiderForm from './views/RiderForm.vue';
 import Neighborhoods from './views/Neighborhoods.vue';
@@ -174,6 +176,8 @@ const router = createRouter({
   { path: '/stock-movements/new', component: StockMovementForm, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
   { path: '/stock-movements/:id', component: StockMovementForm, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
   { path: '/stock/purchase-imports', component: PurchaseImports, meta: { requiresAuth: true, requiresModule: 'STOCK' } },
+    { path: '/inbox', component: Inbox, meta: { requiresAuth: true, requiresModule: 'WHATSAPP' } },
+    { path: '/inbox/quick-replies', component: QuickReplies, meta: { requiresAuth: true, requiresModule: 'WHATSAPP' } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true, requiresModule: 'WHATSAPP' } },
   { path: '/settings/ifood', component: IFoodIntegration, meta: { requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/settings/integrations/aiqfome', component: () => import('./components/AiqfomeConfig.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },

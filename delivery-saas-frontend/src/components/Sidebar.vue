@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/auth';
 import * as bootstrap from 'bootstrap';
 import AiCreditsWidget from './AiCreditsWidget.vue';
 import { useAddOnStoreStore } from '../stores/addOnStore';
+import { useInboxStore } from '@/stores/inbox';
 
 const props = defineProps({
   embedded: { type: Boolean, default: false }
@@ -21,6 +22,7 @@ const props = defineProps({
 const saas = useSaasStore();
 const modules = useModulesStore();
 const addOnStore = useAddOnStoreStore();
+const inboxStore = useInboxStore();
 
 // user helpers
 const userName = computed(() => {
@@ -819,6 +821,7 @@ function selectMenuOption(opt){
                 <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
                 <span>{{ item.name }}</span>
                 <span v-if="item.to === '/billing' && addOnStore.pendingInvoiceCount" class="badge bg-danger ms-auto">{{ addOnStore.pendingInvoiceCount }}</span>
+                <span v-if="item.to === '/inbox' && inboxStore.unreadTotal" class="badge bg-success ms-auto">{{ inboxStore.unreadTotal }}</span>
                 <i class="bi bi-chevron-right ms-auto" style="font-size:0.75rem;opacity:0.6;" aria-hidden="true"></i>
               </router-link>
               <ul v-if="item.children" class="nav flex-column ms-3">
