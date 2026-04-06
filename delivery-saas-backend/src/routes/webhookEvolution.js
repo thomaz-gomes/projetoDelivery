@@ -23,8 +23,10 @@ router.use((req, res, next) => {
 });
 
 // ─── Main webhook handler ───────────────────────────────────────────────────
-// Accept both POST / and POST /:eventName (Evolution API v2 appends event name to URL when webhookByEvents is true)
-router.post('/:eventName?', async (req, res) => {
+// Evolution API v2 appends event name to URL when webhookByEvents is true
+// e.g. /webhook/evolution/messages-upsert
+// Handle both / and /:eventName with a shared handler
+async function webhookHandler(req, res) {
   try {
     const body = req.body || {};
     const event = body.event;
@@ -57,7 +59,10 @@ router.post('/:eventName?', async (req, res) => {
     console.error('[webhookEvolution] Error processing webhook:', err);
     return res.status(500).json({ error: 'Internal error' });
   }
-});
+}
+
+router.post('/', webhookHandler);
+router.post('/:eventName', webhookHandler);
 
 // ─── MESSAGES_UPSERT ────────────────────────────────────────────────────────
 async function handleMessagesUpsert(req, body, instanceName) {
