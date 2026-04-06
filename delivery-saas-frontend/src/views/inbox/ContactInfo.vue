@@ -67,21 +67,6 @@
         </div>
       </div>
 
-      <!-- Addresses list -->
-      <div v-if="customer.addresses && customer.addresses.length" class="mt-3">
-        <div class="fw-semibold small mb-1"><i class="bi bi-geo-alt me-1"></i>Enderecos ({{ customer.addresses.length }})</div>
-        <div
-          v-for="addr in customer.addresses"
-          :key="addr.id"
-          class="small p-1 border-bottom d-flex align-items-start gap-1"
-        >
-          <i class="bi" :class="addr.isDefault ? 'bi-geo-alt-fill text-primary' : 'bi-geo-alt text-muted'" style="font-size: 0.75rem; margin-top: 2px;"></i>
-          <span class="text-muted">
-            {{ addr.street }}{{ addr.number ? ', ' + addr.number : '' }}{{ addr.neighborhood ? ' - ' + addr.neighborhood : '' }}{{ addr.complement ? ' (' + addr.complement + ')' : '' }}
-          </span>
-        </div>
-      </div>
-
       <transition name="fade">
         <div v-if="saved" class="small text-success mt-1"><i class="bi bi-check"></i> Salvo</div>
       </transition>
