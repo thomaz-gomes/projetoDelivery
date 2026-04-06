@@ -29,6 +29,8 @@ async function resolveCompanyIdFromPayload(payload) {
   const candidates = Array.from(new Set([cand, noDashes]));
 
   // Try matching merchantId against both merchantId and merchantUuid fields using normalized candidates
+  // Select includes fields reused downstream (auto-populate merchantId, autoAccept check)
+  // to avoid separate queries later.
   const integ = await prisma.apiIntegration.findFirst({
     where: {
       provider: 'IFOOD',
@@ -37,7 +39,7 @@ async function resolveCompanyIdFromPayload(payload) {
         { merchantUuid: { in: candidates } }
       ]
     },
-    select: { companyId: true, storeId: true },
+    select: { id: true, companyId: true, storeId: true, merchantId: true, merchantUuid: true, autoAccept: true },
   });
 
   if (integ) {
@@ -50,7 +52,7 @@ async function resolveCompanyIdFromPayload(payload) {
       const all = await prisma.apiIntegration.findMany({ where: { provider: 'IFOOD' } });
       if (all && all.length === 1) {
         console.warn('[iFood Processor] fallback: only one IFOOD integration found; assigning companyId', all[0].companyId);
-        return { companyId: all[0].companyId || null, storeId: all[0].storeId || null };
+        return { companyId: all[0].companyId || null, storeId: all[0].storeId || null, _integ: all[0] };
       }
     } catch (e) { /* ignore */ }
     return null;
@@ -63,11 +65,11 @@ async function resolveCompanyIdFromPayload(payload) {
       const payloadStoreName = payload?.store?.name || null;
       if (payloadStoreId) {
         const s = await prisma.store.findFirst({ where: { companyId: integ.companyId, OR: [{ id: payloadStoreId }, { slug: payloadStoreId }, { cnpj: payloadStoreId }] }, select: { id: true } });
-        if (s) return { companyId: integ.companyId || null, storeId: s.id || null };
+        if (s) return { companyId: integ.companyId || null, storeId: s.id || null, _integ: integ };
       }
       if (payloadStoreName) {
         const s2 = await prisma.store.findFirst({ where: { companyId: integ.companyId, name: payloadStoreName }, select: { id: true } });
-        if (s2) return { companyId: integ.companyId || null, storeId: s2.id || null };
+        if (s2) return { companyId: integ.companyId || null, storeId: s2.id || null, _integ: integ };
       }
     } catch (e) {
       console.warn('Failed to infer storeId from payload in iFood webhook processor:', e?.message || e);
@@ -83,7 +85,7 @@ async function resolveCompanyIdFromPayload(payload) {
       if (resolvedStoreId) console.log('iFood webhook processor: sem storeId na integração, usando primeira loja:', resolvedStoreId);
     } catch (e) { /* ignore */ }
   }
-  return { companyId: integ.companyId || null, storeId: resolvedStoreId };
+  return { companyId: integ.companyId || null, storeId: resolvedStoreId, _integ: integ };
 }
 
 /**
@@ -481,21 +483,19 @@ export async function processIFoodWebhook(eventId) {
       }
       const { companyId, storeId } = resolved;
 
+      // Reuse the integration record fetched by resolveCompanyIdFromPayload
+      // (already includes id, merchantId, merchantUuid, autoAccept — no extra query needed)
+      const cachedInteg = resolved._integ || null;
+
       // Auto-populate merchantId on the integration if missing (fixes x-polling-merchants warning)
       try {
         const payloadMerchantId = payload?.merchantId || payload?.order?.merchant?.id || null;
-        if (payloadMerchantId) {
-          const integ = await prisma.apiIntegration.findFirst({
-            where: { companyId, provider: 'IFOOD' },
-            select: { id: true, merchantId: true, merchantUuid: true },
+        if (payloadMerchantId && cachedInteg && !cachedInteg.merchantId && !cachedInteg.merchantUuid) {
+          await prisma.apiIntegration.update({
+            where: { id: cachedInteg.id },
+            data: { merchantId: String(payloadMerchantId) },
           });
-          if (integ && !integ.merchantId && !integ.merchantUuid) {
-            await prisma.apiIntegration.update({
-              where: { id: integ.id },
-              data: { merchantId: String(payloadMerchantId) },
-            });
-            console.log('[iFood Processor] auto-populated merchantId:', payloadMerchantId);
-          }
+          console.log('[iFood Processor] auto-populated merchantId:', payloadMerchantId);
         }
       } catch (e) { /* non-fatal */ }
 
@@ -643,6 +643,7 @@ export async function processIFoodWebhook(eventId) {
 
       // Match integration items to local products by integrationCode
       // Local product name replaces integration name; price kept from integration
+      // Called ONCE — result reused for both mapped.items and raw payload items
       try {
         if (mapped.items && mapped.items.length > 0) {
           const matchedItems = await matchItemsToLocalProducts(mapped.items, companyId)
@@ -650,10 +651,31 @@ export async function processIFoodWebhook(eventId) {
             ...it,
             productId: it._matchedProductId || null,
           }))
-          // Also update payload items with matched local names for print agent
+          // Propagate matched names to raw payload for print agent using lookup (no extra DB call)
           const rawItems = mapped.raw?.order?.items || mapped.raw?.items || null
           if (rawItems) {
-            const matchedRaw = await matchItemsToLocalProducts(rawItems, companyId)
+            const matchedByCode = new Map()
+            for (const mi of matchedItems) {
+              const code = mi.externalCode || mi.externalId || mi.sku || mi.productId || null
+              if (code) matchedByCode.set(String(code), mi)
+            }
+            const matchedRaw = rawItems.map(ri => {
+              const code = ri.externalCode || ri.externalId || ri.sku || ri.productId || null
+              const match = code ? matchedByCode.get(String(code)) : null
+              const result = match ? { ...ri, name: match.name, _matchedProductId: match._matchedProductId } : { ...ri }
+              const subs = ri.subItems || ri.subitems || ri.garnishItems || ri.options || []
+              if (subs.length > 0) {
+                const matchedSubs = match?.subItems || match?.subitems || match?.garnishItems || match?.options || []
+                if (matchedSubs.length > 0) {
+                  const subKey = ri.subItems ? 'subItems' : ri.subitems ? 'subitems' : ri.garnishItems ? 'garnishItems' : 'options'
+                  result[subKey] = subs.map((sub, idx) => {
+                    const ms = matchedSubs[idx]
+                    return ms ? { ...sub, name: ms.name || sub.name, _matchedProductId: ms._matchedProductId || null } : sub
+                  })
+                }
+              }
+              return result
+            })
             if (mapped.raw.order && mapped.raw.order.items) mapped.raw.order.items = matchedRaw
             else if (mapped.raw.items) mapped.raw.items = matchedRaw
           }
@@ -662,17 +684,8 @@ export async function processIFoodWebhook(eventId) {
         console.warn('[iFood Processor] integration code matching failed (continuing):', e?.message || e)
       }
 
-      // Check autoAccept setting
-      let autoAcceptEnabled = false;
-      try {
-        const integWhere = { companyId, provider: 'IFOOD' };
-        if (storeId) integWhere.storeId = storeId;
-        const integ = await prisma.apiIntegration.findFirst({
-          where: integWhere,
-          select: { autoAccept: true },
-        });
-        autoAcceptEnabled = !!(integ && integ.autoAccept);
-      } catch (e) { /* default false */ }
+      // Check autoAccept setting (reuses cachedInteg fetched earlier)
+      const autoAcceptEnabled = !!(cachedInteg && cachedInteg.autoAccept);
 
       // PLACED always maps to PENDENTE_ACEITE (order not yet accepted on iFood).
       // The status stays PENDENTE_ACEITE for upsert — auto-accept will promote to EM_PREPARO after confirming on iFood.

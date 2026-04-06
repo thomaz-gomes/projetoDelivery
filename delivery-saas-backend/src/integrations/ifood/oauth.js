@@ -215,7 +215,19 @@ export async function refreshAccessToken({ companyId }) {
 // ================================================================
 // 4️⃣ Helper: garante access_token válido
 // ================================================================
+// In-memory token cache: avoids repeated DB lookups for the same company
+// within a short window (e.g. poll + getOrderDetails + ack in one cycle).
+// Cache entry: { token, expiresAt (ms) }
+const _tokenCache = new Map();
+const TOKEN_CACHE_TTL_MS = 30_000; // 30s — short enough to pick up refreshes quickly
+
 export async function getIFoodAccessToken(companyId) {
+  // Check in-memory cache first
+  const cached = _tokenCache.get(companyId);
+  if (cached && cached.token && Date.now() < cached.expiresAt - 10_000 && Date.now() < cached.cachedUntil) {
+    return cached.token;
+  }
+
   const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD', enabled: true }, orderBy: { tokenExpiresAt: 'desc' } });
 
   if (!integ?.accessToken) {
@@ -225,8 +237,12 @@ export async function getIFoodAccessToken(companyId) {
   const exp = integ.tokenExpiresAt ? new Date(integ.tokenExpiresAt).getTime() : 0;
   if (Date.now() > exp - 10_000) {
     const r = await refreshAccessToken({ companyId });
-    return r.integration.accessToken;
+    const newToken = r.integration.accessToken;
+    const newExp = r.integration.tokenExpiresAt ? new Date(r.integration.tokenExpiresAt).getTime() : Date.now() + 10800_000;
+    _tokenCache.set(companyId, { token: newToken, expiresAt: newExp, cachedUntil: Date.now() + TOKEN_CACHE_TTL_MS });
+    return newToken;
   }
 
+  _tokenCache.set(companyId, { token: integ.accessToken, expiresAt: exp, cachedUntil: Date.now() + TOKEN_CACHE_TTL_MS });
   return integ.accessToken;
 }

@@ -49,14 +49,17 @@ function makeIFoodHttp() {
  * GET /order/v1.0/events:polling
  */
 export async function ifoodPoll(companyId) {
-  const token = await getIFoodAccessToken(companyId);
-  const http = makeIFoodHttp();
-
-  // 🔹 busca integração no banco para pegar o merchant UUID real
-  const integration = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
+  // Single DB query: fetch integration record and validate token in one step.
+  // getIFoodAccessToken handles refresh and is now cached in memory, so this
+  // avoids the previous double-query (getToken + findFirst for merchant header).
+  const integration = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD', enabled: true }, orderBy: { updatedAt: 'desc' } });
 
   if (!integration) throw new Error('Integração iFood não encontrada');
   if (!integration.accessToken) throw new Error('Sem token ativo para o iFood');
+
+  // Use cached getIFoodAccessToken to handle refresh logic (avoids extra DB hit)
+  const token = await getIFoodAccessToken(companyId);
+  const http = makeIFoodHttp();
 
   // Prefer numeric merchantId from DB (used by polling), otherwise merchantUuid, then env
   // Some iFood endpoints expect numeric IDs; prefer the DB numeric field when present.

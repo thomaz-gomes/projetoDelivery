@@ -14,6 +14,9 @@ import { prisma } from './prisma.js'
 
 export async function enrichOrderForAgent(order) {
   if (!order) return order
+  // Skip if already enriched (avoids duplicate DB queries when called from
+  // multiple code paths for the same order — e.g. emitirNovoPedido + auto-print)
+  if (order._enriched) return order
 
   try {
     // 1. Se o order só tem id (dados parciais), buscar o registro completo do DB
@@ -247,6 +250,8 @@ export async function enrichOrderForAgent(order) {
     if (!order.frontendUrl) {
       order.frontendUrl = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '') || null
     }
+
+    order._enriched = true
   } catch (e) {
     console.warn('enrichOrderForAgent failed:', e && e.message)
   }
