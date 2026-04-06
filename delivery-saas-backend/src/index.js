@@ -75,6 +75,7 @@ import { paymentRouter } from './routes/payment.js'
 import leadsRouter from './routes/leads.js'
 import customDomainRouter from './routes/customDomain.js'
 import webhookEvolutionRouter from './routes/webhookEvolution.js'
+import inboxRouter from './routes/inbox.js'
 import { customDomainResolver } from './middleware/customDomainResolver.js'
 import './cron.js'
 
@@ -230,6 +231,7 @@ app.use("/riders", ridersRouter);
 app.use("/customers", customersRouter);
 app.use("/neighborhoods", neighborhoodsRouter);
 app.use("/wa", requireModule('WHATSAPP'), waRouter);
+app.use('/inbox', requireModule('WHATSAPP'), inboxRouter);
 app.use("/affiliates", affiliatesRouter);
 app.use('/coupons', requireModule('COUPONS'), couponsRouter);
 app.use('/public', publicMenuRouter);
