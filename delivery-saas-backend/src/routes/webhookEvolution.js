@@ -127,6 +127,32 @@ async function processSingleMessage(req, msg, instanceName) {
     if (customer) customerId = customer.id;
   }
 
+  // Auto-create customer on first inbound message
+  const isFromMe = !!key.fromMe;
+  const pushName = msg.pushName || null;
+  if (!customerId && !isFromMe) {
+    try {
+      const newCustomer = await prisma.customer.create({
+        data: {
+          companyId,
+          fullName: pushName || phone,
+          whatsapp: phone,
+        },
+      });
+      customerId = newCustomer.id;
+    } catch (e) {
+      if (e.code === 'P2002') {
+        const existing = await prisma.customer.findFirst({
+          where: { companyId, whatsapp: phone },
+          select: { id: true },
+        });
+        if (existing) customerId = existing.id;
+      } else {
+        console.warn('[webhook-evolution] Failed to auto-create customer:', e.message);
+      }
+    }
+  }
+
   // Extract contact name from pushName
   const contactName = msg.pushName || null;
 
