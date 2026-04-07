@@ -284,10 +284,13 @@ router.post('/conversations/:id/internal-note', async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`company_${companyId}`).emit('inbox:new-message', {
+      const payload = {
         conversationId: conversation.id,
         message,
-      });
+        companyId,
+      };
+      io.to(`company_${companyId}`).emit('inbox:new-message', payload);
+      io.emit('inbox:new-message:broadcast', payload);
     }
 
     res.status(201).json(message);

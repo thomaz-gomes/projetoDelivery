@@ -105,7 +105,9 @@ onMounted(async () => {
   inboxStore.fetchConversations();
   inboxStore.fetchQuickReplies();
 
-  // Socket.IO connection
+  // Socket.IO connection — DO NOT pass token in handshake.auth because the
+  // existing io.use middleware reserves auth.token for print agent authentication
+  // and would reject a JWT here. Use socket.emit('identify', token) instead.
   socket = io(SOCKET_URL, {
     transports: ['polling', 'websocket'],
     reconnectionAttempts: Infinity,
@@ -114,19 +116,53 @@ onMounted(async () => {
   });
 
   socket.on('connect', () => {
-    // Identify with auth token (must be a string, not an object)
+    console.log('[inbox] socket connected', socket.id);
+    // Also emit identify as fallback (for backend versions that only listen here)
     const token = authStore.token || localStorage.getItem('token');
     if (token) {
       socket.emit('identify', token);
     }
   });
 
-  socket.on('inbox:new-message', (payload) => {
+  socket.on('connect_error', (err) => {
+    console.warn('[inbox] socket connect error:', err && err.message);
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.warn('[inbox] socket disconnected:', reason);
+  });
+
+  // Track delivered message IDs to dedupe between room emit and broadcast fallback
+  const seenMessageIds = new Set();
+  function handleIncoming(payload) {
+    const msgId = payload?.message?.id;
+    if (msgId) {
+      if (seenMessageIds.has(msgId)) return;
+      seenMessageIds.add(msgId);
+      // Cap set size to avoid memory growth
+      if (seenMessageIds.size > 500) {
+        const first = seenMessageIds.values().next().value;
+        seenMessageIds.delete(first);
+      }
+    }
     inboxStore.handleNewMessage(payload);
     if (payload.message && payload.message.direction === 'INBOUND') {
       playBeep();
       showNotification(payload.message);
     }
+  }
+
+  socket.on('inbox:new-message', (payload) => {
+    console.log('[inbox] received inbox:new-message', payload?.conversationId);
+    handleIncoming(payload);
+  });
+
+  // Broadcast fallback: filter by companyId to ignore other companies
+  socket.on('inbox:new-message:broadcast', (payload) => {
+    const myCompanyId = authStore.user?.companyId;
+    if (!myCompanyId || payload.companyId !== myCompanyId) return;
+    console.log('[inbox] received inbox:new-message:broadcast (fallback)', payload?.conversationId);
+    handleIncoming(payload);
   });
 
   socket.on('inbox:message-sent', (payload) => {

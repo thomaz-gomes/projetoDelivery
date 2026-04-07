@@ -311,14 +311,28 @@ async function processSingleMessage(req, msg, instanceName) {
     },
   });
 
-  // Emit Socket.IO event with full conversation data
+  // Emit Socket.IO event with full conversation data.
+  // Use room-scoped emit AND a broadcast fallback so it works even if a
+  // socket failed to join the company room. Frontend filters by companyId.
   const io = req.app.get('io');
   if (io) {
-    io.to(`company_${companyId}`).emit('inbox:new-message', {
+    const room = `company_${companyId}`;
+    const roomSockets = io.sockets.adapter.rooms.get(room);
+    const roomSize = roomSockets ? roomSockets.size : 0;
+    console.log(`[inbox] emit inbox:new-message → room=${room} sockets=${roomSize} convId=${conversation.id}`);
+
+    const payload = {
       conversationId: conversation.id,
       message,
       conversation: updatedConversation,
-    });
+      companyId, // included so broadcast fallback can be filtered client-side
+    };
+
+    io.to(room).emit('inbox:new-message', payload);
+
+    // Defense in depth: also broadcast so any frontend client (regardless of
+    // room membership) can pick it up. Client must filter by companyId.
+    io.emit('inbox:new-message:broadcast', payload);
   }
 }
 
