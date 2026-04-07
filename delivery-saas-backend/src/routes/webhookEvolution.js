@@ -319,7 +319,9 @@ async function processSingleMessage(req, msg, instanceName) {
     const room = `company_${companyId}`;
     const roomSockets = io.sockets.adapter.rooms.get(room);
     const roomSize = roomSockets ? roomSockets.size : 0;
-    console.log(`[inbox] emit inbox:new-message → room=${room} sockets=${roomSize} convId=${conversation.id}`);
+    const roomIds = roomSockets ? [...roomSockets].join(',') : '';
+    const totalConnected = io.sockets.sockets.size;
+    console.log(`[inbox] emit inbox:new-message → room=${room} sockets=${roomSize} ids=[${roomIds}] totalConnected=${totalConnected} convId=${conversation.id}`);
 
     const payload = {
       conversationId: conversation.id,
