@@ -12,6 +12,11 @@
         <i class="bi bi-whatsapp text-success" style="font-size: 0.85rem;"></i>
       </div>
       <small class="text-muted">{{ conversation?.channelContactId || '' }}</small>
+      <TagChips
+        v-if="conversation"
+        :conversation-id="conversation.id"
+        :tags="conversation.tags || []"
+      />
     </div>
 
     <!-- Badges -->
@@ -76,6 +81,7 @@
 import { ref, computed } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import AssignUserModal from './AssignUserModal.vue';
+import TagChips from './TagChips.vue';
 
 const props = defineProps({
   conversation: { type: Object, default: null },
