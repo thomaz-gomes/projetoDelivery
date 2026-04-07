@@ -1,95 +1,136 @@
 <template>
   <div class="d-flex flex-column h-100">
-    <!-- Header -->
-    <div class="p-3 border-bottom">
-      <h5 class="mb-2">Inbox</h5>
-      <!-- Search -->
-      <div class="input-group input-group-sm mb-2">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input
-          type="text"
-          class="form-control"
-          placeholder="Buscar conversa..."
-          v-model="searchText"
-          @input="onSearchInput"
-        />
-      </div>
-      <!-- Status filters -->
-      <div class="btn-group btn-group-sm w-100" role="group">
-        <button
-          type="button"
-          class="btn"
-          :class="inboxStore.filters.status === 'OPEN' ? 'btn-success' : 'btn-outline-secondary'"
-          @click="setStatus('OPEN')"
-        >
-          Abertas
-        </button>
-        <button
-          type="button"
-          class="btn"
-          :class="inboxStore.filters.status === 'CLOSED' ? 'btn-success' : 'btn-outline-secondary'"
-          @click="setStatus('CLOSED')"
-        >
-          Fechadas
-        </button>
-        <button
-          type="button"
-          class="btn"
-          :class="!inboxStore.filters.status ? 'btn-success' : 'btn-outline-secondary'"
-          @click="setStatus('')"
-        >
-          Todas
-        </button>
-      </div>
+    <!-- Search -->
+    <div class="p-2 border-bottom">
+      <input
+        type="text"
+        v-model="searchInput"
+        @input="onSearchInput"
+        placeholder="Buscar contato ou mensagem..."
+        class="form-control form-control-sm"
+      />
     </div>
 
-    <!-- Conversation list -->
+    <!-- Filter row 1: status -->
+    <div class="d-flex gap-1 px-2 pt-2">
+      <button
+        v-for="opt in statusOptions"
+        :key="opt.value"
+        class="btn btn-sm flex-fill"
+        :class="filters.status === opt.value ? 'btn-primary' : 'btn-outline-secondary'"
+        @click="setStatus(opt.value)"
+      >{{ opt.label }}</button>
+    </div>
+
+    <!-- Filter row 2: chips + store -->
+    <div class="d-flex gap-1 px-2 py-2 align-items-center flex-wrap">
+      <button
+        class="btn btn-sm"
+        :class="filters.mine ? 'btn-info text-white' : 'btn-outline-secondary'"
+        @click="toggleMine"
+      >
+        <i class="bi bi-person"></i> Minhas
+        <span v-if="mineCount" class="badge bg-light text-dark ms-1">{{ mineCount }}</span>
+      </button>
+      <button
+        class="btn btn-sm"
+        :class="filters.unread ? 'btn-success text-white' : 'btn-outline-secondary'"
+        @click="toggleUnread"
+      >
+        <i class="bi bi-circle-fill" style="font-size: 0.5rem;"></i> Não lidas
+        <span v-if="unreadCount" class="badge bg-light text-dark ms-1">{{ unreadCount }}</span>
+      </button>
+      <select v-model="filters.storeId" @change="onFiltersChange" class="form-select form-select-sm" style="width: auto;">
+        <option :value="null">Todas as lojas</option>
+        <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+      </select>
+    </div>
+
+    <!-- List -->
     <div class="flex-grow-1 overflow-auto">
-      <!-- Loading -->
-      <div v-if="inboxStore.loading" class="text-center p-4">
-        <div class="spinner-border spinner-border-sm text-success" role="status"></div>
-        <p class="text-muted small mt-2">Carregando...</p>
-      </div>
-
-      <!-- Empty state -->
-      <div v-else-if="!inboxStore.conversations.length" class="text-center p-4 text-muted">
-        <i class="bi bi-chat-left" style="font-size: 2rem;"></i>
-        <p class="mt-2 small">Nenhuma conversa encontrada</p>
-      </div>
-
-      <!-- Items -->
+      <div v-if="inboxStore.loading" class="text-center py-3 text-muted small">Carregando...</div>
       <ConversationItem
         v-for="conv in inboxStore.conversations"
         :key="conv.id"
         :conversation="conv"
-        :active="conv.id === inboxStore.activeConversationId"
-        @click="$emit('select', conv.id)"
+        :selected="conv.id === inboxStore.activeConversationId"
+        @click="selectConversation(conv.id)"
       />
+      <div v-if="!inboxStore.loading && !inboxStore.conversations.length" class="text-center py-3 text-muted small">
+        Nenhuma conversa
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
+import { useAuthStore } from '@/stores/auth';
+import api from '@/api';
 import ConversationItem from './ConversationItem.vue';
 
-defineEmits(['select']);
+const emit = defineEmits(['select']);
 
 const inboxStore = useInboxStore();
-const searchText = ref(inboxStore.filters.search || '');
-let debounceTimer = null;
+const authStore = useAuthStore();
+const filters = inboxStore.filters;
 
+const searchInput = ref(filters.search);
+const stores = ref([]);
+
+const statusOptions = [
+  { label: 'Abertas', value: 'OPEN' },
+  { label: 'Fechadas', value: 'CLOSED' },
+  { label: 'Todas', value: '' },
+];
+
+const mineCount = computed(() => {
+  const userId = authStore.user?.id;
+  if (!userId) return 0;
+  return inboxStore.conversations.filter(c => c.assignedUserId === userId).length;
+});
+
+const unreadCount = computed(() => {
+  return inboxStore.conversations.filter(c => (c.unreadCount || 0) > 0).length;
+});
+
+let searchTimer = null;
 function onSearchInput() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    inboxStore.filters.search = searchText.value;
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    filters.search = searchInput.value;
     inboxStore.fetchConversations();
   }, 400);
 }
 
-function setStatus(status) {
-  inboxStore.filters.status = status;
+function setStatus(value) {
+  filters.status = value;
   inboxStore.fetchConversations();
 }
+
+function toggleMine() {
+  filters.mine = !filters.mine;
+  inboxStore.fetchConversations();
+}
+
+function toggleUnread() {
+  filters.unread = !filters.unread;
+  inboxStore.fetchConversations();
+}
+
+function onFiltersChange() {
+  inboxStore.fetchConversations();
+}
+
+function selectConversation(id) {
+  emit('select', id);
+}
+
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/stores');
+    stores.value = Array.isArray(data) ? data : (data.stores || []);
+  } catch (e) { stores.value = []; }
+});
 </script>
