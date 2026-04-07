@@ -16,7 +16,10 @@
     <!-- Content -->
     <div class="flex-grow-1 ms-2 min-width-0">
       <div class="d-flex justify-content-between align-items-baseline">
-        <span class="fw-semibold text-truncate small">{{ displayName }}</span>
+        <span class="text-truncate small">
+          <span class="fw-semibold">{{ displayName }}</span>
+          <span v-if="phoneDisplay" class="text-muted ms-1" style="font-size: 0.7rem;">· {{ phoneDisplay }}</span>
+        </span>
         <small class="text-muted flex-shrink-0 ms-1" style="font-size: 0.7rem;">{{ timeAgo }}</small>
       </div>
       <div class="d-flex justify-content-between align-items-center">
@@ -44,6 +47,14 @@ const displayName = computed(() => {
     || props.conversation.contactName
     || props.conversation.channelContactId
     || 'Sem nome';
+});
+
+const phoneDisplay = computed(() => {
+  // Only show phone next to name if name is NOT the phone itself
+  const phone = props.conversation.channelContactId || '';
+  if (!phone) return '';
+  if (displayName.value === phone) return '';
+  return phone.startsWith('55') ? phone.slice(2) : phone;
 });
 
 const initials = computed(() => {

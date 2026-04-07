@@ -1,14 +1,18 @@
 <template>
   <div class="d-flex flex-column h-100">
-    <!-- Search -->
-    <div class="p-2 border-bottom">
+    <!-- Search + Store filter -->
+    <div class="p-2 border-bottom d-flex gap-2">
       <input
         type="text"
         v-model="searchInput"
         @input="onSearchInput"
         placeholder="Buscar contato ou mensagem..."
-        class="form-control form-control-sm"
+        class="form-control form-control-sm flex-grow-1"
       />
+      <select v-model="filters.storeId" @change="onFiltersChange" class="form-select form-select-sm" style="width: auto; max-width: 140px;">
+        <option :value="null">Todas as lojas</option>
+        <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+      </select>
     </div>
 
     <!-- Filter row 1: status -->
@@ -22,7 +26,7 @@
       >{{ opt.label }}</button>
     </div>
 
-    <!-- Filter row 2: chips + store -->
+    <!-- Filter row 2: chips -->
     <div class="d-flex gap-1 px-2 py-2 align-items-center flex-wrap">
       <button
         class="btn btn-sm"
@@ -40,10 +44,6 @@
         <i class="bi bi-circle-fill" style="font-size: 0.5rem;"></i> Não lidas
         <span v-if="unreadCount" class="badge bg-light text-dark ms-1">{{ unreadCount }}</span>
       </button>
-      <select v-model="filters.storeId" @change="onFiltersChange" class="form-select form-select-sm" style="width: auto;">
-        <option :value="null">Todas as lojas</option>
-        <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
-      </select>
     </div>
 
     <!-- List -->
