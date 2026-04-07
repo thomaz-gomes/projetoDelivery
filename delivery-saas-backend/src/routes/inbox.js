@@ -231,6 +231,54 @@ router.post('/conversations/:id/send', upload.single('media'), async (req, res) 
   }
 });
 
+// ─── 4b. POST /conversations/:id/internal-note — Internal note ─────────────
+
+router.post('/conversations/:id/internal-note', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { body } = req.body;
+    if (!body || !body.trim()) return res.status(400).json({ message: 'body é obrigatório' });
+
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: req.params.id, companyId },
+    });
+    if (!conversation) return res.status(404).json({ message: 'Conversa não encontrada' });
+
+    const message = await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: 'OUTBOUND',
+        type: 'TEXT',
+        body: body.trim(),
+        internal: true,
+        authorUserId: req.user.id,
+        status: 'SENT',
+      },
+      include: {
+        authorUser: { select: { id: true, name: true } },
+      },
+    });
+
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: new Date() },
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`company_${companyId}`).emit('inbox:new-message', {
+        conversationId: conversation.id,
+        message,
+      });
+    }
+
+    res.status(201).json(message);
+  } catch (e) {
+    console.error('[inbox] Error creating internal note:', e);
+    res.status(500).json({ message: 'Erro ao criar nota interna', error: e.message });
+  }
+});
+
 // ─── 5. PATCH /conversations/:id — Update conversation ─────────────────────
 
 router.patch('/conversations/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
