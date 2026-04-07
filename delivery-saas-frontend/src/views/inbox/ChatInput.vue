@@ -7,7 +7,22 @@
       <button class="btn btn-sm btn-close ms-auto" @click="clearFile"></button>
     </div>
 
-    <!-- Quick reply picker -->
+    <!-- Quick reply shortcuts (one-click send) -->
+    <div v-if="quickReplies.length" class="d-flex gap-1 mb-2 overflow-auto pb-1" style="scrollbar-width: thin;">
+      <button
+        v-for="reply in quickReplies"
+        :key="reply.id"
+        class="btn btn-sm btn-outline-secondary text-nowrap"
+        style="font-size: 0.75rem; flex-shrink: 0;"
+        :disabled="sending"
+        :title="reply.body"
+        @click="sendQuickReply(reply)"
+      >
+        <i class="bi bi-lightning-charge me-1"></i>{{ reply.title || reply.shortcut }}
+      </button>
+    </div>
+
+    <!-- Quick reply picker (when typing /) -->
     <QuickReplyPicker
       v-if="showQuickReplies"
       :filter="quickReplyFilter"
@@ -71,6 +86,7 @@ const textareaRef = ref(null);
 
 const showQuickReplies = computed(() => text.value.startsWith('/') && text.value.length > 0);
 const quickReplyFilter = computed(() => text.value.slice(1));
+const quickReplies = computed(() => inboxStore.quickReplies || []);
 
 function triggerFileInput() {
   fileInput.value?.click();
@@ -125,6 +141,21 @@ async function send() {
     nextTick(() => autoResize());
   } catch (err) {
     console.error('Failed to send message', err);
+  } finally {
+    sending.value = false;
+  }
+}
+
+async function sendQuickReply(reply) {
+  if (sending.value || !reply?.body) return;
+  sending.value = true;
+  try {
+    await inboxStore.sendMessage(props.conversationId, {
+      type: 'TEXT',
+      body: reply.body,
+    });
+  } catch (err) {
+    console.error('Failed to send quick reply', err);
   } finally {
     sending.value = false;
   }
