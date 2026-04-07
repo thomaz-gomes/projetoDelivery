@@ -157,6 +157,7 @@ model User {
   rider         Rider?
   aiTokenUsages AiTokenUsage[]
   assignedConversations Conversation[] @relation("ConversationAssignee")
+  authoredMessages      Message[]      @relation("MessageAuthor")
 }
 
 model Rider {
@@ -2122,6 +2123,7 @@ model Conversation {
   unreadCount      Int                @default(0)
   contactName      String?
   contactAvatarUrl String?
+  tags             String[]            @default([])
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   messages         Message[]
@@ -2146,6 +2148,9 @@ model Message {
   longitude       Float?
   quotedMessageId String?
   status          MessageStatus    @default(SENT)
+  internal        Boolean          @default(false)
+  authorUserId    String?
+  authorUser      User?            @relation("MessageAuthor", fields: [authorUserId], references: [id])
   createdAt       DateTime         @default(now())
 
   @@index([conversationId, createdAt])
