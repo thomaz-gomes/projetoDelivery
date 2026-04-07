@@ -15,7 +15,12 @@ export const useInboxStore = defineStore('inbox', {
       storeId: null,
       status: 'OPEN',
       search: '',
+      mine: false,
+      unread: false,
     },
+    replyToMessageId: null,
+    internalMode: false,
+    allTags: [],
   }),
 
   getters: {
@@ -36,6 +41,8 @@ export const useInboxStore = defineStore('inbox', {
         if (this.filters.storeId) params.storeId = this.filters.storeId;
         if (this.filters.status) params.status = this.filters.status;
         if (this.filters.search) params.search = this.filters.search;
+        if (this.filters.mine) params.mine = 'true';
+        if (this.filters.unread) params.unread = 'true';
         const { data } = await api.get('/inbox/conversations', { params });
         this.conversations = Array.isArray(data) ? data : [];
         this.recalcUnread();
@@ -231,5 +238,28 @@ export const useInboxStore = defineStore('inbox', {
     clearOrderDraft(conversationId) {
       delete this.orderDrafts[conversationId];
     },
+
+    async sendInternalNote(conversationId, body) {
+      const { data } = await api.post(`/inbox/conversations/${conversationId}/internal-note`, { body });
+      return data;
+    },
+
+    async updateTags(conversationId, tags) {
+      const { data } = await api.patch(`/inbox/conversations/${conversationId}/tags`, { tags });
+      const idx = this.conversations.findIndex(c => c.id === conversationId);
+      if (idx >= 0) this.conversations[idx] = { ...this.conversations[idx], tags: data.tags };
+      return data;
+    },
+
+    async fetchAllTags() {
+      try {
+        const { data } = await api.get('/inbox/tags');
+        this.allTags = Array.isArray(data) ? data : [];
+      } catch (e) { this.allTags = []; }
+    },
+
+    setReplyTo(messageId) { this.replyToMessageId = messageId; },
+    clearReplyTo() { this.replyToMessageId = null; },
+    toggleInternalMode() { this.internalMode = !this.internalMode; },
   },
 });
