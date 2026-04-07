@@ -161,17 +161,18 @@ router.post('/conversations/:id/send', upload.single('media'), async (req, res) 
       fs.writeFileSync(filePath, req.file.buffer);
 
       // Build public URL
-      const relativePath = `/uploads/inbox/${companyId}/${monthDir()}/${filename}`;
-      const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
-      mediaUrl = `${baseUrl}${relativePath}`;
+      const relativePath = `/public/uploads/inbox/${companyId}/${monthDir()}/${filename}`;
+      mediaUrl = relativePath;
       mediaMimeType = req.file.mimetype;
       mediaFileName = req.file.originalname;
 
       // Send media via Evolution API
+      // Evolution API needs absolute URL to download the file
+      const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
       await evoSendMediaUrl({
         instanceName,
         to,
-        mediaUrl,
+        mediaUrl: `${baseUrl}${mediaUrl}`,
         filename: req.file.originalname,
         mimeType: req.file.mimetype,
         caption: textBody || '',

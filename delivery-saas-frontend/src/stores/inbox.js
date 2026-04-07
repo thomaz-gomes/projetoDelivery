@@ -119,15 +119,26 @@ export const useInboxStore = defineStore('inbox', {
     handleNewMessage({ conversationId, message, conversation: convData }) {
       const idx = this.conversations.findIndex(c => c.id === conversationId);
       if (idx >= 0) {
-        this.conversations[idx] = { ...this.conversations[idx], ...convData, messages: [message] };
+        // Merge new data, keep local fields
+        const existing = this.conversations[idx];
+        this.conversations[idx] = { ...existing, ...convData, messages: [message] };
+        // Move to top
         const [conv] = this.conversations.splice(idx, 1);
         this.conversations.unshift(conv);
-      } else {
-        this.conversations.unshift({ ...convData, messages: [message] });
+      } else if (convData) {
+        // New conversation (e.g. reopened and not in current filtered list)
+        this.conversations.unshift({ ...convData, id: conversationId, messages: [message] });
       }
+
+      // Add message to loaded messages
       if (this.messages[conversationId]) {
-        this.messages[conversationId].push(message);
+        const exists = this.messages[conversationId].find(m => m.id === message.id);
+        if (!exists) this.messages[conversationId].push(message);
+      } else if (this.activeConversationId === conversationId) {
+        // If viewing this conversation but messages not loaded yet
+        this.messages[conversationId] = [message];
       }
+
       this.recalcUnread();
     },
 

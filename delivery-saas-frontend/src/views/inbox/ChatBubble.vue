@@ -14,23 +14,23 @@
       <!-- IMAGE -->
       <div v-else-if="message.type === 'IMAGE'">
         <img
-          :src="message.mediaUrl"
+          :src="resolvedMediaUrl"
           class="img-fluid rounded cursor-pointer"
           style="max-height: 300px; cursor: pointer;"
-          @click="openMedia(message.mediaUrl)"
+          @click="openMedia(resolvedMediaUrl)"
         />
         <div v-if="message.body" class="mt-1 small" style="white-space: pre-wrap;">{{ message.body }}</div>
       </div>
 
       <!-- AUDIO -->
       <div v-else-if="message.type === 'AUDIO'">
-        <AudioPlayer :src="message.mediaUrl" />
+        <AudioPlayer :src="resolvedMediaUrl" />
       </div>
 
       <!-- VIDEO -->
       <div v-else-if="message.type === 'VIDEO'">
         <video
-          :src="message.mediaUrl"
+          :src="resolvedMediaUrl"
           controls
           class="rounded"
           style="max-width: 100%; max-height: 300px;"
@@ -40,7 +40,7 @@
 
       <!-- DOCUMENT -->
       <div v-else-if="message.type === 'DOCUMENT'">
-        <a :href="message.mediaUrl" target="_blank" class="text-decoration-none">
+        <a :href="resolvedMediaUrl" target="_blank" class="text-decoration-none">
           <i class="bi bi-file-earmark me-1"></i>
           {{ message.body || 'Documento' }}
         </a>
@@ -60,7 +60,7 @@
       <!-- STICKER -->
       <div v-else-if="message.type === 'STICKER'">
         <img
-          :src="message.mediaUrl"
+          :src="resolvedMediaUrl"
           style="max-width: 150px; max-height: 150px;"
         />
       </div>
@@ -82,6 +82,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import { API_URL } from '@/config';
 import AudioPlayer from './AudioPlayer.vue';
 
 const props = defineProps({
@@ -89,6 +90,14 @@ const props = defineProps({
 });
 
 const isOutbound = computed(() => props.message.direction === 'OUTBOUND');
+
+// Resolve media URL: relative paths need API_URL prefix
+const resolvedMediaUrl = computed(() => {
+  const url = props.message.mediaUrl;
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${API_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+});
 
 const formattedTime = computed(() => {
   const d = new Date(props.message.createdAt);

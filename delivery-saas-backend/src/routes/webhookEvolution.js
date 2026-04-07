@@ -284,17 +284,23 @@ async function processSingleMessage(req, msg, instanceName) {
     }
   }
 
-  await prisma.conversation.update({
+  const updatedConversation = await prisma.conversation.update({
     where: { id: conversation.id },
     data: updateData,
+    include: {
+      customer: { select: { id: true, fullName: true, whatsapp: true } },
+      assignedUser: { select: { id: true, name: true } },
+      store: { select: { id: true, name: true } },
+    },
   });
 
-  // Emit Socket.IO event
+  // Emit Socket.IO event with full conversation data
   const io = req.app.get('io');
   if (io) {
     io.to(`company_${companyId}`).emit('inbox:new-message', {
       conversationId: conversation.id,
       message,
+      conversation: updatedConversation,
     });
   }
 }
@@ -459,8 +465,8 @@ async function downloadMedia(url, companyId, mimeType) {
   const filePath = path.join(absDir, filename);
   fs.writeFileSync(filePath, response.data);
 
-  // Return public-accessible path
-  return `/${relDir}/${filename}`;
+  // Return public-accessible path (served via /public static mount)
+  return `/public/${relDir}/${filename}`;
 }
 
 export default router;
