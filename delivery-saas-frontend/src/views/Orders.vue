@@ -1121,7 +1121,8 @@ function normalizeOrder(o){
       } catch (e) { return null; }
     })(),
     couponSponsor: (function() {
-      // Extract who subsidizes the discount: "IFOOD", "MERCHANT" or both
+      // Extract who subsidizes the discount: Loja, iFood, Indústria, Rede
+      const sponsorLabels = { MERCHANT: 'Loja', IFOOD: 'iFood', EXTERNAL: 'Indústria', CHAIN: 'Rede' };
       try {
         const discounts = o.payload?.order?.benefits || o.payload?.order?.discounts || o.payload?.discounts || [];
         if (!Array.isArray(discounts) || discounts.length === 0) return null;
@@ -1129,10 +1130,13 @@ function normalizeOrder(o){
         discounts.forEach(d => {
           if (Array.isArray(d.sponsorshipValues)) {
             d.sponsorshipValues.forEach(sv => {
-              if (sv.amount > 0 && sv.name) sponsors.add(String(sv.name).toUpperCase() === 'MERCHANT' ? 'Loja' : 'iFood');
+              if (Number(sv.value || sv.amount || 0) > 0 && sv.name) {
+                sponsors.add(sponsorLabels[String(sv.name).toUpperCase()] || sv.name);
+              }
             });
           } else if (d.source) {
-            sponsors.add(String(d.source).toUpperCase() === 'MERCHANT' ? 'Loja' : 'iFood');
+            const key = String(d.source).toUpperCase();
+            sponsors.add(sponsorLabels[key] || d.source);
           }
         });
         return sponsors.size > 0 ? Array.from(sponsors).join(' + ') : null;
@@ -3290,7 +3294,7 @@ function pulseButton() {
                 </ul>
                 <div v-if="normalizeOrder(o).couponCode || normalizeOrder(o).couponDiscount" class="mt-2 small" style="color: #198754;">
                   <i class="bi bi-ticket-perforated me-1"></i>
-                  <strong>{{ normalizeOrder(o).couponCode ? `Voucher (${normalizeOrder(o).couponCode})` : 'Voucher Desconto' }}:</strong>
+                  <strong>{{ normalizeOrder(o).couponCode ? `Voucher (${normalizeOrder(o).couponCode})` : 'Voucher Desconto' }}{{ normalizeOrder(o).couponSponsor ? ` - ${normalizeOrder(o).couponSponsor}` : '' }}:</strong>
                   -{{ formatCurrency(normalizeOrder(o).couponDiscount) }}
                 </div>
                 <div v-if="normalizeOrder(o).paymentChange" class="mt-2 small">
@@ -3471,11 +3475,10 @@ function pulseButton() {
               <div class="od-pay-row" v-if="selectedNormalized?.couponDiscount">
                 <span class="od-pay-label">
                   <i class="bi bi-ticket-perforated me-1"></i>
-                  {{ selectedNormalized.couponCode ? `Voucher (${selectedNormalized.couponCode})` : 'Voucher Desconto' }}
+                  {{ selectedNormalized.couponCode ? `Voucher (${selectedNormalized.couponCode})` : 'Voucher Desconto' }}{{ selectedNormalized.couponSponsor ? ` - ${selectedNormalized.couponSponsor}` : '' }}
                 </span>
                 <span class="od-pay-value text-success">
                   -{{ formatCurrency(selectedNormalized.couponDiscount) }}
-                  <span v-if="selectedNormalized.couponSponsor" class="text-muted small ms-1">({{ selectedNormalized.couponSponsor }})</span>
                 </span>
               </div>
               <div class="od-pay-row" v-if="selectedOrder?.orderType === 'DELIVERY'">
