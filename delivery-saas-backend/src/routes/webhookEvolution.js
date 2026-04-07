@@ -221,13 +221,30 @@ async function processSingleMessage(req, msg, instanceName) {
     if (existing) return;
   }
 
-  // Download media if present
+  // Download media via Evolution API decryption (URLs are encrypted WhatsApp blobs)
   let localMediaUrl = null;
-  if (evoMediaUrl && type !== 'TEXT' && type !== 'LOCATION') {
+  if (type !== 'TEXT' && type !== 'LOCATION') {
     try {
-      localMediaUrl = await downloadMedia(evoMediaUrl, companyId, mediaMimeType);
+      // Try base64 already in payload first (when webhookBase64: true)
+      const inlineBase64 =
+        messageContent.base64 ||
+        messageContent.imageMessage?.base64 ||
+        messageContent.audioMessage?.base64 ||
+        messageContent.videoMessage?.base64 ||
+        messageContent.documentMessage?.base64 ||
+        messageContent.documentWithCaptionMessage?.message?.documentMessage?.base64 ||
+        messageContent.stickerMessage?.base64 ||
+        msg.base64 ||
+        null;
+
+      if (inlineBase64) {
+        localMediaUrl = await saveBase64Media(inlineBase64, companyId, mediaMimeType);
+      } else {
+        // Fall back to Evolution API decryption endpoint
+        localMediaUrl = await downloadMediaViaEvolution(instanceName, msg, companyId, mediaMimeType);
+      }
     } catch (err) {
-      console.error('[webhookEvolution] Media download failed:', err.message);
+      console.error('[webhookEvolution] Media download failed:', err.response?.data || err.message);
     }
   }
 
@@ -446,27 +463,48 @@ function mimeToExtension(mime) {
   return map[mime] || mime?.split('/')?.[1] || 'bin';
 }
 
-async function downloadMedia(url, companyId, mimeType) {
+// Build a target file path and ensure the directory exists
+function buildMediaTarget(companyId, mimeType) {
   const now = new Date();
   const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const ext = mimeToExtension(mimeType);
   const filename = `${crypto.randomUUID()}.${ext}`;
   const relDir = `uploads/inbox/${companyId}/${yearMonth}`;
   const absDir = path.join(process.cwd(), 'public', relDir);
-
-  // Ensure directory exists
   fs.mkdirSync(absDir, { recursive: true });
+  return {
+    filePath: path.join(absDir, filename),
+    publicUrl: `/public/${relDir}/${filename}`,
+  };
+}
 
-  const response = await axios.get(url, {
-    responseType: 'arraybuffer',
-    timeout: 30000,
-  });
+// Save inline base64 from webhook payload
+async function saveBase64Media(base64, companyId, mimeType) {
+  const { filePath, publicUrl } = buildMediaTarget(companyId, mimeType);
+  const buffer = Buffer.from(base64, 'base64');
+  fs.writeFileSync(filePath, buffer);
+  return publicUrl;
+}
 
-  const filePath = path.join(absDir, filename);
-  fs.writeFileSync(filePath, response.data);
+// Decrypt media via Evolution API endpoint
+async function downloadMediaViaEvolution(instanceName, msg, companyId, mimeType) {
+  const baseURL = process.env.EVOLUTION_API_BASE_URL;
+  const apiKey = process.env.EVOLUTION_API_API_KEY;
+  if (!baseURL || !apiKey) throw new Error('Evolution API not configured');
 
-  // Return public-accessible path (served via /public static mount)
-  return `/public/${relDir}/${filename}`;
+  // Evolution API v2: POST /chat/getBase64FromMediaMessage/{instance}
+  // Body: { message: { key }, convertToMp4: false }
+  const url = `${baseURL.replace(/\/$/, '')}/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`;
+  const { data } = await axios.post(
+    url,
+    { message: { key: msg.key }, convertToMp4: false },
+    { headers: { apikey: apiKey, 'Content-Type': 'application/json' }, timeout: 30000 }
+  );
+
+  const base64 = data?.base64 || data?.media || data?.mediaBase64 || null;
+  if (!base64) throw new Error('No base64 returned from Evolution API');
+
+  return await saveBase64Media(base64, companyId, data?.mimetype || mimeType);
 }
 
 export default router;
