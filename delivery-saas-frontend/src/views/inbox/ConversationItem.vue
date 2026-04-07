@@ -1,32 +1,27 @@
 <template>
   <div
-    class="d-flex align-items-center px-3 py-2 border-bottom cursor-pointer"
-    :class="{ 'bg-light': active }"
+    class="d-flex align-items-center p-2 border-bottom"
+    :class="{ 'bg-light': selected }"
     style="cursor: pointer;"
     @click="$emit('click')"
   >
     <!-- Avatar -->
     <div
-      class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center flex-shrink-0 me-3"
-      style="width: 44px; height: 44px; font-size: 0.9rem; font-weight: 600;"
+      class="rounded-circle d-flex align-items-center justify-content-center text-white fw-semibold flex-shrink-0"
+      :style="{ width: '40px', height: '40px', backgroundColor: avatarColor, fontSize: '0.9rem' }"
     >
       {{ initials }}
     </div>
 
     <!-- Content -->
-    <div class="flex-grow-1 min-width-0">
-      <div class="d-flex justify-content-between align-items-center">
-        <span class="fw-semibold text-truncate" style="max-width: 180px;">{{ displayName }}</span>
-        <small class="text-muted flex-shrink-0 ms-2">{{ timeAgo }}</small>
+    <div class="flex-grow-1 ms-2 min-width-0">
+      <div class="d-flex justify-content-between align-items-baseline">
+        <span class="fw-semibold text-truncate small">{{ displayName }}</span>
+        <small class="text-muted flex-shrink-0 ms-1" style="font-size: 0.7rem;">{{ timeAgo }}</small>
       </div>
       <div class="d-flex justify-content-between align-items-center">
-        <small class="text-muted text-truncate" style="max-width: 220px;">{{ lastMessagePreview }}</small>
-        <span
-          v-if="conversation.unreadCount"
-          class="badge bg-success rounded-pill ms-2 flex-shrink-0"
-        >
-          {{ conversation.unreadCount }}
-        </span>
+        <small class="text-muted text-truncate">{{ preview }}</small>
+        <span v-if="conversation.unreadCount > 0" class="badge bg-success rounded-pill ms-1">{{ conversation.unreadCount }}</span>
       </div>
     </div>
   </div>
@@ -37,54 +32,58 @@ import { computed } from 'vue';
 
 const props = defineProps({
   conversation: { type: Object, required: true },
-  active: { type: Boolean, default: false },
+  selected: { type: Boolean, default: false },
 });
 
 defineEmits(['click']);
 
+const AVATAR_COLORS = ['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#34495e','#16a085','#c0392b'];
+
 const displayName = computed(() => {
-  const c = props.conversation;
-  return c.customer?.fullName || c.contactName || c.channelContactId || 'Desconhecido';
+  return props.conversation.customer?.fullName
+    || props.conversation.contactName
+    || props.conversation.channelContactId
+    || 'Sem nome';
 });
 
 const initials = computed(() => {
-  const name = displayName.value;
+  const name = displayName.value || '?';
   const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return (name[0] || '?').toUpperCase();
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 });
 
-const lastMessagePreview = computed(() => {
-  const msgs = props.conversation.messages;
-  if (!msgs || !msgs.length) return '';
-  const last = msgs[msgs.length - 1] || msgs[0];
-  if (last.type === 'TEXT') return last.body || '';
-  const typeLabels = {
-    IMAGE: 'Imagem',
-    AUDIO: 'Audio',
-    VIDEO: 'Video',
-    DOCUMENT: 'Documento',
-    LOCATION: 'Localizacao',
-    STICKER: 'Sticker',
-  };
-  return '\uD83D\uDCCE ' + (typeLabels[last.type] || last.type);
+const avatarColor = computed(() => {
+  const name = displayName.value;
+  let hash = 0;
+  for (const c of name) hash = (hash * 31 + c.charCodeAt(0)) | 0;
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+});
+
+const preview = computed(() => {
+  const lastMsg = props.conversation.messages?.[0];
+  if (!lastMsg) return '';
+  if (lastMsg.internal) return '🔒 ' + (lastMsg.body || 'Nota interna');
+  switch (lastMsg.type) {
+    case 'IMAGE': return '📷 Foto' + (lastMsg.body ? ': ' + lastMsg.body : '');
+    case 'AUDIO': return '🎤 Áudio';
+    case 'VIDEO': return '📹 Vídeo' + (lastMsg.body ? ': ' + lastMsg.body : '');
+    case 'DOCUMENT': return '📎 ' + (lastMsg.mediaFileName || 'Documento');
+    case 'LOCATION': return '📍 Localização';
+    case 'STICKER': return 'Sticker';
+    default: return lastMsg.body || '';
+  }
 });
 
 const timeAgo = computed(() => {
-  const msgs = props.conversation.messages;
-  const dateStr = props.conversation.lastMessageAt
-    || (msgs && msgs.length ? (msgs[msgs.length - 1] || msgs[0]).createdAt : null);
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'agora';
-  if (diffMin < 60) return diffMin + 'm';
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return diffH + 'h';
-  const dd = String(date.getDate()).padStart(2, '0');
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  return dd + '/' + mm;
+  const d = props.conversation.lastMessageAt;
+  if (!d) return '';
+  const diff = Date.now() - new Date(d).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'agora';
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h';
+  return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 });
 </script>
