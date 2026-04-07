@@ -124,42 +124,56 @@ export const useInboxStore = defineStore('inbox', {
 
     // Socket.IO event handlers
     handleNewMessage({ conversationId, message, conversation: convData }) {
+      // 1) Update conversations list (reassign array to ensure reactivity)
       const idx = this.conversations.findIndex(c => c.id === conversationId);
       if (idx >= 0) {
-        // Merge new data, keep local fields
         const existing = this.conversations[idx];
-        this.conversations[idx] = { ...existing, ...convData, messages: [message] };
-        // Move to top
-        const [conv] = this.conversations.splice(idx, 1);
-        this.conversations.unshift(conv);
+        const merged = { ...existing, ...(convData || {}), messages: [message] };
+        // Move merged conversation to top
+        const newList = [merged, ...this.conversations.filter((_, i) => i !== idx)];
+        this.conversations = newList;
       } else if (convData) {
-        // New conversation (e.g. reopened and not in current filtered list)
-        this.conversations.unshift({ ...convData, id: conversationId, messages: [message] });
+        this.conversations = [{ ...convData, id: conversationId, messages: [message] }, ...this.conversations];
       }
 
-      // Add message to loaded messages
-      if (this.messages[conversationId]) {
-        const exists = this.messages[conversationId].find(m => m.id === message.id);
-        if (!exists) this.messages[conversationId].push(message);
+      // 2) Update loaded messages map (reassign nested array to trigger reactivity)
+      const current = this.messages[conversationId];
+      if (current) {
+        const exists = current.find(m => m.id === message.id);
+        if (!exists) {
+          this.messages = {
+            ...this.messages,
+            [conversationId]: [...current, message],
+          };
+        }
       } else if (this.activeConversationId === conversationId) {
-        // If viewing this conversation but messages not loaded yet
-        this.messages[conversationId] = [message];
+        this.messages = {
+          ...this.messages,
+          [conversationId]: [message],
+        };
       }
 
       this.recalcUnread();
     },
 
     handleMessageSent({ conversationId, message }) {
-      if (this.messages[conversationId]) {
-        const exists = this.messages[conversationId].find(m => m.id === message.id);
-        if (!exists) this.messages[conversationId].push(message);
+      const current = this.messages[conversationId];
+      if (current) {
+        const exists = current.find(m => m.id === message.id);
+        if (!exists) {
+          this.messages = {
+            ...this.messages,
+            [conversationId]: [...current, message],
+          };
+        }
       }
     },
 
     handleMessageStatus({ messageId, conversationId, status }) {
-      if (this.messages[conversationId]) {
-        const msg = this.messages[conversationId].find(m => m.id === messageId);
-        if (msg) msg.status = status;
+      const current = this.messages[conversationId];
+      if (current) {
+        const updated = current.map(m => m.id === messageId ? { ...m, status } : m);
+        this.messages = { ...this.messages, [conversationId]: updated };
       }
     },
 
