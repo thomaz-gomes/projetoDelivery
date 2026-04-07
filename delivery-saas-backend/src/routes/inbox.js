@@ -680,4 +680,58 @@ router.patch('/customer/:id/addresses/:addrId', async (req, res) => {
   }
 });
 
+// ─── Tags: update conversation tags ────────────────────────────────────────
+
+router.patch('/conversations/:id/tags', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { tags } = req.body;
+    if (!Array.isArray(tags)) return res.status(400).json({ message: 'tags deve ser array' });
+
+    const conv = await prisma.conversation.findFirst({
+      where: { id: req.params.id, companyId },
+      select: { id: true },
+    });
+    if (!conv) return res.status(404).json({ message: 'Conversa não encontrada' });
+
+    const cleanTags = tags
+      .map(t => String(t).trim().toLowerCase())
+      .filter(t => t.length > 0 && t.length < 30);
+    const uniqueTags = [...new Set(cleanTags)];
+
+    const updated = await prisma.conversation.update({
+      where: { id: conv.id },
+      data: { tags: uniqueTags },
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`company_${companyId}`).emit('inbox:conversation-updated', { conversation: updated });
+    }
+
+    res.json(updated);
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao atualizar tags', error: e.message });
+  }
+});
+
+// ─── Tags: autocomplete (top 20 by usage) ──────────────────────────────────
+
+router.get('/tags', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const result = await prisma.$queryRaw`
+      SELECT unnest(tags) as tag, COUNT(*)::int as count
+      FROM "Conversation"
+      WHERE "companyId" = ${companyId} AND array_length(tags, 1) > 0
+      GROUP BY tag
+      ORDER BY count DESC
+      LIMIT 20
+    `;
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao buscar tags', error: e.message });
+  }
+});
+
 export default router;
