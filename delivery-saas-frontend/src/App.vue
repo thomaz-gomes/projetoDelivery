@@ -142,6 +142,7 @@ const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules
 
 // show the dashboard layout (sidebar/topbar) for all routes except the login page and public menu
 const route = useRoute();
+const isInboxRoute = computed(() => route?.path?.startsWith('/inbox') === true);
 const showLayout = computed(() => {
   // hide layout for login, register, verify, setup and for any public routes (start with /public)
   if(!route || !route.path) return true
@@ -269,7 +270,7 @@ const showMobileHeader = computed(() => {
         </div>
 
         <!-- Conteúdo -->
-        <main class="flex-grow-1 min-vh-100 main-content" style="max-height: 100%; overflow-y: auto;">
+        <main class="flex-grow-1 min-vh-100 main-content" :class="{ 'main-content--flush': isInboxRoute }" style="max-height: 100%; overflow-y: auto;">
           <router-view />
         </main>
       </div>
@@ -322,13 +323,19 @@ const showMobileHeader = computed(() => {
 }
 
 /* Main content responsive padding */
-.main-content { padding: 1.5rem; }
+.main-content { padding:1.5rem; }
 
 @media (max-width: 767.98px) {
   .main-content {
     padding: 1rem 0.75rem;
     padding-top: calc(52px + 0.75rem); /* compensar header fixo */
   }
+}
+
+/* Inbox route: zero padding so the inbox can use full available area */
+.main-content--flush { padding: 0 !important; }
+@media (max-width: 767.98px) {
+  .main-content--flush { padding-top: 52px !important; } /* keep mobile header offset */
 }
 /* Apply Sidebar color scheme and typography to mobile offcanvas list */
 .mobile-links-list { background: #89d136; padding: 8px 10px; border-radius: 8px; }
