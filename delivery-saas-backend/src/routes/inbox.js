@@ -25,17 +25,20 @@ function monthDir() {
 router.get('/conversations', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { storeId, status, search, cursor, limit: rawLimit } = req.query;
+    const { storeId, status, search, cursor, mine, unread, limit: rawLimit } = req.query;
     const limit = Math.min(Math.max(parseInt(rawLimit, 10) || 50, 1), 100);
 
     const where = { companyId };
     if (storeId) where.storeId = storeId;
-    if (status) where.status = status;
+    if (status) where.status = status.toUpperCase();
+    if (mine === 'true' || mine === '1') where.assignedUserId = req.user.id;
+    if (unread === 'true' || unread === '1') where.unreadCount = { gt: 0 };
     if (search) {
       where.OR = [
         { contactName: { contains: search, mode: 'insensitive' } },
         { channelContactId: { contains: search } },
         { customer: { fullName: { contains: search, mode: 'insensitive' } } },
+        { messages: { some: { body: { contains: search, mode: 'insensitive' } } } },
       ];
     }
     if (cursor) {
