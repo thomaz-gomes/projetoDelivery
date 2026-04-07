@@ -1,11 +1,24 @@
 <template>
-  <div class="d-flex flex-column h-100">
+  <div
+    class="d-flex flex-column h-100 position-relative"
+    @dragover.prevent="onDragOver"
+    @drop.prevent="onDrop"
+    @dragleave="onDragLeave"
+  >
     <!-- Header -->
     <ConversationHeader
       :conversation="inboxStore.activeConversation"
       @back="$emit('back')"
       @toggle-panel="$emit('toggle-panel')"
     />
+
+    <!-- Drag overlay -->
+    <div v-if="isDragging" class="drag-overlay">
+      <div class="text-center">
+        <i class="bi bi-cloud-upload" style="font-size: 3rem;"></i>
+        <p class="mt-2">Solte o arquivo aqui</p>
+      </div>
+    </div>
 
     <!-- Messages area -->
     <div
@@ -19,26 +32,37 @@
         <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
       </div>
 
-      <ChatBubble
-        v-for="msg in inboxStore.activeMessages"
-        :key="msg.id"
-        :message="msg"
-      />
+      <template v-for="(item, idx) in groupedItems" :key="idx">
+        <div v-if="item.type === 'separator'" class="text-center my-3">
+          <span class="badge bg-light text-dark">{{ item.label }}</span>
+        </div>
+        <ChatBubble
+          v-else
+          :message="item.message"
+          :all-messages="inboxStore.activeMessages"
+          @reply="onReply"
+          @open-image="openLightbox"
+        />
+      </template>
     </div>
 
     <!-- Input -->
     <ChatInput
       :conversation-id="conversationId"
     />
+
+    <!-- Lightbox -->
+    <ImageLightbox v-if="lightboxSrc" :src="lightboxSrc" @close="lightboxSrc = null" />
   </div>
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted } from 'vue';
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import ConversationHeader from './ConversationHeader.vue';
 import ChatBubble from './ChatBubble.vue';
 import ChatInput from './ChatInput.vue';
+import ImageLightbox from './ImageLightbox.vue';
 
 const props = defineProps({
   conversationId: { type: String, required: true },
@@ -49,8 +73,65 @@ defineEmits(['back', 'toggle-panel']);
 const inboxStore = useInboxStore();
 const messagesContainer = ref(null);
 const loadingOlder = ref(false);
+const isDragging = ref(false);
+const lightboxSrc = ref(null);
 let oldestCursor = null;
 let noMoreOlder = false;
+
+function dayLabel(date) {
+  const d = new Date(date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(d);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.floor((today - target) / 86400000);
+  if (diffDays === 0) return 'Hoje';
+  if (diffDays === 1) return 'Ontem';
+  if (diffDays < 7) return d.toLocaleDateString('pt-BR', { weekday: 'long' });
+  return d.toLocaleDateString('pt-BR');
+}
+
+const groupedItems = computed(() => {
+  const items = [];
+  let lastDate = null;
+  for (const msg of inboxStore.activeMessages) {
+    const dateKey = new Date(msg.createdAt).toDateString();
+    if (dateKey !== lastDate) {
+      items.push({ type: 'separator', label: dayLabel(msg.createdAt) });
+      lastDate = dateKey;
+    }
+    items.push({ type: 'message', message: msg });
+  }
+  return items;
+});
+
+function onReply(messageId) {
+  inboxStore.setReplyTo?.(messageId);
+}
+
+function openLightbox(src) {
+  lightboxSrc.value = src;
+}
+
+function onDragOver(e) {
+  if (e.dataTransfer?.types?.includes('Files')) {
+    isDragging.value = true;
+  }
+}
+
+function onDragLeave(e) {
+  if (e.currentTarget && !e.currentTarget.contains(e.relatedTarget)) {
+    isDragging.value = false;
+  }
+}
+
+function onDrop(e) {
+  isDragging.value = false;
+  const file = e.dataTransfer?.files?.[0];
+  if (file) {
+    window.dispatchEvent(new CustomEvent('inbox-drop-file', { detail: file }));
+  }
+}
 
 async function loadMessages() {
   if (!inboxStore.messages[props.conversationId]) {
@@ -85,7 +166,6 @@ async function onScroll() {
       }
       if (msgs.length < 50) noMoreOlder = true;
       await nextTick();
-      // Maintain scroll position after prepending
       if (messagesContainer.value) {
         const newHeight = messagesContainer.value.scrollHeight;
         messagesContainer.value.scrollTop = newHeight - prevHeight;
@@ -123,3 +203,21 @@ onMounted(() => {
   loadMessages();
 });
 </script>
+
+<style scoped>
+.drag-overlay {
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  bottom: 80px;
+  background: rgba(13, 110, 253, 0.1);
+  border: 3px dashed #0d6efd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none;
+  color: #0d6efd;
+}
+</style>
