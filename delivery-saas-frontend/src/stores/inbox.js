@@ -76,6 +76,29 @@ export const useInboxStore = defineStore('inbox', {
       const { data } = await api.post(`/inbox/conversations/${conversationId}/send`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+
+      // Optimistic local update — don't rely on socket to render our own message
+      if (data && data.id) {
+        this.handleNewMessage({
+          conversationId,
+          message: data,
+          conversation: null,
+        });
+      }
+
+      return data;
+    },
+
+    async sendInternalNote(conversationId, body) {
+      const { data } = await api.post(`/inbox/conversations/${conversationId}/internal-note`, { body });
+      // Optimistic local update
+      if (data && data.id) {
+        this.handleNewMessage({
+          conversationId,
+          message: data,
+          conversation: null,
+        });
+      }
       return data;
     },
 
@@ -251,11 +274,6 @@ export const useInboxStore = defineStore('inbox', {
 
     clearOrderDraft(conversationId) {
       delete this.orderDrafts[conversationId];
-    },
-
-    async sendInternalNote(conversationId, body) {
-      const { data } = await api.post(`/inbox/conversations/${conversationId}/internal-note`, { body });
-      return data;
     },
 
     async updateTags(conversationId, tags) {
