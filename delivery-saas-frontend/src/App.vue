@@ -270,7 +270,7 @@ const showMobileHeader = computed(() => {
         </div>
 
         <!-- Conteúdo -->
-        <main class="flex-grow-1 min-vh-100 main-content" :class="{ 'main-content--flush': isInboxRoute }" style="max-height: 100%; overflow-y: auto;">
+        <main class="flex-grow-1 min-vh-100 main-content" :class="{ 'main-content--flush': isInboxRoute }" :style="{ maxHeight: '100%', overflowY: isInboxRoute ? 'hidden' : 'auto' }">
           <router-view />
         </main>
       </div>
