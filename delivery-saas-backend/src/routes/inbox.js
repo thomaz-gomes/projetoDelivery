@@ -192,7 +192,25 @@ router.post('/conversations/:id/send', upload.single('media'), async (req, res) 
       if (!textBody) {
         return res.status(400).json({ message: 'Corpo da mensagem é obrigatório para tipo TEXT' });
       }
-      await evoSendText({ instanceName, to, text: textBody });
+      // Build quoted payload if replying to a message
+      let quoted = null;
+      if (quotedMessageId) {
+        const quotedMsg = await prisma.message.findFirst({
+          where: { id: quotedMessageId, conversation: { companyId } },
+          select: { externalId: true, body: true, type: true, direction: true },
+        });
+        if (quotedMsg && quotedMsg.externalId) {
+          quoted = {
+            key: {
+              id: quotedMsg.externalId,
+              fromMe: quotedMsg.direction === 'OUTBOUND',
+              remoteJid: `${conversation.channelContactId}@s.whatsapp.net`,
+            },
+            message: { conversation: quotedMsg.body || '' },
+          };
+        }
+      }
+      await evoSendText({ instanceName, to, text: textBody, quoted });
     }
 
     // Persist message

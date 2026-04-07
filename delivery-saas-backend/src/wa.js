@@ -139,15 +139,15 @@ export async function evoGetQr(instanceName) {
 }
 
 // enviar texto
-export async function evoSendText({ instanceName, to, text }) {
+export async function evoSendText({ instanceName, to, text, quoted }) {
   const number = normalizePhone(to);
   if (!number) throw new Error('Telefone inválido');
 
   const attempts = [
-    { url: '/message/sendText', body: { instanceName, to: number, text } },
-    { url: '/message/send',     body: { instanceName, number, message: text } },
+    { url: '/message/sendText', body: { instanceName, to: number, text, ...(quoted ? { quoted } : {}) } },
+    { url: '/message/send',     body: { instanceName, number, message: text, ...(quoted ? { quoted } : {}) } },
     // alguns builds aceitam rota por path da instância:
-    { url: `/message/sendText/${encodeURIComponent(instanceName)}`, body: { number, text } },
+    { url: `/message/sendText/${encodeURIComponent(instanceName)}`, body: { number, text, ...(quoted ? { quoted } : {}) } },
   ];
 
   let last;
