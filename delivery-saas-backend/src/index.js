@@ -632,18 +632,26 @@ export function attachSocket(server) {
     });
 
     // Allow frontend clients to identify themselves by sending a JWT via 'identify'.
-    // This attaches `socket.user` so server-side code can target sockets by companyId.
-    socket.on('identify', (token) => {
+    // This attaches `socket.user` and joins the company room so the socket can
+    // receive scoped events like inbox:new-message after authenticating.
+    socket.on('identify', (rawToken) => {
       try {
         const JWT_SECRET = process.env.JWT_SECRET;
+        // Be defensive: accept either a raw token string or { token } object
+        const token = typeof rawToken === 'string' ? rawToken : (rawToken && rawToken.token);
         if (!token || !JWT_SECRET) return;
         const user = jwt.verify(token, JWT_SECRET);
         if (user && user.companyId) {
           socket.user = user;
-          console.log('Socket identified as user', socket.id, 'companyId', user.companyId);
+          try {
+            socket.join(`company_${user.companyId}`);
+            console.log('Socket identified and joined room', socket.id, `company_${user.companyId}`);
+          } catch (e) {
+            console.warn('Failed to join company room after identify', e && e.message);
+          }
         }
       } catch (e) {
-        // ignore invalid tokens from identify
+        console.warn('[identify] token verification failed:', e && e.message);
       }
     });
 

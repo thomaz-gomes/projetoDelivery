@@ -114,10 +114,10 @@ onMounted(async () => {
   });
 
   socket.on('connect', () => {
-    // Identify with auth token
+    // Identify with auth token (must be a string, not an object)
     const token = authStore.token || localStorage.getItem('token');
     if (token) {
-      socket.emit('identify', { token });
+      socket.emit('identify', token);
     }
   });
 
@@ -149,3 +149,7 @@ onUnmounted(() => {
   }
 });
 </script>
+<style scoped>
+/* Main content responsive padding */
+.main-content { padding:0 !important; }
+</style>
