@@ -3,7 +3,7 @@
     <div class="py-4">
       <!-- Header -->
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0">Respostas Rapidas</h5>
+        <h5 class="mb-0">Respostas Rápidas</h5>
         <button class="btn btn-primary btn-sm" @click="openCreate">
           <i class="bi bi-plus-lg me-1"></i>Nova
         </button>
@@ -16,7 +16,7 @@
             <thead>
               <tr>
                 <th>Atalho</th>
-                <th>Titulo</th>
+                <th>Título</th>
                 <th>Mensagem</th>
                 <th style="width: 90px;"></th>
               </tr>
@@ -24,15 +24,16 @@
             <tbody>
               <tr v-if="!inboxStore.quickReplies.length">
                 <td colspan="4" class="text-center text-muted py-4">
-                  Nenhuma resposta rapida cadastrada.
+                  Nenhuma resposta rápida cadastrada.
                 </td>
               </tr>
               <tr v-for="reply in inboxStore.quickReplies" :key="reply.id">
-                <td><code>/{{ reply.shortcut }}</code></td>
+                <td><code>{{ reply.shortcut }}</code></td>
                 <td>{{ reply.title }}</td>
                 <td>
-                  <span class="d-inline-block text-truncate" style="max-width: 300px;">
-                    {{ reply.body }}
+                  <i v-if="reply.mediaUrl" class="bi bi-paperclip me-1 text-primary" :title="reply.mediaFileName || 'anexo'"></i>
+                  <span class="d-inline-block text-truncate" style="max-width: 260px; vertical-align: middle;">
+                    {{ reply.body || (reply.mediaUrl ? '(apenas anexo)' : '') }}
                   </span>
                 </td>
                 <td class="text-end">
@@ -54,7 +55,7 @@
         <div class="modal-dialog">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 class="modal-title">{{ editingId ? 'Editar' : 'Nova' }} Resposta Rapida</h5>
+              <h5 class="modal-title">{{ editingId ? 'Editar' : 'Nova' }} Resposta Rápida</h5>
               <button type="button" class="btn-close" @click="showForm = false"></button>
             </div>
             <form @submit.prevent="save">
@@ -64,12 +65,42 @@
                   <input v-model="form.shortcut" type="text" class="form-control" placeholder="ex: ola" required />
                 </div>
                 <div>
-                  <label class="form-label">Titulo</label>
-                  <input v-model="form.title" type="text" class="form-control" placeholder="ex: Saudacao" required />
+                  <label class="form-label">Título</label>
+                  <input v-model="form.title" type="text" class="form-control" placeholder="ex: Saudação" required />
                 </div>
                 <div>
-                  <label class="form-label">Mensagem</label>
-                  <textarea v-model="form.body" class="form-control" rows="4" placeholder="Texto da resposta..." required></textarea>
+                  <label class="form-label">Mensagem <span class="text-muted small">(opcional se tiver anexo)</span></label>
+                  <textarea v-model="form.body" class="form-control" rows="4" placeholder="Texto da resposta..."></textarea>
+                </div>
+
+                <!-- Attachment -->
+                <div>
+                  <label class="form-label">Anexo <span class="text-muted small">(opcional)</span></label>
+
+                  <!-- Existing attachment (edit mode) -->
+                  <div v-if="form.existingMediaUrl && !selectedFile && !form.removeMedia" class="d-flex align-items-center gap-2 p-2 bg-light rounded mb-2 small">
+                    <i class="bi bi-file-earmark"></i>
+                    <span class="text-truncate flex-grow-1">{{ form.existingMediaFileName || 'arquivo' }}</span>
+                    <a :href="assetBase + form.existingMediaUrl" target="_blank" class="btn btn-sm btn-link p-0 me-1" title="Abrir">
+                      <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-danger" @click="markRemoveMedia">Remover</button>
+                  </div>
+
+                  <!-- Selected file preview -->
+                  <div v-else-if="selectedFile" class="d-flex align-items-center gap-2 p-2 bg-light rounded mb-2 small">
+                    <i class="bi bi-paperclip"></i>
+                    <span class="text-truncate flex-grow-1">{{ selectedFile.name }}</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger" @click="clearSelectedFile">Remover</button>
+                  </div>
+
+                  <input
+                    type="file"
+                    class="form-control form-control-sm"
+                    accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,video/*,audio/*"
+                    @change="onFileChange"
+                  />
+                  <small class="text-muted d-block mt-1">Máx 25 MB. Informe texto, anexo, ou ambos.</small>
                 </div>
               </div>
               <div class="modal-footer">
@@ -90,6 +121,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
+import { API_URL } from '@/config';
 import Swal from 'sweetalert2';
 
 const inboxStore = useInboxStore();
@@ -97,35 +129,101 @@ const inboxStore = useInboxStore();
 const showForm = ref(false);
 const saving = ref(false);
 const editingId = ref(null);
-const form = ref({ shortcut: '', title: '', body: '' });
+const selectedFile = ref(null);
+const assetBase = API_URL;
+
+const form = ref({
+  shortcut: '',
+  title: '',
+  body: '',
+  existingMediaUrl: null,
+  existingMediaFileName: null,
+  removeMedia: false,
+});
 
 onMounted(() => {
   inboxStore.fetchQuickReplies();
 });
 
+function resetForm() {
+  form.value = {
+    shortcut: '',
+    title: '',
+    body: '',
+    existingMediaUrl: null,
+    existingMediaFileName: null,
+    removeMedia: false,
+  };
+  selectedFile.value = null;
+}
+
 function openCreate() {
   editingId.value = null;
-  form.value = { shortcut: '', title: '', body: '' };
+  resetForm();
   showForm.value = true;
 }
 
 function openEdit(reply) {
   editingId.value = reply.id;
-  form.value = { shortcut: reply.shortcut, title: reply.title, body: reply.body };
+  form.value = {
+    shortcut: reply.shortcut,
+    title: reply.title,
+    body: reply.body || '',
+    existingMediaUrl: reply.mediaUrl || null,
+    existingMediaFileName: reply.mediaFileName || null,
+    removeMedia: false,
+  };
+  selectedFile.value = null;
   showForm.value = true;
 }
 
+function onFileChange(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (file.size > 25 * 1024 * 1024) {
+    Swal.fire('Erro', 'Arquivo maior que 25 MB', 'error');
+    e.target.value = '';
+    return;
+  }
+  selectedFile.value = file;
+  form.value.removeMedia = false;
+}
+
+function clearSelectedFile() {
+  selectedFile.value = null;
+}
+
+function markRemoveMedia() {
+  form.value.removeMedia = true;
+  selectedFile.value = null;
+}
+
 async function save() {
+  // Validation: body or attachment required
+  const hasBody = form.value.body && form.value.body.trim();
+  const willHaveMedia = !!selectedFile.value || (form.value.existingMediaUrl && !form.value.removeMedia);
+  if (!hasBody && !willHaveMedia) {
+    Swal.fire('Erro', 'Informe texto, anexo, ou ambos', 'error');
+    return;
+  }
+
   saving.value = true;
   try {
+    const fd = new FormData();
+    fd.append('shortcut', form.value.shortcut);
+    fd.append('title', form.value.title);
+    if (hasBody) fd.append('body', form.value.body.trim());
+    if (selectedFile.value) fd.append('file', selectedFile.value);
+    if (form.value.removeMedia) fd.append('removeMedia', 'true');
+
     if (editingId.value) {
-      await inboxStore.updateQuickReply(editingId.value, form.value);
+      await inboxStore.updateQuickReply(editingId.value, fd);
     } else {
-      await inboxStore.createQuickReply(form.value);
+      await inboxStore.createQuickReply(fd);
     }
     showForm.value = false;
   } catch (err) {
-    Swal.fire('Erro', err.response?.data?.error || 'Falha ao salvar', 'error');
+    Swal.fire('Erro', err.response?.data?.message || 'Falha ao salvar', 'error');
   } finally {
     saving.value = false;
   }
@@ -133,8 +231,8 @@ async function save() {
 
 async function confirmDelete(reply) {
   const result = await Swal.fire({
-    title: 'Excluir resposta rapida?',
-    text: `"${reply.title}" sera removida permanentemente.`,
+    title: 'Excluir resposta rápida?',
+    text: `"${reply.title}" será removida permanentemente.`,
     icon: 'warning',
     showCancelButton: true,
     confirmButtonColor: '#dc3545',
@@ -145,7 +243,7 @@ async function confirmDelete(reply) {
     try {
       await inboxStore.deleteQuickReply(reply.id);
     } catch (err) {
-      Swal.fire('Erro', err.response?.data?.error || 'Falha ao excluir', 'error');
+      Swal.fire('Erro', err.response?.data?.message || 'Falha ao excluir', 'error');
     }
   }
 }

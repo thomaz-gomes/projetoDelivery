@@ -25,10 +25,11 @@
         class="btn btn-sm btn-outline-secondary text-nowrap"
         style="font-size: 0.75rem; flex-shrink: 0;"
         :disabled="sending"
-        :title="reply.body"
+        :title="reply.body || reply.mediaFileName || reply.title"
         @click="sendQuickReply(reply)"
       >
-        <i class="bi bi-lightning-charge me-1"></i>{{ reply.title || reply.shortcut }}
+        <i class="bi" :class="reply.mediaUrl ? 'bi-paperclip' : 'bi-lightning-charge'"></i>
+        <span class="ms-1">{{ reply.title || reply.shortcut }}</span>
       </button>
     </div>
 
@@ -146,6 +147,14 @@ function clearFile() {
 }
 
 function onQuickReplySelect(reply) {
+  // If the quick reply has media, send it directly (media can't be previewed in textarea)
+  if (reply.mediaUrl) {
+    text.value = '';
+    nextTick(() => autoResize());
+    sendQuickReply(reply);
+    return;
+  }
+  // Text-only: fill the input so the operator can edit before sending
   text.value = reply.body || '';
   nextTick(() => autoResize());
 }
@@ -212,10 +221,10 @@ async function send() {
 }
 
 async function sendQuickReply(reply) {
-  if (sending.value || !reply?.body) return;
+  if (sending.value || !reply?.id) return;
   sending.value = true;
   try {
-    await inboxStore.sendMessage(props.conversationId, { type: 'TEXT', body: reply.body });
+    await inboxStore.sendQuickReplyById(props.conversationId, reply.id);
   } catch (err) {
     console.error('Failed to send quick reply', err);
   } finally {

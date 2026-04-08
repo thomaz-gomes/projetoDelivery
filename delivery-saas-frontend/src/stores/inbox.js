@@ -128,13 +128,17 @@ export const useInboxStore = defineStore('inbox', {
     },
 
     async createQuickReply(payload) {
-      const { data } = await api.post('/inbox/quick-replies', payload);
+      const isFormData = typeof FormData !== 'undefined' && payload instanceof FormData;
+      const config = isFormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+      const { data } = await api.post('/inbox/quick-replies', payload, config);
       this.quickReplies.push(data);
       return data;
     },
 
     async updateQuickReply(id, payload) {
-      const { data } = await api.put(`/inbox/quick-replies/${id}`, payload);
+      const isFormData = typeof FormData !== 'undefined' && payload instanceof FormData;
+      const config = isFormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+      const { data } = await api.put(`/inbox/quick-replies/${id}`, payload, config);
       const idx = this.quickReplies.findIndex(r => r.id === id);
       if (idx >= 0) this.quickReplies[idx] = data;
       return data;
@@ -143,6 +147,14 @@ export const useInboxStore = defineStore('inbox', {
     async deleteQuickReply(id) {
       await api.delete(`/inbox/quick-replies/${id}`);
       this.quickReplies = this.quickReplies.filter(r => r.id !== id);
+    },
+
+    async sendQuickReplyById(conversationId, quickReplyId) {
+      const { data } = await api.post(`/inbox/conversations/${conversationId}/send-quick-reply`, { quickReplyId });
+      if (data && data.id) {
+        this.handleNewMessage({ conversationId, message: data, conversation: null });
+      }
+      return data;
     },
 
     // Socket.IO event handlers
