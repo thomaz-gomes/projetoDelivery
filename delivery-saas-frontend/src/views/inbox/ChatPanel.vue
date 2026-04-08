@@ -28,8 +28,12 @@
       @scroll="onScroll"
     >
       <!-- Loading older -->
-      <div v-if="loadingOlder" class="text-center py-2">
-        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+      <div v-if="loadingOlder" class="text-center py-2 small text-muted">
+        <div class="spinner-border spinner-border-sm me-1" role="status"></div>
+        Carregando mensagens antigas...
+      </div>
+      <div v-else-if="noMoreMessages && inboxStore.activeMessages.length > 0" class="text-center py-2 small text-muted">
+        <i class="bi bi-check-circle me-1"></i>Início da conversa
       </div>
 
       <template v-for="(item, idx) in groupedItems" :key="idx">
@@ -73,6 +77,7 @@ defineEmits(['back', 'toggle-panel']);
 const inboxStore = useInboxStore();
 const messagesContainer = ref(null);
 const loadingOlder = ref(false);
+const noMoreMessages = ref(false);
 const isDragging = ref(false);
 const lightboxSrc = ref(null);
 let oldestCursor = null;
@@ -156,15 +161,27 @@ function scrollToBottom() {
 
 async function onScroll() {
   if (!messagesContainer.value) return;
-  if (messagesContainer.value.scrollTop < 50 && !loadingOlder.value && !noMoreOlder && oldestCursor) {
+  if (
+    messagesContainer.value.scrollTop < 200 &&
+    !loadingOlder.value &&
+    !noMoreMessages.value &&
+    !noMoreOlder &&
+    oldestCursor
+  ) {
     loadingOlder.value = true;
     const prevHeight = messagesContainer.value.scrollHeight;
     try {
       const msgs = await inboxStore.fetchMessages(props.conversationId, oldestCursor);
-      if (msgs.length > 0) {
+      if (!msgs || msgs.length === 0) {
+        noMoreMessages.value = true;
+        noMoreOlder = true;
+      } else {
         oldestCursor = msgs[0].id;
+        if (msgs.length < 50) {
+          noMoreOlder = true;
+          noMoreMessages.value = true;
+        }
       }
-      if (msgs.length < 50) noMoreOlder = true;
       await nextTick();
       if (messagesContainer.value) {
         const newHeight = messagesContainer.value.scrollHeight;
@@ -195,6 +212,7 @@ watch(
   () => {
     oldestCursor = null;
     noMoreOlder = false;
+    noMoreMessages.value = false;
     loadMessages();
   }
 );
