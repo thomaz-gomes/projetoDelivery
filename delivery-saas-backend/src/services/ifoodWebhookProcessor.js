@@ -706,7 +706,7 @@ export async function processIFoodWebhook(eventId) {
         let confirmOk = false;
         try {
           const { getIFoodAccessToken } = await import('../integrations/ifood/oauth.js');
-          const token = await getIFoodAccessToken(companyId);
+          const token = await getIFoodAccessToken(cachedInteg?.id ? { integrationId: cachedInteg.id } : companyId);
           console.log('[iFood Auto-accept] token obtained, length:', token ? token.length : 0);
           const { default: axios } = await import('axios');
           const baseUrl = (process.env.IFOOD_MERCHANT_BASE || 'https://merchant-api.ifood.com.br').replace(/\/+$/, '');

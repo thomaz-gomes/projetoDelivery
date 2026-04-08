@@ -48,17 +48,19 @@ function makeIFoodHttp() {
  * Polling oficial: busca eventos novos para um merchant
  * GET /order/v1.0/events:polling
  */
-export async function ifoodPoll(companyId) {
-  // Single DB query: fetch integration record and validate token in one step.
-  // getIFoodAccessToken handles refresh and is now cached in memory, so this
-  // avoids the previous double-query (getToken + findFirst for merchant header).
-  const integration = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD', enabled: true }, orderBy: { updatedAt: 'desc' } });
+export async function ifoodPoll(arg) {
+  // Accepts string (legacy companyId) or { integrationId } / { companyId }
+  const integrationId = typeof arg === 'object' && arg ? arg.integrationId : null;
+  const companyId = typeof arg === 'string' ? arg : (arg && arg.companyId) || null;
+
+  const integration = integrationId
+    ? await prisma.apiIntegration.findUnique({ where: { id: integrationId } })
+    : await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD', enabled: true }, orderBy: { updatedAt: 'desc' } });
 
   if (!integration) throw new Error('Integração iFood não encontrada');
   if (!integration.accessToken) throw new Error('Sem token ativo para o iFood');
 
-  // Use cached getIFoodAccessToken to handle refresh logic (avoids extra DB hit)
-  const token = await getIFoodAccessToken(companyId);
+  const token = await getIFoodAccessToken(integrationId ? { integrationId } : { companyId: integration.companyId });
   const http = makeIFoodHttp();
 
   // Prefer numeric merchantId from DB (used by polling), otherwise merchantUuid, then env
@@ -190,12 +192,14 @@ export async function ifoodPoll(companyId) {
  * Envia acknowledgment para os eventos já processados
  * POST /order/v1.0/events/acknowledgment
  */
-export async function ifoodAck(companyId, events = []) {
+export async function ifoodAck(arg, events = []) {
   if (!Array.isArray(events) || events.length === 0) {
     return { ok: true, message: 'Nada para confirmar' };
   }
 
-  const token = await getIFoodAccessToken(companyId);
+  const integrationId = typeof arg === 'object' && arg ? arg.integrationId : null;
+  const companyId = typeof arg === 'string' ? arg : (arg && arg.companyId) || null;
+  const token = await getIFoodAccessToken(integrationId ? { integrationId } : { companyId });
   const http = makeIFoodHttp();
 
   try {

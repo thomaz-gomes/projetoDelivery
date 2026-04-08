@@ -160,8 +160,10 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
 // ================================================================
 // 3️⃣ Atualizar access_token usando refresh_token
 // ================================================================
-export async function refreshAccessToken({ companyId }) {
-  const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
+export async function refreshAccessToken({ companyId, integrationId } = {}) {
+  const integ = integrationId
+    ? await prisma.apiIntegration.findUnique({ where: { id: integrationId } })
+    : await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD' }, orderBy: { updatedAt: 'desc' } });
   // Allow client credentials to come from environment when per-integration values are not present.
   const clientId = integ?.clientId || process.env.IFOOD_CLIENT_ID || null;
   const clientSecret = integ?.clientSecret || process.env.IFOOD_CLIENT_SECRET || null;
@@ -221,14 +223,23 @@ export async function refreshAccessToken({ companyId }) {
 const _tokenCache = new Map();
 const TOKEN_CACHE_TTL_MS = 30_000; // 30s — short enough to pick up refreshes quickly
 
-export async function getIFoodAccessToken(companyId) {
-  // Check in-memory cache first
-  const cached = _tokenCache.get(companyId);
+export async function getIFoodAccessToken(arg) {
+  // Accepts:
+  //   - string (legacy: companyId)
+  //   - { integrationId } (preferred for multi-integration setups)
+  //   - { companyId }
+  const integrationId = typeof arg === 'object' && arg ? arg.integrationId : null;
+  const companyId = typeof arg === 'string' ? arg : (arg && arg.companyId) || null;
+  const cacheKey = integrationId ? `i:${integrationId}` : `c:${companyId}`;
+
+  const cached = _tokenCache.get(cacheKey);
   if (cached && cached.token && Date.now() < cached.expiresAt - 10_000 && Date.now() < cached.cachedUntil) {
     return cached.token;
   }
 
-  const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD', enabled: true }, orderBy: { tokenExpiresAt: 'desc' } });
+  const integ = integrationId
+    ? await prisma.apiIntegration.findUnique({ where: { id: integrationId } })
+    : await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'IFOOD', enabled: true }, orderBy: { tokenExpiresAt: 'desc' } });
 
   if (!integ?.accessToken) {
     throw new Error('Sem token. Finalize o vínculo com o iFood primeiro.');
@@ -236,13 +247,13 @@ export async function getIFoodAccessToken(companyId) {
 
   const exp = integ.tokenExpiresAt ? new Date(integ.tokenExpiresAt).getTime() : 0;
   if (Date.now() > exp - 10_000) {
-    const r = await refreshAccessToken({ companyId });
+    const r = await refreshAccessToken(integrationId ? { integrationId } : { companyId });
     const newToken = r.integration.accessToken;
     const newExp = r.integration.tokenExpiresAt ? new Date(r.integration.tokenExpiresAt).getTime() : Date.now() + 10800_000;
-    _tokenCache.set(companyId, { token: newToken, expiresAt: newExp, cachedUntil: Date.now() + TOKEN_CACHE_TTL_MS });
+    _tokenCache.set(cacheKey, { token: newToken, expiresAt: newExp, cachedUntil: Date.now() + TOKEN_CACHE_TTL_MS });
     return newToken;
   }
 
-  _tokenCache.set(companyId, { token: integ.accessToken, expiresAt: exp, cachedUntil: Date.now() + TOKEN_CACHE_TTL_MS });
+  _tokenCache.set(cacheKey, { token: integ.accessToken, expiresAt: exp, cachedUntil: Date.now() + TOKEN_CACHE_TTL_MS });
   return integ.accessToken;
 }
