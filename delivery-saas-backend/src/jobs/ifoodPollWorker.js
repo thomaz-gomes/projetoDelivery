@@ -27,7 +27,7 @@ export async function startIFoodPollingWorker() {
 
       for (const integ of integrations) {
         try {
-          const result = await ifoodPoll(integ.companyId);
+          const result = await ifoodPoll({ integrationId: integ.id });
           const events = result?.events || [];
           const count = events.length;
 
@@ -60,7 +60,7 @@ export async function startIFoodPollingWorker() {
           // Send ACK for processed events
           if (ackCandidates.length) {
             try {
-              await ifoodAck(integ.companyId, ackCandidates);
+              await ifoodAck({ integrationId: integ.id }, ackCandidates);
             } catch (eAck) {
               console.warn('[iFood Poll Worker] ACK failed:', eAck && eAck.message);
             }
