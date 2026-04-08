@@ -3,7 +3,11 @@
 // lockable: true → show as "locked" with upgrade badge instead of hiding completely
 export const nav = [
   { name: 'Pedidos', to: '/orders', icon: 'bi bi-box-seam', moduleKey: 'cardapio_completo', lockable: true },
-  { name: 'Inbox', to: '/inbox', icon: 'bi bi-chat-left-dots', moduleKey: 'whatsapp', lockable: true },
+  { name: 'Atendimento', to: '/inbox', icon: 'bi bi-headset', moduleKey: 'whatsapp', lockable: true, children: [
+    { name: 'Inbox', to: '/inbox', icon: 'bi bi-chat-left-dots', moduleKey: 'whatsapp', lockable: true },
+    { name: 'Respostas Rápidas', to: '/inbox/quick-replies', icon: 'bi bi-chat-quote', moduleKey: 'whatsapp', lockable: true },
+    { name: 'Automações', to: '/inbox/automation', icon: 'bi bi-robot', moduleKey: 'whatsapp', lockable: true },
+  ] },
   { name: 'Relatórios', to: '/reports', icon: 'bi bi-file-earmark-bar-graph', moduleKey: 'cardapio_completo', lockable: true, children: [
     { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
     { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
@@ -55,8 +59,6 @@ export const nav = [
     { name: 'Formas de Pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card' },
     { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp', lockable: true },
-    { name: 'Respostas Rápidas', to: '/inbox/quick-replies', icon: 'bi bi-chat-quote', moduleKey: 'whatsapp', lockable: true },
-    { name: 'Automações Inbox', to: '/inbox/automation', icon: 'bi bi-robot', moduleKey: 'whatsapp', lockable: true },
     { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' }
   ] },
   {
