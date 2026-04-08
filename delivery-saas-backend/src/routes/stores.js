@@ -744,4 +744,53 @@ storesRouter.delete('/:id', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+storesRouter.patch('/:id/inbox-automation', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { id } = req.params;
+    const store = await prisma.store.findFirst({
+      where: { id, companyId },
+      select: { id: true },
+    });
+    if (!store) return res.status(404).json({ message: 'Loja não encontrada' });
+
+    const { outOfHoursReplyId, greetingReplyId } = req.body || {};
+    const data = {};
+    if (outOfHoursReplyId !== undefined) {
+      if (outOfHoursReplyId) {
+        const exists = await prisma.quickReply.findFirst({
+          where: { id: outOfHoursReplyId, companyId },
+          select: { id: true },
+        });
+        if (!exists) return res.status(400).json({ message: 'outOfHoursReplyId inválido' });
+      }
+      data.outOfHoursReplyId = outOfHoursReplyId || null;
+    }
+    if (greetingReplyId !== undefined) {
+      if (greetingReplyId) {
+        const exists = await prisma.quickReply.findFirst({
+          where: { id: greetingReplyId, companyId },
+          select: { id: true },
+        });
+        if (!exists) return res.status(400).json({ message: 'greetingReplyId inválido' });
+      }
+      data.greetingReplyId = greetingReplyId || null;
+    }
+
+    const updated = await prisma.store.update({
+      where: { id: store.id },
+      data,
+      select: {
+        id: true,
+        outOfHoursReplyId: true,
+        greetingReplyId: true,
+      },
+    });
+    res.json(updated);
+  } catch (e) {
+    console.error('[stores] inbox-automation error:', e);
+    res.status(500).json({ message: 'Erro ao salvar automação', error: e.message });
+  }
+});
+
 export default storesRouter
