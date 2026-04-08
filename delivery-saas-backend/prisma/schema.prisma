@@ -544,6 +544,10 @@ model Store {
   // optional WhatsApp instance assigned to this store (a store may have at most one instance)
   whatsappInstanceId String?
   whatsappInstance   WhatsAppInstance? @relation(fields: [whatsappInstanceId], references: [id])
+  outOfHoursReplyId String?
+  outOfHoursReply   QuickReply? @relation("StoreOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
+  greetingReplyId   String?
+  greetingReply     QuickReply? @relation("StoreGreetingReply", fields: [greetingReplyId], references: [id])
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
@@ -2166,6 +2170,9 @@ model QuickReply {
   body      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  storesOutOfHours Store[] @relation("StoreOutOfHoursReply")
+  storesGreeting   Store[] @relation("StoreGreetingReply")
 
   @@unique([companyId, shortcut])
   @@index([companyId])
