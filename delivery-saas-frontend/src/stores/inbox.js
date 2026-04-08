@@ -276,6 +276,41 @@ export const useInboxStore = defineStore('inbox', {
       delete this.orderDrafts[conversationId];
     },
 
+    saveToSessionStorage() {
+      try {
+        const snapshot = {
+          conversations: this.conversations,
+          activeConversationId: this.activeConversationId,
+          activeMessages: this.activeConversationId ? (this.messages[this.activeConversationId] || null) : null,
+          savedAt: Date.now(),
+        };
+        sessionStorage.setItem('inbox-cache', JSON.stringify(snapshot));
+      } catch (e) { /* quota or serialization issues — ignore */ }
+    },
+
+    restoreFromSessionStorage() {
+      try {
+        const raw = sessionStorage.getItem('inbox-cache');
+        if (!raw) return false;
+        const snap = JSON.parse(raw);
+        if (!snap || !snap.savedAt) return false;
+        // Expire after 30 minutes
+        if (Date.now() - snap.savedAt > 30 * 60 * 1000) {
+          sessionStorage.removeItem('inbox-cache');
+          return false;
+        }
+        this.conversations = Array.isArray(snap.conversations) ? snap.conversations : [];
+        this.activeConversationId = snap.activeConversationId || null;
+        if (snap.activeConversationId && Array.isArray(snap.activeMessages)) {
+          this.messages = { [snap.activeConversationId]: snap.activeMessages };
+        }
+        this.recalcUnread();
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+
     async updateTags(conversationId, tags) {
       const { data } = await api.patch(`/inbox/conversations/${conversationId}/tags`, { tags });
       const idx = this.conversations.findIndex(c => c.id === conversationId);
