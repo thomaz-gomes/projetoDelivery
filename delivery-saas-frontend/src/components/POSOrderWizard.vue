@@ -999,6 +999,21 @@ watch(() => props.preset, async (val) => {
     // Go directly to products
     await loadMenu();
     step.value = 3;
+
+    // Prefill cart from preset.items (e.g. "repetir pedido" flow)
+    if (Array.isArray(val.items) && val.items.length) {
+      try {
+        cart.value = val.items.map(it => ({
+          productId: it.productId || null,
+          name: it.name,
+          quantity: Number(it.quantity) || 1,
+          price: Number(it.price) || 0,
+          options: Array.isArray(it.options) ? it.options : [],
+          notes: it.notes || null,
+        }));
+        recalc();
+      } catch (e) { console.warn('Failed to prefill cart from preset.items', e); }
+    }
   } catch (e) { console.warn('Failed to initialize embedded POSOrderWizard', e); }
 }, { immediate: true });
 
