@@ -20,6 +20,42 @@ function monthDir() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function detectMessageType(mime) {
+  if (!mime) return 'DOCUMENT';
+  if (mime.startsWith('image/')) return 'IMAGE';
+  if (mime.startsWith('video/')) return 'VIDEO';
+  if (mime.startsWith('audio/')) return 'AUDIO';
+  return 'DOCUMENT';
+}
+
+// Save an uploaded file into public/uploads/quick-replies/{companyId}/{yyyy-mm}/
+// Returns { mediaUrl, mediaMimeType, mediaFileName } or null if no file.
+function saveQuickReplyMedia(file, companyId) {
+  if (!file) return null;
+  const ym = monthDir();
+  const dir = path.join(process.cwd(), 'public', 'uploads', 'quick-replies', companyId, ym);
+  fs.mkdirSync(dir, { recursive: true });
+  const ext = path.extname(file.originalname) || '';
+  const filename = `${uuidv4()}${ext}`;
+  fs.writeFileSync(path.join(dir, filename), file.buffer);
+  return {
+    mediaUrl: `/public/uploads/quick-replies/${companyId}/${ym}/${filename}`,
+    mediaMimeType: file.mimetype || null,
+    mediaFileName: file.originalname || null,
+  };
+}
+
+// Best-effort delete of a previously saved quick-reply media file.
+function deleteQuickReplyMedia(mediaUrl) {
+  if (!mediaUrl) return;
+  try {
+    // mediaUrl starts with /public/ — map to disk path
+    const rel = mediaUrl.replace(/^\/public\//, '');
+    const abs = path.join(process.cwd(), 'public', rel);
+    if (fs.existsSync(abs)) fs.unlinkSync(abs);
+  } catch (e) { /* ignore */ }
+}
+
 // ─── 1. GET /conversations — List conversations ────────────────────────────
 
 router.get('/conversations', async (req, res) => {
@@ -300,6 +336,81 @@ router.post('/conversations/:id/internal-note', async (req, res) => {
   }
 });
 
+// ─── 4c. POST /conversations/:id/send-quick-reply ──────────────────────────
+
+router.post('/conversations/:id/send-quick-reply', async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const { quickReplyId } = req.body;
+    if (!quickReplyId) return res.status(400).json({ message: 'quickReplyId é obrigatório' });
+
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: req.params.id, companyId },
+    });
+    if (!conversation) return res.status(404).json({ message: 'Conversa não encontrada' });
+    if (conversation.channel !== 'WHATSAPP') {
+      return res.status(400).json({ message: 'Canal não suportado para envio' });
+    }
+
+    const reply = await prisma.quickReply.findFirst({
+      where: { id: quickReplyId, companyId },
+    });
+    if (!reply) return res.status(404).json({ message: 'Resposta rápida não encontrada' });
+    if (!reply.body && !reply.mediaUrl) {
+      return res.status(400).json({ message: 'Resposta rápida vazia' });
+    }
+
+    const instanceName = conversation.instanceName;
+    const to = conversation.channelContactId;
+
+    // Send via Evolution (media + caption, or text-only)
+    if (reply.mediaUrl) {
+      const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+      await evoSendMediaUrl({
+        instanceName,
+        to,
+        mediaUrl: `${baseUrl}${reply.mediaUrl}`,
+        filename: reply.mediaFileName || 'arquivo',
+        mimeType: reply.mediaMimeType,
+        caption: reply.body || '',
+      });
+    } else {
+      await evoSendText({ instanceName, to, text: reply.body });
+    }
+
+    // Persist Message
+    const message = await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: 'OUTBOUND',
+        type: reply.mediaUrl ? detectMessageType(reply.mediaMimeType) : 'TEXT',
+        body: reply.body || null,
+        mediaUrl: reply.mediaUrl || null,
+        mediaMimeType: reply.mediaMimeType || null,
+        mediaFileName: reply.mediaFileName || null,
+        status: 'SENT',
+      },
+    });
+
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: new Date() },
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      const payload = { conversationId: conversation.id, message, companyId };
+      io.to(`company_${companyId}`).emit('inbox:new-message', payload);
+      io.emit('inbox:new-message:broadcast', payload);
+    }
+
+    return res.status(201).json(message);
+  } catch (err) {
+    console.error('[inbox] POST /conversations/:id/send-quick-reply error:', err);
+    return res.status(500).json({ message: 'Erro ao enviar resposta rápida', error: err.message });
+  }
+});
+
 // ─── 5. PATCH /conversations/:id — Update conversation ─────────────────────
 
 router.patch('/conversations/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
@@ -430,22 +541,34 @@ router.get('/quick-replies', async (req, res) => {
 
 // ─── 9. POST /quick-replies — Create quick reply ───────────────────────────
 
-router.post('/quick-replies', requireRole('ADMIN'), async (req, res) => {
+router.post('/quick-replies', requireRole('ADMIN'), upload.single('file'), async (req, res) => {
   try {
     const { companyId } = req.user;
     let { shortcut, title, body } = req.body;
 
-    if (!shortcut || !title || !body) {
-      return res.status(400).json({ message: 'shortcut, title e body são obrigatórios' });
+    if (!shortcut || !title) {
+      return res.status(400).json({ message: 'shortcut e title são obrigatórios' });
+    }
+    if (!body?.trim() && !req.file) {
+      return res.status(400).json({ message: 'Informe texto, anexo, ou ambos' });
     }
 
-    // Auto-prepend "/" to shortcut
     if (!shortcut.startsWith('/')) {
       shortcut = '/' + shortcut;
     }
 
+    const media = saveQuickReplyMedia(req.file, companyId);
+
     const reply = await prisma.quickReply.create({
-      data: { companyId, shortcut, title, body },
+      data: {
+        companyId,
+        shortcut,
+        title,
+        body: body?.trim() || null,
+        mediaUrl: media?.mediaUrl || null,
+        mediaMimeType: media?.mediaMimeType || null,
+        mediaFileName: media?.mediaFileName || null,
+      },
     });
 
     return res.status(201).json(reply);
@@ -460,15 +583,15 @@ router.post('/quick-replies', requireRole('ADMIN'), async (req, res) => {
 
 // ─── 10. PUT /quick-replies/:id — Update quick reply ───────────────────────
 
-router.put('/quick-replies/:id', requireRole('ADMIN'), async (req, res) => {
+router.put('/quick-replies/:id', requireRole('ADMIN'), upload.single('file'), async (req, res) => {
   try {
     const { companyId } = req.user;
-    let { shortcut, title, body } = req.body;
+    let { shortcut, title, body, removeMedia } = req.body;
 
-    // Verify ownership
+    // Verify ownership + load current media info
     const existing = await prisma.quickReply.findUnique({
       where: { id: req.params.id },
-      select: { companyId: true },
+      select: { companyId: true, mediaUrl: true },
     });
     if (!existing || existing.companyId !== companyId) {
       return res.status(404).json({ message: 'Resposta rápida não encontrada' });
@@ -479,14 +602,36 @@ router.put('/quick-replies/:id', requireRole('ADMIN'), async (req, res) => {
       data.shortcut = shortcut.startsWith('/') ? shortcut : '/' + shortcut;
     }
     if (title !== undefined) data.title = title;
-    if (body !== undefined) data.body = body;
+    if (body !== undefined) data.body = body?.trim() || null;
 
-    const reply = await prisma.quickReply.update({
+    // Media handling:
+    // - new file uploaded → replace (delete old)
+    // - removeMedia === 'true' → clear media (delete old)
+    // - neither → keep as-is
+    if (req.file) {
+      const media = saveQuickReplyMedia(req.file, companyId);
+      if (existing.mediaUrl) deleteQuickReplyMedia(existing.mediaUrl);
+      data.mediaUrl = media.mediaUrl;
+      data.mediaMimeType = media.mediaMimeType;
+      data.mediaFileName = media.mediaFileName;
+    } else if (removeMedia === 'true' || removeMedia === true) {
+      if (existing.mediaUrl) deleteQuickReplyMedia(existing.mediaUrl);
+      data.mediaUrl = null;
+      data.mediaMimeType = null;
+      data.mediaFileName = null;
+    }
+
+    // Validate: after changes, at least one of body or mediaUrl must be present
+    const updated = await prisma.quickReply.update({
       where: { id: req.params.id },
       data,
     });
+    if (!updated.body && !updated.mediaUrl) {
+      // Roll back by rejecting — no undo of file save but at least DB consistent
+      return res.status(400).json({ message: 'Informe texto, anexo, ou ambos' });
+    }
 
-    return res.json(reply);
+    return res.json(updated);
   } catch (err) {
     if (err.code === 'P2002') {
       return res.status(409).json({ message: 'Atalho já existe para esta empresa' });

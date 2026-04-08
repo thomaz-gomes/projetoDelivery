@@ -6,7 +6,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { evoSendText } from '../wa.js';
+import { evoSendText, evoSendMediaUrl } from '../wa.js';
 
 function isStoreOpen(store) {
   if (!store) return true;
@@ -27,16 +27,45 @@ function isStoreOpen(store) {
   return hhmm >= today.from && hhmm <= today.to;
 }
 
-async function sendAutoReply(conversation, instanceName, body) {
-  if (!body || !body.trim()) return;
+function detectMessageTypeFromMime(mime) {
+  if (!mime) return 'DOCUMENT';
+  if (mime.startsWith('image/')) return 'IMAGE';
+  if (mime.startsWith('video/')) return 'VIDEO';
+  if (mime.startsWith('audio/')) return 'AUDIO';
+  return 'DOCUMENT';
+}
+
+// Accepts a QuickReply-like object: { body, mediaUrl, mediaMimeType, mediaFileName }.
+// Sends media+caption if mediaUrl present, else text-only. Persists outbound Message.
+async function sendAutoReply(conversation, instanceName, quickReply) {
+  if (!quickReply) return;
+  const hasBody = quickReply.body && quickReply.body.trim();
+  const hasMedia = !!quickReply.mediaUrl;
+  if (!hasBody && !hasMedia) return;
+
   try {
-    await evoSendText({ instanceName, to: conversation.channelContactId, text: body });
+    if (hasMedia) {
+      const baseUrl = process.env.BACKEND_URL || process.env.BASE_URL || '';
+      await evoSendMediaUrl({
+        instanceName,
+        to: conversation.channelContactId,
+        mediaUrl: `${baseUrl}${quickReply.mediaUrl}`,
+        filename: quickReply.mediaFileName || 'arquivo',
+        mimeType: quickReply.mediaMimeType,
+        caption: hasBody ? quickReply.body.trim() : '',
+      });
+    } else {
+      await evoSendText({ instanceName, to: conversation.channelContactId, text: quickReply.body.trim() });
+    }
     await prisma.message.create({
       data: {
         conversationId: conversation.id,
         direction: 'OUTBOUND',
-        type: 'TEXT',
-        body: body.trim(),
+        type: hasMedia ? detectMessageTypeFromMime(quickReply.mediaMimeType) : 'TEXT',
+        body: hasBody ? quickReply.body.trim() : null,
+        mediaUrl: quickReply.mediaUrl || null,
+        mediaMimeType: quickReply.mediaMimeType || null,
+        mediaFileName: quickReply.mediaFileName || null,
         status: 'SENT',
       },
     });
@@ -55,8 +84,8 @@ async function runAutomations(conversation, incomingMessage, storeId, instanceNa
       alwaysOpen: true,
       open24Hours: true,
       timezone: true,
-      outOfHoursReply: { select: { body: true } },
-      greetingReply: { select: { body: true } },
+      outOfHoursReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
+      greetingReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
       company: { select: { evolutionEnabled: true } },
     },
   });
@@ -64,7 +93,7 @@ async function runAutomations(conversation, incomingMessage, storeId, instanceNa
 
   // 1. Out-of-hours auto-reply
   if (store.outOfHoursReply && !isStoreOpen(store)) {
-    await sendAutoReply(conversation, instanceName, store.outOfHoursReply.body);
+    await sendAutoReply(conversation, instanceName, store.outOfHoursReply);
     return;
   }
 
@@ -81,7 +110,7 @@ async function runAutomations(conversation, incomingMessage, storeId, instanceNa
       select: { id: true },
     });
     if (!recentInbound) {
-      await sendAutoReply(conversation, instanceName, store.greetingReply.body);
+      await sendAutoReply(conversation, instanceName, store.greetingReply);
     }
   }
 
