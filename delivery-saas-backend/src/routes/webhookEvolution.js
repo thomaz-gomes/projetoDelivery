@@ -6,6 +6,112 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { evoSendText } from '../wa.js';
+
+function isStoreOpen(store) {
+  if (!store) return true;
+  if (store.alwaysOpen || store.open24Hours) return true;
+  const schedule = store.weeklySchedule;
+  if (!schedule || !Array.isArray(schedule)) return true;
+
+  const tz = store.timezone || 'America/Sao_Paulo';
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+  const dayOfWeek = now.getDay();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const hhmm = `${hh}:${mm}`;
+
+  const today = schedule.find(s => Number(s.day) === dayOfWeek);
+  if (!today || !today.enabled) return false;
+  if (!today.from || !today.to) return true;
+  return hhmm >= today.from && hhmm <= today.to;
+}
+
+async function sendAutoReply(conversation, instanceName, body) {
+  if (!body || !body.trim()) return;
+  try {
+    await evoSendText({ instanceName, to: conversation.channelContactId, text: body });
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: 'OUTBOUND',
+        type: 'TEXT',
+        body: body.trim(),
+        status: 'SENT',
+      },
+    });
+  } catch (e) {
+    console.warn('[auto-reply] send failed:', e.message);
+  }
+}
+
+async function runAutomations(conversation, incomingMessage, storeId, instanceName) {
+  if (!storeId) return;
+  const store = await prisma.store.findUnique({
+    where: { id: storeId },
+    select: {
+      id: true,
+      weeklySchedule: true,
+      alwaysOpen: true,
+      open24Hours: true,
+      timezone: true,
+      outOfHoursReply: { select: { body: true } },
+      greetingReply: { select: { body: true } },
+      company: { select: { evolutionEnabled: true } },
+    },
+  });
+  if (!store || !store.company?.evolutionEnabled) return;
+
+  // 1. Out-of-hours auto-reply
+  if (store.outOfHoursReply && !isStoreOpen(store)) {
+    await sendAutoReply(conversation, instanceName, store.outOfHoursReply.body);
+    return;
+  }
+
+  // 2. Greeting after 6h of inactivity
+  if (store.greetingReply) {
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+    const recentInbound = await prisma.message.findFirst({
+      where: {
+        conversationId: conversation.id,
+        direction: 'INBOUND',
+        createdAt: { gte: sixHoursAgo, lt: incomingMessage.createdAt },
+        id: { not: incomingMessage.id },
+      },
+      select: { id: true },
+    });
+    if (!recentInbound) {
+      await sendAutoReply(conversation, instanceName, store.greetingReply.body);
+    }
+  }
+
+  // 3. Keyword→tag matching (uses existing tags as keywords)
+  try {
+    const allTags = await prisma.$queryRaw`
+      SELECT DISTINCT unnest(tags) as tag
+      FROM "Conversation"
+      WHERE "companyId" = ${conversation.companyId} AND array_length(tags, 1) > 0
+    `;
+    const bodyLower = String(incomingMessage.body || '').toLowerCase();
+    if (bodyLower) {
+      const matched = allTags
+        .map(r => r.tag)
+        .filter(t => t && bodyLower.includes(String(t).toLowerCase()));
+      if (matched.length) {
+        const currentTags = conversation.tags || [];
+        const newTags = [...new Set([...currentTags, ...matched])];
+        if (newTags.length !== currentTags.length) {
+          await prisma.conversation.update({
+            where: { id: conversation.id },
+            data: { tags: newTags },
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[automation] keyword match failed:', e.message);
+  }
+}
 
 const router = Router();
 
@@ -335,6 +441,13 @@ async function processSingleMessage(req, msg, instanceName) {
     // Defense in depth: also broadcast so any frontend client (regardless of
     // room membership) can pick it up. Client must filter by companyId.
     io.emit('inbox:new-message:broadcast', payload);
+  }
+
+  // Run automations pipeline (best-effort, non-blocking)
+  if (direction === 'INBOUND' && type === 'TEXT' && conversation.storeId) {
+    runAutomations(updatedConversation, message, conversation.storeId, instanceName).catch(e =>
+      console.warn('[automations] failed:', e.message)
+    );
   }
 }
 
