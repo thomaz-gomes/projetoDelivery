@@ -10,42 +10,38 @@
       <div class="mb-2">
         <input type="text" class="form-control form-control-sm fw-semibold" v-model="customer.fullName" @blur="save('fullName', customer.fullName)" placeholder="Nome do contato" />
       </div>
+      <!-- CPF -->
+      <div class="mb-2">
+        <input type="text" class="form-control form-control-sm" v-model="customer.cpf" @blur="save('cpf', customer.cpf)" placeholder="CPF" />
+      </div>
 
+
+      
+
+      <!-- Stats -->
+      <div class="mt-2 small text-muted d-flex justify-content-between flex-wrap gap-1 p-2 bg-light rounded" style="font-size: 12px;">
+      <div class="d-flex w-100 gap-3 flex-wrap justify-content-between align-items-center mb-2">
       <!-- WhatsApp (read-only) -->
-      <div class="mb-2 d-flex align-items-center gap-1">
+      <div class="d-flex align-items-center gap-1">
         <i class="bi bi-whatsapp text-success"></i>
-        <small class="text-muted">{{ formatPhone(customer.whatsapp) }}</small>
+        <small class="fw-bold" style="font-size: 14px;">{{ formatPhone(customer.whatsapp) }}</small>
       </div>
 
       <!-- Classification badge -->
-      <div v-if="customer.stats" class="mb-2">
+      <div v-if="customer.stats">
         <span class="badge" :class="tierBadgeClass">
           {{ tierStars }} {{ customer.stats.label }}
         </span>
-        <span v-if="customer.stats.favoriteItem" class="ms-1 small text-muted">
-          <i class="bi bi-heart-fill text-danger" style="font-size: 0.6rem;"></i> {{ customer.stats.favoriteItem }}
+      </div>
+      </div>
+        <div><strong>Desde:</strong> {{ formatDate(customer.createdAt) }}</div>
+        <div><strong>Gasto:</strong> R$ {{ Number(customer.stats?.totalSpent || 0).toFixed(2).replace('.', ',') }}</div>
+        <div><strong>Pedidos:</strong> {{ customer.stats?.totalOrders || 0 }}</div>
+
+        <span  style="font-size: 14px;" v-if="customer.stats?.favoriteItem" class="d-block mt-1">
+          <i class="bi bi-heart-fill text-danger" style="font-size: 0.6rem;"></i> <strong>Item favorito:</strong> {{ customer.stats.favoriteItem }}
         </span>
-      </div>
-
-      <!-- CPF, Email, Phone 2 -->
-      <div class="mb-2">
-        <label class="form-label small text-muted mb-0">CPF</label>
-        <input type="text" class="form-control form-control-sm" v-model="customer.cpf" @blur="save('cpf', customer.cpf)" placeholder="000.000.000-00" />
-      </div>
-      <div class="mb-2">
-        <label class="form-label small text-muted mb-0">Email</label>
-        <input type="email" class="form-control form-control-sm" v-model="customer.email" @blur="save('email', customer.email)" />
-      </div>
-      <div class="mb-2">
-        <label class="form-label small text-muted mb-0">Telefone 2</label>
-        <input type="text" class="form-control form-control-sm" v-model="customer.phone" @blur="save('phone', customer.phone)" />
-      </div>
-
-      <!-- Stats -->
-      <div class="mt-2 small text-muted">
-        <div>Cliente desde: {{ formatDate(customer.createdAt) }}</div>
-        <div>Total gasto: R$ {{ Number(customer.stats?.totalSpent || 0).toFixed(2).replace('.', ',') }}</div>
-        <div>Pedidos: {{ customer.stats?.totalOrders || 0 }}</div>
+        
       </div>
 
       <transition name="fade">

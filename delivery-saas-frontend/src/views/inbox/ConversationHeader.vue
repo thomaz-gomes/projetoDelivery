@@ -11,7 +11,7 @@
         <span class="fw-semibold text-truncate">{{ displayName }}</span>
         <i class="bi bi-whatsapp text-success" style="font-size: 0.85rem;"></i>
       </div>
-      <small class="text-muted">{{ conversation?.channelContactId || '' }}</small>
+      
       <TagChips
         v-if="conversation"
         :conversation-id="conversation.id"

@@ -1,6 +1,8 @@
 <template>
   <div
-    class="d-flex flex-column h-100 position-relative"
+    class="d-flex flex-column position-relative" style="
+    height: 95% !important;
+"
     @dragover.prevent="onDragOver"
     @drop.prevent="onDrop"
     @dragleave="onDragLeave"
