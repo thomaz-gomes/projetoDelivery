@@ -56,6 +56,7 @@ export const nav = [
     { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp', lockable: true },
     { name: 'Respostas Rápidas', to: '/inbox/quick-replies', icon: 'bi bi-chat-quote', moduleKey: 'whatsapp', lockable: true },
+    { name: 'Automações Inbox', to: '/inbox/automation', icon: 'bi bi-robot', moduleKey: 'whatsapp', lockable: true },
     { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' }
   ] },
   {
