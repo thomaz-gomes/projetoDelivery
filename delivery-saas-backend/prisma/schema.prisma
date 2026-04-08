@@ -2162,14 +2162,17 @@ model Message {
 }
 
 model QuickReply {
-  id        String   @id @default(uuid())
-  companyId String
-  company   Company  @relation(fields: [companyId], references: [id])
-  shortcut  String
-  title     String
-  body      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(uuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id])
+  shortcut      String
+  title         String
+  body          String?
+  mediaUrl      String?
+  mediaMimeType String?
+  mediaFileName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   storesOutOfHours Store[] @relation("StoreOutOfHoursReply")
   storesGreeting   Store[] @relation("StoreGreetingReply")
