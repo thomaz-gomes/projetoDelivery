@@ -970,37 +970,42 @@ watch(()=>props.visible, async (v)=>{
 watch(()=>orderType.value,(v)=>{ if(v==='DELIVERY' && neighborhoods.value.length===0) loadNeighborhoods(); });
 
 // Embedded mode: skip customer/address steps and go directly to products
+let embeddedInitialized = false;
 watch(() => props.preset, async (val) => {
   if (!props.embedded || !val?.skipCustomer) return;
   try {
-    // Set customer from preset
-    if (val.customerId) {
-      try {
-        const { data } = await api.get(`/customers/${val.customerId}`);
-        foundCustomer.value = data;
-        savedAddresses.value = data.addresses || [];
-        if (val.customerName) newCustomerName.value = val.customerName;
-      } catch (e) { console.warn('Failed to load preset customer:', e); }
-    } else if (val.customerName) {
-      newCustomerName.value = val.customerName;
+    // Initialize customer/address/menu only once per wizard instance
+    if (!embeddedInitialized) {
+      // Set customer from preset
+      if (val.customerId) {
+        try {
+          const { data } = await api.get(`/customers/${val.customerId}`);
+          foundCustomer.value = data;
+          savedAddresses.value = data.addresses || [];
+          if (val.customerName) newCustomerName.value = val.customerName;
+        } catch (e) { console.warn('Failed to load preset customer:', e); }
+      } else if (val.customerName) {
+        newCustomerName.value = val.customerName;
+      }
+      // Set order type
+      if (val.orderType) {
+        const ot = String(val.orderType).toUpperCase();
+        if (ot === 'RETIRADA' || ot === 'BALCAO' || ot === 'BALCÃO') orderType.value = 'BALCAO';
+        else orderType.value = ot;
+      }
+      // Set address from preset
+      if (val.address) {
+        const a = val.address;
+        addr.value = { street: a.street || '', number: a.number || '', complement: a.complement || '', neighborhood: a.neighborhood || '', reference: a.reference || '', observation: a.observation || '', city: a.city || '', state: a.state || '' };
+        if (a.id) selectedAddressId.value = a.id;
+      }
+      // Go directly to products
+      await loadMenu();
+      step.value = 3;
+      embeddedInitialized = true;
     }
-    // Set order type
-    if (val.orderType) {
-      const ot = String(val.orderType).toUpperCase();
-      if (ot === 'RETIRADA' || ot === 'BALCAO' || ot === 'BALCÃO') orderType.value = 'BALCAO';
-      else orderType.value = ot;
-    }
-    // Set address from preset
-    if (val.address) {
-      const a = val.address;
-      addr.value = { street: a.street || '', number: a.number || '', complement: a.complement || '', neighborhood: a.neighborhood || '', reference: a.reference || '', observation: a.observation || '', city: a.city || '', state: a.state || '' };
-      if (a.id) selectedAddressId.value = a.id;
-    }
-    // Go directly to products
-    await loadMenu();
-    step.value = 3;
 
-    // Prefill cart from preset.items (e.g. "repetir pedido" flow)
+    // Prefill/replace cart from preset.items (supports re-prefill on "repetir" click)
     if (Array.isArray(val.items) && val.items.length) {
       try {
         cart.value = val.items.map(it => ({
@@ -1015,7 +1020,7 @@ watch(() => props.preset, async (val) => {
       } catch (e) { console.warn('Failed to prefill cart from preset.items', e); }
     }
   } catch (e) { console.warn('Failed to initialize embedded POSOrderWizard', e); }
-}, { immediate: true });
+}, { immediate: true, deep: true });
 
 
 </script>

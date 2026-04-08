@@ -8,33 +8,33 @@
     >
       <ConversationList @select="selectConversation" />
     </div>
-    <!-- Chat panel: shown when conversation selected -->
-    <div class="flex-grow-1 d-flex flex-column" v-if="inboxStore.activeConversationId">
-      <ChatPanel
-        :conversation-id="inboxStore.activeConversationId"
-        @back="inboxStore.activeConversationId = null"
-        @toggle-panel="showContactPanel = !showContactPanel"
-      />
-    </div>
-    <!-- Empty state on desktop -->
-    <div
-      v-else
-      class="flex-grow-1 d-none d-md-flex align-items-center justify-content-center text-muted"
-    >
-      <div class="text-center">
-        <i class="bi bi-chat-left-dots" style="font-size: 3rem;"></i>
-        <p class="mt-2">Selecione uma conversa</p>
+    <!-- Chat + contact panel (shown when conversation selected) -->
+    <template v-if="inboxStore.activeConversationId">
+      <div class="flex-grow-1 d-flex flex-column" :key="'chat-' + inboxStore.activeConversationId">
+        <ChatPanel
+          :conversation-id="inboxStore.activeConversationId"
+          @back="inboxStore.activeConversationId = null"
+          @toggle-panel="showContactPanel = !showContactPanel"
+        />
       </div>
-    </div>
-
-    <!-- Contact panel (right side) -->
-    <div
-      v-if="inboxStore.activeConversationId && showContactPanel"
-      class="border-start d-none d-md-flex flex-column"
-      style="width: 350px; min-width: 320px; flex-shrink: 0;"
-    >
-      <ContactPanel :conversation-id="inboxStore.activeConversationId" />
-    </div>
+      <div
+        v-if="showContactPanel"
+        class="border-start d-none d-md-flex flex-column"
+        style="width: 350px; min-width: 320px; flex-shrink: 0;"
+        :key="'contact-' + inboxStore.activeConversationId"
+      >
+        <ContactPanel :conversation-id="inboxStore.activeConversationId" />
+      </div>
+    </template>
+    <!-- Empty state on desktop (when no conversation selected) -->
+    <template v-else>
+      <div class="flex-grow-1 d-none d-md-flex align-items-center justify-content-center text-muted">
+        <div class="text-center">
+          <i class="bi bi-chat-left-dots" style="font-size: 3rem;"></i>
+          <p class="mt-2">Selecione uma conversa</p>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 

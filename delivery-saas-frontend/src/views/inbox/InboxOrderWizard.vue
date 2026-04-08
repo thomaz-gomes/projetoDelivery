@@ -2,51 +2,43 @@
   <div class="p-3 border-top">
     <div class="fw-semibold small mb-2"><i class="bi bi-bag me-1"></i>Pedido</div>
 
-    <!-- Initial state: only "Iniciar Pedido" button -->
-    <div v-if="!draft?.active && !showLastOrderPrompt">
-      <button class="btn btn-sm btn-success w-100" @click="onStartClick" :disabled="!customerId">
-        <i class="bi bi-plus me-1"></i>Iniciar Pedido
-      </button>
-      <small v-if="!customerId" class="text-muted d-block mt-1">Vincule um cliente primeiro</small>
+    <!-- No customer linked yet -->
+    <div v-if="!customerId" class="small text-muted">
+      Vincule um cliente primeiro para iniciar um pedido.
     </div>
 
-    <!-- Last order prompt: shown after clicking "Iniciar Pedido" when there's a last order -->
-    <div v-else-if="showLastOrderPrompt && lastOrder" class="p-2 bg-light rounded">
-      <div class="d-flex justify-content-between align-items-center mb-1">
-        <span class="fw-semibold small">Último pedido</span>
-        <small class="text-muted">{{ formatDate(lastOrder.createdAt) }}</small>
-      </div>
-      <div class="small text-muted mb-1">
-        <span v-for="(item, i) in lastOrder.items" :key="i">
-          {{ item.quantity }}x {{ item.name }}<span v-if="i < lastOrder.items.length - 1">, </span>
-        </span>
-      </div>
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <small class="fw-semibold">R$ {{ Number(lastOrder.total || 0).toFixed(2).replace('.', ',') }}</small>
-      </div>
-      <div class="d-flex gap-1 flex-wrap">
-        <button class="btn btn-sm btn-success flex-fill" @click="repeatOrder" title="Repetir o último pedido">
-          <i class="bi bi-arrow-repeat me-1"></i>Repetir
-        </button>
-        <button class="btn btn-sm btn-outline-primary flex-fill" @click="askRepeat" :disabled="asking" title="Perguntar ao cliente">
-          <span v-if="asking" class="spinner-border spinner-border-sm me-1"></span>
-          <i v-else class="bi bi-chat-dots me-1"></i>Perguntar
-        </button>
-      </div>
-      <div class="d-flex gap-1 mt-1">
-        <button class="btn btn-sm btn-outline-secondary flex-fill" @click="newOrder" title="Pedido novo">
-          <i class="bi bi-plus me-1"></i>Pedido novo
-        </button>
-        <button class="btn btn-sm btn-outline-danger" @click="cancelPrompt" title="Cancelar">
-          <i class="bi bi-x"></i>
-        </button>
-      </div>
-    </div>
-
-    <!-- Active wizard -->
+    <!-- Active wizard (always open when customerId present) -->
     <div v-else-if="draft?.active">
+      <!-- Last order suggestion (optional) — shown above the wizard when present and not yet used -->
+      <div v-if="lastOrder && showLastOrderHint" class="p-2 bg-light rounded mb-2">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="fw-semibold small"><i class="bi bi-clock-history me-1"></i>Último pedido</span>
+          <button type="button" class="btn btn-sm btn-link p-0 text-muted" @click="dismissLastOrderHint" title="Dispensar">
+            <i class="bi bi-x-lg" style="font-size: 0.7rem;"></i>
+          </button>
+        </div>
+        <div class="small text-muted mb-1">
+          <span v-for="(item, i) in lastOrder.items" :key="i">
+            {{ item.quantity }}x {{ item.name }}<span v-if="i < lastOrder.items.length - 1">, </span>
+          </span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <small class="fw-semibold">R$ {{ Number(lastOrder.total || 0).toFixed(2).replace('.', ',') }}</small>
+          <small class="text-muted">{{ formatDate(lastOrder.createdAt) }}</small>
+        </div>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm btn-success flex-fill" @click="repeatOrder" title="Preencher carrinho com o último pedido">
+            <i class="bi bi-arrow-repeat me-1"></i>Repetir
+          </button>
+          <button class="btn btn-sm btn-outline-primary flex-fill" @click="askRepeat" :disabled="asking" title="Perguntar ao cliente">
+            <span v-if="asking" class="spinner-border spinner-border-sm me-1"></span>
+            <i v-else class="bi bi-chat-dots me-1"></i>Perguntar
+          </button>
+        </div>
+      </div>
+
       <div class="d-flex justify-content-between align-items-center mb-2">
-        <small class="badge bg-info-subtle text-info">{{ draft.orderType === 'DELIVERY' ? 'Entrega' : 'Balcao' }}</small>
+        <small class="badge bg-info-subtle text-info">{{ draft.orderType === 'DELIVERY' ? 'Entrega' : 'Balcão' }}</small>
         <button class="btn btn-sm btn-outline-danger" @click="cancelOrder" title="Cancelar pedido">
           <i class="bi bi-x"></i>
         </button>
@@ -73,7 +65,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import POSOrderWizard from '@/components/POSOrderWizard.vue';
 
@@ -88,9 +80,9 @@ const props = defineProps({
 
 const inboxStore = useInboxStore();
 const justCreated = ref(false);
-const showLastOrderPrompt = ref(false);
 const asking = ref(false);
 const askedSuccessfully = ref(false);
+const showLastOrderHint = ref(true);
 
 const draft = computed(() => inboxStore.getOrderDraft(props.conversationId));
 
@@ -104,22 +96,29 @@ const wizardPreset = computed(() => ({
   items: draft.value?.items || null,
 }));
 
+// Auto-start the wizard whenever a customer is linked and no draft is active.
+// The last-order suggestion is shown above the wizard (not as a separate step).
+watch(
+  () => [props.customerId, props.conversationId],
+  ([cid]) => {
+    if (!cid) return;
+    if (draft.value?.active) return;
+    startOrder();
+  },
+  { immediate: true }
+);
+
+// Reset the hint whenever the conversation changes
+watch(() => props.conversationId, () => {
+  showLastOrderHint.value = true;
+});
+
 function formatDate(d) {
   if (!d) return '-';
   return new Date(d).toLocaleDateString('pt-BR');
 }
 
-// "Iniciar Pedido" handler: if there's a last order, show prompt; else go straight to wizard
-function onStartClick() {
-  if (props.lastOrder?.items?.length) {
-    showLastOrderPrompt.value = true;
-  } else {
-    startOrder();
-  }
-}
-
 function startOrder(items) {
-  showLastOrderPrompt.value = false;
   inboxStore.setOrderDraft(props.conversationId, {
     active: true,
     orderType: props.orderType,
@@ -136,15 +135,17 @@ function repeatOrder() {
     price: it.price,
     options: it.options || [],
   }));
-  startOrder(items);
+  // Replace the current draft items (keeps the wizard open)
+  inboxStore.setOrderDraft(props.conversationId, {
+    active: true,
+    orderType: draft.value?.orderType || props.orderType,
+    items,
+  });
+  showLastOrderHint.value = false;
 }
 
-function newOrder() {
-  startOrder();
-}
-
-function cancelPrompt() {
-  showLastOrderPrompt.value = false;
+function dismissLastOrderHint() {
+  showLastOrderHint.value = false;
 }
 
 async function askRepeat() {
@@ -159,7 +160,6 @@ async function askRepeat() {
       `Olá! 👋\n\nSeu último pedido foi:\n${itemsText}\n\nTotal: *R$ ${total}*\n\n` +
       `Deseja repetir o pedido? 😊`;
     await inboxStore.sendMessage(props.conversationId, { type: 'TEXT', body });
-    showLastOrderPrompt.value = false;
     askedSuccessfully.value = true;
     setTimeout(() => { askedSuccessfully.value = false; }, 3000);
   } catch (e) {
