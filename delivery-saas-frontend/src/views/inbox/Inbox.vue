@@ -39,7 +39,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { io } from 'socket.io-client';
 import { SOCKET_URL } from '@/config';
 import { useInboxStore } from '@/stores/inbox';
@@ -101,9 +101,26 @@ onMounted(async () => {
     Notification.requestPermission();
   }
 
-  // Fetch initial data
-  inboxStore.fetchConversations();
+  // Restore from sessionStorage if available (instant render)
+  const restored = inboxStore.restoreFromSessionStorage();
+  if (!restored) {
+    inboxStore.fetchConversations();
+  } else {
+    // Still refresh in background to pick up any updates
+    inboxStore.fetchConversations().catch(() => {});
+  }
   inboxStore.fetchQuickReplies();
+
+  // Persist snapshot on changes (debounced)
+  let saveTimer = null;
+  watch(
+    () => [inboxStore.conversations, inboxStore.activeConversationId, inboxStore.messages],
+    () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => inboxStore.saveToSessionStorage(), 500);
+    },
+    { deep: true }
+  );
 
   // Socket.IO connection — DO NOT pass token in handshake.auth because the
   // existing io.use middleware reserves auth.token for print agent authentication
@@ -130,6 +147,20 @@ onMounted(async () => {
 
   socket.on('disconnect', (reason) => {
     console.warn('[inbox] socket disconnected:', reason);
+  });
+
+  socket.on('reconnect', async () => {
+    console.log('[inbox] socket reconnected — refetching');
+    try {
+      await inboxStore.fetchConversations();
+      if (inboxStore.activeConversationId) {
+        // Force fresh fetch (ignore local cache)
+        delete inboxStore.messages[inboxStore.activeConversationId];
+        await inboxStore.fetchMessages(inboxStore.activeConversationId);
+      }
+    } catch (e) {
+      console.warn('[inbox] refetch on reconnect failed', e);
+    }
   });
 
   // Track delivered message IDs to dedupe between room emit and broadcast fallback
