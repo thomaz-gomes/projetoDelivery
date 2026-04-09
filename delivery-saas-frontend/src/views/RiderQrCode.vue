@@ -39,12 +39,30 @@ function stopScanner() {
 }
 
 async function startScanner() {
+  // Pré-checagens antes de pedir permissão
+  if (!window.isSecureContext) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Conexão insegura',
+      html: `O navegador só libera a câmera em <b>HTTPS</b> ou <b>localhost</b>.<br><br>
+        Você está em <code>${location.protocol}//${location.host}</code>.<br>
+        Peça para o admin publicar o app com HTTPS ou acesse via <code>localhost</code>.`
+    });
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    Swal.fire({ icon: 'error', title: 'Câmera indisponível', text: 'Este navegador não suporta acesso à câmera (mediaDevices ausente).' });
+    return;
+  }
   // Try BarcodeDetector first (native). If not available or it errors, fall back to qr-scanner library.
   try {
     scanning.value = true;
-    const constraints = { video: { facingMode: 'environment' } };
+    const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
     stream = await navigator.mediaDevices.getUserMedia(constraints);
-    if (videoEl.value) videoEl.value.srcObject = stream;
+    if (videoEl.value) {
+      videoEl.value.srcObject = stream;
+      try { await videoEl.value.play(); } catch(_) {}
+    }
 
     if ('BarcodeDetector' in window) {
       const detector = new BarcodeDetector({ formats: ['qr_code'] });
@@ -71,7 +89,21 @@ async function startScanner() {
     }
   } catch (e) {
     console.error('Scanner error', e);
-    Swal.fire({ icon: 'error', text: 'Não foi possível acessar a câmera. Verifique as permissões.' });
+    let msg = 'Não foi possível acessar a câmera.';
+    switch (e && e.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        msg = 'Permissão da câmera negada. Habilite nas configurações do navegador (ícone de cadeado → Permissões → Câmera).';
+        break;
+      case 'NotFoundError':
+      case 'OverconstrainedError':
+        msg = 'Nenhuma câmera encontrada no dispositivo.';
+        break;
+      case 'NotReadableError':
+        msg = 'A câmera está em uso por outro app. Feche-o e tente novamente.';
+        break;
+    }
+    Swal.fire({ icon: 'error', title: 'Câmera', text: msg });
     scanning.value = false;
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   }
@@ -116,8 +148,8 @@ async function claimTokenFromText(text) {
 
 onMounted(()=>{
   try{ window.addEventListener('open-rider-scanner', externalOpenScannerHandler) }catch(e){}
-  // automatically open scanner when the view loads
-  try{ startScanner().catch(()=>{}); }catch(e){ console.warn('auto start scanner failed', e) }
+  // NÃO auto-iniciar: a permissão da câmera precisa de gesto do usuário em mobile.
+  // O usuário deve tocar em "Ler pedido (QR)".
 })
 onBeforeUnmount(()=>{ try{ window.removeEventListener('open-rider-scanner', externalOpenScannerHandler) }catch(e){} })
 </script>

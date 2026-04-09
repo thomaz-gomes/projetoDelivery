@@ -377,6 +377,50 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
   }
 });
 
+// Rider: notify customer that rider has arrived at the address (WhatsApp via Evolution)
+ordersRouter.post('/:id/notify-arrival', requireRole('RIDER'), async (req, res) => {
+  const { id } = req.params;
+  const riderId = req.user.riderId;
+  if (!riderId) return res.status(403).json({ message: 'Rider inválido' });
+
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+  if (order.riderId !== riderId) return res.status(403).json({ message: 'Pedido não atribuído a este entregador' });
+
+  // Check if notification was already sent (stored in order.payload.riderArrivalNotified)
+  const payload = order.payload || {};
+  if (payload.riderArrivalNotified) {
+    return res.status(409).json({ message: 'Notificação já enviada para este pedido' });
+  }
+
+  // Need customer phone
+  const phone = order.customerPhone || payload.customerPhone;
+  if (!phone) return res.status(400).json({ message: 'Cliente sem telefone cadastrado' });
+
+  try {
+    const { pickConnectedInstance } = await import('../services/notify.js');
+    const { evoSendText, normalizePhone } = await import('../wa.js');
+
+    const instance = await pickConnectedInstance(order.companyId);
+    if (!instance) return res.status(400).json({ message: 'Nenhuma instância WhatsApp conectada' });
+
+    const to = normalizePhone(phone);
+    const text = 'Olá! O motoboy se encontra no endereço. Por favor, dirija-se até o entregador para receber seu pedido. 🛵';
+    await evoSendText({ instanceName: instance.instanceName, to, text });
+
+    // Mark as notified so it can't be sent again
+    await prisma.order.update({
+      where: { id },
+      data: { payload: { ...payload, riderArrivalNotified: true } },
+    });
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[orders.notify-arrival] failed', e);
+    return res.status(500).json({ message: 'Falha ao enviar notificação' });
+  }
+});
+
 // Admin: edit order details (customer, address, items, payment, notes)
 ordersRouter.patch('/:id', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (req, res) => {
   const { id } = req.params;

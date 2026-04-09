@@ -91,7 +91,7 @@ async function formatDisplayNumber(order) {
   } catch (e) { return String(order.id || '').slice(0,6); }
 }
 
-async function pickConnectedInstance(companyId) {
+export async function pickConnectedInstance(companyId) {
   let inst = await prisma.whatsAppInstance.findFirst({
     where: { companyId, status: 'CONNECTED' },
     orderBy: { createdAt: 'desc' },
