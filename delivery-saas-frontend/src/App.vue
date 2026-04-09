@@ -164,6 +164,16 @@ const showMobileHeader = computed(() => {
   const p = route.path || ''
   return !(p === '/rider' || p.startsWith('/rider/'))
 });
+
+// Floating QR shortcut: visible on all rider screens except the QR reader itself and claim/login flows
+const showRiderQrFab = computed(() => {
+  const p = route?.path || ''
+  if (!(p === '/rider' || p.startsWith('/rider/'))) return false
+  if (p === '/rider/home') return false // QR reader page
+  if (p.startsWith('/rider/claim')) return false
+  return true
+});
+function goToRiderQr(){ try { router.push('/rider/home') } catch(e){} }
 </script>
 
 <template>
@@ -291,6 +301,17 @@ const showMobileHeader = computed(() => {
     <MediaLibraryModal />
     <AiStudioModal />
     <ImportProgressBar />
+    <!-- Atalho global do leitor QR para entregadores -->
+    <button
+      v-if="showRiderQrFab"
+      type="button"
+      class="rider-qr-fab"
+      title="Ler QR Code"
+      aria-label="Ler QR Code"
+      @click="goToRiderQr"
+    >
+      <i class="bi bi-qr-code-scan"></i>
+    </button>
   </div>
 </template>
 
@@ -396,4 +417,27 @@ button#quickMenuDropdown[aria-expanded="true"], .btn:first-child:active {
 .user-info .user-text { max-width: 160px; overflow: hidden; text-align: left;}
 .user-info .user-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-info .user-role { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Floating QR shortcut for rider area */
+.rider-qr-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 84px;
+  z-index: 1050;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: none;
+  background: #198754;
+  color: #fff;
+  font-size: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+  cursor: pointer;
+  transition: transform .15s ease, background .15s ease;
+}
+.rider-qr-fab:hover { background: #157347; transform: scale(1.05); }
+.rider-qr-fab:active { transform: scale(0.96); }
 </style>
