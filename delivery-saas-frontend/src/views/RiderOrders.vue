@@ -70,7 +70,19 @@
               </ul>
             </div>
           </div>
-          <div v-if="o.status === 'SAIU_PARA_ENTREGA'" class="card-footer">
+          <div v-if="o.status === 'SAIU_PARA_ENTREGA'" class="card-footer d-grid gap-2">
+            <button
+              v-if="o.customerPhone && !arrivalNotified[o.id]"
+              class="btn btn-outline-success w-100"
+              :disabled="arrivalSending[o.id]"
+              @click="notifyArrival(o)"
+            >
+              <i class="bi bi-whatsapp me-1"></i>
+              {{ arrivalSending[o.id] ? 'Enviando...' : 'Avisar Chegada' }}
+            </button>
+            <span v-else-if="arrivalNotified[o.id]" class="text-success small text-center">
+              <i class="bi bi-check2-circle me-1"></i>Cliente notificado
+            </span>
             <button class="btn btn-success w-100" @click="markDelivered(o)">
               <i class="bi bi-check-circle me-1"></i>Marcar entregue
             </button>
@@ -108,6 +120,10 @@ import { isNativeApp, startNativeTracking, stopNativeTracking } from '../utils/n
 const orders = ref([])
 const loading = ref(false)
 let socket = null
+
+// Arrival notification state (one-shot per order)
+const arrivalNotified = ref({})
+const arrivalSending = ref({})
 
 // GPS Tracking state
 const trackingEnabled = ref(false)
@@ -525,6 +541,10 @@ async function load(){
       }));
       // exclude already completed orders
       orders.value = details.filter(d => d && d.status !== 'CONCLUIDO');
+      // Restore arrival notification state from order payload
+      for (const o of orders.value) {
+        if (o.payload?.riderArrivalNotified) arrivalNotified.value[o.id] = true
+      }
     } catch (e) {
       orders.value = (list || []).filter(d => d && d.status !== 'CONCLUIDO');
     }
@@ -547,6 +567,21 @@ async function markDelivered(o){
       try { Swal && Swal.fire && Swal.fire({ icon: 'error', title: 'Erro', text: 'Falha ao marcar entregue', toast: true, position: 'top-end' }); } catch(e) {}
     }
   }catch(e){ console.error(e); try { Swal && Swal.fire && Swal.fire({ icon: 'error', title: 'Erro', text: e?.response?.data?.message || 'Erro ao marcar entregue', toast: true, position: 'top-end' }); } catch(_){} }
+}
+
+async function notifyArrival(o) {
+  arrivalSending.value[o.id] = true
+  try {
+    await api.post(`/orders/${o.id}/notify-arrival`)
+    arrivalNotified.value[o.id] = true
+    Swal.fire({ icon: 'success', title: 'Enviado', text: 'Cliente notificado via WhatsApp.', toast: true, position: 'top-end', timer: 2500, showConfirmButton: false })
+  } catch (e) {
+    const msg = e?.response?.status === 409 ? 'Notificação já enviada.' : (e?.response?.data?.message || 'Falha ao enviar notificação')
+    if (e?.response?.status === 409) arrivalNotified.value[o.id] = true
+    Swal.fire({ icon: e?.response?.status === 409 ? 'info' : 'error', text: msg, toast: true, position: 'top-end', timer: 3000, showConfirmButton: false })
+  } finally {
+    arrivalSending.value[o.id] = false
+  }
 }
 
 function ensureSocket(){
