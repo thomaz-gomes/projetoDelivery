@@ -28,12 +28,24 @@ function sessionToJSON(s) {
 // ─── GET /cash/current ─────────────────────────────────────────────────
 
 cashRouter.get('/current', async (req, res) => {
-  const { companyId } = req.user;
+  const { companyId, id: userId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
 
   const session = await prisma.cashSession.findFirst({
-    where: { companyId, status: 'OPEN' },
-    include: { movements: { orderBy: { createdAt: 'asc' } } },
+    where: {
+      companyId,
+      status: 'OPEN',
+      OR: [
+        { ownerId: userId },
+        { operators: { some: { userId } } },
+      ],
+    },
+    include: {
+      movements: { orderBy: { createdAt: 'asc' } },
+      stores: { include: { store: { select: { id: true, name: true } } } },
+      operators: { include: { user: { select: { id: true, name: true } } } },
+      owner: { select: { id: true, name: true } },
+    },
   });
 
   res.json(session ? sessionToJSON(session) : null);
@@ -42,22 +54,56 @@ cashRouter.get('/current', async (req, res) => {
 // ─── POST /cash/open ───────────────────────────────────────────────────
 
 cashRouter.post('/open', async (req, res) => {
-  const { companyId } = req.user;
+  const { companyId, id: userId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
 
-  let { openingAmount, note } = req.body || {};
+  let { openingAmount, note, label, channels, storeIds, operatorIds } = req.body || {};
 
-  // Check no open session exists
-  const existing = await prisma.cashSession.findFirst({
+  // Defaults
+  label = label || 'Caixa';
+  channels = Array.isArray(channels) && channels.length > 0
+    ? channels
+    : ['BALCAO', 'IFOOD', 'AIQFOME', 'WHATSAPP'];
+
+  // Default storeIds = all stores of the company
+  if (!Array.isArray(storeIds) || storeIds.length === 0) {
+    const companyStores = await prisma.store.findMany({
+      where: { companyId },
+      select: { id: true },
+    });
+    storeIds = companyStores.map(s => s.id);
+  }
+
+  if (!Array.isArray(operatorIds)) operatorIds = [];
+
+  // Validate: no two open sessions can serve the same store+channel combination
+  const existingOpen = await prisma.cashSession.findMany({
     where: { companyId, status: 'OPEN' },
+    include: { stores: true },
   });
-  if (existing) return res.status(400).json({ message: 'Já existe sessão de caixa aberta' });
 
-  // Auto-suggest opening from last closed session's declared cash
+  for (const existing of existingOpen) {
+    const existingStoreIds = existing.stores.map(s => s.storeId);
+    const overlappingStores = storeIds.filter(sid => existingStoreIds.includes(sid));
+    if (overlappingStores.length === 0) continue;
+
+    const existingChannels = existing.channels || [];
+    const overlappingChannels = channels.filter(ch => existingChannels.includes(ch));
+    if (overlappingChannels.length > 0) {
+      return res.status(400).json({
+        message: `Conflito: já existe caixa aberto ("${existing.label}") atendendo os mesmos canais/lojas`,
+        conflictSessionId: existing.id,
+        overlappingStores,
+        overlappingChannels,
+      });
+    }
+  }
+
+  // Auto-suggest opening from last closed session of the same owner
   if (openingAmount == null) {
     try {
       const lastClosed = await prisma.cashSession.findFirst({
-        where: { companyId, status: 'CLOSED' },
+        where: { companyId, ownerId: userId, status: 'CLOSED' },
         orderBy: { closedAt: 'desc' },
       });
       if (lastClosed?.declaredValues) {
@@ -74,31 +120,136 @@ cashRouter.post('/open', async (req, res) => {
   }
 
   const amount = Number(openingAmount || 0);
-  const session = await prisma.cashSession.create({
-    data: {
-      companyId,
-      openedBy: req.user.id,
-      openingAmount: amount,
-      currentBalance: amount,
-      openingNote: note || null,
-      status: 'OPEN',
-    },
-    include: { movements: true },
+
+  // Create session + stores + operators in a transaction
+  const session = await prisma.$transaction(async (tx) => {
+    const created = await tx.cashSession.create({
+      data: {
+        companyId,
+        ownerId: userId,
+        openedBy: userId,
+        label,
+        channels,
+        openingAmount: amount,
+        currentBalance: amount,
+        openingNote: note || null,
+        status: 'OPEN',
+      },
+    });
+
+    // Create CashSessionStore records
+    if (storeIds.length > 0) {
+      await tx.cashSessionStore.createMany({
+        data: storeIds.map(storeId => ({
+          cashSessionId: created.id,
+          storeId,
+        })),
+      });
+    }
+
+    // Create CashSessionOperator records
+    if (operatorIds.length > 0) {
+      await tx.cashSessionOperator.createMany({
+        data: operatorIds.map(opId => ({
+          cashSessionId: created.id,
+          userId: opId,
+          addedBy: userId,
+        })),
+      });
+    }
+
+    // Return full session with includes
+    return tx.cashSession.findUnique({
+      where: { id: created.id },
+      include: {
+        movements: true,
+        stores: { include: { store: { select: { id: true, name: true } } } },
+        operators: { include: { user: { select: { id: true, name: true } } } },
+        owner: { select: { id: true, name: true } },
+      },
+    });
   });
 
   res.status(201).json(sessionToJSON(session));
 });
 
+// ─── POST /cash/operators — add operator to caller's open session ──────
+
+cashRouter.post('/operators', async (req, res) => {
+  const { companyId, id: userId } = req.user;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+
+  const { userId: operatorUserId } = req.body || {};
+  if (!operatorUserId) return res.status(400).json({ message: 'userId é obrigatório' });
+
+  const session = await prisma.cashSession.findFirst({
+    where: { companyId, status: 'OPEN', ownerId: userId },
+  });
+  if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta sob sua responsabilidade' });
+
+  try {
+    await prisma.cashSessionOperator.create({
+      data: {
+        cashSessionId: session.id,
+        userId: operatorUserId,
+        addedBy: userId,
+      },
+    });
+  } catch (e) {
+    if (e.code === 'P2002') {
+      return res.status(400).json({ message: 'Operador já adicionado a esta sessão' });
+    }
+    throw e;
+  }
+
+  res.status(201).json({ ok: true });
+});
+
+// ─── DELETE /cash/operators/:userId — remove operator ──────────────────
+
+cashRouter.delete('/operators/:userId', async (req, res) => {
+  const { companyId, id: callerId } = req.user;
+  if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
+
+  const { userId: operatorUserId } = req.params;
+
+  const session = await prisma.cashSession.findFirst({
+    where: { companyId, status: 'OPEN', ownerId: callerId },
+  });
+  if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta sob sua responsabilidade' });
+
+  const deleted = await prisma.cashSessionOperator.deleteMany({
+    where: {
+      cashSessionId: session.id,
+      userId: operatorUserId,
+    },
+  });
+
+  if (deleted.count === 0) {
+    return res.status(404).json({ message: 'Operador não encontrado nesta sessão' });
+  }
+
+  res.json({ ok: true });
+});
+
 // ─── POST /cash/movement ──────────────────────────────────────────────
 
 cashRouter.post('/movement', async (req, res) => {
-  const { companyId } = req.user;
+  const { companyId, id: userId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
   const { type, amount, account, note } = req.body || {};
   if (!type || !amount) return res.status(400).json({ message: 'type e amount são obrigatórios' });
 
+  // Find session where user is owner or operator
   const session = await prisma.cashSession.findFirst({
-    where: { companyId, status: 'OPEN' },
+    where: {
+      companyId,
+      status: 'OPEN',
+      OR: [
+        { ownerId: userId },
+        { operators: { some: { userId } } },
+      ],
+    },
   });
   if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
 
@@ -149,6 +300,11 @@ cashRouter.post('/close/finalize', async (req, res) => {
     include: { movements: true },
   });
   if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
+
+  // Only the owner can close the session
+  if (session.ownerId !== req.user.id) {
+    return res.status(403).json({ message: 'Apenas o responsável pelo caixa pode fechá-lo' });
+  }
 
   // 1. Register last-minute movements (sangrias/reforços from step 3)
   if (Array.isArray(lastMinuteMovements) && lastMinuteMovements.length > 0) {
@@ -249,6 +405,11 @@ cashRouter.post('/close', async (req, res) => {
   });
   if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
 
+  // Only the owner can close the session
+  if (session.ownerId !== req.user.id) {
+    return res.status(403).json({ message: 'Apenas o responsável pelo caixa pode fechá-lo' });
+  }
+
   // Parse legacy closingSummary
   let parsed = closingSummary;
   if (typeof parsed === 'string') {
@@ -304,7 +465,12 @@ cashRouter.get('/sessions', async (req, res) => {
 
   const sessions = await prisma.cashSession.findMany({
     where: { companyId },
-    include: { movements: { orderBy: { createdAt: 'asc' } } },
+    include: {
+      movements: { orderBy: { createdAt: 'asc' } },
+      owner: { select: { id: true, name: true } },
+      stores: { include: { store: { select: { id: true, name: true } } } },
+      operators: { include: { user: { select: { id: true, name: true } } } },
+    },
     orderBy: { openedAt: 'desc' },
     take: 50,
   });
@@ -343,11 +509,18 @@ cashRouter.get('/sessions', async (req, res) => {
 // ─── GET /cash/summary/current ─────────────────────────────────────────
 
 cashRouter.get('/summary/current', async (req, res) => {
-  const { companyId } = req.user;
+  const { companyId, id: userId } = req.user;
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
 
   const session = await prisma.cashSession.findFirst({
-    where: { companyId, status: 'OPEN' },
+    where: {
+      companyId,
+      status: 'OPEN',
+      OR: [
+        { ownerId: userId },
+        { operators: { some: { userId } } },
+      ],
+    },
     include: { movements: true },
   });
   if (!session) return res.json(null);
