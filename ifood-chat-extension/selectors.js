@@ -15,9 +15,9 @@ window.IFOOD_SELECTORS = {
   // Número do pedido dentro de cada conversa (h2 contém "#XXXX")
   conversationOrderNumber: 'h2',
 
-  // Campo de input de mensagem (será preenchido quando você enviar o HTML da conversa aberta)
-  messageInput: 'textarea, input[placeholder*="mensagem"], input[placeholder*="Digite"]',
+  // Campo de input de mensagem (textarea dentro da conversa aberta)
+  messageInput: 'textarea[aria-label="Campo de mensagem"]',
 
-  // Botão enviar mensagem
-  sendButton: 'button[aria-label="Enviar"], button[type="submit"]',
+  // Botão enviar mensagem (ícone ifdl-icon-send-message)
+  sendButton: 'button[aria-label="Enviar mensagem"]',
 };
