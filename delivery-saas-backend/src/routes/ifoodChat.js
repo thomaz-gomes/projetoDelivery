@@ -5,7 +5,6 @@ import { randomToken, sha256 } from '../utils.js'
 
 const router = express.Router()
 router.use(authMiddleware)
-router.use(requireRole('ADMIN'))
 
 // Default messages seeded when first fetched
 const DEFAULTS = [
@@ -15,8 +14,8 @@ const DEFAULTS = [
   { status: 'MANUAL', message: 'Olá {nome}! Temos uma mensagem sobre o seu pedido #{numero}.', enabled: false },
 ]
 
-// GET /ifood-chat/messages/:storeId
-router.get('/messages/:storeId', async (req, res) => {
+// GET /ifood-chat/messages/:storeId (admin only)
+router.get('/messages/:storeId', requireRole('ADMIN'), async (req, res) => {
   try {
     const { storeId } = req.params
     let messages = await prisma.ifoodChatMessage.findMany({ where: { storeId } })
@@ -38,7 +37,7 @@ router.get('/messages/:storeId', async (req, res) => {
 })
 
 // PUT /ifood-chat/messages/:storeId
-router.put('/messages/:storeId', async (req, res) => {
+router.put('/messages/:storeId', requireRole('ADMIN'), async (req, res) => {
   try {
     const { storeId } = req.params
     const { messages } = req.body // array of { status, message, enabled }
@@ -96,7 +95,7 @@ router.post('/send', async (req, res) => {
 })
 
 // POST /ifood-chat/generate-token
-router.post('/generate-token', async (req, res) => {
+router.post('/generate-token', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId
     if (!companyId) return res.status(400).json({ ok: false, message: 'No company' })
