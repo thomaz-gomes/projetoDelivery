@@ -119,22 +119,31 @@ async function sendChatMessage(orderNumber, message) {
 
 /**
  * Fecha o painel de chat completamente.
- * Tenta clicar no X (ifdl-icon-close) e depois no botão toggle para fechar.
+ * 1. Se estiver dentro de uma conversa, fecha a conversa primeiro (volta à lista)
+ * 2. Depois fecha o painel inteiro (volta ao gestor)
  */
 async function closeChatPanel() {
-  // Tentar fechar pelo X
-  const closeBtn = document.querySelector(SELECTORS.closeChatButton);
-  if (closeBtn) {
-    closeBtn.click();
-    await sleep(500);
+  // Passo 1: Se estiver dentro de uma conversa (textarea visível), fechar a conversa
+  const textarea = document.querySelector(SELECTORS.messageInput);
+  if (textarea) {
+    const closeConvBtn = document.querySelector(SELECTORS.closeConversationButton);
+    if (closeConvBtn) {
+      closeConvBtn.click();
+      await sleep(500);
+    }
   }
 
-  // Verificar se o painel ainda está aberto (h1 "Conversas" ou textarea visível)
-  const stillOpen = document.querySelector(SELECTORS.messageInput) ||
-    Array.from(document.querySelectorAll('h1')).find(h => h.textContent.includes('Conversas'));
-
-  if (stillOpen) {
-    // Clicar no toggle button para fechar o painel
+  // Passo 2: Se a lista de conversas está aberta, fechar o painel inteiro
+  const listOpen = Array.from(document.querySelectorAll('h1')).find(h => h.textContent.includes('Conversas'));
+  if (listOpen) {
+    // Usar o X genérico da lista
+    const closeListBtn = document.querySelector(SELECTORS.closeChatButton);
+    if (closeListBtn) {
+      closeListBtn.click();
+      await sleep(500);
+      return;
+    }
+    // Fallback: toggle button
     const toggleBtn = document.querySelector(SELECTORS.chatToggleButton);
     if (toggleBtn) {
       toggleBtn.click();

@@ -6,8 +6,11 @@ window.IFOOD_SELECTORS = {
   // Botão que abre o painel de conversas (header do iFood)
   chatToggleButton: '[data-test-id="CONSUMER_CHAT_REBORN_HEADER_ENTRY_POINT"]',
 
-  // Botão fechar/X do painel de conversas (ícone do design system iFood)
+  // Botão fechar/X do painel de conversas (ícone genérico)
   closeChatButton: 'span.ifdl-icon-close',
+
+  // Botão fechar/voltar dentro de uma conversa aberta (tem data-testid)
+  closeConversationButton: '[data-testid="close-icon"]',
 
   // Container scrollável da lista de conversas (virtual scroll)
   conversationListScroll: '[style*="overflow: auto"]',
