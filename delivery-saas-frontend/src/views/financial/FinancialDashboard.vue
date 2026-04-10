@@ -83,6 +83,33 @@
       </div>
     </div>
 
+    <!-- Faturas de Cartão -->
+    <div v-if="invoiceSummaries.length" class="mt-4 mb-4">
+      <h5>Faturas de Cartão</h5>
+      <div class="row g-3">
+        <div v-for="inv in invoiceSummaries" :key="inv.card.id" class="col-md-6">
+          <div class="card" :class="inv.parcelasCount > 0 ? 'border-primary' : 'border-light'">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 class="mb-0">{{ inv.card.name }}{{ inv.card.lastDigits ? ` (final ${inv.card.lastDigits})` : '' }}</h6>
+                  <small class="text-muted">Fatura {{ inv.month }} · vence dia {{ inv.card.dueDay }}</small>
+                </div>
+                <div class="text-end">
+                  <div class="fs-5 fw-bold">{{ formatCurrency(inv.total) }}</div>
+                  <small class="text-muted">{{ inv.parcelasCount }} parcela{{ inv.parcelasCount !== 1 ? 's' : '' }}</small>
+                </div>
+              </div>
+              <div class="mt-2 d-flex gap-2" v-if="inv.parcelasCount > 0">
+                <button class="btn btn-sm btn-outline-primary" @click="showInvoiceDetail(inv)">Ver detalhes</button>
+                <button class="btn btn-sm btn-success" @click="payInvoice(inv)">Pagar fatura</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Atalhos rápidos -->
     <div class="row g-3 mb-4">
       <div class="col-md-4">
@@ -159,6 +186,7 @@ export default {
       selectedStoreId: '',
       loading: false,
       reconciling: false,
+      invoiceSummaries: [],
     };
   },
   async mounted() {
@@ -175,7 +203,7 @@ export default {
       }
     },
     async loadAll() {
-      await Promise.all([this.loadSummary(), this.loadHealth()]);
+      await Promise.all([this.loadSummary(), this.loadHealth(), this.loadInvoices()]);
     },
     async loadSummary() {
       this.loading = true;
@@ -208,6 +236,35 @@ export default {
       } finally {
         this.reconciling = false;
       }
+    },
+    async loadInvoices() {
+      try {
+        const { data } = await api.get('/financial/invoices/summary');
+        this.invoiceSummaries = data;
+      } catch (e) {
+        console.error(e);
+      }
+    },
+    async payInvoice(inv) {
+      if (!confirm(`Pagar fatura ${inv.card.name} de ${this.formatCurrency(inv.total)} (${inv.parcelasCount} parcelas)?`)) return;
+      try {
+        await api.post('/financial/invoices/pay', {
+          payablePaymentMethodId: inv.card.id,
+          month: inv.month,
+          accountId: inv.card.accountId,
+        });
+        alert('Fatura paga com sucesso!');
+        await this.loadInvoices();
+        if (this.loadAll) await this.loadAll();
+      } catch (e) {
+        alert(e.response?.data?.message || 'Erro ao pagar fatura');
+      }
+    },
+    showInvoiceDetail(inv) {
+      const lines = inv.parcelas.map(p =>
+        `${p.description} — ${this.formatCurrency(p.grossAmount)} — ${this.formatDate(p.dueDate)}`
+      ).join('\n');
+      alert(`Fatura ${inv.card.name} - ${inv.month}\n\n${lines}\n\nTotal: ${this.formatCurrency(inv.total)}`);
     },
     formatCurrency(value) {
       return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
