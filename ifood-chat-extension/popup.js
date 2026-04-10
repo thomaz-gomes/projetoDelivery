@@ -53,20 +53,50 @@ function refreshStatus() {
 }
 refreshStatus();
 
-// Activate current tab
+// Activate: find iFood tabs and pick one
 activateBtn.addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return;
+  // Query all iFood tabs
+  const tabs = await chrome.tabs.query({ url: 'https://gestordepedidos.ifood.com.br/*' });
 
-  if (!tab.url || !tab.url.includes('gestordepedidos.ifood.com.br')) {
+  if (tabs.length === 0) {
     activeTabInfo.className = 'no-tab';
-    activeTabInfo.textContent = 'Abra o Gestor de Pedidos do iFood primeiro!';
+    activeTabInfo.textContent = 'Nenhuma aba do Gestor de Pedidos encontrada!';
     return;
   }
 
-  chrome.runtime.sendMessage({ type: 'SET_ACTIVE_TAB', tabId: tab.id, tabUrl: tab.url }, () => {
-    refreshStatus();
+  if (tabs.length === 1) {
+    // Only one iFood tab — activate it directly
+    const tab = tabs[0];
+    chrome.runtime.sendMessage({ type: 'SET_ACTIVE_TAB', tabId: tab.id, tabUrl: tab.url }, () => {
+      refreshStatus();
+    });
+    return;
+  }
+
+  // Multiple iFood tabs — show selector
+  // Replace button with a list of tabs to choose from
+  const container = activateBtn.parentElement;
+  activateBtn.style.display = 'none';
+
+  const list = document.createElement('div');
+  list.style.cssText = 'margin-bottom:8px;';
+  list.innerHTML = '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">Escolha a aba:</div>';
+
+  tabs.forEach((tab) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn-outline';
+    btn.style.cssText = 'font-size:12px;text-align:left;padding:6px 10px;margin-bottom:4px;';
+    btn.textContent = `Aba #${tab.id} — ${tab.title || tab.url}`;
+    btn.addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'SET_ACTIVE_TAB', tabId: tab.id, tabUrl: tab.url }, () => {
+        list.remove();
+        refreshStatus();
+      });
+    });
+    list.appendChild(btn);
   });
+
+  container.insertBefore(list, deactivateBtn);
 });
 
 // Deactivate tab
