@@ -4,6 +4,7 @@ import { getIFoodOrderDetails } from '../integrations/ifood/orders.js';
 import { upsertCustomerFromIfood } from '../services/customers.js';
 import { emitirNovoPedido, emitirPedidoAtualizado, app } from '../index.js';
 import { notifyCustomerStatus, notifyCustomerOrderSummary } from './notify.js';
+import { tryEmitIfoodChat } from './ifoodChatEmitter.js';
 import buildAndPersistStockMovementFromOrderItems from './stockFromOrder.js';
 import { canTransition } from '../stateMachine.js';
 import printQueue from '../printQueue.js'
@@ -795,6 +796,7 @@ export async function processIFoodWebhook(eventId) {
         } else if (res && res.statusChanged) {
           console.log('[iFood Processor] status changed by webhook:', res.from, '->', res.to, 'orderId:', savedOrder && savedOrder.id);
           emitirPedidoAtualizado(savedOrder);
+          tryEmitIfoodChat(savedOrder, res.to).catch(() => {});
           // Notify customer about status change for relevant statuses
           try { await notifyCustomerStatus(savedOrder.id, res.to); } catch (e) { console.warn('[iFood Processor] notifyCustomerStatus failed', e && e.message); }
         } else {

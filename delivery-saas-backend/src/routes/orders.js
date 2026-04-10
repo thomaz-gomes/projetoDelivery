@@ -15,6 +15,7 @@ import { notifyRiderAssigned, notifyCustomerStatus, notifyCustomerOrderSummary }
 import riderAccountService from '../services/riderAccount.js';
 import { buildAndPersistStockMovementFromOrderItems } from '../services/stockFromOrder.js';
 import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
+import { tryEmitIfoodChat } from '../services/ifoodChatEmitter.js';
 import { nextDisplaySimple } from '../utils/displaySimple.js';
 import { geocodeOrderIfNeeded } from '../utils/geocode.js';
 
@@ -276,6 +277,7 @@ ordersRouter.post('/:id/assign', requireRole('ADMIN', 'ATTENDANT', 'STORE'), asy
 
   // emitir evento de atualização via Socket.IO para todos os clientes conectados
   try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(order); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e); }
+  tryEmitIfoodChat(order, data.status || order.status).catch(() => {});
 
   // notifica cliente (stub)
   const newStatus = data.status || order.status;
@@ -539,6 +541,7 @@ ordersRouter.post('/:id/accept', requireRole('ADMIN', 'ATTENDANT', 'STORE'), asy
     });
 
     try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) {}
+    tryEmitIfoodChat(updated, 'EM_PREPARO').catch(() => {});
     res.json(updated);
   } catch (e) {
     console.error('[Orders] accept failed:', e);
@@ -642,6 +645,7 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
     // notify customer and emit websocket update
     notifyCustomerStatus(updated.id, status).catch(() => {});
     try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e); }
+    tryEmitIfoodChat(updated, status).catch(() => {});
 
     // If this order belongs to an IFOOD integration, attempt to notify iFood of the status change
     try {
