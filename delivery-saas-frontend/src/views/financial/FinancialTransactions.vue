@@ -141,6 +141,41 @@
                 <label class="form-label">Operadora (taxas)</label>
                 <SelectInput v-model="form.gatewayConfigId" :options="gatewayOptions" optionValueKey="id" optionLabelKey="label" placeholder="Nenhuma (sem taxa)" />
               </div>
+              <div class="col-md-6">
+                <label class="form-label">Forma de Pagamento</label>
+                <SelectInput v-model="form.payablePaymentMethodId" :options="paymentMethodOptions"
+                  optionValueKey="id" optionLabelKey="name" placeholder="Nenhuma (avulso)" />
+              </div>
+              <div class="col-md-6" v-if="form.payablePaymentMethodId">
+                <label class="form-label">Data da Compra</label>
+                <input type="date" class="form-control" v-model="form.purchaseDate">
+              </div>
+              <div class="col-md-4" v-if="selectedMethodType === 'CREDIT_CARD' || selectedMethodType === 'BOLETO'">
+                <label class="form-label">Parcelas</label>
+                <SelectInput v-model="form.installmentCount" :options="installmentOptions" />
+              </div>
+              <div class="col-md-4" v-if="selectedMethodType === 'BOLETO' && form.installmentCount > 1">
+                <label class="form-label">Intervalo</label>
+                <SelectInput v-model="form.boletoTemplate" :options="boletoTemplateOptions" />
+              </div>
+              <div class="col-12" v-if="form.payablePaymentMethodId && form.installmentCount > 1 && form.purchaseDate && form.grossAmount > 0">
+                <button type="button" class="btn btn-outline-primary btn-sm mb-2" @click="previewInstallments">
+                  Calcular Parcelas
+                </button>
+              </div>
+              <div class="col-12" v-if="installmentPreview.length > 1">
+                <h6>Parcelas</h6>
+                <table class="table table-sm">
+                  <thead><tr><th>Parcela</th><th>Valor (R$)</th><th>Vencimento</th></tr></thead>
+                  <tbody>
+                    <tr v-for="inst in installmentPreview" :key="inst.number">
+                      <td>{{ inst.number }}/{{ inst.totalInstallments }}</td>
+                      <td><input type="number" class="form-control form-control-sm" v-model.number="inst.amount" step="0.01" min="0"></td>
+                      <td><input type="date" class="form-control form-control-sm" v-model="inst.dueDate"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
               <div class="col-12">
                 <label class="form-label">Observações</label>
                 <textarea class="form-control" v-model="form.notes" rows="2"></textarea>
@@ -174,10 +209,19 @@ export default {
       showForm: false,
       saving: false,
       filters: { type: '', status: '', dueDateFrom: '', dueDateTo: '', sourceType: '' },
-      form: { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '' },
+      form: { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d' },
+      installmentPreview: [],
+      installmentOptions: Array.from({ length: 24 }, (_, i) => ({ value: i + 1, label: `${i + 1}x` })),
+      boletoTemplateOptions: [
+        { value: '30d', label: 'A cada 30 dias' },
+        { value: '7_14_21', label: '7/14/21 dias' },
+        { value: '7_15', label: '7/15 dias' },
+        { value: 'custom', label: 'Personalizado' },
+      ],
       accounts: [],
       costCenters: [],
       gateways: [],
+      paymentMethods: [],
       typeOptions: [{ value: 'PAYABLE', label: 'A Pagar' }, { value: 'RECEIVABLE', label: 'A Receber' }],
       statusOptions: [
         { value: 'PENDING', label: 'Pendente' }, { value: 'CONFIRMED', label: 'Confirmada' },
@@ -196,6 +240,11 @@ export default {
     accountOptions() { return this.accounts.filter(a => a.isActive); },
     costCenterOptions() { return this.costCenters.map(c => ({ id: c.id, label: `${c.code} - ${c.name}` })); },
     gatewayOptions() { return this.gateways.map(g => ({ id: g.id, label: `${g.provider} ${g.label || ''}`.trim() })); },
+    paymentMethodOptions() { return this.paymentMethods.filter(m => m.isActive); },
+    selectedMethodType() {
+      const m = this.paymentMethods.find(pm => pm.id === this.form.payablePaymentMethodId);
+      return m?.type || null;
+    },
   },
   async mounted() {
     await Promise.all([this.load(), this.loadLookups()]);
@@ -218,14 +267,16 @@ export default {
     },
     async loadLookups() {
       try {
-        const [acc, cc, gw] = await Promise.all([
+        const [acc, cc, gw, pm] = await Promise.all([
           api.get('/financial/accounts'),
           api.get('/financial/cost-centers', { params: { flat: 'true' } }),
           api.get('/financial/gateways'),
+          api.get('/financial/payment-methods', { params: { activeOnly: 'true' } }),
         ]);
         this.accounts = acc.data;
         this.costCenters = cc.data;
         this.gateways = gw.data;
+        this.paymentMethods = pm.data;
       } catch (e) {
         console.error('Failed to load lookups:', e);
       }
@@ -242,14 +293,33 @@ export default {
       }
       this.saving = true;
       try {
-        await api.post('/financial/transactions', this.form);
+        const payload = { ...this.form };
+        if (this.installmentPreview.length > 1) {
+          payload.installments = this.installmentPreview;
+        }
+        await api.post('/financial/transactions', payload);
         this.showForm = false;
-        this.form = { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '' };
+        this.installmentPreview = [];
+        this.form = { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d' };
         await this.load();
       } catch (e) {
         alert(e.response?.data?.message || 'Erro ao criar');
       } finally {
         this.saving = false;
+      }
+    },
+    async previewInstallments() {
+      try {
+        const { data } = await api.post('/financial/transactions/preview-installments', {
+          payablePaymentMethodId: this.form.payablePaymentMethodId,
+          purchaseDate: this.form.purchaseDate,
+          grossAmount: this.form.grossAmount,
+          installmentCount: this.form.installmentCount,
+          template: this.form.boletoTemplate,
+        });
+        this.installmentPreview = data.preview;
+      } catch (e) {
+        alert(e.response?.data?.message || 'Erro ao calcular parcelas');
       }
     },
     async payTransaction(tx) {
