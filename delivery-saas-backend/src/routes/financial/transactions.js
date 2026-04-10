@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
 import { calculateFees } from '../../services/financial/feeCalculator.js';
+import { calculateInstallmentDates } from '../../services/financial/installmentCalculator.js';
 
 const router = express.Router();
 
@@ -54,6 +55,48 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST /financial/transactions/preview-installments
+router.post('/preview-installments', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { payablePaymentMethodId, purchaseDate, grossAmount, installmentCount, template, customDates } = req.body;
+
+    if (!payablePaymentMethodId || !purchaseDate || !grossAmount || !installmentCount) {
+      return res.status(400).json({ message: 'payablePaymentMethodId, purchaseDate, grossAmount e installmentCount são obrigatórios' });
+    }
+
+    const method = await prisma.payablePaymentMethod.findFirst({
+      where: { id: payablePaymentMethodId, companyId },
+    });
+    if (!method) return res.status(404).json({ message: 'Método de pagamento não encontrado' });
+
+    const { installments } = calculateInstallmentDates(method.type, new Date(purchaseDate), Number(installmentCount), {
+      closingDay: method.closingDay,
+      dueDay: method.dueDay,
+      template,
+      customDates,
+    });
+
+    // Divide grossAmount equally; first installment gets the rounding remainder
+    const gross = Number(grossAmount);
+    const count = installments.length;
+    const baseAmount = Math.floor((gross * 100) / count) / 100;
+    const remainder = Math.round((gross - baseAmount * count) * 100) / 100;
+
+    const preview = installments.map((inst, idx) => ({
+      number: inst.number,
+      totalInstallments: count,
+      dueDate: inst.dueDate,
+      amount: idx === 0 ? Math.round((baseAmount + remainder) * 100) / 100 : baseAmount,
+    }));
+
+    res.json({ method, preview });
+  } catch (e) {
+    console.error('POST /financial/transactions/preview-installments error:', e);
+    res.status(500).json({ message: 'Erro ao calcular preview de parcelas', error: e?.message });
+  }
+});
+
 // GET /financial/transactions/:id
 router.get('/:id', async (req, res) => {
   try {
@@ -75,7 +118,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /financial/transactions - criar título financeiro
+// POST /financial/transactions - criar título financeiro (com suporte a parcelas)
 router.post('/', async (req, res) => {
   try {
     const companyId = req.user.companyId;
@@ -83,13 +126,95 @@ router.post('/', async (req, res) => {
       type, description, accountId, costCenterId, gatewayConfigId,
       grossAmount, dueDate, sourceType, sourceId, notes,
       recurrence, installmentNumber, totalInstallments, parentTransactionId,
+      payablePaymentMethodId, installments,
     } = req.body;
 
     if (!type || !description || !grossAmount || !dueDate) {
       return res.status(400).json({ message: 'type, description, grossAmount e dueDate são obrigatórios' });
     }
 
-    // Calcular taxas se gatewayConfigId fornecido
+    // ── Multi-installment creation ──────────────────────────────────────────
+    if (Array.isArray(installments) && installments.length > 1) {
+      const result = await prisma.$transaction(async (tx) => {
+        // Create parent transaction (confirmed, represents the full amount)
+        const parent = await tx.financialTransaction.create({
+          data: {
+            companyId,
+            type,
+            description,
+            accountId: accountId || null,
+            costCenterId: costCenterId || null,
+            gatewayConfigId: gatewayConfigId || null,
+            payablePaymentMethodId: payablePaymentMethodId || null,
+            grossAmount: Number(grossAmount),
+            feeAmount: 0,
+            netAmount: Number(grossAmount),
+            dueDate: new Date(dueDate),
+            sourceType: sourceType || 'MANUAL',
+            sourceId: sourceId || null,
+            notes: notes || null,
+            recurrence: 'MONTHLY',
+            totalInstallments: installments.length,
+            status: 'CONFIRMED',
+            createdBy: req.user.id,
+          },
+        });
+
+        // Create child transactions (one per installment)
+        const children = [];
+        for (const inst of installments) {
+          const childGross = Number(inst.amount);
+          let childFee = 0;
+          let childNet = childGross;
+          let childExpected = null;
+
+          if (gatewayConfigId) {
+            const feeResult = await calculateFees(gatewayConfigId, childGross, new Date(inst.dueDate));
+            childFee = feeResult.feeAmount;
+            childNet = feeResult.netAmount;
+            childExpected = feeResult.expectedDate;
+          }
+
+          const suffix = `(${inst.number}/${installments.length})`;
+          const child = await tx.financialTransaction.create({
+            data: {
+              companyId,
+              type,
+              description: `${description} ${suffix}`,
+              accountId: accountId || null,
+              costCenterId: costCenterId || null,
+              gatewayConfigId: gatewayConfigId || null,
+              payablePaymentMethodId: payablePaymentMethodId || null,
+              grossAmount: childGross,
+              feeAmount: childFee,
+              netAmount: childNet,
+              dueDate: new Date(inst.dueDate),
+              expectedDate: childExpected,
+              sourceType: sourceType || 'MANUAL',
+              sourceId: sourceId || null,
+              notes: notes || null,
+              recurrence: 'NONE',
+              installmentNumber: inst.number,
+              totalInstallments: installments.length,
+              parentTransactionId: parent.id,
+              status: 'PENDING',
+              createdBy: req.user.id,
+            },
+            include: {
+              account: { select: { id: true, name: true } },
+              costCenter: { select: { id: true, code: true, name: true } },
+            },
+          });
+          children.push(child);
+        }
+
+        return { parent, children };
+      });
+
+      return res.status(201).json(result);
+    }
+
+    // ── Single transaction (existing behavior) ──────────────────────────────
     let feeAmount = 0;
     let netAmount = Number(grossAmount);
     let expectedDate = null;
@@ -109,6 +234,7 @@ router.post('/', async (req, res) => {
         accountId: accountId || null,
         costCenterId: costCenterId || null,
         gatewayConfigId: gatewayConfigId || null,
+        payablePaymentMethodId: payablePaymentMethodId || null,
         grossAmount: Number(grossAmount),
         feeAmount,
         netAmount,
