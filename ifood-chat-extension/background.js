@@ -4,6 +4,10 @@ let socket = null;
 let connected = false;
 let messageQueue = [];
 
+// Active tab — only this tab receives automated messages
+let activeTabId = null;
+let activeTabUrl = '';
+
 function connect(config) {
   if (socket) {
     try { socket.disconnect(); } catch (e) { /* ignore */ }
@@ -12,7 +16,7 @@ function connect(config) {
 
   if (!config || !config.backendUrl || !config.extensionToken || !config.companyId) {
     console.warn('[iFood Extension] Config incompleta, ignorando conexão.');
-    updateBadge('off');
+    updateBadge();
     return;
   }
 
@@ -31,19 +35,19 @@ function connect(config) {
   socket.on('connect', () => {
     console.log('[iFood Extension] Conectado ao backend');
     connected = true;
-    updateBadge('on');
+    updateBadge();
   });
 
   socket.on('disconnect', () => {
     console.log('[iFood Extension] Desconectado');
     connected = false;
-    updateBadge('off');
+    updateBadge();
   });
 
   socket.on('connect_error', (err) => {
     console.error('[iFood Extension] Erro de conexão:', err.message);
     connected = false;
-    updateBadge('off');
+    updateBadge();
   });
 
   socket.on('ifood:chat', (payload) => {
@@ -53,33 +57,44 @@ function connect(config) {
 }
 
 async function forwardToContentScript(payload) {
+  // Only send to the activated tab
+  if (!activeTabId) {
+    console.warn('[iFood Extension] Nenhuma aba ativada. Enfileirando mensagem.');
+    messageQueue.push(payload);
+    return;
+  }
+
   try {
-    const tabs = await chrome.tabs.query({ url: 'https://gestordepedidos.ifood.com.br/*' });
-    if (tabs.length === 0) {
-      console.warn('[iFood Extension] Nenhuma aba do iFood encontrada. Enfileirando mensagem.');
+    // Verify the tab still exists
+    const tab = await chrome.tabs.get(activeTabId).catch(() => null);
+    if (!tab) {
+      console.warn('[iFood Extension] Aba ativada não existe mais. Desativando.');
+      activeTabId = null;
+      activeTabUrl = '';
       messageQueue.push(payload);
+      updateBadge();
       return;
     }
 
-    for (const tab of tabs) {
-      try {
-        await chrome.tabs.sendMessage(tab.id, { type: 'SEND_CHAT_MESSAGE', payload });
-      } catch (e) {
-        console.warn('[iFood Extension] Falha ao enviar para tab', tab.id, e.message);
-      }
-    }
+    await chrome.tabs.sendMessage(activeTabId, { type: 'SEND_CHAT_MESSAGE', payload });
   } catch (e) {
-    console.error('[iFood Extension] Falha ao encaminhar para content script:', e);
+    console.error('[iFood Extension] Falha ao enviar para aba ativada:', e.message);
     messageQueue.push(payload);
   }
 }
 
-function updateBadge(state) {
+function updateBadge() {
   try {
-    if (state === 'on') {
+    if (connected && activeTabId) {
+      // Connected + tab active = all good
       chrome.action.setBadgeText({ text: '' });
       chrome.action.setBadgeBackgroundColor({ color: '#28a745' });
+    } else if (connected && !activeTabId) {
+      // Connected but no tab = needs attention
+      chrome.action.setBadgeText({ text: '⚡' });
+      chrome.action.setBadgeBackgroundColor({ color: '#ffc107' });
     } else {
+      // Disconnected
       chrome.action.setBadgeText({ text: '!' });
       chrome.action.setBadgeBackgroundColor({ color: '#dc3545' });
     }
@@ -90,7 +105,12 @@ function updateBadge(state) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'GET_STATUS') {
-    sendResponse({ connected, queueLength: messageQueue.length });
+    sendResponse({
+      connected,
+      queueLength: messageQueue.length,
+      activeTabId,
+      activeTabUrl,
+    });
     return false;
   }
   if (msg.type === 'RECONNECT') {
@@ -98,8 +118,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
-  if (msg.type === 'CONTENT_SCRIPT_READY') {
+  if (msg.type === 'SET_ACTIVE_TAB') {
+    activeTabId = msg.tabId;
+    activeTabUrl = msg.tabUrl || '';
+    console.log('[iFood Extension] Aba ativada:', activeTabId, activeTabUrl);
+    updateBadge();
+    // Flush queued messages
     if (messageQueue.length > 0) {
+      const queued = [...messageQueue];
+      messageQueue = [];
+      for (const payload of queued) {
+        forwardToContentScript(payload);
+      }
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg.type === 'CLEAR_ACTIVE_TAB') {
+    activeTabId = null;
+    activeTabUrl = '';
+    console.log('[iFood Extension] Aba desativada');
+    updateBadge();
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg.type === 'CONTENT_SCRIPT_READY') {
+    // Only flush if this is the active tab
+    if (sender.tab && sender.tab.id === activeTabId && messageQueue.length > 0) {
       const queued = [...messageQueue];
       messageQueue = [];
       for (const payload of queued) {
@@ -122,25 +167,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
-// Re-connect when service worker wakes up (MV3 can kill/restart the worker)
+// Clear active tab if it gets closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === activeTabId) {
+    console.log('[iFood Extension] Aba ativada foi fechada');
+    activeTabId = null;
+    activeTabUrl = '';
+    updateBadge();
+  }
+});
+
+// Clear active tab if it navigates away from iFood
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (tabId === activeTabId && changeInfo.url && !changeInfo.url.includes('gestordepedidos.ifood.com.br')) {
+    console.log('[iFood Extension] Aba ativada saiu do iFood');
+    activeTabId = null;
+    activeTabUrl = '';
+    updateBadge();
+  }
+});
+
+// Re-connect when service worker wakes up
 chrome.runtime.onStartup.addListener(() => {
   chrome.storage.local.get(['backendUrl', 'extensionToken', 'companyId'], (config) => {
     connect(config);
   });
 });
 
-// Also connect on install/update
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get(['backendUrl', 'extensionToken', 'companyId'], (config) => {
     connect(config);
   });
 });
 
-// Initial connection attempt
+// Initial connection
 chrome.storage.local.get(['backendUrl', 'extensionToken', 'companyId'], (config) => {
   if (config && config.backendUrl && config.extensionToken && config.companyId) {
     connect(config);
   } else {
-    updateBadge('off');
+    updateBadge();
   }
 });

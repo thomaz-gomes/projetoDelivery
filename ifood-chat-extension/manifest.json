@@ -3,7 +3,7 @@
   "name": "Delivery SaaS - iFood Chat",
   "version": "1.0.0",
   "description": "Envia mensagens automáticas no chat do iFood Gestor de Pedidos",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "tabs", "scripting"],
   "host_permissions": ["https://gestordepedidos.ifood.com.br/*"],
   "background": {
     "service_worker": "background.js"
