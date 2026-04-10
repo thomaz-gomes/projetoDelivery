@@ -9,6 +9,10 @@ const queue = [];
 chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY' });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'PING') {
+    sendResponse({ ok: true });
+    return false;
+  }
   if (msg.type === 'SEND_CHAT_MESSAGE') {
     queue.push(msg.payload);
     processQueue();

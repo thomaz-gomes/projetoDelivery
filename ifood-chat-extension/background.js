@@ -56,6 +56,28 @@ function connect(config) {
   });
 }
 
+async function ensureContentScripts(tabId) {
+  try {
+    // Try to ping the content script
+    await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+    console.log('[iFood Extension] Content script já carregado na aba', tabId);
+  } catch (e) {
+    // Content script not loaded — inject it
+    console.log('[iFood Extension] Injetando content scripts na aba', tabId);
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['selectors.js', 'content.js'],
+      });
+      // Give scripts a moment to initialize
+      await new Promise(r => setTimeout(r, 500));
+      console.log('[iFood Extension] Content scripts injetados com sucesso');
+    } catch (injectErr) {
+      console.error('[iFood Extension] Falha ao injetar content scripts:', injectErr.message);
+    }
+  }
+}
+
 async function forwardToContentScript(payload) {
   // Only send to the activated tab
   if (!activeTabId) {
@@ -76,6 +98,8 @@ async function forwardToContentScript(payload) {
       return;
     }
 
+    // Ensure content scripts are loaded before sending
+    await ensureContentScripts(activeTabId);
     await chrome.tabs.sendMessage(activeTabId, { type: 'SEND_CHAT_MESSAGE', payload });
   } catch (e) {
     console.error('[iFood Extension] Falha ao enviar para aba ativada:', e.message);
@@ -123,14 +147,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     activeTabUrl = msg.tabUrl || '';
     console.log('[iFood Extension] Aba ativada:', activeTabId, activeTabUrl);
     updateBadge();
-    // Flush queued messages
-    if (messageQueue.length > 0) {
-      const queued = [...messageQueue];
-      messageQueue = [];
-      for (const payload of queued) {
-        forwardToContentScript(payload);
+    // Inject content scripts if not already loaded
+    ensureContentScripts(activeTabId).then(() => {
+      // Flush queued messages after scripts are injected
+      if (messageQueue.length > 0) {
+        const queued = [...messageQueue];
+        messageQueue = [];
+        for (const payload of queued) {
+          forwardToContentScript(payload);
+        }
       }
-    }
+    });
     sendResponse({ ok: true });
     return false;
   }
