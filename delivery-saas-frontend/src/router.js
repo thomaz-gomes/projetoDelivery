@@ -182,6 +182,7 @@ const router = createRouter({
     { path: '/inbox/automation', component: InboxAutomation, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'WHATSAPP' } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'WHATSAPP' } },
   { path: '/settings/ifood', component: IFoodIntegration, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/settings/ifood-chat', component: () => import('./components/IfoodChatConfig.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/integrations/aiqfome', component: () => import('./components/AiqfomeConfig.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/meta-pixel', component: MetaPixelIntegration, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
