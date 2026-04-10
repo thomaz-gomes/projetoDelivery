@@ -96,7 +96,8 @@ model Company {
   cashFlowEntries       CashFlowEntry[]
   ofxImports            OfxImport[]
 
-  financialBridgeLogs FinancialBridgeLog[]
+  payablePaymentMethods PayablePaymentMethod[]
+  financialBridgeLogs   FinancialBridgeLog[]
 
   // ---- Cash register (PDV) ----
   cashSessions          CashSession[]
@@ -634,37 +635,37 @@ model FileSource {
 }
 
 model PrinterSetting {
-  id                   String    @id @default(cuid())
-  companyId            String    @unique
-  interface            String    @default("printer:EPSON")
-  type                 String    @default("EPSON")
-  width                Int       @default(48)
-  headerName           String?   @default("Minha Loja")
-  headerCity           String?   @default("Cidade")
+  id                      String    @id @default(cuid())
+  companyId               String    @unique
+  interface               String    @default("printer:EPSON")
+  type                    String    @default("EPSON")
+  width                   Int       @default(48)
+  headerName              String?   @default("Minha Loja")
+  headerCity              String?   @default("Cidade")
   // Agent token (hashed) used by delivery-print-agent for authentication
-  agentTokenHash       String?
-  agentTokenCreatedAt  DateTime?
+  agentTokenHash          String?
+  agentTokenCreatedAt     DateTime?
   // Extension token (hashed) used by iFood chat browser extension
-  extensionTokenHash       String?
-  extensionTokenCreatedAt  DateTime?
+  extensionTokenHash      String?
+  extensionTokenCreatedAt DateTime?
   // Pairing code for simplified agent setup (short-lived, single-use)
-  pairingCode          String?
-  pairingCodeExpiresAt DateTime?
+  pairingCode             String?
+  pairingCodeExpiresAt    DateTime?
   // Receipt customization
-  receiptTemplate      String? // Custom receipt template with {{placeholders}}. Null = use default.
-  copies               Int       @default(1) // Number of copies to print per order
-  printerName          String? // Actual system printer name (e.g., "EPSON TM-T20II Receipt")
+  receiptTemplate         String? // Custom receipt template with {{placeholders}}. Null = use default.
+  copies                  Int       @default(1) // Number of copies to print per order
+  printerName             String? // Actual system printer name (e.g., "EPSON TM-T20II Receipt")
   // Real-time rider tracking feature toggle (company-wide)
-  trackingEnabled      Boolean   @default(false)
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  trackingEnabled         Boolean   @default(false)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 }
 
 model IfoodChatMessage {
   id        Int      @id @default(autoincrement())
   storeId   String
   store     Store    @relation(fields: [storeId], references: [id])
-  status    String   // CONFIRMED, DISPATCHED, DELIVERED, MANUAL
+  status    String // CONFIRMED, DISPATCHED, DELIVERED, MANUAL
   message   String
   enabled   Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -1610,6 +1611,14 @@ enum RecurrenceType {
   ANNUAL
 }
 
+enum PayableMethodType {
+  CREDIT_CARD
+  BOLETO
+  PIX
+  DINHEIRO
+  TRANSFERENCIA
+}
+
 // ---- Contas Financeiras (caixas, contas bancárias, marketplaces) ----
 model FinancialAccount {
   id             String               @id @default(uuid())
@@ -1629,10 +1638,11 @@ model FinancialAccount {
   updatedAt      DateTime             @updatedAt
 
   // relações
-  transactions    FinancialTransaction[]
-  cashFlowEntries CashFlowEntry[]
-  ofxImports      OfxImport[]
-  cashMovements   CashMovement[]
+  transactions          FinancialTransaction[]
+  cashFlowEntries       CashFlowEntry[]
+  ofxImports            OfxImport[]
+  cashMovements         CashMovement[]
+  payablePaymentMethods PayablePaymentMethod[]
 
   @@unique([companyId, name], name: "company_fin_account_name")
   @@index([companyId], name: "idx_fin_account_company")
@@ -1689,6 +1699,32 @@ model PaymentGatewayConfig {
 
   @@unique([companyId, provider, label], name: "company_gateway_provider_label")
   @@index([companyId], name: "idx_gateway_config_company")
+}
+
+// ---- Métodos de Pagamento de Contas a Pagar ----
+model PayablePaymentMethod {
+  id        String            @id @default(uuid())
+  companyId String
+  company   Company           @relation(fields: [companyId], references: [id])
+  name      String
+  type      PayableMethodType
+  isActive  Boolean           @default(true)
+
+  closingDay  Int?
+  dueDay      Int?
+  cardBrand   String?
+  lastDigits  String?
+  creditLimit Decimal?
+
+  accountId String?
+  account   FinancialAccount? @relation(fields: [accountId], references: [id])
+
+  transactions FinancialTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, isActive], name: "idx_payable_method_company")
 }
 
 // ---- Transações Financeiras (Título Financeiro: Contas a Pagar / Receber) ----
@@ -1749,6 +1785,9 @@ model FinancialTransaction {
   createdBy     String? // userId que criou
   updatedBy     String? // userId que alterou por último
   metadata      Json? // dados extras flexíveis
+
+  payablePaymentMethodId String?
+  payablePaymentMethod   PayablePaymentMethod? @relation(fields: [payablePaymentMethodId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
