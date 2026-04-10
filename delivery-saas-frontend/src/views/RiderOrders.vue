@@ -86,8 +86,10 @@
             <button class="btn btn-success w-100" @click="markDelivered(o)">
               <i class="bi bi-check-circle me-1"></i>Marcar entregue
             </button>
+          </div>
+          <div v-if="isIfoodOrder(o)" class="card-footer d-grid gap-2">
             <button
-              v-if="isIfoodOrder(o) && !ifoodChatSent[o.id]"
+              v-if="!ifoodChatSent[o.id]"
               class="btn btn-outline-danger w-100"
               :disabled="ifoodChatSending[o.id]"
               @click="sendIfoodChat(o)"
@@ -95,7 +97,7 @@
               <i class="bi bi-chat-dots me-1"></i>
               {{ ifoodChatSending[o.id] ? 'Enviando...' : 'Msg iFood' }}
             </button>
-            <span v-else-if="ifoodChatSent[o.id]" class="text-success small text-center d-block">
+            <span v-else class="text-success small text-center d-block">
               <i class="bi bi-check2-circle me-1"></i>Mensagem iFood enviada
             </span>
           </div>
