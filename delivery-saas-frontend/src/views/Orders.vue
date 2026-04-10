@@ -109,9 +109,13 @@ function initIfoodWidget(merchantIds) {
 function destroyIfoodWidget() {
   const script = document.getElementById('ifood-widget-script');
   if (script) script.remove();
-  // remove widget container injected by the script
+  // remove widget container and any other elements injected by the iFood script
   const container = document.getElementById('ifood-widget-container');
   if (container) container.remove();
+  // iFood widget may inject iframes or divs with dynamic ids — remove any leftovers
+  document.querySelectorAll('[id*="ifood-widget"], [class*="ifood-widget"], iframe[src*="ifood"]').forEach(el => el.remove());
+  // clean up global reference so re-init works on next mount
+  try { delete window.iFoodWidget; } catch (e) {}
 }
 
 function isIfoodOrder(o) {
