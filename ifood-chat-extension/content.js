@@ -33,6 +33,8 @@ async function processQueue() {
     } catch (e) {
       console.error('[iFood Extension] Falha ao enviar mensagem:', e);
       chrome.runtime.sendMessage({ type: 'MESSAGE_FAILED', orderNumber: payload.orderNumber, error: e.message });
+      // Tentar fechar o chat para limpar estado antes da próxima
+      await closeChatPanel();
     }
 
     if (queue.length > 0) {
@@ -46,23 +48,38 @@ async function processQueue() {
 async function sendChatMessage(orderNumber, message) {
   console.log(`[iFood Extension] Enviando mensagem para pedido ${orderNumber}...`);
 
-  // Step 1: Abrir painel de conversas
+  // Step 1: Garantir que o painel de chat está fechado primeiro
+  await closeChatPanel();
+  await sleep(500);
+
+  // Step 2: Abrir painel de conversas (lista)
   const chatBtn = await waitForElement(SELECTORS.chatToggleButton, 3000);
   if (!chatBtn) throw new Error('Botão de chat não encontrado');
   chatBtn.click();
   await sleep(1500);
 
-  // Step 2: Encontrar conversa pelo número do pedido
+  // Step 3: Verificar que estamos na lista de conversas (h1 "Conversas" visível)
+  const conversasTitle = await waitForElement('h1', 3000);
+  if (!conversasTitle || !conversasTitle.textContent.includes('Conversas')) {
+    // Pode estar dentro de uma conversa — fechar e reabrir
+    console.log('[iFood Extension] Não está na lista, tentando fechar e reabrir...');
+    await closeChatPanel();
+    await sleep(500);
+    chatBtn.click();
+    await sleep(1500);
+  }
+
+  // Step 4: Encontrar conversa pelo número do pedido
   const conversation = await findConversationByOrderNumber(orderNumber);
   if (!conversation) throw new Error(`Conversa do pedido ${orderNumber} não encontrada`);
   conversation.click();
   await sleep(1500);
 
-  // Step 3: Digitar mensagem
+  // Step 5: Digitar mensagem
   const input = await waitForElement(SELECTORS.messageInput, 5000);
   if (!input) throw new Error('Campo de mensagem não encontrado');
 
-  // React controlled inputs: usar native setter para disparar eventos corretamente
+  // React controlled inputs: usar native setter
   const nativeSetter =
     Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set ||
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
@@ -76,65 +93,82 @@ async function sendChatMessage(orderNumber, message) {
   input.dispatchEvent(new Event('change', { bubbles: true }));
   await sleep(500);
 
-  // Step 4: Checar modo debug
+  // Step 6: Checar modo debug
   const { debugMode } = await chrome.storage.local.get(['debugMode']);
   if (debugMode) {
     console.log(`[iFood Extension] MODO DEBUG — mensagem preenchida mas NÃO enviada para pedido ${orderNumber}`);
     return;
   }
 
-  // Step 5: Enviar
+  // Step 7: Enviar
   const sendBtn = await waitForElement(SELECTORS.sendButton, 2000);
   if (sendBtn) {
     sendBtn.click();
   } else {
-    // Fallback: Enter
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
   }
-  await sleep(500);
+  await sleep(1000);
 
-  // Step 6: Voltar para lista de conversas (clicar no X)
-  try {
-    const closeBtn = document.querySelector(SELECTORS.closeChatButton);
-    if (closeBtn) closeBtn.click();
-  } catch (e) { /* ignore */ }
+  // Step 8: Fechar o painel de chat completamente (pronto para próxima mensagem)
+  await closeChatPanel();
 
   console.log(`[iFood Extension] Mensagem enviada para pedido ${orderNumber}`);
 }
 
 /**
+ * Fecha o painel de chat completamente.
+ * Tenta clicar no X (ifdl-icon-close) e depois no botão toggle para fechar.
+ */
+async function closeChatPanel() {
+  // Tentar fechar pelo X
+  const closeBtn = document.querySelector(SELECTORS.closeChatButton);
+  if (closeBtn) {
+    closeBtn.click();
+    await sleep(500);
+  }
+
+  // Verificar se o painel ainda está aberto (h1 "Conversas" ou textarea visível)
+  const stillOpen = document.querySelector(SELECTORS.messageInput) ||
+    Array.from(document.querySelectorAll('h1')).find(h => h.textContent.includes('Conversas'));
+
+  if (stillOpen) {
+    // Clicar no toggle button para fechar o painel
+    const toggleBtn = document.querySelector(SELECTORS.chatToggleButton);
+    if (toggleBtn) {
+      toggleBtn.click();
+      await sleep(500);
+    }
+  }
+}
+
+/**
  * Encontra a conversa na lista pelo número do pedido.
  * A lista do iFood usa virtual scroll — os h2 contêm "#XXXX".
- * Busca nos h2 visíveis, e se não encontrar, scrolla a lista.
  */
 async function findConversationByOrderNumber(orderNumber) {
   const cleanNumber = orderNumber.replace(/^#/, '');
   const target = `#${cleanNumber}`;
 
-  // Tentar encontrar nos h2 visíveis
   let found = findH2WithOrderNumber(target);
   if (found) return found;
 
-  // Não encontrou — scrollar a lista virtual para carregar mais itens
+  // Scrollar a lista virtual para carregar mais itens
   const scrollContainer = document.querySelector(SELECTORS.conversationListScroll);
   if (scrollContainer) {
-    // Primeiro, scroll até o topo
     scrollContainer.scrollTop = 0;
     await sleep(300);
 
     found = findH2WithOrderNumber(target);
     if (found) return found;
 
-    // Scroll para baixo em incrementos
     const maxScrollAttempts = 15;
     for (let i = 0; i < maxScrollAttempts; i++) {
       const prevTop = scrollContainer.scrollTop;
       scrollContainer.scrollTop += 250;
       await sleep(400);
 
-      // Se não scrollou mais, chegou ao fim
       if (scrollContainer.scrollTop === prevTop) break;
 
       found = findH2WithOrderNumber(target);
@@ -146,28 +180,22 @@ async function findConversationByOrderNumber(orderNumber) {
 }
 
 /**
- * Busca um h2 que contenha o número do pedido e retorna a row clicável (parent).
- * Estrutura do iFood: div[position:absolute] > div.row > [avatar] [content com h2] [hora]
+ * Busca um h2 que contenha o número do pedido e retorna a row clicável.
  */
 function findH2WithOrderNumber(target) {
   const headings = document.querySelectorAll(SELECTORS.conversationOrderNumber);
   for (const h2 of headings) {
     const text = (h2.textContent || '').trim();
     if (text === target) {
-      // Subir até a row clicável — o parent do parent do h2 é a row principal
-      // h2 > div.content > div.row (queremos clicar na row)
       let clickTarget = h2;
-      // Subir até encontrar o container da conversa (div com height fixo de 82px)
       for (let i = 0; i < 6; i++) {
         if (!clickTarget.parentElement) break;
         clickTarget = clickTarget.parentElement;
-        // A row da conversa é filha direta do div com position:absolute
         const parentStyle = clickTarget.parentElement?.style;
         if (parentStyle && parentStyle.position === 'absolute') {
           return clickTarget;
         }
       }
-      // Fallback: retorna o h2 mesmo — o click deve propagar
       return h2;
     }
   }

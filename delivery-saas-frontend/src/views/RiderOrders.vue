@@ -87,12 +87,17 @@
               <i class="bi bi-check-circle me-1"></i>Marcar entregue
             </button>
             <button
-              v-if="isIfoodOrder(o)"
+              v-if="isIfoodOrder(o) && !ifoodChatSent[o.id]"
               class="btn btn-outline-danger w-100"
+              :disabled="ifoodChatSending[o.id]"
               @click="sendIfoodChat(o)"
             >
-              <i class="bi bi-chat-dots me-1"></i>Msg iFood
+              <i class="bi bi-chat-dots me-1"></i>
+              {{ ifoodChatSending[o.id] ? 'Enviando...' : 'Msg iFood' }}
             </button>
+            <span v-else-if="ifoodChatSent[o.id]" class="text-success small text-center d-block">
+              <i class="bi bi-check2-circle me-1"></i>Mensagem iFood enviada
+            </span>
           </div>
         </div>
   </transition-group>
@@ -131,6 +136,10 @@ let socket = null
 // Arrival notification state (one-shot per order)
 const arrivalNotified = ref({})
 const arrivalSending = ref({})
+
+// iFood chat state
+const ifoodChatSent = ref({})
+const ifoodChatSending = ref({})
 
 // GPS Tracking state
 const trackingEnabled = ref(false)
@@ -268,12 +277,16 @@ async function sendIfoodChat(order) {
     Swal.fire({ icon: 'error', text: 'Pedido sem loja associada', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
     return;
   }
+  ifoodChatSending.value[order.id] = true;
   try {
     await api.post('/ifood-chat/send', { orderId: order.id, storeId: order.storeId });
+    ifoodChatSent.value[order.id] = true;
     Swal.fire({ icon: 'success', text: 'Mensagem enviada no chat iFood', toast: true, position: 'top-end', timer: 2500, showConfirmButton: false });
   } catch (e) {
     console.error('sendIfoodChat failed', e);
     Swal.fire({ icon: 'error', text: 'Falha ao enviar mensagem: ' + (e.response?.data?.message || e.message), toast: true, position: 'top-end', timer: 4000, showConfirmButton: false });
+  } finally {
+    ifoodChatSending.value[order.id] = false;
   }
 }
 
