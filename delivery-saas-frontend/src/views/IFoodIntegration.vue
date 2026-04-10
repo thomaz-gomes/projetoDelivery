@@ -20,7 +20,7 @@ const statusMsg = ref('');
 const statusType = ref('info');
 
 // ── Tabs ──
-const activeTab = ref('connections'); // 'connections' | 'payments'
+const activeTab = ref('connections'); // 'connections' | 'payments' | 'chat'
 
 // ── Payment mappings ──
 const paymentIntegId = ref(null); // selected integration for payment mapping
@@ -29,6 +29,64 @@ const paymentSaving = ref(false);
 const paymentMsg = ref('');
 const paymentMsgType = ref('info');
 const companyPaymentMethods = ref([]);
+
+// ── Chat automático ──
+const chatMessages = ref([]);
+const chatLoading = ref(false);
+const chatSaving = ref(false);
+const chatStoreId = ref('');
+const chatToken = ref('');
+const chatCompanyId = ref('');
+const chatGenerating = ref(false);
+
+const chatStatusLabels = {
+  CONFIRMED: 'Pedido Confirmado',
+  DISPATCHED: 'Saiu para Entrega',
+  DELIVERED: 'Pedido Entregue',
+  MANUAL: 'Mensagem Manual (botão)',
+};
+
+import { API_URL } from '../config';
+const chatBackendUrl = computed(() => API_URL || window.location.origin);
+
+async function openChatTab() {
+  activeTab.value = 'chat';
+}
+
+async function loadChatMessages() {
+  if (!chatStoreId.value) { chatMessages.value = []; return; }
+  chatLoading.value = true;
+  try {
+    const { data } = await api.get(`/ifood-chat/messages/${chatStoreId.value}`);
+    chatMessages.value = data.messages || [];
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: 'Erro ao carregar mensagens', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+  } finally { chatLoading.value = false; }
+}
+
+async function saveChatMessage(msg) {
+  chatSaving.value = true;
+  try {
+    await api.put(`/ifood-chat/messages/${chatStoreId.value}`, {
+      messages: [{ status: msg.status, message: msg.message, enabled: msg.enabled }]
+    });
+    Swal.fire({ icon: 'success', text: 'Salvo', toast: true, position: 'top-end', showConfirmButton: false, timer: 1000 });
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: 'Erro ao salvar', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+  } finally { chatSaving.value = false; }
+}
+
+async function generateChatToken() {
+  chatGenerating.value = true;
+  try {
+    const { data } = await api.post('/ifood-chat/generate-token');
+    chatToken.value = data.token;
+    chatCompanyId.value = data.companyId;
+    Swal.fire({ icon: 'success', text: 'Token gerado. Copie e cole na extensão.', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: 'Erro ao gerar token', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+  } finally { chatGenerating.value = false; }
+}
 
 async function loadCompanyPaymentMethods() {
   try {
@@ -327,6 +385,11 @@ onUnmounted(() => { clearRefreshTimers(); });
           <i class="bi bi-credit-card me-1"></i>Formas de Pagamento
         </a>
       </li>
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: activeTab === 'chat' }" href="#" @click.prevent="openChatTab">
+          <i class="bi bi-chat-dots me-1"></i>Chat Automático
+        </a>
+      </li>
     </ul>
 
     <!-- ═══ TAB: CONNECTIONS ═══ -->
@@ -569,6 +632,78 @@ onUnmounted(() => { clearRefreshTimers(); });
         Nenhuma integração iFood configurada. Adicione uma integração na aba Conexões.
       </div>
     </div><!-- /payments tab -->
+
+    <!-- ═══ TAB: CHAT AUTOMÁTICO ═══ -->
+    <div v-if="activeTab === 'chat'">
+      <div class="alert alert-info small">
+        <i class="bi bi-info-circle me-1"></i>
+        Configure as mensagens enviadas automaticamente no chat do iFood quando o status do pedido mudar.
+        Use <code>{nome}</code> para o nome do cliente e <code>{numero}</code> para o número do pedido.
+      </div>
+
+      <!-- Extensão Chrome -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h6 class="card-title">Configuração da Extensão Chrome</h6>
+          <p class="small text-muted">Gere um token e copie os dados abaixo para configurar a extensão do Chrome.</p>
+
+          <button class="btn btn-sm btn-primary mb-3" @click="generateChatToken" :disabled="chatGenerating">
+            {{ chatGenerating ? 'Gerando...' : (chatToken ? 'Regenerar Token' : 'Gerar Token') }}
+          </button>
+
+          <div v-if="chatToken">
+            <div class="mb-2">
+              <label class="form-label small fw-semibold mb-1">URL do Backend</label>
+              <input :value="chatBackendUrl" class="form-control form-control-sm" readonly />
+            </div>
+            <div class="mb-2">
+              <label class="form-label small fw-semibold mb-1">Token da Extensão</label>
+              <input :value="chatToken" class="form-control form-control-sm" readonly />
+            </div>
+            <div class="mb-2">
+              <label class="form-label small fw-semibold mb-1">Company ID</label>
+              <input :value="chatCompanyId" class="form-control form-control-sm" readonly />
+            </div>
+            <p class="small text-muted mt-2 mb-0">Copie esses 3 valores e cole no popup da extensão.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seletor de Loja -->
+      <div class="mb-4" style="max-width:400px">
+        <label class="form-label fw-semibold">Loja</label>
+        <select class="form-select" v-model="chatStoreId" @change="loadChatMessages">
+          <option value="">Selecione a loja...</option>
+          <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+        </select>
+      </div>
+
+      <div v-if="!chatStoreId" class="text-muted text-center py-3">
+        Selecione uma loja para configurar as mensagens.
+      </div>
+
+      <div v-else-if="chatLoading" class="text-center py-4">
+        <div class="spinner-border text-primary" role="status"></div>
+      </div>
+
+      <div v-else>
+        <div v-for="msg in chatMessages" :key="msg.status" class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center py-2">
+            <h6 class="mb-0">{{ chatStatusLabels[msg.status] || msg.status }}</h6>
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" v-model="msg.enabled" @change="saveChatMessage(msg)" />
+              <label class="form-check-label small">{{ msg.enabled ? 'Ativo' : 'Inativo' }}</label>
+            </div>
+          </div>
+          <div class="card-body">
+            <textarea class="form-control" v-model="msg.message" rows="3"></textarea>
+            <button class="btn btn-sm btn-outline-success mt-2" @click="saveChatMessage(msg)" :disabled="chatSaving">
+              <i class="bi bi-check-lg me-1"></i>Salvar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div><!-- /chat tab -->
 
   </div>
 </template>
