@@ -1099,6 +1099,39 @@ function normalizeOrder(o){
     customerPhone: o.customerPhone || o.contact || (o.customer && o.customer.contact) || '',
     address: extractAddress(o) || '',
     shortAddress,
+    // Structured address components for detail view
+    addressDetails: (function() {
+      try {
+        const sources = [
+          o.payload?.order?.delivery?.deliveryAddress,
+          o.payload?.delivery?.deliveryAddress,
+          o.payload?.rawPayload?.address,
+          (typeof o.address === 'object' ? o.address : null),
+          o.customerAddress,
+          (o.customer && Array.isArray(o.customer.addresses) && o.customer.addresses.length
+            ? (o.customer.addresses.find(a => a && a.isDefault) || o.customer.addresses[0])
+            : null),
+          o.customer?.address,
+        ];
+        for (const a of sources) {
+          if (!a || typeof a !== 'object') continue;
+          const street = a.streetName || a.street || '';
+          if (!street) continue;
+          return {
+            street,
+            number: a.streetNumber || a.number || '',
+            complement: a.complement || a.complemento || '',
+            neighborhood: a.neighborhood || a.bairro || '',
+            city: a.city || '',
+            state: a.state || a.uf || '',
+            postalCode: a.postalCode || a.zip || a.postal_code || a.cep || '',
+            reference: a.reference || a.ref || a.referencePoint || '',
+            observation: a.observation || a.observacao || a.observations || '',
+          };
+        }
+        return null;
+      } catch (e) { return null; }
+    })(),
     total,
     paymentMethod,
     isPrepaid,
@@ -3501,7 +3534,22 @@ function pulseButton() {
               <div class="od-section-title"><i class="bi bi-geo-alt"></i> Endereço</div>
               <button v-if="orderEditable" class="btn btn-sm btn-outline-secondary od-edit-btn" @click="editAddress" title="Editar endereço"><i class="bi bi-pencil"></i></button>
             </div>
-            <div class="od-address-text">{{ selectedNormalized ? (selectedNormalized.address || '—') : (selectedOrder ? normalizeOrder(selectedOrder).address : '—') || '—' }}</div>
+            <template v-if="selectedNormalized?.addressDetails">
+              <div class="od-address-text">
+                <div>{{ selectedNormalized.addressDetails.street }}{{ selectedNormalized.addressDetails.number ? ', ' + selectedNormalized.addressDetails.number : '' }}</div>
+                <div v-if="selectedNormalized.addressDetails.complement" class="text-muted small">Complemento: {{ selectedNormalized.addressDetails.complement }}</div>
+                <div v-if="selectedNormalized.addressDetails.neighborhood" class="text-muted small">Bairro: {{ selectedNormalized.addressDetails.neighborhood }}</div>
+                <div v-if="selectedNormalized.addressDetails.city || selectedNormalized.addressDetails.state" class="text-muted small">
+                  {{ [selectedNormalized.addressDetails.city, selectedNormalized.addressDetails.state].filter(Boolean).join(' - ') }}
+                  {{ selectedNormalized.addressDetails.postalCode ? ' · CEP: ' + selectedNormalized.addressDetails.postalCode : '' }}
+                </div>
+                <div v-if="selectedNormalized.addressDetails.reference" class="text-muted small mt-1"><i class="bi bi-signpost"></i> <strong>Referência:</strong> {{ selectedNormalized.addressDetails.reference }}</div>
+                <div v-if="selectedNormalized.addressDetails.observation" class="text-muted small"><i class="bi bi-chat-left-text"></i> <strong>Obs:</strong> {{ selectedNormalized.addressDetails.observation }}</div>
+              </div>
+            </template>
+            <template v-else>
+              <div class="od-address-text">{{ selectedNormalized ? (selectedNormalized.address || '—') : (selectedOrder ? normalizeOrder(selectedOrder).address : '—') || '—' }}</div>
+            </template>
             <div v-if="selectedNormalized?.deliveryObservations" class="od-notes mt-1">
               <i class="bi bi-info-circle"></i> <strong>Obs. entrega:</strong> {{ selectedNormalized.deliveryObservations }}
             </div>
