@@ -13,20 +13,17 @@ export function normalizeMethod(name) {
 }
 
 /**
- * Agrega pagamentos por forma de pagamento a partir de pedidos concluídos em um período.
+ * Agrega pagamentos por forma de pagamento a partir de pedidos concluídos vinculados a uma sessão de caixa.
  * @returns {{ [method: string]: number }} Ex: { "Dinheiro": 150.50, "PIX": 200.00 }
  */
-export async function aggregatePaymentsByMethod(companyId, startDate, endDate) {
-  const where = { companyId, status: 'CONCLUIDO' };
-  if (startDate || endDate) {
-    where.updatedAt = {};
-    if (startDate) where.updatedAt.gte = new Date(startDate);
-    if (endDate) where.updatedAt.lte = new Date(endDate);
-  }
-
+export async function aggregatePaymentsByMethod(sessionId, companyId) {
   const orders = await prisma.order.findMany({
-    where,
-    select: { id: true, payload: true, total: true },
+    where: {
+      companyId,
+      cashSessionId: sessionId,
+      status: 'CONCLUIDO',
+    },
+    select: { payload: true, total: true },
   });
 
   const byMethodCents = {};
@@ -61,11 +58,7 @@ export async function aggregatePaymentsByMethod(companyId, startDate, endDate) {
  * Outros: total de pagamentos no período
  */
 export async function calculateExpectedValues(session) {
-  const paymentsByMethod = await aggregatePaymentsByMethod(
-    session.companyId,
-    session.openedAt,
-    session.closedAt || new Date()
-  );
+  const paymentsByMethod = await aggregatePaymentsByMethod(session.id, session.companyId);
 
   // Agregar movimentos da sessão
   const movements = await prisma.cashMovement.findMany({ where: { sessionId: session.id } });
