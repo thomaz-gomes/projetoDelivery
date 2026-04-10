@@ -335,17 +335,38 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
   if (existing.riderId !== riderId) return res.status(403).json({ message: 'Pedido não atribuído a este entregador' });
 
   try {
+    // Detect prepaid/online payment — skip CONFIRMACAO_PAGAMENTO and go straight to CONCLUIDO
+    const isPrepaid = (() => {
+      const p = existing.payload;
+      if (!p) return false;
+      // iFood: payload.order.payments.prepaid or payload.payments.prepaid
+      const payments = p.order?.payments || p.payments;
+      if (payments && typeof payments === 'object' && !Array.isArray(payments)) {
+        if (payments.prepaid === true) return true;
+        const methods = payments.methods || [];
+        if (methods.length > 0 && methods.every(m => m.prepaid === true)) return true;
+      }
+      // PDV/public: payload.payment.prepaid or paymentConfirmed with online flag
+      if (p.payment?.prepaid === true) return true;
+      return false;
+    })();
+
+    const targetStatus = isPrepaid ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
+    const historyReason = isPrepaid
+      ? 'Entregue pelo motoboy (pagamento online — concluído automaticamente)'
+      : 'Entregue pelo motoboy (aguardando confirmação de pagamento)';
+
     const updated = await prisma.order.update({
       where: { id },
       data: {
-        status: 'CONFIRMACAO_PAGAMENTO',
-        histories: { create: { from: existing.status, to: 'CONFIRMACAO_PAGAMENTO', byRiderId: riderId, reason: 'Entregue pelo motoboy (aguardando confirmação de pagamento)' } }
+        status: targetStatus,
+        histories: { create: { from: existing.status, to: targetStatus, byRiderId: riderId, reason: historyReason } }
       },
       include: { rider: true }
     });
 
     // notify customer and emit socket (use new status)
-    notifyCustomerStatus(updated.id, 'CONFIRMACAO_PAGAMENTO').catch(() => {});
+    notifyCustomerStatus(updated.id, targetStatus).catch(() => {});
     try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e) }
 
     // If this order belongs to an IFOOD integration, notify iFood that payment confirmation/completion happened
@@ -370,7 +391,44 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
       }
     })();
 
-    // Rider account credit happens only on CONCLUIDO (via PATCH /status), not here
+    // When prepaid, the order went straight to CONCLUIDO — run completion triggers
+    if (isPrepaid) {
+      // Rider account credit
+      try {
+        if (updated.riderId) {
+          const riderAccountService = await import('../services/riderAccountService.js').then(m => m.default || m);
+          await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId: updated.companyId, riderId: updated.riderId, orderId: updated.id, orderDate: updated.updatedAt || new Date() });
+        }
+      } catch (e) { console.error('[complete/prepaid] rider credit error:', e?.message); }
+
+      // Financial entries
+      try {
+        await createFinancialEntriesForOrder(updated);
+      } catch (e) { console.error('[complete/prepaid] financial entries error:', e?.message); }
+
+      // Cash session link
+      try {
+        const { findMatchingSession } = await import('../services/cash/sessionMatcher.js');
+        const matchedSession = await findMatchingSession(updated, riderId);
+        if (matchedSession) {
+          await prisma.order.update({ where: { id: updated.id }, data: { cashSessionId: matchedSession.id, outOfSession: false } });
+        } else {
+          await prisma.order.update({ where: { id: updated.id }, data: { outOfSession: true } });
+        }
+      } catch (e) { console.error('[complete/prepaid] session link error:', e?.message); }
+
+      // Affiliate tracking
+      try {
+        const count = await prisma.affiliateSale.count({ where: { orderId: updated.id } });
+        if (count === 0) { try { await trackAffiliateSale(updated, updated.companyId); } catch (e) {} }
+      } catch (e) {}
+
+      // Cashback
+      try {
+        const cashbackSvc = await import('../services/cashbackService.js').then(m => m.default || m);
+        if (cashbackSvc.creditWalletForOrder) await cashbackSvc.creditWalletForOrder(updated);
+      } catch (e) {}
+    }
 
     return res.json({ ok: true, order: updated });
   } catch (e) {
