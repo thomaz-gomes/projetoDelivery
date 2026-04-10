@@ -22,6 +22,13 @@
             <label class="form-label">Visão</label>
             <SelectInput v-model="filters.view" :options="viewOptions" />
           </div>
+          <div class="col-md-2" v-if="stores.length > 1">
+            <label class="form-label">Loja</label>
+            <select class="form-select" v-model="filters.storeId" @change="load">
+              <option value="">Todas as lojas</option>
+              <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+            </select>
+          </div>
           <div class="col-md-2 text-end">
             <button class="btn btn-primary" @click="load">Atualizar</button>
           </div>
@@ -150,7 +157,8 @@ export default {
     return {
       data: null,
       accounts: [],
-      filters: { dateFrom: startOfMonth, dateTo: endOfMonth, accountId: '', view: 'daily' },
+      stores: [],
+      filters: { dateFrom: startOfMonth, dateTo: endOfMonth, accountId: '', view: 'daily', storeId: '' },
       viewOptions: [
         { value: 'daily', label: 'Diário' },
         { value: 'weekly', label: 'Semanal' },
@@ -166,6 +174,10 @@ export default {
       const { data } = await api.get('/financial/accounts');
       this.accounts = data;
     } catch (e) { /* ignore */ }
+    try {
+      const { data } = await api.get('/stores');
+      this.stores = data;
+    } catch (e) { console.error(e); }
     await this.load();
   },
   methods: {
@@ -175,6 +187,7 @@ export default {
         if (this.filters.dateFrom) params.dateFrom = this.filters.dateFrom;
         if (this.filters.dateTo) params.dateTo = this.filters.dateTo;
         if (this.filters.accountId) params.accountId = this.filters.accountId;
+        if (this.filters.storeId) params.storeId = this.filters.storeId;
         if (this.filters.view) params.view = this.filters.view;
         const { data } = await api.get('/financial/cash-flow', { params });
         this.data = data;

@@ -14,6 +14,13 @@
             <label class="form-label">Período até</label>
             <input type="date" class="form-control" v-model="dateTo">
           </div>
+          <div class="col-md-3" v-if="stores.length > 1">
+            <label class="form-label">Loja</label>
+            <select class="form-select" v-model="selectedStoreId" @change="load">
+              <option value="">Todas as lojas</option>
+              <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+            </select>
+          </div>
           <div class="col-md-3">
             <button class="btn btn-primary" @click="load">Gerar DRE</button>
           </div>
@@ -84,15 +91,23 @@ export default {
       dre: null,
       loading: false,
       expandedDetails: {},
+      stores: [],
+      selectedStoreId: '',
     };
+  },
+  async mounted() {
+    try {
+      const { data } = await api.get('/stores');
+      this.stores = data;
+    } catch (e) { console.error(e); }
   },
   methods: {
     async load() {
       this.loading = true;
       try {
-        const { data } = await api.get('/financial/reports/dre', {
-          params: { dateFrom: this.dateFrom, dateTo: this.dateTo },
-        });
+        const params = { dateFrom: this.dateFrom, dateTo: this.dateTo };
+        if (this.selectedStoreId) params.storeId = this.selectedStoreId;
+        const { data } = await api.get('/financial/reports/dre', { params });
         this.dre = data;
         this.expandedDetails = {};
       } catch (e) {
