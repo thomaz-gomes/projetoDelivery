@@ -2,7 +2,11 @@
   <div class="cash-control d-inline-block ms-2" ref="container">
     <template v-if="currentSession">
         <button type="button" class="btn btn-secondary btn-sm" @click="toggleDropdown" :aria-expanded="showDropdown">
-          <i class="bi bi-cash-coin"></i> <span class="d-none d-sm-inline">Caixa aberto</span>
+          <i class="bi bi-cash-coin"></i>
+          <span class="d-none d-sm-inline">
+            <span class="badge bg-success ms-1">{{ currentSession.label || 'Caixa' }}</span>
+          </span>
+          <small class="text-muted ms-1 d-none d-md-inline">{{ currentSession.channels?.join(', ') }}</small>
         </button>
         <ul v-show="showDropdown" class="dropdown-menu show" style="position:absolute;">
           <li><button class="dropdown-item" type="button" @click="onPartialSummary">Resumo Parcial</button></li>
@@ -29,6 +33,8 @@
 import Swal from 'sweetalert2';
 import api from '../api';
 import { ref, createApp, h, onMounted, onUnmounted } from 'vue';
+import { io } from 'socket.io-client';
+import { SOCKET_URL } from '@/config';
 import CurrencyInput from './form/input/CurrencyInput.vue';
 import CashClosingWizard from './CashClosingWizard.vue';
 import { formatCurrency, formatAmount } from '../utils/formatters.js';
@@ -97,16 +103,21 @@ function normalizeMethod(name) {
 
 async function openCash() {
   console.debug('CashControl: openCash clicked');
-  // try to prefill opening amount from last closed session counted cash
+
+  // Fetch stores and last session in parallel
   let suggested = '0,00';
+  let stores = [];
   try {
-    const { data: sessions } = await api.get('/cash/sessions');
-    if (Array.isArray(sessions) && sessions.length) {
-      // find most recent closed session
+    const [sessionsRes, storesRes] = await Promise.all([
+      api.get('/cash/sessions').catch(() => ({ data: [] })),
+      api.get('/stores').catch(() => ({ data: [] })),
+    ]);
+    stores = Array.isArray(storesRes.data) ? storesRes.data : [];
+    const sessions = Array.isArray(sessionsRes.data) ? sessionsRes.data : [];
+    if (sessions.length) {
       const closed = sessions.find(s => s.closedAt) || sessions[0];
       if (closed && closed.closingSummary && closed.closingSummary.counted) {
         const counted = closed.closingSummary.counted;
-        // find a key matching cash/dinheiro
         let found = null;
         for (const k of Object.keys(counted || {})) {
           const kl = String(k).toLowerCase();
@@ -119,12 +130,44 @@ async function openCash() {
         if (found != null) suggested = formatAmount(found || 0);
       }
     }
-  } catch (e) { /* ignore errors and keep suggested 0,00 */ }
+  } catch (e) { /* ignore errors */ }
+
+  // Build stores checkboxes HTML
+  const storesHtml = stores.map(s =>
+    `<div class="form-check"><input class="form-check-input store-check" type="checkbox" value="${s.id}" checked><label class="form-check-label">${s.name || s.id}</label></div>`
+  ).join('');
+  const showStoresSection = stores.length > 1;
 
   const { value: formValues } = await Swal.fire({
     title: 'Abertura de frente de caixa',
-    html: `<label>Valor em dinheiro</label><input id="swal-open-amount" inputmode="decimal" class="swal2-input" value="${suggested}">\n<label>Observações</label><textarea id="swal-open-note" class="swal2-textarea"></textarea>`,
+    html: `
+      <div class="mb-3 text-start">
+        <label class="form-label fw-bold">Nome do Caixa</label>
+        <input type="text" class="form-control" id="swal-label" value="Caixa">
+      </div>
+      <div class="mb-3 text-start">
+        <label class="form-label fw-bold">Canais</label>
+        <div class="d-flex flex-wrap gap-2">
+          <div class="form-check"><input class="form-check-input channel-check" type="checkbox" value="BALCAO" checked><label class="form-check-label">Balcão</label></div>
+          <div class="form-check"><input class="form-check-input channel-check" type="checkbox" value="IFOOD" checked><label class="form-check-label">iFood</label></div>
+          <div class="form-check"><input class="form-check-input channel-check" type="checkbox" value="AIQFOME" checked><label class="form-check-label">Aiqfome</label></div>
+          <div class="form-check"><input class="form-check-input channel-check" type="checkbox" value="WHATSAPP" checked><label class="form-check-label">WhatsApp</label></div>
+        </div>
+      </div>
+      <div class="mb-3 text-start" id="swal-stores-section" style="${showStoresSection ? '' : 'display:none'}">
+        <label class="form-label fw-bold">Lojas</label>
+        <div class="d-flex flex-wrap gap-2" id="swal-stores">${storesHtml}</div>
+      </div>
+      <div class="mb-3 text-start">
+        <label class="form-label fw-bold">Valor em dinheiro</label>
+        <input id="swal-open-amount" inputmode="decimal" class="form-control" value="${suggested}">
+      </div>
+      <div class="mb-3 text-start">
+        <label class="form-label fw-bold">Observações</label>
+        <textarea id="swal-open-note" class="form-control" rows="2"></textarea>
+      </div>`,
     focusConfirm: false,
+    width: 500,
     didOpen: () => {
       const el = document.getElementById('swal-open-amount');
       if (el) {
@@ -133,9 +176,16 @@ async function openCash() {
       }
     },
     preConfirm: () => {
-      const amount = parseFloat(document.getElementById('swal-open-amount').value.replace(',', '.')) || 0;
+      const label = (document.getElementById('swal-label')?.value || 'Caixa').trim();
+      const channels = [...document.querySelectorAll('.channel-check:checked')].map(el => el.value);
+      const storeIds = [...document.querySelectorAll('.store-check:checked')].map(el => el.value);
+      const openingAmount = parseFloat(document.getElementById('swal-open-amount').value.replace(',', '.')) || 0;
       const note = document.getElementById('swal-open-note').value || '';
-      return { openingAmount: amount, note };
+      if (!channels.length) {
+        Swal.showValidationMessage('Selecione pelo menos um canal');
+        return false;
+      }
+      return { openingAmount, note, label, channels, storeIds };
     },
     showCancelButton: true,
     confirmButtonText: 'Salvar',
@@ -145,7 +195,6 @@ async function openCash() {
   loading.value = true;
   try {
     const { data } = await api.post('/cash/open', formValues);
-    // refresh current session state
     await loadCurrentSession(true);
     invalidateCashSummary();
     Swal.fire('OK', 'Caixa aberto', 'success');
@@ -344,9 +393,37 @@ async function onWizardCompleted(data) {
   Swal.fire('OK', 'Caixa fechado com sucesso!', 'success');
 }
 
+let cashSocket = null;
+
 onMounted(() => {
   // initialize current session on mount
   loadCurrentSession().catch(() => {});
+
+  // Socket.IO listeners for cash-related events
+  const token = localStorage.getItem('token');
+  if (token) {
+    cashSocket = io(SOCKET_URL, {
+      transports: ['polling', 'websocket'],
+      auth: { token },
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 3000,
+    });
+
+    cashSocket.on('order:out-of-session', (data) => {
+      Swal.fire({ icon: 'warning', title: 'Pedido fora da sessão', text: data?.message || 'Um pedido foi recebido mas não pertence à sessão de caixa atual.', toast: true, position: 'top-end', showConfirmButton: false, timer: 5000 });
+    });
+
+    cashSocket.on('order:reversed', (data) => {
+      Swal.fire({ icon: 'info', title: 'Pedido estornado', text: data?.message || 'Um pedido foi estornado do caixa.', toast: true, position: 'top-end', showConfirmButton: false, timer: 5000 });
+      invalidateCashSummary();
+      loadCurrentSession().catch(() => {});
+    });
+
+    cashSocket.on('financial:bridge-error', (data) => {
+      Swal.fire({ icon: 'error', title: 'Erro financeiro', text: data?.message || 'Erro ao registrar movimento financeiro.', toast: true, position: 'top-end', showConfirmButton: false, timer: 5000 });
+    });
+  }
+
   // close dropdown on outside click
   const outside = (ev) => {
     try {
@@ -357,6 +434,7 @@ onMounted(() => {
   document.addEventListener('click', outside);
   onUnmounted(() => {
     try { document.removeEventListener('click', outside); } catch (e) {}
+    if (cashSocket) { cashSocket.disconnect(); cashSocket = null; }
   });
 });
 </script>
