@@ -429,9 +429,16 @@ function storeIcon() {
 
 function updateDeliveryMarker(order) {
   if (!map || !L) return
-  const lat = Number(order.latitude)
-  const lng = Number(order.longitude)
-  if (isNaN(lat) || isNaN(lng)) return
+  // Try top-level coordinates first, then fall back to payload delivery address
+  let lat = Number(order.latitude)
+  let lng = Number(order.longitude)
+  if (!lat || !lng) {
+    const da = order.payload?.order?.delivery?.deliveryAddress || order.payload?.delivery?.deliveryAddress || {}
+    const coords = da.coordinates || da
+    lat = Number(coords.latitude || coords.lat || 0)
+    lng = Number(coords.longitude || coords.lng || coords.lon || 0)
+  }
+  if (!lat || !lng || isNaN(lat) || isNaN(lng)) return
 
   const display = order.displayId || order.id.slice(0, 6)
   const customer = order.customerName || ''

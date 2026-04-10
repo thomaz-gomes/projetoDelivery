@@ -231,6 +231,7 @@ ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN'), async (
         address: true,
         latitude: true,
         longitude: true,
+        payload: true,
         customerName: true,
         customerPhone: true,
         orderType: true,
