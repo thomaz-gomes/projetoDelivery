@@ -1,18 +1,23 @@
 // selectors.js — iFood Gestor de Pedidos DOM selectors
 // Update these when iFood changes their HTML structure
-// IMPORTANT: Verify these selectors against the live iFood page using Chrome DevTools
+// Last verified: 2026-04-10
+
 window.IFOOD_SELECTORS = {
-  // Chat panel toggle
-  chatToggleButton: '[data-testid="chat-toggle"], .chat-button, [aria-label="Chat"], [aria-label="Conversas"]',
+  // Botão que abre o painel de conversas (header do iFood)
+  chatToggleButton: '[data-test-id="CONSUMER_CHAT_REBORN_HEADER_ENTRY_POINT"]',
 
-  // Conversation list
-  conversationList: '[data-testid="conversation-list"], .conversations-list, [role="list"]',
-  conversationItem: '[data-testid="conversation-item"], .conversation-item, [role="listitem"]',
+  // Botão fechar/X do painel de conversas (ícone do design system iFood)
+  closeChatButton: 'span.ifdl-icon-close',
 
-  // Inside a conversation
-  messageInput: '[data-testid="message-input"], textarea[placeholder], input[placeholder*="mensagem"], input[placeholder*="Digite"]',
-  sendButton: '[data-testid="send-button"], button[aria-label="Enviar"], button[type="submit"]',
+  // Container scrollável da lista de conversas (virtual scroll)
+  conversationListScroll: '[style*="overflow: auto"]',
 
-  // Close/back button
-  closeChatButton: '[data-testid="close-chat"], .close-chat, [aria-label="Fechar"], [aria-label="Voltar"]',
+  // Número do pedido dentro de cada conversa (h2 contém "#XXXX")
+  conversationOrderNumber: 'h2',
+
+  // Campo de input de mensagem (será preenchido quando você enviar o HTML da conversa aberta)
+  messageInput: 'textarea, input[placeholder*="mensagem"], input[placeholder*="Digite"]',
+
+  // Botão enviar mensagem
+  sendButton: 'button[aria-label="Enviar"], button[type="submit"]',
 };
