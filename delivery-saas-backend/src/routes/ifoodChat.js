@@ -110,7 +110,7 @@ router.post('/generate-token', async (req, res) => {
       create: { companyId, extensionTokenHash: tokenHash, extensionTokenCreatedAt: new Date() },
     })
 
-    res.json({ ok: true, token })
+    res.json({ ok: true, token, companyId })
   } catch (e) {
     console.error('POST /ifood-chat/generate-token failed', e)
     res.status(500).json({ ok: false, error: e.message })

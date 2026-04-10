@@ -8,16 +8,30 @@
       Use <code>{nome}</code> para o nome do cliente e <code>{numero}</code> para o número do pedido.
     </div>
 
-    <!-- Token Section -->
+    <!-- Extensão Chrome Section -->
     <div class="card mb-4">
       <div class="card-body">
-        <h6 class="card-title">Token da Extensão Chrome</h6>
-        <p class="small text-muted">Gere um token para autenticar a extensão do Chrome. Cole-o no popup da extensão.</p>
-        <div class="d-flex gap-2">
-          <input v-if="token" :value="token" class="form-control form-control-sm" readonly />
-          <button class="btn btn-sm btn-primary" @click="generateToken" :disabled="generatingToken">
-            {{ generatingToken ? 'Gerando...' : (token ? 'Regenerar Token' : 'Gerar Token') }}
-          </button>
+        <h6 class="card-title">Configuração da Extensão Chrome</h6>
+        <p class="small text-muted">Gere um token e copie os dados abaixo para configurar a extensão do Chrome.</p>
+
+        <button class="btn btn-sm btn-primary mb-3" @click="generateToken" :disabled="generatingToken">
+          {{ generatingToken ? 'Gerando...' : (token ? 'Regenerar Token' : 'Gerar Token') }}
+        </button>
+
+        <div v-if="token">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">URL do Backend</label>
+            <input :value="backendUrl" class="form-control form-control-sm" readonly />
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Token da Extensão</label>
+            <input :value="token" class="form-control form-control-sm" readonly />
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Company ID</label>
+            <input :value="companyId" class="form-control form-control-sm" readonly />
+          </div>
+          <p class="small text-muted mt-2 mb-0">Copie esses 3 valores e cole no popup da extensão.</p>
         </div>
       </div>
     </div>
@@ -48,15 +62,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import Swal from 'sweetalert2'
 import api from '../api'
+import { API_URL } from '../config'
 
 const loading = ref(true)
 const saving = ref(false)
 const messages = ref([])
 const token = ref('')
+const companyId = ref('')
 const generatingToken = ref(false)
+const backendUrl = computed(() => API_URL || window.location.origin)
 
 const statusLabels = {
   CONFIRMED: 'Pedido Confirmado',
@@ -99,6 +116,7 @@ async function generateToken() {
   try {
     const { data } = await api.post('/ifood-chat/generate-token')
     token.value = data.token
+    companyId.value = data.companyId
     Swal.fire({ icon: 'success', text: 'Token gerado. Copie e cole na extensão.', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 })
   } catch (e) {
     Swal.fire({ icon: 'error', text: 'Erro ao gerar token', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 })
