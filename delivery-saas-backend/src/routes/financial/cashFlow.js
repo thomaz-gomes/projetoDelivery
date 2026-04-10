@@ -7,7 +7,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { accountId, dateFrom, dateTo, view = 'daily' } = req.query;
+    const { accountId, dateFrom, dateTo, view = 'daily', storeId } = req.query;
 
     const from = dateFrom ? new Date(dateFrom) : new Date(new Date().setDate(1)); // início do mês
     const to = dateTo ? new Date(dateTo) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0); // fim do mês
@@ -15,6 +15,7 @@ router.get('/', async (req, res) => {
     // 1. Movimentações realizadas (CashFlowEntry)
     const realizedWhere = { companyId, entryDate: { gte: from, lte: to } };
     if (accountId) realizedWhere.accountId = accountId;
+    if (storeId) realizedWhere.storeId = storeId;
 
     const realized = await prisma.cashFlowEntry.findMany({
       where: realizedWhere,
@@ -32,6 +33,7 @@ router.get('/', async (req, res) => {
       dueDate: { gte: from, lte: to },
     };
     if (accountId) forecastWhere.accountId = accountId;
+    if (storeId) forecastWhere.storeId = storeId;
 
     const forecast = await prisma.financialTransaction.findMany({
       where: forecastWhere,

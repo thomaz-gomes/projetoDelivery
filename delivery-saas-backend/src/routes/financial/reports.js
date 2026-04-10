@@ -7,7 +7,7 @@ const router = express.Router();
 router.get('/dre', async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { dateFrom, dateTo } = req.query;
+    const { dateFrom, dateTo, storeId } = req.query;
 
     if (!dateFrom || !dateTo) {
       return res.status(400).json({ message: 'dateFrom e dateTo são obrigatórios' });
@@ -23,13 +23,16 @@ router.get('/dre', async (req, res) => {
     });
 
     // Buscar transações PAID no período, agrupadas por centro de custo
+    const txWhere = {
+      companyId,
+      status: { in: ['PAID', 'PARTIALLY'] },
+      issueDate: { gte: from, lte: to },
+      costCenterId: { not: null },
+    };
+    if (storeId) txWhere.storeId = storeId;
+
     const transactions = await prisma.financialTransaction.findMany({
-      where: {
-        companyId,
-        status: { in: ['PAID', 'PARTIALLY'] },
-        issueDate: { gte: from, lte: to },
-        costCenterId: { not: null },
-      },
+      where: txWhere,
       select: {
         type: true,
         costCenterId: true,
@@ -75,7 +78,7 @@ router.get('/dre', async (req, res) => {
     }
 
     // Calcular CMV
-    const cmv = await calculateCMV(companyId, from, to);
+    const cmv = await calculateCMV(companyId, from, to, storeId);
 
     // Montar DRE final
     const revenue = dreGroups['REVENUE']?.total || 0;
@@ -119,26 +122,36 @@ router.get('/dre', async (req, res) => {
 router.get('/summary', async (req, res) => {
   try {
     const companyId = req.user.companyId;
+    const { storeId } = req.query;
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
+    const recWhere = { companyId, type: 'RECEIVABLE', status: { in: ['PENDING', 'CONFIRMED'] }, dueDate: { gte: startOfMonth, lte: endOfMonth } };
+    const payWhere = { companyId, type: 'PAYABLE', status: { in: ['PENDING', 'CONFIRMED'] }, dueDate: { gte: startOfMonth, lte: endOfMonth } };
+    const overdueWhere = { companyId, status: 'OVERDUE' };
+    if (storeId) {
+      recWhere.storeId = storeId;
+      payWhere.storeId = storeId;
+      overdueWhere.storeId = storeId;
+    }
+
     const [receivables, payables, overdue, accounts] = await Promise.all([
       // Total a receber no mês
       prisma.financialTransaction.aggregate({
-        where: { companyId, type: 'RECEIVABLE', status: { in: ['PENDING', 'CONFIRMED'] }, dueDate: { gte: startOfMonth, lte: endOfMonth } },
+        where: recWhere,
         _sum: { netAmount: true },
         _count: true,
       }),
       // Total a pagar no mês
       prisma.financialTransaction.aggregate({
-        where: { companyId, type: 'PAYABLE', status: { in: ['PENDING', 'CONFIRMED'] }, dueDate: { gte: startOfMonth, lte: endOfMonth } },
+        where: payWhere,
         _sum: { netAmount: true },
         _count: true,
       }),
       // Títulos vencidos
       prisma.financialTransaction.aggregate({
-        where: { companyId, status: 'OVERDUE' },
+        where: overdueWhere,
         _sum: { netAmount: true },
         _count: true,
       }),
@@ -166,12 +179,12 @@ router.get('/summary', async (req, res) => {
 router.get('/cmv', async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { dateFrom, dateTo } = req.query;
+    const { dateFrom, dateTo, storeId } = req.query;
     if (!dateFrom || !dateTo) {
       return res.status(400).json({ message: 'dateFrom e dateTo são obrigatórios' });
     }
 
-    const cmv = await calculateCMV(companyId, new Date(dateFrom), new Date(dateTo));
+    const cmv = await calculateCMV(companyId, new Date(dateFrom), new Date(dateTo), storeId);
     res.json(cmv);
   } catch (e) {
     console.error('GET /financial/reports/cmv error:', e);
@@ -180,15 +193,18 @@ router.get('/cmv', async (req, res) => {
 });
 
 // Helper: calcular CMV usando dados de estoque (composesCmv = true)
-async function calculateCMV(companyId, from, to) {
+async function calculateCMV(companyId, from, to, storeId) {
   try {
     // Buscar movimentações de entrada (compras) no período para ingredientes que compõem CMV
+    const mvWhere = {
+      companyId,
+      type: 'IN',
+      createdAt: { gte: from, lte: to },
+    };
+    if (storeId) mvWhere.storeId = storeId;
+
     const movements = await prisma.stockMovement.findMany({
-      where: {
-        companyId,
-        type: 'IN',
-        createdAt: { gte: from, lte: to },
-      },
+      where: mvWhere,
       include: {
         items: {
           include: {
