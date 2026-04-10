@@ -589,7 +589,7 @@ ridersRouter.get('/ranking', async (req, res) => {
     select: {
       id: true, riderId: true, closedByIfoodCode: true, updatedAt: true,
       histories: {
-        where: { to: { in: ['SAIU_PARA_ENTREGA', 'CONCLUIDO'] } },
+        where: { to: { in: ['SAIU_PARA_ENTREGA', 'CONCLUIDO', 'RIDER_DELIVERED'] } },
         select: { to: true, changedAt: true },
         orderBy: { changedAt: 'asc' }
       }
@@ -628,12 +628,16 @@ ridersRouter.get('/ranking', async (req, res) => {
     const completionRate = totalDeliveries + canceled > 0 ? totalDeliveries / (totalDeliveries + canceled) : 0;
 
     // Average delivery time (minutes)
+    // Prefer RIDER_DELIVERED timestamp (actual rider arrival) over CONCLUIDO
+    // (which for iFood prepaid orders may come later via webhook)
     let totalTime = 0, timeCount = 0;
     for (const o of riderOrders) {
       const saiu = o.histories.find(h => h.to === 'SAIU_PARA_ENTREGA');
+      const riderDelivered = o.histories.find(h => h.to === 'RIDER_DELIVERED');
       const concluido = o.histories.find(h => h.to === 'CONCLUIDO');
-      if (saiu && concluido) {
-        const mins = (new Date(concluido.changedAt) - new Date(saiu.changedAt)) / 60000;
+      const endEvent = riderDelivered || concluido;
+      if (saiu && endEvent) {
+        const mins = (new Date(endEvent.changedAt) - new Date(saiu.changedAt)) / 60000;
         if (mins > 0 && mins < 300) { totalTime += mins; timeCount++; }
       }
     }

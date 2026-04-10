@@ -799,6 +799,39 @@ export async function processIFoodWebhook(eventId) {
           tryEmitIfoodChat(savedOrder, res.to).catch(() => {});
           // Notify customer about status change for relevant statuses
           try { await notifyCustomerStatus(savedOrder.id, res.to); } catch (e) { console.warn('[iFood Processor] notifyCustomerStatus failed', e && e.message); }
+
+          // When iFood webhook moves order to CONCLUIDO, run financial completion triggers
+          if (res.to === 'CONCLUIDO') {
+            try {
+              const { createFinancialEntriesForOrder } = await import('./financial/orderFinancialBridge.js');
+              await createFinancialEntriesForOrder(savedOrder);
+            } catch (e) { console.error('[iFood Processor] financial entries error:', e?.message); }
+
+            // Rider account credit
+            try {
+              if (savedOrder.riderId) {
+                const riderAccountService = await import('./riderAccountService.js').then(m => m.default || m);
+                await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId, riderId: savedOrder.riderId, orderId: savedOrder.id, orderDate: savedOrder.updatedAt || new Date() });
+              }
+            } catch (e) { console.error('[iFood Processor] rider credit error:', e?.message); }
+
+            // Cash session link
+            try {
+              const { findMatchingSession } = await import('./cash/sessionMatcher.js');
+              const session = await findMatchingSession(savedOrder, null);
+              if (session) await prisma.order.update({ where: { id: savedOrder.id }, data: { cashSessionId: session.id, outOfSession: false } });
+              else await prisma.order.update({ where: { id: savedOrder.id }, data: { outOfSession: true } });
+            } catch (e) { console.error('[iFood Processor] session link error:', e?.message); }
+
+            // Affiliate tracking
+            try {
+              const { trackAffiliateSale } = await import('../routes/orders.js').catch(() => ({}));
+              if (trackAffiliateSale) {
+                const c = await prisma.affiliateSale.count({ where: { orderId: savedOrder.id } });
+                if (c === 0) await trackAffiliateSale(savedOrder, companyId);
+              }
+            } catch (e) {}
+          }
         } else {
           // No status change; still optionally emit a generic update for visibility
           console.log('[iFood Processor] no status change for order', savedOrder && savedOrder.id, 'current status:', savedOrder && savedOrder.status);
