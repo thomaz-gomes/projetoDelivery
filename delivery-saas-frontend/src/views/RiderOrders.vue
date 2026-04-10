@@ -54,7 +54,7 @@
           <div class="card-body">
             <div class="mb-2">
               <strong>Endereço:</strong> {{ formatAddress(o) }}
-              <a v-if="getAddressForMaps(o)" :href="getGoogleMapsLink(o)" target="_blank" class="btn btn-sm btn-outline-info py-0 px-1 ms-1" title="Ver no Google Maps">
+              <a v-if="getGoogleMapsLink(o) !== '#'" :href="getGoogleMapsLink(o)" target="_blank" class="btn btn-sm btn-outline-info py-0 px-1 ms-1" title="Ver no Google Maps">
                 <i class="bi bi-geo-alt-fill"></i>
               </a>
             </div>
@@ -287,38 +287,54 @@ function getAddressForMaps(o) {
 
 function getGoogleMapsLink(o) {
   try {
+    if (!o) return '#';
+
+    // 1. Try top-level coordinates on the order (stored in DB from iFood payload)
+    const topLat = Number(o.latitude);
+    const topLng = Number(o.longitude);
+    if (topLat && topLng) {
+      return `https://www.google.com/maps?q=${topLat},${topLng}`;
+    }
+
+    // 2. Try coordinates from payload delivery address (iFood nested structure)
+    try {
+      const da = o.payload?.order?.delivery?.deliveryAddress || o.payload?.delivery?.deliveryAddress || {};
+      const coords = da.coordinates || da;
+      const pLat = Number(coords.latitude || coords.lat || 0);
+      const pLng = Number(coords.longitude || coords.lng || coords.lon || 0);
+      if (pLat && pLng) {
+        return `https://www.google.com/maps?q=${pLat},${pLng}`;
+      }
+    } catch (e) {}
+
+    // 3. Try address object coordinates
     const addr = getAddressForMaps(o);
-    if (!addr) return '#';
-    
-    // Try coordinates first
-    if (addr.latitude && addr.longitude) {
+    if (addr && addr.latitude && addr.longitude) {
       return `https://www.google.com/maps?q=${addr.latitude},${addr.longitude}`;
     }
-    
-    // Build address string for search
-    const parts = [];
-    if (addr.street || addr.streetName) parts.push(addr.street || addr.streetName);
-    if (addr.number || addr.streetNumber) parts.push(addr.number || addr.streetNumber);
-    if (addr.neighborhood) parts.push(addr.neighborhood);
-    if (addr.city) parts.push(addr.city);
-    if (addr.state) parts.push(addr.state);
-    if (addr.postalCode || addr.zipCode) parts.push(addr.postalCode || addr.zipCode);
-    
-    // If we have formattedAddress, use it
-    if (addr.formattedAddress || addr.formatted) {
-      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr.formattedAddress || addr.formatted)}`;
+
+    // 4. Build address string for search
+    if (addr) {
+      if (addr.formattedAddress || addr.formatted) {
+        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr.formattedAddress || addr.formatted)}`;
+      }
+      const parts = [];
+      if (addr.street || addr.streetName) parts.push(addr.street || addr.streetName);
+      if (addr.number || addr.streetNumber) parts.push(addr.number || addr.streetNumber);
+      if (addr.neighborhood) parts.push(addr.neighborhood);
+      if (addr.city) parts.push(addr.city);
+      if (addr.state) parts.push(addr.state);
+      if (addr.postalCode || addr.zipCode) parts.push(addr.postalCode || addr.zipCode);
+      if (parts.length > 0) {
+        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts.join(', '))}`;
+      }
     }
-    
-    // Otherwise build from parts
-    if (parts.length > 0) {
-      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts.join(', '))}`;
-    }
-    
-    // Last resort: just the address string
+
+    // 5. Last resort: address string
     if (o.address && typeof o.address === 'string') {
       return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address)}`;
     }
-    
+
     return '#';
   } catch (e) {
     console.warn('getGoogleMapsLink error', e);
