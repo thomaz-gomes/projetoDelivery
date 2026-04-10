@@ -1,0 +1,255 @@
+/**
+ * enrichOrderForAgent.js
+ *
+ * Enriquece o payload de um pedido com:
+ *   1. Dados completos do DB (address, items, payload, customerName, etc.)
+ *   2. Configurações de impressão (template, cópias, nome da impressora)
+ *   3. Campos derivados (qrText, address) resolvidos para top-level
+ *
+ * Garante que o agente sempre receba todos os dados necessários para imprimir,
+ * independente de qual code path originou a emissão (agentPrint, printQueue,
+ * webhooks, emitirNovoPedido).
+ */
+import { prisma } from './prisma.js'
+
+export async function enrichOrderForAgent(order) {
+  if (!order) return order
+
+  try {
+    // 1. Se o order só tem id (dados parciais), buscar o registro completo do DB
+    if (order.id && (!order.items || !Array.isArray(order.items) || order.items.length === 0)) {
+      try {
+        const full = await prisma.order.findUnique({
+          where: { id: order.id },
+          include: { items: true }
+        })
+        if (full) {
+          // Mesclar: campos do DB como base, campos existentes no order como override
+          const merged = Object.assign({}, full, order)
+          // Preservar items do DB se o order não tinha
+          if (!order.items || !Array.isArray(order.items) || order.items.length === 0) {
+            merged.items = full.items
+          }
+          // Preservar payload do DB (mais completo) mesclando com eventuais campos extras
+          if (full.payload && order.payload) {
+            merged.payload = Object.assign({}, full.payload, order.payload)
+          } else if (full.payload) {
+            merged.payload = full.payload
+          }
+          Object.assign(order, merged)
+        }
+      } catch (e) {
+        console.warn('enrichOrderForAgent: failed to load full order from DB:', e && e.message)
+      }
+    }
+
+    // 1b. Fetch slim do DB para campos que o emitObj mínimo do PDV não inclui.
+    //     Roda mesmo que items já esteja presente (step 1 pode ter sido pulado).
+    if (order.id && (order.displaySimple == null || !order.address || !order.orderType)) {
+      try {
+        const slim = await prisma.order.findUnique({
+          where: { id: order.id },
+          select: {
+            displaySimple:        true,
+            address:              true,
+            deliveryNeighborhood: true,
+            orderType:            true,
+            customerName:         true,
+            customerPhone:        true,
+            companyId:            true,
+            createdAt:            true,
+          }
+        })
+        if (slim) {
+          if (slim.address && typeof slim.address === 'string' && (!order.address || typeof order.address !== 'string' || order.address === '-'))
+            order.address = slim.address
+          if (slim.deliveryNeighborhood && !order.deliveryNeighborhood)
+            order.deliveryNeighborhood = slim.deliveryNeighborhood
+          if (slim.orderType && !order.orderType)
+            order.orderType = slim.orderType
+          if (slim.customerName && !order.customerName)
+            order.customerName = slim.customerName
+          if (slim.customerPhone && !order.customerPhone)
+            order.customerPhone = slim.customerPhone
+
+          // displaySimple: se persistido no DB, usar. Caso nulo, calcular (mesma lógica do GET /orders).
+          if (slim.displaySimple != null) {
+            order.displaySimple = String(slim.displaySimple).padStart(2, '0')
+          } else if (order.displaySimple == null) {
+            try {
+              const d = new Date(slim.createdAt || order.createdAt || Date.now())
+              const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+              const cid = slim.companyId || order.companyId
+              if (cid) {
+                const count = await prisma.order.count({
+                  where: { companyId: cid, createdAt: { gte: startOfDay, lte: d } }
+                })
+                order.displaySimple = String(count).padStart(2, '0')
+              }
+            } catch (e) { /* ignore */ }
+          }
+        }
+      } catch (e) {
+        console.warn('enrichOrderForAgent: slim fetch failed:', e && e.message)
+      }
+    }
+
+    // 2. Resolver companyId
+    let companyId = order.companyId || (order.payload && order.payload.companyId) || null
+
+    if (!companyId && order.storeId) {
+      try {
+        const store = await prisma.store.findUnique({
+          where: { id: order.storeId },
+          select: { companyId: true }
+        })
+        if (store) companyId = store.companyId
+      } catch (e) { /* ignore */ }
+    }
+
+    // 3. Resolver qrText de payload.qrText para top-level (qrText não é campo do modelo Order)
+    if (!order.qrText) {
+      const p = order.payload || {}
+      order.qrText = p.qrText || p.qr_text || null
+      if (order.qrText) console.log('enrichOrderForAgent: qrText resolved from payload:', order.qrText)
+    } else {
+      console.log('enrichOrderForAgent: qrText already set:', order.qrText)
+    }
+
+    // 3c. Extrair informações de takeout/retirada (quando presente no payload iFood)
+    try {
+      const p = order.payload || {}
+      const ip = p.order || p
+      const takeout = ip.takeout || p.takeout || null
+      if (takeout && typeof takeout === 'object') {
+        const mode = takeout.mode || takeout.type || null
+        const dt = takeout.takeoutDateTime || takeout.pickupDateTime || takeout.takeout_date_time || null
+        order.takeout = {};
+        if (mode) order.takeout.mode = String(mode).toUpperCase()
+        if (dt) {
+          try { order.takeout.takeoutDateTime = new Date(dt).toISOString() } catch (e) { order.takeout.takeoutDateTime = dt }
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+
+    // 3d. Extrair informações de pagamento (troco/changeFor) quando presente no payload iFood
+    try {
+      const p = order.payload || {}
+      const ip = p.order || p
+      // iFood may include payments.methods = [{ method, type, value, changeFor }]
+      const paymentsBlock = ip.payments || ip.payment || (ip.payments && ip.payments.methods ? ip.payments : null) || null
+      let found = null
+      if (paymentsBlock) {
+        const methods = Array.isArray(paymentsBlock.methods) ? paymentsBlock.methods : (Array.isArray(paymentsBlock) ? paymentsBlock : null)
+        if (methods && Array.isArray(methods)) {
+          // prefer CASH/offline entries
+          found = methods.find(m => String(m.method || m.type || '').toUpperCase().includes('CASH')) || methods[0]
+        }
+      }
+      if (found) {
+        // support nested cash.changeFor as iFood places troco under payments.methods[].cash
+        let changeFor = null;
+        if (found.changeFor != null) changeFor = Number(found.changeFor);
+        else if (found.change_for != null) changeFor = Number(found.change_for);
+        else if (found.cash && (found.cash.changeFor != null || found.cash.change_for != null)) changeFor = Number(found.cash.changeFor ?? found.cash.change_for);
+        const amount = (found.value != null ? Number(found.value) : (found.amount != null ? Number(found.amount) : null))
+        order.payment = order.payment || {}
+        if (changeFor != null && !Number.isNaN(changeFor)) order.payment.changeFor = changeFor
+        if (amount != null && !Number.isNaN(amount)) order.payment.amount = amount
+        if (found.method) order.payment.method = found.method
+      }
+    } catch (e) { /* ignore */ }
+
+    // 3b. Fallback: gerar qrText se ainda vazio e pedido for DELIVERY
+    if (!order.qrText && order.id) {
+      const orderType = String(order.orderType || (order.payload && (order.payload.orderType || order.payload.order_type)) || '').toUpperCase()
+      console.log('enrichOrderForAgent: qrText fallback check — orderType:', orderType, 'hasDelivery:', !!(order.payload && (order.payload.delivery || order.payload.deliveryAddress)))
+      if (orderType === 'DELIVERY' || (order.payload && (order.payload.delivery || order.payload.deliveryAddress))) {
+        const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')
+        order.qrText = `${frontend}/orders/${order.id}`
+        console.log('enrichOrderForAgent: qrText generated as fallback:', order.qrText)
+        // Auto-criar ticket para que o fallback por orderId funcione quando o motoboy escanear o QR
+        try {
+          const now = new Date()
+          const existing = await prisma.ticket.findFirst({
+            where: { orderId: order.id, usedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }
+          })
+          if (!existing) {
+            const { randomToken, sha256 } = await import('./utils.js')
+            const tokenHash = sha256(randomToken(24))
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
+            await prisma.ticket.create({ data: { orderId: order.id, tokenHash, expiresAt } })
+          }
+        } catch (e) {
+          console.warn('enrichOrderForAgent: failed to auto-create ticket:', e && e.message)
+        }
+      }
+    }
+
+    // 4. Resolver address se ausente ou inválido (objeto vazio vindo do PDV) - buscar de payload.delivery.deliveryAddress
+    if (!order.address || typeof order.address !== 'string' || order.address === '-') {
+      try {
+        const p = order.payload || {}
+        // iFood: payload pode ser envelope { order: { delivery: {...} } } ou direto { delivery: {...} }
+        const ip = p.order || p
+        const da = (ip.delivery && ip.delivery.deliveryAddress) || p.deliveryAddress || null
+        if (da && typeof da === 'object') {
+          if (da.formattedAddress) {
+            order.address = da.formattedAddress
+          } else {
+            const parts = []
+            if (da.streetName || da.street || da.logradouro) parts.push(da.streetName || da.street || da.logradouro)
+            if (da.streetNumber || da.number || da.numero) parts.push(da.streetNumber || da.number || da.numero)
+            if (da.complement || da.complemento) parts.push(da.complement || da.complemento)
+            if (da.neighborhood || da.bairro) parts.push(da.neighborhood || da.bairro)
+            if (da.city || da.cidade) parts.push(da.city || da.cidade)
+            if (parts.length) order.address = parts.join(', ')
+          }
+        }
+        // Fallback: rawPayload.address
+        if (!order.address || order.address === '-') {
+          const raw = p.rawPayload && p.rawPayload.address
+          if (raw && typeof raw === 'string') order.address = raw
+          else if (raw && typeof raw === 'object') {
+            if (raw.formattedAddress) order.address = raw.formattedAddress
+            else {
+              const rp = []
+              if (raw.street || raw.logradouro) rp.push(raw.street || raw.logradouro)
+              if (raw.number || raw.numero) rp.push(raw.number || raw.numero)
+              if (raw.neighborhood || raw.bairro) rp.push(raw.neighborhood || raw.bairro)
+              if (raw.city) rp.push(raw.city)
+              if (rp.length) order.address = rp.join(', ')
+            }
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    if (!companyId) return order
+
+    // 5. Buscar PrinterSetting da empresa
+    const ps = await prisma.printerSetting.findUnique({
+      where: { companyId }
+    })
+
+    if (ps) {
+      order.receiptTemplate = ps.receiptTemplate || null
+      order.copies = ps.copies || 1
+      order.printerName = ps.printerName || null
+      order.headerName = ps.headerName || null
+      order.headerCity = ps.headerCity || null
+      order.printerInterface = ps.interface || null
+      order.printerType = ps.type || null
+      order.paperWidth = ps.width || null
+    }
+
+    // Pass frontendUrl so the agent can generate qrText as a last resort
+    if (!order.frontendUrl) {
+      order.frontendUrl = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '') || null
+    }
+  } catch (e) {
+    console.warn('enrichOrderForAgent failed:', e && e.message)
+  }
+
+  return order
+}

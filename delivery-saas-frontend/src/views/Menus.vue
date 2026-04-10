@@ -3,7 +3,7 @@
     <ListCard title="Cardápios" icon="bi bi-list-ul" :subtitle="menus.length ? `${menus.length} itens` : ''">
       <template #actions>
         <div class="d-flex align-items-center" style="gap:8px">
-          <div class="d-flex" style="gap:8px">
+          <div v-if="isAdmin" class="d-flex" style="gap:8px">
             <button class="btn btn-primary" @click="goNew" :disabled="atMenuLimit" :title="atMenuLimit ? `Limite do plano atingido (${menus.length}/${saas.menuLimit} cardápios)` : ''"><i class="bi bi-plus-lg me-1"></i> Novo cardápio</button>
             <button class="btn btn-outline-secondary" @click="goOptions"><i class="bi bi-list-check me-1"></i> Opções</button>
           </div>
@@ -63,15 +63,15 @@
                         />
                       </div>
 
-                      <button class="btn btn-sm btn-light me-2" @click="edit(m)" title="Editar"><i class="bi bi-pencil-square"></i></button>
+                      <button v-if="isAdmin" class="btn btn-sm btn-light me-2" @click="edit(m)" title="Editar"><i class="bi bi-pencil-square"></i></button>
 
-                      <button class="btn btn-sm btn-outline-primary me-2" @click="openMenuAdmin(m)" title="Editar estrutura deste cardápio"><i class="bi bi-box-seam"></i></button>
+                      <button class="btn btn-sm btn-outline-primary me-2" @click="openMenuAdmin(m)" title="Gerenciar itens deste cardápio"><i class="bi bi-box-seam"></i></button>
 
                       <button class="btn btn-sm btn-outline-secondary me-2" @click="copyPublicLink(m)" title="Copiar link público"><i class="bi bi-link-45deg"></i></button>
 
-                      <button class="btn btn-sm btn-outline-danger" @click="remove(m)" title="Remover"><i class="bi bi-trash"></i></button>
+                      <button v-if="isAdmin" class="btn btn-sm btn-outline-danger" @click="remove(m)" title="Remover"><i class="bi bi-trash"></i></button>
 
-                      <button class="btn btn-sm btn-outline-warning ms-2" @click="openImport(m)" title="Importar cardápio com IA"><i class="bi bi-stars"></i></button>
+                      <button v-if="isAdmin" class="btn btn-sm btn-outline-warning ms-2" @click="openImport(m)" title="Importar cardápio com IA"><i class="bi bi-stars"></i></button>
                     </div>
                   </td>
                 </tr>
@@ -105,6 +105,7 @@ import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 import { useRoute, useRouter } from 'vue-router'
 import { useSaasStore } from '../stores/saas'
+import { useAuthStore } from '../stores/auth'
 import ListCard from '@/components/ListCard.vue'
 import { bindLoading } from '../state/globalLoading.js'
 import Swal from 'sweetalert2'
@@ -113,6 +114,8 @@ import MenuAiImportModal from '@/components/MenuAiImportModal.vue'
 const route = useRoute()
 const router = useRouter()
 const saas = useSaasStore()
+const auth = useAuthStore()
+const isAdmin = computed(() => ['ADMIN','SUPER_ADMIN'].includes(String(auth.user?.role || '').toUpperCase()))
 const companyId = localStorage.getItem('companyId') || ''
 
 const loading = ref(false)

@@ -10,5 +10,17 @@
       "allowDelivery": true,
       "allowPickup": true
     }
-  }
+  },
+  "nfeSerie": "1",
+  "nfeEnvironment": "homologation",
+  "enderEmit": {
+    "xLgr": "",
+    "nro": "",
+    "xBairro": "",
+    "cMun": "",
+    "xMun": "",
+    "UF": "",
+    "CEP": ""
+  },
+  "cnpj": "33662260000199"
 }

@@ -1,3 +1,13 @@
+// Role hierarchy: higher roles can see items restricted to lower roles
+const ROLE_LEVEL = { SUPER_ADMIN: 4, ADMIN: 3, ATTENDANT: 2, RIDER: 1 }
+
+function canAccessRole(userRole, requiredRole) {
+  if (!requiredRole) return true
+  const userLevel = ROLE_LEVEL[String(userRole || '').toUpperCase()] || 0
+  const requiredLevel = ROLE_LEVEL[String(requiredRole).toUpperCase()] || 0
+  return userLevel >= requiredLevel
+}
+
 export function buildVisibleNav(user, enabledModules, nav) {
   try {
     const role = user && user.role ? String(user.role).toUpperCase() : null;
@@ -15,7 +25,8 @@ export function buildVisibleNav(user, enabledModules, nav) {
     const isModuleEnabled = (key) => !key || enabled.includes(String(key).toLowerCase());
 
     return (nav || []).map((item) => {
-      if (item.role && role !== String(item.role).toUpperCase()) return null;
+      // Role hierarchy check: user must have sufficient level
+      if (item.role && !canAccessRole(role, item.role)) return null;
 
       // Module guard: inaccessible items show with locked:true (upgrade badge)
       if (item.moduleKey && !isModuleEnabled(item.moduleKey)) {
@@ -28,7 +39,7 @@ export function buildVisibleNav(user, enabledModules, nav) {
       const copy = { ...item };
       if (Array.isArray(copy.children)) {
         copy.children = copy.children.map(c => {
-          if (c.role && String(c.role).toUpperCase() !== role) return null;
+          if (c.role && !canAccessRole(role, c.role)) return null;
           if (c.moduleKey && !isModuleEnabled(c.moduleKey)) {
             if (c.lockable) {
               return { ...c, locked: true, to: `/store/${c.moduleKey.toLowerCase()}` };

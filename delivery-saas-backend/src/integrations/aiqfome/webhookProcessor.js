@@ -228,6 +228,6 @@ export async function processAiqfomeWebhook(eventId) {
     await prisma.webhookEvent.update({ where: { id: evt.id }, data: { status: 'PROCESSED', processedAt: new Date(), error: null } });
   } catch (err) {
     console.error('[aiqbridge] Webhook processing error:', err);
-    await prisma.webhookEvent.update({ where: { id: evt.id }, data: { status: 'ERROR', error: String(err) } });
-  }
-}
+        await prisma.webhookEvent.update({ where: { id: evt.id }, data: { status: 'ERROR', error: String(err) } });
+      }
+    }

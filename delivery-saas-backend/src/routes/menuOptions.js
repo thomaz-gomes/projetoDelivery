@@ -54,11 +54,18 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
 })
 
 // PATCH /menu/options/:id
-router.patch('/:id', requireRole('ADMIN'), async (req, res) => {
+router.patch('/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId
+  const userRole = String(req.user.role || '').toUpperCase()
   const existing = await prisma.optionGroup.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Grupo não encontrado' })
+  // ATTENDANT can only toggle isActive
+  if (userRole === 'ATTENDANT') {
+    if (req.body && Object.keys(req.body).some(k => k !== 'isActive')) {
+      return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
+    }
+  }
   const { name, min, max, position, isActive } = req.body || {}
   try {
     const updated = await prisma.optionGroup.update({ where: { id }, data: { name: name ?? existing.name, min: min !== undefined ? Number(min) : existing.min, max: max !== undefined ? (max === null ? null : Number(max)) : existing.max, position: position !== undefined ? Number(position) : existing.position, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive } })
@@ -168,10 +175,17 @@ router.post('/:groupId/options', requireRole('ADMIN'), async (req, res) => {
 })
 
 // PATCH /menu/options/options/:id
-router.patch('/options/:id', requireRole('ADMIN'), async (req, res) => {
+router.patch('/options/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const { id } = req.params
+  const userRole = String(req.user.role || '').toUpperCase()
   const existing = await prisma.option.findUnique({ where: { id } })
   if (!existing) return res.status(404).json({ message: 'Opção não encontrada' })
+  // ATTENDANT can only toggle isAvailable
+  if (userRole === 'ATTENDANT') {
+    if (req.body && Object.keys(req.body).some(k => k !== 'isAvailable')) {
+      return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
+    }
+  }
   const { name, price, image, position, availableDays, availableFrom, availableTo, isAvailable, linkedProductId, technicalSheetId } = req.body || {}
   try {
     const data = {}

@@ -9,7 +9,7 @@
             <TextInput v-model="search" placeholder="Buscar um item" inputClass="form-control me-2" />
             <button class="btn btn-sm btn-outline-secondary me-2" :class="{ active: compactMode }" @click="toggleCompact"><i class="bi bi-list"></i> {{ compactMode ? 'Denso' : 'Normal' }}</button>
           </div>
-          <div class="d-flex gap-2">
+          <div v-if="isAdmin" class="d-flex gap-2">
             <button class="btn btn-outline-secondary" @click="goNewCategory">Adicionar categoria</button>
             <button class="btn btn-primary" @click="goNewProduct">Adicionar produto</button>
             <button v-if="menuId" class="btn btn-outline-warning" @click="showImportModal = true" title="Importar cardápio com IA">
@@ -46,10 +46,10 @@
               </div>
 
                 <div class="category-actions">
-                  <button class="btn btn-sm btn-outline-secondary me-2" @click.stop.prevent="editCategory(cat)" :aria-label="`Editar categoria ${cat.name || ''}`"><i class="bi bi-pencil me-1"></i>Editar</button>
-                  <button class="btn btn-sm btn-primary me-2" @click.stop.prevent="newProductForCategory(cat)" :aria-label="`Novo produto para ${cat.name || ''}`"><i class="bi bi-plus-circle me-1"></i>Novo produto</button>
-                  <button class="btn btn-sm btn-outline-secondary me-2" @click.stop.prevent="duplicateCategory(cat)" :aria-label="`Duplicar categoria ${cat.name || ''}`"><i class="bi bi-files me-1"></i></button>
-                  <button class="btn btn-sm btn-danger" @click.stop.prevent="deleteCategory(cat)" :aria-label="`Excluir categoria ${cat.name || ''}`"><i class="bi bi-trash me-1"></i></button>
+                  <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary me-2" @click.stop.prevent="editCategory(cat)" :aria-label="`Editar categoria ${cat.name || ''}`"><i class="bi bi-pencil me-1"></i>Editar</button>
+                  <button v-if="isAdmin" class="btn btn-sm btn-primary me-2" @click.stop.prevent="newProductForCategory(cat)" :aria-label="`Novo produto para ${cat.name || ''}`"><i class="bi bi-plus-circle me-1"></i>Novo produto</button>
+                  <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary me-2" @click.stop.prevent="duplicateCategory(cat)" :aria-label="`Duplicar categoria ${cat.name || ''}`"><i class="bi bi-files me-1"></i></button>
+                  <button v-if="isAdmin" class="btn btn-sm btn-danger" @click.stop.prevent="deleteCategory(cat)" :aria-label="`Excluir categoria ${cat.name || ''}`"><i class="bi bi-trash me-1"></i></button>
                 </div>
             </div>
 
@@ -97,8 +97,8 @@
                     <div class="price-pill">{{ formatCurrency(p.price) }}</div>
                   </div>
                   <div class="product-actions d-flex align-items-center" style="gap:8px">
-                    <button class="btn btn-sm btn-outline-primary" @click="edit(p)" :aria-label="`Editar ${p.name || 'produto'}`"><i class="bi bi-pencil me-1"></i></button>
-                    <button class="btn btn-sm btn-danger" @click="remove(p)" :aria-label="`Remover ${p.name || 'produto'}`"><i class="bi bi-trash me-1"></i></button>
+                    <button v-if="isAdmin" class="btn btn-sm btn-outline-primary" @click="edit(p)" :aria-label="`Editar ${p.name || 'produto'}`"><i class="bi bi-pencil me-1"></i></button>
+                    <button v-if="isAdmin" class="btn btn-sm btn-danger" @click="remove(p)" :aria-label="`Remover ${p.name || 'produto'}`"><i class="bi bi-trash me-1"></i></button>
                   </div>
                 </div>
               </div>
@@ -126,11 +126,15 @@
 import { ref, onMounted, computed, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import api from '../api'
+import { useAuthStore } from '../stores/auth'
 import { assetUrl } from '../utils/assetUrl.js'
 import { bindLoading } from '../state/globalLoading.js'
 import { useMediaLibrary } from '../composables/useMediaLibrary.js'
 import { useAiStudio } from '../composables/useAiStudio.js'
 import MenuAiImportModal from '../components/MenuAiImportModal.vue'
+
+const auth = useAuthStore()
+const isAdmin = computed(() => ['ADMIN','SUPER_ADMIN'].includes(String(auth.user?.role || '').toUpperCase()))
 
 const loading = ref(false)
 bindLoading(loading)

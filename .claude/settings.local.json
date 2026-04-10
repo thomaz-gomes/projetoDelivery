@@ -31,7 +31,34 @@
       "Bash(python3:*)",
       "Bash(npx pkg:*)",
       "Bash(docker exec projetodelivery-db-1 psql -U postgres -d projetodelivery -c \"SELECT tablename FROM pg_tables WHERE schemaname=''public'' ORDER BY tablename;\")",
-      "Bash(docker run --rm dimitri/pgloader:latest pgloader --version)"
+      "Bash(docker run --rm dimitri/pgloader:latest pgloader --version)",
+      "Read(//c/Users/gomes/.claude/plugins/marketplaces/superpowers-dev/skills/subagent-driven-development/**)",
+      "Bash(ssh srv1199508:*)",
+      "Bash(npx cap:*)",
+      "Bash(java -version)",
+      "Read(//c/Program Files/Android/Android Studio/jbr/bin/**)",
+      "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/java.exe\" -version)",
+      "Bash(grep -n \"normalizeDeliveryAddressFromPayload\\\\|buildConcatenatedAddress\" /d/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-backend/src/routes/*.js)",
+      "Bash(python -c ':*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker compose:*)",
+      "Bash(grep -r \"rider\\\\|moto\\\\|checkin\" /d/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-frontend/src/router* --include=\"*.js\" -l)",
+      "WebFetch(domain:www.aiqbridge.com.br)",
+      "Read(//home/gomes/Documents/GitHub/projetoDelivery/delivery-saas-backend/src/routes/whatsapp/**)",
+      "Read(//home/gomes/Documents/GitHub/projetoDelivery/delivery-saas-backend/src/**)",
+      "Read(//home/gomes/Documents/GitHub/projetoDelivery/delivery-saas-backend/src/services/**)",
+      "Read(//c/Users/gomes/.ssh/**)",
+      "Read(//c/Users/gomes/.claude/projects/d--Users-gomes-Documents-GitHub-projetoDelivery/7c4998e0-14e3-4a5f-b38e-de0e19b510c8/tool-results/**)",
+      "Bash(grep -r \"authMiddleware\\\\|requireRole\\\\|requirePermission\" /d/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-backend/src/routes/*.js)",
+      "Bash(xargs wc:*)",
+      "Read(//c/Users/gomes/.claude/plugins/cache/superpowers-dev/superpowers/4.3.1/skills/subagent-driven-development/**)",
+      "Bash(npx prisma:*)"
+    ],
+    "additionalDirectories": [
+      "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery\\delivery-saas-backend\\src\\services",
+      "D:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery\\.git"
     ]
   }
 }

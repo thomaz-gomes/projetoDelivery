@@ -104,12 +104,19 @@ router.get('/menus/:id', async (req, res) => {
 })
 
 // PATCH /menu/menus/:id
-router.patch('/menus/:id', requireRole('ADMIN'), async (req, res) => {
+router.patch('/menus/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId
+  const userRole = String(req.user.role || '').toUpperCase()
   const existing = await prisma.menu.findUnique({ where: { id }, include: { store: true } })
   if (!existing) return res.status(404).json({ message: 'Menu não encontrado' })
   if (existing.store && existing.store.companyId !== companyId) return res.status(404).json({ message: 'Menu não encontrado' })
+  // ATTENDANT can only toggle isActive
+  if (userRole === 'ATTENDANT') {
+    if (req.body && Object.keys(req.body).some(k => k !== 'isActive')) {
+      return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
+    }
+  }
   const { name, description, storeId, logoUrl, bannerUrl, isActive, position, slug = undefined, address, phone, whatsapp, timezone, weeklySchedule, open24Hours, allowDelivery, allowPickup, catalogMode } = req.body || {}
   if (storeId) {
     const st = await prisma.store.findUnique({ where: { id: storeId } })
@@ -205,11 +212,18 @@ router.post('/categories', requireRole('ADMIN'), async (req, res) => {
   res.status(201).json(created)
 })
 
-router.patch('/categories/:id', requireRole('ADMIN'), async (req, res) => {
+router.patch('/categories/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId
+  const userRole = String(req.user.role || '').toUpperCase()
   const existing = await prisma.menuCategory.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Categoria não encontrada' })
+  // ATTENDANT can only toggle isActive
+  if (userRole === 'ATTENDANT') {
+    if (req.body && Object.keys(req.body).some(k => k !== 'isActive')) {
+      return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
+    }
+  }
   const { name, position, isActive, menuId, dadosFiscaisId } = req.body || {}
   if (menuId) {
     const menu = await prisma.menu.findUnique({ where: { id: menuId }, include: { store: true } })
@@ -395,11 +409,18 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
-router.patch('/products/:id', requireRole('ADMIN'), async (req, res) => {
+router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId
+  const userRole = String(req.user.role || '').toUpperCase()
   const existing = await prisma.product.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Produto não encontrado' })
+  // ATTENDANT can only toggle isActive
+  if (userRole === 'ATTENDANT') {
+    if (req.body && Object.keys(req.body).some(k => k !== 'isActive')) {
+      return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
+    }
+  }
   const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId, cashbackPercent, dadosFiscaisId } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
