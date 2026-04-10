@@ -2,6 +2,51 @@
   <div class="container py-3">
     <h3 class="mb-3">Financeiro</h3>
 
+    <!-- Store filter -->
+    <div class="mb-3" v-if="stores.length > 1">
+      <select class="form-select form-select-sm w-auto" v-model="selectedStoreId" @change="loadAll">
+        <option value="">Todas as lojas</option>
+        <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+      </select>
+    </div>
+
+    <!-- Saúde Financeira -->
+    <div class="card border-warning mb-4" v-if="health">
+      <div class="card-header bg-warning bg-opacity-10">
+        <h6 class="mb-0">Saúde Financeira</h6>
+      </div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between mb-2">
+          <span>Pedidos sem registro financeiro</span>
+          <span :class="health.orphanOrders > 0 ? 'text-danger fw-bold' : 'text-success'">
+            {{ health.orphanOrders }}
+          </span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span>Pedidos fora de caixa</span>
+          <span :class="health.outOfSessionOrders > 0 ? 'text-warning fw-bold' : 'text-success'">
+            {{ health.outOfSessionOrders }}
+          </span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span>Falhas de bridge pendentes</span>
+          <span :class="health.pendingBridgeFailures > 0 ? 'text-danger fw-bold' : 'text-success'">
+            {{ health.pendingBridgeFailures }}
+          </span>
+        </div>
+        <div class="d-flex justify-content-between mb-2 text-muted">
+          <span>Último registro financeiro</span>
+          <span>{{ health.lastSuccessfulBridge ? formatDate(health.lastSuccessfulBridge) : 'N/A' }}</span>
+        </div>
+        <button v-if="health.orphanOrders > 0 || health.pendingBridgeFailures > 0"
+                class="btn btn-sm btn-outline-warning mt-2"
+                :disabled="reconciling"
+                @click="runReconciliation">
+          {{ reconciling ? 'Executando...' : 'Executar Reconciliação' }}
+        </button>
+      </div>
+    </div>
+
     <!-- Cards de resumo -->
     <div class="stat-grid mb-4">
       <div class="stat-card">
@@ -109,17 +154,35 @@ export default {
   data() {
     return {
       summary: {},
+      health: null,
+      stores: [],
+      selectedStoreId: '',
       loading: false,
+      reconciling: false,
     };
   },
   async mounted() {
-    await this.loadSummary();
+    await this.loadStores();
+    await this.loadAll();
   },
   methods: {
+    async loadStores() {
+      try {
+        const { data } = await api.get('/stores');
+        this.stores = data || [];
+      } catch (e) {
+        console.warn('Failed to load stores:', e);
+      }
+    },
+    async loadAll() {
+      await Promise.all([this.loadSummary(), this.loadHealth()]);
+    },
     async loadSummary() {
       this.loading = true;
       try {
-        const { data } = await api.get('/financial/reports/summary');
+        const params = {};
+        if (this.selectedStoreId) params.storeId = this.selectedStoreId;
+        const { data } = await api.get('/financial/reports/summary', { params });
         this.summary = data;
       } catch (e) {
         console.error('Failed to load financial summary:', e);
@@ -127,8 +190,31 @@ export default {
         this.loading = false;
       }
     },
+    async loadHealth() {
+      try {
+        const { data } = await api.get('/financial/health');
+        this.health = data;
+      } catch (e) {
+        console.error('Failed to load financial health:', e);
+      }
+    },
+    async runReconciliation() {
+      this.reconciling = true;
+      try {
+        await api.post('/financial/reconciliation/run');
+        await this.loadHealth();
+      } catch (e) {
+        console.error('Reconciliation failed:', e);
+      } finally {
+        this.reconciling = false;
+      }
+    },
     formatCurrency(value) {
       return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+    },
+    formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      return new Date(dateStr).toLocaleString('pt-BR');
     },
   },
 };
