@@ -1,2 +1,0 @@
-Icons
-Place icon16.png, icon48.png, and icon128.png here.
