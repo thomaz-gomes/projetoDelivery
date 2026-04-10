@@ -2839,6 +2839,19 @@ async function openAssignModal(order) {
   // Modal Vue opened; selection/dispatch handled inside the modal UI
 }
 
+// Change/assign rider from order details (no status change, no notification)
+async function changeRider(order) {
+  if (!order) return;
+  const riders = (await store.fetchRiders()) || [];
+  assignModalRiders.value = riders.map(r => ({ id: r.id, name: r.name, description: r.whatsapp || 'sem WhatsApp', whatsapp: r.whatsapp || '' }));
+  assignSelectedRider.value = order.rider ? String(order.rider.id) : null;
+  bulkAssignOrders.value = [];
+  assignModalOrder.value = { id: order.id, _changeOnly: true };
+  try { Swal.close(); } catch(e) {}
+  await nextTick();
+  assignModalVisible.value = true;
+}
+
 async function changeStatus(order, to) {
   try {
     if (to === 'SAIU_PARA_ENTREGA') {
@@ -3649,7 +3662,10 @@ function pulseButton() {
 
           <!-- Rider section -->
           <div class="od-section" v-if="ridersEnabled && selectedOrder">
-            <div class="od-section-title"><i class="bi bi-person-badge"></i> Entregador</div>
+            <div class="od-section-header">
+              <div class="od-section-title"><i class="bi bi-person-badge"></i> Entregador</div>
+              <button class="btn btn-sm btn-outline-secondary od-edit-btn" @click="changeRider(selectedOrder)" title="Trocar entregador"><i class="bi bi-pencil"></i></button>
+            </div>
             <div v-if="selectedOrder.rider" class="d-flex align-items-center gap-2">
               <span>{{ selectedOrder.rider.name }}</span>
               <button v-if="selectedOrder.rider" class="btn btn-sm btn-outline-success" @click.stop="openWhatsAppToRider(selectedOrder)">
@@ -3696,7 +3712,7 @@ function pulseButton() {
     <div class="modal-dialog modal-md modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">{{ isBulkAssign ? `Escolher entregador (${bulkAssignOrders.length} pedidos)` : 'Escolher entregador' }}</h5>
+          <h5 class="modal-title">{{ isBulkAssign ? `Escolher entregador (${bulkAssignOrders.length} pedidos)` : (assignModalOrder?._changeOnly ? 'Trocar entregador' : 'Escolher entregador') }}</h5>
           <button type="button" class="btn-close" aria-label="Fechar" @click="assignModalVisible=false; bulkAssignOrders=[]"></button>
         </div>
         <div class="modal-body">
@@ -3716,14 +3732,14 @@ function pulseButton() {
         <div class="modal-footer d-flex justify-content-between">
           <div>
             <button class="btn btn-outline-secondary" type="button" @click="assignModalVisible=false; bulkAssignOrders=[]">Cancelar</button>
-            <!-- Single order: dispatch without rider -->
-            <button v-if="!isBulkAssign" class="btn btn-outline-danger ms-2" type="button" :disabled="!assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } assignModalVisible=false; await store.updateStatus(id, 'SAIU_PARA_ENTREGA'); await store.fetch(); Swal.fire('OK','Pedido despachado sem entregador.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao despachar pedido.','error') } })()">Despachar sem entregador</button>
+            <!-- Single order: dispatch without rider (hidden when just changing rider) -->
+            <button v-if="!isBulkAssign && !assignModalOrder?._changeOnly" class="btn btn-outline-danger ms-2" type="button" :disabled="!assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } assignModalVisible=false; await store.updateStatus(id, 'SAIU_PARA_ENTREGA'); await store.fetch(); Swal.fire('OK','Pedido despachado sem entregador.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao despachar pedido.','error') } })()">Despachar sem entregador</button>
             <!-- Bulk: dispatch all without rider -->
             <button v-if="isBulkAssign" class="btn btn-outline-danger ms-2" type="button" @click="(async ()=>{ try{ assignModalVisible=false; loading=true; let ok=0,fail=0; for(const o of bulkAssignOrders){ try{ await store.updateStatus(o.id,'SAIU_PARA_ENTREGA'); ok++ }catch(e){ console.error(e); fail++ } } await store.fetch(); loading=false; clearSelection(); bulkAssignOrders=[]; Swal.fire({icon:fail?'warning':'success',title:`${ok} pedido(s) despachado(s) sem entregador`+(fail?`, ${fail} falha(s)`:''),timer:3000,toast:true,position:'top-end',showConfirmButton:false}) }catch(e){ console.error(e); loading=false; Swal.fire('Erro','Falha ao despachar pedidos.','error') } })()">Despachar sem entregador</button>
           </div>
           <div>
             <!-- Single order: assign rider -->
-            <button v-if="!isBulkAssign" class="btn btn-secondary" type="button" :disabled="!assignSelectedRider || !assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } await store.assignOrder(id, { riderId: assignSelectedRider, alsoSetStatus: true }); await store.fetch(); assignModalVisible=false; Swal.fire('OK','Pedido atribuído e notificado via WhatsApp.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao atribuir entregador.','error') } })()">Atribuir</button>
+            <button v-if="!isBulkAssign" class="btn btn-secondary" type="button" :disabled="!assignSelectedRider || !assignOrderId" @click="(async ()=>{ try{ const id = assignOrderId; const changeOnly = !!(assignModalOrder && assignModalOrder._changeOnly); if(!id){ assignModalVisible=false; console.error('assignModal: pedido indisponível', assignModalOrder && assignModalOrder.value); Swal.fire('Erro','Pedido indisponível.','error'); return } await store.assignOrder(id, { riderId: assignSelectedRider, alsoSetStatus: !changeOnly }); await store.fetch(); assignModalVisible=false; Swal.fire('OK', changeOnly ? 'Entregador alterado.' : 'Pedido atribuído e notificado via WhatsApp.','success') }catch(e){ console.error(e); Swal.fire('Erro','Falha ao atribuir entregador.','error') } })()">{{ assignModalOrder?._changeOnly ? 'Salvar' : 'Atribuir' }}</button>
             <!-- Bulk: assign same rider to all -->
             <button v-if="isBulkAssign" class="btn btn-secondary" type="button" :disabled="!assignSelectedRider" @click="(async ()=>{ try{ assignModalVisible=false; loading=true; let ok=0,fail=0; for(const o of bulkAssignOrders){ try{ await store.assignOrder(o.id,{riderId:assignSelectedRider,alsoSetStatus:true}); ok++ }catch(e){ console.error(e); fail++ } } await store.fetch(); loading=false; clearSelection(); bulkAssignOrders=[]; Swal.fire({icon:fail?'warning':'success',title:`${ok} pedido(s) atribuído(s)`+(fail?`, ${fail} falha(s)`:''),timer:3000,toast:true,position:'top-end',showConfirmButton:false}) }catch(e){ console.error(e); loading=false; Swal.fire('Erro','Falha ao atribuir entregador.','error') } })()">Atribuir</button>
           </div>
