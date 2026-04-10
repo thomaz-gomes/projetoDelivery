@@ -802,6 +802,53 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
       }
     } catch (e) { console.error('Failed to create financial entries for order:', e?.message || e); }
 
+    // If order was completed, link to matching cash session
+    try {
+      if (status === 'CONCLUIDO') {
+        const { findMatchingSession, resolveOrderChannel } = await import('../services/cash/sessionMatcher.js');
+        const matchedSession = await findMatchingSession(updated, req.user.id);
+
+        if (matchedSession) {
+          // Check if payment is immediate (cash/PIX)
+          const payments = updated.payload?.paymentConfirmed || [];
+          const paymentMethod = updated.payload?.payment?.method || '';
+          const isImmediate = payments.length
+            ? payments.every(p => /din|pix|cash|money/i.test(p.method))
+            : /din|pix|cash|money/i.test(paymentMethod);
+
+          await prisma.order.update({
+            where: { id: updated.id },
+            data: { cashSessionId: matchedSession.id, outOfSession: false },
+          });
+
+          // Update cash session balance for immediate payments
+          if (isImmediate) {
+            await prisma.cashSession.update({
+              where: { id: matchedSession.id },
+              data: { currentBalance: { increment: Number(updated.total) } },
+            });
+          }
+        } else {
+          // No matching session — mark as out-of-session
+          await prisma.order.update({
+            where: { id: updated.id },
+            data: { outOfSession: true },
+          });
+
+          // Alert admins via Socket.IO
+          const io = req.app.get('io');
+          if (io) {
+            io.to(`company_${companyId}`).emit('order:out-of-session', {
+              orderId: updated.id,
+              displayId: updated.displayId,
+              total: updated.total,
+              channel: resolveOrderChannel(updated),
+            });
+          }
+        }
+      }
+    } catch (e) { console.error('[sessionMatcher] Error linking order to session:', e.message); }
+
     // If order was completed, attempt to credit cashback to customer wallet
     try {
       if (status === 'CONCLUIDO') {
