@@ -72,7 +72,14 @@ async function sendChatMessage(orderNumber, message) {
   input.dispatchEvent(new Event('change', { bubbles: true }));
   await sleep(500);
 
-  // Step 4: Enviar
+  // Step 4: Checar modo debug
+  const { debugMode } = await chrome.storage.local.get(['debugMode']);
+  if (debugMode) {
+    console.log(`[iFood Extension] MODO DEBUG — mensagem preenchida mas NÃO enviada para pedido ${orderNumber}`);
+    return;
+  }
+
+  // Step 5: Enviar
   const sendBtn = await waitForElement(SELECTORS.sendButton, 2000);
   if (sendBtn) {
     sendBtn.click();
@@ -84,7 +91,7 @@ async function sendChatMessage(orderNumber, message) {
   }
   await sleep(500);
 
-  // Step 5: Voltar para lista de conversas (clicar no X)
+  // Step 6: Voltar para lista de conversas (clicar no X)
   try {
     const closeBtn = document.querySelector(SELECTORS.closeChatButton);
     if (closeBtn) closeBtn.click();
