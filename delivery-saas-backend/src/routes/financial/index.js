@@ -9,6 +9,7 @@ import gatewaysRouter from './gateways.js';
 import ofxRouter from './ofx.js';
 import reportsRouter from './reports.js';
 import paymentMethodsRouter from './paymentMethods.js';
+import invoicesRouter from './invoices.js';
 
 const financialRouter = express.Router();
 financialRouter.use(authMiddleware);
@@ -22,6 +23,7 @@ financialRouter.use('/gateways', gatewaysRouter);
 financialRouter.use('/ofx', ofxRouter);
 financialRouter.use('/reports', reportsRouter);
 financialRouter.use('/payment-methods', paymentMethodsRouter);
+financialRouter.use('/invoices', invoicesRouter);
 
 // POST /financial/reconciliation/run — run reconciliation on demand
 financialRouter.post('/reconciliation/run', async (req, res) => {
