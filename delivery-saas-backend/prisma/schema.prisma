@@ -571,6 +571,7 @@ model Store {
   cashSessionStores     CashSessionStore[]
   financialTransactions FinancialTransaction[]
   cashFlowEntries       CashFlowEntry[]
+  ifoodChatMessages     IfoodChatMessage[]
 }
 
 model Menu {
@@ -654,6 +655,19 @@ model PrinterSetting {
   trackingEnabled      Boolean   @default(false)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+}
+
+model IfoodChatMessage {
+  id        Int      @id @default(autoincrement())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  status    String   // CONFIRMED, DISPATCHED, DELIVERED, MANUAL
+  message   String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, status])
 }
 
 model RiderPosition {
