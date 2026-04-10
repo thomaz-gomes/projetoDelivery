@@ -61,21 +61,33 @@ router.post('/import', async (req, res) => {
     // Tentar match automático
     const matchResult = await matchOfxItems(companyId, ofxImport.id, items);
 
+    // Stage 2: AI reconciliation for remaining pending items
+    let aiMatchResults = null;
+    try {
+      const { reconcileOfxItems } = await import('../../services/financial/ofxAiMatcher.js');
+      aiMatchResults = await reconcileOfxItems(ofxImport.id, companyId);
+    } catch (e) {
+      console.error('[ofx] reconciliation error:', e.message);
+    }
+
     // Atualizar importação com resultado
+    const totalMatched = matchResult.matched + (aiMatchResults ? aiMatchResults.exact + aiMatchResults.aiAuto : 0);
+    const totalUnmatched = (aiMatchResults ? aiMatchResults.unmatched + aiMatchResults.aiSuggested : matchResult.unmatched);
     await prisma.ofxImport.update({
       where: { id: ofxImport.id },
       data: {
         status: 'COMPLETED',
-        matchedItems: matchResult.matched,
-        unmatchedItems: matchResult.unmatched,
+        matchedItems: totalMatched,
+        unmatchedItems: totalUnmatched,
       },
     });
 
     res.status(201).json({
       import: ofxImport,
       totalItems: items.length,
-      matched: matchResult.matched,
-      unmatched: matchResult.unmatched,
+      matched: totalMatched,
+      unmatched: totalUnmatched,
+      aiMatchResults,
     });
   } catch (e) {
     console.error('POST /financial/ofx/import error:', e);
@@ -174,6 +186,17 @@ router.post('/items/:id/match', async (req, res) => {
   } catch (e) {
     console.error('POST /financial/ofx/items/:id/match error:', e);
     res.status(500).json({ message: 'Erro ao conciliar item', error: e?.message });
+  }
+});
+
+// POST /financial/ofx/:importId/reconcile — re-run AI reconciliation
+router.post('/:importId/reconcile', async (req, res) => {
+  try {
+    const { reconcileOfxItems } = await import('../../services/financial/ofxAiMatcher.js');
+    const results = await reconcileOfxItems(req.params.importId, req.user.companyId);
+    res.json(results);
+  } catch (e) {
+    res.status(500).json({ message: 'Erro na conciliação', error: e?.message });
   }
 });
 
