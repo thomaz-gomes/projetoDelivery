@@ -1531,6 +1531,20 @@ async function emitirNfeOrder(order) {
   }
 }
 
+async function sendIfoodChat(order) {
+  if (!order.storeId) {
+    Swal.fire({ icon: 'error', text: 'Pedido sem loja associada', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+    return;
+  }
+  try {
+    await api.post('/ifood-chat/send', { orderId: order.id, storeId: order.storeId });
+    Swal.fire({ icon: 'success', text: 'Mensagem enviada no chat iFood', toast: true, position: 'top-end', timer: 2500, showConfirmButton: false });
+  } catch (e) {
+    console.error('sendIfoodChat failed', e);
+    Swal.fire({ icon: 'error', text: 'Falha ao enviar mensagem: ' + (e.response?.data?.message || e.message), toast: true, position: 'top-end', timer: 4000, showConfirmButton: false });
+  }
+}
+
 async function bulkEmitNfe() {
   const ids = [...selectedOrderIds.value]
   if (!ids.length) return
@@ -3326,6 +3340,7 @@ function pulseButton() {
                     <button class="btn btn-sm btn-outline-secondary" @click="viewReceipt(o)" title="Visualizar comanda"><i class="bi bi-eye"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" @click="printReceipt(o)" title="Imprimir comanda"><i class="bi bi-printer"></i></button>
                     <button class="btn btn-sm btn-outline-success" @click.stop="emitirNfeOrder(o)" title="Emitir NF-e"><i class="bi bi-receipt"></i></button>
+                    <button v-if="isIfoodOrder(o)" class="btn btn-sm btn-outline-danger" @click.stop="sendIfoodChat(o)" title="Enviar mensagem no chat iFood"><i class="bi bi-chat-dots"></i></button>
                     <button v-if="o.status === 'EM_PREPARO' && isTakeoutOrder(o)" class="btn btn-sm btn-info text-white" @click.stop="markReadyForPickup(o)" :disabled="loading" title="Pronto para Retirada">
                       <i class="bi bi-bag-check"></i> Pronto
                     </button>

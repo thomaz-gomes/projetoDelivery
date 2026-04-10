@@ -86,6 +86,13 @@
             <button class="btn btn-success w-100" @click="markDelivered(o)">
               <i class="bi bi-check-circle me-1"></i>Marcar entregue
             </button>
+            <button
+              v-if="isIfoodOrder(o)"
+              class="btn btn-outline-danger w-100"
+              @click="sendIfoodChat(o)"
+            >
+              <i class="bi bi-chat-dots me-1"></i>Msg iFood
+            </button>
           </div>
         </div>
   </transition-group>
@@ -244,6 +251,30 @@ function getWhatsAppLink(phone) {
   // remove non-digits
   const digits = String(phone).replace(/\D/g, '');
   return `https://wa.me/55${digits}`;
+}
+
+function isIfoodOrder(o) {
+  if (!o) return false;
+  return (
+    o.payload?.provider === 'IFOOD' ||
+    o.payload?.order?.salesChannel === 'IFOOD' ||
+    o.payload?.salesChannel === 'IFOOD' ||
+    Boolean(o.payload?.order?.merchant || o.payload?.merchant)
+  );
+}
+
+async function sendIfoodChat(order) {
+  if (!order.storeId) {
+    Swal.fire({ icon: 'error', text: 'Pedido sem loja associada', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+    return;
+  }
+  try {
+    await api.post('/ifood-chat/send', { orderId: order.id, storeId: order.storeId });
+    Swal.fire({ icon: 'success', text: 'Mensagem enviada no chat iFood', toast: true, position: 'top-end', timer: 2500, showConfirmButton: false });
+  } catch (e) {
+    console.error('sendIfoodChat failed', e);
+    Swal.fire({ icon: 'error', text: 'Falha ao enviar mensagem: ' + (e.response?.data?.message || e.message), toast: true, position: 'top-end', timer: 4000, showConfirmButton: false });
+  }
 }
 
 function formatPayment(o) {
