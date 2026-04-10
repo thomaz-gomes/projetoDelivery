@@ -116,6 +116,7 @@ router.post('/seed-default', async (req, res) => {
       { code: '2.02', name: 'Taxas de Adquirentes', dreGroup: 'DEDUCTIONS', parent: '2' },
       { code: '2.03', name: 'Descontos e Cupons', dreGroup: 'DEDUCTIONS', parent: '2' },
       { code: '2.04', name: 'Impostos sobre Vendas', dreGroup: 'DEDUCTIONS', parent: '2' },
+      { code: '2.05', name: 'Cancelamentos / Estornos', dreGroup: 'DEDUCTIONS', parent: '2' },
       { code: '3', name: 'CMV (Custo de Mercadoria Vendida)', dreGroup: 'COGS' },
       { code: '3.01', name: 'Insumos e Matéria-Prima', dreGroup: 'COGS', parent: '3' },
       { code: '3.02', name: 'Embalagens', dreGroup: 'COGS', parent: '3' },
