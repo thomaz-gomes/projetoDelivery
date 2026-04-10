@@ -36,7 +36,24 @@
       </div>
     </div>
 
-    <div v-if="loading" class="text-center py-4">
+    <!-- Seletor de Loja -->
+    <div class="mb-4">
+      <label class="form-label fw-semibold">Loja</label>
+      <select class="form-select" v-model="selectedStoreId" @change="loadMessages">
+        <option value="">Selecione a loja...</option>
+        <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+      </select>
+    </div>
+
+    <div v-if="loadingStores" class="text-center py-4">
+      <div class="spinner-border text-primary" role="status"></div>
+    </div>
+
+    <div v-else-if="!selectedStoreId" class="text-muted text-center py-3">
+      Selecione uma loja para configurar as mensagens.
+    </div>
+
+    <div v-else-if="loading" class="text-center py-4">
       <div class="spinner-border text-primary" role="status"></div>
     </div>
 
@@ -67,9 +84,12 @@ import Swal from 'sweetalert2'
 import api from '../api'
 import { API_URL } from '../config'
 
-const loading = ref(true)
+const loading = ref(false)
+const loadingStores = ref(true)
 const saving = ref(false)
 const messages = ref([])
+const stores = ref([])
+const selectedStoreId = ref('')
 const token = ref('')
 const companyId = ref('')
 const generatingToken = ref(false)
@@ -84,25 +104,35 @@ const statusLabels = {
 
 onMounted(async () => {
   try {
-    const storeId = localStorage.getItem('selectedStoreId')
-    if (!storeId) {
-      Swal.fire({ icon: 'warning', text: 'Selecione uma loja', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 })
-      return
-    }
-    const { data } = await api.get(`/ifood-chat/messages/${storeId}`)
+    const { data } = await api.get('/stores')
+    stores.value = data.stores || data || []
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: 'Erro ao carregar lojas', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 })
+  } finally {
+    loadingStores.value = false
+  }
+})
+
+async function loadMessages() {
+  if (!selectedStoreId.value) {
+    messages.value = []
+    return
+  }
+  loading.value = true
+  try {
+    const { data } = await api.get(`/ifood-chat/messages/${selectedStoreId.value}`)
     messages.value = data.messages || []
   } catch (e) {
     Swal.fire({ icon: 'error', text: 'Erro ao carregar configurações', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 })
   } finally {
     loading.value = false
   }
-})
+}
 
 async function save() {
   saving.value = true
   try {
-    const storeId = localStorage.getItem('selectedStoreId')
-    await api.put(`/ifood-chat/messages/${storeId}`, { messages: messages.value })
+    await api.put(`/ifood-chat/messages/${selectedStoreId.value}`, { messages: messages.value })
     Swal.fire({ icon: 'success', text: 'Configurações salvas', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 })
   } catch (e) {
     Swal.fire({ icon: 'error', text: 'Erro ao salvar', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 })
