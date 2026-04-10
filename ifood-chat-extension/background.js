@@ -56,30 +56,43 @@ function connect(config) {
   });
 }
 
-async function ensureContentScripts(tabId) {
-  try {
-    // Try to ping the content script
-    await chrome.tabs.sendMessage(tabId, { type: 'PING' });
-    console.log('[iFood Extension] Content script já carregado na aba', tabId);
-  } catch (e) {
-    // Content script not loaded — inject it
-    console.log('[iFood Extension] Injetando content scripts na aba', tabId);
+async function injectContentScripts(tabId) {
+  console.log('[iFood Extension] Injetando content scripts na aba', tabId);
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['selectors.js'],
+  });
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['content.js'],
+  });
+  // Wait for scripts to initialize
+  await new Promise(r => setTimeout(r, 1000));
+  console.log('[iFood Extension] Content scripts injetados');
+}
+
+async function sendMessageToTab(tabId, message, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['selectors.js', 'content.js'],
-      });
-      // Give scripts a moment to initialize
-      await new Promise(r => setTimeout(r, 500));
-      console.log('[iFood Extension] Content scripts injetados com sucesso');
-    } catch (injectErr) {
-      console.error('[iFood Extension] Falha ao injetar content scripts:', injectErr.message);
+      const response = await chrome.tabs.sendMessage(tabId, message);
+      return response;
+    } catch (e) {
+      console.warn(`[iFood Extension] Tentativa ${attempt}/${retries} falhou:`, e.message);
+      if (attempt < retries) {
+        // Re-inject and retry
+        try {
+          await injectContentScripts(tabId);
+        } catch (injectErr) {
+          console.error('[iFood Extension] Falha ao injetar:', injectErr.message);
+        }
+      } else {
+        throw e;
+      }
     }
   }
 }
 
 async function forwardToContentScript(payload) {
-  // Only send to the activated tab
   if (!activeTabId) {
     console.warn('[iFood Extension] Nenhuma aba ativada. Enfileirando mensagem.');
     messageQueue.push(payload);
@@ -87,7 +100,6 @@ async function forwardToContentScript(payload) {
   }
 
   try {
-    // Verify the tab still exists
     const tab = await chrome.tabs.get(activeTabId).catch(() => null);
     if (!tab) {
       console.warn('[iFood Extension] Aba ativada não existe mais. Desativando.');
@@ -98,11 +110,9 @@ async function forwardToContentScript(payload) {
       return;
     }
 
-    // Ensure content scripts are loaded before sending
-    await ensureContentScripts(activeTabId);
-    await chrome.tabs.sendMessage(activeTabId, { type: 'SEND_CHAT_MESSAGE', payload });
+    await sendMessageToTab(activeTabId, { type: 'SEND_CHAT_MESSAGE', payload });
   } catch (e) {
-    console.error('[iFood Extension] Falha ao enviar para aba ativada:', e.message);
+    console.error('[iFood Extension] Falha ao enviar após retries:', e.message);
     messageQueue.push(payload);
   }
 }
@@ -147,9 +157,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     activeTabUrl = msg.tabUrl || '';
     console.log('[iFood Extension] Aba ativada:', activeTabId, activeTabUrl);
     updateBadge();
-    // Inject content scripts if not already loaded
-    ensureContentScripts(activeTabId).then(() => {
-      // Flush queued messages after scripts are injected
+    // Always inject content scripts on activation
+    injectContentScripts(activeTabId).then(() => {
+      console.log('[iFood Extension] Scripts prontos na aba ativada');
+      // Flush queued messages
       if (messageQueue.length > 0) {
         const queued = [...messageQueue];
         messageQueue = [];
@@ -157,6 +168,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           forwardToContentScript(payload);
         }
       }
+    }).catch(e => {
+      console.error('[iFood Extension] Falha ao injetar na ativação:', e.message);
     });
     sendResponse({ ok: true });
     return false;
