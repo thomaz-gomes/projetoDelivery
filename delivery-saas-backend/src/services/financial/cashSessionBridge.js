@@ -96,9 +96,19 @@ export async function createFinancialEntriesForCashSession(session) {
       }
     }
 
+    // Audit: log successful bridge execution
+    await prisma.financialBridgeLog.create({
+      data: { companyId: session.companyId, sourceType: 'CASH_SESSION', sourceId: session.id, status: 'SUCCESS' },
+    }).catch(() => {});
+
   } catch (e) {
     // Nunca bloquear o fechamento se o financeiro falhar
     console.error('createFinancialEntriesForCashSession error:', e);
+
+    // Audit: log failed bridge execution
+    await prisma.financialBridgeLog.create({
+      data: { companyId: session.companyId, sourceType: 'CASH_SESSION', sourceId: session.id, status: 'FAILED', errorMessage: e.message },
+    }).catch(() => {});
   }
 }
 

@@ -80,6 +80,7 @@ export async function createFinancialEntriesForOrder(order) {
         accountId: defaultAccount?.id || null,
         costCenterId: revenueCostCenter?.id || null,
         gatewayConfigId: gatewayConfig?.id || null,
+        storeId: order.storeId || null,
         grossAmount: orderTotal,
         feeAmount,
         netAmount,
@@ -117,9 +118,19 @@ export async function createFinancialEntriesForOrder(order) {
       });
     }
 
+    // Audit: log successful bridge execution
+    await prisma.financialBridgeLog.create({
+      data: { companyId: order.companyId, sourceType: 'ORDER', sourceId: order.id, status: 'SUCCESS' },
+    }).catch(() => {});
+
   } catch (e) {
     // Não bloquear o fluxo do pedido se o financeiro falhar
     console.error('createFinancialEntriesForOrder error:', e);
+
+    // Audit: log failed bridge execution
+    await prisma.financialBridgeLog.create({
+      data: { companyId: order.companyId, sourceType: 'ORDER', sourceId: order.id, status: 'FAILED', errorMessage: e.message },
+    }).catch(() => {});
   }
 }
 
