@@ -10,6 +10,7 @@ import { startWatching } from './fileWatcher.js';
 import { startIFoodPollingWorker } from './jobs/ifoodPollWorker.js';
 import { startScheduler as startMdeScheduler } from './services/mdeQueue.js';
 import { initEncryptionKey } from './services/encryption.js';
+import { startReconciliationJob } from './jobs/financialReconciliation.js';
 
 // Ensure CERT_STORE_KEY is available for certificate password encryption.
 // In development, auto-generate a key and persist it to .env so it survives restarts.
@@ -213,6 +214,12 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
         console.log('Started MDe queue scheduler');
       } catch (e) {
         console.error('Failed to start MDe queue scheduler:', e && e.message);
+      }
+      try {
+        startReconciliationJob();
+        console.log('Started financial reconciliation job');
+      } catch (e) {
+        console.error('Failed to start financial reconciliation job:', e && e.message);
       }
     } catch (e) {
       console.error('❌ Falha ao anexar Socket.IO:', e.message || e);
