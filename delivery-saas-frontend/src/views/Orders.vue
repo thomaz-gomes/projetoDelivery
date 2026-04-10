@@ -146,6 +146,7 @@ const sortableInstances = [];
 const playSound = ref(true);
 const selectedStatus = ref('TODOS');
 const selectedRider = ref('TODOS');
+const selectedPaymentMethod = ref('TODOS');
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
 const companyPaymentMethods = ref([]);
 const ifoodPaymentMap = ref({}); // { CASH: 'Dinheiro', CREDIT: 'Visa Crédito', ... }
@@ -176,6 +177,16 @@ async function updatePrinterConnected(){
 const printingEnabled = computed(() => modules.has('printing'));
 const ridersEnabled = computed(() => {
   return modules.has('riders') || modules.has('rider') || modules.has('delivery') || modules.has('entregadores') || modules.has('motoboy') || modules.has('motoboys')
+});
+// Distinct payment methods from current orders for the filter dropdown
+const availablePaymentMethods = computed(() => {
+  const set = new Set();
+  for (const o of store.orders) {
+    const n = o._normalized || normalizeOrder(o);
+    const pm = n.paymentMethod;
+    if (pm && pm !== '—') set.add(pm);
+  }
+  return Array.from(set).sort();
 });
 const showPdv = ref(false);
 const newOrderPhone = ref('');
@@ -1322,11 +1333,17 @@ const filteredOrders = computed(() => {
     const qName = String(searchCustomerName.value || '').trim().toLowerCase();
     const customerMatch = !qName || String(o.customerName || '').toLowerCase().includes(qName);
 
+    // filtro por forma de pagamento
+    const paymentMatch = selectedPaymentMethod.value === 'TODOS' || (() => {
+      const n = o._normalized || normalizeOrder(o);
+      return n.paymentMethod === selectedPaymentMethod.value;
+    })();
+
     // filtro por tipo de pedido (entrega / retirada)
     const oType = getOrderType(o);
     const typeMatch = (oType === 'DELIVERY' && filterEntrega.value) || (oType === 'RETIRADA' && filterRetirada.value);
 
-    if (!statusMatch || !riderMatch || !orderNumberMatch || !customerMatch || !typeMatch) return false;
+    if (!statusMatch || !riderMatch || !orderNumberMatch || !customerMatch || !typeMatch || !paymentMatch) return false;
 
     // filtro: pedidos com mais de 24h não devem ser exibidos
     const created = getCreatedAt(o);
@@ -3229,6 +3246,17 @@ function pulseButton() {
           </option>
         </SelectInput>
         </template>
+
+        <SelectInput
+          v-model="selectedPaymentMethod"
+          class="form-select form-select"
+          style="min-width: 180px;"
+        >
+          <option value="TODOS">Todas as formas</option>
+          <option v-for="pm in availablePaymentMethods" :key="pm" :value="pm">
+            {{ pm }}
+          </option>
+        </SelectInput>
 
         <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control form-control" />
         <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control form-control" />
