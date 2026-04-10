@@ -882,6 +882,28 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
       }
     } catch (e) { console.error('Error while attempting to credit cashback on order status change:', e?.message || e); }
 
+    // Reversal of financial entries when cancelling a completed order
+    if (existing.status === 'CONCLUIDO' && status === 'CANCELADO') {
+      try {
+        const { reverseFinancialEntriesForOrder } = await import('../services/financial/reversalBridge.js');
+        const result = await reverseFinancialEntriesForOrder(updated);
+
+        if (result.reversed) {
+          const io = req.app.get('io');
+          if (io) {
+            io.to(`company_${companyId}`).emit('order:reversed', {
+              orderId: updated.id,
+              displayId: updated.displayId,
+              total: updated.total,
+              reversedCount: result.count,
+            });
+          }
+        }
+      } catch (e) {
+        console.error('[orders] reversal bridge error:', e.message);
+      }
+    }
+
     return res.json(updated);
   } catch (e) {
     console.error('Failed to update order status', e);
