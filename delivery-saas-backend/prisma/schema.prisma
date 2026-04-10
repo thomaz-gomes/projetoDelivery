@@ -96,6 +96,8 @@ model Company {
   cashFlowEntries       CashFlowEntry[]
   ofxImports            OfxImport[]
 
+  financialBridgeLogs FinancialBridgeLog[]
+
   // ---- Cash register (PDV) ----
   cashSessions          CashSession[]
   cashBlindCloseDefault Boolean        @default(false)
@@ -132,48 +134,50 @@ model Company {
   menuEventDailySummaries MenuEventDailySummary[]
 
   // ---- Rider Shift / Check-in / Bonus ----
-  riderShifts        RiderShift[]
-  riderCheckins      RiderCheckin[]
-  riderBonusRules    RiderBonusRule[]
-  checkinLocations   CheckinLocation[]
+  riderShifts      RiderShift[]
+  riderCheckins    RiderCheckin[]
+  riderBonusRules  RiderBonusRule[]
+  checkinLocations CheckinLocation[]
 
   // ---- Inbox / Messaging ----
-  conversations      Conversation[]
-  quickReplies       QuickReply[]
+  conversations Conversation[]
+  quickReplies  QuickReply[]
 }
 
 model User {
-  id            String         @id @default(uuid())
-  companyId     String?
-  company       Company?       @relation(fields: [companyId], references: [id])
-  role          Role
-  name          String
-  email         String         @unique
-  whatsapp      String?
-  password      String
-  emailVerified Boolean        @default(false)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @default(now()) @updatedAt
-  rider         Rider?
-  aiTokenUsages AiTokenUsage[]
-  assignedConversations Conversation[] @relation("ConversationAssignee")
-  authoredMessages      Message[]      @relation("MessageAuthor")
+  id                    String                @id @default(uuid())
+  companyId             String?
+  company               Company?              @relation(fields: [companyId], references: [id])
+  role                  Role
+  name                  String
+  email                 String                @unique
+  whatsapp              String?
+  password              String
+  emailVerified         Boolean               @default(false)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @default(now()) @updatedAt
+  rider                 Rider?
+  aiTokenUsages         AiTokenUsage[]
+  assignedConversations Conversation[]        @relation("ConversationAssignee")
+  authoredMessages      Message[]             @relation("MessageAuthor")
+  ownedCashSessions     CashSession[]         @relation("CashSessionOwner")
+  operatorCashSessions  CashSessionOperator[] @relation("CashSessionOperators")
 }
 
 model Rider {
-  id           String             @id @default(uuid())
-  companyId    String
-  company      Company            @relation(fields: [companyId], references: [id])
-  name         String
-  whatsapp     String
-  dailyRate    Decimal?
-  active       Boolean            @default(true)
-  userId       String?            @unique
-  user         User?              @relation(fields: [userId], references: [id])
-  orders       Order[]
-  account      RiderAccount?
-  transactions RiderTransaction[]
-  position     RiderPosition?
+  id               String                 @id @default(uuid())
+  companyId        String
+  company          Company                @relation(fields: [companyId], references: [id])
+  name             String
+  whatsapp         String
+  dailyRate        Decimal?
+  active           Boolean                @default(true)
+  userId           String?                @unique
+  user             User?                  @relation(fields: [userId], references: [id])
+  orders           Order[]
+  account          RiderAccount?
+  transactions     RiderTransaction[]
+  position         RiderPosition?
   checkins         RiderCheckin[]
   shiftAssignments RiderShiftAssignment[]
 }
@@ -221,6 +225,11 @@ model Order {
   nfeProtocols         NfeProtocol[]
   cashbackTransactions CashbackTransaction[]
   closedByIfoodCode    Boolean               @default(false)
+
+  // ---- Vínculo com sessão de caixa ----
+  cashSessionId String?
+  cashSession   CashSession? @relation(fields: [cashSessionId], references: [id])
+  outOfSession  Boolean      @default(false)
 
   // Index to speed up queries by company + couponCode
   @@index([companyId, couponCode], name: "idx_order_company_coupon")
@@ -487,7 +496,7 @@ model ApiIntegration {
 
   // previously there was a unique constraint companyId+provider; removed to allow
   // multiple integrations of the same provider per company (multi-store setups)
-  paymentMappings IfoodPaymentMapping[]
+  paymentMappings        IfoodPaymentMapping[]
   aiqfomePaymentMappings AiqfomePaymentMapping[] @relation("AiqfomePayments")
 }
 
@@ -544,10 +553,10 @@ model Store {
   // optional WhatsApp instance assigned to this store (a store may have at most one instance)
   whatsappInstanceId String?
   whatsappInstance   WhatsAppInstance? @relation(fields: [whatsappInstanceId], references: [id])
-  outOfHoursReplyId String?
-  outOfHoursReply   QuickReply? @relation("StoreOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
-  greetingReplyId   String?
-  greetingReply     QuickReply? @relation("StoreGreetingReply", fields: [greetingReplyId], references: [id])
+  outOfHoursReplyId  String?
+  outOfHoursReply    QuickReply?       @relation("StoreOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
+  greetingReplyId    String?
+  greetingReply      QuickReply?       @relation("StoreGreetingReply", fields: [greetingReplyId], references: [id])
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
@@ -557,6 +566,11 @@ model Store {
   stockMovements  StockMovement[]
   purchaseImports PurchaseImport[]
   conversations   Conversation[]
+
+  // ---- Financial module (inverse relations) ----
+  cashSessionStores     CashSessionStore[]
+  financialTransactions FinancialTransaction[]
+  cashFlowEntries       CashFlowEntry[]
 }
 
 model Menu {
@@ -677,8 +691,8 @@ model RiderShift {
   companyId         String
   company           Company          @relation(fields: [companyId], references: [id])
   name              String
-  startTime         String           // "HH:mm"
-  endTime           String           // "HH:mm"
+  startTime         String // "HH:mm"
+  endTime           String // "HH:mm"
   active            Boolean          @default(true)
   createdAt         DateTime         @default(now())
   checkinLocationId String?
@@ -720,17 +734,17 @@ model RiderCheckin {
 }
 
 model RiderBonusRule {
-  id           String              @id @default(uuid())
+  id           String             @id @default(uuid())
   companyId    String
-  company      Company             @relation(fields: [companyId], references: [id])
+  company      Company            @relation(fields: [companyId], references: [id])
   name         String
   type         RiderBonusRuleType
-  deadlineTime String              // "HH:mm"
+  deadlineTime String // "HH:mm"
   bonusAmount  Decimal
   shiftId      String?
-  shift        RiderShift?         @relation(fields: [shiftId], references: [id])
-  active       Boolean             @default(true)
-  createdAt    DateTime            @default(now())
+  shift        RiderShift?        @relation(fields: [shiftId], references: [id])
+  active       Boolean            @default(true)
+  createdAt    DateTime           @default(now())
 
   @@index([companyId, active])
 }
@@ -1550,6 +1564,7 @@ enum FinancialTransactionStatus {
   OVERDUE // Vencida
   CANCELED // Cancelada
   PARTIALLY // Parcialmente paga
+  REVERSED // Estornada
 }
 
 // Tipo da movimentação real de dinheiro
@@ -1696,6 +1711,15 @@ model FinancialTransaction {
   sourceType String? // Ex: "ORDER", "RIDER", "AFFILIATE", "COUPON", "STOCK_PURCHASE", "MANUAL"
   sourceId   String? // ID do registro de origem
 
+  // ---- Estorno ----
+  reversedTransactionId String?
+  reversedTransaction   FinancialTransaction?  @relation("TransactionReversal", fields: [reversedTransactionId], references: [id])
+  reversals             FinancialTransaction[] @relation("TransactionReversal")
+
+  // ---- Loja ----
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
   // ---- Recorrência ----
   recurrence          RecurrenceType @default(NONE)
   parentTransactionId String? // referência à transação original se for parcela/recorrência
@@ -1740,6 +1764,9 @@ model CashFlowEntry {
   // Transação financeira que originou esta movimentação (pode ser nulo para ajustes manuais)
   transactionId String?
   transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id])
+  // Loja associada
+  storeId       String?
+  store         Store?                @relation(fields: [storeId], references: [id])
   // Tipo: INFLOW (entrada) ou OUTFLOW (saída)
   type          CashFlowEntryType
   amount        Decimal // Valor movimentado (sempre positivo)
@@ -1820,6 +1847,8 @@ model OfxReconciliationItem {
   matchConfidence Decimal?
   // Motivo do match ou rejeição
   matchNotes      String?
+  matchMethod     String?
+  aiReasoning     String?
   resolvedBy      String? // userId que resolveu manualmente
   resolvedAt      DateTime?
   createdAt       DateTime              @default(now())
@@ -1827,6 +1856,24 @@ model OfxReconciliationItem {
   @@index([importId], name: "idx_ofx_recon_import")
   @@index([importId, matchStatus], name: "idx_ofx_recon_status")
   @@index([fitId], name: "idx_ofx_recon_fitid")
+}
+
+// ---- Financial Bridge Log (erros de criação automática de transações) ----
+model FinancialBridgeLog {
+  id           String    @id @default(uuid())
+  companyId    String
+  company      Company   @relation(fields: [companyId], references: [id])
+  sourceType   String
+  sourceId     String
+  status       String
+  errorMessage String?
+  retryCount   Int       @default(0)
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+  resolvedBy   String?
+
+  @@index([companyId, status], name: "idx_bridge_log_status")
+  @@index([sourceType, sourceId], name: "idx_bridge_log_source")
 }
 
 // ---- Meta Pixel (Facebook) integration per Menu ----
@@ -1920,6 +1967,14 @@ model CashSession {
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
+  // Responsável (dono do caixa – único que pode fechar)
+  ownerId  String
+  owner    User     @relation("CashSessionOwner", fields: [ownerId], references: [id])
+  // Nome descritivo do caixa
+  label    String   @default("Caixa")
+  // Canais atendidos por este caixa
+  channels String[] @default(["BALCAO", "IFOOD", "AIQFOME", "WHATSAPP"])
+
   // Abertura
   openedAt      DateTime @default(now())
   openedBy      String
@@ -1946,12 +2001,16 @@ model CashSession {
   // Relações
   movements             CashMovement[]
   financialTransactions FinancialTransaction[]
+  operators             CashSessionOperator[]
+  stores                CashSessionStore[]
+  orders                Order[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([companyId, status], name: "idx_cash_session_company_status")
   @@index([companyId, openedAt], name: "idx_cash_session_company_opened")
+  @@index([ownerId, status], name: "idx_cash_session_owner_status")
 }
 
 model CashMovement {
@@ -1972,6 +2031,30 @@ model CashMovement {
   createdBy String?
 
   @@index([sessionId], name: "idx_cash_movement_session")
+}
+
+model CashSessionOperator {
+  id            String      @id @default(uuid())
+  cashSessionId String
+  cashSession   CashSession @relation(fields: [cashSessionId], references: [id])
+  userId        String
+  user          User        @relation("CashSessionOperators", fields: [userId], references: [id])
+  addedAt       DateTime    @default(now())
+  addedBy       String
+
+  @@unique([cashSessionId, userId])
+  @@index([userId], name: "idx_cash_op_user")
+}
+
+model CashSessionStore {
+  id            String      @id @default(uuid())
+  cashSessionId String
+  cashSession   CashSession @relation(fields: [cashSessionId], references: [id])
+  storeId       String
+  store         Store       @relation(fields: [storeId], references: [id])
+
+  @@unique([cashSessionId, storeId])
+  @@index([storeId], name: "idx_cash_store_store")
 }
 
 // =============================
@@ -2127,7 +2210,7 @@ model Conversation {
   unreadCount      Int                @default(0)
   contactName      String?
   contactAvatarUrl String?
-  tags             String[]            @default([])
+  tags             String[]           @default([])
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   messages         Message[]
