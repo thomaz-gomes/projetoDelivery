@@ -1,6 +1,7 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
+import { randomToken, sha256 } from '../utils.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -90,6 +91,28 @@ router.post('/send', async (req, res) => {
     res.json({ ok: true, sent: true })
   } catch (e) {
     console.error('POST /ifood-chat/send failed', e)
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+// POST /ifood-chat/generate-token
+router.post('/generate-token', async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    if (!companyId) return res.status(400).json({ ok: false, message: 'No company' })
+
+    const token = randomToken(24)
+    const tokenHash = sha256(token)
+
+    await prisma.printerSetting.upsert({
+      where: { companyId },
+      update: { extensionTokenHash: tokenHash, extensionTokenCreatedAt: new Date() },
+      create: { companyId, extensionTokenHash: tokenHash, extensionTokenCreatedAt: new Date() },
+    })
+
+    res.json({ ok: true, token })
+  } catch (e) {
+    console.error('POST /ifood-chat/generate-token failed', e)
     res.status(500).json({ ok: false, error: e.message })
   }
 })

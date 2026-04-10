@@ -644,6 +644,9 @@ model PrinterSetting {
   // Agent token (hashed) used by delivery-print-agent for authentication
   agentTokenHash       String?
   agentTokenCreatedAt  DateTime?
+  // Extension token (hashed) used by iFood chat browser extension
+  extensionTokenHash       String?
+  extensionTokenCreatedAt  DateTime?
   // Pairing code for simplified agent setup (short-lived, single-use)
   pairingCode          String?
   pairingCodeExpiresAt DateTime?

@@ -589,6 +589,31 @@ export function attachSocket(server) {
     }
   });
 
+  // Extension authentication (similar to agent auth)
+  io.use(async (socket, next) => {
+    const extensionToken = socket.handshake.auth.extensionToken;
+    if (extensionToken) {
+      try {
+        const companyId = socket.handshake.auth.companyId;
+        if (!companyId) return next(new Error('extension-missing-companyId'));
+        const setting = await prisma.printerSetting.findUnique({
+          where: { companyId },
+          select: { extensionTokenHash: true },
+        });
+        if (!setting || !setting.extensionTokenHash) return next(new Error('extension-not-configured'));
+        const incomingHash = sha256(extensionToken);
+        if (incomingHash !== setting.extensionTokenHash) return next(new Error('invalid-extension-token'));
+        socket.extension = { companyId };
+        socket.companyId = companyId;
+        console.log(`🧩 Extensão iFood autenticada — company: ${companyId}`);
+      } catch (e) {
+        return next(new Error('extension-auth-error'));
+      }
+      return next();
+    }
+    return next();
+  });
+
   io.on("connection", (socket) => {
     const origin = socket.handshake && socket.handshake.headers && socket.handshake.headers.origin;
     console.log(`📡 Painel conectado: ${socket.id} (origin: ${origin})`);
@@ -900,6 +925,26 @@ export function emitirEntregadorOffline(companyId, riderId) {
     }
   } catch (e) {
     console.warn('Falha ao emitir rider-offline:', e?.message || e);
+  }
+}
+
+export function emitirIfoodChat({ orderNumber, message, storeId, companyId }) {
+  if (!io) {
+    console.warn('⚠️ Socket.IO não inicializado — ifood:chat não emitido.');
+    return;
+  }
+  try {
+    const payload = { orderNumber, message, storeId };
+    const sockets = Array.from(io.sockets.sockets.values());
+    let sent = 0;
+    for (const s of sockets) {
+      if (!s.extension) continue;
+      if (s.companyId && s.companyId !== companyId) continue;
+      try { s.emit('ifood:chat', payload); sent++; } catch (e) { /* ignore */ }
+    }
+    console.log(`📨 ifood:chat emitido para ${sent} extensões — pedido: ${orderNumber}`);
+  } catch (e) {
+    console.warn('Falha ao emitir ifood:chat:', e?.message || e);
   }
 }
 
