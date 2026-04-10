@@ -76,6 +76,7 @@ import leadsRouter from './routes/leads.js'
 import customDomainRouter from './routes/customDomain.js'
 import webhookEvolutionRouter from './routes/webhookEvolution.js'
 import inboxRouter from './routes/inbox.js'
+import ifoodChatRouter from './routes/ifoodChat.js'
 import { customDomainResolver } from './middleware/customDomainResolver.js'
 import './cron.js'
 
@@ -288,6 +289,7 @@ app.use('/media', mediaRouter);
 app.use('/settings', dadosFiscaisRouter);
 app.use('/fiscal', dadosFiscaisRouter);
 app.use('/checkout', checkoutRouter);
+app.use('/ifood-chat', ifoodChatRouter);
 // Server-side rasterization endpoint (returns PNG data URL)
 app.use('/rasterize', rasterizeRouter);
 // Dev-only debug agent print route (bypass auth for local development convenience)
