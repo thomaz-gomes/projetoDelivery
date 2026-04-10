@@ -1968,8 +1968,8 @@ model CashSession {
   company   Company @relation(fields: [companyId], references: [id])
 
   // Responsável (dono do caixa – único que pode fechar)
-  ownerId  String
-  owner    User     @relation("CashSessionOwner", fields: [ownerId], references: [id])
+  ownerId  String?
+  owner    User?    @relation("CashSessionOwner", fields: [ownerId], references: [id])
   // Nome descritivo do caixa
   label    String   @default("Caixa")
   // Canais atendidos por este caixa

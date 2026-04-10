@@ -302,7 +302,7 @@ cashRouter.post('/close/finalize', async (req, res) => {
   if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
 
   // Only the owner can close the session
-  if (session.ownerId !== req.user.id) {
+  if (session.ownerId && session.ownerId !== req.user.id) {
     return res.status(403).json({ message: 'Apenas o responsável pelo caixa pode fechá-lo' });
   }
 
@@ -406,7 +406,7 @@ cashRouter.post('/close', async (req, res) => {
   if (!session) return res.status(400).json({ message: 'Nenhuma sessão de caixa aberta' });
 
   // Only the owner can close the session
-  if (session.ownerId !== req.user.id) {
+  if (session.ownerId && session.ownerId !== req.user.id) {
     return res.status(403).json({ message: 'Apenas o responsável pelo caixa pode fechá-lo' });
   }
 

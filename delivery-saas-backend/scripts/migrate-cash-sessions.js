@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 async function migrate() {
   // Find sessions that need migration (ownerId might be empty/null for existing records)
   const sessions = await prisma.cashSession.findMany({
-    where: { ownerId: '' },  // Prisma required field defaults to empty string if not set
+    where: { ownerId: null },  // Nullable field — null for existing records before migration
   });
 
   let migrated = 0;
