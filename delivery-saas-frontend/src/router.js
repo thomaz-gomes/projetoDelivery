@@ -109,6 +109,7 @@ import FinancialDRE from './views/financial/FinancialDRE.vue';
 import FinancialGateways from './views/financial/FinancialGateways.vue';
 import FinancialOFX from './views/financial/FinancialOFX.vue';
 import FinancialCostCenters from './views/financial/FinancialCostCenters.vue';
+import PayablePaymentMethods from './views/financial/PayablePaymentMethods.vue';
 import ProductsReport from './views/reports/ProductsReport.vue';
 import MenuPerformanceReport from './views/reports/MenuPerformanceReport.vue';
 import RidersDashboard from './views/reports/RidersDashboard.vue';
@@ -284,6 +285,7 @@ const router = createRouter({
     { path: '/financial/gateways', component: FinancialGateways, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     { path: '/financial/ofx', component: FinancialOFX, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     { path: '/financial/cost-centers', component: FinancialCostCenters, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/payment-methods', component: PayablePaymentMethods, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     // ---- Loja de Complementos ----
     { path: '/store', component: AddOnStore, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/store/credits', component: CreditPackStore, meta: { requiresAuth: true, role: 'ADMIN' } },

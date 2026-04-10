@@ -54,6 +54,7 @@ export const nav = [
     { name: 'Contas Bancárias', to: '/financial/accounts', icon: 'bi bi-bank' },
     { name: 'Conciliação Bancária', to: '/financial/ofx', icon: 'bi bi-file-earmark-arrow-up' },
     { name: 'Centros de Custo', to: '/financial/cost-centers', icon: 'bi bi-diagram-3' },
+    { name: 'Formas de Pagamento', to: '/financial/payment-methods', icon: 'bi bi-credit-card' },
   ] },
   { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', role: 'ADMIN', children: [
     { name: 'Códigos de Integração', to: '/menu/integration', icon: 'bi bi-upc-scan', moduleKey: 'cardapio_completo', lockable: true },
