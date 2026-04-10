@@ -1037,14 +1037,61 @@ function normalizeOrder(o){
     return a || '';
   }
 
+  // short address for cards: "Rua, número - Bairro"
+  const shortAddress = (function() {
+    try {
+      // Try to extract structured address components
+      const sources = [
+        o.payload?.order?.delivery?.deliveryAddress,
+        o.payload?.delivery?.deliveryAddress,
+        o.payload?.rawPayload?.address,
+        (typeof o.address === 'object' ? o.address : null),
+        o.customerAddress,
+      ];
+      for (const a of sources) {
+        if (!a || typeof a !== 'object') continue;
+        const street = a.streetName || a.street || '';
+        const number = a.streetNumber || a.number || '';
+        const neighborhood = a.neighborhood || a.bairro || '';
+        if (street) {
+          const base = [street, number].filter(Boolean).join(', ');
+          return neighborhood ? `${base} - ${neighborhood}` : base;
+        }
+      }
+      // If order has deliveryNeighborhood from DB, append to address string
+      const fullAddr = extractAddress(o) || '';
+      if (o.deliveryNeighborhood && fullAddr && !fullAddr.includes(o.deliveryNeighborhood)) {
+        // Truncate to main part and append neighborhood
+        const mainPart = fullAddr.split('|')[0]?.trim() || fullAddr;
+        return `${mainPart} - ${o.deliveryNeighborhood}`;
+      }
+      // Fallback: truncate full address
+      return fullAddr.split('|')[0]?.trim() || fullAddr;
+    } catch (e) { return extractAddress(o) || ''; }
+  })();
+
+  // Detect prepaid/online payment (iFood "PAGO")
+  const isPrepaid = (function() {
+    try {
+      const pay = resolveIfoodPayments(o);
+      if (!pay) return false;
+      if (pay.prepaid === true) return true;
+      const methods = pay.methods || [];
+      return methods.length > 0 && methods.every(m => m.prepaid === true);
+    } catch (e) { return false; }
+  })();
+
   const normalized = {
     id: o.id,
     display: formatDisplay(o),
     customerName: o.customerName || o.name || (o.customer && (o.customer.name || o.customer.fullName)) || '',
     customerPhone: o.customerPhone || o.contact || (o.customer && o.customer.contact) || '',
     address: extractAddress(o) || '',
+    shortAddress,
     total,
     paymentMethod,
+    isPrepaid,
+    closedByIfoodCode: !!(o.closedByIfoodCode || o.payload?.closedByIfoodCode),
     // storeName and channelLabel: prefer explicit store name and a human-friendly channel label
     // prefer the related store name from the related store object, or from the
     // payload (public orders may include payload.store.name). Do NOT fallback to company.
@@ -1233,11 +1280,16 @@ function cancelOrderAction(o) {
 }
 
 // compute next status in the happy path pipeline
-function getNextStatus(current) {
+function getNextStatus(current, order) {
   const c = (current || '').toUpperCase();
   // PRONTO advances to SAIU_PARA_ENTREGA (aguardando retirada / saiu)
   if (c === 'PRONTO') return 'SAIU_PARA_ENTREGA';
-  const pipeline = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO'];
+  // When payment is prepaid (PAGO online), skip CONFIRMACAO_PAGAMENTO and go straight to CONCLUIDO
+  const norm = order ? normalizeOrder(order) : null;
+  const prepaid = norm?.isPrepaid || false;
+  const pipeline = prepaid
+    ? ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONCLUIDO']
+    : ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO'];
   const idx = pipeline.indexOf(c);
   if (idx === -1) return null;
   if (idx === pipeline.length - 1) return null;
@@ -1245,7 +1297,7 @@ function getNextStatus(current) {
 }
 
 async function advanceStatus(order) {
-  const next = getNextStatus(order.status);
+  const next = getNextStatus(order.status, order);
   if (!next) return;
   // reuse existing changeStatus to preserve assign-modal behaviour for SAIU_PARA_ENTREGA
   await changeStatus(order, next);
@@ -3198,7 +3250,7 @@ function pulseButton() {
         <div class="pending-card-info">
           <div class="fw-semibold">#{{ formatDisplay(o) }} - {{ o.customerName || 'Cliente' }}</div>
           <div class="small text-muted">
-            {{ normalizeOrder(o).address ? normalizeOrder(o).address.substring(0, 60) : '' }}
+            {{ normalizeOrder(o).shortAddress || (normalizeOrder(o).address ? normalizeOrder(o).address.substring(0, 60) : '') }}
             <span v-if="normalizeOrder(o).channelLabel" class="ms-2 badge bg-light text-dark">{{ normalizeOrder(o).channelLabel }}</span>
           </div>
           <div class="small text-muted">
@@ -3257,7 +3309,7 @@ function pulseButton() {
                   </template>
                 </div>
                 <!-- Row 3: address (truncated) -->
-                <div class="oc-address" :title="normalizeOrder(o).address || '-'">{{ normalizeOrder(o).address || '-' }}</div>
+                <div class="oc-address" :title="normalizeOrder(o).address || '-'">{{ normalizeOrder(o).shortAddress || normalizeOrder(o).address || '-' }}</div>
 
                 <!-- Row 4: time + total + actions -->
                  <div class="d-flex justify-content-between">
@@ -3265,9 +3317,9 @@ function pulseButton() {
                   
                   <span class="oc-total">{{ formatCurrency(computeDisplayedTotal(o)) }}</span></div>
                 <div class="oc-footer">
-                  <span v-if="isIfoodOrder(o)"  title="Pedido iFood">
+                  <span v-if="isIfoodOrder(o)" title="Pedido iFood">
                     <img src="https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png" alt="iFood" style="width:24px;height:24px;object-fit:contain;margin-right:4px;vertical-align:-2px;" />
-                    
+                    <span v-if="o.status === 'CONCLUIDO' && normalizeOrder(o).closedByIfoodCode" class="badge bg-success ms-1" style="font-size:0.65rem;">com código</span>
                   </span>
                   <div class="oc-actions">
                     <button class="btn btn-sm btn-outline-secondary" @click.stop="openDetails(o)" title="Detalhes"><i class="bi bi-list-ul"></i></button>
@@ -3277,7 +3329,7 @@ function pulseButton() {
                     <button v-if="o.status === 'EM_PREPARO' && isTakeoutOrder(o)" class="btn btn-sm btn-info text-white" @click.stop="markReadyForPickup(o)" :disabled="loading" title="Pronto para Retirada">
                       <i class="bi bi-bag-check"></i> Pronto
                     </button>
-                    <button class="btn btn-sm btn-primary advance" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status) || !store.canTransition(o.status, getNextStatus(o.status)) || loading" title="Avançar status">
+                    <button class="btn btn-sm btn-primary advance" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status, o) || !store.canTransition(o.status, getNextStatus(o.status, o)) || loading" title="Avançar status">
                       Avançar <i class="bi bi-arrow-right"></i>
                     </button>
                   </div>
@@ -3386,7 +3438,7 @@ function pulseButton() {
                 'bg-info': selectedOrder.status === 'CONFIRMACAO_PAGAMENTO',
                 'bg-success': selectedOrder.status === 'CONCLUIDO',
                 'bg-danger': selectedOrder.status === 'CANCELADO'
-              }">{{ STATUS_LABEL[selectedOrder.status] || selectedOrder.status }}</span>
+              }">{{ selectedOrder.status === 'CONCLUIDO' && selectedNormalized?.closedByIfoodCode ? 'Concluído com código' : (STATUS_LABEL[selectedOrder.status] || selectedOrder.status) }}</span>
             </div>
             <div class="od-info-item" v-if="selectedOrder">
               <i :class="getOrderType(selectedOrder) === 'RETIRADA' ? 'bi bi-bag' : 'bi bi-bicycle'"></i>
