@@ -458,7 +458,7 @@ onMounted(async () => {
         updated = payload.order || payload.data || payload.payload || null;
         // If we only have status, build a minimal updated object
         if (!updated && (payload.status || payload.statusName)) {
-          updated = { id, status: payload.status || payload.statusName };
+          updated = { id, status: payload.status || payload.statusName, ...(payload.closedByIfoodCode ? { closedByIfoodCode: true } : {}) };
         }
       }
 

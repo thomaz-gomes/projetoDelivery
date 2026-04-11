@@ -891,7 +891,7 @@ export function emitirPedidoAtualizado(pedido) {
     return;
   }
   try {
-    const payload = { id: pedido.id, displayId: pedido.displayId, status: pedido.status, riderId: pedido.riderId || null };
+    const payload = { id: pedido.id, displayId: pedido.displayId, status: pedido.status, riderId: pedido.riderId || null, closedByIfoodCode: pedido.closedByIfoodCode || false };
     io.emit('order-updated', payload);
     console.log('📢 Atualização de pedido emitida:', payload);
   } catch (e) {
