@@ -87,7 +87,7 @@
               <i class="bi bi-check-circle me-1"></i>Marcar entregue
             </button>
           </div>
-          <div v-if="isIfoodOrder(o)" class="card-footer d-grid gap-2">
+          <div v-if="isIfoodOrder(o) && o.status === 'SAIU_PARA_ENTREGA'" class="card-footer d-grid gap-2">
             <button
               v-if="!ifoodChatSent[o.id]"
               class="btn btn-outline-danger w-100"
@@ -95,10 +95,10 @@
               @click="sendIfoodChat(o)"
             >
               <i class="bi bi-chat-dots me-1"></i>
-              {{ ifoodChatSending[o.id] ? 'Enviando...' : 'Msg iFood' }}
+              {{ ifoodChatSending[o.id] ? 'Enviando...' : 'Informar chegada' }}
             </button>
             <span v-else class="text-success small text-center d-block">
-              <i class="bi bi-check2-circle me-1"></i>Mensagem iFood enviada
+              <i class="bi bi-check2-circle me-1"></i>Chegada informada via iFood
             </span>
           </div>
         </div>
