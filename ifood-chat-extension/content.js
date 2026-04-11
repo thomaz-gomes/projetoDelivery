@@ -33,7 +33,6 @@ async function processQueue() {
     } catch (e) {
       console.error('[iFood Extension] Falha ao enviar mensagem:', e);
       chrome.runtime.sendMessage({ type: 'MESSAGE_FAILED', orderNumber: payload.orderNumber, error: e.message });
-      // Tentar fechar o chat para limpar estado antes da próxima
       await closeChatPanel();
     }
 
@@ -48,48 +47,81 @@ async function processQueue() {
 async function sendChatMessage(orderNumber, message) {
   console.log(`[iFood Extension] Enviando mensagem para pedido ${orderNumber}...`);
 
-  // Step 1: Garantir que o painel de chat está fechado primeiro
+  // Garantir estado limpo
   await closeChatPanel();
   await sleep(500);
 
-  // Step 2: Abrir painel de conversas (lista)
-  const chatBtn = await waitForElement(SELECTORS.chatToggleButton, 3000);
-  if (!chatBtn) throw new Error('Botão de chat não encontrado');
+  // FLUXO 1: Tentar pela lista de conversas existentes
+  const sentViaList = await trySendViaConversationList(orderNumber, message);
+  if (sentViaList) return;
+
+  // FLUXO 2: Conversa não existe — criar via card do pedido
+  console.log(`[iFood Extension] Conversa não encontrada na lista. Abrindo via card do pedido...`);
+  await closeChatPanel();
+  await sleep(500);
+  await sendViaOrderCard(orderNumber, message);
+}
+
+/**
+ * FLUXO 1: Abre a lista de conversas e tenta encontrar o pedido.
+ * Retorna true se conseguiu enviar, false se conversa não existe.
+ */
+async function trySendViaConversationList(orderNumber, message) {
+  const chatBtn = document.querySelector(SELECTORS.chatToggleButton);
+  if (!chatBtn) return false;
   chatBtn.click();
   await sleep(1500);
 
-  // Step 3: Verificar que estamos na lista de conversas (h1 "Conversas" visível)
-  const conversasTitle = await waitForElement('h1', 3000);
-  if (!conversasTitle || !conversasTitle.textContent.includes('Conversas')) {
-    // Pode estar dentro de uma conversa — fechar e reabrir
-    console.log('[iFood Extension] Não está na lista, tentando fechar e reabrir...');
+  // Verificar que estamos na lista
+  const conversasTitle = Array.from(document.querySelectorAll('h1')).find(h => h.textContent.includes('Conversas'));
+  if (!conversasTitle) {
     await closeChatPanel();
-    await sleep(500);
-    chatBtn.click();
-    await sleep(1500);
+    return false;
   }
 
-  // Step 4: Encontrar conversa pelo número do pedido (com retry para pedidos novos)
-  let conversation = null;
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY = 10000; // 10s entre retries
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    conversation = await findConversationByOrderNumber(orderNumber);
-    if (conversation) break;
-    if (attempt < MAX_RETRIES) {
-      console.log(`[iFood Extension] Conversa ${orderNumber} não encontrada. Tentativa ${attempt}/${MAX_RETRIES}, aguardando ${RETRY_DELAY/1000}s...`);
-      // Fechar e reabrir o painel para atualizar a lista
-      await closeChatPanel();
-      await sleep(RETRY_DELAY);
-      const btn = document.querySelector(SELECTORS.chatToggleButton);
-      if (btn) { btn.click(); await sleep(1500); }
-    }
+  const conversation = await findConversationByOrderNumber(orderNumber);
+  if (!conversation) {
+    // Conversa não existe na lista
+    await closeChatPanel();
+    return false;
   }
-  if (!conversation) throw new Error(`Conversa do pedido ${orderNumber} não encontrada após ${MAX_RETRIES} tentativas`);
+
   conversation.click();
   await sleep(1500);
 
-  // Step 5: Digitar mensagem
+  await typeAndSend(message, orderNumber);
+  return true;
+}
+
+/**
+ * FLUXO 2: Encontra o card do pedido na tela de expedição, abre detalhes,
+ * clica no botão de chat (que cria a conversa) e envia a mensagem.
+ */
+async function sendViaOrderCard(orderNumber, message) {
+  const cleanNumber = orderNumber.replace(/^#/, '');
+
+  // Encontrar o card do pedido pelo número
+  const card = findOrderCard(cleanNumber);
+  if (!card) throw new Error(`Card do pedido ${orderNumber} não encontrado na tela de expedição`);
+
+  // Clicar no card para abrir detalhes
+  card.click();
+  await sleep(2000);
+
+  // Clicar no botão de chat nos detalhes do pedido (cria a conversa)
+  const chatBtn = await waitForElement(SELECTORS.orderDetailsChatButton, 5000);
+  if (!chatBtn) throw new Error(`Botão de chat não encontrado nos detalhes do pedido ${orderNumber}`);
+  chatBtn.click();
+  await sleep(2000);
+
+  await typeAndSend(message, orderNumber);
+}
+
+/**
+ * Digita a mensagem e envia (ou para se modo debug).
+ * Assume que o campo de mensagem já está visível.
+ */
+async function typeAndSend(message, orderNumber) {
   const input = await waitForElement(SELECTORS.messageInput, 5000);
   if (!input) throw new Error('Campo de mensagem não encontrado');
 
@@ -107,14 +139,14 @@ async function sendChatMessage(orderNumber, message) {
   input.dispatchEvent(new Event('change', { bubbles: true }));
   await sleep(500);
 
-  // Step 6: Checar modo debug
+  // Checar modo debug
   const { debugMode } = await chrome.storage.local.get(['debugMode']);
   if (debugMode) {
     console.log(`[iFood Extension] MODO DEBUG — mensagem preenchida mas NÃO enviada para pedido ${orderNumber}`);
     return;
   }
 
-  // Step 7: Enviar
+  // Enviar
   const sendBtn = await waitForElement(SELECTORS.sendButton, 2000);
   if (sendBtn) {
     sendBtn.click();
@@ -125,19 +157,32 @@ async function sendChatMessage(orderNumber, message) {
   }
   await sleep(1000);
 
-  // Step 8: Fechar o painel de chat completamente (pronto para próxima mensagem)
+  // Fechar tudo
   await closeChatPanel();
-
   console.log(`[iFood Extension] Mensagem enviada para pedido ${orderNumber}`);
 }
 
 /**
+ * Encontra o card do pedido na tela de expedição pelo número.
+ * Os cards têm [data-testid="card"] e o número aparece num span dentro.
+ */
+function findOrderCard(orderNumber) {
+  const cards = document.querySelectorAll(SELECTORS.orderCard);
+  for (const card of cards) {
+    const text = card.textContent || '';
+    // O número aparece como "3222" (sem #) no card
+    if (text.includes(orderNumber)) {
+      return card;
+    }
+  }
+  return null;
+}
+
+/**
  * Fecha o painel de chat completamente.
- * 1. Se estiver dentro de uma conversa, fecha a conversa primeiro (volta à lista)
- * 2. Depois fecha o painel inteiro (volta ao gestor)
  */
 async function closeChatPanel() {
-  // Passo 1: Se estiver dentro de uma conversa (textarea visível), fechar a conversa
+  // Se dentro de uma conversa (textarea visível), fechar a conversa
   const textarea = document.querySelector(SELECTORS.messageInput);
   if (textarea) {
     const closeConvBtn = document.querySelector(SELECTORS.closeConversationButton);
@@ -147,17 +192,15 @@ async function closeChatPanel() {
     }
   }
 
-  // Passo 2: Se a lista de conversas está aberta, fechar o painel inteiro
+  // Se a lista de conversas está aberta, fechar o painel
   const listOpen = Array.from(document.querySelectorAll('h1')).find(h => h.textContent.includes('Conversas'));
   if (listOpen) {
-    // Usar o X genérico da lista
     const closeListBtn = document.querySelector(SELECTORS.closeChatButton);
     if (closeListBtn) {
       closeListBtn.click();
       await sleep(500);
       return;
     }
-    // Fallback: toggle button
     const toggleBtn = document.querySelector(SELECTORS.chatToggleButton);
     if (toggleBtn) {
       toggleBtn.click();
@@ -167,8 +210,7 @@ async function closeChatPanel() {
 }
 
 /**
- * Encontra a conversa na lista pelo número do pedido.
- * A lista do iFood usa virtual scroll — os h2 contêm "#XXXX".
+ * Encontra conversa na lista pelo número do pedido (virtual scroll).
  */
 async function findConversationByOrderNumber(orderNumber) {
   const cleanNumber = orderNumber.replace(/^#/, '');
@@ -177,7 +219,6 @@ async function findConversationByOrderNumber(orderNumber) {
   let found = findH2WithOrderNumber(target);
   if (found) return found;
 
-  // Scrollar a lista virtual para carregar mais itens
   const scrollContainer = document.querySelector(SELECTORS.conversationListScroll);
   if (scrollContainer) {
     scrollContainer.scrollTop = 0;
@@ -203,7 +244,7 @@ async function findConversationByOrderNumber(orderNumber) {
 }
 
 /**
- * Busca um h2 que contenha o número do pedido e retorna a row clicável.
+ * Busca h2 com o número do pedido e retorna a row clicável.
  */
 function findH2WithOrderNumber(target) {
   const headings = document.querySelectorAll(SELECTORS.conversationOrderNumber);

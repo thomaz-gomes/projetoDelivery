@@ -1,26 +1,24 @@
 // selectors.js — iFood Gestor de Pedidos DOM selectors
 // Update these when iFood changes their HTML structure
-// Last verified: 2026-04-10
+// Last verified: 2026-04-11
 
 window.IFOOD_SELECTORS = {
-  // Botão que abre o painel de conversas (header do iFood)
+  // ── Painel de conversas (header) ──
   chatToggleButton: '[data-test-id="CONSUMER_CHAT_REBORN_HEADER_ENTRY_POINT"]',
-
-  // Botão fechar/X do painel de conversas (ícone genérico)
   closeChatButton: 'span.ifdl-icon-close',
-
-  // Botão fechar/voltar dentro de uma conversa aberta (tem data-testid)
   closeConversationButton: '[data-testid="close-icon"]',
 
-  // Container scrollável da lista de conversas (virtual scroll)
+  // ── Lista de conversas (virtual scroll) ──
   conversationListScroll: '[style*="overflow: auto"]',
-
-  // Número do pedido dentro de cada conversa (h2 contém "#XXXX")
   conversationOrderNumber: 'h2',
 
-  // Campo de input de mensagem (textarea dentro da conversa aberta)
+  // ── Dentro de uma conversa ──
   messageInput: 'textarea[aria-label="Campo de mensagem"]',
-
-  // Botão enviar mensagem (ícone ifdl-icon-send-message)
   sendButton: 'button[aria-label="Enviar mensagem"]',
+
+  // ── Cards de pedido (tela de expedição) ──
+  orderCard: '[data-testid="card"]',
+
+  // ── Botão de chat nos detalhes do pedido (cria conversa se não existir) ──
+  orderDetailsChatButton: '[data-test-id="CONSUMER_CHAT_REBORN_MESSAGING_ORDER_DETAILS_ENTRY_POINT"]',
 };
