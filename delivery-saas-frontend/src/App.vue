@@ -173,7 +173,19 @@ const showRiderQrFab = computed(() => {
   if (p.startsWith('/rider/claim')) return false
   return true
 });
-function goToRiderQr(){ try { router.push('/rider/home') } catch(e){} }
+function goToRiderQr(){
+  try {
+    // If already on rider orders, dispatch event to open scanner directly
+    if (route.path === '/rider' || route.path === '/rider/orders') {
+      window.dispatchEvent(new CustomEvent('open-rider-scanner'));
+    } else {
+      // Navigate to orders first, then open scanner
+      router.push('/rider/orders').then(() => {
+        setTimeout(() => window.dispatchEvent(new CustomEvent('open-rider-scanner')), 300);
+      });
+    }
+  } catch(e){}
+}
 </script>
 
 <template>
