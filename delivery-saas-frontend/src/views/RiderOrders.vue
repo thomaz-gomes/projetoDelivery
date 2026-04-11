@@ -33,8 +33,7 @@
         <div v-for="o in orders" :key="o.id" class="card">
           <div class="card-header">
             <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="fw-bold">#{{ o.displayId || o.displaySimple }}</span>
-              <span v-if="getIfoodLocator(o)" class="badge bg-danger ms-1" style="font-size:0.7rem;">Localizador {{ getIfoodLocator(o) }}</span>
+              <span class="fw-bold">#{{ o.displaySimple || o.displayId }}</span>
               <span :class="statusBadgeClass(o.status)" class="badge">{{ statusLabel(o.status) }}</span>
             </div>
             <div class="d-flex justify-content-between align-items-center">
