@@ -70,6 +70,11 @@
                 </li>
               </ul>
             </div>
+            <div v-if="getIfoodLocator(o)" class="text-center py-2 border-top mt-2" role="button" @click="copyLocator(o)" style="cursor:pointer;">
+              <div class="text-muted small mb-1">Localizador</div>
+              <div style="font-size:1.8rem;font-weight:700;letter-spacing:3px;">{{ getIfoodLocator(o) }}</div>
+              <div class="text-muted small mt-1"><i class="bi bi-clipboard me-1"></i>toque para copiar</div>
+            </div>
           </div>
           <div v-if="o.status === 'SAIU_PARA_ENTREGA'" class="card-footer d-grid gap-2">
             <button
@@ -278,6 +283,19 @@ function isIfoodOrder(o) {
 function getIfoodLocator(o) {
   if (!o || !isIfoodOrder(o)) return null;
   return o.payload?.order?.customer?.phone?.localizer || null;
+}
+
+function copyLocator(o) {
+  const loc = getIfoodLocator(o);
+  if (!loc) return;
+  try {
+    navigator.clipboard.writeText(loc);
+    Swal.fire({ icon: 'success', title: 'Localizador copiado', text: loc, toast: true, position: 'top-end', timer: 1500, showConfirmButton: false });
+  } catch (e) {
+    // fallback
+    const ta = document.createElement('textarea'); ta.value = loc; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    Swal.fire({ icon: 'success', title: 'Localizador copiado', toast: true, position: 'top-end', timer: 1500, showConfirmButton: false });
+  }
 }
 
 function getPhoneLink(o) {
