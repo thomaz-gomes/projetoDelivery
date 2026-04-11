@@ -34,7 +34,7 @@
           <div class="card-header">
             <div class="d-flex justify-content-between align-items-center mb-1">
               <span class="fw-bold">#{{ o.displayId || o.displaySimple }}</span>
-              <span v-if="getIfoodLocator(o)" class="badge bg-danger ms-1" style="font-size:0.7rem;">iFood #{{ getIfoodLocator(o) }}</span>
+              <span v-if="getIfoodLocator(o)" class="badge bg-danger ms-1" style="font-size:0.7rem;">Localizador {{ getIfoodLocator(o) }}</span>
               <span :class="statusBadgeClass(o.status)" class="badge">{{ statusLabel(o.status) }}</span>
             </div>
             <div class="d-flex justify-content-between align-items-center">
@@ -277,15 +277,7 @@ function isIfoodOrder(o) {
 
 function getIfoodLocator(o) {
   if (!o || !isIfoodOrder(o)) return null;
-  // The iFood locator is a numeric code (e.g. 69116316) stored in various payload locations
-  return o.payload?.order?.orderNumber ||
-    o.payload?.orderNumber ||
-    o.payload?.order?.shortReference ||
-    o.payload?.shortReference ||
-    o.externalId ||
-    o.payload?.orderId ||
-    o.payload?.order?.id ||
-    null;
+  return o.payload?.order?.customer?.phone?.localizer || null;
 }
 
 function getPhoneLink(o) {
