@@ -2534,7 +2534,7 @@ function columnOrders(key) {
     return filteredOrders.value.filter((o) => {
       if (!o) return false;
       return accepted.includes((o.status || '').toUpperCase());
-    });
+    }).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   } catch (e) {
     // fallback: if filteredOrders isn't ready for some reason, filter raw store.orders
     const nowTs = Date.now();
