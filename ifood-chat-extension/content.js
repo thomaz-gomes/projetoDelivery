@@ -69,9 +69,23 @@ async function sendChatMessage(orderNumber, message) {
     await sleep(1500);
   }
 
-  // Step 4: Encontrar conversa pelo número do pedido
-  const conversation = await findConversationByOrderNumber(orderNumber);
-  if (!conversation) throw new Error(`Conversa do pedido ${orderNumber} não encontrada`);
+  // Step 4: Encontrar conversa pelo número do pedido (com retry para pedidos novos)
+  let conversation = null;
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 10000; // 10s entre retries
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    conversation = await findConversationByOrderNumber(orderNumber);
+    if (conversation) break;
+    if (attempt < MAX_RETRIES) {
+      console.log(`[iFood Extension] Conversa ${orderNumber} não encontrada. Tentativa ${attempt}/${MAX_RETRIES}, aguardando ${RETRY_DELAY/1000}s...`);
+      // Fechar e reabrir o painel para atualizar a lista
+      await closeChatPanel();
+      await sleep(RETRY_DELAY);
+      const btn = document.querySelector(SELECTORS.chatToggleButton);
+      if (btn) { btn.click(); await sleep(1500); }
+    }
+  }
+  if (!conversation) throw new Error(`Conversa do pedido ${orderNumber} não encontrada após ${MAX_RETRIES} tentativas`);
   conversation.click();
   await sleep(1500);
 
