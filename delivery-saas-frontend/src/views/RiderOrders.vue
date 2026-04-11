@@ -488,36 +488,37 @@ function getGoogleMapsLink(o) {
 function formatAddress(o){
   try{
     if(!o) return '-'
-    
-    // Try to find address object from multiple possible locations
-    const a = o.payload?.delivery?.deliveryAddress || 
-             o.address || 
-             o.deliveryAddress || 
-             o.customerAddress || 
+
+    // Prioritize iFood delivery address (has full details), then customer addresses, then simple string
+    const a = o.payload?.order?.delivery?.deliveryAddress ||
+             o.payload?.delivery?.deliveryAddress ||
+             o.payload?.rawPayload?.delivery?.deliveryAddress ||
              o.payload?.rawPayload?.address ||
-             o.payload?.rawPayload?.delivery?.deliveryAddress;
-    
-    // If address is a simple string, return it
+             (o.customer && Array.isArray(o.customer.addresses) && o.customer.addresses.length
+               ? (o.customer.addresses.find(x => x.isDefault) || o.customer.addresses[0])
+               : null) ||
+             o.deliveryAddress ||
+             o.customerAddress;
+
+    if (a && typeof a === 'object') {
+      const street = a.street || a.streetName || '';
+      const number = a.number || a.streetNumber || '';
+      const main = street && number ? `${street}, ${number}` : (a.formattedAddress || a.formatted || street || '');
+
+      const parts = [];
+      if (a.complement) parts.push(a.complement);
+      if (a.neighborhood) parts.push(a.neighborhood);
+      if (a.reference) parts.push('Ref: ' + a.reference);
+      if (a.city) parts.push(a.city + (a.state ? '/' + a.state : ''));
+
+      return [main, parts.join(' — ')].filter(Boolean).join(' | ') || '-';
+    }
+
+    // Fallback to simple string
     if (typeof o.address === 'string' && o.address) return o.address;
     if (typeof a === 'string' && a) return a;
-    
-    if(!a) return '-';
-    
-    // Build formatted address
-    const main = a.formattedAddress || 
-                a.formatted || 
-                [a.street || a.streetName, a.number || a.streetNumber].filter(Boolean).join(', ');
-    
-    const tail = []
-    if(a.neighborhood) tail.push(a.neighborhood)
-    if(a.complement) tail.push('Comp: ' + a.complement)
-    if(a.reference) tail.push('Ref: ' + a.reference)
-    if(a.observation) tail.push('Obs: ' + a.observation)
-    if(a.city && !tail.includes(a.city)) tail.push(a.city)
-    
-    const result = [main, tail.filter(Boolean).join(' — ')].filter(Boolean).join(' | ');
-    return result || '-';
-  }catch(e){ 
+    return '-';
+  }catch(e){
     console.warn('formatAddress error', e);
     return '-';
   }

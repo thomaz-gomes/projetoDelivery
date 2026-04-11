@@ -146,41 +146,41 @@ function buildContext(order, settings = {}) {
   // iFood: desempacota envelope { order: { ... } } ou usa payload direto
   const ifoodPayload = payload.order || payload;
 
-  // Endereço - resolver de múltiplas fontes
+  // Endereço - resolver de múltiplas fontes (priorizar objeto estruturado com detalhes completos)
   const endereco = (() => {
-    // 1. String direta no topo
-    if (o.address && typeof o.address === 'string' && o.address.trim() && o.address.trim() !== '-') return o.address.trim();
-    if (o.addressFull) return o.addressFull;
-    if (o.addressString) return o.addressString;
-    // 2. Objeto estruturado (payload.delivery.deliveryAddress)
-    // iFood: usa ifoodPayload para suportar envelope { order: {...} } e formato direto
-    const da = (ifoodPayload.delivery && ifoodPayload.delivery.deliveryAddress) || payload.deliveryAddress || o.deliveryAddress || null;
-    if (da && typeof da === 'object') {
-      if (da.formattedAddress) return da.formattedAddress;
-      if (da.formatted) return da.formatted;
+    // Helper: monta endereço completo a partir de objeto estruturado
+    function buildFromObj(da) {
+      if (!da || typeof da !== 'object') return null;
+      const street = da.streetName || da.street || da.logradouro || '';
+      const number = da.streetNumber || da.number || da.numero || '';
+      const main = street && number ? `${street}, ${number}` : (da.formattedAddress || da.formatted || street || '');
+      if (!main) return null;
       const parts = [];
-      if (da.streetName || da.street || da.logradouro) parts.push(da.streetName || da.street || da.logradouro);
-      if (da.streetNumber || da.number || da.numero) parts.push(da.streetNumber || da.number || da.numero);
       if (da.complement || da.complemento) parts.push(da.complement || da.complemento);
       if (da.neighborhood || da.bairro) parts.push(da.neighborhood || da.bairro);
+      if (da.reference) parts.push('Ref: ' + da.reference);
       if (da.city || da.cidade) parts.push(da.city || da.cidade);
-      if (parts.length) return parts.join(', ');
+      return [main, parts.join(' - ')].filter(Boolean).join(' | ');
+    }
+    // 1. Objeto estruturado do payload (iFood deliveryAddress com todos os campos)
+    const da = (ifoodPayload.delivery && ifoodPayload.delivery.deliveryAddress) || payload.deliveryAddress || o.deliveryAddress || null;
+    const fromPayload = buildFromObj(da);
+    if (fromPayload) return fromPayload;
+    // 2. Customer addresses (do banco, com complemento/bairro/referência)
+    if (o.customer && Array.isArray(o.customer.addresses) && o.customer.addresses.length) {
+      const ca = o.customer.addresses.find(x => x.isDefault) || o.customer.addresses[0];
+      const fromCustomer = buildFromObj(ca);
+      if (fromCustomer) return fromCustomer;
     }
     // 3. rawPayload.address
     const raw = payload.rawPayload && payload.rawPayload.address;
-    if (raw) {
-      if (typeof raw === 'string') return raw;
-      if (typeof raw === 'object') {
-        if (raw.formattedAddress || raw.formatted) return raw.formattedAddress || raw.formatted;
-        const rp = [];
-        if (raw.street || raw.logradouro) rp.push(raw.street || raw.logradouro);
-        if (raw.number || raw.numero) rp.push(raw.number || raw.numero);
-        if (raw.neighborhood || raw.bairro) rp.push(raw.neighborhood || raw.bairro);
-        if (raw.city) rp.push(raw.city);
-        if (rp.length) return rp.join(', ');
-      }
-    }
-    // 4. Campos avulsos
+    const fromRaw = buildFromObj(raw);
+    if (fromRaw) return fromRaw;
+    if (typeof raw === 'string' && raw) return raw;
+    // 4. String simples do banco
+    if (o.addressFull) return o.addressFull;
+    if (o.address && typeof o.address === 'string' && o.address.trim() && o.address.trim() !== '-') return o.address.trim();
+    // 5. Campos avulsos
     if (o.street || o.number) return [o.street, o.number].filter(Boolean).join(' ');
     return '-';
   })();
