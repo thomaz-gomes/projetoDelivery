@@ -235,8 +235,9 @@ export function determineStatusFromIFoodEvent(payload, orderObj) {
   if (code === 'CONFIRMED' || code === 'CFM') return 'EM_PREPARO';
   if (code === 'DISPATCHED' || code === 'DSP') return 'SAIU_PARA_ENTREGA';
   if (code === 'CONCLUDED' || code === 'CON') {
-    // if payment is ONLINE -> mark as CONCLUIDO directly, otherwise confirmation step
-    return isPaymentOnline(orderObj) ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
+    // iFood CONCLUDED means the order was confirmed via delivery code or system —
+    // always move to CONCLUIDO regardless of payment type
+    return 'CONCLUIDO';
   }
   if (code === 'READY_TO_PICKUP' || code === 'RTP') {
     // If this is a TAKEOUT/PICKUP order, READY_TO_PICKUP means the order is
