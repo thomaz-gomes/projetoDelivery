@@ -34,7 +34,7 @@
           <div class="card-header">
             <div class="d-flex justify-content-between align-items-center mb-1">
               <span class="fw-bold">#{{ o.displayId || o.displaySimple }}</span>
-              <span v-if="getIfoodDisplayId(o)" class="badge bg-danger ms-1" style="font-size:0.7rem;">iFood #{{ getIfoodDisplayId(o) }}</span>
+              <span v-if="getIfoodLocator(o)" class="badge bg-danger ms-1" style="font-size:0.7rem;">iFood #{{ getIfoodLocator(o) }}</span>
               <span :class="statusBadgeClass(o.status)" class="badge">{{ statusLabel(o.status) }}</span>
             </div>
             <div class="d-flex justify-content-between align-items-center">
@@ -42,7 +42,7 @@
                 <span class="fw-semibold">{{ o.customerName || 'Cliente' }}</span>
                 <div v-if="o.customerPhone" class="d-flex align-items-center gap-1 mt-1">
                   <span class="text-muted">{{ o.customerPhone }}</span>
-                  <a :href="getPhoneLink(o)" class="btn btn-sm btn-outline-primary py-0 px-1" :title="getIfoodDisplayId(o) ? 'Ligar (localizador: ' + getIfoodDisplayId(o) + ')' : 'Ligar'"><i class="bi bi-telephone-fill"></i></a>
+                  <a :href="getPhoneLink(o)" class="btn btn-sm btn-outline-primary py-0 px-1" :title="getIfoodLocator(o) ? 'Ligar (localizador: ' + getIfoodLocator(o) + ')' : 'Ligar'"><i class="bi bi-telephone-fill"></i></a>
                   <a v-if="!isIfoodOrder(o)" :href="getWhatsAppLink(o.customerPhone)" target="_blank" class="btn btn-sm btn-outline-success py-0 px-1" title="WhatsApp"><i class="bi bi-whatsapp"></i></a>
                 </div>
               </div>
@@ -275,16 +275,24 @@ function isIfoodOrder(o) {
   );
 }
 
-function getIfoodDisplayId(o) {
+function getIfoodLocator(o) {
   if (!o || !isIfoodOrder(o)) return null;
-  return o.displayId || o.payload?.order?.displayId || o.payload?.order?.shortCode || null;
+  // The iFood locator is a numeric code (e.g. 69116316) stored in various payload locations
+  return o.payload?.order?.orderNumber ||
+    o.payload?.orderNumber ||
+    o.payload?.order?.shortReference ||
+    o.payload?.shortReference ||
+    o.externalId ||
+    o.payload?.orderId ||
+    o.payload?.order?.id ||
+    null;
 }
 
 function getPhoneLink(o) {
   const phone = o?.customerPhone;
   if (!phone) return '#';
-  const loc = getIfoodDisplayId(o);
-  if (loc) return `tel:${phone.replace(/\D/g, '')},,${loc}`;
+  const loc = getIfoodLocator(o);
+  if (loc) return `tel:${phone.replace(/\D/g, '')};${loc}`;
   return `tel:${phone}`;
 }
 
