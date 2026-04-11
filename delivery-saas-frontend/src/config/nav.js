@@ -16,11 +16,7 @@ export const nav = [
     { name: 'Notas Fiscais', to: '/relatorios/nfe-emissoes', icon: 'bi bi-receipt', moduleKey: 'fiscal', lockable: true },
     { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat', moduleKey: 'stock', lockable: true }
   ] },
-  { name: 'Cardápio', to: '/menu/menus', icon: 'bi bi-journal-text', children: [
-    { name: 'Cardápios', to: '/menu/menus', icon: 'bi bi-list' },
-    { name: 'Produtos e Categorias', to: '/menu/admin', icon: 'bi bi-grid' },
-    { name: 'Opcionais', to: '/menu/options', icon: 'bi bi-plus-circle', role: 'ADMIN' },
-  ] },
+  { name: 'Cardápio', to: '/menu/menus', icon: 'bi bi-journal-text' },
   { name: 'Clientes', to: '/customers', icon: 'bi bi-person', moduleKey: 'cardapio_completo', lockable: true },
   { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', moduleKey: 'riders', lockable: true, role: 'ADMIN', children: [
     { name: 'Lista', to: '/riders', icon: 'bi bi-people' },
