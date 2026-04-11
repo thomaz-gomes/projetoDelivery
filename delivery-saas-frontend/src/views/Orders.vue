@@ -1349,7 +1349,7 @@ async function advanceStatus(order) {
 
 const filteredOrders = computed(() => {
   const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
+  const dayMs = 12 * 60 * 60 * 1000;
   return store.orders.filter((o) => {
     // filtro de status/entregador
     const statusMatch = selectedStatus.value === 'TODOS' || o.status === selectedStatus.value;

@@ -343,12 +343,12 @@ function goToRiderQr(){ try { router.push('/rider/home') } catch(e){} }
   color: #000;
 }
 
-/* Main content responsive padding */
-.main-content { padding:1.5rem; }
+/* Main content responsive padding 
+.main-content { padding:1.5rem; }*/
 
 @media (max-width: 767.98px) {
   .main-content {
-    padding: 1rem 0.75rem;
+   /*  padding: 1rem 0.75rem; */
     padding-top: calc(52px + 0.75rem); /* compensar header fixo */
   }
 }

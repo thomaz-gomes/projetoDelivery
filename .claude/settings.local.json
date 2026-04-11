@@ -54,7 +54,10 @@
       "Bash(grep -r \"authMiddleware\\\\|requireRole\\\\|requirePermission\" /d/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-backend/src/routes/*.js)",
       "Bash(xargs wc:*)",
       "Read(//c/Users/gomes/.claude/plugins/cache/superpowers-dev/superpowers/4.3.1/skills/subagent-driven-development/**)",
-      "Bash(npx prisma:*)"
+      "Bash(npx prisma:*)",
+      "WebFetch(domain:ajuda.beefood.com.br)",
+      "Bash(grep -l \"email\\\\|smtp\\\\|mail\\\\|configuration\" /d/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-frontend/src/views/*.vue)",
+      "Bash(grep -l \"role.*ADMIN\\\\|meta.*requiresAuth.*true\" /d/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-frontend/src/views/*.vue)"
     ],
     "additionalDirectories": [
       "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery\\delivery-saas-backend\\src\\services",
