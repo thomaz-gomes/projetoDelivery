@@ -128,6 +128,12 @@ function isIfoodOrder(o) {
   );
 }
 
+function hasCustomerWhatsApp(o) {
+  if (!o) return false;
+  const w = o.customer?.whatsapp;
+  return !!(w && w.replace(/\D/g, '').length >= 10);
+}
+
 function formatDisplay(o) {
   if (!o) return '';
   if (o.displaySimple) return o.displaySimple;

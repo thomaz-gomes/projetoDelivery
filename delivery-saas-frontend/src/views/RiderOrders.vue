@@ -34,6 +34,7 @@
           <div class="card-header">
             <div class="d-flex justify-content-between align-items-center mb-1">
               <span class="fw-bold">#{{ o.displayId || o.displaySimple }}</span>
+              <span v-if="getIfoodDisplayId(o)" class="badge bg-danger ms-1" style="font-size:0.7rem;">iFood #{{ getIfoodDisplayId(o) }}</span>
               <span :class="statusBadgeClass(o.status)" class="badge">{{ statusLabel(o.status) }}</span>
             </div>
             <div class="d-flex justify-content-between align-items-center">
@@ -41,8 +42,8 @@
                 <span class="fw-semibold">{{ o.customerName || 'Cliente' }}</span>
                 <div v-if="o.customerPhone" class="d-flex align-items-center gap-1 mt-1">
                   <span class="text-muted">{{ o.customerPhone }}</span>
-                  <a :href="'tel:' + o.customerPhone" class="btn btn-sm btn-outline-primary py-0 px-1" title="Ligar"><i class="bi bi-telephone-fill"></i></a>
-                  <a :href="getWhatsAppLink(o.customerPhone)" target="_blank" class="btn btn-sm btn-outline-success py-0 px-1" title="WhatsApp"><i class="bi bi-whatsapp"></i></a>
+                  <a :href="getPhoneLink(o)" class="btn btn-sm btn-outline-primary py-0 px-1" :title="getIfoodDisplayId(o) ? 'Ligar (localizador: ' + getIfoodDisplayId(o) + ')' : 'Ligar'"><i class="bi bi-telephone-fill"></i></a>
+                  <a v-if="!isIfoodOrder(o)" :href="getWhatsAppLink(o.customerPhone)" target="_blank" class="btn btn-sm btn-outline-success py-0 px-1" title="WhatsApp"><i class="bi bi-whatsapp"></i></a>
                 </div>
               </div>
               <div class="text-end">
@@ -72,7 +73,7 @@
           </div>
           <div v-if="o.status === 'SAIU_PARA_ENTREGA'" class="card-footer d-grid gap-2">
             <button
-              v-if="o.customerPhone && !arrivalNotified[o.id]"
+              v-if="o.customerPhone && !arrivalNotified[o.id] && !isIfoodOrder(o)"
               class="btn btn-outline-success w-100"
               :disabled="arrivalSending[o.id]"
               @click="notifyArrival(o)"
@@ -274,6 +275,19 @@ function isIfoodOrder(o) {
   );
 }
 
+function getIfoodDisplayId(o) {
+  if (!o || !isIfoodOrder(o)) return null;
+  return o.displayId || o.payload?.order?.displayId || o.payload?.order?.shortCode || null;
+}
+
+function getPhoneLink(o) {
+  const phone = o?.customerPhone;
+  if (!phone) return '#';
+  const loc = getIfoodDisplayId(o);
+  if (loc) return `tel:${phone.replace(/\D/g, '')},,${loc}`;
+  return `tel:${phone}`;
+}
+
 async function sendIfoodChat(order) {
   if (!order.storeId) {
     Swal.fire({ icon: 'error', text: 'Pedido sem loja associada', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
@@ -292,28 +306,64 @@ async function sendIfoodChat(order) {
   }
 }
 
+const PAYMENT_MAP = {
+  CASH: 'Dinheiro', CREDIT: 'Crédito', DEBIT: 'Débito',
+  MEAL_VOUCHER: 'Vale Refeição', FOOD_VOUCHER: 'Vale Alimentação',
+  PIX: 'PIX', PREPAID: 'Pré-pago', ONLINE: 'Pagamento Online',
+  WALLET: 'Carteira Digital', VOUCHER: 'Voucher', GIFT_CARD: 'Gift Card',
+  DINHEIRO: 'Dinheiro', CREDITO: 'Crédito', DEBITO: 'Débito',
+};
+
+function translatePay(raw, brand) {
+  if (!raw) return '—';
+  const u = raw.toUpperCase().trim();
+  let label = PAYMENT_MAP[u] || null;
+  if (!label) { for (const [k, v] of Object.entries(PAYMENT_MAP)) { if (u.startsWith(k)) { label = v; break; } } }
+  if (!label) label = raw;
+  if (brand) label += ` ${brand}`;
+  return label;
+}
+
+function resolveIfoodPayments(o) {
+  const fromOrder = o.payload?.order?.payments;
+  if (fromOrder) return fromOrder;
+  const direct = o.payload?.payments;
+  if (direct && !Array.isArray(direct)) return direct;
+  return null;
+}
+
 function formatPayment(o) {
   try {
-    if (!o) return '-';
-    // Try multiple possible payment locations
-    const payment = o.payment || 
-                   o.payload?.payment || 
-                   (o.payload?.payments && o.payload.payments[0]) ||
-                   (o.payload?.rawPayload?.payment) ||
-                   (o.payload?.rawPayload?.payments && o.payload.rawPayload.payments[0]);
-    
-    if (!payment) return '-';
-    
-    const method = payment.methodName || payment.method || payment.type || payment.name;
-    const value = payment.value || payment.amount;
-    
-    if (method && value) {
-      return `${method} - ${formatMoney(value)}`;
+    if (!o) return '—';
+    // iFood payments (object with methods array)
+    const ifoodPay = resolveIfoodPayments(o);
+    if (ifoodPay && (ifoodPay.methods?.length || ifoodPay.prepaid != null)) {
+      const methods = ifoodPay.methods || [];
+      if (methods.length > 0) {
+        const label = methods.map(m => {
+          let l = translatePay(m.method || m.type || '', m.card?.brand);
+          if (m.prepaid === true) l += ' (pago online)';
+          else if (m.prepaid === false) l += ' (cobrar do cliente)';
+          return l;
+        }).filter(Boolean).join(' + ');
+        // Check for troco
+        const cashMethod = methods.find(m => (m.method || '').toUpperCase() === 'CASH' || (m.method || '').toUpperCase() === 'DINHEIRO');
+        const changeFor = cashMethod?.changeFor ? formatMoney(cashMethod.changeFor) : null;
+        return label + (changeFor ? ` · Troco: ${changeFor}` : '');
+      }
+      if (ifoodPay.prepaid) return 'Pré-pago (pago online)';
     }
-    return method || '-';
+    // Direct payment field
+    if (o.payment && (o.payment.methodCode || o.payment.method)) {
+      return translatePay(o.payment.methodCode || o.payment.method, o.payment.card?.brand);
+    }
+    if (o.payload?.payment) {
+      return translatePay(o.payload.payment.methodCode || o.payload.payment.method || o.payload.payment.type, o.payload.payment.card?.brand);
+    }
+    return '—';
   } catch (e) {
     console.warn('formatPayment error', e);
-    return '-';
+    return '—';
   }
 }
 
