@@ -10,6 +10,16 @@ const settings = ref({
   usd_to_brl: '',
   custom_domain_server_ip: '',
 })
+
+// ── SMTP / Email ──────────────────────────────────────────────────────────
+const smtp = ref({ smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '', smtp_from: '' })
+const savingSmtp = ref(false)
+const savedSmtp = ref(false)
+const errorSmtp = ref(null)
+const showSmtpPass = ref(false)
+const testingEmail = ref(false)
+const testEmailAddr = ref('')
+const testEmailResult = ref(null)
 const settingsMeta = ref([])  // { key, isSet, updatedAt }
 const loading = ref(true)
 const saving = ref(false)
@@ -134,6 +144,17 @@ async function load() {
     if (ipRow && ipRow.isSet) {
       settings.value.custom_domain_server_ip = ipRow.value
     }
+    // Carrega configurações SMTP
+    const smtpHostRow = data.find(r => r.key === 'smtp_host')
+    if (smtpHostRow && smtpHostRow.isSet) smtp.value.smtp_host = smtpHostRow.value
+    const smtpPortRow = data.find(r => r.key === 'smtp_port')
+    if (smtpPortRow && smtpPortRow.isSet) smtp.value.smtp_port = smtpPortRow.value
+    const smtpUserRow = data.find(r => r.key === 'smtp_user')
+    if (smtpUserRow && smtpUserRow.isSet) smtp.value.smtp_user = smtpUserRow.value
+    const smtpFromRow = data.find(r => r.key === 'smtp_from')
+    if (smtpFromRow && smtpFromRow.isSet) smtp.value.smtp_from = smtpFromRow.value
+    // smtp_pass não é carregado (sensível) — apenas mostra se está configurado
+
     // Carrega mapa de provedores
     const providerRow = data.find(r => r.key === 'ai_provider_map')
     if (providerRow && providerRow.isSet && providerRow.value) {
@@ -209,6 +230,67 @@ async function clearGoogleKey() {
     error.value = e?.response?.data?.message || 'Erro ao remover chave'
   } finally {
     saving.value = false
+  }
+}
+
+async function saveSmtp() {
+  savingSmtp.value = true
+  savedSmtp.value = false
+  errorSmtp.value = null
+  try {
+    const payload = []
+    if (smtp.value.smtp_host.trim()) payload.push({ key: 'smtp_host', value: smtp.value.smtp_host.trim() })
+    if (smtp.value.smtp_port) payload.push({ key: 'smtp_port', value: String(smtp.value.smtp_port).trim() })
+    if (smtp.value.smtp_user.trim()) payload.push({ key: 'smtp_user', value: smtp.value.smtp_user.trim() })
+    if (smtp.value.smtp_pass.trim()) payload.push({ key: 'smtp_pass', value: smtp.value.smtp_pass.trim() })
+    payload.push({ key: 'smtp_from', value: (smtp.value.smtp_from || smtp.value.smtp_user).trim() })
+    if (!payload.length) { errorSmtp.value = 'Preencha pelo menos host, usuário e senha'; return }
+    await api.put('/saas/settings', payload)
+    savedSmtp.value = true
+    smtp.value.smtp_pass = ''
+    showSmtpPass.value = false
+    await load()
+    setTimeout(() => { savedSmtp.value = false }, 3000)
+  } catch (e) {
+    errorSmtp.value = e?.response?.data?.message || 'Erro ao salvar configurações SMTP'
+  } finally {
+    savingSmtp.value = false
+  }
+}
+
+async function clearSmtp() {
+  if (!confirm('Tem certeza que deseja remover toda a configuração SMTP?')) return
+  savingSmtp.value = true
+  errorSmtp.value = null
+  try {
+    await api.put('/saas/settings', [
+      { key: 'smtp_host', value: '' },
+      { key: 'smtp_port', value: '' },
+      { key: 'smtp_user', value: '' },
+      { key: 'smtp_pass', value: '' },
+      { key: 'smtp_from', value: '' },
+    ])
+    smtp.value = { smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '', smtp_from: '' }
+    await load()
+  } catch (e) {
+    errorSmtp.value = e?.response?.data?.message || 'Erro ao remover configuração SMTP'
+  } finally {
+    savingSmtp.value = false
+  }
+}
+
+async function sendTestEmail() {
+  const addr = testEmailAddr.value.trim()
+  if (!addr) { testEmailResult.value = { type: 'danger', text: 'Informe um email de destino' }; return }
+  testingEmail.value = true
+  testEmailResult.value = null
+  try {
+    const { data } = await api.post('/saas/settings/test-email', { email: addr })
+    testEmailResult.value = { type: 'success', text: data.message }
+  } catch (e) {
+    testEmailResult.value = { type: 'danger', text: e?.response?.data?.message || 'Erro ao enviar email de teste' }
+  } finally {
+    testingEmail.value = false
   }
 }
 
@@ -486,6 +568,108 @@ onMounted(async () => {
             <i v-else class="bi bi-floppy me-2"></i>
             Salvar configurações
           </button>
+        </div>
+      </div>
+
+      <!-- SMTP / Email -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+          <h5 class="card-title mb-1">
+            <i class="bi bi-envelope me-2 text-success"></i>Email (SMTP)
+          </h5>
+          <p class="text-muted small mb-4">
+            Configuração do servidor SMTP para envio de emails de verificação de conta.
+            Se não configurado, os códigos são apenas logados no console do backend.
+          </p>
+
+          <div v-if="errorSmtp" class="alert alert-danger py-2 small">{{ errorSmtp }}</div>
+          <div v-if="savedSmtp" class="alert alert-success py-2 small">Configurações SMTP salvas com sucesso.</div>
+
+          <!-- Status -->
+          <div class="mb-3">
+            <div v-if="metaFor('smtp_host').isSet && metaFor('smtp_user').isSet && metaFor('smtp_pass').isSet" class="mb-2">
+              <span class="badge bg-success me-2"><i class="bi bi-check-circle me-1"></i>Configurado</span>
+              <small class="text-muted">
+                Atualizado em
+                {{ metaFor('smtp_host').updatedAt
+                    ? new Date(metaFor('smtp_host').updatedAt).toLocaleDateString('pt-BR')
+                    : '—' }}
+              </small>
+              <button class="btn btn-outline-danger btn-sm ms-3" @click="clearSmtp" :disabled="savingSmtp">
+                <i class="bi bi-trash me-1"></i>Remover
+              </button>
+            </div>
+            <div v-else class="mb-2">
+              <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Não configurado</span>
+            </div>
+          </div>
+
+          <!-- Host e Porta -->
+          <div class="row g-3 mb-3">
+            <div class="col-8">
+              <label class="form-label fw-semibold">Servidor SMTP</label>
+              <input type="text" class="form-control font-monospace" v-model="smtp.smtp_host" placeholder="smtp.gmail.com" />
+            </div>
+            <div class="col-4">
+              <label class="form-label fw-semibold">Porta</label>
+              <input type="number" class="form-control font-monospace" v-model="smtp.smtp_port" placeholder="587" />
+            </div>
+          </div>
+
+          <!-- Usuário -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Usuário (email)</label>
+            <input type="email" class="form-control font-monospace" v-model="smtp.smtp_user" placeholder="seuemail@gmail.com" />
+          </div>
+
+          <!-- Senha -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Senha / App Password</label>
+            <div v-if="metaFor('smtp_pass').isSet && !smtp.smtp_pass" class="mb-2">
+              <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Senha configurada</span>
+            </div>
+            <div class="input-group">
+              <input
+                :type="showSmtpPass ? 'text' : 'password'"
+                class="form-control font-monospace"
+                v-model="smtp.smtp_pass"
+                placeholder="Deixe vazio para manter a senha atual"
+                autocomplete="new-password"
+              />
+              <button class="btn btn-outline-secondary" type="button" @click="showSmtpPass = !showSmtpPass">
+                <i :class="showSmtpPass ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+              </button>
+            </div>
+            <div class="form-text">
+              Para Gmail, use uma <strong>Senha de App</strong> (16 caracteres). Senhas normais não funcionam.
+            </div>
+          </div>
+
+          <!-- Remetente -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Email remetente (From)</label>
+            <input type="email" class="form-control font-monospace" v-model="smtp.smtp_from" placeholder="Mesmo do usuário se vazio" />
+            <div class="form-text">Deixe vazio para usar o mesmo email do campo Usuário.</div>
+          </div>
+
+          <button class="btn btn-primary me-2" @click="saveSmtp" :disabled="savingSmtp">
+            <span v-if="savingSmtp" class="spinner-border spinner-border-sm me-2"></span>
+            <i v-else class="bi bi-floppy me-2"></i>
+            Salvar SMTP
+          </button>
+
+          <!-- Teste de email -->
+          <hr class="my-4">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-send me-2"></i>Enviar email de teste</h6>
+          <div v-if="testEmailResult" class="alert py-2 small" :class="'alert-' + testEmailResult.type">{{ testEmailResult.text }}</div>
+          <div class="input-group" style="max-width: 480px;">
+            <input type="email" class="form-control" v-model="testEmailAddr" placeholder="email@destino.com" />
+            <button class="btn btn-outline-success" @click="sendTestEmail" :disabled="testingEmail">
+              <span v-if="testingEmail" class="spinner-border spinner-border-sm me-1"></span>
+              <i v-else class="bi bi-send me-1"></i>
+              Testar
+            </button>
+          </div>
         </div>
       </div>
 

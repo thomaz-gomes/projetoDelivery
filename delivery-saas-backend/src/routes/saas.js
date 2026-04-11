@@ -5,6 +5,7 @@ import { AI_SERVICE_COSTS, clearServiceCostCache } from '../services/aiCreditMan
 import { calculateProRation } from '../services/proRation.js'
 import { encrypt, decrypt } from '../services/encryption.js'
 import { invalidateSetting } from '../services/systemSettings.js'
+import { sendTestEmail } from '../services/email.js'
 
 export const saasRouter = express.Router()
 saasRouter.use(authMiddleware)
@@ -868,8 +869,8 @@ saasRouter.delete('/companies/:id', requireRole('SUPER_ADMIN'), async (_req, res
 // -------- System Settings (SUPER_ADMIN) --------
 
 // Chaves expostas na API (whitelist). Valores de chaves *_key são mascarados na leitura.
-const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price', 'google_ai_api_key', 'ai_provider_map', 'usd_to_brl', 'custom_domain_server_ip']
-const SENSITIVE_KEYS = new Set(['openai_api_key', 'google_ai_api_key'])
+const SETTINGS_WHITELIST = ['openai_api_key', 'openai_model', 'credit_brl_price', 'google_ai_api_key', 'ai_provider_map', 'usd_to_brl', 'custom_domain_server_ip', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from']
+const SENSITIVE_KEYS = new Set(['openai_api_key', 'google_ai_api_key', 'smtp_pass'])
 
 function maskValue(key, value) {
   if (!value) return ''
@@ -932,6 +933,25 @@ saasRouter.put('/settings', requireRole('SUPER_ADMIN'), async (req, res) => {
   } catch (e) {
     console.error('[PUT /saas/settings]', e)
     res.status(500).json({ message: 'Erro ao salvar configurações' })
+  }
+})
+
+/**
+ * POST /saas/settings/test-email
+ * Envia um email de teste para verificar a configuração SMTP.
+ */
+saasRouter.post('/settings/test-email', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const { email } = req.body
+    if (!email) return res.status(400).json({ message: 'Email de destino é obrigatório' })
+    const result = await sendTestEmail(email)
+    if (result.messageId?.startsWith('console-')) {
+      return res.status(400).json({ message: 'SMTP não configurado — email foi logado no console' })
+    }
+    res.json({ message: `Email de teste enviado para ${email}`, messageId: result.messageId })
+  } catch (e) {
+    console.error('[POST /saas/settings/test-email]', e)
+    res.status(500).json({ message: e.message || 'Erro ao enviar email de teste' })
   }
 })
 

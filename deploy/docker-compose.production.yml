@@ -74,6 +74,12 @@ services:
       # AI Parser
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       USE_AI_PARSER: ${USE_AI_PARSER:-false}
+      # SMTP / Email
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     volumes:
       - backend_uploads:/app/public/uploads
       # Custom domain SSL: write nginx configs + trigger files, host cron does certbot
