@@ -127,7 +127,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import api from '../api'
 import { formatDateTime } from '../utils/dates'
 import { io } from 'socket.io-client'
@@ -176,11 +176,27 @@ function stopScanner() {
 }
 
 async function startScanner() {
+  if (!window.isSecureContext) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Conexão insegura',
+      html: `O navegador só libera a câmera em <b>HTTPS</b> ou <b>localhost</b>.<br><br>Você está em <code>${location.protocol}//${location.host}</code>.`
+    });
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    Swal.fire({ icon: 'error', title: 'Câmera indisponível', text: 'Este navegador não suporta acesso à câmera.' });
+    return;
+  }
   try {
     scanning.value = true;
-    const constraints = { video: { facingMode: 'environment' } };
+    await nextTick();
+    const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
     stream = await navigator.mediaDevices.getUserMedia(constraints);
-    if (videoEl.value) videoEl.value.srcObject = stream;
+    if (videoEl.value) {
+      videoEl.value.srcObject = stream;
+      try { await videoEl.value.play(); } catch(_) {}
+    }
 
     if ('BarcodeDetector' in window) {
       const detector = new BarcodeDetector({ formats: ['qr_code'] });
@@ -207,7 +223,21 @@ async function startScanner() {
     }
   } catch (e) {
     console.error('Scanner error', e);
-    Swal.fire({ icon: 'error', text: 'Não foi possível acessar a câmera. Verifique as permissões.' });
+    let msg = 'Não foi possível acessar a câmera.';
+    switch (e && e.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        msg = 'Permissão da câmera negada. Toque no cadeado na barra de endereço → Permissões → Câmera → Permitir.';
+        break;
+      case 'NotFoundError':
+      case 'OverconstrainedError':
+        msg = 'Nenhuma câmera encontrada no dispositivo.';
+        break;
+      case 'NotReadableError':
+        msg = 'A câmera está em uso por outro app. Feche-o e tente novamente.';
+        break;
+    }
+    Swal.fire({ icon: 'error', title: 'Câmera', text: msg });
     scanning.value = false;
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   }
