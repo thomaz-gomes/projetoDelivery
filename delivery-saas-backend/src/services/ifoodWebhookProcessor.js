@@ -761,6 +761,8 @@ export async function processIFoodWebhook(eventId) {
         if (res && res.created) {
           console.log('[iFood Processor] emitting novo-pedido for created order', savedOrder && savedOrder.id, 'status:', savedOrder && savedOrder.status);
           emitirNovoPedido(savedOrder);
+          // Send iFood chat message for new order (e.g. CONFIRMED after auto-accept)
+          tryEmitIfoodChat(savedOrder, savedOrder.status).catch(() => {});
           // Notify customer with order summary on new orders
           try { await notifyCustomerOrderSummary(savedOrder.id); } catch (e) { console.warn('[iFood Processor] notifyCustomerOrderSummary failed', e && e.message); }
           // Auto-print: if enabled, enqueue and attempt immediate delivery to connected agents
