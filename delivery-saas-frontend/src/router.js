@@ -328,13 +328,12 @@ function roleLevel(role) {
 
 function isRoleAllowed(userRole, allowedRoles) {
   const ur = String(userRole || '').toUpperCase()
-  const level = roleLevel(ur)
-  // SUPER_ADMIN always passes any role check
-  if (level >= ROLE_HIERARCHY.SUPER_ADMIN) return true
+  const userLevel = roleLevel(ur)
+  // Use hierarchy: user passes if their level >= any of the allowed roles
   const list = Array.isArray(allowedRoles)
     ? allowedRoles.map(r => String(r).toUpperCase())
     : String(allowedRoles || '').split(/[,|]/).map(s => s.trim().toUpperCase()).filter(Boolean)
-  return list.includes(ur)
+  return list.some(r => userLevel >= roleLevel(r))
 }
 
 // Ensure auth.user is populated (single call per navigation)
