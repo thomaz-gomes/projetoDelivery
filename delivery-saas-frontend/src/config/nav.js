@@ -2,22 +2,17 @@
 // moduleKey: guards visibility by enabled module
 // lockable: true → show as "locked" with upgrade badge instead of hiding completely
 export const nav = [
+  // Itens diretos (sem filhos)
   { name: 'Pedidos', to: '/orders', icon: 'bi bi-box-seam', moduleKey: 'cardapio_completo', lockable: true },
+  { name: 'Cardápio', to: '/menu/menus', icon: 'bi bi-journal-text' },
+  { name: 'Clientes', to: '/customers', icon: 'bi bi-person', moduleKey: 'cardapio_completo', lockable: true },
+
+  // Itens com sub-menus
   { name: 'Atendimento', to: '/inbox', icon: 'bi bi-headset', moduleKey: 'whatsapp', lockable: true, children: [
     { name: 'Inbox', to: '/inbox', icon: 'bi bi-chat-left-dots', moduleKey: 'whatsapp', lockable: true },
     { name: 'Respostas Rápidas', to: '/inbox/quick-replies', icon: 'bi bi-chat-quote', moduleKey: 'whatsapp', lockable: true, role: 'ADMIN' },
     { name: 'Automações', to: '/inbox/automation', icon: 'bi bi-robot', moduleKey: 'whatsapp', lockable: true, role: 'ADMIN' },
   ] },
-  { name: 'Relatórios', to: '/reports', icon: 'bi bi-file-earmark-bar-graph', moduleKey: 'cardapio_completo', lockable: true, role: 'ADMIN', children: [
-    { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
-    { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
-    { name: 'Produtos mais vendidos', to: '/reports/products', icon: 'bi bi-bar-chart-line' },
-    { name: 'Desempenho do Cardápio', to: '/reports/menu-performance', icon: 'bi bi-graph-up' },
-    { name: 'Notas Fiscais', to: '/relatorios/nfe-emissoes', icon: 'bi bi-receipt', moduleKey: 'fiscal', lockable: true },
-    { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat', moduleKey: 'stock', lockable: true }
-  ] },
-  { name: 'Cardápio', to: '/menu/menus', icon: 'bi bi-journal-text' },
-  { name: 'Clientes', to: '/customers', icon: 'bi bi-person', moduleKey: 'cardapio_completo', lockable: true },
   { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', moduleKey: 'riders', lockable: true, role: 'ADMIN', children: [
     { name: 'Lista', to: '/riders', icon: 'bi bi-people' },
     { name: 'Créditos/Débitos', to: '/rider-adjustments', icon: 'bi bi-credit-card' },
@@ -28,6 +23,14 @@ export const nav = [
     { name: 'Turnos', to: '/settings/rider-shifts', icon: 'bi bi-calendar-week' },
     { name: 'Regras de Bônus', to: '/settings/rider-bonus-rules', icon: 'bi bi-gift' },
     { name: 'Configurações', to: '/settings/rider-tracking', icon: 'bi bi-gear' },
+  ] },
+  { name: 'Relatórios', to: '/reports', icon: 'bi bi-file-earmark-bar-graph', moduleKey: 'cardapio_completo', lockable: true, role: 'ADMIN', children: [
+    { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
+    { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
+    { name: 'Produtos mais vendidos', to: '/reports/products', icon: 'bi bi-bar-chart-line' },
+    { name: 'Desempenho do Cardápio', to: '/reports/menu-performance', icon: 'bi bi-graph-up' },
+    { name: 'Notas Fiscais', to: '/relatorios/nfe-emissoes', icon: 'bi bi-receipt', moduleKey: 'fiscal', lockable: true },
+    { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat', moduleKey: 'stock', lockable: true }
   ] },
   { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', role: 'ADMIN', children: [
     { name: 'Studio IA', to: '/marketing/studio-ia', icon: 'bi bi-stars' },
@@ -62,12 +65,6 @@ export const nav = [
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp', lockable: true },
     { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' }
   ] },
-  {
-    name: 'Loja de Add-ons',
-    to: '/store',
-    icon: 'bi-shop',
-    role: 'ADMIN',
-  },
   { name: 'SaaS', to: '/saas', icon: 'bi bi-grid-3x3-gap', role: 'SUPER_ADMIN', children: [
     { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
     { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },
