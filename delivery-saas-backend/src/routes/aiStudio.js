@@ -66,6 +66,18 @@ const ANGLE_PROMPTS = {
   hero:     'camera at plate level (0-degree eye-level angle), emphasizing height and layering of the food with natural depth-of-field blur in foreground',
 }
 
+// Fetch com retry automático para 429/503 (rate limit / overload)
+async function fetchWithRetry(url, options, { maxRetries = 3, baseDelay = 5000, label = 'API' } = {}) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options)
+    if (res.ok || (res.status !== 429 && res.status !== 503)) return res
+    if (attempt === maxRetries) return res // última tentativa, retorna o erro
+    const delay = baseDelay * Math.pow(2, attempt) // 5s, 10s, 20s
+    console.warn(`[AI Studio] ${label}: ${res.status}, retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})`)
+    await new Promise(r => setTimeout(r, delay))
+  }
+}
+
 async function getGoogleAIKey() {
   const key = await getSetting('google_ai_api_key', 'GOOGLE_AI_API_KEY')
   if (!key) throw Object.assign(new Error('Chave da API Google AI não configurada. Acesse Painel SaaS → Configurações.'), { statusCode: 503 })
@@ -176,7 +188,7 @@ router.post('/enhance', requireRole('ADMIN'), async (req, res) => {
 
     // 5. Envia a imagem original + prompt de retoque para o modelo de geração
     // O Nano Banana suporta imagem + texto como entrada e retorna imagem retocada
-    const imageGenRes = await fetch(
+    const imageGenRes = await fetchWithRetry(
       `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
@@ -305,7 +317,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
       if (!VALID_MIMES.includes(refMimeType)) refMimeType = 'image/jpeg'
       const refBase64 = refImageBuffer.toString('base64')
 
-      const visionRes = await fetch(
+      const visionRes = await fetchWithRetry(
         `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
@@ -380,7 +392,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
         `Avoid: clay or plastic appearance, artificial smoothness, fake gloss, cartoon style, neon colors, watermarks, text`
     }
 
-    const imageGenRes = await fetch(
+    const imageGenRes = await fetchWithRetry(
       `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
@@ -623,7 +635,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
 
     // 2. Gemini Vision — analisa a foto e retorna JSON com productDescription, cuisineType, productName
     console.log('[AI Studio] generate-pack: analyzing product photo via Vision...')
-    const visionRes = await fetch(
+    const visionRes = await fetchWithRetry(
       `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
@@ -681,7 +693,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
 
     // 3. Gemini Flash text — gera N descrições de cena coerentes com o segmento
     console.log('[AI Studio] generate-pack: generating %d scene descriptions...', qty)
-    const sceneRes = await fetch(
+    const sceneRes = await fetchWithRetry(
       `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
@@ -747,7 +759,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
         `emphasis on food textures, high-end food photography for social media, ` +
         `real photograph, not digital art, not CGI, not illustration, no watermarks, no text`
 
-      const imageGenRes = await fetch(
+      const imageGenRes = await fetchWithRetry(
         `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
