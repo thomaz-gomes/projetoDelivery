@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from './api'
+import './assets/rider-theme.css'
 import { assetUrl } from './utils/assetUrl.js'
 import { useAuthStore } from './stores/auth';
 import { useSaasStore } from './stores/saas';
@@ -143,6 +144,7 @@ const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules
 // show the dashboard layout (sidebar/topbar) for all routes except the login page and public menu
 const route = useRoute();
 const isInboxRoute = computed(() => route?.path?.startsWith('/inbox') === true);
+const isRiderRoute = computed(() => route?.path?.startsWith('/rider') === true);
 const showLayout = computed(() => {
   // hide layout for login, register, verify, setup and for any public routes (start with /public)
   if(!route || !route.path) return true
@@ -189,7 +191,7 @@ function goToRiderQr(){
 </script>
 
 <template>
-  <div class="bg-light text-dark">
+  <div :class="isRiderRoute ? 'rider-app auto-dark' : 'bg-light text-dark'">
     <template v-if="showLayout">
       <!-- Mobile top header with hamburger (visible < md) -->
       <header v-if="showMobileHeader" class="mobile-topbar d-md-none">

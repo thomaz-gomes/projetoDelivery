@@ -147,6 +147,73 @@ ridersRouter.delete('/me/position', requireRole('RIDER'), async (req, res) => {
   }
 });
 
+// GET /riders/me/daily-stats — RIDER only
+// Returns today/month earnings, delivery counts, check-in status and active order
+ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
+  try {
+    const riderId = req.user.riderId;
+    if (!riderId) return res.status(400).json({ message: 'riderId não encontrado no token' });
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Today earnings (sum of riderTransaction amounts)
+    const todayTxAgg = await prisma.riderTransaction.aggregate({
+      _sum: { amount: true },
+      where: { riderId, date: { gte: todayStart } }
+    });
+    const todayEarnings = todayTxAgg._sum.amount || 0;
+
+    // Today deliveries (completed orders)
+    const todayDeliveries = await prisma.order.count({
+      where: { riderId, status: 'CONCLUIDO', updatedAt: { gte: todayStart } }
+    });
+
+    // Month earnings
+    const monthTxAgg = await prisma.riderTransaction.aggregate({
+      _sum: { amount: true },
+      where: { riderId, date: { gte: monthStart } }
+    });
+    const monthEarnings = monthTxAgg._sum.amount || 0;
+
+    // Month deliveries
+    const monthDeliveries = await prisma.order.count({
+      where: { riderId, status: 'CONCLUIDO', updatedAt: { gte: monthStart } }
+    });
+
+    // Check-in today
+    const tomorrow = new Date(todayStart);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const checkinToday = await prisma.riderCheckin.findFirst({
+      where: { riderId, checkinAt: { gte: todayStart, lt: tomorrow } }
+    });
+    const checkedIn = !!checkinToday;
+
+    // Active order (not CONCLUIDO)
+    const activeOrderRaw = await prisma.order.findFirst({
+      where: { riderId, status: { not: 'CONCLUIDO' } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, displayId: true, displaySimple: true, status: true, customerName: true, address: true }
+    });
+    const activeOrder = activeOrderRaw
+      ? {
+          id: activeOrderRaw.id,
+          displayId: activeOrderRaw.displayId,
+          displaySimple: activeOrderRaw.displaySimple,
+          status: activeOrderRaw.status,
+          customerName: activeOrderRaw.customerName || null,
+          address: activeOrderRaw.address || null,
+        }
+      : null;
+
+    return res.json({ todayEarnings, todayDeliveries, monthEarnings, monthDeliveries, checkedIn, activeOrder });
+  } catch (e) {
+    console.error('me/daily-stats error:', e);
+    return res.status(500).json({ message: 'Erro ao buscar estatísticas diárias' });
+  }
+});
+
 // GET /riders/map/positions — ADMIN only
 // Shows riders who checked in today. If ?shiftOnly=true, filters by currently active shift.
 ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {

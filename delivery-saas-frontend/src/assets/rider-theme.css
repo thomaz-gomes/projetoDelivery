@@ -1,0 +1,145 @@
+/* ── Rider App Theme ── */
+.rider-app {
+  --rider-primary: #198754;
+  --rider-primary-dark: #157347;
+  --rider-primary-light: #1ea362;
+  --rider-accent: #FF9307;
+  --rider-bg: #f0f2f5;
+  --rider-card: #ffffff;
+  --rider-card-border: rgba(0,0,0,0.06);
+  --rider-text: #1a1a1a;
+  --rider-text-secondary: #6c757d;
+  --rider-text-muted: #adb5bd;
+  --rider-font-base: 0.9375rem;
+  --rider-font-sm: 0.8125rem;
+  --rider-font-xs: 0.75rem;
+  --rider-font-lg: 1.125rem;
+  --rider-radius: 16px;
+  --rider-radius-sm: 10px;
+  --rider-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --rider-shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  --rider-header-height: 56px;
+  --rider-nav-height: 60px;
+  --rider-safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  font-size: var(--rider-font-base);
+  color: var(--rider-text);
+  background: var(--rider-bg);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Dark mode - auto-detect */
+@media (prefers-color-scheme: dark) {
+  .rider-app.auto-dark {
+    --rider-bg: #121212;
+    --rider-card: #1e1e1e;
+    --rider-card-border: rgba(255,255,255,0.08);
+    --rider-text: #e0e0e0;
+    --rider-text-secondary: #9e9e9e;
+    --rider-text-muted: #666;
+    --rider-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    --rider-shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+  }
+}
+
+/* Manual dark override */
+.rider-app.dark {
+  --rider-bg: #121212;
+  --rider-card: #1e1e1e;
+  --rider-card-border: rgba(255,255,255,0.08);
+  --rider-text: #e0e0e0;
+  --rider-text-secondary: #9e9e9e;
+  --rider-text-muted: #666;
+  --rider-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  --rider-shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+/* ── Base resets for rider area ── */
+.rider-app .card {
+  background: var(--rider-card);
+  border: 1px solid var(--rider-card-border);
+  border-radius: var(--rider-radius);
+  box-shadow: var(--rider-shadow);
+}
+
+.rider-app .btn {
+  border-radius: var(--rider-radius-sm);
+  font-weight: 600;
+  min-height: 44px;
+  font-size: var(--rider-font-base);
+}
+
+.rider-app .btn-lg {
+  min-height: 52px;
+  font-size: var(--rider-font-lg);
+  border-radius: var(--rider-radius);
+}
+
+.rider-app .text-muted {
+  color: var(--rider-text-secondary) !important;
+}
+
+.rider-app .small, .rider-app small {
+  font-size: var(--rider-font-sm);
+}
+
+/* ── Rider-specific utilities ── */
+.rider-app .rider-page {
+  padding-top: calc(var(--rider-header-height) + 12px);
+  padding-bottom: calc(var(--rider-nav-height) + var(--rider-safe-bottom) + 16px);
+  padding-left: 16px;
+  padding-right: 16px;
+  max-width: 540px;
+  margin: 0 auto;
+}
+
+/* Large touch targets for on-the-go use */
+.rider-app .touch-target {
+  min-height: 48px;
+  min-width: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Status dot (GPS, connection) */
+.rider-app .status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.rider-app .status-dot.ok { background: #4caf50; }
+.rider-app .status-dot.warning { background: #ff9800; }
+.rider-app .status-dot.error { background: #f44336; }
+.rider-app .status-dot.pulse {
+  animation: rider-pulse 1.5s ease-in-out infinite;
+}
+@keyframes rider-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+/* Skeleton loading animation */
+.rider-app .skeleton {
+  background: linear-gradient(90deg, var(--rider-card) 25%, #e8e8e8 50%, var(--rider-card) 75%);
+  background-size: 200% 100%;
+  animation: rider-shimmer 1.5s infinite;
+  border-radius: var(--rider-radius-sm);
+}
+.rider-app.dark .skeleton,
+.rider-app.auto-dark .skeleton {
+  background: linear-gradient(90deg, var(--rider-card) 25%, #2a2a2a 50%, var(--rider-card) 75%);
+  background-size: 200% 100%;
+}
+@keyframes rider-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Haptic press effect */
+.rider-app .press-effect:active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}

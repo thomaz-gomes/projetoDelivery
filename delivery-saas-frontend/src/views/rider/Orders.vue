@@ -2,7 +2,9 @@
 import { ref, onMounted } from 'vue';
 import api from '../../api';
 import RiderOrders from '../RiderOrders.vue';
+import RiderHeader from '../../components/rider/RiderHeader.vue';
 import MobileBottomNav from '../../components/MobileBottomNav.vue';
+import SwipeableViews from '../../components/rider/SwipeableViews.vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -25,30 +27,35 @@ onMounted(verifyCheckin);
 <template>
   <MobileBottomNav />
 
-  <!-- Loading -->
-  <div v-if="checkedIn === null" class="text-center py-5">
-    <div class="spinner-border text-primary" role="status"></div>
-  </div>
+  <!-- RiderHeader shown for loading / no-checkin states (RiderOrders has its own) -->
+  <RiderHeader v-if="checkedIn !== true" />
 
-  <!-- No check-in alert -->
-  <div v-else-if="!checkedIn" class="checkin-alert-wrapper">
-    <div class="checkin-alert mx-auto px-3 pt-5 pb-5 text-center">
-      <div class="alert-icon mb-3">
-        <i class="bi bi-exclamation-triangle-fill"></i>
-      </div>
-      <h5 class="fw-bold mb-2">Check-in necessário</h5>
-      <p class="text-muted mb-4">
-        Você precisa fazer o check-in uma vez ao dia para visualizar seus pedidos.
-        Registre sua presença no turno antes de começar as entregas.
-      </p>
-      <button class="btn btn-success btn-lg px-4" @click="router.push('/rider/checkin')">
-        <i class="bi bi-geo-alt-fill me-2"></i>Fazer Check-in
-      </button>
+  <SwipeableViews>
+    <!-- Loading -->
+    <div v-if="checkedIn === null" class="text-center" style="padding-top: calc(var(--rider-header-height, 56px) + 40px)">
+      <div class="spinner-border text-primary" role="status"></div>
     </div>
-  </div>
 
-  <!-- Orders (only if checked in) -->
-  <RiderOrders v-else />
+    <!-- No check-in alert -->
+    <div v-else-if="!checkedIn" class="checkin-alert-wrapper" style="padding-top: var(--rider-header-height, 56px)">
+      <div class="checkin-alert mx-auto px-3 pt-5 pb-5 text-center">
+        <div class="alert-icon mb-3">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+        </div>
+        <h5 class="fw-bold mb-2">Check-in necessário</h5>
+        <p class="text-muted mb-4">
+          Você precisa fazer o check-in uma vez ao dia para visualizar seus pedidos.
+          Registre sua presença no turno antes de começar as entregas.
+        </p>
+        <button class="btn btn-success btn-lg px-4" @click="router.push('/rider/checkin')">
+          <i class="bi bi-geo-alt-fill me-2"></i>Fazer Check-in
+        </button>
+      </div>
+    </div>
+
+    <!-- Orders (only if checked in) -->
+    <RiderOrders v-else />
+  </SwipeableViews>
 </template>
 
 <style scoped>

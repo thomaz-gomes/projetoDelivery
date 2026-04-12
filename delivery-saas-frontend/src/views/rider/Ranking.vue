@@ -1,7 +1,9 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import api from '../../api';
+import RiderHeader from '../../components/rider/RiderHeader.vue';
 import MobileBottomNav from '../../components/MobileBottomNav.vue';
+import SwipeableViews from '../../components/rider/SwipeableViews.vue';
 
 const ranking = ref([]);
 const myRiderId = ref(null);
@@ -49,7 +51,9 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="p-3 rider-ranking">
+  <RiderHeader />
+  <SwipeableViews>
+  <div class="rider-ranking" style="padding: calc(var(--rider-header-height, 56px) + 12px) 12px 12px">
     <h5 class="mb-3"><i class="bi-trophy me-2"></i>Ranking de Entregadores</h5>
 
     <!-- Period filter -->
@@ -170,9 +174,10 @@ onMounted(load);
       </div>
     </template>
 
-    <div style="height:84px"></div>
-    <MobileBottomNav />
+    <div class="mobile-nav-spacer d-lg-none"></div>
   </div>
+  </SwipeableViews>
+  <MobileBottomNav />
 </template>
 
 <style scoped>

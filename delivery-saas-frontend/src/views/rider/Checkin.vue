@@ -1,7 +1,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import api from '../../api';
+import RiderHeader from '../../components/rider/RiderHeader.vue';
 import MobileBottomNav from '../../components/MobileBottomNav.vue';
+import SwipeableViews from '../../components/rider/SwipeableViews.vue';
 
 const currentTime = ref('');
 const shifts = ref([]);
@@ -92,7 +94,9 @@ onUnmounted(() => {
 
 <template>
   <div class="checkin-page">
-    <div class="checkin-container mx-auto px-3 pt-4 pb-5">
+    <RiderHeader />
+    <SwipeableViews>
+    <div class="checkin-container mx-auto px-3 pb-5" style="padding-top: calc(var(--rider-header-height, 56px) + 12px)">
       <!-- Clock hero -->
       <div class="text-center mb-4">
         <div class="checkin-clock">{{ currentTime }}</div>
@@ -149,7 +153,8 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div style="height: 80px"></div>
+    </SwipeableViews>
+    <div class="mobile-nav-spacer d-lg-none"></div>
     <MobileBottomNav />
   </div>
 </template>

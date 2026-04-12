@@ -1,69 +1,184 @@
 <script setup>
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import api from '../../api';
+import RiderHeader from '../../components/rider/RiderHeader.vue';
 import MobileBottomNav from '../../components/MobileBottomNav.vue';
+import SwipeableViews from '../../components/rider/SwipeableViews.vue';
 
 const router = useRouter();
+const loading = ref(true);
+const stats = ref({ todayEarnings: 0, todayDeliveries: 0, monthEarnings: 0, monthDeliveries: 0, checkedIn: false, activeOrder: null });
+
+function formatMoney(v) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0)); }
+
+async function load() {
+  loading.value = true;
+  try {
+    const { data } = await api.get('/riders/me/daily-stats');
+    stats.value = data;
+  } catch (e) { console.warn('daily-stats failed', e); }
+  finally { loading.value = false; }
+}
+
 function go(path) { router.push(path); }
+
+onMounted(load);
 </script>
 
 <template>
-  <div class="rider-dashboard mx-auto px-3 pt-4 pb-5">
-    <h5 class="mb-3 fw-bold">Meu Painel</h5>
-
-    <div class="d-grid gap-2">
-      <div class="card nav-card" @click="go('/rider/orders')" role="button">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="nav-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-list-task"></i></div>
-          <div class="flex-grow-1">
-            <div class="fw-semibold">Meus Pedidos</div>
-            <div class="small text-muted">Acompanhe e gerencie suas entregas</div>
-          </div>
-          <i class="bi bi-chevron-right text-muted"></i>
-        </div>
+  <RiderHeader />
+  <SwipeableViews>
+  <div class="rider-dashboard rider-page">
+    <!-- Hero: today's earnings -->
+    <div class="hero-card mb-3">
+      <div class="hero-label">Ganhos hoje</div>
+      <div class="hero-value" v-if="!loading">{{ formatMoney(stats.todayEarnings) }}</div>
+      <div class="hero-value" v-else>
+        <span class="skeleton" style="width:140px;height:36px;display:inline-block"></span>
       </div>
-
-      <div class="card nav-card" @click="go('/rider/checkin')" role="button">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="nav-icon bg-success bg-opacity-10 text-success"><i class="bi bi-geo-alt-fill"></i></div>
-          <div class="flex-grow-1">
-            <div class="fw-semibold">Check-in</div>
-            <div class="small text-muted">Registre sua presença no turno</div>
-          </div>
-          <i class="bi bi-chevron-right text-muted"></i>
-        </div>
-      </div>
-
-      <div class="card nav-card" @click="go('/rider/ranking')" role="button">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="nav-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-trophy-fill"></i></div>
-          <div class="flex-grow-1">
-            <div class="fw-semibold">Ranking</div>
-            <div class="small text-muted">Veja sua posição entre os entregadores</div>
-          </div>
-          <i class="bi bi-chevron-right text-muted"></i>
-        </div>
-      </div>
-
-      <div class="card nav-card" @click="go('/rider/account')" role="button">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="nav-icon bg-info bg-opacity-10 text-info"><i class="bi bi-wallet2"></i></div>
-          <div class="flex-grow-1">
-            <div class="fw-semibold">Meu Extrato</div>
-            <div class="small text-muted">Visualize suas transações e saldo</div>
-          </div>
-          <i class="bi bi-chevron-right text-muted"></i>
-        </div>
+      <div class="hero-sub">
+        <span><i class="bi bi-bicycle me-1"></i>{{ loading ? '—' : stats.todayDeliveries }} entregas</span>
+        <span v-if="stats.checkedIn" class="badge-checkin"><i class="bi bi-check-circle-fill me-1"></i>Check-in OK</span>
+        <span v-else class="badge-no-checkin" @click="go('/rider/checkin')"><i class="bi bi-exclamation-circle me-1"></i>Sem check-in</span>
       </div>
     </div>
 
-    <div style="height: 80px"></div>
-    <MobileBottomNav />
+    <!-- Active order card -->
+    <div v-if="stats.activeOrder" class="active-order-card mb-3 press-effect" @click="go('/rider/orders')">
+      <div class="d-flex align-items-center gap-2">
+        <div class="active-order-pulse"></div>
+        <div class="flex-grow-1">
+          <div class="fw-bold">#{{ stats.activeOrder.displayId || stats.activeOrder.displaySimple || '—' }}</div>
+          <div class="active-order-addr">{{ stats.activeOrder.address || stats.activeOrder.customerName || 'Pedido ativo' }}</div>
+        </div>
+        <i class="bi bi-chevron-right"></i>
+      </div>
+    </div>
+
+    <!-- Month summary -->
+    <div class="month-row mb-3">
+      <div class="month-stat">
+        <div class="month-stat__value">{{ loading ? '—' : formatMoney(stats.monthEarnings) }}</div>
+        <div class="month-stat__label">Este mês</div>
+      </div>
+      <div class="month-stat">
+        <div class="month-stat__value">{{ loading ? '—' : stats.monthDeliveries }}</div>
+        <div class="month-stat__label">Entregas no mês</div>
+      </div>
+    </div>
+
+    <!-- Quick nav -->
+    <div class="quick-nav">
+      <div class="quick-nav__item press-effect" @click="go('/rider/orders')">
+        <div class="quick-nav__icon" style="background:rgba(25,135,84,0.1);color:#198754"><i class="bi bi-list-check"></i></div>
+        <span>Pedidos</span>
+      </div>
+      <div class="quick-nav__item press-effect" @click="go('/rider/checkin')">
+        <div class="quick-nav__icon" style="background:rgba(13,110,253,0.1);color:#0d6efd"><i class="bi bi-geo-alt-fill"></i></div>
+        <span>Check-in</span>
+      </div>
+      <div class="quick-nav__item press-effect" @click="go('/rider/ranking')">
+        <div class="quick-nav__icon" style="background:rgba(255,193,7,0.1);color:#ffc107"><i class="bi bi-trophy-fill"></i></div>
+        <span>Ranking</span>
+      </div>
+      <div class="quick-nav__item press-effect" @click="go('/rider/account')">
+        <div class="quick-nav__icon" style="background:rgba(13,202,240,0.1);color:#0dcaf0"><i class="bi bi-wallet-fill"></i></div>
+        <span>Extrato</span>
+      </div>
+    </div>
+
+    <div class="mobile-nav-spacer d-lg-none"></div>
   </div>
+  </SwipeableViews>
+  <MobileBottomNav />
 </template>
 
 <style scoped>
 .rider-dashboard { max-width: 500px; }
-.nav-card { cursor: pointer; border-radius: 12px; border: 1px solid rgba(0,0,0,0.08); transition: transform 0.15s, box-shadow 0.15s; }
-.nav-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
-.nav-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; }
+
+.hero-card {
+  background: var(--rider-primary, #198754);
+  color: #fff;
+  border-radius: var(--rider-radius, 16px);
+  padding: 24px 20px;
+  text-align: center;
+}
+.hero-label { font-size: 0.85rem; opacity: 0.85; margin-bottom: 4px; }
+.hero-value { font-size: 2.25rem; font-weight: 800; line-height: 1.1; margin-bottom: 8px; }
+.hero-sub { display: flex; justify-content: center; gap: 16px; font-size: 0.8rem; opacity: 0.9; }
+.badge-checkin { color: #a8e866; }
+.badge-no-checkin { color: #ffc107; cursor: pointer; text-decoration: underline; }
+
+.active-order-card {
+  background: var(--rider-card, #fff);
+  border: 2px solid var(--rider-primary, #198754);
+  border-radius: var(--rider-radius, 16px);
+  padding: 16px;
+  cursor: pointer;
+}
+.active-order-pulse {
+  width: 12px;
+  height: 12px;
+  background: #198754;
+  border-radius: 50%;
+  animation: ao-pulse 1.5s infinite;
+  flex-shrink: 0;
+}
+@keyframes ao-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.5; }
+}
+.active-order-addr {
+  font-size: 0.8rem;
+  color: var(--rider-text-secondary, #6c757d);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+
+.month-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.month-stat {
+  background: var(--rider-card, #fff);
+  border-radius: var(--rider-radius, 16px);
+  padding: 16px;
+  text-align: center;
+  box-shadow: var(--rider-shadow, 0 2px 8px rgba(0,0,0,0.08));
+}
+.month-stat__value { font-size: 1.25rem; font-weight: 700; color: var(--rider-text, #1a1a1a); }
+.month-stat__label { font-size: 0.75rem; color: var(--rider-text-secondary, #6c757d); margin-top: 2px; }
+
+.quick-nav {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.quick-nav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 4px;
+  background: var(--rider-card, #fff);
+  border-radius: var(--rider-radius, 16px);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--rider-text, #1a1a1a);
+  box-shadow: var(--rider-shadow, 0 2px 8px rgba(0,0,0,0.08));
+}
+.quick-nav__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
 </style>

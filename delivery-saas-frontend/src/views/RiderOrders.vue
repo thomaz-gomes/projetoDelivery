@@ -1,37 +1,33 @@
 <template>
-  <div class="container py-3">
+  <ActiveDeliveryFocus
+    v-if="activeDelivery && showFocusMode"
+    :order="activeDelivery"
+    :gps-status="gpsStatus"
+    :arrival-notified="!!arrivalNotified[activeDelivery.id]"
+    :arrival-sending="!!arrivalSending[activeDelivery.id]"
+    @dismiss="showFocusMode = false"
+    @mark-delivered="markDelivered(activeDelivery)"
+    @notify-arrival="notifyArrival(activeDelivery)"
+  />
+  <div class="container rider-orders-page" style="padding-top: calc(var(--rider-header-height, 56px) + 12px)">
+    <RiderHeader :gps-status="gpsStatus" />
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4>Meus Pedidos</h4>
       <div class="d-flex align-items-center gap-2">
-        <span v-if="!trackingEnabled" class="badge bg-secondary px-2 py-1">
-          📡 Desligado
-        </span>
-        <span v-else-if="gpsStatus === 'ok'" class="badge bg-success px-2 py-1" :title="gpsLastUpdate ? 'Última: ' + gpsLastUpdate.toLocaleTimeString('pt-BR') : ''">
-          📡 GPS OK
-        </span>
-        <span v-else-if="gpsStatus === 'sending'" class="badge bg-info px-2 py-1">
-          📡 Enviando...
-        </span>
-        <span v-else-if="gpsStatus === 'stale'" class="badge bg-warning text-dark px-2 py-1">
-          📡 Reconectando...
-        </span>
-        <span v-else-if="gpsStatus === 'error'" class="badge bg-danger px-2 py-1">
-          📡 Erro GPS
-        </span>
-        <span v-else-if="activeOrderForTracking" class="badge bg-success px-2 py-1">
-          📡 Iniciando...
-        </span>
         <button class="btn btn-outline-secondary btn-sm" @click="load">Recarregar</button>
       </div>
     </div>
 
-    <div v-if="loading" class="text-center">Carregando...</div>
+    <PullToRefresh :loading="loading" @refresh="load">
+    <div v-if="loading" class="d-grid gap-3">
+      <SkeletonCard v-for="n in 3" :key="n" />
+    </div>
 
     <div v-else>
       <div v-if="orders.length === 0" class="text-center text-muted">Nenhum pedido disponível.</div>
       <transition-group name="fade-list" tag="div" class="d-grid gap-3">
         <div v-for="o in orders" :key="o.id" class="card">
-          <div class="card-header">
+          <div class="card-header" @click="openOrderDetail(o)" style="cursor:pointer">
             <div class="d-flex justify-content-between align-items-center mb-1">
               <span class="fw-bold">#{{ o.displaySimple || o.displayId }}</span>
               <span :class="statusBadgeClass(o.status)" class="badge">{{ statusLabel(o.status) }}</span>
@@ -52,6 +48,13 @@
             </div>
           </div>
           <div class="card-body">
+            <MiniMap
+              v-if="getOrderCoords(o)"
+              :lat="getOrderCoords(o).lat"
+              :lng="getOrderCoords(o).lng"
+              :label="o.customerName || ''"
+              class="mb-2"
+            />
             <div class="mb-2">
               <strong>Endereço:</strong> {{ formatAddress(o) }}
               <a v-if="getGoogleMapsLink(o) !== '#'" :href="getGoogleMapsLink(o)" target="_blank" class="btn btn-sm btn-outline-info py-0 px-1 ms-1" title="Ver no Google Maps">
@@ -114,6 +117,7 @@
         </div>
   </transition-group>
     </div>
+    </PullToRefresh>
 
     <!-- QR Scanner Modal -->
     <div v-if="scanning" class="scanner-overlay">
@@ -128,11 +132,48 @@
         </div>
       </div>
     </div>
+
+    <!-- Order Detail Bottom Sheet -->
+    <BottomSheet :visible="showOrderSheet" :title="'Pedido #' + (selectedOrder?.displayId || selectedOrder?.displaySimple || '')" @close="closeOrderSheet">
+      <template v-if="selectedOrder">
+        <div class="mb-3">
+          <div class="fw-semibold mb-1">Endere&ccedil;o</div>
+          <div class="text-muted">{{ formatAddress(selectedOrder) }}</div>
+        </div>
+        <div class="mb-3">
+          <div class="fw-semibold mb-1">Pagamento</div>
+          <div class="text-muted">{{ formatPayment(selectedOrder) }}</div>
+        </div>
+        <div class="mb-3">
+          <div class="fw-semibold mb-1">Itens</div>
+          <ul class="list-unstyled mb-0">
+            <li v-for="it in normalizeOrderItems(selectedOrder)" :key="it.id || it.name" class="d-flex justify-content-between py-1">
+              <span>{{ (it.quantity || 1) }}x {{ it.name }}</span>
+              <span class="text-muted">{{ formatMoney(it.unitPrice || it.price || 0) }}</span>
+            </li>
+          </ul>
+        </div>
+        <div class="d-flex gap-2 mt-3">
+          <a v-if="selectedOrder.customerPhone" :href="'tel:' + selectedOrder.customerPhone" class="btn btn-outline-primary flex-fill">
+            <i class="bi bi-telephone-fill me-1"></i>Ligar
+          </a>
+          <a v-if="selectedOrder.customerPhone" :href="getWhatsAppLink(selectedOrder.customerPhone)" target="_blank" class="btn btn-outline-success flex-fill">
+            <i class="bi bi-whatsapp me-1"></i>WhatsApp
+          </a>
+        </div>
+      </template>
+    </BottomSheet>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import RiderHeader from '../components/rider/RiderHeader.vue'
+import ActiveDeliveryFocus from '../components/rider/ActiveDeliveryFocus.vue'
+import BottomSheet from '../components/rider/BottomSheet.vue'
+import PullToRefresh from '../components/rider/PullToRefresh.vue'
+import SkeletonCard from '../components/rider/SkeletonCard.vue'
+import MiniMap from '../components/rider/MiniMap.vue'
 import api from '../api'
 import { formatDateTime } from '../utils/dates'
 import { io } from 'socket.io-client'
@@ -144,6 +185,16 @@ import { isNativeApp, startNativeTracking, stopNativeTracking } from '../utils/n
 const orders = ref([])
 const loading = ref(false)
 let socket = null
+
+// Active delivery focus mode
+const showFocusMode = ref(true)
+const activeDelivery = computed(() => orders.value.find(o => o.status === 'SAIU_PARA_ENTREGA'))
+
+// Bottom sheet state
+const selectedOrder = ref(null)
+const showOrderSheet = ref(false)
+function openOrderDetail(o) { selectedOrder.value = o; showOrderSheet.value = true; }
+function closeOrderSheet() { showOrderSheet.value = false; }
 
 // Arrival notification state (one-shot per order)
 const arrivalNotified = ref({})
@@ -167,6 +218,12 @@ const scanning = ref(false)
 const videoEl = ref(null)
 let stream = null
 let qrScanner = null
+
+function getOrderCoords(o) {
+  const a = o?.payload?.delivery?.deliveryAddress || o?.address || o?.deliveryAddress;
+  if (a && a.latitude && a.longitude) return { lat: Number(a.latitude), lng: Number(a.longitude) };
+  return null;
+}
 
 function stopScanner() {
   scanning.value = false;
@@ -713,6 +770,8 @@ async function load(){
     } catch (e) {
       orders.value = (list || []).filter(d => d && d.status !== 'CONCLUIDO');
     }
+    // Show focus mode when a new active delivery appears
+    if (orders.value.some(o => o.status === 'SAIU_PARA_ENTREGA')) showFocusMode.value = true;
     syncTrackingWithOrders(orders.value)
   }catch(e){ console.error(e); alert(e?.response?.data?.message || 'Erro') }
   finally{ loading.value = false }
