@@ -577,4 +577,249 @@ router.post('/generate-description', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+// POST /ai-studio/generate-pack — gera N fotos de redes sociais a partir de uma foto real do produto
+// Pipeline: Vision (analisa) → Gemini Flash (cenas) → Imagen (N imagens paralelas)
+// Custo: quantity * 10 créditos
+router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const userId = req.user.id
+  const { photoBase64, quantity = 3, aspectRatio = '1:1' } = req.body || {}
+
+  // ── Validação ──
+  if (!photoBase64 || typeof photoBase64 !== 'string') {
+    return res.status(400).json({ message: 'photoBase64 é obrigatório' })
+  }
+  const qty = Math.max(1, Math.min(5, Math.floor(Number(quantity) || 3)))
+  const VALID_RATIOS = ['1:1', '16:9', '9:16']
+  const safeRatio = VALID_RATIOS.includes(aspectRatio) ? aspectRatio : '1:1'
+
+  // Decodifica data URI
+  const dataUriMatch = photoBase64.match(/^data:(image\/\w+);base64,(.+)$/)
+  if (!dataUriMatch) {
+    return res.status(400).json({ message: 'photoBase64 deve ser um data URI válido (data:image/...;base64,...)' })
+  }
+  const photoMime = dataUriMatch[1]
+  const photoB64 = dataUriMatch[2]
+
+  const VALID_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  const safeMime = VALID_MIMES.includes(photoMime) ? photoMime : 'image/jpeg'
+
+  const totalCredits = qty * 10
+
+  try {
+    // 1. Verifica créditos (quantity * 10)
+    const check = await checkCredits(companyId, 'AI_STUDIO_ENHANCE', totalCredits)
+    if (!check.ok) {
+      return res.status(402).json({
+        message: `Créditos de IA insuficientes. Necessário: ${check.totalCost}, Disponível: ${check.balance}.`,
+        balance: check.balance,
+        required: check.totalCost,
+      })
+    }
+
+    const apiKey = await getGoogleAIKey()
+
+    // 2. Gemini Vision — analisa a foto e retorna JSON com productDescription, cuisineType, productName
+    console.log('[AI Studio] generate-pack: analyzing product photo via Vision...')
+    const visionRes = await fetch(
+      `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inlineData: { mimeType: safeMime, data: photoB64 } },
+              {
+                text:
+                  `You are a food photography and marketing expert. Analyze this food photo and return a JSON object with exactly these fields:\n\n` +
+                  `1. "productDescription": An ultra-detailed description of the food in English. Describe every visible ingredient, texture, color, ` +
+                  `cooking method, container/plate, garnishes, sauces — everything needed to reproduce this exact dish in a photo. ` +
+                  `Be extremely specific (e.g. "thick beef patty with caramelized edges and melted cheddar" not just "burger").\n\n` +
+                  `2. "cuisineType": The cuisine segment/type in Portuguese (e.g. "hamburgueria artesanal", "pizzaria napoletana", ` +
+                  `"açaiteria", "restaurante japonês", "padaria artesanal", "churrascaria", "lanchonete", "doceria gourmet"). ` +
+                  `Be specific to the actual food shown.\n\n` +
+                  `3. "productName": A short product name in Portuguese (e.g. "Smash Burger Duplo", "Açaí Tradicional", "Pizza Margherita"). ` +
+                  `Maximum 5 words.\n\n` +
+                  `CRITICAL: Only describe what you ACTUALLY SEE. Do NOT invent ingredients not visible in the photo.\n\n` +
+                  `Output ONLY valid JSON, no markdown, no code fences, no extra text.`,
+              },
+            ],
+          }],
+          generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
+          thinkingConfig: { thinkingBudget: 0 },
+        }),
+        signal: AbortSignal.timeout(30_000),
+      }
+    )
+
+    if (!visionRes.ok) {
+      const errText = await visionRes.text().catch(() => '')
+      throw new Error(`Vision analysis error ${visionRes.status}: ${errText.slice(0, 300)}`)
+    }
+
+    const visionData = await visionRes.json()
+    const visionText = visionData.candidates?.[0]?.content?.parts?.find(p => p.text)?.text?.trim() || ''
+    if (!visionText) throw new Error('Gemini Vision não retornou análise do produto')
+
+    let analysis
+    try {
+      // Limpa possíveis code fences do JSON
+      const cleanJson = visionText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+      analysis = JSON.parse(cleanJson)
+    } catch {
+      throw new Error(`Falha ao parsear JSON da análise: ${visionText.slice(0, 200)}`)
+    }
+
+    const { productDescription, cuisineType, productName } = analysis
+    if (!productDescription || !cuisineType) {
+      throw new Error('Análise incompleta: productDescription e cuisineType são obrigatórios')
+    }
+
+    console.log('[AI Studio] generate-pack: product="%s", cuisine="%s"', productName, cuisineType)
+
+    // 3. Gemini Flash text — gera N descrições de cena coerentes com o segmento
+    console.log('[AI Studio] generate-pack: generating %d scene descriptions...', qty)
+    const sceneRes = await fetch(
+      `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text:
+                `You are a creative director for food photography social media campaigns.\n\n` +
+                `PRODUCT: ${productDescription}\n` +
+                `CUISINE SEGMENT: ${cuisineType}\n\n` +
+                `Generate exactly ${qty} DIFFERENT scene descriptions for professional food photography backgrounds. ` +
+                `Each scene describes ONLY the background, lighting, surface, and props — NOT the food itself.\n\n` +
+                `CRITICAL RULES:\n` +
+                `- Each scene MUST be coherent with the "${cuisineType}" segment\n` +
+                `- NEVER use scenes that contradict the cuisine (e.g. no breakfast table for hamburgueria, no formal dinner setting for açaiteria, ` +
+                `no Japanese zen garden for pizzaria)\n` +
+                `- Each scene must be visually distinct from the others (different surfaces, lighting, color palettes)\n` +
+                `- Describe: surface/table material, lighting type and direction, color palette, 1-2 props maximum, mood/atmosphere\n` +
+                `- Keep each description to 2-3 sentences in English\n` +
+                `- Think about what would work on Instagram/social media for this specific cuisine type\n\n` +
+                `Output a JSON array of ${qty} strings. No markdown, no code fences, no extra text.`,
+            }],
+          }],
+          generationConfig: { maxOutputTokens: 1000, temperature: 0.8 },
+          thinkingConfig: { thinkingBudget: 0 },
+        }),
+        signal: AbortSignal.timeout(30_000),
+      }
+    )
+
+    if (!sceneRes.ok) {
+      const errText = await sceneRes.text().catch(() => '')
+      throw new Error(`Scene generation error ${sceneRes.status}: ${errText.slice(0, 300)}`)
+    }
+
+    const sceneData = await sceneRes.json()
+    const sceneText = sceneData.candidates?.[0]?.content?.parts?.find(p => p.text)?.text?.trim() || ''
+    if (!sceneText) throw new Error('Gemini não retornou descrições de cena')
+
+    let scenes
+    try {
+      const cleanJson = sceneText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+      scenes = JSON.parse(cleanJson)
+    } catch {
+      throw new Error(`Falha ao parsear JSON das cenas: ${sceneText.slice(0, 200)}`)
+    }
+
+    if (!Array.isArray(scenes) || scenes.length === 0) {
+      throw new Error('Nenhuma descrição de cena gerada')
+    }
+    // Garante que temos exatamente qty cenas (trunca ou repete a última se necessário)
+    while (scenes.length < qty) scenes.push(scenes[scenes.length - 1])
+    if (scenes.length > qty) scenes.length = qty
+
+    console.log('[AI Studio] generate-pack: generating %d images in parallel...', qty)
+
+    // 4. Imagen — N chamadas paralelas
+    const dir = path.join(process.cwd(), 'public', 'uploads', 'media', companyId)
+    await fs.promises.mkdir(dir, { recursive: true })
+
+    const imagePromises = scenes.map(async (scene, index) => {
+      const imagenPrompt =
+        `FOOD (reproduce this exact dish with absolute fidelity, do not change any ingredient): ${productDescription}. ` +
+        `\nSCENE (background, lighting, and props ONLY — do NOT alter the food): ${scene}. ` +
+        `\nIMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.\n` +
+        `\nSTYLE: realistic DSLR photograph shot with Canon EOS R5 100mm f/2.8 macro lens, ` +
+        `natural shadows and highlights, shallow depth of field, ` +
+        `emphasis on food textures, high-end food photography for social media, ` +
+        `real photograph, not digital art, not CGI, not illustration, no watermarks, no text`
+
+      const imageGenRes = await fetch(
+        `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: imagenPrompt }] }],
+            generationConfig: {
+              responseModalities: ['IMAGE'],
+              imageConfig: { aspectRatio: safeRatio },
+            },
+          }),
+          signal: AbortSignal.timeout(120_000),
+        }
+      )
+
+      if (!imageGenRes.ok) {
+        const errText = await imageGenRes.text().catch(() => '')
+        throw new Error(`Imagen error (image ${index + 1}) ${imageGenRes.status}: ${errText.slice(0, 300)}`)
+      }
+
+      const imageGenData = await imageGenRes.json()
+      const imagePart = imageGenData.candidates?.[0]?.content?.parts?.find(p => p.inlineData)
+      const b64 = imagePart?.inlineData?.data
+      if (!b64) throw new Error(`Imagen não retornou imagem (image ${index + 1})`)
+
+      const generatedBuffer = Buffer.from(b64, 'base64')
+      const generatedMime = imagePart?.inlineData?.mimeType || 'image/png'
+      const generatedExt  = generatedMime === 'image/png' ? 'png' : 'jpg'
+
+      const newId = randomUUID()
+      const safeName = `${newId}.${generatedExt}`
+      await fs.promises.writeFile(path.join(dir, safeName), generatedBuffer)
+      const newUrl = `/public/uploads/media/${companyId}/${safeName}`
+
+      const slug = (productName || 'pack').slice(0, 30).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase()
+      const filename = `ai_pack_${slug}_${index + 1}.${generatedExt}`
+
+      const mediaRecord = await prisma.media.create({
+        data: { id: newId, companyId, filename, mimeType: generatedMime, size: generatedBuffer.length, url: newUrl, aiEnhanced: true },
+      })
+
+      return mediaRecord
+    })
+
+    const mediaResults = await Promise.all(imagePromises)
+
+    // 5. Debita créditos em uma única transação
+    await debitCredits(companyId, 'AI_STUDIO_ENHANCE', totalCredits, {
+      type: 'generate_pack',
+      quantity: qty,
+      productName: (productName || '').slice(0, 100),
+      cuisineType: (cuisineType || '').slice(0, 100),
+      aspectRatio: safeRatio,
+      mediaIds: mediaResults.map(m => m.id),
+    }, userId)
+
+    console.log('[AI Studio] generate-pack: completed %d images for company %s', qty, companyId)
+
+    res.json({
+      media: mediaResults,
+      analysis: { productName: productName || '', cuisineType: cuisineType || '' },
+    })
+  } catch (e) {
+    console.error('[AI Studio] Erro ao gerar pack de imagens:', e?.message || e)
+    const status = e.statusCode || 500
+    res.status(status).json({ message: e?.message || 'Erro interno ao gerar pack de imagens com IA' })
+  }
+})
+
 export default router
