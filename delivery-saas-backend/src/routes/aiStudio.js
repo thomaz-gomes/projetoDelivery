@@ -706,7 +706,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
                 `Output a JSON array of ${qty} strings. No markdown, no code fences, no extra text.`,
             }],
           }],
-          generationConfig: { maxOutputTokens: 1000, temperature: 0.8 },
+          generationConfig: { maxOutputTokens: 3000, temperature: 0.8 },
         }),
         signal: AbortSignal.timeout(30_000),
       }
