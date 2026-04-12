@@ -593,6 +593,11 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
   const VALID_RATIOS = ['1:1', '16:9', '9:16']
   const safeRatio = VALID_RATIOS.includes(aspectRatio) ? aspectRatio : '1:1'
 
+  // Limite de tamanho (~5 MB decodificado ≈ ~6.7 MB em base64)
+  if (photoBase64.length > 7_500_000) {
+    return res.status(400).json({ message: 'Imagem muito grande. Máximo: 5 MB.' })
+  }
+
   // Decodifica data URI
   const dataUriMatch = photoBase64.match(/^data:(image\/\w+);base64,(.+)$/)
   if (!dataUriMatch) {
@@ -601,7 +606,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
   const photoMime = dataUriMatch[1]
   const photoB64 = dataUriMatch[2]
 
-  const VALID_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  const VALID_MIMES = ['image/jpeg', 'image/png', 'image/webp']
   const safeMime = VALID_MIMES.includes(photoMime) ? photoMime : 'image/jpeg'
 
   try {
@@ -739,6 +744,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
     // 4. Imagen — N chamadas paralelas
     const dir = path.join(process.cwd(), 'public', 'uploads', 'media', companyId)
     await fs.promises.mkdir(dir, { recursive: true })
+    const slug = (productName || 'pack').slice(0, 30).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase()
 
     const imagePromises = scenes.map(async (scene, index) => {
       const imagenPrompt =
@@ -784,8 +790,6 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
       const safeName = `${newId}.${generatedExt}`
       await fs.promises.writeFile(path.join(dir, safeName), generatedBuffer)
       const newUrl = `/public/uploads/media/${companyId}/${safeName}`
-
-      const slug = (productName || 'pack').slice(0, 30).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase()
       const filename = `ai_pack_${slug}_${index + 1}.${generatedExt}`
 
       const mediaRecord = await prisma.media.create({
@@ -795,23 +799,37 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
       return mediaRecord
     })
 
-    const mediaResults = await Promise.all(imagePromises)
+    const settled = await Promise.allSettled(imagePromises)
+    const mediaResults = settled.filter(r => r.status === 'fulfilled').map(r => r.value)
+    const failures = settled.filter(r => r.status === 'rejected')
 
-    // 5. Debita créditos em uma única transação
-    await debitCredits(companyId, 'AI_STUDIO_ENHANCE', qty, {
+    if (mediaResults.length === 0) {
+      const firstErr = failures[0]?.reason?.message || 'Todas as imagens falharam'
+      throw new Error(firstErr)
+    }
+
+    if (failures.length > 0) {
+      console.warn('[AI Studio] generate-pack: %d/%d images failed', failures.length, qty)
+    }
+
+    // 5. Debita créditos apenas pelas imagens geradas com sucesso
+    const successCount = mediaResults.length
+    await debitCredits(companyId, 'AI_STUDIO_ENHANCE', successCount, {
       type: 'generate_pack',
-      quantity: qty,
+      quantityRequested: qty,
+      quantityGenerated: successCount,
       productName: (productName || '').slice(0, 100),
       cuisineType: (cuisineType || '').slice(0, 100),
       aspectRatio: safeRatio,
       resultMediaIds: mediaResults.map(m => m.id),
     }, userId)
 
-    console.log('[AI Studio] generate-pack: completed %d images for company %s', qty, companyId)
+    console.log('[AI Studio] generate-pack: completed %d/%d images for company %s', successCount, qty, companyId)
 
     res.json({
       media: mediaResults,
       analysis: { productName: productName || '', cuisineType: cuisineType || '' },
+      partial: failures.length > 0,
     })
   } catch (e) {
     console.error('[AI Studio] Erro ao gerar pack de imagens:', e?.message || e)
