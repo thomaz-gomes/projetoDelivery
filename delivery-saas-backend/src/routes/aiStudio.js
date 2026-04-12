@@ -648,7 +648,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
               },
             ],
           }],
-          generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
+          generationConfig: { maxOutputTokens: 2000, temperature: 0.1 },
         }),
         signal: AbortSignal.timeout(30_000),
       }
