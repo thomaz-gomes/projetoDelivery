@@ -604,11 +604,9 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
   const VALID_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
   const safeMime = VALID_MIMES.includes(photoMime) ? photoMime : 'image/jpeg'
 
-  const totalCredits = qty * 10
-
   try {
-    // 1. Verifica créditos (quantity * 10)
-    const check = await checkCredits(companyId, 'AI_STUDIO_ENHANCE', totalCredits)
+    // 1. Verifica créditos (qty unidades × custo unitário definido em aiCreditManager)
+    const check = await checkCredits(companyId, 'AI_STUDIO_ENHANCE', qty)
     if (!check.ok) {
       return res.status(402).json({
         message: `Créditos de IA insuficientes. Necessário: ${check.totalCost}, Disponível: ${check.balance}.`,
@@ -800,13 +798,13 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
     const mediaResults = await Promise.all(imagePromises)
 
     // 5. Debita créditos em uma única transação
-    await debitCredits(companyId, 'AI_STUDIO_ENHANCE', totalCredits, {
+    await debitCredits(companyId, 'AI_STUDIO_ENHANCE', qty, {
       type: 'generate_pack',
       quantity: qty,
       productName: (productName || '').slice(0, 100),
       cuisineType: (cuisineType || '').slice(0, 100),
       aspectRatio: safeRatio,
-      mediaIds: mediaResults.map(m => m.id),
+      resultMediaIds: mediaResults.map(m => m.id),
     }, userId)
 
     console.log('[AI Studio] generate-pack: completed %d images for company %s', qty, companyId)
