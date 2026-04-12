@@ -335,8 +335,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
               ],
             }],
             generationConfig: { maxOutputTokens: 500, temperature: 0.1 },
-            thinkingConfig: { thinkingBudget: 0 },
-          }),
+            }),
           signal: AbortSignal.timeout(30_000),
         }
       )
@@ -650,7 +649,6 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
             ],
           }],
           generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
-          thinkingConfig: { thinkingBudget: 0 },
         }),
         signal: AbortSignal.timeout(30_000),
       }
@@ -709,7 +707,6 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
             }],
           }],
           generationConfig: { maxOutputTokens: 1000, temperature: 0.8 },
-          thinkingConfig: { thinkingBudget: 0 },
         }),
         signal: AbortSignal.timeout(30_000),
       }
