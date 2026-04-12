@@ -29,31 +29,7 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* Dark mode - auto-detect */
-@media (prefers-color-scheme: dark) {
-  .rider-app.auto-dark {
-    --rider-bg: #121212;
-    --rider-card: #1e1e1e;
-    --rider-card-border: rgba(255,255,255,0.08);
-    --rider-text: #e0e0e0;
-    --rider-text-secondary: #9e9e9e;
-    --rider-text-muted: #666;
-    --rider-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    --rider-shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
-  }
-}
-
-/* Manual dark override */
-.rider-app.dark {
-  --rider-bg: #121212;
-  --rider-card: #1e1e1e;
-  --rider-card-border: rgba(255,255,255,0.08);
-  --rider-text: #e0e0e0;
-  --rider-text-secondary: #9e9e9e;
-  --rider-text-muted: #666;
-  --rider-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  --rider-shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
-}
+/* Dark mode removed — rider app is light-only */
 
 /* ── Base resets for rider area ── */
 .rider-app .card {
@@ -128,11 +104,7 @@
   animation: rider-shimmer 1.5s infinite;
   border-radius: var(--rider-radius-sm);
 }
-.rider-app.dark .skeleton,
-.rider-app.auto-dark .skeleton {
-  background: linear-gradient(90deg, var(--rider-card) 25%, #2a2a2a 50%, var(--rider-card) 75%);
-  background-size: 200% 100%;
-}
+/* (dark skeleton removed) */
 @keyframes rider-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }

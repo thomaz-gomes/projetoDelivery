@@ -2,45 +2,41 @@
   <!-- Mobile bottom navigation (fixed) - visible on small screens only -->
   <nav v-if="showNav" class="mobile-bottom-nav d-lg-none">
     <div class="d-flex justify-content-around align-items-center">
-      <!-- Meus pedidos (principal) -->
-      <button :class="['nav-item btn btn-link', isActive('/rider/orders') ? 'active' : 'text-muted']" @click.prevent="goRiderOrders" aria-label="Meus pedidos">
+      <!-- Meus pedidos -->
+      <button :class="['nav-item', { active: isActive('/rider/orders') }]" @click.prevent="goRiderOrders" aria-label="Meus pedidos">
         <span class="nav-icon-wrap">
           <i :class="['bi', isActive('/rider/orders') ? 'bi-list-check' : 'bi-list-task', 'nav-icon']" aria-hidden="true"></i>
           <span v-if="orderCount > 0" class="nav-badge">{{ orderCount > 9 ? '9+' : orderCount }}</span>
         </span>
-        <div class="nav-label">Meus pedidos</div>
-        <span v-if="isActive('/rider/orders')" class="nav-dot"></span>
+        <div class="nav-label">Pedidos</div>
       </button>
 
       <!-- Check-in -->
-      <button :class="['nav-item btn btn-link', isActive('/rider/checkin') ? 'active' : 'text-muted']" @click.prevent="router.push('/rider/checkin')" aria-label="Check-in">
+      <button :class="['nav-item', { active: isActive('/rider/checkin') }]" @click.prevent="router.push('/rider/checkin')" aria-label="Check-in">
         <span class="nav-icon-wrap">
           <i :class="['bi', isActive('/rider/checkin') ? 'bi-geo-alt-fill' : 'bi-geo-alt', 'nav-icon']" aria-hidden="true"></i>
         </span>
         <div class="nav-label">Check-in</div>
-        <span v-if="isActive('/rider/checkin')" class="nav-dot"></span>
       </button>
 
       <!-- Ranking -->
-      <button :class="['nav-item btn btn-link', isActive('/rider/ranking') ? 'active' : 'text-muted']" @click.prevent="router.push('/rider/ranking')" aria-label="Ranking">
+      <button :class="['nav-item', { active: isActive('/rider/ranking') }]" @click.prevent="router.push('/rider/ranking')" aria-label="Ranking">
         <span class="nav-icon-wrap">
           <i :class="['bi', isActive('/rider/ranking') ? 'bi-trophy-fill' : 'bi-trophy', 'nav-icon']" aria-hidden="true"></i>
         </span>
         <div class="nav-label">Ranking</div>
-        <span v-if="isActive('/rider/ranking')" class="nav-dot"></span>
       </button>
 
       <!-- Meu Extrato -->
-      <button :class="['nav-item btn btn-link', isActive('/rider/account') ? 'active' : 'text-muted']" @click.prevent="goStatement" aria-label="Meu extrato">
+      <button :class="['nav-item', { active: isActive('/rider/account') }]" @click.prevent="goStatement" aria-label="Meu extrato">
         <span class="nav-icon-wrap">
           <i :class="['bi', isActive('/rider/account') ? 'bi-wallet-fill' : 'bi-wallet2', 'nav-icon']" aria-hidden="true"></i>
         </span>
         <div class="nav-label">Extrato</div>
-        <span v-if="isActive('/rider/account')" class="nav-dot"></span>
       </button>
 
       <!-- Sair -->
-      <button class="nav-item btn btn-link text-muted" @click.prevent="logout" aria-label="Sair">
+      <button class="nav-item" @click.prevent="logout" aria-label="Sair">
         <span class="nav-icon-wrap">
           <i class="bi bi-box-arrow-right nav-icon" aria-hidden="true"></i>
         </span>
@@ -106,35 +102,39 @@ function isActive(path){
 
 <style scoped>
 .mobile-bottom-nav {
-  --nav-height: 64px;
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 1080;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  background: rgba(255, 255, 255, 0.92);
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  padding: 0.4rem 0;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgb(248, 249, 250);
+  padding: 8px 8px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
 }
 
 .mobile-bottom-nav .nav-item {
   background: transparent;
   border: 0;
-  padding: 0.25rem 0.4rem;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 3px;
   min-height: 52px;
   justify-content: center;
-  transition: color 0.2s ease, transform 0.1s ease;
+  border-radius: 14px;
+  color: #1a1a1a;
+  transition: background 0.2s ease, transform 0.1s ease;
   position: relative;
 }
 
 .mobile-bottom-nav .nav-item:active {
   transform: scale(0.95);
+}
+
+.mobile-bottom-nav .nav-item.active {
+  background: rgb(137, 209, 54);
+  color: #000;
 }
 
 .mobile-bottom-nav .nav-icon-wrap {
@@ -146,30 +146,13 @@ function isActive(path){
 
 .mobile-bottom-nav .nav-icon {
   display: block;
-  font-size: 1.3rem;
-  transition: color 0.2s ease;
+  font-size: 1.25rem;
 }
 
 .mobile-bottom-nav .nav-label {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
+  font-weight: 500;
   line-height: 1;
-  margin-top: 2px;
-  transition: color 0.2s ease;
-}
-
-.mobile-bottom-nav .nav-item.active,
-.mobile-bottom-nav .nav-item.active .nav-label,
-.mobile-bottom-nav .nav-item.active .nav-icon {
-  color: #198754 !important;
-}
-
-.mobile-bottom-nav .nav-dot {
-  display: block;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #198754;
-  margin-top: 2px;
 }
 
 .nav-badge {
@@ -178,7 +161,7 @@ function isActive(path){
   right: -10px;
   background: #dc3545;
   color: #fff;
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   font-weight: 700;
   min-width: 16px;
   height: 16px;
