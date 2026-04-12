@@ -195,12 +195,7 @@ const wizardStep = computed(() => {
   return 1;
 });
 
-// Stores that don't yet have an integration (for "new" mode)
-const availableStores = computed(() => {
-  const usedStoreIds = new Set(integrations.value.map(i => i.storeId).filter(Boolean));
-  if (wizardMode.value === 'relink') return stores.value; // allow any store when relinking
-  return stores.value.filter(s => !usedStoreIds.has(s.id));
-});
+const availableStores = computed(() => stores.value);
 
 function showStatus(msg, type = 'info') {
   statusMsg.value = msg;
