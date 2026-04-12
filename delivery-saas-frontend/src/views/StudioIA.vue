@@ -25,6 +25,11 @@
         </a>
       </li>
       <li class="nav-item">
+        <a class="nav-link" :class="{ active: tab === 'pack' }" href="#" @click.prevent="tab = 'pack'">
+          <i class="bi bi-grid-3x3-gap me-1"></i>Pack Social
+        </a>
+      </li>
+      <li class="nav-item">
         <a class="nav-link" :class="{ active: tab === 'enhance' }" href="#" @click.prevent="tab = 'enhance'">
           <i class="bi bi-magic me-1"></i>Otimizar Foto
         </a>
@@ -185,6 +190,144 @@
             <div v-else class="sia-preview-placeholder">
               <i class="bi bi-image" style="font-size:3rem;opacity:.2"></i>
               <p class="text-muted small mt-2 mb-0">A imagem gerada aparecera aqui</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Tab: Pack Social ── -->
+      <div v-if="tab === 'pack'" class="studio-ia-panel">
+        <div class="row g-4">
+          <div class="col-12 col-lg-5">
+
+            <!-- Upload foto do produto (obrigatorio) -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">
+                <i class="bi bi-cloud-arrow-up me-1"></i>Foto do produto <span class="fw-normal text-danger">(obrigatorio)</span>
+              </label>
+              <div
+                class="sia-dropzone"
+                :class="{ 'drag-over': packDragOver }"
+                @click="$refs.packFileInput.click()"
+                @dragover.prevent="packDragOver = true"
+                @dragleave.prevent="packDragOver = false"
+                @drop.prevent="onPackDrop"
+              >
+                <div v-if="packPreview" class="sia-dropzone-preview">
+                  <img :src="packPreview" alt="Produto" />
+                  <button type="button" class="btn btn-sm btn-outline-danger sia-dropzone-clear" @click.stop="clearPack">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </div>
+                <template v-else>
+                  <i class="bi bi-cloud-arrow-up" style="font-size:2rem;opacity:.4"></i>
+                  <span class="small text-muted mt-1">Arraste ou clique para enviar</span>
+                  <span class="small text-muted" style="font-size:.75rem">JPG, PNG ou WebP — maximo 5 MB</span>
+                </template>
+              </div>
+              <input ref="packFileInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="onPackFileChange" />
+            </div>
+
+            <!-- Quantidade -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">
+                <i class="bi bi-collection me-1"></i>Quantidade de fotos
+              </label>
+              <div class="sia-qty-grid">
+                <label
+                  v-for="n in 5"
+                  :key="n"
+                  :class="['sia-qty-card', { active: packQuantity === n }]"
+                >
+                  <input type="radio" :value="n" v-model="packQuantity" class="d-none" :disabled="packLoading" />
+                  <span class="sia-qty-number">{{ n }}</span>
+                  <span class="sia-qty-cost">{{ n }} cred.</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Formato -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">
+                <i class="bi bi-aspect-ratio me-1"></i>Formato
+              </label>
+              <div class="sia-ratio-grid">
+                <label
+                  v-for="r in RATIOS"
+                  :key="r.key"
+                  :class="['sia-ratio-card', { active: packRatio === r.key }]"
+                >
+                  <input type="radio" :value="r.key" v-model="packRatio" class="d-none" :disabled="packLoading" />
+                  <span class="sia-ratio-icon" :style="{ aspectRatio: r.preview }"><i class="bi bi-image"></i></span>
+                  <span class="sia-ratio-name">{{ r.name }}</span>
+                  <span class="sia-ratio-sub">{{ r.sub }}</span>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="packError" class="alert alert-danger py-2 small mt-3 mb-0">
+              <i class="bi bi-exclamation-triangle me-1"></i>{{ packError }}
+            </div>
+          </div>
+
+          <!-- Preview / Resultado -->
+          <div class="col-12 col-lg-7">
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-4">
+              <span class="badge bg-warning text-dark px-3 py-2">
+                <i class="bi bi-lightning-charge-fill me-1"></i>Custo: <strong>{{ packQuantity }}</strong> creditos
+              </span>
+              <button
+                type="button"
+                class="btn btn-warning fw-bold ms-auto"
+                :disabled="!packFile || packLoading"
+                @click="generatePack"
+              >
+                <span v-if="packLoading" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                <i v-else class="bi bi-stars me-1"></i>
+                {{ packLoading ? 'Gerando...' : `Gerar ${packQuantity} Fotos` }}
+              </button>
+            </div>
+
+            <div v-if="packLoading" class="sia-preview-placeholder">
+              <div class="spinner-border text-warning" style="width:3rem;height:3rem" role="status"></div>
+              <p class="text-muted small mt-3 mb-0">Gerando pack de {{ packQuantity }} fotos com IA...<br>Isso pode levar alguns minutos.</p>
+            </div>
+            <div v-else-if="packResults.length" class="sia-preview-result">
+              <div v-if="packAnalysis" class="mb-3 text-start">
+                <span class="badge bg-secondary me-1" v-if="packAnalysis.cuisineType">
+                  <i class="bi bi-tag me-1"></i>{{ packAnalysis.cuisineType }}
+                </span>
+                <span class="badge bg-secondary" v-if="packAnalysis.productName">
+                  <i class="bi bi-box me-1"></i>{{ packAnalysis.productName }}
+                </span>
+              </div>
+              <div class="sia-pack-grid" :class="{ 'pack-single': packResults.length === 1 }">
+                <div
+                  v-for="(item, idx) in packResults"
+                  :key="idx"
+                  class="sia-pack-item"
+                >
+                  <img :src="assetUrl(item.url)" :alt="item.filename" />
+                  <div class="sia-pack-item-overlay">
+                    <button class="btn btn-sm btn-light" @click="downloadMedia(item)" title="Download">
+                      <i class="bi bi-download"></i>
+                    </button>
+                  </div>
+                  <span class="sia-pack-badge">{{ idx + 1 }}</span>
+                </div>
+              </div>
+              <div class="sia-preview-actions mt-3">
+                <button class="btn btn-outline-secondary btn-sm" @click="downloadAllPack">
+                  <i class="bi bi-download me-1"></i>Baixar todas
+                </button>
+                <button class="btn btn-link btn-sm text-muted" @click="resetPack">
+                  <i class="bi bi-arrow-counterclockwise me-1"></i>Gerar outro pack
+                </button>
+              </div>
+            </div>
+            <div v-else class="sia-preview-placeholder">
+              <i class="bi bi-grid-3x3-gap" style="font-size:3rem;opacity:.2"></i>
+              <p class="text-muted small mt-2 mb-0">Envie uma foto e gere seu pack de imagens</p>
             </div>
           </div>
         </div>
@@ -427,6 +570,18 @@ const genRefPreview = ref(null)
 const genRefBase64 = ref(null)
 const refDragOver = ref(false)
 
+// Pack Social tab
+const packFile = ref(null)
+const packPreview = ref(null)
+const packBase64 = ref(null)
+const packQuantity = ref(3)
+const packRatio = ref('1:1')
+const packLoading = ref(false)
+const packError = ref(null)
+const packResults = ref([])
+const packAnalysis = ref(null)
+const packDragOver = ref(false)
+
 // Enhance tab
 const enhanceStyle = ref('minimal')
 const enhanceAngle = ref('standard')
@@ -490,6 +645,81 @@ function clearGenRef() {
     URL.revokeObjectURL(genRefPreview.value)
     genRefPreview.value = null
   }
+}
+
+// ── Pack Social ──
+function onPackFileChange(e) {
+  const f = e.target.files?.[0]
+  if (f) stagePackFile(f)
+  try { e.target.value = '' } catch {}
+}
+
+function onPackDrop(e) {
+  packDragOver.value = false
+  const f = e.dataTransfer?.files?.[0]
+  if (f) stagePackFile(f)
+}
+
+function stagePackFile(file) {
+  packError.value = null
+  if (!file.type.startsWith('image/')) {
+    packError.value = 'Formato invalido. Use JPG, PNG ou WebP.'
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    packError.value = 'Arquivo muito grande. Maximo: 5 MB.'
+    return
+  }
+  packFile.value = file
+  packResults.value = []
+  packAnalysis.value = null
+  if (packPreview.value) URL.revokeObjectURL(packPreview.value)
+  packPreview.value = URL.createObjectURL(file)
+  const reader = new FileReader()
+  reader.onload = () => { packBase64.value = reader.result }
+  reader.readAsDataURL(file)
+}
+
+function clearPack() {
+  packFile.value = null
+  packBase64.value = null
+  packResults.value = []
+  packAnalysis.value = null
+  if (packPreview.value) {
+    URL.revokeObjectURL(packPreview.value)
+    packPreview.value = null
+  }
+}
+
+function resetPack() {
+  clearPack()
+  packError.value = null
+}
+
+async function generatePack() {
+  if (!packBase64.value) return
+  packError.value = null
+  packResults.value = []
+  packAnalysis.value = null
+  packLoading.value = true
+  try {
+    const res = await api.post('/ai-studio/generate-pack', {
+      photoBase64: packBase64.value,
+      quantity: packQuantity.value,
+      aspectRatio: packRatio.value,
+    }, { timeout: 300000 })
+    packResults.value = res.data.media || []
+    packAnalysis.value = res.data.analysis || null
+    await refreshBalance()
+  } catch (e) {
+    packError.value = e?.response?.data?.message || 'Erro ao gerar pack. Tente novamente.'
+  } finally {
+    packLoading.value = false
+  }
+}
+
+function downloadAllPack() {
+  packResults.value.forEach(item => downloadMedia(item))
 }
 
 // ── Generate from text (+ optional reference) ──
@@ -1021,6 +1251,92 @@ async function refreshBalance() {
   font-size: 0.7rem;
 }
 
+/* ── Pack Social: Quantity Cards ── */
+.sia-qty-grid {
+  display: flex;
+  gap: 0.5rem;
+}
+.sia-qty-card {
+  flex: 1;
+  border: 2px solid #e9ecef;
+  border-radius: 10px;
+  padding: 0.5rem 0.25rem;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.1rem;
+  background: #fff;
+  user-select: none;
+}
+.sia-qty-card:hover {
+  border-color: #ffc107;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+}
+.sia-qty-card.active {
+  border-color: #ffc107;
+  background: #fffbeb;
+  box-shadow: 0 2px 12px rgba(255, 193, 7, 0.3);
+}
+.sia-qty-number { font-weight: 800; font-size: 1.1rem; line-height: 1.2; }
+.sia-qty-cost { font-size: 0.62rem; color: #6c757d; }
+
+/* ── Pack Social: Results Grid ── */
+.sia-pack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+.sia-pack-grid.pack-single {
+  grid-template-columns: 1fr;
+  max-width: 400px;
+  margin: 0 auto;
+}
+.sia-pack-item {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid #e9ecef;
+  aspect-ratio: 1;
+}
+.sia-pack-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sia-pack-item-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sia-pack-item:hover .sia-pack-item-overlay {
+  opacity: 1;
+}
+.sia-pack-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(255, 193, 7, 0.9);
+  color: #212529;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 /* ── Responsive ── */
 @media (max-width: 767.98px) {
   .studio-ia-hero { padding: 1rem 1.25rem; border-radius: 0; }
@@ -1028,5 +1344,6 @@ async function refreshBalance() {
   .sia-style-grid { grid-template-columns: 1fr 1fr; }
   .sia-angle-grid { flex-direction: column; }
   .sia-gallery-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .sia-pack-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 }
 </style>

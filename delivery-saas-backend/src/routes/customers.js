@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import xlsx from 'xlsx';
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { requireModuleStrict } from '../modules.js';
@@ -69,15 +70,15 @@ customersRouter.get('/', async (req, res) => {
     if (isPhone) {
       // Busca apenas nos últimos dígitos de whatsapp e phone (ignorando DDI)
       where.OR = [
-        { whatsapp: { contains: search } },
-        { phone: { contains: search } },
+        { whatsapp: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
       ];
     } else {
       where.OR = [
-        { fullName: { contains: search } },
-        { cpf: { contains: search } },
-        { whatsapp: { contains: search } },
-        { phone: { contains: search } },
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { cpf: { contains: search, mode: 'insensitive' } },
+        { whatsapp: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
       ];
     }
   }
@@ -88,25 +89,53 @@ customersRouter.get('/', async (req, res) => {
       orderBy: { createdAt: 'desc' },
       take,
       skip,
-      include: {
-        addresses: true,
-        orders: {
-          orderBy: { createdAt: 'desc' },
-          select: { id: true, createdAt: true, status: true, total: true },
-        },
-      },
     }),
     prisma.customer.count({ where }),
   ]);
 
-  // Enriquece cada customer com tier e stats resumidos
+  // Compute stats via single aggregation query instead of loading all orders
+  let statsMap = {};
+  if (rows.length) {
+    const ids = rows.map(c => c.id);
+    const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const agg = await prisma.$queryRaw`
+      SELECT
+        "customerId",
+        COUNT(*)::int AS "totalOrders",
+        COALESCE(SUM(CASE WHEN status = 'CONCLUIDO' THEN total ELSE 0 END), 0) AS "totalSpent",
+        MAX("createdAt") AS "lastOrderDate",
+        COUNT(CASE WHEN status = 'CONCLUIDO' AND "createdAt" >= ${d30} THEN 1 END)::int AS "completedLast30d",
+        COUNT(CASE WHEN status = 'CONCLUIDO' THEN 1 END)::int AS "completedTotal",
+        MAX(CASE WHEN status = 'CONCLUIDO' THEN "createdAt" END) AS "lastCompletedDate"
+      FROM "Order"
+      WHERE "customerId" IN (${Prisma.join(ids)})
+      GROUP BY "customerId"
+    `;
+    for (const r of agg) {
+      statsMap[r.customerId] = r;
+    }
+  }
+
   const enriched = rows.map(c => {
-    const all = (c.orders || []);
-    const completed = all.filter(o => o.status === 'CONCLUIDO');
-    const totalSpent = completed.reduce((sum, o) => sum + Number(o.total || 0), 0);
-    const lastOrderDate = all.length ? all[0].createdAt : null;
-    const tierInfo = computeCustomerTier(c.orders);
-    return { ...c, stats: { totalSpent, lastOrderDate, totalOrders: all.length, ...tierInfo } };
+    const s = statsMap[c.id];
+    if (!s) return { ...c, stats: { totalSpent: 0, totalOrders: 0, lastOrderDate: null, tier: 'novo', stars: 1, label: 'NOVO' } };
+
+    let tier;
+    if (s.totalOrders === 1) {
+      tier = { tier: 'novo', stars: 1, label: 'NOVO' };
+    } else if (s.completedTotal === 0) {
+      tier = { tier: 'em_risco', stars: 1, label: 'Em Risco' };
+    } else if (!s.lastCompletedDate || Date.now() - new Date(s.lastCompletedDate).getTime() > 30 * 24 * 60 * 60 * 1000) {
+      tier = { tier: 'em_risco', stars: 1, label: 'Em Risco' };
+    } else if (s.completedLast30d >= 8) {
+      tier = { tier: 'vip', stars: 4, label: 'VIP' };
+    } else if (s.completedLast30d >= 4) {
+      tier = { tier: 'fiel', stars: 3, label: 'Fiel' };
+    } else {
+      tier = { tier: 'regular', stars: 2, label: 'Regular' };
+    }
+
+    return { ...c, stats: { totalSpent: Number(s.totalSpent), totalOrders: s.totalOrders, lastOrderDate: s.lastOrderDate, ...tier } };
   });
 
   res.json({ total, rows: enriched });

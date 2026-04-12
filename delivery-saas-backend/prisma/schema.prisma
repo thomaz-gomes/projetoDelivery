@@ -931,6 +931,7 @@ model Product {
   dadosFiscaisId      String?
   dadosFiscais        DadosFiscais?        @relation(fields: [dadosFiscaisId], references: [id])
   integrationCode     String?
+  highlightOnSlip     Boolean              @default(false)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   productOptionGroups ProductOptionGroup[]
@@ -1396,6 +1397,7 @@ model Option {
   price            Decimal     @default(0)
   image            String?
   integrationCode  String?
+  highlightOnSlip  Boolean     @default(false)
   position         Int         @default(0)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt

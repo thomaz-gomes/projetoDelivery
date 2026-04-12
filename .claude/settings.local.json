@@ -57,7 +57,8 @@
       "Bash(npx prisma:*)",
       "WebFetch(domain:ajuda.beefood.com.br)",
       "Bash(grep -l \"email\\\\|smtp\\\\|mail\\\\|configuration\" /d/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-frontend/src/views/*.vue)",
-      "Bash(grep -l \"role.*ADMIN\\\\|meta.*requiresAuth.*true\" /d/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-frontend/src/views/*.vue)"
+      "Bash(grep -l \"role.*ADMIN\\\\|meta.*requiresAuth.*true\" /d/Users/gomes/Documents/GitHub/projetoDelivery/delivery-saas-frontend/src/views/*.vue)",
+      "Bash(grep -E \"\\\\.\\(js|ts|vue\\)$\")"
     ],
     "additionalDirectories": [
       "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery\\delivery-saas-backend\\src\\services",

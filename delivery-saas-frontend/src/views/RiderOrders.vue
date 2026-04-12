@@ -62,14 +62,19 @@
             <div class="mb-2"><strong>Itens:</strong>
               <ul class="mb-0">
                 <li v-for="it in normalizeOrderItems(o)" :key="it.id || (it.name + String(it.price) + it.quantity)" class="small">
-                  <div class="d-flex justify-content-between">
+                  <div class="d-flex justify-content-between" :class="{ 'highlight-slip': it.highlightOnSlip }">
                     <div>{{ (it.quantity || 1) }}x {{ it.name }}</div>
                     <div class="text-muted">{{ formatMoney(it.unitPrice || it.price || it.amount || 0) }}</div>
+                  </div>
+                  <div v-if="it.options && it.options.length" class="ms-3 text-muted">
+                    <div v-for="(op, oi) in it.options" :key="oi" :class="{ 'highlight-slip': op.highlightOnSlip }">
+                      - {{ op.name }}<span v-if="Number(op.price) > 0"> ({{ formatMoney(op.price) }})</span>
+                    </div>
                   </div>
                 </li>
               </ul>
             </div>
-            <div v-if="getIfoodLocator(o)" class="text-center py-2 border-top mt-2" role="button" @click="copyLocator(o)" style="cursor:pointer;">
+            <div v-if="getIfoodLocator(o)" class="text-center py-2 border-top mt-2" role="button" @click="copyLocator(o)" style="cursor: pointer;background-color: #F8F9FA;color: #6C757D;border-radius: 16px;border: 2px solid #e9e9e9 !important;">
               <div class="text-muted small mb-1">Localizador</div>
               <div style="font-size:1.8rem;font-weight:700;letter-spacing:3px;">{{ getIfoodLocator(o) }}</div>
               <div class="text-muted small mt-1"><i class="bi bi-clipboard me-1"></i>toque para copiar</div>
@@ -871,5 +876,14 @@ onUnmounted(() => {
   padding: 20px;
   background: rgba(0, 0, 0, 0.8);
   text-align: center;
+}
+
+/* Highlighted items on rider order slip */
+.highlight-slip {
+  background-color: #fff3cd;
+  font-weight: 700;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: #664d03;
 }
 </style>

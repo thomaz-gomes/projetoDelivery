@@ -131,11 +131,11 @@ router.post('/:groupId/options', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const group = await prisma.optionGroup.findFirst({ where: { id: groupId, companyId } })
   if (!group) return res.status(404).json({ message: 'Grupo não encontrado' })
-  const { name, price = 0, image = null, position = 0, availableDays = null, availableFrom = null, availableTo = null, isAvailable = true, linkedProductId = null, technicalSheetId = null } = req.body || {}
+  const { name, price = 0, image = null, position = 0, availableDays = null, availableFrom = null, availableTo = null, isAvailable = true, linkedProductId = null, technicalSheetId = null, highlightOnSlip = false } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
   try {
     const integrationCode = await generateOptionCode(groupId)
-    const data = { groupId, name, price: Number(price || 0), image: image ?? null, position: Number(position || 0), integrationCode }
+    const data = { groupId, name, price: Number(price || 0), image: image ?? null, position: Number(position || 0), highlightOnSlip: Boolean(highlightOnSlip), integrationCode }
     // validate and attach technicalSheetId when provided
     if (technicalSheetId) {
       const ts = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
@@ -186,7 +186,7 @@ router.patch('/options/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res)
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, price, image, position, availableDays, availableFrom, availableTo, isAvailable, linkedProductId, technicalSheetId } = req.body || {}
+  const { name, price, image, position, availableDays, availableFrom, availableTo, isAvailable, linkedProductId, technicalSheetId, highlightOnSlip } = req.body || {}
   try {
     const data = {}
     // validate and attach technicalSheetId when provided
@@ -203,6 +203,7 @@ router.patch('/options/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res)
     if (price !== undefined) data.price = Number(price)
     if (image !== undefined) data.image = image
     if (position !== undefined) data.position = Number(position)
+    if (highlightOnSlip !== undefined) data.highlightOnSlip = Boolean(highlightOnSlip)
     // If linkedProductId is provided, record it and ignore availability fields
     if (linkedProductId !== undefined) {
       data.linkedProductId = linkedProductId || null
