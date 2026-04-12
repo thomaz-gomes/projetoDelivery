@@ -1003,9 +1003,25 @@ ordersRouter.get('/:id', async (req, res) => {
 
   const order = await prisma.order.findFirst({
     where: { id, companyId },
-    include: { items: true, rider: true, company: true, store: true }
+    include: { items: { include: { product: { select: { highlightOnSlip: true } } } }, rider: true, company: true, store: true }
   });
   if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+
+  // Enrich order items: flatten product.highlightOnSlip onto item and enrich options with Option.highlightOnSlip
+  try {
+    for (const item of (order.items || [])) {
+      if (item.product) { item.highlightOnSlip = !!item.product.highlightOnSlip; delete item.product; }
+      // options is JSON array with {id, name, price, ...}; enrich with highlightOnSlip from Option model
+      if (item.options && Array.isArray(item.options)) {
+        const optIds = item.options.map(o => o.id).filter(Boolean);
+        if (optIds.length) {
+          const opts = await prisma.option.findMany({ where: { id: { in: optIds } }, select: { id: true, highlightOnSlip: true } });
+          const map = Object.fromEntries(opts.map(o => [o.id, !!o.highlightOnSlip]));
+          for (const o of item.options) { if (o.id && map[o.id]) o.highlightOnSlip = true; }
+        }
+      }
+    }
+  } catch (e) { console.warn('Failed to enrich highlightOnSlip for order items', e?.message || e); }
 
   // compute displaySimple for this order (position within same day)
   try {

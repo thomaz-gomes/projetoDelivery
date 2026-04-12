@@ -23,6 +23,7 @@ export function normalizeOrderItems(o){
       unitPrice,
       options,
       notes: it.notes || it.observations || it.note || null,
+      highlightOnSlip: !!it.highlightOnSlip,
     }
   })
 }

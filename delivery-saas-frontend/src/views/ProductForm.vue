@@ -86,6 +86,12 @@
               <label class="form-check-label small text-muted" for="prodActive">Ativo</label>
             </div>
           </div>
+          <div class="col-md-4 d-flex align-items-end">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="prodHighlight" v-model="form.highlightOnSlip" />
+              <label class="form-check-label small text-muted" for="prodHighlight">Destacar na comanda</label>
+            </div>
+          </div>
         </div>
 
         <div class="mb-3" v-if="!saas.isCardapioSimplesOnly">
@@ -150,7 +156,7 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null })
 const activeTab = ref('general')
 const cashbackEnabled = ref(false)
 const groups = ref([])
@@ -237,7 +243,7 @@ async function save(){
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
     if(isEdit){
-      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
+      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
       if(form.value.marketplace) payload.marketplace = form.value.marketplace
       // include cashbackPercent when cashback module is enabled (allow null to clear)
       if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
@@ -257,7 +263,7 @@ async function save(){
         else { router.push({ path: '/menu/admin' }) }
       }
     } else {
-  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
+  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
   if(form.value.marketplace) payload.marketplace = form.value.marketplace
   if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       const res = await api.post('/menu/products', payload)

@@ -44,6 +44,12 @@
               <label class="form-check-label small text-muted" for="optAlways">Sempre disponível</label>
             </div>
           </div>
+          <div class="col-md-3 d-flex align-items-end">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="optHighlight" v-model="form.highlightOnSlip" />
+              <label class="form-check-label small text-muted" for="optHighlight">Destacar na comanda</label>
+            </div>
+          </div>
         </div>
 
         <div v-if="!form.alwaysAvailable && !form.linkedProductId" class="mb-3">
@@ -113,7 +119,7 @@ const isEdit = Boolean(id)
 const query = route.query || {}
 const groupId = query.groupId || null
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isAvailable: true, alwaysAvailable: true, availableDays: [], availableFrom: '', availableTo: '', linkedProductId: null, image: null, technicalSheetId: null })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isAvailable: true, alwaysAvailable: true, availableDays: [], availableFrom: '', availableTo: '', linkedProductId: null, image: null, technicalSheetId: null, highlightOnSlip: false })
 const productsList = ref([])
 const technicalSheets = ref([])
 const saving = ref(false)
@@ -141,7 +147,8 @@ async function load(){
           availableTo: o.availableTo || '',
           linkedProductId: o.linkedProductId || null,
           image: o.image || null,
-          technicalSheetId: o.technicalSheetId || null
+          technicalSheetId: o.technicalSheetId || null,
+          highlightOnSlip: !!o.highlightOnSlip
         }
       }
     } else if(groupId){
@@ -168,6 +175,7 @@ async function save(){
       price: Number(form.value.price || 0),
       position: Number(form.value.position || 0),
       isAvailable: !!form.value.isAvailable,
+      highlightOnSlip: !!form.value.highlightOnSlip,
       linkedProductId: form.value.linkedProductId || null
     }
     if(!form.value.linkedProductId){
