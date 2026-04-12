@@ -27,10 +27,12 @@ export function authMiddleware(req, res, next) {
 
 export function requireRole(...roles) {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ message: 'Forbidden' });
+    if (!req.user) return res.status(403).json({ message: 'Forbidden' });
+    // MASTER inherits all SUPER_ADMIN privileges automatically
+    if (roles.includes(req.user.role) || (req.user.role === 'MASTER' && roles.includes('SUPER_ADMIN'))) {
+      return next();
     }
-    next();
+    return res.status(403).json({ message: 'Forbidden' });
   };
 }
 

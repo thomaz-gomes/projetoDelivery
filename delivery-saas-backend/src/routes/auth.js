@@ -87,9 +87,10 @@ authRouter.post('/login', async (req, res) => {
     if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' });
 
     // Check if user needs email verification or company setup
-    // SUPER_ADMIN bypasses email verification requirement
-    const needsVerification = user.emailVerified === false && user.role !== 'SUPER_ADMIN';
-    const needsSetup = !user.companyId && user.role !== 'SUPER_ADMIN';
+    // SUPER_ADMIN and MASTER bypass email verification requirement
+    const isSuperRole = user.role === 'SUPER_ADMIN' || user.role === 'MASTER';
+    const needsVerification = user.emailVerified === false && !isSuperRole;
+    const needsSetup = !user.companyId && !isSuperRole;
 
     const token = signToken({ id: user.id, role: user.role, companyId: user.companyId ?? null, riderId: user.rider?.id ?? null, name: user.name });
     const userPayload = { id: user.id, role: user.role, name: user.name, companyId: user.companyId, riderId: user.rider?.id ?? null, needsVerification, needsSetup };
@@ -392,7 +393,7 @@ authRouter.post('/verify-email', async (req, res) => {
       name: user.name,
     });
 
-    const needsSetup = !user.companyId && user.role !== 'SUPER_ADMIN';
+    const needsSetup = !user.companyId && user.role !== 'SUPER_ADMIN' && user.role !== 'MASTER';
     return res.json({
       token,
       user: { id: user.id, role: user.role, name: user.name, companyId: user.companyId, needsSetup },

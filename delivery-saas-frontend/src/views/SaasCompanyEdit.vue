@@ -9,7 +9,7 @@ const router = useRouter()
 const auth = useAuthStore()
 
 // ADMIN edits their own company; SUPER_ADMIN edits any company via :id
-const isSuperAdmin = computed(() => auth.user?.role === 'SUPER_ADMIN')
+const isSuperAdmin = computed(() => auth.user?.role === 'SUPER_ADMIN' || auth.user?.role === 'MASTER')
 const id = route.params.id || auth.user?.companyId
 
 const company = ref(null)

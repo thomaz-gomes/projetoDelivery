@@ -145,7 +145,7 @@ const pageSize = ref(10)
 
 const emailError = ref('')
 
-const canDelete = computed(() => auth.user && auth.user.role === 'SUPER_ADMIN')
+const canDelete = computed(() => auth.user && (auth.user.role === 'SUPER_ADMIN' || auth.user.role === 'MASTER'))
 
 const formatDate = (d) => { if(!d) return ''; try{ return formatDateTime(d) }catch(e){ return d } }
 

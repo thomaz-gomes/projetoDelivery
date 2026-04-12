@@ -1,5 +1,5 @@
 // Role hierarchy: higher roles can see items restricted to lower roles
-const ROLE_LEVEL = { SUPER_ADMIN: 4, ADMIN: 3, ATTENDANT: 2, RIDER: 1 }
+const ROLE_LEVEL = { MASTER: 5, SUPER_ADMIN: 4, ADMIN: 3, ATTENDANT: 2, RIDER: 1 }
 
 function canAccessRole(userRole, requiredRole) {
   if (!requiredRole) return true
@@ -11,14 +11,18 @@ function canAccessRole(userRole, requiredRole) {
 export function buildVisibleNav(user, enabledModules, nav) {
   try {
     const role = user && user.role ? String(user.role).toUpperCase() : null;
-    if (role === 'SUPER_ADMIN') {
-      return [
+    if (role === 'SUPER_ADMIN' || role === 'MASTER') {
+      const nav = [
         { name: 'SaaS Dashboard', to: '/saas', icon: 'bi bi-grid-3x3-gap' },
         { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
         { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },
         { name: 'Empresas', to: '/saas/companies', icon: 'bi bi-building' },
         { name: 'Mensalidades', to: '/saas/billing', icon: 'bi bi-receipt' }
       ];
+      if (role === 'MASTER') {
+        nav.push({ name: 'Super Admins', to: '/saas/super-admins', icon: 'bi bi-shield-lock' });
+      }
+      return nav;
     }
 
     const enabled = (enabledModules || []).map(k => String(k).toLowerCase());

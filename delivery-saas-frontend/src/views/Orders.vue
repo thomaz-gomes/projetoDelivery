@@ -270,8 +270,8 @@ onMounted(async () => {
   // If this is a SaaS Super Admin session, do not initialize restaurant listeners or fetching —
   // redirect the admin to the SaaS dashboard instead.
   try {
-    if (auth.user && String(auth.user.role || '').toUpperCase() === 'SUPER_ADMIN') {
-      try { console.log('SUPER_ADMIN detected — skipping Orders listeners and redirecting to /saas'); } catch(e){}
+    if (auth.user && ['SUPER_ADMIN', 'MASTER'].includes(String(auth.user.role || '').toUpperCase())) {
+      try { console.log('SUPER_ADMIN/MASTER detected — skipping Orders listeners and redirecting to /saas'); } catch(e){}
       try { router.replace('/saas'); } catch(e){}
       return;
     }

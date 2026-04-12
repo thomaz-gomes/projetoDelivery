@@ -95,6 +95,7 @@ import SaasAdmin from './views/SaasAdmin.vue';
 import SaasSettings from './views/SaasSettings.vue';
 import SaasAiUsage from './views/SaasAiUsage.vue';
 const SaasGatewayConfig = () => import('./views/SaasGatewayConfig.vue')
+const SaasSuperAdmins = () => import('./views/SaasSuperAdmins.vue')
 const AdminBilling = () => import('./views/AdminBilling.vue')
 import CashbackSettings from './views/cashback/CashbackSettings.vue';
 import NfeEmissao from './views/NfeEmissao.vue';
@@ -271,6 +272,7 @@ const router = createRouter({
   ,{ path: '/saas/settings', component: SaasSettings, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/ai-usage', component: SaasAiUsage, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/gateway', component: SaasGatewayConfig, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/super-admins', component: SaasSuperAdmins, meta: { requiresAuth: true, role: 'MASTER' } }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
     { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CASHBACK' } },
     { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },
@@ -320,7 +322,7 @@ function isSystemDomain(hostname) {
 }
 
 // Role hierarchy: higher roles inherit access from lower roles
-const ROLE_HIERARCHY = { SUPER_ADMIN: 4, ADMIN: 3, ATTENDANT: 2, RIDER: 1 }
+const ROLE_HIERARCHY = { MASTER: 5, SUPER_ADMIN: 4, ADMIN: 3, ATTENDANT: 2, RIDER: 1 }
 
 function roleLevel(role) {
   return ROLE_HIERARCHY[String(role || '').toUpperCase()] || 0
@@ -381,7 +383,7 @@ router.beforeEach(async (to) => {
     const userRole = String(auth.user?.role || '').toUpperCase()
 
     // Redirect users without company to setup (except SUPER_ADMIN)
-    if (to.path !== '/setup' && auth.user && !auth.user.companyId && userRole !== 'SUPER_ADMIN') {
+    if (to.path !== '/setup' && auth.user && !auth.user.companyId && userRole !== 'SUPER_ADMIN' && userRole !== 'MASTER') {
       return { path: '/setup' }
     }
 
@@ -409,7 +411,7 @@ router.beforeEach(async (to) => {
     }
 
     // Module guard: block routes requiring a module the user doesn't have (applies to all non-SUPER_ADMIN roles)
-    if (to.meta.requiresModule && userRole !== 'SUPER_ADMIN') {
+    if (to.meta.requiresModule && userRole !== 'SUPER_ADMIN' && userRole !== 'MASTER') {
       const { useModulesStore } = await import('./stores/modules')
       const modules = useModulesStore()
       if (!modules.enabled.length) {

@@ -42,7 +42,7 @@ async function onSubmit() {
     let destination = route.query.redirect || '/orders';
     if (auth.user?.affiliateId) destination = '/affiliate';
     else if (auth.user?.role === 'RIDER') destination = '/rider';
-    else if (auth.user?.role === 'SUPER_ADMIN') destination = '/saas';
+    else if (auth.user?.role === 'SUPER_ADMIN' || auth.user?.role === 'MASTER') destination = '/saas';
     else if (auth.user?.role === 'ADMIN') {
       await saas.fetchMySubscription();
       if (saas.isCardapioSimplesOnly) destination = '/menu/menus';
