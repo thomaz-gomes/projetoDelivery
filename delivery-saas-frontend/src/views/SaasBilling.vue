@@ -27,8 +27,8 @@ const statusFilter = ref('')
 
 const newInvoice = ref({ year: new Date().getFullYear(), month: new Date().getMonth()+1, amount: 0, dueDate: '' })
 
-const isSuperAdmin = computed(() => auth.user && String(auth.user.role || '').toUpperCase() === 'SUPER_ADMIN')
-const isAdmin = computed(() => auth.user && ['ADMIN', 'SUPER_ADMIN'].includes(String(auth.user.role || '').toUpperCase()))
+const isSuperAdmin = computed(() => auth.user && ['SUPER_ADMIN', 'MASTER'].includes(String(auth.user.role || '').toUpperCase()))
+const isAdmin = computed(() => auth.user && ['ADMIN', 'SUPER_ADMIN', 'MASTER'].includes(String(auth.user.role || '').toUpperCase()))
 
 async function load(){
   const subRes = await api.get('/saas/subscription/me')

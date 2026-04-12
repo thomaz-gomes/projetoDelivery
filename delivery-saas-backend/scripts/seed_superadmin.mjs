@@ -11,16 +11,16 @@ async function main() {
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) {
     if (existing.role !== 'SUPER_ADMIN' || existing.companyId) {
-      await prisma.user.update({ where: { id: existing.id }, data: { role: 'SUPER_ADMIN', companyId: null, name } })
-      console.log('Updated existing user to SUPER_ADMIN:', existing.id)
+      await prisma.user.update({ where: { id: existing.id }, data: { role: 'MASTER', companyId: null, name } })
+      console.log('Updated existing user to MASTER:', existing.id)
     } else {
-      console.log('SUPER_ADMIN already exists:', existing.id)
+      console.log('MASTER already exists:', existing.id)
     }
     return
   }
 
-  const created = await prisma.user.create({ data: { email, name, role: 'SUPER_ADMIN', password: hash, companyId: null } })
-  console.log('Created SUPER_ADMIN:', created.id, email)
+  const created = await prisma.user.create({ data: { email, name, role: 'MASTER', password: hash, companyId: null } })
+  console.log('Created MASTER:', created.id, email)
 }
 
 main().catch(e => { console.error(e); process.exit(1) }).finally(async () => { try { await prisma.$disconnect() } catch(_){} })

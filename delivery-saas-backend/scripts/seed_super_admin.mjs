@@ -10,12 +10,12 @@ async function main() {
 
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) {
-    await prisma.user.update({ where: { id: existing.id }, data: { role: 'SUPER_ADMIN', name, emailVerified: true } })
-    console.log('Updated SUPER_ADMIN user:', email)
+    await prisma.user.update({ where: { id: existing.id }, data: { role: 'MASTER', name, emailVerified: true } })
+    console.log('Updated MASTER user:', email)
   } else {
     const hash = await bcrypt.hash(String(password), 10)
-    await prisma.user.create({ data: { name, email, password: hash, role: 'SUPER_ADMIN', emailVerified: true } })
-    console.log('Created SUPER_ADMIN:', email)
+    await prisma.user.create({ data: { name, email, password: hash, role: 'MASTER', emailVerified: true } })
+    console.log('Created MASTER:', email)
   }
 
   console.log('Login credentials ->', email, '/', password)

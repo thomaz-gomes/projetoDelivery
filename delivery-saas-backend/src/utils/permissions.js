@@ -9,6 +9,7 @@ let mapping = {}
 let lastLoadedAt = 0
 
 const DEFAULT = {
+  MASTER: ['*'],
   SUPER_ADMIN: ['*'],
   ADMIN: ['users:read','users:create','users:update','users:delete','orders:view','menu:edit','settings:update'],
   ATTENDANT: ['orders:view','orders:update','customers:view'],

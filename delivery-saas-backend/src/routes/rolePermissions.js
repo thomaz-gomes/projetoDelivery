@@ -10,6 +10,7 @@ const FILE = path.join(process.cwd(), 'settings', 'rolePermissions.json')
 
 // sensible default mapping of permissions per role (frontend can extend)
 const DEFAULT = {
+  MASTER: ["*"],
   SUPER_ADMIN: ["*"],
   ADMIN: [
     'users:read', 'users:create', 'users:update', 'users:delete',

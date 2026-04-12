@@ -1220,7 +1220,7 @@ saasRouter.put('/mercadopago-config', requireRole('SUPER_ADMIN'), async (req, re
 
 // GET /saas/gateway — get active gateway config
 saasRouter.get('/gateway', async (req, res) => {
-  if (req.user.role !== 'SUPER_ADMIN') return res.sendStatus(403)
+  if (req.user.role !== 'SUPER_ADMIN' && req.user.role !== 'MASTER') return res.sendStatus(403)
   try {
     const config = await prisma.saasGatewayConfig.findFirst({ where: { isActive: true } })
     if (!config) return res.json(null)
@@ -1235,7 +1235,7 @@ saasRouter.get('/gateway', async (req, res) => {
 
 // PUT /saas/gateway — create or update gateway config
 saasRouter.put('/gateway', async (req, res) => {
-  if (req.user.role !== 'SUPER_ADMIN') return res.sendStatus(403)
+  if (req.user.role !== 'SUPER_ADMIN' && req.user.role !== 'MASTER') return res.sendStatus(403)
   try {
     const { provider, displayName, credentials, billingMode, webhookSecret, platformFee } = req.body
     if (!provider || !displayName) {
@@ -1289,7 +1289,7 @@ saasRouter.put('/gateway', async (req, res) => {
 
 // POST /saas/gateway/test — test gateway credentials
 saasRouter.post('/gateway/test', async (req, res) => {
-  if (req.user.role !== 'SUPER_ADMIN') return res.sendStatus(403)
+  if (req.user.role !== 'SUPER_ADMIN' && req.user.role !== 'MASTER') return res.sendStatus(403)
   try {
     const { getActiveGateway } = await import('../services/paymentGateway/index.js')
     const { adapter } = await getActiveGateway()
@@ -1583,6 +1583,103 @@ saasRouter.post('/jobs/expire-trials', requireRole('SUPER_ADMIN'), async (req, r
     res.json({ ok: true, expired: expiredCount, total: expiredTrials.length })
   } catch (e) {
     res.status(500).json({ message: 'Erro ao expirar trials', error: e?.message || String(e) })
+  }
+})
+
+// ─── MASTER-only: Super Admin user management ────────────────────────────────
+
+// GET /saas/super-admins — list all SUPER_ADMIN users
+saasRouter.get('/super-admins', requireRole('MASTER'), async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { role: 'SUPER_ADMIN' },
+      select: { id: true, name: true, email: true, createdAt: true },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json(users)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao listar super admins' })
+  }
+})
+
+// POST /saas/super-admins — create a new SUPER_ADMIN user
+saasRouter.post('/super-admins', requireRole('MASTER'), async (req, res) => {
+  const { name, email, password } = req.body || {}
+  if (!name || !email || !password) return res.status(400).json({ message: 'Nome, email e senha são obrigatórios' })
+  try {
+    const existing = await prisma.user.findUnique({ where: { email } })
+    if (existing) return res.status(409).json({ message: 'Email já cadastrado' })
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash(String(password), 10)
+    const user = await prisma.user.create({ data: { name, email, password: hash, role: 'SUPER_ADMIN', emailVerified: true, companyId: null } })
+    res.status(201).json({ id: user.id, name: user.name, email: user.email, createdAt: user.createdAt })
+  } catch (e) {
+    console.error('Error creating SUPER_ADMIN', e)
+    res.status(500).json({ message: 'Erro ao criar super admin' })
+  }
+})
+
+// DELETE /saas/super-admins/:id — remove a SUPER_ADMIN user
+saasRouter.delete('/super-admins/:id', requireRole('MASTER'), async (req, res) => {
+  const { id } = req.params
+  try {
+    const user = await prisma.user.findUnique({ where: { id } })
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' })
+    if (user.role !== 'SUPER_ADMIN') return res.status(400).json({ message: 'Só é possível remover usuários SUPER_ADMIN' })
+    await prisma.user.delete({ where: { id } })
+    res.json({ message: 'Super admin removido' })
+  } catch (e) {
+    console.error('Error deleting SUPER_ADMIN', e)
+    res.status(500).json({ message: 'Erro ao remover super admin' })
+  }
+})
+
+// ─── MASTER-only: AI Credits manipulation per company ─────────────────────────
+
+// PUT /saas/companies/:id/ai-credits — set credits (quantity or unlimited)
+saasRouter.put('/companies/:id/ai-credits', requireRole('MASTER'), async (req, res) => {
+  const { id } = req.params
+  const { balance, unlimited } = req.body || {}
+  try {
+    const company = await prisma.company.findUnique({ where: { id }, include: { saasSubscription: { include: { plan: true } } } })
+    if (!company) return res.status(404).json({ message: 'Empresa não encontrada' })
+
+    // Update the plan's unlimitedAiCredits flag if toggling unlimited
+    if (unlimited !== undefined && company.saasSubscription?.plan) {
+      await prisma.saasPlan.update({
+        where: { id: company.saasSubscription.plan.id },
+        data: { unlimitedAiCredits: Boolean(unlimited) }
+      })
+    }
+
+    // Update balance if provided
+    if (balance !== undefined && balance !== null) {
+      await prisma.company.update({ where: { id }, data: { aiCreditsBalance: Number(balance) } })
+    }
+
+    const updated = await prisma.company.findUnique({
+      where: { id },
+      select: { id: true, name: true, aiCreditsBalance: true, saasSubscription: { select: { plan: { select: { aiCreditsMonthlyLimit: true, unlimitedAiCredits: true } } } } }
+    })
+    res.json(updated)
+  } catch (e) {
+    console.error('Error updating AI credits', e)
+    res.status(500).json({ message: 'Erro ao atualizar créditos de IA' })
+  }
+})
+
+// GET /saas/companies/:id/ai-credits — get AI credit info for a company
+saasRouter.get('/companies/:id/ai-credits', requireRole('MASTER'), async (req, res) => {
+  const { id } = req.params
+  try {
+    const company = await prisma.company.findUnique({
+      where: { id },
+      select: { id: true, name: true, aiCreditsBalance: true, aiCreditsLastReset: true, saasSubscription: { select: { plan: { select: { name: true, aiCreditsMonthlyLimit: true, unlimitedAiCredits: true } } } } }
+    })
+    if (!company) return res.status(404).json({ message: 'Empresa não encontrada' })
+    res.json(company)
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao buscar créditos' })
   }
 })
 
