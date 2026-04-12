@@ -690,20 +690,14 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
           contents: [{
             parts: [{
               text:
-                `You are a creative director for food photography social media campaigns.\n\n` +
-                `PRODUCT: ${productDescription}\n` +
-                `CUISINE SEGMENT: ${cuisineType}\n\n` +
-                `Generate exactly ${qty} DIFFERENT scene descriptions for professional food photography backgrounds. ` +
-                `Each scene describes ONLY the background, lighting, surface, and props — NOT the food itself.\n\n` +
-                `CRITICAL RULES:\n` +
-                `- Each scene MUST be coherent with the "${cuisineType}" segment\n` +
-                `- NEVER use scenes that contradict the cuisine (e.g. no breakfast table for hamburgueria, no formal dinner setting for açaiteria, ` +
-                `no Japanese zen garden for pizzaria)\n` +
-                `- Each scene must be visually distinct from the others (different surfaces, lighting, color palettes)\n` +
-                `- Describe: surface/table material, lighting type and direction, color palette, 1-2 props maximum, mood/atmosphere\n` +
-                `- Keep each description to 2-3 sentences in English\n` +
-                `- Think about what would work on Instagram/social media for this specific cuisine type\n\n` +
-                `Output a JSON array of ${qty} strings. No markdown, no code fences, no extra text.`,
+                `Generate ${qty} SHORT food photography scene descriptions for "${cuisineType}".\n\n` +
+                `Rules:\n` +
+                `- Each description: MAX 25 words. Surface + lighting + 1 prop + mood. Nothing else.\n` +
+                `- Coherent with "${cuisineType}" — no contradictory settings.\n` +
+                `- Each scene visually distinct.\n` +
+                `- English only.\n\n` +
+                `Example format: ["dark wood counter, warm side light, craft beer glass, pub mood", "black slate board, dramatic spotlight, red napkin, urban vibe"]\n\n` +
+                `Output ONLY a JSON array of ${qty} strings. No markdown, no explanation.`,
             }],
           }],
           generationConfig: { maxOutputTokens: 3000, temperature: 0.8 },
