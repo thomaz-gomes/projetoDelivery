@@ -702,14 +702,20 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
           contents: [{
             parts: [{
               text:
-                `Generate ${qty} SHORT food photography scene descriptions for "${cuisineType}".\n\n` +
+                `Generate ${qty} SHORT and VARIED social media photo concepts for "${cuisineType}" — "${productName}".\n\n` +
+                `Each concept must be VERY DIFFERENT from the others. Mix these categories:\n` +
+                `- Classic product shot (different surface/lighting/props)\n` +
+                `- Human interaction (hand holding the food, person about to bite, hand dipping sauce)\n` +
+                `- Lifestyle/context (food on a table with drinks, outdoor setting, delivery box being opened)\n` +
+                `- Detail/close-up (extreme close-up of texture, cross-section showing layers)\n` +
+                `- Action/motion (cheese pull, sauce drizzle, steam rising)\n\n` +
                 `Rules:\n` +
-                `- Each description: MAX 25 words. Surface + lighting + 1 prop + mood. Nothing else.\n` +
-                `- Coherent with "${cuisineType}" — no contradictory settings.\n` +
-                `- Each scene visually distinct.\n` +
+                `- MAX 25 words each. Describe the scene concept briefly.\n` +
+                `- Coherent with "${cuisineType}" segment.\n` +
+                `- At least 2 concepts MUST include human elements (hands, person).\n` +
                 `- English only.\n\n` +
-                `Example format: ["dark wood counter, warm side light, craft beer glass, pub mood", "black slate board, dramatic spotlight, red napkin, urban vibe"]\n\n` +
-                `Output ONLY a JSON array of ${qty} strings. No markdown, no explanation.`,
+                `Example: ["hand holding burger at eye level, blurred pub background, warm light", "overhead flat-lay on dark wood, fries and beer beside, dramatic shadows", "close-up cheese pull, melted cheddar stretching, dark moody background"]\n\n` +
+                `Output ONLY a JSON array of ${qty} strings. No markdown.`,
             }],
           }],
           generationConfig: { maxOutputTokens: 3000, temperature: 0.8 },
@@ -751,13 +757,14 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
 
     const imagePromises = scenes.map(async (scene, index) => {
       const imagenPrompt =
-        `FOOD (reproduce this exact dish with absolute fidelity, do not change any ingredient): ${productDescription}. ` +
-        `\nSCENE (background, lighting, and props ONLY — do NOT alter the food): ${scene}. ` +
+        `You are a professional food photographer creating social media content.\n` +
+        `The attached photo shows the EXACT product to feature. Keep this product visually faithful — same ingredients, same textures, same colors.\n\n` +
+        `SCENE CONCEPT: ${scene}\n` +
         `\nIMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.\n` +
-        `\nSTYLE: realistic DSLR photograph shot with Canon EOS R5 100mm f/2.8 macro lens, ` +
-        `natural shadows and highlights, shallow depth of field, ` +
-        `emphasis on food textures, high-end food photography for social media, ` +
-        `real photograph, not digital art, not CGI, not illustration, no watermarks, no text`
+        `\nRULES:\n` +
+        `- The food/product must look IDENTICAL to the attached photo — do not add, remove, or change any ingredient\n` +
+        `- Apply ONLY the scene concept described above (background, lighting, props, human interaction)\n` +
+        `- Realistic DSLR photograph, natural textures, no CGI, no illustration, no watermarks, no text`
 
       const imageGenRes = await fetchWithRetry(
         `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
@@ -765,7 +772,12 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: imagenPrompt }] }],
+            contents: [{
+              parts: [
+                { inlineData: { mimeType: safeMime, data: photoB64 } },
+                { text: imagenPrompt },
+              ],
+            }],
             generationConfig: {
               responseModalities: ['IMAGE'],
               imageConfig: { aspectRatio: safeRatio },
