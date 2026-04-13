@@ -36,7 +36,7 @@ router.use(requireModuleStrict('CARDAPIO_SIMPLES'))
 
 // Google AI Studio — endpoints REST (sem SDK)
 const GOOGLE_AI_BASE   = 'https://generativelanguage.googleapis.com/v1beta'
-const GEMINI_TEXT_MODEL = 'gemini-2.0-flash-001'   // visão + texto — versão datada estável
+const GEMINI_TEXT_MODEL = 'gemini-2.5-flash'       // visão + texto
 const IMAGEN_MODEL      = 'gemini-2.5-flash-image' // Nano Banana (atual) — retoque e geração de foto
 
 // Prompts de estilo fotográfico — otimizados para fotorrealismo máximo com DALL-E 3
