@@ -842,15 +842,19 @@ function ensureSocket(){
 // Reinicia o tracking quando a página volta ao foco (tela desbloqueada, app ativo)
 // Isso resolve o problema de watchPosition ser suspenso em segundo plano no mobile.
 function onVisibilityChange() {
-  if (document.visibilityState === 'visible' && trackingEnabled.value) {
-    if (activeOrderForTracking.value) {
-      // Restart watch — may have been paused by browser while in bg
-      const currentOrderId = activeOrderForTracking.value === '__active__' ? null : activeOrderForTracking.value
-      stopTracking()
-      startTracking(currentOrderId)
-    } else {
-      // Page came back visible but not tracking — start if enabled
-      startTracking(null)
+  if (document.visibilityState === 'visible') {
+    // Refresh orders immediately when app comes back to foreground
+    load().catch(() => {})
+
+    if (trackingEnabled.value) {
+      if (activeOrderForTracking.value) {
+        // Restart watch — may have been paused by browser while in bg
+        const currentOrderId = activeOrderForTracking.value === '__active__' ? null : activeOrderForTracking.value
+        stopTracking()
+        startTracking(currentOrderId)
+      } else {
+        startTracking(null)
+      }
     }
   }
 }
@@ -868,6 +872,21 @@ function onBeforeUnload() {
   }
 }
 
+// Auto-refresh: poll every 30s to keep orders list up to date
+let autoRefreshId = null
+function startAutoRefresh() {
+  if (autoRefreshId) return
+  autoRefreshId = setInterval(() => {
+    // Only refresh when page is visible (avoid wasting battery in background)
+    if (document.visibilityState === 'visible') {
+      load().catch(() => {})
+    }
+  }, 30000)
+}
+function stopAutoRefresh() {
+  if (autoRefreshId) { clearInterval(autoRefreshId); autoRefreshId = null }
+}
+
 onMounted(async () => {
   await checkTrackingStatus()
   // Start GPS tracking immediately if enabled (don't wait for orders)
@@ -876,11 +895,13 @@ onMounted(async () => {
   }
   load()
   ensureSocket()
+  startAutoRefresh()
   try { window.addEventListener('open-rider-scanner', externalOpenScannerHandler) } catch (e) {}
   document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('beforeunload', onBeforeUnload)
 })
 onUnmounted(() => {
+  stopAutoRefresh()
   stopTracking()
   try { socket && socket.disconnect() } catch (e) {}
   try { window.removeEventListener('open-rider-scanner', externalOpenScannerHandler) } catch (e) {}
