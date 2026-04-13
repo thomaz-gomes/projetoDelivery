@@ -646,21 +646,26 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
               { inlineData: { mimeType: safeMime, data: photoB64 } },
               {
                 text:
-                  `You are a food photography and marketing expert. Analyze this food photo and return a JSON object with exactly these fields:\n\n` +
-                  `1. "productDescription": An ultra-detailed description of the food in English. Describe every visible ingredient, texture, color, ` +
-                  `cooking method, container/plate, garnishes, sauces — everything needed to reproduce this exact dish in a photo. ` +
-                  `Be extremely specific (e.g. "thick beef patty with caramelized edges and melted cheddar" not just "burger").\n\n` +
-                  `2. "cuisineType": The cuisine segment/type in Portuguese (e.g. "hamburgueria artesanal", "pizzaria napoletana", ` +
-                  `"açaiteria", "restaurante japonês", "padaria artesanal", "churrascaria", "lanchonete", "doceria gourmet"). ` +
-                  `Be specific to the actual food shown.\n\n` +
-                  `3. "productName": A short product name in Portuguese (e.g. "Smash Burger Duplo", "Açaí Tradicional", "Pizza Margherita"). ` +
-                  `Maximum 5 words.\n\n` +
-                  `CRITICAL: Only describe what you ACTUALLY SEE. Do NOT invent ingredients not visible in the photo.\n\n` +
-                  `Output ONLY valid JSON, no markdown, no code fences, no extra text.`,
+                  `Analyze this food photo. Return ONLY a JSON object:\n` +
+                  `{"productDescription":"brief description in English, max 30 words, main ingredients and type","cuisineType":"restaurant segment in Portuguese (e.g. hamburgueria, pizzaria, açaiteria, lanchonete)","productName":"short name in Portuguese, max 4 words"}\n` +
+                  `Keep productDescription SHORT. Only describe what you see. Output valid JSON only, no markdown.`,
               },
             ],
           }],
-          generationConfig: { maxOutputTokens: 2000, temperature: 0.1 },
+          generationConfig: {
+            maxOutputTokens: 500,
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'OBJECT',
+              properties: {
+                productDescription: { type: 'STRING', description: 'Brief food description in English, max 30 words' },
+                cuisineType: { type: 'STRING', description: 'Restaurant segment in Portuguese (e.g. hamburgueria, pizzaria, açaiteria)' },
+                productName: { type: 'STRING', description: 'Short product name in Portuguese, max 4 words' },
+              },
+              required: ['productDescription', 'cuisineType', 'productName'],
+            },
+          },
         }),
         signal: AbortSignal.timeout(30_000),
       }
@@ -672,16 +677,18 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
     }
 
     const visionData = await visionRes.json()
+    console.log('[AI Studio] generate-pack: visionRes finishReason:', visionData.candidates?.[0]?.finishReason)
+    console.log('[AI Studio] generate-pack: visionRes tokenCount:', JSON.stringify(visionData.usageMetadata || {}))
     const visionText = visionData.candidates?.[0]?.content?.parts?.find(p => p.text)?.text?.trim() || ''
+    console.log('[AI Studio] generate-pack: raw visionText (%d chars):', visionText.length, visionText)
     if (!visionText) throw new Error('Gemini Vision não retornou análise do produto')
 
     let analysis
     try {
-      // Limpa possíveis code fences do JSON
       const cleanJson = visionText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
       analysis = JSON.parse(cleanJson)
     } catch {
-      throw new Error(`Falha ao parsear JSON da análise: ${visionText.slice(0, 200)}`)
+      throw new Error(`Falha ao parsear JSON da análise (finishReason: ${visionData.candidates?.[0]?.finishReason}, chars: ${visionText.length}): ${visionText.slice(0, 300)}`)
     }
 
     const { productDescription, cuisineType, productName } = analysis
@@ -718,7 +725,15 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
                 `Output ONLY a JSON array of ${qty} strings. No markdown.`,
             }],
           }],
-          generationConfig: { maxOutputTokens: 3000, temperature: 0.8 },
+          generationConfig: {
+            maxOutputTokens: 8000,
+            temperature: 0.8,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'ARRAY',
+              items: { type: 'STRING' },
+            },
+          },
         }),
         signal: AbortSignal.timeout(30_000),
       }
@@ -730,7 +745,10 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
     }
 
     const sceneData = await sceneRes.json()
+    console.log('[AI Studio] generate-pack: sceneRes finishReason:', sceneData.candidates?.[0]?.finishReason)
+    console.log('[AI Studio] generate-pack: sceneRes tokenCount:', JSON.stringify(sceneData.usageMetadata || {}))
     const sceneText = sceneData.candidates?.[0]?.content?.parts?.find(p => p.text)?.text?.trim() || ''
+    console.log('[AI Studio] generate-pack: raw sceneText (%d chars):', sceneText.length, sceneText.slice(0, 300))
     if (!sceneText) throw new Error('Gemini não retornou descrições de cena')
 
     let scenes
@@ -738,7 +756,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
       const cleanJson = sceneText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
       scenes = JSON.parse(cleanJson)
     } catch {
-      throw new Error(`Falha ao parsear JSON das cenas: ${sceneText.slice(0, 200)}`)
+      throw new Error(`Falha ao parsear JSON das cenas (finishReason: ${sceneData.candidates?.[0]?.finishReason}, chars: ${sceneText.length}): ${sceneText.slice(0, 300)}`)
     }
 
     if (!Array.isArray(scenes) || scenes.length === 0) {
@@ -764,6 +782,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
         `\nRULES:\n` +
         `- The food/product must look IDENTICAL to the attached photo — do not add, remove, or change any ingredient\n` +
         `- Apply ONLY the scene concept described above (background, lighting, props, human interaction)\n` +
+        `- REMOVE any visible text, labels, logos, or brand names from the product and packaging — the result must have NO readable text anywhere\n` +
         `- Realistic DSLR photograph, natural textures, no CGI, no illustration, no watermarks, no text`
 
       const imageGenRes = await fetchWithRetry(
