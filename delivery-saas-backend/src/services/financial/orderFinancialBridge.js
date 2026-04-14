@@ -110,7 +110,7 @@ export async function createFinancialEntriesForOrder(order) {
           type: 'RECEIVABLE',
           status: 'PENDING',
           description: `Voucher iFood (marketplace) ${order.couponCode || ''} - ${pedidoLabel}`,
-          costCenterId: revenueCC?.id || null,
+          costCenterId: revenueCostCenter?.id || null,
           grossAmount: discIfood,
           feeAmount: 0,
           netAmount: discIfood,

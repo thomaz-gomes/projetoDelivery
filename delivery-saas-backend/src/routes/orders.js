@@ -1004,14 +1004,20 @@ ordersRouter.get('/:id', async (req, res) => {
 
     const order = await prisma.order.findFirst({
       where: { id, companyId },
-      include: { items: { include: { product: { select: { highlightOnSlip: true } } } }, rider: true, company: true, store: true }
+      include: { items: true, rider: true, company: true, store: true }
     });
     if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
 
-    // Enrich order items: flatten product.highlightOnSlip onto item and enrich options with Option.highlightOnSlip
+    // Enrich order items: fetch highlightOnSlip from Product and Option models
     try {
+      const productIds = (order.items || []).map(i => i.productId).filter(Boolean);
+      const productMap = {};
+      if (productIds.length) {
+        const products = await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, highlightOnSlip: true } });
+        for (const p of products) productMap[p.id] = !!p.highlightOnSlip;
+      }
       for (const item of (order.items || [])) {
-        if (item.product) { item.highlightOnSlip = !!item.product.highlightOnSlip; delete item.product; }
+        if (item.productId && productMap[item.productId]) item.highlightOnSlip = true;
         // options is JSON array with {id, name, price, ...}; enrich with highlightOnSlip from Option model
         if (item.options && Array.isArray(item.options)) {
           const optIds = item.options.map(o => o.id).filter(Boolean);
