@@ -138,15 +138,19 @@
             </div>
             <div v-if="vouchers.storeDiscount > 0" class="d-flex justify-content-between mb-2">
               <span class="text-muted">Desconto Loja:</span>
-              <strong class="text-success">- {{ formatCurrency(vouchers.storeDiscount) }}</strong>
+              <strong class="text-danger">- {{ formatCurrency(vouchers.storeDiscount) }}</strong>
             </div>
             <div v-if="order.orderType === 'DELIVERY'" class="d-flex justify-content-between mb-2">
               <span class="text-muted">Taxa de entrega:</span>
               <strong>{{ Number(order.deliveryFee || 0) > 0 ? formatCurrency(order.deliveryFee) : 'Grátis' }}</strong>
             </div>
             <div class="d-flex justify-content-between pt-2 border-top">
-              <span class="fw-semibold">Total:</span>
-              <strong class="fs-5">{{ formatCurrency(order.total) }}</strong>
+              <span class="fw-semibold">Total faturado:</span>
+              <strong class="fs-5">{{ formatCurrency(storeRevenue(order)) }}</strong>
+            </div>
+            <div v-if="vouchers.discountIfood > 0" class="d-flex justify-content-between text-muted small">
+              <span>Cliente pagou: {{ formatCurrency(order.total) }}</span>
+              <span>iFood repassa: {{ formatCurrency(vouchers.discountIfood) }}</span>
             </div>
           </div>
         </div>
@@ -274,7 +278,7 @@ import { useRoute } from 'vue-router';
 import Swal from 'sweetalert2';
 import api from '../api';
 import { formatDateTime } from '../utils/dates.js';
-import { splitVoucherDiscounts } from '../utils/orderUtils.js';
+import { splitVoucherDiscounts, storeRevenue } from '../utils/orderUtils.js';
 
 const route = useRoute();
 const id = route.params.id;

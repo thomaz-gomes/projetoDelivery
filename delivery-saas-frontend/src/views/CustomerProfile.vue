@@ -785,8 +785,8 @@ async function manualDebit() {
               <td class="text-end text-danger">-{{ formatCurrency(Number(selectedOrder.couponDiscount || 0)) }}</td>
             </tr>
             <tr class="fw-bold">
-              <td colspan="3" class="text-end">Total</td>
-              <td class="text-end">{{ formatCurrency(Number(selectedOrder.total || 0)) }}</td>
+              <td colspan="3" class="text-end">Total faturado</td>
+              <td class="text-end">{{ formatCurrency(Number(selectedOrder.total || 0) + Number(selectedOrder.discountIfood || 0)) }}</td>
             </tr>
           </tfoot>
         </table>

@@ -3348,7 +3348,7 @@ function pulseButton() {
             <span v-if="normalizeOrder(o).channelLabel" class="ms-2 badge bg-light text-dark">{{ normalizeOrder(o).channelLabel }}</span>
           </div>
           <div class="small text-muted">
-            {{ normalizeOrder(o).items?.length || 0 }} item(ns) · {{ formatCurrency(normalizeOrder(o).total || 0) }}
+            {{ normalizeOrder(o).items?.length || 0 }} item(ns) · {{ formatCurrency(Number(o.total || 0) + Number(o.discountIfood || 0)) }}
           </div>
         </div>
         <div class="pending-card-actions">

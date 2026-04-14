@@ -5,7 +5,7 @@ import { useRoute } from 'vue-router';
 import api from '../api';
 import { formatDateTime } from '../utils/dates'
 import { bindLoading } from '../state/globalLoading.js';
-import { splitVoucherDiscounts } from '../utils/orderUtils.js';
+import { splitVoucherDiscounts, storeRevenue } from '../utils/orderUtils.js';
 import QRCode from 'qrcode';
 
 const route = useRoute();
@@ -273,7 +273,7 @@ async function associateCustomer() {
         <div class="line"><span>Taxa de entrega(+)</span><span>{{ fmt(totals.deliveryFee) }}</span></div>
         <div class="line"><span>Taxas adicionais(+)</span><span>{{ fmt(totals.additionalFees) }}</span></div>
         <div v-if="voucherInfo.storeDiscount > 0" class="line"><span>Desconto Loja(-)</span><span>{{ fmt(voucherInfo.storeDiscount) }}</span></div>
-        <div class="line total"><span>TOTAL(=)</span><span>{{ fmt(totals.orderAmount) }}</span></div>
+        <div class="line total"><span>TOTAL(=)</span><span>{{ fmt(order ? storeRevenue(order) : totals.orderAmount) }}</span></div>
       </section>
 
       <section class="sec">
