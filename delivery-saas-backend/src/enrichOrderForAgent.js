@@ -189,13 +189,19 @@ export async function enrichOrderForAgent(order) {
       }
     }
 
-    // 4. Resolver address se ausente ou inválido (objeto vazio vindo do PDV) - buscar de payload.delivery.deliveryAddress
-    if (!order.address || typeof order.address !== 'string' || order.address === '-') {
-      try {
-        const p = order.payload || {}
-        // iFood: payload pode ser envelope { order: { delivery: {...} } } ou direto { delivery: {...} }
-        const ip = p.order || p
-        const da = (ip.delivery && ip.delivery.deliveryAddress) || p.deliveryAddress || null
+    // 4. Resolver address + deliveryAddress (objeto completo para impressão multilinha)
+    try {
+      const p = order.payload || {}
+      const ip = p.order || p
+      const da = (ip.delivery && ip.delivery.deliveryAddress) || p.deliveryAddress || null
+
+      // Preservar deliveryAddress como objeto para o agente montar multilinha
+      if (da && typeof da === 'object' && !order.deliveryAddress) {
+        order.deliveryAddress = da
+      }
+
+      // Resolver address flat (string) se ausente
+      if (!order.address || typeof order.address !== 'string' || order.address === '-') {
         if (da && typeof da === 'object') {
           if (da.formattedAddress) {
             order.address = da.formattedAddress
@@ -214,6 +220,7 @@ export async function enrichOrderForAgent(order) {
           const raw = p.rawPayload && p.rawPayload.address
           if (raw && typeof raw === 'string') order.address = raw
           else if (raw && typeof raw === 'object') {
+            if (!order.deliveryAddress) order.deliveryAddress = raw
             if (raw.formattedAddress) order.address = raw.formattedAddress
             else {
               const rp = []
@@ -225,8 +232,8 @@ export async function enrichOrderForAgent(order) {
             }
           }
         }
-      } catch (e) { /* ignore */ }
-    }
+      }
+    } catch (e) { /* ignore */ }
 
     if (!companyId) return order
 

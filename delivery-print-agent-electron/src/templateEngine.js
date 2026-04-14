@@ -23,7 +23,7 @@ const logger = require('./logger');
 function render(order, printer) {
   const charset = printer.characterSet || 'PC850';
   const widthMm = printer.width || 80;
-  const cols    = ESCPos.columnsForWidth(widthMm);
+  const cols    = printer.columns || ESCPos.columnsForWidth(widthMm);
   const margin  = printer.marginLeft || 0;
 
   const header = [
@@ -56,18 +56,37 @@ function render(order, printer) {
   const lines      = processTemplate(template, context);
   const parts      = [...header];
 
+  let curWidthMult = 1; // rastreia multiplicador de largura ativo
+
   for (const line of lines) {
     if (line.type === 'text') {
-      if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-      parts.push(ESCPos.text(line.content, charset));
+      const textCols = Math.floor((cols - margin) / curWidthMult);
+      const textLines = line.content.split('\n');
+      for (const tl of textLines) {
+        if (tl.length <= textCols) {
+          if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+          parts.push(ESCPos.text(tl, charset));
+        } else {
+          let rest = tl;
+          while (rest.length > 0) {
+            const part = _wordBreak(rest, textCols);
+            rest = rest.slice(part.length).trimStart();
+            if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+            parts.push(ESCPos.text(part, charset));
+          }
+        }
+      }
     } else if (line.type === 'sep') {
+      const effCols = Math.floor((cols - margin) / curWidthMult);
       parts.push(ESCPos.align('left'));
-      parts.push(ESCPos.separator(cols - margin, line.char || '-'));
+      parts.push(ESCPos.separator(effCols, line.char || '-'));
     } else if (line.type === 'bold') {
       parts.push(ESCPos.bold(line.on));
     } else if (line.type === 'size') {
-      const m = line.mult || 1;
-      parts.push(ESCPos.charSize(m, m));
+      const w = line.w || line.mult || 1;
+      const h = line.h || line.mult || 1;
+      curWidthMult = h >= 2 ? Math.max(w, 2) : w;
+      parts.push(ESCPos.charSize(w, h));
     } else if (line.type === 'align') {
       parts.push(ESCPos.align(line.value));
     } else if (line.type === 'feed') {
@@ -75,13 +94,8 @@ function render(order, printer) {
     } else if (line.type === 'invert') {
       parts.push(ESCPos.invert(line.on));
     } else if (line.type === 'row') {
-      const total = cols - margin;
-      const left = line.left;
-      const right = line.right;
-      const pad = total - left.length - right.length;
-      const formatted = pad > 0 ? left + ' '.repeat(pad) + right : left + ' ' + right;
-      if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-      parts.push(ESCPos.text(formatted, charset));
+      const effCols = Math.floor((cols - margin) / curWidthMult);
+      parts.push(..._rowWithWrap(line.left, line.right, effCols, margin, charset));
     } else if (line.type === 'qr') {
       parts.push(ESCPos.align('center'));
       parts.push(ESCPos.qrCode(line.data, 4, 1));
@@ -95,6 +109,62 @@ function render(order, printer) {
   parts.push(ESCPos.feedLines(4));
   parts.push(ESCPos.cut('partial'));
   return Buffer.concat(parts);
+}
+
+// ─── Helper: ROW com word-wrap (reutilizado em blocos e template texto) ───────
+/**
+ * Gera buffers ESC/POS para uma linha left|right.
+ * Cada linha emitida tem EXATAMENTE effCols caracteres (padded com espaços),
+ * garantindo que a impressora nunca faça wrap no hardware.
+ *
+ * Se left+right não cabem: trunca left por palavras, preço fixo na 1ª linha,
+ * continuação indentada nas linhas seguintes (sem preço).
+ */
+function _rowWithWrap(left, right, effCols, margin, charset, indent) {
+  const bufs = [];
+  const minGap = 1;
+  const indentN  = indent || 0;
+  const maxFirst = effCols - right.length - minGap;
+  const contMax  = effCols - indentN;
+  const indentStr = indentN > 0 ? ' '.repeat(indentN) : '';
+
+  /** Emite uma linha com EXATAMENTE effCols chars (pad com espaços). */
+  function emit(text) {
+    const padded = text.length < effCols ? text + ' '.repeat(effCols - text.length) : text.slice(0, effCols);
+    if (margin > 0) bufs.push(ESCPos.marginLeft(margin));
+    bufs.push(ESCPos.text(padded, charset));
+  }
+
+  if (maxFirst <= 0) {
+    // Não cabe de jeito nenhum: preço sozinho na linha
+    emit(left.slice(0, effCols));
+    emit(' '.repeat(effCols - right.length) + right);
+  } else if (left.length <= maxFirst) {
+    // Cabe numa linha
+    const padN = effCols - left.length - right.length;
+    emit(left + ' '.repeat(padN) + right);
+  } else {
+    // Trunca por palavras — preço fixo na 1ª linha
+    const firstPart = _wordBreak(left, maxFirst);
+    let rest = left.slice(firstPart.length).trimStart();
+    const firstPad = effCols - firstPart.length - right.length;
+    emit(firstPart + ' '.repeat(firstPad) + right);
+
+    // Linhas de continuação (indentadas, sem preço, cada uma exatamente effCols)
+    while (rest.length > 0) {
+      const part = _wordBreak(rest, contMax);
+      rest = rest.slice(part.length).trimStart();
+      emit(indentStr + part);
+    }
+  }
+  return bufs;
+}
+
+/** Quebra texto no último espaço antes de maxWidth, ou em maxWidth se não houver espaço. */
+function _wordBreak(text, maxWidth) {
+  if (text.length <= maxWidth) return text;
+  const breakAt = text.lastIndexOf(' ', maxWidth);
+  return breakAt > 0 ? text.slice(0, breakAt) : text.slice(0, maxWidth);
 }
 
 // ─── Renderizador de blocos JSON (formato do painel) ──────────────────────────
@@ -194,8 +264,26 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         else                       parts.push(ESCPos.charSize(1, 1));
 
         const content = substituteVars(block.c || '', ctx);
-        if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-        parts.push(ESCPos.text(content, charset));
+        const wMult = (block.s === 'xl' || block.s === 'lg') ? 2 : 1;
+        const textCols = Math.floor((cols - margin) / wMult);
+
+        // Quebrar conteúdo em linhas que cabem na largura da impressora
+        const rawLines = content.split('\n');
+        for (const rawLine of rawLines) {
+          if (rawLine.length <= textCols) {
+            if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+            parts.push(ESCPos.text(rawLine, charset));
+          } else {
+            // Word-wrap por palavras
+            let rest = rawLine;
+            while (rest.length > 0) {
+              const part = _wordBreak(rest, textCols);
+              rest = rest.slice(part.length).trimStart();
+              if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+              parts.push(ESCPos.text(part, charset));
+            }
+          }
+        }
 
         // Reset formatação
         if (block.b)                               parts.push(ESCPos.bold(false));
@@ -221,11 +309,18 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
             }))
           : (order.items || []);
 
+        // Tamanho configurável — só altera charSize se explicitamente definido no bloco
+        const rawNameSize = block.itemNameSize || null;
+        const rawOptSize  = block.itemOptionSize || null;
+        const nameSize = rawNameSize ? _parseSize(rawNameSize) : null;
+        const optSize  = rawOptSize  ? _parseSize(rawOptSize) : null;
+        let curItemW = 1; // multiplicador de largura ativo
+
         for (const item of items) {
           const qty  = item.quantity || 1;
           const name = item.name || item.productName || '';
 
-          // Preço: item.price × qty + SUM(opt.price × opt.qty) × qty  (mesmo cálculo do SaleDetails.vue)
+          // Preço: item.price × qty + SUM(opt.price × opt.qty) × qty
           const basePrice  = _toNum(item.price);
           const optsTotal  = Array.isArray(item.options)
             ? item.options.reduce((s, o) => s + _toNum(o.price || 0) * (Number(o.quantity || 1)), 0)
@@ -233,62 +328,92 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
           const itemTotal  = (basePrice * qty) + (optsTotal * qty);
           const priceVal   = _fmtN(itemTotal);
 
-          // Linha do item: nome à esquerda, preço à direita (ROW)
+          // SIZE do nome (se configurado) — altura dobrada (h>=2) também reduz colunas efetivas
+          if (nameSize) {
+            parts.push(ESCPos.charSize(nameSize.w, nameSize.h));
+            curItemW = nameSize.h >= 2 ? Math.max(nameSize.w, 2) : nameSize.w;
+          }
           parts.push(ESCPos.bold(true));
-          const leftText  = `${qty}  ${name}`;
-          const rightText = priceVal;
-          const totalCols = cols - margin;
-          const padLen    = totalCols - leftText.length - rightText.length;
-          const rowLine   = padLen > 0 ? leftText + ' '.repeat(padLen) + rightText : leftText + ' ' + rightText;
-          if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-          parts.push(ESCPos.text(rowLine, charset));
+          const nameCols = Math.floor((cols - margin) / curItemW);
+          const qtyPrefix = `${qty}  `;
+          parts.push(..._rowWithWrap(qtyPrefix + name, priceVal, nameCols, margin, charset, qtyPrefix.length));
           parts.push(ESCPos.bold(false));
 
-          // Complementos / opções do item (exibe preço unitário da opção, como no SaleDetails.vue)
+          // SIZE dos opcionais — se configurado usa o valor, senão reseta para normal
+          if (optSize) {
+            parts.push(ESCPos.charSize(optSize.w, optSize.h));
+            curItemW = optSize.h >= 2 ? Math.max(optSize.w, 2) : optSize.w;
+          } else if (nameSize) {
+            // Nome tinha tamanho custom, opcionais não — resetar para normal
+            parts.push(ESCPos.charSize(1, 1));
+            curItemW = 1;
+          }
+          const optCols = Math.floor((cols - margin) / curItemW);
+
           if (Array.isArray(item.options) && item.options.length > 0) {
+            const optIndent = 3;
+            const optPrefix = ' '.repeat(optIndent);
+            const maxOpt    = optCols - optIndent;
             for (const opt of item.options) {
               const optName  = opt.name || '';
-              const optPrice = _toNum(opt.price || 0);
               const oqty     = Number(opt.quantity || 1);
-              const totalQty = oqty * qty;
-              const totalSuffix = qty > 1 ? ` (${totalQty} total)` : '';
-              let optLine;
-              optLine = optPrice > 0
-                ? `   ${oqty}x ${optName}: R$ ${_fmtN(optPrice)}${totalSuffix}`
-                : `   ${oqty}x ${optName}${totalSuffix}`;
-              if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-              parts.push(ESCPos.text(optLine, charset));
+              const optText = `${oqty}x ${optName}`;
+              // Quebra por palavras, cada linha padded a optCols exatos
+              let rest = optText;
+              while (rest.length > 0) {
+                const part = _wordBreak(rest, maxOpt);
+                rest = rest.slice(part.length).trimStart();
+                const raw = optPrefix + part;
+                const padded = raw.length < optCols ? raw + ' '.repeat(optCols - raw.length) : raw.slice(0, optCols);
+                if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+                parts.push(ESCPos.text(padded, charset));
+              }
             }
           }
 
           const obs = item.notes || item.observation || '';
           if (obs) {
+            const obsText = `   ** ${obs} **`;
+            const obsPad = obsText.length < optCols ? obsText + ' '.repeat(optCols - obsText.length) : obsText.slice(0, optCols);
             if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-            parts.push(ESCPos.text(`   Obs: ${obs}`, charset));
+            parts.push(ESCPos.text(obsPad, charset));
           }
         }
+        // Reset SIZE se alterou
+        if (nameSize || optSize) parts.push(ESCPos.charSize(1, 1));
         break;
       }
 
       case 'payments': {
         // Tamanho da fonte configurável: normal, lg (2x altura), xl (2x largura+altura)
         const pSize = block.paymentSize || 'normal';
+        // Sempre setar charSize explícito para garantir reset (evita herdar tamanho de bloco anterior)
         if (pSize === 'xl')      parts.push(ESCPos.charSize(2, 2));
         else if (pSize === 'lg') parts.push(ESCPos.charSize(1, 2));
+        else                     parts.push(ESCPos.charSize(1, 1));
 
-        // Colunas efetivas (se fonte dobrada em largura, metade das colunas)
-        const payCols = pSize === 'xl' ? Math.floor((cols - margin) / 2) : (cols - margin);
+        // Colunas efetivas: xl=metade, lg=metade (altura dobrada usa mais espaço horizontal)
+        const payCols = (pSize === 'xl' || pSize === 'lg') ? Math.floor((cols - margin) / 2) : (cols - margin);
 
         parts.push(ESCPos.invert(true));
         for (const p of rawPayments) {
           const method = _paymentLabel(p);
           const value  = _fmtN(_toNum(p.value || p.amount || p.valor || 0));
-          // Padding interno para não encostar nas bordas do fundo invertido
-          const innerCols = payCols - 2; // 1 espaço em cada lado
-          const padLen    = innerCols - method.length - value.length;
-          const rowLine   = ' ' + (padLen > 0 ? method + ' '.repeat(padLen) + value : method + ' ' + value) + ' ';
+          const inner = payCols - 2;
+          const maxMethod = inner - value.length - 1;
+          const truncMethod = method.length > maxMethod ? _wordBreak(method, maxMethod) : method;
+          const rest = method.length > maxMethod ? method.slice(truncMethod.length).trimStart() : '';
+          const pad1 = inner - truncMethod.length - value.length;
+          const line1 = ' ' + truncMethod + ' '.repeat(Math.max(pad1, 1)) + value + ' ';
+          const padded1 = line1.length < payCols ? line1 + ' '.repeat(payCols - line1.length) : line1.slice(0, payCols);
           if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-          parts.push(ESCPos.text(rowLine, charset));
+          parts.push(ESCPos.text(padded1, charset));
+          if (rest) {
+            const line2 = ' ' + rest;
+            const padded2 = line2.length < payCols ? line2 + ' '.repeat(payCols - line2.length) : line2.slice(0, payCols);
+            if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+            parts.push(ESCPos.text(padded2, charset));
+          }
         }
         parts.push(ESCPos.invert(false));
 
@@ -375,61 +500,60 @@ function buildBlockContext(order) {
                     : '';
 
   // ── Endereço ─────────────────────────────────────────────────────────────────
-  // O enrichOrderForAgent já resolve order.address como string flat.
-  // Filtrar sentinel "-" e tentar múltiplos fallbacks.
-  let endereco_cliente = (typeof order.address === 'string' && order.address && order.address !== '-') ? order.address : '';
-  if (!endereco_cliente) {
-    try {
-      const pl = order.payload || {};
-      // iFood: desempacotar envelope { order: { delivery: {...} } } ou usar payload direto
-      const _ip = pl.order || pl;
-      const da = (_ip.delivery && _ip.delivery.deliveryAddress)
-              || pl.deliveryAddress
-              || order.deliveryAddress;    // campo direto no order (pedidos legados)
-      if (da && typeof da === 'string' && da !== '-') {
-        endereco_cliente = da;
-      } else if (da && typeof da === 'object') {
-        if (da.formattedAddress) {
-          endereco_cliente = da.formattedAddress;
-        } else {
-          const parts = [
-            da.streetName || da.street || da.logradouro || '',
-            da.streetNumber || da.number || da.numero || '',
-            da.complement || da.complemento || '',
-            da.neighborhood || da.bairro || '',
-            da.city || da.cidade || '',
-          ].filter(Boolean);
-          endereco_cliente = parts.join(', ');
-        }
-      }
+  // Extrair campos individuais + montar endereço multilinha completo.
+  let endereco_cliente = '';
+  let end_rua = '', end_numero = '', end_complemento = '', end_bairro = '';
+  let end_cidade = '', end_referencia = '', end_cep = '';
+  try {
+    const pl = order.payload || {};
+    const _ip = pl.order || pl;
+    const da = (_ip.delivery && _ip.delivery.deliveryAddress)
+            || _ip.delivery
+            || pl.deliveryAddress
+            || order.deliveryAddress;
 
-      // Fallback: deliveryNeighborhood (coluna desnormalizada do DB — tem pelo menos o bairro)
-      if (!endereco_cliente && order.deliveryNeighborhood) {
-        endereco_cliente = order.deliveryNeighborhood;
-      }
+    if (da && typeof da === 'object') {
+      end_rua         = da.streetName || da.street || da.logradouro || '';
+      end_numero      = da.streetNumber || da.number || da.numero || '';
+      end_complemento = da.complement || da.complemento || '';
+      end_bairro      = da.neighborhood || da.bairro || '';
+      end_cidade      = da.city || da.cidade || '';
+      end_referencia  = da.reference || da.referencia || '';
+      end_cep         = da.postalCode || da.zipCode || da.cep || '';
 
-      // Fallback adicional: rawPayload.address (mesmo caminho que enrichOrderForAgent usa)
-      if (!endereco_cliente) {
-        const raw = pl.rawPayload && pl.rawPayload.address;
-        if (raw && typeof raw === 'string' && raw !== '-') {
-          endereco_cliente = raw;
-        } else if (raw && typeof raw === 'object') {
-          if (raw.formattedAddress) {
-            endereco_cliente = raw.formattedAddress;
-          } else {
-            const rp = [
-              raw.streetName || raw.street || raw.logradouro || '',
-              raw.streetNumber || raw.number || raw.numero || '',
-              raw.complement || raw.complemento || '',
-              raw.neighborhood || raw.bairro || '',
-              raw.city || raw.cidade || '',
-            ].filter(Boolean);
-            if (rp.length) endereco_cliente = rp.join(', ');
-          }
-        }
+      if (end_rua || end_numero) {
+        const lines = [];
+        lines.push(end_rua + (end_numero ? ', ' + end_numero : ''));
+        if (end_complemento) lines.push('Compl: ' + end_complemento);
+        if (end_bairro) lines.push('Bairro: ' + end_bairro);
+        if (end_cidade) lines.push(end_cidade);
+        if (end_referencia) lines.push('Ref: ' + end_referencia);
+        endereco_cliente = lines.join('\n');
       }
-    } catch (_) { /* ignore */ }
-  }
+    } else if (da && typeof da === 'string' && da !== '-') {
+      endereco_cliente = da;
+    }
+
+    // Fallback: order.address (string flat do DB)
+    if (!endereco_cliente && order.address && typeof order.address === 'string' && order.address !== '-') {
+      endereco_cliente = order.address;
+    }
+
+    // Fallback: deliveryNeighborhood
+    if (!endereco_cliente && order.deliveryNeighborhood) {
+      endereco_cliente = order.deliveryNeighborhood;
+    }
+
+    // Fallback adicional: rawPayload.address
+    if (!endereco_cliente) {
+      const raw = pl.rawPayload && pl.rawPayload.address;
+      if (raw && typeof raw === 'string' && raw !== '-') {
+        endereco_cliente = raw;
+      } else if (raw && typeof raw === 'object') {
+        endereco_cliente = _buildMultilineAddress(raw, '');
+      }
+    }
+  } catch (_) { /* ignore */ }
 
   logger.info('[tpl] endereço resolvido', {
     'order.address':  order.address,
@@ -471,14 +595,21 @@ function buildBlockContext(order) {
   return {
     header_name:       order.headerName || order.store?.name || order.storeName || 'Delivery',
     header_city:       order.headerCity || '',
-    display_id:        String(order.displayId || order.displaySimple || order.id || '---'),
+    display_id:        _padDisplay(order.displaySimple ?? order.displayId ?? order.id),
     data_pedido:       `${pad2(createdAt.getDate())}/${pad2(createdAt.getMonth()+1)}/${createdAt.getFullYear()}`,
     data_curta:        `${pad2(createdAt.getDate())}/${mesesBc[createdAt.getMonth()]} - ${horaBc}`,
     hora_pedido:       horaBc,
-    tipo_pedido,
+    tipo_pedido:       `${tipo_pedido} #${_padDisplay(order.displaySimple ?? order.displayId ?? order.id)}`,
     nome_cliente:      order.customer?.name || order.customerName || '',
     telefone_cliente:  order.customer?.phone || order.customerPhone || '',
     endereco_cliente,
+    end_rua,
+    end_numero,
+    end_complemento,
+    end_bairro,
+    end_cidade,
+    end_referencia,
+    end_cep,
     subtotal:          subtotalVal > 0  ? _fmtN(subtotalVal)  : '0,00',
     taxa_entrega:      _fmtN(taxaVal),
     acrescimo:         _fmtN(acrescimoVal),
@@ -490,7 +621,12 @@ function buildBlockContext(order) {
     localizador:       localizadorBc,
     localizador_suffix: localizadorBc ? `, Localizador: ${localizadorBc}` : '',
     codigo_coleta,
+    loc_coleta:        [localizadorBc ? `Loc: ${localizadorBc}` : '', codigo_coleta ? `Coleta: ${codigo_coleta}` : ''].filter(Boolean).join('  '),
     link_pedido:       _resolveQrUrl(order, tipo_pedido),
+
+    // Canal combinado e salesChannel separado
+    canal: order.canal || order.source || order.channel || _plBc.source || '',
+    sales_channel: _resolveSalesChannel(order, _plBc),
 
     // Troco (changeFor) — extraído pelo enrichOrderForAgent
     troco_raw:         _toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0),
@@ -565,6 +701,9 @@ function parseLine(line) {
     result.push({ type: 'cut' });
   } else if (/^\[BOLD:(on|off)\]$/i.test(trimmed)) {
     result.push({ type: 'bold', on: trimmed.toLowerCase().includes('on') });
+  } else if (/^\[SIZE:(\d)x(\d)\]$/i.test(trimmed)) {
+    const match = trimmed.match(/\[SIZE:(\d)x(\d)\]/i);
+    result.push({ type: 'size', w: parseInt(match[1]), h: parseInt(match[2]) });
   } else if (/^\[SIZE:(\d)\]$/.test(trimmed)) {
     const m = parseInt(trimmed.match(/\[SIZE:(\d)\]/)[1]);
     result.push({ type: 'size', mult: m });
@@ -698,7 +837,7 @@ function buildContext(order, printer) {
   return {
     loja_nome,
     loja_cnpj:    order.store?.cnpj || pl.storeCnpj || '',
-    display_id:   order.displayId || order.id || '---',
+    display_id:   _padDisplay(order.displaySimple ?? order.displayId ?? order.id),
     data:         `${pad2(createdAt.getDate())}/${pad2(createdAt.getMonth()+1)}/${createdAt.getFullYear()}`,
     data_curta,
     hora,
@@ -713,7 +852,7 @@ function buildContext(order, printer) {
     endereco_bairro: neighborhood,
     endereco_cidade: city,
     endereco_ref:    reference,
-    endereco_completo: flatAddress || [street, streetNumber, complement, neighborhood, city].filter(Boolean).join(', '),
+    endereco_completo: _buildMultilineAddress(da, flatAddress),
 
     tipo_delivery,
     endereco_rua_ok: !!(street || flatAddress),
@@ -729,11 +868,8 @@ function buildContext(order, printer) {
       const itemTotal = (base * qty) + (optsSum * qty);
       const optLines = Array.isArray(item.options) && item.options.length > 0
         ? item.options.map(o => {
-            const op   = _toNum(o.price || 0);
             const oqty = Number(o.quantity || 1);
-            const totalQty = oqty * qty;
-            const totalSuffix = qty > 1 ? ` (${totalQty} total)` : '';
-            return `   ${oqty}x ${o.name || ''}${op > 0 ? ': R$ ' + _fmtN(op) : ''}${totalSuffix}`;
+            return `   ${oqty}x ${o.name || ''}`;
           }).join('\n')
         : '';
       return {
@@ -790,9 +926,11 @@ function buildContext(order, printer) {
     localizador:   localizador_bc,
     localizador_suffix,
     codigo_coleta: ifoodPl.delivery?.pickupCode || '',
+    loc_coleta:    [localizador_bc ? `Loc: ${localizador_bc}` : '', (ifoodPl.delivery?.pickupCode) ? `Coleta: ${ifoodPl.delivery.pickupCode}` : ''].filter(Boolean).join('  '),
 
-    // Canal/operador (ex: IFOOD, WHATSAPP, SISTEMA)
-    canal: order.source || order.channel || order.canal || pl.source || '',
+    // Canal combinado e salesChannel separado
+    canal: order.canal || order.source || order.channel || pl.source || '',
+    sales_channel: _resolveSalesChannel(order, pl),
 
     // Contagem total de itens (unidades)
     total_itens_count: String(totalItensCount),
@@ -803,6 +941,11 @@ function buildContext(order, printer) {
     troco_raw:  _toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0),
     troco:      _fmtN(_toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0)),
     tem_troco:  _toNum(order.payment?.changeFor || order.changeFor || 0) > 0,
+
+    // Tamanhos configuráveis — resolvem para diretivas [SIZE:WxH] no template
+    // printer.itemNameSize / printer.itemOptionSize: "1x2", "2", "1" etc.
+    size_item_nome:  `[SIZE:${printer?.itemNameSize || '1x2'}]`,
+    size_item_opcao: `[SIZE:${printer?.itemOptionSize || '1x2'}]`,
   };
 }
 
@@ -845,6 +988,56 @@ function _paymentLabel(p) {
   label += isPrepaid ? ' (pago online)' : ' (cobrar do cliente)';
 
   return label;
+}
+
+// ─── Utilitários de endereço ──────────────────────────────────────────────────
+/** Monta endereço multilinha a partir do objeto deliveryAddress ou fallback flat. */
+function _buildMultilineAddress(da, flatAddress) {
+  if (!da || typeof da !== 'object' || Object.keys(da).length === 0) return flatAddress || '';
+  const street = da.streetName || da.street || da.logradouro || '';
+  const num    = da.streetNumber || da.number || da.numero || '';
+  if (!street && !num) return flatAddress || '';
+  const lines = [];
+  lines.push(street + (num ? ', ' + num : ''));
+  const comp = da.complement || da.complemento || '';
+  if (comp) lines.push('Compl: ' + comp);
+  const bairro = da.neighborhood || da.bairro || da.district || '';
+  if (bairro) lines.push('Bairro: ' + bairro);
+  const city = da.city || da.cidade || '';
+  if (city) lines.push(city);
+  const ref = da.reference || da.referencia || '';
+  if (ref) lines.push('Ref: ' + ref);
+  return lines.join('\n');
+}
+
+// ─── Utilitários de canal ─────────────────────────────────────────────────────
+/** Resolve salesChannel: "iFood", "PDV", "WhatsApp", etc. */
+function _resolveSalesChannel(order, pl) {
+  const ip = (pl && pl.order) || pl || {};
+  if (ip.merchant || ip.salesChannel === 'IFOOD' || String(ip.salesChannel || '').toUpperCase() === 'IFOOD') return 'iFood';
+  const raw = pl?.rawPayload?.source || pl?.source || order.source || '';
+  if (raw) return String(raw);
+  return '';
+}
+
+// ─── Utilitários de display ───────────────────────────────────────────────────
+/** Formata displaySimple com padding de 2 dígitos: 3 → "03", 12 → "12". */
+function _padDisplay(v) {
+  if (v == null) return '---';
+  const n = Number(v);
+  if (isFinite(n) && n > 0) return String(n).padStart(2, '0');
+  return String(v);
+}
+
+// ─── Utilitários de tamanho ───────────────────────────────────────────────────
+/** Parseia "1x2", "2", "1" → { w, h }. Padrão: { w: 1, h: 1 }. */
+function _parseSize(s) {
+  if (!s) return { w: 1, h: 1 };
+  const str = String(s).toLowerCase();
+  const m = str.match(/^(\d)x(\d)$/);
+  if (m) return { w: parseInt(m[1]), h: parseInt(m[2]) };
+  const n = parseInt(str);
+  return isFinite(n) && n > 0 ? { w: n, h: n } : { w: 1, h: 1 };
 }
 
 // ─── Utilitários numéricos ────────────────────────────────────────────────────

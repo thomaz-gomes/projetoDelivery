@@ -47,11 +47,15 @@ const DEFAULT_CONFIG = {
  *   baudRate: number,        // Ex: 9600 ou 19200
  *   // Layout:
  *   width: 58 | 80,          // Largura em mm
+ *   columns: number,         // Chars por linha (0=auto: 48 para 80mm, 32 para 58mm)
  *   characterSet: 'PC850' | 'UTF8', // Codepage
  *   marginLeft: number,      // Colunas extras à esquerda (0 = sem margem)
  *   density: number,         // Densidade de aquecimento: 0-15 (padrão 8)
  *   copies: number,          // Número de vias (padrão 1)
  *   enabled: boolean,
+ *   // Tamanhos de fonte (formato: "WxH" ou "N", ex: "1x2"=esticado, "2"=dobrado, "1"=normal):
+ *   itemNameSize: string,    // Tamanho do nome do item (padrão "1x2")
+ *   itemOptionSize: string,  // Tamanho dos opcionais/complementos (padrão "1x2")
  * }
  */
 

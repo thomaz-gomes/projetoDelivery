@@ -439,10 +439,17 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
       <div class="field">
         <label>Largura do Papel</label>
         <select id="pm-width">
-          <option value="80">80mm (48 colunas)</option>
-          <option value="58">58mm (32 colunas)</option>
+          <option value="80">80mm</option>
+          <option value="58">58mm</option>
         </select>
       </div>
+      <div class="field">
+        <label>Colunas (chars por linha)</label>
+        <input id="pm-columns" type="number" min="20" max="80" placeholder="auto" />
+      </div>
+    </div>
+
+    <div class="form-row">
       <div class="field">
         <label>Codepage</label>
         <select id="pm-charset">
@@ -473,6 +480,25 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
       <div class="field">
         <label>Categorias (vírgula)</label>
         <input id="pm-categories" placeholder="all  ou  food,drink" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="field">
+        <label>Tamanho nome do item</label>
+        <select id="pm-itemNameSize">
+          <option value="1">Normal (1x1)</option>
+          <option value="1x2" selected>Esticado alto (1x2)</option>
+          <option value="2">Dobrado (2x2)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Tamanho opcionais</label>
+        <select id="pm-itemOptionSize">
+          <option value="1">Normal (1x1)</option>
+          <option value="1x2" selected>Esticado alto (1x2)</option>
+          <option value="2">Dobrado (2x2)</option>
+        </select>
       </div>
     </div>
 
@@ -661,12 +687,15 @@ function resetPrinterForm() {
   document.getElementById('pm-com').value        = '';
   document.getElementById('pm-baud').value       = '9600';
   document.getElementById('pm-width').value      = '80';
+  document.getElementById('pm-columns').value    = '';
   document.getElementById('pm-charset').value    = 'PC850';
   document.getElementById('pm-density').value    = '8';
   document.getElementById('pm-margin').value     = '0';
-  document.getElementById('pm-copies').value     = '1';
-  document.getElementById('pm-categories').value = 'all';
-  document.getElementById('pm-enabled').checked  = true;
+  document.getElementById('pm-copies').value          = '1';
+  document.getElementById('pm-categories').value      = 'all';
+  document.getElementById('pm-itemNameSize').value    = '1x2';
+  document.getElementById('pm-itemOptionSize').value  = '1x2';
+  document.getElementById('pm-enabled').checked       = true;
 }
 
 function fillPrinterForm(p) {
@@ -678,12 +707,15 @@ function fillPrinterForm(p) {
   document.getElementById('pm-com').value        = p.comPort || '';
   document.getElementById('pm-baud').value       = p.baudRate || 9600;
   document.getElementById('pm-width').value      = p.width || 80;
+  document.getElementById('pm-columns').value    = p.columns || '';
   document.getElementById('pm-charset').value    = p.characterSet || 'PC850';
   document.getElementById('pm-density').value    = p.density ?? 8;
   document.getElementById('pm-margin').value     = p.marginLeft || 0;
-  document.getElementById('pm-copies').value     = p.copies || 1;
-  document.getElementById('pm-categories').value = (p.categories || ['all']).join(', ');
-  document.getElementById('pm-enabled').checked  = p.enabled !== false;
+  document.getElementById('pm-copies').value          = p.copies || 1;
+  document.getElementById('pm-categories').value      = (p.categories || ['all']).join(', ');
+  document.getElementById('pm-itemNameSize').value    = p.itemNameSize || '1x2';
+  document.getElementById('pm-itemOptionSize').value  = p.itemOptionSize || '1x2';
+  document.getElementById('pm-enabled').checked       = p.enabled !== false;
 }
 
 function updateInterfaceFields() {
@@ -707,11 +739,14 @@ function collectPrinterForm() {
     comPort:             document.getElementById('pm-com').value.trim(),
     baudRate:            parseInt(document.getElementById('pm-baud').value) || 9600,
     width:               parseInt(document.getElementById('pm-width').value) || 80,
+    columns:             parseInt(document.getElementById('pm-columns').value) || 0,
     characterSet:        document.getElementById('pm-charset').value,
     density:             parseInt(document.getElementById('pm-density').value) ?? 8,
     marginLeft:          parseInt(document.getElementById('pm-margin').value) || 0,
     copies:              parseInt(document.getElementById('pm-copies').value) || 1,
     categories:          categories.length ? categories : ['all'],
+    itemNameSize:        document.getElementById('pm-itemNameSize').value || '1x2',
+    itemOptionSize:      document.getElementById('pm-itemOptionSize').value || '1x2',
     enabled:             document.getElementById('pm-enabled').checked,
   };
 }
@@ -900,42 +935,32 @@ async function resetConfig() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_BLOCKS = [
+  { t: 'cond', key: 'header_name', c: '{{header_name}}', s: 'lg', a: 'center' },
+  { t: 'cond', key: 'canal', c: ' {{canal}}', a: 'center', s: 'sm', b: true },
   { t: 'sep' },
-  { t: 'text', c: '{{header_name}}', a: 'center', b: true, s: 'lg' },
-  { t: 'cond', key: 'header_city', c: '{{header_city}}', a: 'center' },
-  { t: 'sep' },
-  // Tipo do pedido em destaque (ENTREGA / RETIRADA / MESA)
   { t: 'text', c: '{{tipo_pedido}}', a: 'center', b: true, s: 'xl' },
   { t: 'text', c: '{{data_pedido}}  {{hora_pedido}}', a: 'center' },
   { t: 'sep' },
-  { t: 'text', c: 'Pedido #{{display_id}}', b: true },
+  { t: 'text', c: '{{nome_cliente}} | Tel: {{telefone_cliente}}', b: true },
+  { t: 'cond', key: 'loc_coleta', c: '{{loc_coleta}}' },
   { t: 'sep' },
-  // Dados do cliente
-  { t: 'text', c: '{{nome_cliente}}' },
-  { t: 'text', c: 'Tel: {{telefone_cliente}}' },
-  { t: 'cond', key: 'localizador',   c: 'Localizador: {{localizador}}' },
-  { t: 'text', c: '{{endereco_cliente}}' },
-  // Observações do pedido (inclui desconto iFood, obs especiais, etc.)
-  { t: 'cond', key: 'observacoes', c: 'Obs: {{observacoes}}' },
-  // iFood: código de coleta
-  { t: 'cond', key: 'codigo_coleta', c: 'Codigo Coleta: {{codigo_coleta}}' },
+  { t: 'text', c: '{{end_rua}}, {{end_numero}} . {{end_complemento}} {{end_bairro}}', b: true, a: 'center' },
+  { t: 'text', c: '{{end_referencia}}', a: 'center' },
+  { t: 'cond', key: 'observacoes', c: 'Obs: {{observacoes}}', a: 'center' },
   { t: 'sep' },
-  // Itens — opções aparecem como "-1x Nome" (formato iFood)
-  { t: 'items', itemBold: true, itemSize: 'normal' },
+  { t: 'items', itemBold: true, itemNameSize: '1x2', itemOptionSize: '1' },
   { t: 'sep' },
-  { t: 'text', c: 'Quantidade de itens:    {{total_itens_count}}' },
+  { t: 'text', c: 'Quantidade de itens:    {{total_itens_count}}', b: true },
   { t: 'sep' },
   { t: 'text', c: 'Total itens(=):    R$ {{subtotal}}' },
   { t: 'cond', key: 'taxa_entrega',  c: 'Taxa entrega(+):   R$ {{taxa_entrega}}' },
   { t: 'cond', key: 'acrescimo_val', c: 'Acrescimo(+):     R$ {{acrescimo_val}}' },
   { t: 'cond', key: 'desconto',      c: 'Desconto(-):       R$ {{desconto}}' },
   { t: 'sep' },
-  { t: 'text', c: 'TOTAL(=):          R$ {{total}}', b: true, s: 'lg' },
+  { t: 'text', c: 'TOTAL(=):          R$ {{total}}', b: true },
   { t: 'sep' },
   { t: 'text', c: 'FORMA DE PAGAMENTO', b: true, a: 'center' },
-  { t: 'payments' },
-  { t: 'sep' },
-  { t: 'cond', key: 'canal', c: 'Op: {{canal}}', a: 'center' },
+  { t: 'payments', paymentSize: 'normal' },
   { t: 'sep' },
   { t: 'qr' },
 ];
@@ -943,7 +968,9 @@ const DEFAULT_BLOCKS = [
 const PLACEHOLDER_CATS = [
   { label: 'Dados da loja', items: [
     { key: 'header_name',  label: 'Nome da loja' },
-    { key: 'header_city',  label: 'Cidade' }
+    { key: 'header_city',  label: 'Cidade' },
+    { key: 'sales_channel', label: 'Canal (iFood, PDV, etc.)' },
+    { key: 'canal',         label: 'Loja - Canal (combinado)' }
   ]},
   { label: 'Pedido', items: [
     { key: 'display_id',   label: 'N. Pedido' },
@@ -955,7 +982,16 @@ const PLACEHOLDER_CATS = [
   { label: 'Cliente', items: [
     { key: 'nome_cliente',       label: 'Nome do cliente' },
     { key: 'telefone_cliente',   label: 'Telefone' },
-    { key: 'endereco_cliente',   label: 'Endereço' }
+    { key: 'endereco_cliente',   label: 'Endereço completo (multilinha)' }
+  ]},
+  { label: 'Endereço', items: [
+    { key: 'end_rua',            label: 'Rua/Logradouro' },
+    { key: 'end_numero',         label: 'Número' },
+    { key: 'end_complemento',    label: 'Complemento' },
+    { key: 'end_bairro',         label: 'Bairro' },
+    { key: 'end_cidade',         label: 'Cidade' },
+    { key: 'end_referencia',     label: 'Referência' },
+    { key: 'end_cep',            label: 'CEP' }
   ]},
   { label: 'Valores', items: [
     { key: 'total_itens_count',  label: 'Qtd de itens' },
@@ -966,6 +1002,7 @@ const PLACEHOLDER_CATS = [
     { key: 'total',              label: 'Total' }
   ]},
   { label: 'iFood', items: [
+    { key: 'loc_coleta',          label: 'Localizador + Coleta (1 linha)' },
     { key: 'localizador',        label: 'Localizador (phone.localizer)' },
     { key: 'codigo_coleta',      label: 'Código de coleta (pickupCode)' }
   ]}
@@ -985,17 +1022,18 @@ function initTemplateEditor() {
         tplBlocks = parsed.blocks;
         // Migration: add missing cond blocks if not present
         let migrated = false;
-        const ifoodKeys = ['localizador', 'codigo_coleta'];
-        const existingKeys = tplBlocks.filter(b => b.t === 'cond').map(b => b.key);
-        const missing = ifoodKeys.filter(k => !existingKeys.includes(k));
-        if (missing.length > 0) {
+        // Migrar blocos antigos (localizador + codigo_coleta separados) para loc_coleta combinado
+        const hasLocColeta = tplBlocks.some(b => b.t === 'cond' && b.key === 'loc_coleta');
+        if (!hasLocColeta) {
+          // Remover blocos antigos separados se existirem
+          const oldLocIdx = tplBlocks.findIndex(b => b.t === 'cond' && b.key === 'localizador');
+          if (oldLocIdx >= 0) { tplBlocks.splice(oldLocIdx, 1); migrated = true; }
+          const oldColIdx = tplBlocks.findIndex(b => b.t === 'cond' && b.key === 'codigo_coleta');
+          if (oldColIdx >= 0) { tplBlocks.splice(oldColIdx, 1); migrated = true; }
+          // Inserir bloco combinado após telefone
           const telIdx = tplBlocks.findIndex(b => b.t === 'text' && b.c && b.c.includes('telefone_cliente'));
           const insertAt = telIdx >= 0 ? telIdx + 1 : tplBlocks.length;
-          const newBlocks = missing.map(k => k === 'localizador'
-            ? { t: 'cond', key: 'localizador',   c: 'Localizador: {{localizador}}' }
-            : { t: 'cond', key: 'codigo_coleta', c: 'Cod. Coleta: {{codigo_coleta}}' }
-          );
-          tplBlocks.splice(insertAt, 0, ...newBlocks);
+          tplBlocks.splice(insertAt, 0, { t: 'cond', key: 'loc_coleta', c: '{{loc_coleta}}' });
           migrated = true;
         }
         // Migration: add acrescimo_val between taxa_entrega and desconto if missing
@@ -1072,9 +1110,10 @@ function renderOneBlock(block, idx) {
 
   } else if (block.t === 'items') {
     const boldBadge = block.itemBold ? '<span class="tpl-fmt-badge">N</span>' : '';
-    const sizeBadge = block.itemSize && block.itemSize !== 'normal'
-      ? `<span class="tpl-fmt-badge">${sizeLabel(block.itemSize)}</span>` : '';
-    inner = `<div class="tpl-fixed">&#9776; Itens do pedido${boldBadge}${sizeBadge}</div>`;
+    const ns = block.itemNameSize || '1x2';
+    const os = block.itemOptionSize || '1x2';
+    const sizeBadge = `<span class="tpl-fmt-badge" style="font-size:10px">Nome:${ns} Opc:${os}</span>`;
+    inner = `<div class="tpl-fixed">&#9776; Itens do pedido${boldBadge} ${sizeBadge}</div>`;
 
   } else if (block.t === 'payments') {
     const pSizeBadge = block.paymentSize && block.paymentSize !== 'normal'
@@ -1147,9 +1186,23 @@ function renderTplToolbar() {
   }
 
   if (isItems) {
-    const ib = !!block.itemBold, il = block.itemSize === 'lg';
+    const ib = !!block.itemBold;
+    const ins = block.itemNameSize || '1x2';
+    const ios = block.itemOptionSize || '1x2';
     html += `<button class="btn btn-sm ${ib?'btn-primary':'btn-ghost'}" onclick="tplToggleItemBold()" title="Itens em negrito" style="font-weight:700;font-family:serif">N</button>`;
-    html += `<button class="btn btn-sm ${il?'btn-primary':'btn-ghost'}" onclick="tplToggleItemSize()" title="Itens grandes" style="font-size:15px">A</button>`;
+    html += '<span class="tpl-divider"></span>';
+    html += `<span style="color:#888;font-size:11px">Nome:</span>`;
+    html += `<select class="tpl-ki" style="width:90px" onchange="tplSetItemNameSize(this.value)">`;
+    html += `<option value="1" ${ins==='1'?'selected':''}>Normal</option>`;
+    html += `<option value="1x2" ${ins==='1x2'?'selected':''}>Esticado</option>`;
+    html += `<option value="2" ${ins==='2'?'selected':''}>Dobrado</option>`;
+    html += `</select>`;
+    html += `<span style="color:#888;font-size:11px">Opc:</span>`;
+    html += `<select class="tpl-ki" style="width:90px" onchange="tplSetItemOptionSize(this.value)">`;
+    html += `<option value="1" ${ios==='1'?'selected':''}>Normal</option>`;
+    html += `<option value="1x2" ${ios==='1x2'?'selected':''}>Esticado</option>`;
+    html += `<option value="2" ${ios==='2'?'selected':''}>Dobrado</option>`;
+    html += `</select>`;
   }
 
   if (block.t === 'payments') {
@@ -1239,7 +1292,7 @@ function tplAddBlock(type) {
     case 'text':     newBlock = { t: 'text', c: 'Novo texto' }; break;
     case 'sep':      newBlock = { t: 'sep' }; break;
     case 'cond':     newBlock = { t: 'cond', key: 'observacoes', c: '{{observacoes}}' }; break;
-    case 'items':    newBlock = { t: 'items', itemBold: true, itemSize: 'normal' }; break;
+    case 'items':    newBlock = { t: 'items', itemBold: true, itemNameSize: '1x2', itemOptionSize: '1x2' }; break;
     case 'payments': newBlock = { t: 'payments' }; break;
     case 'qr':       newBlock = { t: 'qr' }; break;
     default: return;
@@ -1288,10 +1341,15 @@ function tplToggleItemBold() {
   renderBlockEditor();
 }
 
-function tplToggleItemSize() {
+function tplSetItemNameSize(s) {
   if (tplSelIdx < 0) return;
-  const cur = tplBlocks[tplSelIdx].itemSize;
-  tplBlocks[tplSelIdx].itemSize = cur === 'lg' ? 'normal' : 'lg';
+  tplBlocks[tplSelIdx].itemNameSize = s;
+  renderBlockEditor();
+}
+
+function tplSetItemOptionSize(s) {
+  if (tplSelIdx < 0) return;
+  tplBlocks[tplSelIdx].itemOptionSize = s;
   renderBlockEditor();
 }
 

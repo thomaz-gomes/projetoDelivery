@@ -72,7 +72,7 @@ async function print(order, printer, outputDir) {
   }
 
   // Nome do arquivo
-  const displayId = order.displayId || order.displaySimple || order.id || 'unknown';
+  const displayId = order.displaySimple || order.displayId || order.id || 'unknown';
   const ts = new Date();
   const timeStr = `${_pad(ts.getHours())}${_pad(ts.getMinutes())}${_pad(ts.getSeconds())}`;
   const filename = `pedido-${_sanitize(String(displayId))}-${timeStr}.pdf`;
@@ -97,9 +97,35 @@ async function print(order, printer, outputDir) {
   }
 
   function addRow(left, right, opts = {}) {
-    const pad = cols - left.length - right.length;
-    const line = pad > 0 ? left + ' '.repeat(pad) + right : left + ' ' + right;
-    addLine(line, opts);
+    const effCols = opts.effCols || cols;
+    const indent = opts.indent || 0;
+    const indentStr = indent > 0 ? ' '.repeat(indent) : '';
+    const minGap = 2;
+    const maxFirst = effCols - right.length - minGap;
+    const contMax = effCols - indent;
+
+    if (maxFirst <= 0 || left.length <= maxFirst) {
+      const pad = effCols - left.length - right.length;
+      const line = pad > 0 ? left + ' '.repeat(pad) + right : left + ' ' + right;
+      addLine(line, opts);
+    } else {
+      // Word-wrap: quebra por palavras, preço na 1ª linha
+      const firstPart = _pdfWordBreak(left, maxFirst);
+      let rest = left.slice(firstPart.length).trimStart();
+      const firstPad = effCols - firstPart.length - right.length;
+      addLine(firstPart + ' '.repeat(Math.max(firstPad, minGap)) + right, opts);
+      while (rest.length > 0) {
+        const part = _pdfWordBreak(rest, contMax);
+        rest = rest.slice(part.length).trimStart();
+        addLine(indentStr + part, opts);
+      }
+    }
+  }
+
+  function _pdfWordBreak(text, maxWidth) {
+    if (text.length <= maxWidth) return text;
+    const breakAt = text.lastIndexOf(' ', maxWidth);
+    return breakAt > 0 ? text.slice(0, breakAt) : text.slice(0, maxWidth);
   }
 
   function addFeed(n) {
@@ -132,7 +158,7 @@ async function print(order, printer, outputDir) {
   for (const l of lines) {
     doc.font(l.font).fontSize(l.fontSize);
 
-    if (l.inverted && l.text.trim()) {
+    if (l.inverted) {
       doc.save();
       doc.rect(MARGIN, y, contentWidth, l.lineHeight).fill('#333');
       doc.fillColor('#fff');
@@ -150,7 +176,7 @@ async function print(order, printer, outputDir) {
       doc.text(l.text, MARGIN, y, { lineBreak: false });
     }
 
-    if (l.inverted && l.text.trim()) {
+    if (l.inverted) {
       doc.fillColor('#000');
       doc.restore();
     }
@@ -321,6 +347,7 @@ function _renderTextLines(tpl, widthMm, order, printer, cols, addLine, addSep, a
   let currentFontSize = BASE_SIZE;
   let currentLineHeight = BASE_LH;
   let inverted = false;
+  let curWidthMult = 1;
 
   for (const line of parsed) {
     switch (line.type) {
@@ -333,15 +360,20 @@ function _renderTextLines(tpl, widthMm, order, printer, cols, addLine, addSep, a
           inverted,
         });
         break;
-      case 'sep':
-        addSep(line.char || '-');
+      case 'sep': {
+        const effCols = Math.floor(cols / curWidthMult);
+        addLine((line.char || '-').repeat(effCols), { inverted });
         break;
+      }
       case 'bold':
         currentBold = line.on;
         break;
       case 'size': {
-        const m = line.mult || 1;
-        if (m >= 2) { currentFontSize = XL_SIZE; currentLineHeight = XL_LH; }
+        const w = line.w || line.mult || 1;
+        const h = line.h || line.mult || 1;
+        curWidthMult = w;
+        if (w >= 2 && h >= 2) { currentFontSize = XL_SIZE; currentLineHeight = XL_LH; }
+        else if (h >= 2) { currentFontSize = BASE_SIZE; currentLineHeight = BASE_LH * h; }
         else { currentFontSize = BASE_SIZE; currentLineHeight = BASE_LH; }
         break;
       }
@@ -354,13 +386,17 @@ function _renderTextLines(tpl, widthMm, order, printer, cols, addLine, addSep, a
       case 'invert':
         inverted = line.on;
         break;
-      case 'row':
+      case 'row': {
+        const effCols = Math.floor(cols / curWidthMult);
         addRow(line.left, line.right, {
           bold: currentBold,
           fontSize: currentFontSize,
           lineHeight: currentLineHeight,
+          inverted,
+          effCols,
         });
         break;
+      }
       case 'qr':
         addLine(line.data, { align: 'center', fontSize: BASE_SIZE * 0.8, lineHeight: BASE_LH * 0.8 });
         break;
