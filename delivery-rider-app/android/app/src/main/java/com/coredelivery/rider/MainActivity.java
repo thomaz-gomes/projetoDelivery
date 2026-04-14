@@ -42,8 +42,14 @@ public class MainActivity extends BridgeActivity {
             );
         }
 
-        // Override WebChromeClient to handle camera permission requests from getUserMedia
+        // Wrap the existing Capacitor WebChromeClient to add camera permission handling
+        // without losing Capacitor's built-in permission management (GPS, geolocation, etc.)
+        final WebChromeClient original = (WebChromeClient) getBridge().getWebView().getWebChromeClient();
+
         getBridge().getWebView().setWebChromeClient(new WebChromeClient() {
+            // Delegate ALL methods to the original Capacitor client by default.
+            // We only override onPermissionRequest to add camera support.
+
             @Override
             public void onPermissionRequest(PermissionRequest request) {
                 String[] resources = request.getResources();
@@ -56,19 +62,69 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 if (needsCamera) {
-                    // Check if we already have the Android-level camera permission
                     if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
                             == PackageManager.PERMISSION_GRANTED) {
                         request.grant(resources);
                     } else {
-                        // Request the runtime permission; result handled by cameraPermissionLauncher
                         pendingPermissionRequest = request;
                         cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
                     }
+                } else if (original != null) {
+                    // Let Capacitor handle non-camera permissions (geolocation, etc.)
+                    original.onPermissionRequest(request);
                 } else {
-                    // For non-camera permissions, grant by default
                     request.grant(resources);
                 }
+            }
+
+            // Forward geolocation permissions to Capacitor's handler
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origin, android.webkit.GeolocationPermissions.Callback callback) {
+                if (original != null) {
+                    original.onGeolocationPermissionsShowPrompt(origin, callback);
+                } else {
+                    callback.invoke(origin, true, false);
+                }
+            }
+
+            // Forward console messages (Capacitor uses these for logging)
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage consoleMessage) {
+                if (original != null) return original.onConsoleMessage(consoleMessage);
+                return super.onConsoleMessage(consoleMessage);
+            }
+
+            // Forward JS dialogs
+            @Override
+            public boolean onJsAlert(android.webkit.WebView view, String url, String message, android.webkit.JsResult result) {
+                if (original != null) return original.onJsAlert(view, url, message, result);
+                return super.onJsAlert(view, url, message, result);
+            }
+
+            @Override
+            public boolean onJsConfirm(android.webkit.WebView view, String url, String message, android.webkit.JsResult result) {
+                if (original != null) return original.onJsConfirm(view, url, message, result);
+                return super.onJsConfirm(view, url, message, result);
+            }
+
+            @Override
+            public boolean onJsPrompt(android.webkit.WebView view, String url, String message, String defaultValue, android.webkit.JsPromptResult result) {
+                if (original != null) return original.onJsPrompt(view, url, message, defaultValue, result);
+                return super.onJsPrompt(view, url, message, defaultValue, result);
+            }
+
+            // Forward file chooser (for input type=file)
+            @Override
+            public boolean onShowFileChooser(android.webkit.WebView webView, android.webkit.ValueCallback<android.net.Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                if (original != null) return original.onShowFileChooser(webView, filePathCallback, fileChooserParams);
+                return super.onShowFileChooser(webView, filePathCallback, fileChooserParams);
+            }
+
+            // Forward create window requests
+            @Override
+            public boolean onCreateWindow(android.webkit.WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                if (original != null) return original.onCreateWindow(view, isDialog, isUserGesture, resultMsg);
+                return super.onCreateWindow(view, isDialog, isUserGesture, resultMsg);
             }
         });
     }
