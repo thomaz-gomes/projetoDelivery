@@ -213,6 +213,8 @@ model Order {
   // persisted coupon information (nullable - may be null for older orders)
   couponCode           String?
   couponDiscount       Decimal?
+  discountIfood        Decimal?  // desconto pago pelo iFood (marketplace) — entra no caixa da loja
+  discountMerchant     Decimal?  // desconto absorvido pela loja — NÃO entra no caixa
   deliveryFee          Decimal?
   payload              Json?
   createdAt            DateTime              @default(now())

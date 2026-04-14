@@ -149,16 +149,34 @@ function mapIFoodOrder(payload) {
   // Prefer explicit `orderId` or nested `order.id`/`referenceId` over the event `id` to avoid mixing event vs order identifiers.
   const externalId = payload?.orderId || order?.id || order?.referenceId || null;
 
-  // Extrair desconto dos benefits do iFood (cupons/promoções do parceiro)
+  // Extrair desconto dos benefits do iFood separando por sponsor
+  // IFOOD = marketplace paga (entra no caixa da loja)
+  // MERCHANT = loja absorve (não entra no caixa)
   let couponDiscount = 0;
+  let discountIfood = 0;    // valor que o iFood repassa à loja
+  let discountMerchant = 0; // valor que a loja absorve
   let couponCode = null;
   const benefits = order?.benefits || [];
   if (Array.isArray(benefits) && benefits.length > 0) {
     for (const b of benefits) {
       const val = Number(b.value || 0);
       if (val > 0) couponDiscount += val;
+      // Separar por sponsorshipValues
+      if (Array.isArray(b.sponsorshipValues)) {
+        for (const sv of b.sponsorshipValues) {
+          const svVal = Number(sv.value || sv.amount || 0);
+          const name = String(sv.name || '').toUpperCase();
+          if (name === 'IFOOD' || name === 'EXTERNAL' || name === 'CHAIN') {
+            discountIfood += svVal;
+          } else if (name === 'MERCHANT') {
+            discountMerchant += svVal;
+          }
+        }
+      } else {
+        // Sem sponsorshipValues: fallback — considerar como iFood (conservador, entra no caixa)
+        discountIfood += val;
+      }
     }
-    // Tentar extrair nome/código do benefício
     const firstBenefit = benefits[0];
     if (firstBenefit?.description || firstBenefit?.title) {
       couponCode = firstBenefit.description || firstBenefit.title;
@@ -178,6 +196,8 @@ function mapIFoodOrder(payload) {
     total,
     deliveryFee: Number(order?.total?.deliveryFee || 0) || null,
     couponDiscount: couponDiscount > 0 ? couponDiscount : null,
+    discountIfood: discountIfood > 0 ? discountIfood : null,
+    discountMerchant: discountMerchant > 0 ? discountMerchant : null,
     couponCode,
     items,
     // payment troco (changeFor) extraction — prefer payments.methods[*].changeFor (iFood)
@@ -286,6 +306,8 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     total: mapped.total,
     deliveryFee: mapped.deliveryFee,
     couponDiscount: mapped.couponDiscount || null,
+    discountIfood: mapped.discountIfood || null,
+    discountMerchant: mapped.discountMerchant || null,
     couponCode: mapped.couponCode || null,
     orderType: mapped.orderType || null,
     payload: mapped.raw,

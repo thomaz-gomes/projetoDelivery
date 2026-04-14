@@ -93,22 +93,74 @@ export async function createFinancialEntriesForOrder(order) {
       },
     });
 
-    // 2. Se houver desconto de cupom, registrar como dedução
-    if (order.couponDiscount && Number(order.couponDiscount) > 0) {
+    // 2. Descontos — separar por sponsor
+    // discountIfood: iFood paga à loja → RECEIVABLE (entra no caixa)
+    // discountMerchant: loja absorve → PAYABLE/dedução (sai do caixa)
+    // Fallback: se não tem separação, usa couponDiscount como dedução (comportamento legado)
+    const discIfood   = Number(order.discountIfood || 0);
+    const discMerch   = Number(order.discountMerchant || 0);
+    const discTotal   = Number(order.couponDiscount || 0);
+    const pedidoLabel = `Pedido #${order.displayId || order.id.slice(0, 8)}`;
+
+    if (discIfood > 0) {
+      // iFood repassa à loja → registrar como receita a receber
+      await prisma.financialTransaction.create({
+        data: {
+          companyId: order.companyId,
+          type: 'RECEIVABLE',
+          status: 'PENDING',
+          description: `Voucher iFood (marketplace) ${order.couponCode || ''} - ${pedidoLabel}`,
+          costCenterId: revenueCC?.id || null,
+          grossAmount: discIfood,
+          feeAmount: 0,
+          netAmount: discIfood,
+          dueDate: now,
+          issueDate: now,
+          sourceType: 'COUPON',
+          sourceId: order.id,
+        },
+      });
+    }
+
+    if (discMerch > 0) {
+      // Loja absorve → registrar como dedução
       const deductionCC = await prisma.costCenter.findFirst({
         where: { companyId: order.companyId, dreGroup: 'DEDUCTIONS', code: { contains: '2.03' } },
       });
-
       await prisma.financialTransaction.create({
         data: {
           companyId: order.companyId,
           type: 'PAYABLE',
           status: 'PAID',
-          description: `Desconto cupom ${order.couponCode || ''} - Pedido #${order.displayId || order.id.slice(0, 8)}`,
+          description: `Desconto loja ${order.couponCode || ''} - ${pedidoLabel}`,
           costCenterId: deductionCC?.id || null,
-          grossAmount: Number(order.couponDiscount),
+          grossAmount: discMerch,
           feeAmount: 0,
-          netAmount: Number(order.couponDiscount),
+          netAmount: discMerch,
+          dueDate: now,
+          paidAt: now,
+          issueDate: now,
+          sourceType: 'COUPON',
+          sourceId: order.id,
+        },
+      });
+    }
+
+    // Fallback legado: se não tem separação por sponsor mas tem couponDiscount
+    if (discTotal > 0 && discIfood === 0 && discMerch === 0) {
+      const deductionCC = await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, dreGroup: 'DEDUCTIONS', code: { contains: '2.03' } },
+      });
+      await prisma.financialTransaction.create({
+        data: {
+          companyId: order.companyId,
+          type: 'PAYABLE',
+          status: 'PAID',
+          description: `Desconto cupom ${order.couponCode || ''} - ${pedidoLabel}`,
+          costCenterId: deductionCC?.id || null,
+          grossAmount: discTotal,
+          feeAmount: 0,
+          netAmount: discTotal,
           dueDate: now,
           paidAt: now,
           issueDate: now,

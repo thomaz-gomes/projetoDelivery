@@ -215,29 +215,52 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
     : (pl.payment && typeof pl.payment === 'object')                                  ? [pl.payment]
     : [];
 
-  // Adicionar cupom/voucher como forma de pagamento se houver desconto
-  // Tentar: order.couponDiscount > order.discount > iFood benefits
-  let couponVal = _toNum(order.couponDiscount || order.discount || 0);
-  let couponLabel = order.couponCode ? `Voucher (${order.couponCode})` : 'Voucher Desconto';
+  // Adicionar vouchers como formas de pagamento, separando por sponsor:
+  // - iFood/marketplace: "Voucher iFood" (iFood repassa à loja)
+  // - Loja: "Voucher Loja" (loja absorve)
+  const voucherPayments = [];
+  const discIfood   = _toNum(order.discountIfood || 0);
+  const discMerch   = _toNum(order.discountMerchant || 0);
 
-  // Fallback: extrair desconto dos benefits do iFood (quando couponDiscount não está no order)
-  if (couponVal <= 0 && Array.isArray(ifoodPl.benefits) && ifoodPl.benefits.length > 0) {
-    for (const b of ifoodPl.benefits) {
-      couponVal += _toNum(b.value || 0);
+  if (discIfood > 0 || discMerch > 0) {
+    // Dados separados por sponsor (novo formato)
+    if (discIfood > 0)  voucherPayments.push({ method: 'Voucher iFood', amount: discIfood, _systemLabel: 'Voucher iFood' });
+    if (discMerch > 0)  voucherPayments.push({ method: 'Voucher Loja', amount: discMerch, _systemLabel: 'Voucher Loja' });
+  } else {
+    // Fallback: extrair do couponDiscount ou benefits (sem separação por sponsor)
+    let couponVal = _toNum(order.couponDiscount || order.discount || 0);
+    let couponLabel = order.couponCode ? `Voucher (${order.couponCode})` : 'Voucher Desconto';
+    if (couponVal <= 0 && Array.isArray(ifoodPl.benefits) && ifoodPl.benefits.length > 0) {
+      // Tentar separar por sponsorshipValues do payload
+      let ifVal = 0, merchVal = 0;
+      for (const b of ifoodPl.benefits) {
+        const bVal = _toNum(b.value || 0);
+        if (Array.isArray(b.sponsorshipValues)) {
+          for (const sv of b.sponsorshipValues) {
+            const svVal = _toNum(sv.value || sv.amount || 0);
+            const name = String(sv.name || '').toUpperCase();
+            if (name === 'MERCHANT') merchVal += svVal;
+            else ifVal += svVal;
+          }
+        } else {
+          ifVal += bVal;
+        }
+        couponVal += bVal;
+      }
+      const desc = ifoodPl.benefits[0]?.description || ifoodPl.benefits[0]?.title || '';
+      if (ifVal > 0 && merchVal > 0) {
+        voucherPayments.push({ method: 'Voucher iFood', amount: ifVal, _systemLabel: 'Voucher iFood' });
+        voucherPayments.push({ method: 'Voucher Loja', amount: merchVal, _systemLabel: 'Voucher Loja' });
+      } else if (couponVal > 0) {
+        if (desc) couponLabel = `Voucher (${desc})`;
+        voucherPayments.push({ method: couponLabel, amount: couponVal, _systemLabel: couponLabel });
+      }
+    } else if (couponVal > 0) {
+      voucherPayments.push({ method: couponLabel, amount: couponVal, _systemLabel: couponLabel });
     }
-    const desc = ifoodPl.benefits[0]?.description || ifoodPl.benefits[0]?.title || '';
-    if (desc) couponLabel = `Voucher (${desc})`;
   }
 
-  logger.info('[tpl] voucher debug', {
-    couponDiscount: order.couponDiscount, discount: order.discount,
-    couponCode: order.couponCode, couponVal,
-    benefits: ifoodPl.benefits,
-  });
-
-  const rawPayments = couponVal > 0
-    ? [...rawPaymentsBase, { method: couponLabel, amount: couponVal }]
-    : rawPaymentsBase;
+  const rawPayments = [...rawPaymentsBase, ...voucherPayments];
 
   const parts = [...header];
 
@@ -891,15 +914,12 @@ function buildContext(order, printer) {
         valor:  _fmt(p.value || p.amount || p.valor || 0),
         valor_num: _fmtN(p.value || p.amount || p.valor || 0),
       })),
-      // Cupom/voucher como forma de pagamento (se houver desconto)
-      ...(descontoVal > 0 ? [{
-        metodo: order.couponCode ? `Voucher (${order.couponCode})`
-          : (ifoodPl.benefits?.[0]?.description || ifoodPl.benefits?.[0]?.title)
-            ? `Voucher (${ifoodPl.benefits[0].description || ifoodPl.benefits[0].title})`
-            : 'Voucher Desconto',
-        valor:  _fmt(descontoVal),
-        valor_num: _fmtN(descontoVal),
-      }] : []),
+      // Vouchers separados por sponsor
+      ..._buildVoucherPayments(order, ifoodPl).map(v => ({
+        metodo: v.method,
+        valor: _fmt(v.amount),
+        valor_num: _fmtN(v.amount),
+      })),
     ],
 
     // Subtotal com e sem prefixo "R$ "
@@ -988,6 +1008,50 @@ function _paymentLabel(p) {
   label += isPrepaid ? ' (pago online)' : ' (cobrar do cliente)';
 
   return label;
+}
+
+// ─── Utilitários de voucher ───────────────────────────────────────────────────
+/** Monta array de vouchers como pagamentos, separando iFood vs Loja quando possível. */
+function _buildVoucherPayments(order, ifoodPl) {
+  const result = [];
+  const discIfood = _toNum(order.discountIfood || 0);
+  const discMerch = _toNum(order.discountMerchant || 0);
+
+  if (discIfood > 0 || discMerch > 0) {
+    if (discIfood > 0)  result.push({ method: 'Voucher iFood', amount: discIfood, _systemLabel: 'Voucher iFood' });
+    if (discMerch > 0)  result.push({ method: 'Voucher Loja', amount: discMerch, _systemLabel: 'Voucher Loja' });
+    return result;
+  }
+
+  // Fallback: extrair do couponDiscount ou benefits
+  let couponVal = _toNum(order.couponDiscount || order.discount || 0);
+  if (couponVal <= 0 && Array.isArray(ifoodPl?.benefits) && ifoodPl.benefits.length > 0) {
+    let ifVal = 0, merchVal = 0;
+    for (const b of ifoodPl.benefits) {
+      couponVal += _toNum(b.value || 0);
+      if (Array.isArray(b.sponsorshipValues)) {
+        for (const sv of b.sponsorshipValues) {
+          const svVal = _toNum(sv.value || sv.amount || 0);
+          if (String(sv.name || '').toUpperCase() === 'MERCHANT') merchVal += svVal;
+          else ifVal += svVal;
+        }
+      }
+    }
+    if (ifVal > 0 && merchVal > 0) {
+      result.push({ method: 'Voucher iFood', amount: ifVal, _systemLabel: 'Voucher iFood' });
+      result.push({ method: 'Voucher Loja', amount: merchVal, _systemLabel: 'Voucher Loja' });
+      return result;
+    }
+  }
+
+  if (couponVal > 0) {
+    const label = order.couponCode ? `Voucher (${order.couponCode})`
+      : (ifoodPl?.benefits?.[0]?.description || ifoodPl?.benefits?.[0]?.title)
+        ? `Voucher (${ifoodPl.benefits[0].description || ifoodPl.benefits[0].title})`
+        : 'Voucher Desconto';
+    result.push({ method: label, amount: couponVal, _systemLabel: label });
+  }
+  return result;
 }
 
 // ─── Utilitários de endereço ──────────────────────────────────────────────────
