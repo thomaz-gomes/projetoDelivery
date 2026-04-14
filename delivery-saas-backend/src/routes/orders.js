@@ -998,50 +998,55 @@ ordersRouter.post('/:id/tickets', requireRole('ADMIN'), async (req, res) => {
 
 // GET /orders/:id - detalhe do pedido (inclui items, rider e payload)
 ordersRouter.get('/:id', async (req, res) => {
-  const { id } = req.params;
-  const companyId = req.user.companyId;
-
-  const order = await prisma.order.findFirst({
-    where: { id, companyId },
-    include: { items: { include: { product: { select: { highlightOnSlip: true } } } }, rider: true, company: true, store: true }
-  });
-  if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
-
-  // Enrich order items: flatten product.highlightOnSlip onto item and enrich options with Option.highlightOnSlip
   try {
-    for (const item of (order.items || [])) {
-      if (item.product) { item.highlightOnSlip = !!item.product.highlightOnSlip; delete item.product; }
-      // options is JSON array with {id, name, price, ...}; enrich with highlightOnSlip from Option model
-      if (item.options && Array.isArray(item.options)) {
-        const optIds = item.options.map(o => o.id).filter(Boolean);
-        if (optIds.length) {
-          const opts = await prisma.option.findMany({ where: { id: { in: optIds } }, select: { id: true, highlightOnSlip: true } });
-          const map = Object.fromEntries(opts.map(o => [o.id, !!o.highlightOnSlip]));
-          for (const o of item.options) { if (o.id && map[o.id]) o.highlightOnSlip = true; }
+    const { id } = req.params;
+    const companyId = req.user.companyId;
+
+    const order = await prisma.order.findFirst({
+      where: { id, companyId },
+      include: { items: { include: { product: { select: { highlightOnSlip: true } } } }, rider: true, company: true, store: true }
+    });
+    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+
+    // Enrich order items: flatten product.highlightOnSlip onto item and enrich options with Option.highlightOnSlip
+    try {
+      for (const item of (order.items || [])) {
+        if (item.product) { item.highlightOnSlip = !!item.product.highlightOnSlip; delete item.product; }
+        // options is JSON array with {id, name, price, ...}; enrich with highlightOnSlip from Option model
+        if (item.options && Array.isArray(item.options)) {
+          const optIds = item.options.map(o => o.id).filter(Boolean);
+          if (optIds.length) {
+            const opts = await prisma.option.findMany({ where: { id: { in: optIds } }, select: { id: true, highlightOnSlip: true } });
+            const map = Object.fromEntries(opts.map(o => [o.id, !!o.highlightOnSlip]));
+            for (const o of item.options) { if (o.id && map[o.id]) o.highlightOnSlip = true; }
+          }
         }
       }
-    }
-  } catch (e) { console.warn('Failed to enrich highlightOnSlip for order items', e?.message || e); }
+    } catch (e) { console.warn('Failed to enrich highlightOnSlip for order items', e?.message || e); }
 
-  // compute displaySimple for this order (position within same day)
-  try {
-    if (order.displaySimple != null) {
-      order.displaySimple = String(order.displaySimple).padStart(2, '0');
-    } else {
-      const createdAt = order.createdAt || new Date();
-      const startOfDay = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
-      const count = await prisma.order.count({
-        where: {
-          companyId: order.companyId,
-          createdAt: { gte: startOfDay, lte: createdAt }
-        }
-      });
-      order.displaySimple = String(count).padStart(2, '0');
+    // compute displaySimple for this order (position within same day)
+    try {
+      if (order.displaySimple != null) {
+        order.displaySimple = String(order.displaySimple).padStart(2, '0');
+      } else {
+        const createdAt = order.createdAt || new Date();
+        const startOfDay = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+        const count = await prisma.order.count({
+          where: {
+            companyId: order.companyId,
+            createdAt: { gte: startOfDay, lte: createdAt }
+          }
+        });
+        order.displaySimple = String(count).padStart(2, '0');
+      }
+    } catch (e) {
+      console.warn('Failed to compute displaySimple for order detail', e?.message || e);
     }
+    return res.json(order);
   } catch (e) {
-    console.warn('Failed to compute displaySimple for order detail', e?.message || e);
+    console.error('GET /orders/:id failed', e?.message || e);
+    return res.status(500).json({ message: 'Erro ao carregar pedido' });
   }
-  return res.json(order);
 });
 
 // POST /orders/:id/refresh-ifood — busca detalhes frescos do iFood e atualiza o payload do pedido
