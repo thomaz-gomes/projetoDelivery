@@ -1,14 +1,4 @@
 <template>
-  <ActiveDeliveryFocus
-    v-if="activeDelivery && showFocusMode"
-    :order="activeDelivery"
-    :gps-status="gpsStatus"
-    :arrival-notified="!!arrivalNotified[activeDelivery.id]"
-    :arrival-sending="!!arrivalSending[activeDelivery.id]"
-    @dismiss="showFocusMode = false"
-    @mark-delivered="markDelivered(activeDelivery)"
-    @notify-arrival="notifyArrival(activeDelivery)"
-  />
   <div class="container rider-orders-page" style="padding-top: calc(var(--rider-header-height, 56px) + 12px)">
     <RiderHeader :gps-status="gpsStatus" />
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -167,9 +157,8 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import RiderHeader from '../components/rider/RiderHeader.vue'
-import ActiveDeliveryFocus from '../components/rider/ActiveDeliveryFocus.vue'
 import BottomSheet from '../components/rider/BottomSheet.vue'
 import PullToRefresh from '../components/rider/PullToRefresh.vue'
 import SkeletonCard from '../components/rider/SkeletonCard.vue'
@@ -187,8 +176,6 @@ const loading = ref(false)
 let socket = null
 
 // Active delivery focus mode
-const showFocusMode = ref(true)
-const activeDelivery = computed(() => orders.value.find(o => o.status === 'SAIU_PARA_ENTREGA'))
 
 // Bottom sheet state
 const selectedOrder = ref(null)
@@ -771,7 +758,6 @@ async function load(){
       orders.value = (list || []).filter(d => d && d.status !== 'CONCLUIDO');
     }
     // Show focus mode when a new active delivery appears
-    if (orders.value.some(o => o.status === 'SAIU_PARA_ENTREGA')) showFocusMode.value = true;
     syncTrackingWithOrders(orders.value)
   }catch(e){ console.error(e); alert(e?.response?.data?.message || 'Erro') }
   finally{ loading.value = false }
