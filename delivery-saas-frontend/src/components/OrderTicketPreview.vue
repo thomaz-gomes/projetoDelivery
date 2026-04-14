@@ -24,6 +24,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '@/api.js'
+import { splitVoucherDiscounts } from '@/utils/orderUtils.js'
 
 const props = defineProps({
   order: { type: Object, required: true },
@@ -126,10 +127,8 @@ function buildContext(order) {
   const subtotalVal = toNum(order.subtotal) || calcSubtotal
   const taxaVal     = toNum(order.deliveryFee || 0)
   const acrescimoVal = toNum(ifoodPl.total?.additionalFees ?? 0)
-  let descontoVal = toNum(order.discount || order.couponDiscount || 0)
-  if (descontoVal <= 0 && Array.isArray(ifoodPl.benefits) && ifoodPl.benefits.length > 0) {
-    for (const b of ifoodPl.benefits) descontoVal += toNum(b.value || 0)
-  }
+  const vInfo = splitVoucherDiscounts(order)
+  const descontoVal = vInfo.storeDiscount
   const totalVal = toNum(order.total)
 
   // Troco
@@ -203,13 +202,10 @@ function buildContext(order) {
       metodo: paymentLabel(p),
       valor_num: fmtN(toNum(p.value || p.amount || p.valor || 0)),
     })),
-    ...(descontoVal > 0 ? [{
-      metodo: order.couponCode ? `Voucher (${order.couponCode})`
-        : (ifoodPl.benefits?.[0]?.description || ifoodPl.benefits?.[0]?.title)
-          ? `Voucher (${ifoodPl.benefits[0].description || ifoodPl.benefits[0].title})`
-          : 'Voucher Desconto',
-      valor_num: fmtN(descontoVal),
-    }] : []),
+    ...vInfo.voucherPayments.map(vp => ({
+      metodo: vp.label,
+      valor_num: fmtN(vp.value),
+    })),
   ]
 
   const link_pedido = order.qrText || order.trackingUrl || ''

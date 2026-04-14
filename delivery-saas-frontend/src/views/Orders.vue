@@ -3443,7 +3443,15 @@ function pulseButton() {
                     </div>
                   </li>
                 </ul>
-                <div v-if="normalizeOrder(o).couponCode || normalizeOrder(o).couponDiscount" class="mt-2 small" style="color: #198754;">
+                <div v-if="Number(o.discountIfood || 0) > 0" class="mt-2 small" style="color: #198754;">
+                  <i class="bi bi-ticket-perforated me-1"></i>
+                  <strong>Voucher iFood:</strong> {{ formatCurrency(Number(o.discountIfood)) }}
+                </div>
+                <div v-if="Number(o.discountMerchant || 0) > 0" class="mt-2 small" style="color: #dc3545;">
+                  <i class="bi bi-ticket-perforated me-1"></i>
+                  <strong>Desconto Loja:</strong> -{{ formatCurrency(Number(o.discountMerchant)) }}
+                </div>
+                <div v-else-if="!Number(o.discountIfood || 0) && (normalizeOrder(o).couponCode || normalizeOrder(o).couponDiscount)" class="mt-2 small" style="color: #198754;">
                   <i class="bi bi-ticket-perforated me-1"></i>
                   <strong>{{ normalizeOrder(o).couponCode ? `Voucher (${normalizeOrder(o).couponCode})` : 'Voucher Desconto' }}{{ normalizeOrder(o).couponSponsor ? ` - ${normalizeOrder(o).couponSponsor}` : '' }}:</strong>
                   -{{ formatCurrency(normalizeOrder(o).couponDiscount) }}

@@ -28,4 +28,79 @@ export function normalizeOrderItems(o){
   })
 }
 
-export default { normalizeOrderItems };
+/**
+ * Separa descontos de voucher por sponsor (iFood vs Loja).
+ * Retorna { discountIfood, discountMerchant, voucherPayments, storeDiscount }
+ *
+ * - discountIfood: valor que o iFood repassa à loja (entra no caixa como pagamento)
+ * - discountMerchant: valor que a loja absorve (desconto real)
+ * - voucherPayments: array de { label, value } para exibir como formas de pagamento
+ * - storeDiscount: valor a mostrar como desconto no total (apenas loja)
+ */
+export function splitVoucherDiscounts(order) {
+  const discIfood = Number(order?.discountIfood || 0);
+  const discMerch = Number(order?.discountMerchant || 0);
+  const couponTotal = Number(order?.couponDiscount || order?.discount || 0);
+  const couponCode = order?.couponCode || '';
+
+  // Se o backend já separou por sponsor
+  if (discIfood > 0 || discMerch > 0) {
+    const payments = [];
+    if (discIfood > 0) payments.push({ label: 'Voucher iFood', value: discIfood });
+    if (discMerch > 0) payments.push({ label: 'Voucher Loja', value: discMerch });
+    return {
+      discountIfood: discIfood,
+      discountMerchant: discMerch,
+      voucherPayments: payments,
+      storeDiscount: discMerch,
+    };
+  }
+
+  // Fallback: tentar separar via benefits no payload
+  const pl = order?.payload || {};
+  const ip = pl.order || pl;
+  const benefits = ip.benefits || ip.discounts || pl.discounts || [];
+
+  if (Array.isArray(benefits) && benefits.length > 0) {
+    let ifVal = 0, merchVal = 0;
+    for (const b of benefits) {
+      if (Array.isArray(b.sponsorshipValues)) {
+        for (const sv of b.sponsorshipValues) {
+          const svVal = Number(sv.value || sv.amount || 0);
+          const name = String(sv.name || '').toUpperCase();
+          if (name === 'MERCHANT') merchVal += svVal;
+          else if (svVal > 0) ifVal += svVal;
+        }
+      } else {
+        // Sem sponsorshipValues: considerar como iFood (conservador)
+        ifVal += Number(b.value || 0);
+      }
+    }
+    if (ifVal > 0 || merchVal > 0) {
+      const payments = [];
+      if (ifVal > 0) payments.push({ label: 'Voucher iFood', value: ifVal });
+      if (merchVal > 0) payments.push({ label: 'Voucher Loja', value: merchVal });
+      return {
+        discountIfood: ifVal,
+        discountMerchant: merchVal,
+        voucherPayments: payments,
+        storeDiscount: merchVal,
+      };
+    }
+  }
+
+  // Fallback final: tudo como desconto da loja (comportamento legado)
+  if (couponTotal > 0) {
+    const label = couponCode ? `Voucher (${couponCode})` : 'Voucher Desconto';
+    return {
+      discountIfood: 0,
+      discountMerchant: couponTotal,
+      voucherPayments: [{ label, value: couponTotal }],
+      storeDiscount: couponTotal,
+    };
+  }
+
+  return { discountIfood: 0, discountMerchant: 0, voucherPayments: [], storeDiscount: 0 };
+}
+
+export default { normalizeOrderItems, splitVoucherDiscounts };

@@ -37,11 +37,15 @@
               <i class="bi bi-credit-card me-1"></i>{{ getPaymentMethod(o) }}
             </div>
           </div>
-          <div v-if="o.couponCode || Number(o.couponDiscount || 0) > 0" class="mt-2 small" style="color: #198754;">
+          <div v-if="Number(o.discountIfood || 0) > 0" class="mt-2 small" style="color: #198754;">
+            <i class="bi bi-ticket-perforated me-1"></i> Voucher iFood: {{ formatCurrency(Number(o.discountIfood)) }}
+          </div>
+          <div v-if="Number(o.discountMerchant || 0) > 0" class="mt-2 small" style="color: #dc3545;">
+            <i class="bi bi-ticket-perforated me-1"></i> Desconto Loja: -{{ formatCurrency(Number(o.discountMerchant)) }}
+          </div>
+          <div v-else-if="!Number(o.discountIfood || 0) && (o.couponCode || Number(o.couponDiscount || 0) > 0)" class="mt-2 small" style="color: #198754;">
             <i class="bi bi-ticket-perforated me-1"></i>
-            <span v-if="o.couponCode">Cupom {{ o.couponCode }}: </span>
-            <span v-else>Cupom: </span>
-            <span>-{{ formatCurrency(Number(o.couponDiscount || 0)) }}</span>
+            {{ o.couponCode ? `Cupom ${o.couponCode}` : 'Cupom' }}: -{{ formatCurrency(Number(o.couponDiscount || 0)) }}
           </div>
           <div class="mt-2 d-flex justify-content-between align-items-center">
             <div class="small text-muted">Itens: {{ (o.items||[]).reduce((s,i)=> s+Number(i.quantity||1),0) }}</div>

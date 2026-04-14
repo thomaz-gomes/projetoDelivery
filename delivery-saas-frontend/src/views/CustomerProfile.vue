@@ -737,9 +737,13 @@ async function manualDebit() {
           <div class="info-value">{{ selectedOrder.orderType === 'delivery' ? 'Entrega' : selectedOrder.orderType === 'pickup' ? 'Retirada' : selectedOrder.orderType }}</div>
         </div>
 
-        <div v-if="selectedOrder.couponCode" class="mb-3">
-          <div class="info-label">Cupom</div>
-          <div class="info-value">{{ selectedOrder.couponCode }} (-{{ formatCurrency(Number(selectedOrder.couponDiscount || 0)) }})</div>
+        <div v-if="Number(selectedOrder.discountIfood || 0) > 0" class="mb-3">
+          <div class="info-label">Voucher iFood</div>
+          <div class="info-value text-success">{{ formatCurrency(Number(selectedOrder.discountIfood)) }}</div>
+        </div>
+        <div v-if="Number(selectedOrder.discountMerchant || 0) > 0 || selectedOrder.couponCode" class="mb-3">
+          <div class="info-label">{{ selectedOrder.couponCode ? `Desconto (${selectedOrder.couponCode})` : 'Desconto Loja' }}</div>
+          <div class="info-value text-danger">-{{ formatCurrency(Number(selectedOrder.discountMerchant || selectedOrder.couponDiscount || 0)) }}</div>
         </div>
 
         <h6 class="fw-semibold mt-3">Itens</h6>
@@ -768,7 +772,15 @@ async function manualDebit() {
               <td colspan="3" class="text-end text-muted">Taxa de entrega</td>
               <td class="text-end">{{ formatCurrency(Number(selectedOrder.deliveryFee || 0)) }}</td>
             </tr>
-            <tr v-if="selectedOrder.couponDiscount">
+            <tr v-if="Number(selectedOrder.discountIfood || 0) > 0">
+              <td colspan="3" class="text-end text-muted">Voucher iFood</td>
+              <td class="text-end text-success">{{ formatCurrency(Number(selectedOrder.discountIfood)) }}</td>
+            </tr>
+            <tr v-if="Number(selectedOrder.discountMerchant || 0) > 0">
+              <td colspan="3" class="text-end text-muted">Desconto Loja</td>
+              <td class="text-end text-danger">-{{ formatCurrency(Number(selectedOrder.discountMerchant)) }}</td>
+            </tr>
+            <tr v-else-if="!Number(selectedOrder.discountIfood || 0) && selectedOrder.couponDiscount">
               <td colspan="3" class="text-end text-muted">Desconto cupom</td>
               <td class="text-end text-danger">-{{ formatCurrency(Number(selectedOrder.couponDiscount || 0)) }}</td>
             </tr>

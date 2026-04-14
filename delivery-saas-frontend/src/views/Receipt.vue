@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import api from '../api';
 import { formatDateTime } from '../utils/dates'
 import { bindLoading } from '../state/globalLoading.js';
+import { splitVoucherDiscounts } from '../utils/orderUtils.js';
 import QRCode from 'qrcode';
 
 const route = useRoute();
@@ -91,6 +92,8 @@ const ifoodLocalizer = computed(() => {
   const ip = resolveIfoodPayload(order.value);
   return ip.customer?.phone?.localizer || null;
 });
+
+const voucherInfo = computed(() => order.value ? splitVoucherDiscounts(order.value) : { discountIfood: 0, discountMerchant: 0, voucherPayments: [], storeDiscount: 0 });
 
 const totals = computed(() => {
   if (!order.value) return null;
@@ -269,7 +272,7 @@ async function associateCustomer() {
         <div class="line"><span>Total itens(=)</span><span>{{ fmt(totals.subTotal) }}</span></div>
         <div class="line"><span>Taxa de entrega(+)</span><span>{{ fmt(totals.deliveryFee) }}</span></div>
         <div class="line"><span>Taxas adicionais(+)</span><span>{{ fmt(totals.additionalFees) }}</span></div>
-        <div class="line"><span>Desconto(-)</span><span>{{ fmt(totals.benefits) }}</span></div>
+        <div v-if="voucherInfo.storeDiscount > 0" class="line"><span>Desconto Loja(-)</span><span>{{ fmt(voucherInfo.storeDiscount) }}</span></div>
         <div class="line total"><span>TOTAL(=)</span><span>{{ fmt(totals.orderAmount) }}</span></div>
       </section>
 
@@ -278,6 +281,10 @@ async function associateCustomer() {
         <div v-for="(m,idx) in totals.methods" :key="idx" class="line small">
           <span>{{ m.prepaid ? 'Online' : 'Loja' }} - {{ m.method }}</span>
           <span>{{ fmt(m.value) }}</span>
+        </div>
+        <div v-for="(vp,idx) in voucherInfo.voucherPayments" :key="'v'+idx" class="line small">
+          <span>{{ vp.label }}</span>
+          <span>{{ fmt(vp.value) }}</span>
         </div>
         <div class="line"><span>Dinheiro</span><span>{{ fmt(totals.cash) }}</span></div>
         <div class="line"><span>- Receber</span><span>{{ fmt(totals.pending) }}</span></div>

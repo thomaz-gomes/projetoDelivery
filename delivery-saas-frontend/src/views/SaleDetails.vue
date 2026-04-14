@@ -136,9 +136,9 @@
               <span class="text-muted">Subtotal:</span>
               <strong>{{ formatCurrency(calculateSubtotal()) }}</strong>
             </div>
-            <div v-if="order.couponDiscount" class="d-flex justify-content-between mb-2">
-              <span class="text-muted">{{ order.couponCode ? `Cupom (${order.couponCode})` : 'Cupom' }}:</span>
-              <strong class="text-success">- {{ formatCurrency(order.couponDiscount) }}</strong>
+            <div v-if="vouchers.storeDiscount > 0" class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Desconto Loja:</span>
+              <strong class="text-success">- {{ formatCurrency(vouchers.storeDiscount) }}</strong>
             </div>
             <div v-if="order.orderType === 'DELIVERY'" class="d-flex justify-content-between mb-2">
               <span class="text-muted">Taxa de entrega:</span>
@@ -178,13 +178,13 @@
               </div>
             </div>
           </div>
-          <div v-if="order.couponDiscount && Number(order.couponDiscount) > 0" class="border-top pt-3 mt-2">
-            <div class="d-flex justify-content-between align-items-center">
+          <div v-if="vouchers.voucherPayments.length > 0" class="border-top pt-3 mt-2">
+            <div v-for="(vp, i) in vouchers.voucherPayments" :key="i" class="d-flex justify-content-between align-items-center mb-1">
               <span class="text-muted">
                 <i class="bi bi-ticket-perforated me-1"></i>
-                {{ order.couponCode ? `Voucher Parceiro (${order.couponCode})` : 'Voucher Parceiro Desconto' }}
+                {{ vp.label }}
               </span>
-              <strong class="text-success">{{ formatCurrency(order.couponDiscount) }}</strong>
+              <strong class="text-success">{{ formatCurrency(vp.value) }}</strong>
             </div>
           </div>
         </div>
@@ -274,10 +274,12 @@ import { useRoute } from 'vue-router';
 import Swal from 'sweetalert2';
 import api from '../api';
 import { formatDateTime } from '../utils/dates.js';
+import { splitVoucherDiscounts } from '../utils/orderUtils.js';
 
 const route = useRoute();
 const id = route.params.id;
 const order = ref(null);
+const vouchers = ref({ discountIfood: 0, discountMerchant: 0, voucherPayments: [], storeDiscount: 0 });
 
 // use shared formatDateTime from utils/dates.js
 function padNumber(n){ if (n == null || n === '') return null; return String(n).toString().padStart(2, '0'); }
@@ -468,6 +470,7 @@ async function load(){
   try{
     const { data } = await api.get(`/orders/${id}`);
     order.value = data?.order || data;
+    vouchers.value = splitVoucherDiscounts(order.value);
   }catch(e){ console.error('load order failed', e); }
 }
 
