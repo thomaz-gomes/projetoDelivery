@@ -144,6 +144,11 @@
           </div>
         </div>
 
+        <AvailabilityScheduler
+          v-model:alwaysAvailable="form.alwaysAvailable"
+          v-model:schedule="form.weeklySchedule"
+        />
+
         </div>
 
           <div :class="['tab-pane', activeTab === 'marketplace' ? 'show active' : '']" id="marketplace" role="tabpanel" aria-labelledby="tab-marketplace">
@@ -178,6 +183,7 @@ import TextareaInput from '../components/form/input/TextareaInput.vue'
 import CurrencyInput from '../components/form/input/CurrencyInput.vue'
 import SelectInput from '../components/form/select/SelectInput.vue'
 import MarketplaceTab from '../components/MarketplaceTab.vue'
+import AvailabilityScheduler from '../components/AvailabilityScheduler.vue'
 import { normalizeToIngredientUnit } from '../utils/unitConversion.js'
 
 const saas = useSaasStore()
@@ -187,7 +193,7 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [] })
 const activeTab = ref('general')
 const cashbackEnabled = ref(false)
 const groups = ref([])
@@ -228,7 +234,7 @@ async function load(){
       const res = await api.get('/menu/products')
       const all = res.data || []
       const p = all.find(x=>x.id===id)
-      if(p){ form.value = { ...p, optionGroupIds: [], categoryId: p.categoryId || (p.category && p.category.id) || null, cashbackPercent: (p.cashbackPercent !== undefined ? p.cashbackPercent : (p.cashback || null)), dadosFiscaisId: p.dadosFiscaisId || null } }
+      if(p){ form.value = { ...p, optionGroupIds: [], categoryId: p.categoryId || (p.category && p.category.id) || null, cashbackPercent: (p.cashbackPercent !== undefined ? p.cashbackPercent : (p.cashback || null)), dadosFiscaisId: p.dadosFiscaisId || null, alwaysAvailable: p.alwaysAvailable !== false, weeklySchedule: Array.isArray(p.weeklySchedule) ? p.weeklySchedule : [] } }
       // load attached groups
       try{ const att = await api.get(`/menu/products/${id}/option-groups`); form.value.optionGroupIds = att.data.attachedIds || [] }catch(e){}
     }
@@ -274,7 +280,7 @@ async function save(){
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
     if(isEdit){
-      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
+      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
       if(form.value.marketplace) payload.marketplace = form.value.marketplace
       // include cashbackPercent when cashback module is enabled (allow null to clear)
       if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
@@ -294,7 +300,7 @@ async function save(){
         else { router.push({ path: '/menu/admin' }) }
       }
     } else {
-  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null }
+  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
   if(form.value.marketplace) payload.marketplace = form.value.marketplace
   if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       const res = await api.post('/menu/products', payload)

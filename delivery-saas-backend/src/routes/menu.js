@@ -339,7 +339,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false } = body
+  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, alwaysAvailable = true, weeklySchedule = null } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -359,7 +359,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       if (!sheet || sheet.companyId !== companyId) return res.status(400).json({ message: 'Ficha técnica inválida' })
     }
     const integrationCode = await generateProductCode(companyId)
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), integrationCode } })
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -421,7 +421,7 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId, cashbackPercent, dadosFiscaisId, highlightOnSlip } = req.body || {}
+  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId, cashbackPercent, dadosFiscaisId, highlightOnSlip, alwaysAvailable, weeklySchedule } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -493,7 +493,11 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
     // set cashbackPercent if provided (allow null to clear)
     cashbackPercent: cashbackPercent !== undefined ? (cashbackPercent === null ? null : Number(cashbackPercent)) : existing.cashbackPercent,
     dadosFiscaisId: dadosFiscaisId !== undefined ? (dadosFiscaisId || null) : existing.dadosFiscaisId,
-    highlightOnSlip: highlightOnSlip !== undefined ? Boolean(highlightOnSlip) : existing.highlightOnSlip
+    highlightOnSlip: highlightOnSlip !== undefined ? Boolean(highlightOnSlip) : existing.highlightOnSlip,
+    alwaysAvailable: alwaysAvailable !== undefined ? Boolean(alwaysAvailable) : existing.alwaysAvailable,
+    weeklySchedule: alwaysAvailable !== undefined
+      ? (alwaysAvailable === false ? (weeklySchedule || null) : null)
+      : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule)
   } })
   res.json(updated)
 })
