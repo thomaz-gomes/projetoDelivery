@@ -8,6 +8,7 @@ import { resolvePublicCustomerFromReq } from './publicHelpers.js'
 import * as cashbackSvc from '../services/cashback.js'
 import { nextDisplaySimple } from '../utils/displaySimple.js'
 import { geocodeOrderIfNeeded } from '../utils/geocode.js'
+import { isAvailableNow } from '../services/availability.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -164,7 +165,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                     include: {
                       options: {
                         include: {
-                          linkedProduct: { select: { id: true, isActive: true } }
+                          linkedProduct: { select: { id: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                         }
                       }
                     }
@@ -192,7 +193,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                     include: {
                       options: {
                         include: {
-                          linkedProduct: { select: { id: true, isActive: true } }
+                          linkedProduct: { select: { id: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                         }
                       }
                     }
@@ -277,7 +278,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                               include: {
                                 options: {
                                   include: {
-                                    linkedProduct: { select: { id: true, isActive: true } }
+                                    linkedProduct: { select: { id: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                                   }
                                 }
                               }
@@ -333,36 +334,49 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
     if (company) company.paymentMethods = paymentMethods || []
     if (company) company.pickupInfo = printer ? `${printer.headerName || ''}${printer.headerCity ? ' - ' + printer.headerCity : ''}`.trim() : null
 
-    // normalize products to expose optionGroups directly
+    // Determine effective timezone for schedule evaluation
+    const effectiveTz = company?.timezone || 'America/Sao_Paulo'
+
+    // normalize products to expose optionGroups directly, and filter by schedule availability
     for(const cat of categories){
-      cat.products = (cat.products || []).map(p => ({
-        ...p,
-        optionGroups: (p.productOptionGroups || []).map(pg => {
-          const group = { ...pg.group }
-          // if options link to products, reflect linked availability
-          if (group.options && Array.isArray(group.options)) {
-            // remove options that link to inactive products entirely (don't expose inactive items)
-            group.options = group.options
-              .filter(o => !(o.linkedProduct && o.linkedProduct.isActive === false))
-              .map(o => {
-                const opt = { ...o }
-                if (opt.linkedProduct) {
-                  // availability follows linked product (should be true here)
-                  opt.isAvailable = Boolean(opt.linkedProduct.isActive)
-                  // remove availability-specific scheduling from the public payload
-                  delete opt.availableDays
-                  delete opt.availableFrom
-                  delete opt.availableTo
-                }
-                if (opt.linkedProduct) delete opt.linkedProduct
-                return opt
-              })
-          }
-          return group
-        })
-      }))
+      // Category-level schedule gates its whole product list (precedence over product).
+      const categoryOpen = isAvailableNow(cat, effectiveTz)
+      if (!categoryOpen) { cat.products = []; continue }
+
+      cat.products = (cat.products || [])
+        .filter(p => isAvailableNow(p, effectiveTz))
+        .map(p => ({
+          ...p,
+          optionGroups: (p.productOptionGroups || []).map(pg => {
+            const group = { ...pg.group }
+            if (group.options && Array.isArray(group.options)) {
+              group.options = group.options
+                .filter(o => {
+                  // linked option: inherits linked product's availability (active + schedule)
+                  if (o.linkedProduct) {
+                    if (o.linkedProduct.isActive === false) return false
+                    return isAvailableNow(o.linkedProduct, effectiveTz)
+                  }
+                  // free option: evaluate its own schedule
+                  return isAvailableNow(o, effectiveTz)
+                })
+                .map(o => {
+                  const opt = { ...o }
+                  if (opt.linkedProduct) {
+                    opt.isAvailable = Boolean(opt.linkedProduct.isActive)
+                    delete opt.linkedProduct
+                  }
+                  // strip private scheduling from public payload
+                  delete opt.alwaysAvailable
+                  delete opt.weeklySchedule
+                  return opt
+                })
+            }
+            return group
+          })
+        }))
     }
-    // remove categories that became empty after filtering out inactive products/options
+    // remove categories that became empty after filtering out unavailable products/options
     const filteredCategories = categories.filter(c => Array.isArray(c.products) && c.products.length > 0)
     // replace categories variable with filtered list to return
   const categoriesToReturn = filteredCategories
@@ -380,7 +394,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                   include: {
                     options: {
                       include: {
-                        linkedProduct: { select: { id: true, isActive: true } }
+                        linkedProduct: { select: { id: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                       }
                     }
                   }
@@ -400,7 +414,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                   include: {
                     options: {
                       include: {
-                        linkedProduct: { select: { id: true, isActive: true } }
+                        linkedProduct: { select: { id: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                       }
                     }
                   }
