@@ -1450,14 +1450,34 @@ model Ingredient {
   minStock      Decimal?         @default(0)
   currentStock  Decimal?         @default(0)
   avgCost       Decimal? // nullable average cost per unit
+  isComposite   Boolean          @default(false)
+  yieldQuantity Decimal?
+  yieldUnit     String?          // GR, KG, ML, L, UN
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
   technicalItems     TechnicalSheetItem[]
   // stock movement items referencing this ingredient
   stockMovementItems StockMovementItem[]
+  compositionItems    CompositeIngredientItem[] @relation("CompositeParent")
+  usedInCompositions  CompositeIngredientItem[] @relation("CompositeChild")
 
   @@index([companyId, description], name: "company_ingredient_description_idx")
+}
+
+model CompositeIngredientItem {
+  id           String     @id @default(uuid())
+  compositeId  String
+  composite    Ingredient @relation("CompositeParent", fields: [compositeId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient @relation("CompositeChild", fields: [ingredientId], references: [id])
+  quantity     Decimal
+  unit         String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([compositeId], name: "idx_composite_item_parent")
+  @@index([ingredientId], name: "idx_composite_item_child")
 }
 
 model TechnicalSheet {
@@ -1494,6 +1514,7 @@ model TechnicalSheetItem {
 enum MovementType {
   IN
   OUT
+  PRODUCTION
 }
 
 model StockMovement {
