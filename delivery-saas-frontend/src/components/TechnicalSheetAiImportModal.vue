@@ -761,13 +761,13 @@ async function convertPdfToImages(file) {
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
-    const viewport = page.getViewport({ scale: 2.0 })
+    const viewport = page.getViewport({ scale: 1.5 })
     const canvas = document.createElement('canvas')
     canvas.width = viewport.width
     canvas.height = viewport.height
     const ctx = canvas.getContext('2d')
     await page.render({ canvasContext: ctx, viewport }).promise
-    images.push(canvas.toDataURL('image/png'))
+    images.push(canvas.toDataURL('image/jpeg', 0.85))
   }
 
   return images
@@ -829,8 +829,8 @@ async function parseContent() {
       sendMethod = 'docx'
     }
 
-    // Start job
-    const res = await api.post('/technical-sheets/ai-import/parse', { method: sendMethod, files }, { timeout: 30000 })
+    // Start job (large base64 payloads need generous limits)
+    const res = await api.post('/technical-sheets/ai-import/parse', { method: sendMethod, files }, { timeout: 120000, maxBodyLength: 50 * 1024 * 1024, maxContentLength: 50 * 1024 * 1024 })
     const { jobId } = res.data
 
     // Poll status

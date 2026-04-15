@@ -191,7 +191,7 @@ app.use((req, res, next) => {
   return next();
 });
 // capture raw body for debugging parsing errors (verify is called before parsing)
-app.use(bodyParser.json({ limit: "10mb", verify: (req, _res, buf) => { try { req.rawBody = buf && buf.toString ? buf.toString() : null } catch(_) { req.rawBody = null } } }));
+app.use(bodyParser.json({ limit: "50mb", verify: (req, _res, buf) => { try { req.rawBody = buf && buf.toString ? buf.toString() : null } catch(_) { req.rawBody = null } } }));
 
 // Error handler specifically for JSON parse errors produced by body-parser.
 // This will log the request path, headers and a snippet of the raw body to help
