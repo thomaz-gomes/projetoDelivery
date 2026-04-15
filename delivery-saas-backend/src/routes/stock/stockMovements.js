@@ -1,5 +1,6 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
+import { cascadeRecomputeComposites } from '../../services/compositeCost.js';
 
 const router = express.Router();
 
@@ -60,6 +61,9 @@ router.post('/', async (req, res) => {
 
         await tx.ingredient.update({ where: { id: it.ingredientId }, data: { currentStock: newStock, avgCost: newAvg } });
       }
+
+      const changedIngredientIds = items.map(it => it.ingredientId);
+      await cascadeRecomputeComposites(changedIngredientIds, tx);
 
       return await tx.stockMovement.findUnique({ where: { id: movement.id }, include: { items: { include: { ingredient: true } }, company: true, store: true } });
     });
