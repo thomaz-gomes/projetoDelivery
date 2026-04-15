@@ -80,19 +80,50 @@
             <label class="form-label">Posição</label>
             <input v-model.number="form.position" type="number" class="form-control" />
           </div>
-          <div class="col-md-4 d-flex align-items-end">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="prodActive" v-model="form.isActive" />
-              <label class="form-check-label small text-muted" for="prodActive">Ativo</label>
-            </div>
-          </div>
-          <div class="col-md-4 d-flex align-items-end">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="prodHighlight" v-model="form.highlightOnSlip" />
-              <label class="form-check-label small text-muted" for="prodHighlight">Destacar na comanda</label>
-            </div>
-          </div>
         </div>
+
+        <!-- Disponibilidade e destaque -->
+        <fieldset class="mb-3 p-3 border rounded bg-light">
+          <legend class="h6 text-muted mb-2" style="font-size:0.8rem; letter-spacing:0.04em; text-transform:uppercase;">
+            Disponibilidade
+          </legend>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="prodActive"
+                  v-model="form.isActive"
+                  role="switch"
+                />
+                <label class="form-check-label fw-semibold" for="prodActive">
+                  Produto disponível
+                </label>
+                <div class="small text-muted">
+                  {{ form.isActive ? 'Visível para os clientes no cardápio' : 'Oculto no cardápio' }}
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="prodHighlight"
+                  v-model="form.highlightOnSlip"
+                  role="switch"
+                />
+                <label class="form-check-label fw-semibold" for="prodHighlight">
+                  Destacar na comanda
+                </label>
+                <div class="small text-muted">
+                  Imprime o nome deste item com destaque no recibo
+                </div>
+              </div>
+            </div>
+          </div>
+        </fieldset>
 
         <div class="mb-3" v-if="!saas.isCardapioSimplesOnly">
           <label class="form-label">Grupos de complementos</label>
