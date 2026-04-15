@@ -15,7 +15,7 @@
                 <div class="card border-0 bg-light">
                   <div class="card-body py-3">
                     <div class="small text-muted">CMV (Ficha Técnica)</div>
-                    <div class="h5 fw-bold mt-1">R$ {{ cmv.toFixed(2) }}</div>
+                    <div class="h5 fw-bold mt-1">R$ {{ cmvDisplay }}</div>
                   </div>
                 </div>
               </div>
@@ -125,7 +125,7 @@
                 <div v-if="!calc.denominatorValid" class="text-danger small mb-2">Denominador inválido (≤ 0). Ajuste taxas/margem/cupom.</div>
 
                 <dl class="row small text-muted">
-                  <div class="col-7">CMV</div><div class="col-5 text-end">R$ {{ cmv.toFixed(2) }}</div>
+                  <div class="col-7">CMV</div><div class="col-5 text-end">R$ {{ cmvDisplay }}</div>
                   <div class="col-7">Embalagem</div><div class="col-5 text-end">R$ {{ packagingCost.toFixed(2) }}</div>
                   <div class="col-7">Entrega (rest.)</div><div class="col-5 text-end">R$ {{ (freeDelivery ? deliveryCostForRestaurant : 0).toFixed(2) }}</div>
                   <div class="col-7">Taxa Mkpt</div><div class="col-5 text-end">R$ {{ calc.marketplaceFeeAmount.toFixed(2) }}</div>
@@ -158,7 +158,7 @@ const emit = defineEmits<{
   (e: 'applyPrice', price: number | null): void
 }>()
 
-const cmv = props.cmv ?? 0
+const cmv = computed(() => Number(props.cmv ?? 0))
 
 const initial = props.initial ?? {}
 
@@ -180,7 +180,7 @@ const coupon = computed<Coupon | null>(() => {
 
 const calc = computed(() => {
   return computeSuggestedPrice(
-    cmv,
+    cmv.value,
     packagingCost.value,
     freeDelivery.value ? deliveryCostForRestaurant.value : 0,
     marketplaceFeePercent.value,
@@ -190,10 +190,12 @@ const calc = computed(() => {
   )
 })
 
+const cmvDisplay = computed(() => cmv.value.toFixed(2))
 const suggestedPriceDisplay = computed(() => (calc.value.suggestedPrice !== null ? `R$ ${calc.value.suggestedPrice.toFixed(2)}` : '—'))
 const netProfitDisplay = computed(() => (calc.value.netProfit !== null ? `R$ ${calc.value.netProfit.toFixed(2)}` : '—'))
 
 watch([
+  cmv,
   marketplaceFeePercent,
   paymentFeePercent,
   desiredMarginPercent,
