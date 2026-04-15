@@ -422,15 +422,16 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
           linkedProducts++;
         }
       } else if (productAction === 'create') {
-        const newProduct = await prisma.product.create({
-          data: {
-            companyId,
-            name: sheetName,
-            technicalSheetId: newSheet.id,
-            price: 0,
-            isActive: true,
-          },
-        });
+        const productData = {
+          companyId,
+          name: sheetName,
+          technicalSheetId: newSheet.id,
+          price: 0,
+          isActive: true,
+        };
+        if (sheet.menuId) productData.menuId = sheet.menuId;
+        if (sheet.categoryId) productData.categoryId = sheet.categoryId;
+        const newProduct = await prisma.product.create({ data: productData });
         validProductIds.add(newProduct.id);
         createdProducts++;
       }

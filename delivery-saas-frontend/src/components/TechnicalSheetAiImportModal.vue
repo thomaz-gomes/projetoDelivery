@@ -404,6 +404,24 @@
                     </span>
                   </template>
                   <template v-if="sheet.productAction === 'create'">
+                    <select
+                      v-model="sheet.createMenuId"
+                      class="form-select form-select-sm"
+                      style="width: auto; min-width: 150px;"
+                      @change="sheet.createCategoryId = null"
+                    >
+                      <option :value="null">Todos os cardápios</option>
+                      <option v-for="m in existingMenus" :key="m.id" :value="m.id">{{ m.name }}</option>
+                    </select>
+                    <select
+                      v-if="categoriesForMenu(sheet.createMenuId).length"
+                      v-model="sheet.createCategoryId"
+                      class="form-select form-select-sm"
+                      style="width: auto; min-width: 150px;"
+                    >
+                      <option :value="null">Sem categoria</option>
+                      <option v-for="c in categoriesForMenu(sheet.createMenuId)" :key="c.id" :value="c.id">{{ c.name }}</option>
+                    </select>
                     <span class="badge bg-info text-dark">
                       <i class="bi bi-plus-circle me-1"></i>Criará "{{ sheet.name }}"
                     </span>
@@ -602,17 +620,25 @@ const existingIngredients = ref([])
 // Existing products for linking
 const existingProducts = ref([])
 
+// Menus and categories for "create product"
+const existingMenus = ref([])
+const existingCategories = ref([])
+
 onMounted(async () => {
   aiCreditsStore.fetch()
 
-  // Load existing ingredients and products
+  // Load existing ingredients, products, menus and categories
   try {
-    const [ingRes, prodRes] = await Promise.all([
+    const [ingRes, prodRes, menuRes, catRes] = await Promise.all([
       api.get('/ingredients'),
       api.get('/menu/products'),
+      api.get('/menu/menus'),
+      api.get('/menu/categories'),
     ])
     existingIngredients.value = ingRes.data || []
     existingProducts.value = prodRes.data || []
+    existingMenus.value = menuRes.data || []
+    existingCategories.value = catRes.data || []
   } catch (_) {}
 })
 
@@ -860,6 +886,8 @@ async function parseContent() {
         productIds: s.matchedProductId ? [s.matchedProductId] : [],
         matchedProductName: s.matchedProductName || null,
         productConfidence: s.productConfidence ?? 0,
+        createMenuId: null,
+        createCategoryId: null,
         items: (s.items || []).map(item => ({
           description: item.description || '',
           ingredientId: item.matchedIngredientId || null,
@@ -911,6 +939,15 @@ function onProductActionChange(sheet) {
   if (sheet.productAction !== 'link') {
     sheet.productIds = [];
   }
+  if (sheet.productAction !== 'create') {
+    sheet.createMenuId = null;
+    sheet.createCategoryId = null;
+  }
+}
+
+function categoriesForMenu(menuId) {
+  if (!menuId) return existingCategories.value.filter(c => !c.menuId)
+  return existingCategories.value.filter(c => c.menuId === menuId || !c.menuId)
 }
 
 function onIngredientSelect(ing) {
@@ -932,6 +969,8 @@ async function doImport() {
       yield: s.yield,
       productAction: s.productAction || 'none',
       productIds: s.productAction === 'link' ? (s.productIds || []) : [],
+      menuId: s.productAction === 'create' ? (s.createMenuId || null) : null,
+      categoryId: s.productAction === 'create' ? (s.createCategoryId || null) : null,
       items: s.items.map(item => ({
         description: item.description,
         ingredientId: item.newIngredient ? null : item.ingredientId,
