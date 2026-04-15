@@ -200,7 +200,7 @@ router.get('/categories/:id', async (req, res) => {
 
 router.post('/categories', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
-  const { name, position = 0, isActive = true, menuId = null, dadosFiscaisId = null } = req.body || {}
+  const { name, position = 0, isActive = true, menuId = null, dadosFiscaisId = null, description = null, alwaysAvailable = true, weeklySchedule = null } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
   // if menuId provided, validate it belongs to a menu whose store is in this company
   if (menuId) {
@@ -208,7 +208,7 @@ router.post('/categories', requireRole('ADMIN'), async (req, res) => {
     if (!menu) return res.status(400).json({ message: 'Menu inválido' })
     if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
   }
-  const created = await prisma.menuCategory.create({ data: { companyId, name, position: Number(position || 0), isActive: Boolean(isActive), menuId, dadosFiscaisId: dadosFiscaisId || null } })
+  const created = await prisma.menuCategory.create({ data: { companyId, name, position: Number(position || 0), isActive: Boolean(isActive), menuId, dadosFiscaisId: dadosFiscaisId || null, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
   res.status(201).json(created)
 })
 
@@ -224,13 +224,23 @@ router.patch('/categories/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, r
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, position, isActive, menuId, dadosFiscaisId } = req.body || {}
+  const { name, position, isActive, menuId, dadosFiscaisId, alwaysAvailable, weeklySchedule } = req.body || {}
   if (menuId) {
     const menu = await prisma.menu.findUnique({ where: { id: menuId }, include: { store: true } })
     if (!menu) return res.status(400).json({ message: 'Menu inválido' })
     if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
   }
-  const updated = await prisma.menuCategory.update({ where: { id }, data: { name: name ?? existing.name, position: position !== undefined ? Number(position) : existing.position, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, menuId: menuId !== undefined ? menuId : existing.menuId, dadosFiscaisId: dadosFiscaisId !== undefined ? (dadosFiscaisId || null) : existing.dadosFiscaisId } })
+  const updated = await prisma.menuCategory.update({ where: { id }, data: {
+    name: name ?? existing.name,
+    position: position !== undefined ? Number(position) : existing.position,
+    isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
+    menuId: menuId !== undefined ? menuId : existing.menuId,
+    dadosFiscaisId: dadosFiscaisId !== undefined ? (dadosFiscaisId || null) : existing.dadosFiscaisId,
+    alwaysAvailable: alwaysAvailable !== undefined ? Boolean(alwaysAvailable) : existing.alwaysAvailable,
+    weeklySchedule: alwaysAvailable !== undefined
+      ? (alwaysAvailable === false ? (weeklySchedule || null) : null)
+      : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule),
+  } })
   res.json(updated)
 })
 

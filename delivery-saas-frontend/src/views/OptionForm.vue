@@ -39,37 +39,10 @@
             </div>
           </div>
           <div class="col-md-3 d-flex align-items-end">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="optAlways" v-model="form.alwaysAvailable" />
-              <label class="form-check-label small text-muted" for="optAlways">Sempre disponível</label>
-            </div>
-          </div>
-          <div class="col-md-3 d-flex align-items-end">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="optHighlight" v-model="form.highlightOnSlip" />
               <label class="form-check-label small text-muted" for="optHighlight">Destacar na comanda</label>
             </div>
-          </div>
-        </div>
-
-        <div v-if="!form.alwaysAvailable && !form.linkedProductId" class="mb-3">
-          <label class="form-label small">Dias disponíveis</label>
-          <div class="d-flex flex-wrap gap-2">
-            <div v-for="(d, idx) in daysOfWeek" :key="idx" class="form-check">
-              <input class="form-check-input" type="checkbox" :id="'day-'+idx" :value="idx" v-model="form.availableDays" />
-              <label class="form-check-label" :for="'day-'+idx">{{ d }}</label>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="!form.alwaysAvailable && !form.linkedProductId" class="row mb-3">
-          <div class="col-md-6">
-            <label class="form-label small">Início</label>
-            <input type="time" v-model="form.availableFrom" class="form-control" />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label small">Fim</label>
-            <input type="time" v-model="form.availableTo" class="form-control" />
           </div>
         </div>
 
@@ -79,7 +52,16 @@
             <option :value="null">Nenhum</option>
             <option v-for="p in productsList" :key="p.id" :value="p.id">{{ p.name }}</option>
           </SelectInput>
+          <div v-if="form.linkedProductId" class="small text-muted mt-1">
+            Quando vinculada, a disponibilidade da opção segue a do produto vinculado.
+          </div>
         </div>
+
+        <AvailabilityScheduler
+          v-if="!form.linkedProductId"
+          v-model:alwaysAvailable="form.alwaysAvailable"
+          v-model:schedule="form.weeklySchedule"
+        />
 
         <div class="mb-3">
           <MediaField v-model="form.image" label="Imagem da opção (opcional)" field-id="option-image" />
@@ -110,6 +92,7 @@ import TextInput from '../components/form/input/TextInput.vue'
 import TextareaInput from '../components/form/input/TextareaInput.vue'
 import CurrencyInput from '../components/form/input/CurrencyInput.vue'
 import SelectInput from '../components/form/select/SelectInput.vue'
+import AvailabilityScheduler from '../components/AvailabilityScheduler.vue'
 import { normalizeToIngredientUnit } from '../utils/unitConversion.js'
 
 const route = useRoute()
@@ -119,7 +102,7 @@ const isEdit = Boolean(id)
 const query = route.query || {}
 const groupId = query.groupId || null
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isAvailable: true, alwaysAvailable: true, availableDays: [], availableFrom: '', availableTo: '', linkedProductId: null, image: null, technicalSheetId: null, highlightOnSlip: false })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isAvailable: true, alwaysAvailable: true, weeklySchedule: [], linkedProductId: null, image: null, technicalSheetId: null, highlightOnSlip: false })
 const productsList = ref([])
 const technicalSheets = ref([])
 const saving = ref(false)
@@ -141,10 +124,8 @@ async function load(){
           price: Number(o.price||0),
           position: o.position || 0,
           isAvailable: o.isAvailable === undefined ? true : o.isAvailable,
-          alwaysAvailable: !(o.availableDays && o.availableDays.length) && !o.availableFrom && !o.availableTo,
-          availableDays: o.availableDays || [],
-          availableFrom: o.availableFrom || '',
-          availableTo: o.availableTo || '',
+          alwaysAvailable: o.alwaysAvailable !== false,
+          weeklySchedule: Array.isArray(o.weeklySchedule) ? o.weeklySchedule : [],
           linkedProductId: o.linkedProductId || null,
           image: o.image || null,
           technicalSheetId: o.technicalSheetId || null,
@@ -176,12 +157,9 @@ async function save(){
       position: Number(form.value.position || 0),
       isAvailable: !!form.value.isAvailable,
       highlightOnSlip: !!form.value.highlightOnSlip,
-      linkedProductId: form.value.linkedProductId || null
-    }
-    if(!form.value.linkedProductId){
-      payload.availableDays = form.value.alwaysAvailable ? null : (form.value.availableDays || [])
-      payload.availableFrom = form.value.alwaysAvailable ? null : form.value.availableFrom || null
-      payload.availableTo = form.value.alwaysAvailable ? null : form.value.availableTo || null
+      linkedProductId: form.value.linkedProductId || null,
+      alwaysAvailable: !!form.value.alwaysAvailable,
+      weeklySchedule: form.value.linkedProductId || form.value.alwaysAvailable ? null : form.value.weeklySchedule,
     }
 
     if(isEdit){

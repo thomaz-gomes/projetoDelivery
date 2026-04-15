@@ -41,6 +41,11 @@
               <div class="small text-muted">Aplicado a todos os produtos desta categoria (pode ser sobrescrito por produto)</div>
             </div>
 
+            <AvailabilityScheduler
+              v-model:alwaysAvailable="alwaysAvailable"
+              v-model:schedule="weeklySchedule"
+            />
+
             <div class="d-flex justify-content-between">
               <button class="btn btn-secondary" type="button" @click="cancel">Voltar</button>
               <button class="btn btn-primary" :disabled="saving">{{ saving ? 'Salvando...' : 'Criar categoria' }}</button>
@@ -58,6 +63,7 @@ import { useRouter, useRoute } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
 import SelectInput from '../components/form/select/SelectInput.vue'
+import AvailabilityScheduler from '../components/AvailabilityScheduler.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -74,13 +80,23 @@ const storesMap = {}
 const menuId = ref(null)
 const dadosFiscaisId = ref(null)
 const dadosFiscaisList = ref([])
+const alwaysAvailable = ref(true)
+const weeklySchedule = ref([])
 
 async function load(){
   if(!isEdit) return
   try{
     const res = await api.get(`/menu/categories/${id}`)
     const c = res.data
-    if(c){ name.value = c.name || ''; description.value = c.description || ''; position.value = c.position || 0; isActive.value = c.isActive ?? true; dadosFiscaisId.value = c.dadosFiscaisId || null }
+    if(c){
+      name.value = c.name || '';
+      description.value = c.description || '';
+      position.value = c.position || 0;
+      isActive.value = c.isActive ?? true;
+      dadosFiscaisId.value = c.dadosFiscaisId || null;
+      alwaysAvailable.value = c.alwaysAvailable !== false;
+      weeklySchedule.value = Array.isArray(c.weeklySchedule) ? c.weeklySchedule : [];
+    }
   }catch(e){ console.error(e); error.value = 'Falha ao carregar categoria' }
 }
 
@@ -117,7 +133,16 @@ async function save(){
   saving.value = true
   try{
     if(!name.value) { error.value = 'Nome é obrigatório'; return }
-    const payload = { name: name.value, position: position.value, description: description.value, isActive: isActive.value, menuId: menuId.value, dadosFiscaisId: dadosFiscaisId.value }
+    const payload = {
+      name: name.value,
+      position: position.value,
+      description: description.value,
+      isActive: isActive.value,
+      menuId: menuId.value,
+      dadosFiscaisId: dadosFiscaisId.value,
+      alwaysAvailable: !!alwaysAvailable.value,
+      weeklySchedule: alwaysAvailable.value ? null : weeklySchedule.value,
+    }
     if(isEdit){
       await api.patch(`/menu/categories/${id}`, payload)
       Swal.fire({ icon: 'success', text: 'Categoria atualizada' })

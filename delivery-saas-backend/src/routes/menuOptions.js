@@ -131,43 +131,29 @@ router.post('/:groupId/options', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const group = await prisma.optionGroup.findFirst({ where: { id: groupId, companyId } })
   if (!group) return res.status(404).json({ message: 'Grupo não encontrado' })
-  const { name, price = 0, image = null, position = 0, availableDays = null, availableFrom = null, availableTo = null, isAvailable = true, linkedProductId = null, technicalSheetId = null, highlightOnSlip = false } = req.body || {}
+  const { name, price = 0, image = null, position = 0, isAvailable = true, linkedProductId = null, technicalSheetId = null, highlightOnSlip = false, alwaysAvailable = true, weeklySchedule = null } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
   try {
     const integrationCode = await generateOptionCode(groupId)
     const data = { groupId, name, price: Number(price || 0), image: image ?? null, position: Number(position || 0), highlightOnSlip: Boolean(highlightOnSlip), integrationCode }
-    // validate and attach technicalSheetId when provided
     if (technicalSheetId) {
       const ts = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
       if (!ts || ts.companyId !== companyId) return res.status(400).json({ message: 'technicalSheetId inválido' })
       data.technicalSheetId = technicalSheetId
     }
-    // If this option links to a product, record the relation and DO NOT accept availability fields
     if (linkedProductId) {
+      // Linked option inherits availability from the product; ignore schedule fields.
       data.linkedProductId = linkedProductId
+      data.alwaysAvailable = true
+      data.weeklySchedule = null
     } else {
       data.isAvailable = Boolean(isAvailable)
-      // include availability fields when provided
-      if (availableDays !== undefined) data.availableDays = availableDays === null ? null : availableDays
-      if (availableFrom !== undefined) data.availableFrom = availableFrom === null ? null : availableFrom
-      if (availableTo !== undefined) data.availableTo = availableTo === null ? null : availableTo
+      data.alwaysAvailable = alwaysAvailable !== false
+      data.weeklySchedule = alwaysAvailable === false ? (weeklySchedule || null) : null
     }
 
-    try {
-      const created = await prisma.option.create({ data })
-      return res.status(201).json(created)
-    } catch (innerErr) {
-      // If Prisma complains about unknown args (schema mismatch), retry without availability fields
-      const msg = String(innerErr?.message || innerErr)
-      if (/Unknown arg|Unknown argument|Unknown field/i.test(msg)) {
-        // Retry without availability fields and isAvailable in case schema is older
-        const fallbackData = { groupId, name, price: Number(price || 0), image: image ?? null, position: Number(position || 0) }
-        if (linkedProductId) fallbackData.linkedProductId = linkedProductId
-        const created = await prisma.option.create({ data: fallbackData })
-        return res.status(201).json(created)
-      }
-      throw innerErr
-    }
+    const created = await prisma.option.create({ data })
+    return res.status(201).json(created)
   } catch (e) {
     console.error('Error creating option', e)
     res.status(500).json({ message: e?.message || 'Erro ao criar opção' })
@@ -186,10 +172,9 @@ router.patch('/options/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res)
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, price, image, position, availableDays, availableFrom, availableTo, isAvailable, linkedProductId, technicalSheetId, highlightOnSlip } = req.body || {}
+  const { name, price, image, position, isAvailable, linkedProductId, technicalSheetId, highlightOnSlip, alwaysAvailable, weeklySchedule } = req.body || {}
   try {
     const data = {}
-    // validate and attach technicalSheetId when provided
     if (technicalSheetId !== undefined) {
       if (technicalSheetId === null) {
         data.technicalSheetId = null
@@ -204,29 +189,27 @@ router.patch('/options/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res)
     if (image !== undefined) data.image = image
     if (position !== undefined) data.position = Number(position)
     if (highlightOnSlip !== undefined) data.highlightOnSlip = Boolean(highlightOnSlip)
-    // If linkedProductId is provided, record it and ignore availability fields
-    if (linkedProductId !== undefined) {
-      data.linkedProductId = linkedProductId || null
+
+    const nextLinkedProductId = linkedProductId !== undefined ? (linkedProductId || null) : existing.linkedProductId
+    if (linkedProductId !== undefined) data.linkedProductId = nextLinkedProductId
+
+    if (isAvailable !== undefined) data.isAvailable = Boolean(isAvailable)
+
+    if (nextLinkedProductId) {
+      // Linked option inherits availability from its product — clear own schedule.
+      if (alwaysAvailable !== undefined || weeklySchedule !== undefined) {
+        data.alwaysAvailable = true
+        data.weeklySchedule = null
+      }
     } else {
-      if (isAvailable !== undefined) data.isAvailable = Boolean(isAvailable)
-      if (availableDays !== undefined) data.availableDays = availableDays
-      if (availableFrom !== undefined) data.availableFrom = availableFrom
-      if (availableTo !== undefined) data.availableTo = availableTo
+      if (alwaysAvailable !== undefined) data.alwaysAvailable = Boolean(alwaysAvailable)
+      data.weeklySchedule = alwaysAvailable !== undefined
+        ? (alwaysAvailable === false ? (weeklySchedule || null) : null)
+        : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule)
     }
 
-    try {
-      const updated = await prisma.option.update({ where: { id }, data: { ...data } })
-      return res.json(updated)
-    } catch (innerErr) {
-      const msg = String(innerErr?.message || innerErr)
-      if (/Unknown arg|Unknown argument|Unknown field/i.test(msg)) {
-        // retry without availability fields and isAvailable in case schema is older
-        const { availableDays: _ad, availableFrom: _af, availableTo: _at, isAvailable: _ia, ...fallback } = data
-        const updated = await prisma.option.update({ where: { id }, data: fallback })
-        return res.json(updated)
-      }
-      throw innerErr
-    }
+    const updated = await prisma.option.update({ where: { id }, data })
+    return res.json(updated)
   } catch (e) {
     console.error('Error updating option', e)
     res.status(500).json({ message: e?.message || 'Erro ao atualizar opção' })
