@@ -909,6 +909,9 @@ model MenuCategory {
   products       Product[]
   dadosFiscaisId String?
   dadosFiscais   DadosFiscais? @relation(fields: [dadosFiscaisId], references: [id])
+  // Availability scheduling (category-level, takes precedence over product-level)
+  alwaysAvailable Boolean      @default(true)
+  weeklySchedule  Json?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -936,6 +939,9 @@ model Product {
   dadosFiscais        DadosFiscais?        @relation(fields: [dadosFiscaisId], references: [id])
   integrationCode     String?
   highlightOnSlip     Boolean              @default(false)
+  // Availability scheduling (product-level; category-level wins on conflict)
+  alwaysAvailable     Boolean              @default(true)
+  weeklySchedule      Json?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   productOptionGroups ProductOptionGroup[]
@@ -1403,6 +1409,9 @@ model Option {
   integrationCode  String?
   highlightOnSlip  Boolean     @default(false)
   position         Int         @default(0)
+  // Availability scheduling (if linkedProductId is set, linked product's availability also applies)
+  alwaysAvailable  Boolean     @default(true)
+  weeklySchedule   Json?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
