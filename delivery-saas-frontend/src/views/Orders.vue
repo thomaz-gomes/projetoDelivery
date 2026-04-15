@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref, computed, onUnmounted, nextTick, watch } from 'vue';
-import { normalizeOrderItems } from '../utils/orderUtils.js';
+import { normalizeOrderItems, storeRevenue } from '../utils/orderUtils.js';
 import { useOrdersStore } from '../stores/orders';
 import { useAuthStore } from '../stores/auth';
 import { useCustomersStore } from '../stores/customers';
@@ -3348,7 +3348,7 @@ function pulseButton() {
             <span v-if="normalizeOrder(o).channelLabel" class="ms-2 badge bg-light text-dark">{{ normalizeOrder(o).channelLabel }}</span>
           </div>
           <div class="small text-muted">
-            {{ normalizeOrder(o).items?.length || 0 }} item(ns) · {{ formatCurrency(Number(o.total || 0) + Number(o.discountIfood || 0) - Number(o.additionalFees || 0)) }}
+            {{ normalizeOrder(o).items?.length || 0 }} item(ns) · {{ formatCurrency(storeRevenue(o)) }}
           </div>
         </div>
         <div class="pending-card-actions">
@@ -3409,7 +3409,7 @@ function pulseButton() {
                  <div class="d-flex justify-content-between">
                   <span class="oc-time">{{ getCreatedDurationDisplay(o) }}</span>
                   
-                  <span class="oc-total">{{ formatCurrency(computeDisplayedTotal(o)) }}</span></div>
+                  <span class="oc-total">{{ formatCurrency(storeRevenue(o)) }}</span></div>
                 <div class="oc-footer">
                   <span v-if="isIfoodOrder(o)" title="Pedido iFood">
                     <img src="https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png" alt="iFood" style="width:24px;height:24px;object-fit:contain;margin-right:4px;vertical-align:-2px;" />
@@ -3668,8 +3668,8 @@ function pulseButton() {
                 <span class="od-pay-value">{{ formatCurrency(selectedNormalized.paymentChange) }}</span>
               </div>
               <div class="od-pay-row od-pay-total">
-                <span class="od-pay-label">Total</span>
-                <span class="od-pay-value">{{ formatCurrency(computeDisplayedTotal(selectedOrder || {})) }}</span>
+                <span class="od-pay-label">Total faturado</span>
+                <span class="od-pay-value">{{ formatCurrency(storeRevenue(selectedOrder || {})) }}</span>
               </div>
             </div>
           </div>

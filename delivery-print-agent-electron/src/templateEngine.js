@@ -489,10 +489,10 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
     _row('Qtd itens:', ctx.total_itens_count || '0');
     _row('Total Itens(=)', ctx.subtotal || '0,00');
     _row('Taxa entrega(+)', ctx.taxa_entrega || ctx.taxa_val || '0,00');
-    _row('Acrescimo(+)', ctx.acrescimo || ctx.acrescimo_val || '0,00');
+    _row('Taxa serviço', ctx.acrescimo || ctx.acrescimo_val || '0,00');
     _row('Desconto(-)', ctx.desconto || ctx.desconto_val || '0,00');
     parts.push(ESCPos.bold(true));
-    _row('TOTAL(=)', ctx.total || ctx.total_val || '0,00');
+    _row('TOTAL FATURADO', ctx.total || ctx.total_val || '0,00');
     parts.push(ESCPos.bold(false));
   }
 
@@ -600,14 +600,16 @@ function buildBlockContext(order) {
   const taxaVal     = _toNum(order.deliveryFee || 0);
   const descontoVal = _toNum(order.discount || order.couponDiscount || 0);
   const subtotalVal = _toNum(order.subtotal) || itemsTotal;
-  const totalVal    = _toNum(order.total);
 
   // iFood: campos específicos (localizador, código de coleta)
   const _plBc = order.payload || {};
   const _ifBc = _plBc.order || _plBc;
 
-  // Taxas adicionais (taxa de serviço iFood, etc.) — payload.total.additionalFees
-  const acrescimoVal = _toNum(_ifBc.total?.additionalFees ?? 0);
+  // Taxas adicionais (taxa de serviço iFood, etc.)
+  const acrescimoVal = _toNum(order.additionalFees ?? _ifBc.total?.additionalFees ?? 0);
+  // Total faturado = cliente pagou + iFood repassa - taxa serviço retida pelo iFood
+  const discIfoodValBc = _toNum(order.discountIfood || 0);
+  const totalVal    = _toNum(order.total) + discIfoodValBc - acrescimoVal;
   const localizadorBc   = _ifBc.customer?.phones?.[0]?.localizer || _ifBc.customer?.phone?.localizer || '';
   const codigo_coleta = _ifBc.delivery?.pickupCode || '';
 
@@ -849,13 +851,15 @@ function buildContext(order, printer) {
     return s + base + opts;
   }, 0);
   const taxaVal     = _toNum(order.deliveryFee || 0);
-  const acrescimoVal = _toNum(ifoodPl.total?.additionalFees ?? 0);
+  const acrescimoVal = _toNum(order.additionalFees ?? ifoodPl.total?.additionalFees ?? 0);
   let descontoVal = _toNum(order.discount || order.couponDiscount || 0);
   // Fallback: extrair desconto dos benefits do iFood
   if (descontoVal <= 0 && Array.isArray(ifoodPl.benefits) && ifoodPl.benefits.length > 0) {
     for (const b of ifoodPl.benefits) descontoVal += _toNum(b.value || 0);
   }
-  const totalVal    = _toNum(order.total);
+  // Total faturado = cliente pagou + iFood repassa - taxa serviço retida pelo iFood
+  const discIfoodVal = _toNum(order.discountIfood || 0);
+  const totalVal    = _toNum(order.total) + discIfoodVal - acrescimoVal;
 
   return {
     loja_nome,

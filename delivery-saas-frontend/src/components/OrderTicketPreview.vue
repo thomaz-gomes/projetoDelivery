@@ -126,10 +126,11 @@ function buildContext(order) {
 
   const subtotalVal = toNum(order.subtotal) || calcSubtotal
   const taxaVal     = toNum(order.deliveryFee || 0)
-  const acrescimoVal = toNum(ifoodPl.total?.additionalFees ?? 0)
+  const acrescimoVal = toNum(order.additionalFees ?? ifoodPl.total?.additionalFees ?? 0)
   const vInfo = splitVoucherDiscounts(order)
   const descontoVal = vInfo.storeDiscount
-  const totalVal = toNum(order.total)
+  // Total faturado = cliente pagou + iFood repassa - taxa serviço retida pelo iFood
+  const totalVal = toNum(order.total) + vInfo.discountIfood - acrescimoVal
 
   // Troco
   const trocoRaw = toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0)
@@ -272,9 +273,9 @@ Obs: {{obs_pedido}}
 
 [ROW:Total Itens(=)|{{subtotal_val}}]
 [ROW:Taxa entrega(+)|{{taxa_val}}]
-[ROW:Acrescimo(+)|{{acrescimo_val}}]
+[ROW:Taxa servico|{{acrescimo_val}}]
 [ROW:Desconto(-)|{{desconto_val}}]
-[ROW:TOTAL(=)|{{total_val}}]
+[ROW:TOTAL FATURADO|{{total_val}}]
 
 [SEP]
 [SIZE:1]
