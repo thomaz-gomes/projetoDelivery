@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4">
+  <div class="container py-2 py-md-4">
     <h2 class="h4 mb-3">{{ id ? 'Editar Ingrediente' : 'Novo Ingrediente' }}</h2>
     <div class="card">
       <div class="card-body">
