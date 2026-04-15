@@ -49,9 +49,17 @@ function extractJSON(text) {
   } catch (_) {}
 
   // 5) Last resort: surface a hint of what the AI actually returned
-  const snippet = String(text).slice(0, 500).replace(/\s+/g, ' ');
-  console.error('[techSheetImport] extractJSON falhou. Conteudo retornado (primeiros 500 chars):', snippet);
-  throw new Error(`IA nao retornou JSON valido. Inicio da resposta: "${snippet.slice(0, 200)}..."`);
+  const fullLen = text.length;
+  const head = String(text).slice(0, 400).replace(/\s+/g, ' ');
+  const tail = String(text).slice(-400).replace(/\s+/g, ' ');
+  console.error(`[techSheetImport] extractJSON falhou (texto ${fullLen} chars).`);
+  console.error('  HEAD:', head);
+  console.error('  TAIL:', tail);
+  // Show the parse error from the last attempt for diagnosis
+  let parseErr = '';
+  try { JSON.parse(cleaned); } catch (e) { parseErr = e.message; }
+  console.error('  ParseError:', parseErr);
+  throw new Error(`IA nao retornou JSON valido (${fullLen} chars). Erro: ${parseErr}`);
 }
 
 // --- System prompt ---
