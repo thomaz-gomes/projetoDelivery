@@ -244,6 +244,45 @@ router.patch('/categories/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, r
   res.json(updated)
 })
 
+// POST /menu/reorder — atomic bulk reorder of categories and products
+// Body: { categories?: [{id, position}], products?: [{id, position, categoryId?}] }
+router.post('/reorder', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const { categories = [], products = [] } = req.body || {}
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const c of Array.isArray(categories) ? categories : []) {
+        if (!c?.id) continue
+        const existing = await tx.menuCategory.findFirst({ where: { id: c.id, companyId } })
+        if (!existing) continue
+        await tx.menuCategory.update({
+          where: { id: c.id },
+          data: { position: Number(c.position) || 0 },
+        })
+      }
+      for (const p of Array.isArray(products) ? products : []) {
+        if (!p?.id) continue
+        const existing = await tx.product.findFirst({ where: { id: p.id, companyId } })
+        if (!existing) continue
+        const data = { position: Number(p.position) || 0 }
+        if (p.categoryId !== undefined) {
+          if (p.categoryId === null) {
+            data.categoryId = null
+          } else {
+            const cat = await tx.menuCategory.findFirst({ where: { id: p.categoryId, companyId } })
+            if (cat) data.categoryId = p.categoryId
+          }
+        }
+        await tx.product.update({ where: { id: p.id }, data })
+      }
+    })
+    return res.json({ ok: true })
+  } catch (e) {
+    console.error('POST /menu/reorder error', e)
+    return res.status(500).json({ message: e?.message || 'Erro ao reordenar' })
+  }
+})
+
 router.delete('/categories/:id', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId

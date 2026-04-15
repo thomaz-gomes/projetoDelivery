@@ -9,9 +9,12 @@
             <TextInput v-model="search" placeholder="Buscar um item" inputClass="form-control me-2" />
             <button class="btn btn-sm btn-outline-secondary me-2" :class="{ active: compactMode }" @click="toggleCompact"><i class="bi bi-list"></i> {{ compactMode ? 'Denso' : 'Normal' }}</button>
           </div>
-          <div v-if="isAdmin" class="d-flex gap-2">
+          <div v-if="isAdmin" class="d-flex gap-2 flex-wrap">
             <button class="btn btn-outline-secondary" @click="goNewCategory">Adicionar categoria</button>
             <button class="btn btn-primary" @click="goNewProduct">Adicionar produto</button>
+            <button class="btn btn-outline-secondary" @click="showReorderModal = true" title="Reordenar categorias e produtos">
+              <i class="bi bi-arrows-move me-1"></i><span class="d-none d-sm-inline">Reordenar</span>
+            </button>
             <button v-if="menuId" class="btn btn-outline-warning" @click="showImportModal = true" title="Importar cardápio com IA">
               <i class="bi bi-stars me-1"></i><span class="d-none d-sm-inline">Importar com IA</span><span class="d-inline d-sm-none">IA</span>
             </button>
@@ -119,6 +122,15 @@
       @imported="onImported"
     />
 
+    <!-- Reorder Modal -->
+    <ReorderMenuModal
+      v-if="showReorderModal"
+      :categories="reorderCategories"
+      :products="reorderProducts"
+      @close="showReorderModal = false"
+      @saved="load"
+    />
+
   </div>
 </template>
 
@@ -132,6 +144,7 @@ import { bindLoading } from '../state/globalLoading.js'
 import { useMediaLibrary } from '../composables/useMediaLibrary.js'
 import { useAiStudio } from '../composables/useAiStudio.js'
 import MenuAiImportModal from '../components/MenuAiImportModal.vue'
+import ReorderMenuModal from '../components/ReorderMenuModal.vue'
 
 const auth = useAuthStore()
 const isAdmin = computed(() => ['ADMIN','SUPER_ADMIN'].includes(String(auth.user?.role || '').toUpperCase()))
@@ -153,6 +166,17 @@ const menuInfo = ref(null)
 
 // AI Import
 const showImportModal = ref(false)
+const showReorderModal = ref(false)
+const reorderCategories = computed(() => {
+  const list = categoriesList.value || []
+  if (!menuId.value) return list
+  return list.filter(c => String(c.menuId || '') === String(menuId.value))
+})
+const reorderProducts = computed(() => {
+  const list = products.value || []
+  if (!menuId.value) return list
+  return list.filter(p => String(p.menuId || '') === String(menuId.value))
+})
 function onImported() {
   showImportModal.value = false
   load()
