@@ -657,9 +657,10 @@ export async function processIFoodWebhook(eventId) {
         }
 
         if (inferred) mapped.status = inferred;
-        // Track when iFood sends the CONCLUDED event so we know the order was
-        // closed via iFood confirmation code (as opposed to manual rider completion).
-        if (eventCode === 'CONCLUDED' || eventCode === 'CON') {
+        // Track when iFood validates the delivery drop code (entregador digitou o código).
+        // DDCS = DELIVERY_DROP_CODE_VALIDATION_SUCCESS — only this means code was used.
+        // CONCLUDED/CON is generic and fires for all completions (manual, takeout, etc).
+        if (eventCode === 'DELIVERY_DROP_CODE_VALIDATION_SUCCESS' || eventCode === 'DDCS') {
           mapped.closedByIfoodCode = true;
         }
         console.log('[iFood Processor] eventCode:', eventCode, '-> inferred status:', inferred, 'mapped.status:', mapped.status);
