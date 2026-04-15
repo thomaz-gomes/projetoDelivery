@@ -1,7 +1,7 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
-import { areUnitsCompatible } from '../../services/unitConversion.js';
+import { areUnitsCompatible, convertQuantity } from '../../services/unitConversion.js';
 import { assertNoCycle, cascadeRecomputeComposites, computeCompositeAvgCost } from '../../services/compositeCost.js';
 
 export const ingredientsRouter = express.Router();
@@ -240,6 +240,88 @@ ingredientsRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   } catch (e) {
     console.error('PATCH /ingredients/:id error', e);
     res.status(400).json({ message: e.message || 'Erro ao atualizar ingrediente' });
+  }
+});
+
+// produce — create a PRODUCTION movement that debits bases and credits the composite
+ingredientsRouter.post('/:id/produce', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const companyId = req.user.companyId;
+    const { quantity, storeId = null, note = null, allowNegative = false } = req.body || {};
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return res.status(400).json({ message: 'Quantidade inválida' });
+
+    const composite = await prisma.ingredient.findFirst({
+      where: { id, companyId, isComposite: true },
+      include: { compositionItems: { include: { ingredient: true } } },
+    });
+    if (!composite) return res.status(404).json({ message: 'Insumo composto não encontrado' });
+    if (!composite.yieldQuantity || Number(composite.yieldQuantity) <= 0) {
+      return res.status(400).json({ message: 'Composto sem rendimento definido' });
+    }
+    if (!composite.compositionItems.length) {
+      return res.status(400).json({ message: 'Composto sem ingredientes na composição' });
+    }
+
+    const ratio = qty / Number(composite.yieldQuantity);
+    const baseConsumption = composite.compositionItems.map(item => {
+      const consumedInItemUnit = Number(item.quantity) * ratio;
+      const consumedInBaseUnit = convertQuantity(consumedInItemUnit, item.unit, item.ingredient.unit);
+      return { ingredientId: item.ingredientId, qtyInBaseUnit: consumedInBaseUnit, baseIngredient: item.ingredient };
+    });
+
+    for (const c of baseConsumption) {
+      if (c.qtyInBaseUnit == null) {
+        return res.status(400).json({ message: `Conversão de unidade falhou para ${c.baseIngredient.description}` });
+      }
+    }
+
+    if (!allowNegative) {
+      for (const c of baseConsumption) {
+        if (Number(c.baseIngredient.currentStock || 0) < c.qtyInBaseUnit) {
+          return res.status(400).json({ message: `Estoque insuficiente para ${c.baseIngredient.description}` });
+        }
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const movement = await tx.stockMovement.create({
+        data: { companyId, storeId: storeId || null, type: 'PRODUCTION', note: note || null },
+      });
+
+      for (const c of baseConsumption) {
+        await tx.stockMovementItem.create({
+          data: { stockMovementId: movement.id, ingredientId: c.ingredientId, quantity: c.qtyInBaseUnit, unitCost: null },
+        });
+        const base = await tx.ingredient.findUnique({ where: { id: c.ingredientId } });
+        await tx.ingredient.update({
+          where: { id: c.ingredientId },
+          data: { currentStock: Number(base.currentStock || 0) - c.qtyInBaseUnit },
+        });
+      }
+
+      await tx.stockMovementItem.create({
+        data: { stockMovementId: movement.id, ingredientId: composite.id, quantity: qty, unitCost: null },
+      });
+      await tx.ingredient.update({
+        where: { id: composite.id },
+        data: { currentStock: Number(composite.currentStock || 0) + qty },
+      });
+
+      const changedIds = [...baseConsumption.map(c => c.ingredientId), composite.id];
+      await cascadeRecomputeComposites(changedIds, tx);
+
+      return tx.stockMovement.findUnique({
+        where: { id: movement.id },
+        include: { items: { include: { ingredient: true } } },
+      });
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error('POST /ingredients/:id/produce error', e);
+    res.status(500).json({ message: e.message || 'Erro ao registrar produção' });
   }
 });
 
