@@ -316,12 +316,16 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
       req.user?.id,
     );
 
-    // Pre-load company ingredients for validation
+    // Pre-load company ingredients for validation and deduplication
     const companyIngredients = await prisma.ingredient.findMany({
       where: { companyId },
-      select: { id: true },
+      select: { id: true, description: true, unit: true },
     });
     const validIngredientIds = new Set(companyIngredients.map(i => i.id));
+    // Map normalized description+unit -> id for dedup across sheets in same batch
+    const ingredientByDesc = new Map(
+      companyIngredients.map(i => [`${i.description.trim().toUpperCase()}||${i.unit || 'UN'}`, i.id])
+    );
 
     // Pre-load valid product IDs for this company
     const companyProducts = await prisma.product.findMany({
@@ -349,25 +353,32 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
         let ingredientId = item.ingredientId || null;
 
         if (item.newIngredient) {
-          // Create a new ingredient
+          // Create a new ingredient — but reuse if same desc+unit already exists or was created earlier in batch
           const desc = String(item.description || '').trim();
           if (!desc) continue;
           const unit = ALLOWED_UNITS.includes(String(item.unit || '').toUpperCase())
             ? String(item.unit).toUpperCase()
             : 'UN';
 
-          const newIngredient = await prisma.ingredient.create({
-            data: {
-              companyId,
-              description: desc,
-              unit,
-              controlsStock: true,
-              composesCmv: false,
-            },
-          });
-          ingredientId = newIngredient.id;
-          validIngredientIds.add(ingredientId);
-          createdIngredients++;
+          const dedupKey = `${desc.toUpperCase()}||${unit}`;
+          const existingId = ingredientByDesc.get(dedupKey);
+          if (existingId) {
+            ingredientId = existingId;
+          } else {
+            const newIngredient = await prisma.ingredient.create({
+              data: {
+                companyId,
+                description: desc,
+                unit,
+                controlsStock: true,
+                composesCmv: false,
+              },
+            });
+            ingredientId = newIngredient.id;
+            validIngredientIds.add(ingredientId);
+            ingredientByDesc.set(dedupKey, ingredientId);
+            createdIngredients++;
+          }
         }
 
         // Validate ingredient belongs to company
