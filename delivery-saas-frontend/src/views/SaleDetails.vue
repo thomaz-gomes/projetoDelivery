@@ -144,6 +144,10 @@
               <span class="text-muted">Taxa de entrega:</span>
               <strong>{{ Number(order.deliveryFee || 0) > 0 ? formatCurrency(order.deliveryFee) : 'Grátis' }}</strong>
             </div>
+            <div v-if="Number(order.additionalFees || 0) > 0" class="d-flex justify-content-between mb-2">
+              <span class="text-muted">Taxa de serviço (iFood):</span>
+              <strong>{{ formatCurrency(order.additionalFees) }}</strong>
+            </div>
             <div class="d-flex justify-content-between pt-2 border-top">
               <span class="fw-semibold">Total faturado:</span>
               <strong class="fs-5">{{ formatCurrency(storeRevenue(order)) }}</strong>

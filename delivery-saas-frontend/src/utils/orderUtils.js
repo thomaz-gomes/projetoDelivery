@@ -105,13 +105,15 @@ export function splitVoucherDiscounts(order) {
 
 /**
  * Calcula o total real faturado pela loja.
- * total (o que o cliente pagou) + discountIfood (o que o marketplace repassa).
+ * total (o que o cliente pagou) + discountIfood (o que o marketplace repassa)
+ * - additionalFees (taxa de serviço retida pelo iFood).
  * O desconto da loja (discountMerchant) NÃO entra — a loja absorve.
  */
 export function storeRevenue(order) {
   const v = splitVoucherDiscounts(order);
   const orderTotal = Number(order?.total || 0);
-  return orderTotal + v.discountIfood;
+  const addFees = Number(order?.additionalFees || 0);
+  return orderTotal + v.discountIfood - addFees;
 }
 
 export default { normalizeOrderItems, splitVoucherDiscounts, storeRevenue };

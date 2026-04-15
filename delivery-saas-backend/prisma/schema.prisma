@@ -216,6 +216,7 @@ model Order {
   discountIfood        Decimal?  // desconto pago pelo iFood (marketplace) — entra no caixa da loja
   discountMerchant     Decimal?  // desconto absorvido pela loja — NÃO entra no caixa
   deliveryFee          Decimal?
+  additionalFees       Decimal?  // taxa de serviço iFood (retida pelo iFood, não entra no caixa da loja)
   payload              Json?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt

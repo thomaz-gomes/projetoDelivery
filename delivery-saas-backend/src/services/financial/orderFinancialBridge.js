@@ -170,6 +170,32 @@ export async function createFinancialEntriesForOrder(order) {
       });
     }
 
+    // 3. Taxa de serviço iFood (additionalFees) — retida pelo iFood, registrar como dedução
+    const addFees = Number(order.additionalFees || 0);
+    if (addFees > 0) {
+      const deductionCC = await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, dreGroup: 'DEDUCTIONS', isActive: true },
+        orderBy: { code: 'asc' },
+      });
+      await prisma.financialTransaction.create({
+        data: {
+          companyId: order.companyId,
+          type: 'PAYABLE',
+          status: 'PAID',
+          description: `Taxa de serviço iFood - ${pedidoLabel}`,
+          costCenterId: deductionCC?.id || null,
+          grossAmount: addFees,
+          feeAmount: 0,
+          netAmount: addFees,
+          dueDate: now,
+          paidAt: now,
+          issueDate: now,
+          sourceType: 'ORDER_FEE',
+          sourceId: order.id,
+        },
+      });
+    }
+
     // Audit: log successful bridge execution
     await prisma.financialBridgeLog.create({
       data: { companyId: order.companyId, sourceType: 'ORDER', sourceId: order.id, status: 'SUCCESS' },
