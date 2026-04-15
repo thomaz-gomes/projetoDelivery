@@ -24,10 +24,34 @@ const parseJobs = new Map();
 const ALLOWED_UNITS = ['UN', 'GR', 'KG', 'ML', 'L'];
 
 function extractJSON(text) {
-  try { return JSON.parse(text.trim()); } catch (_) {}
-  const match = text.match(/\{[\s\S]*\}/);
-  if (match) { try { return JSON.parse(match[0]); } catch (_) {} }
-  throw new Error('IA nao retornou JSON valido. Tente novamente.');
+  if (!text || typeof text !== 'string') {
+    throw new Error('IA nao retornou conteudo. Tente novamente.');
+  }
+  let cleaned = text.trim();
+
+  // 1) Strip markdown code fences (```json ... ``` or ``` ... ```)
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+
+  // 2) Strip preamble before the first { and trailing text after the last }
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+
+  // 3) Try direct parse
+  try { return JSON.parse(cleaned); } catch (_) {}
+
+  // 4) Try removing trailing commas (common AI mistake)
+  try {
+    const noTrailingCommas = cleaned.replace(/,(\s*[}\]])/g, '$1');
+    return JSON.parse(noTrailingCommas);
+  } catch (_) {}
+
+  // 5) Last resort: surface a hint of what the AI actually returned
+  const snippet = String(text).slice(0, 500).replace(/\s+/g, ' ');
+  console.error('[techSheetImport] extractJSON falhou. Conteudo retornado (primeiros 500 chars):', snippet);
+  throw new Error(`IA nao retornou JSON valido. Inicio da resposta: "${snippet.slice(0, 200)}..."`);
 }
 
 // --- System prompt ---
@@ -142,10 +166,13 @@ async function runParseJob(jobId, method, files, companyId, userId) {
         }
       }
 
+      console.log(`[techSheetImport:${jobId}] Resposta IA recebida (${(rawContent || '').length} chars)`);
       const parsed = extractJSON(rawContent);
 
       if (parsed?.sheets && Array.isArray(parsed.sheets)) {
         allSheets.push(...parsed.sheets);
+      } else {
+        console.warn(`[techSheetImport:${jobId}] JSON parseado mas sem chave 'sheets' valida:`, JSON.stringify(parsed).slice(0, 300));
       }
     }
 
