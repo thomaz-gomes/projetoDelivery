@@ -58,11 +58,12 @@ async function getOpenAIModel() {
 // ─── Gemini callers ──────────────────────────────────────────────────────────
 
 async function geminiText(systemPrompt, userContent, opts) {
-  const { temperature = 0.2, maxTokens, timeoutMs = 60_000 } = opts;
+  const { temperature = 0.2, maxTokens, timeoutMs = 60_000, jsonMode = false } = opts;
   const apiKey = await getGeminiKey();
 
   const generationConfig = { temperature };
   if (maxTokens) generationConfig.maxOutputTokens = maxTokens;
+  if (jsonMode) generationConfig.responseMimeType = 'application/json';
 
   const res = await fetch(
     `${GOOGLE_AI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
@@ -99,8 +100,11 @@ async function geminiText(systemPrompt, userContent, opts) {
 }
 
 async function geminiVision(systemPrompt, textPrompt, imageBase64, mimeType, opts) {
-  const { temperature = 0.2, maxTokens = 400, timeoutMs = 30_000 } = opts;
+  const { temperature = 0.2, maxTokens = 400, timeoutMs = 30_000, jsonMode = false } = opts;
   const apiKey = await getGeminiKey();
+
+  const generationConfig = { temperature, maxOutputTokens: maxTokens };
+  if (jsonMode) generationConfig.responseMimeType = 'application/json';
 
   const body = {
     contents: [{
@@ -110,7 +114,7 @@ async function geminiVision(systemPrompt, textPrompt, imageBase64, mimeType, opt
         { text: textPrompt },
       ],
     }],
-    generationConfig: { temperature, maxOutputTokens: maxTokens },
+    generationConfig,
   };
   if (systemPrompt) {
     body.systemInstruction = { parts: [{ text: systemPrompt }] };
@@ -149,7 +153,7 @@ async function geminiVision(systemPrompt, textPrompt, imageBase64, mimeType, opt
 // ─── OpenAI callers ──────────────────────────────────────────────────────────
 
 async function openaiText(systemPrompt, userContent, opts) {
-  const { temperature = 0.2, maxTokens, timeoutMs = 60_000 } = opts;
+  const { temperature = 0.2, maxTokens, timeoutMs = 60_000, jsonMode = false } = opts;
   const apiKey = await getOpenAIKey();
   const model  = await getOpenAIModel();
 
@@ -162,6 +166,7 @@ async function openaiText(systemPrompt, userContent, opts) {
     ],
   };
   if (maxTokens) body.max_tokens = maxTokens;
+  if (jsonMode) body.response_format = { type: 'json_object' };
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST',
@@ -200,7 +205,7 @@ async function openaiText(systemPrompt, userContent, opts) {
 }
 
 async function openaiVision(systemPrompt, textPrompt, imageBase64, mimeType, opts) {
-  const { temperature = 0.2, maxTokens = 400, timeoutMs = 30_000 } = opts;
+  const { temperature = 0.2, maxTokens = 400, timeoutMs = 30_000, jsonMode = false } = opts;
   const apiKey = await getOpenAIKey();
   const model  = await getOpenAIModel();
 
@@ -224,6 +229,7 @@ async function openaiVision(systemPrompt, textPrompt, imageBase64, mimeType, opt
     max_tokens: maxTokens,
     messages,
   };
+  if (jsonMode) body.response_format = { type: 'json_object' };
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST',
