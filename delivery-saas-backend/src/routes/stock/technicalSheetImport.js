@@ -9,6 +9,7 @@
 
 import express from 'express';
 import * as XLSX from 'xlsx';
+import { jsonrepair } from 'jsonrepair';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
@@ -48,7 +49,14 @@ function extractJSON(text) {
     return JSON.parse(noTrailingCommas);
   } catch (_) {}
 
-  // 5) Last resort: surface a hint of what the AI actually returned
+  // 5) Try jsonrepair — handles missing brackets, commas, quotes, etc. (common LLM mistakes)
+  try {
+    const repaired = jsonrepair(cleaned);
+    console.log('[techSheetImport] JSON foi reparado por jsonrepair');
+    return JSON.parse(repaired);
+  } catch (_) {}
+
+  // 6) Last resort: surface a hint of what the AI actually returned
   const fullLen = text.length;
   const head = String(text).slice(0, 400).replace(/\s+/g, ' ');
   const tail = String(text).slice(-400).replace(/\s+/g, ' ');
