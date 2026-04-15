@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import api from '../../api';
 import ListCard from '../../components/ListCard.vue';
 import IngredientAiImportModal from '../../components/IngredientAiImportModal.vue';
+import ProduceCompositeModal from '../../components/ProduceCompositeModal.vue';
 
 const router = useRouter();
 const showAiImport = ref(false);
@@ -13,7 +14,10 @@ const loading = ref(false);
 const error = ref('');
 const groups = ref([]);
 
-async function fetch(){
+const showProduce = ref(false);
+const produceTarget = ref(null);
+
+async function fetchList(){
   loading.value = true;
   try{
     const [{ data: rows }, { data: g }] = await Promise.all([ api.get('/ingredients'), api.get('/ingredient-groups') ]);
@@ -26,6 +30,20 @@ async function fetch(){
 function goToNew(){ router.push('/ingredients/new'); }
 function goToEdit(i){ router.push(`/ingredients/${i.id}`); }
 
+async function openProduce(ing) {
+  try {
+    const { data } = await api.get(`/ingredients/${ing.id}`);
+    produceTarget.value = data;
+    showProduce.value = true;
+  } catch (e) {
+    error.value = 'Não foi possível carregar os dados do insumo composto';
+  }
+}
+
+async function onProduced() {
+  await fetchList();
+}
+
 function onKeydown(ev){
   try{
     const tag = document.activeElement && document.activeElement.tagName;
@@ -34,7 +52,7 @@ function onKeydown(ev){
   }catch(e){}
 }
 
-onMounted(() => { fetch(); document.addEventListener('keydown', onKeydown); });
+onMounted(() => { fetchList(); document.addEventListener('keydown', onKeydown); });
 
 const displayed = computed(() => {
   if(!q.value) return list.value
@@ -62,16 +80,41 @@ onUnmounted(() => { try{ document.removeEventListener('keydown', onKeydown); }ca
       <template #default>
         <div class="table-responsive">
           <table class="table table-hover mb-0">
-            <thead><tr><th>Descrição</th><th>Unidade</th><th>Grupo</th><th>Controla</th><th>Estoque</th><th>Custo Médio</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Descrição</th>
+                <th>Unidade</th>
+                <th>Grupo</th>
+                <th>Controla</th>
+                <th>Estoque</th>
+                <th>Custo Médio</th>
+                <th class="text-end">Ações</th>
+              </tr>
+            </thead>
             <tbody>
               <tr v-for="i in displayed" :key="i.id">
-                <td>{{ i.description }}</td>
+                <td>
+                  {{ i.description }}
+                  <span v-if="i.isComposite" class="badge bg-info ms-2" title="Insumo composto">
+                    <i class="bi bi-layers me-1"></i>Composto
+                  </span>
+                </td>
                 <td>{{ i.unit }}</td>
                 <td>{{ i.group ? i.group.name : '-' }}</td>
                 <td>{{ i.controlsStock ? 'Sim' : 'Não' }}</td>
                 <td>{{ i.currentStock !== null ? i.currentStock : '-' }}</td>
                 <td>{{ i.avgCost !== null ? i.avgCost : '-' }}</td>
-                <td><button class="btn btn-sm btn-outline-secondary" @click="goToEdit(i)">Editar</button></td>
+                <td class="text-end">
+                  <button
+                    v-if="i.isComposite"
+                    class="btn btn-sm btn-outline-success me-1"
+                    @click="openProduce(i)"
+                    title="Produzir"
+                  >
+                    <i class="bi bi-arrow-repeat me-1"></i>Produzir
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary" @click="goToEdit(i)">Editar</button>
+                </td>
               </tr>
               <tr v-if="!list.length"><td colspan="7" class="text-center text-muted py-4">Nenhum ingrediente cadastrado.</td></tr>
             </tbody>
@@ -83,7 +126,14 @@ onUnmounted(() => { try{ document.removeEventListener('keydown', onKeydown); }ca
     <IngredientAiImportModal
       v-if="showAiImport"
       @close="showAiImport = false"
-      @imported="showAiImport = false; fetch()"
+      @imported="showAiImport = false; fetchList()"
+    />
+
+    <ProduceCompositeModal
+      v-if="showProduce && produceTarget"
+      :composite="produceTarget"
+      @close="showProduce = false"
+      @produced="onProduced"
     />
   </div>
 </template>
