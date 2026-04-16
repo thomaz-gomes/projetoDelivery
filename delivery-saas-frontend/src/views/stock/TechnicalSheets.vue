@@ -22,13 +22,17 @@ const ingredients = ref([]);
 const itemQty = ref('');
 const itemIng = ref(null);
 const auditItems = ref([]);
-const auditCount = computed(() => auditItems.value.length);
+const auditTotal = ref(0);
+const auditTruncated = ref(false);
+const auditCount = computed(() => auditTotal.value);
 const showAuditModal = ref(false);
 
 async function loadAudit() {
   try {
     const { data } = await api.get('/technical-sheets/audit-units');
     auditItems.value = data.items || [];
+    auditTotal.value = data.total || 0;
+    auditTruncated.value = data.truncated || false;
   } catch (e) {
     // ignore — just don't show the banner
   }
@@ -182,6 +186,9 @@ function onQuickClear(){ q.value = '' }
                 </tr>
               </tbody>
             </table>
+            <p v-if="auditTruncated" class="small text-muted mt-2">
+              Mostrando {{ auditItems.length }} de {{ auditTotal }} itens. Corrija e recarregue para ver os demais.
+            </p>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showAuditModal = false">Fechar</button>
@@ -277,7 +284,7 @@ function onQuickClear(){ q.value = '' }
               <td>{{ it.ingredient.description }}</td>
               <td>
                 {{ it.unit || it.ingredient.unit || '-' }}
-                <span v-if="it.unit && !areUnitsCompatible(it.unit, it.ingredient.unit)" class="badge bg-danger ms-1" :title="'Incompatível com ' + it.ingredient.unit">⚠ Inválida</span>
+                <span v-if="it.unit && !areUnitsCompatible(it.unit, it.ingredient.unit)" class="badge bg-danger ms-1" :title="'Incompatível com ' + it.ingredient.unit"><i class="bi-exclamation-triangle"></i> Inválida</span>
               </td>
               <td>{{ fmtMoney(it.ingredient.avgCost) }}/{{ it.ingredient.unit }}</td>
               <td>{{ it.quantity }}</td>

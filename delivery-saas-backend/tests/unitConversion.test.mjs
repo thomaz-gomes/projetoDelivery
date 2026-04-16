@@ -57,6 +57,14 @@ test('normalizeToIngredientUnit — existing behavior preserved', () => {
   assert.equal(normalizeToIngredientUnit(1000, 'GR', 'KG'), 1);
 });
 
+test('areUnitsCompatible — old services re-export still works', async () => {
+  const { areUnitsCompatible: fromServices } = await import('../src/services/unitConversion.js');
+  assert.equal(fromServices('GR', 'KG'), true);
+  assert.equal(fromServices('UN', 'KG'), false);
+  // Semantic change: empty is now compatible (was false before)
+  assert.equal(fromServices('', 'KG'), true);
+});
+
 // Simulates what the route handler should do
 test('route-level validation: rejects incompatible unit before persist', async () => {
   const ingredient = { id: 'ing1', unit: 'KG', avgCost: 5.90 };

@@ -118,7 +118,7 @@ onMounted(fetch);
               <td>{{ it.ingredient.description }}</td>
               <td>
                 {{ it.unit || it.ingredient.unit || '-' }}
-                <span v-if="it.unit && !areUnitsCompatible(it.unit, it.ingredient.unit)" class="badge bg-danger ms-1" :title="'Incompatível com ' + it.ingredient.unit">⚠ Inválida</span>
+                <span v-if="it.unit && !areUnitsCompatible(it.unit, it.ingredient.unit)" class="badge bg-danger ms-1" :title="'Incompatível com ' + it.ingredient.unit"><i class="bi-exclamation-triangle"></i> Inválida</span>
               </td>
               <td>{{ fmtMoney(it.ingredient.avgCost) }}/{{ it.ingredient.unit }}</td>
               <td>{{ it.quantity }}</td>

@@ -24,11 +24,13 @@ test('auditSheetItems returns items with incompatible unit family', async () => 
     },
   };
   const result = await auditSheetItems(prismaMock, 'c1');
-  assert.equal(result.length, 2);
-  const ids = result.map(r => r.itemId).sort();
+  assert.equal(result.items.length, 2);
+  assert.equal(result.total, 2);
+  assert.equal(result.truncated, false);
+  const ids = result.items.map(r => r.itemId).sort();
   assert.deepEqual(ids, ['i1', 'i4']);
   // payload shape
-  const i1 = result.find(r => r.itemId === 'i1');
+  const i1 = result.items.find(r => r.itemId === 'i1');
   assert.equal(i1.sheetId, 's1');
   assert.equal(i1.sheetName, 'Lanche');
   assert.equal(i1.ingredientName, 'TOMATE');
@@ -36,8 +38,26 @@ test('auditSheetItems returns items with incompatible unit family', async () => 
   assert.equal(i1.ingredientUnit, 'KG');
 });
 
-test('auditSheetItems returns empty array when all compatible', async () => {
+test('auditSheetItems returns empty when all compatible', async () => {
   const prismaMock = { technicalSheetItem: { findMany: async () => [] } };
   const result = await auditSheetItems(prismaMock, 'c1');
-  assert.deepEqual(result, []);
+  assert.deepEqual(result.items, []);
+  assert.equal(result.total, 0);
+  assert.equal(result.truncated, false);
+});
+
+test('auditSheetItems caps results at limit and flags truncated', async () => {
+  // Generate 150 bad items (UN vs KG)
+  const badItems = Array.from({ length: 150 }, (_, i) => ({
+    id: `i${i}`,
+    unit: 'UN',
+    quantity: 1,
+    technicalSheet: { id: 's1', name: 'Sheet', companyId: 'c1' },
+    ingredient: { id: `ing${i}`, description: `ING${i}`, unit: 'KG' },
+  }));
+  const prismaMock = { technicalSheetItem: { findMany: async () => badItems } };
+  const result = await auditSheetItems(prismaMock, 'c1');
+  assert.equal(result.items.length, 100);
+  assert.equal(result.total, 150);
+  assert.equal(result.truncated, true);
 });

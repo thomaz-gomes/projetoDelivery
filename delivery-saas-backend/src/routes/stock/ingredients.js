@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { areUnitsCompatible, convertQuantity } from '../../services/unitConversion.js';
+// areUnitsCompatible above re-exports from utils/unitConversion.js (single source of truth)
 import { assertNoCycle, cascadeRecomputeComposites, computeCompositeAvgCost } from '../../services/compositeCost.js';
 
 export const ingredientsRouter = express.Router();
@@ -156,6 +157,39 @@ ingredientsRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
     if (groupId) {
       const g = await prisma.ingredientGroup.findFirst({ where: { id: groupId, companyId } });
       if (!g) return res.status(400).json({ message: 'Grupo inválido' });
+    }
+
+    // Guard: if unit is changing, ensure no existing TechnicalSheetItem or
+    // CompositeIngredientItem would become incompatible with the new unit.
+    if (unit && String(unit).toUpperCase() !== String(existing.unit).toUpperCase()) {
+      const [sheetConflicts, compositeConflicts] = await Promise.all([
+        prisma.technicalSheetItem.findMany({
+          where: { ingredientId: id, unit: { not: null } },
+          include: { technicalSheet: { select: { name: true } } },
+        }),
+        prisma.compositeIngredientItem.findMany({
+          where: { ingredientId: id, unit: { not: null } },
+          include: { composite: { select: { description: true } } },
+        }).catch(() => []),
+      ]);
+      const bad = [];
+      for (const si of sheetConflicts) {
+        if (!areUnitsCompatible(si.unit, unit)) {
+          bad.push({ type: 'sheet', sheetName: si.technicalSheet?.name, itemUnit: si.unit });
+        }
+      }
+      for (const ci of compositeConflicts) {
+        if (!areUnitsCompatible(ci.unit, unit)) {
+          bad.push({ type: 'composite', compositeName: ci.composite?.description, itemUnit: ci.unit });
+        }
+      }
+      if (bad.length > 0) {
+        return res.status(400).json({
+          message: `Mudança de unidade bloqueada: ${bad.length} item(ns) ficariam incompatíveis`,
+          code: 'INGREDIENT_UNIT_CHANGE_BREAKS_ITEMS',
+          conflicts: bad,
+        });
+      }
     }
 
     const nextIsComposite = isComposite === undefined ? existing.isComposite : !!isComposite;

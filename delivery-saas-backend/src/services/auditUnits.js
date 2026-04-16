@@ -1,12 +1,13 @@
 import { areUnitsCompatible } from '../utils/unitConversion.js';
 
-export async function auditSheetItems(prismaInstance, companyId) {
+export async function auditSheetItems(prismaInstance, companyId, { limit = 100 } = {}) {
   const items = await prismaInstance.technicalSheetItem.findMany({
     where: { technicalSheet: { companyId } },
     include: {
       technicalSheet: { select: { id: true, name: true, companyId: true } },
       ingredient: { select: { id: true, description: true, unit: true } },
     },
+    // no take here — we need to filter first, then slice
   });
   const bad = [];
   for (const it of items) {
@@ -24,5 +25,5 @@ export async function auditSheetItems(prismaInstance, companyId) {
       });
     }
   }
-  return bad;
+  return { items: bad.slice(0, limit), total: bad.length, truncated: bad.length > limit };
 }

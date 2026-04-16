@@ -159,7 +159,7 @@
                         v-if="isItemIncompatible(item)"
                         class="badge bg-danger mt-1"
                         :title="'Incompatível com ' + (findIngredient(item.ingredientId)?.unit || '')"
-                      >⚠ Inválida</span>
+                      ><i class="bi-exclamation-triangle"></i> Inválida</span>
                     </td>
                     <td class="text-end text-muted small">{{ itemCostDisplay(item) }}</td>
                     <td class="text-center">

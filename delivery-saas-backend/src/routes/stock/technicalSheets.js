@@ -21,8 +21,8 @@ technicalSheetsRouter.get('/', async (req, res) => {
 // MUST be declared BEFORE `/:id` so Express doesn't capture "audit-units" as an id.
 technicalSheetsRouter.get('/audit-units', async (req, res) => {
   try {
-    const bad = await auditSheetItems(prisma, req.user.companyId);
-    res.json({ items: bad, count: bad.length });
+    const result = await auditSheetItems(prisma, req.user.companyId);
+    res.json(result);
   } catch (e) {
     console.error('GET /technical-sheets/audit-units error:', e);
     res.status(500).json({ message: e?.message });
