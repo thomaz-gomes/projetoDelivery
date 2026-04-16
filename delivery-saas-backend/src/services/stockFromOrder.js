@@ -200,6 +200,48 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 	return result;
 }
 
+export async function reverseStockMovementForOrder(prismaInstance, orderId, userId = null) {
+	const original = await prismaInstance.stockMovement.findFirst({
+		where: { type: 'OUT', note: `Order:${orderId}`, reversedAt: null },
+		include: { items: true },
+	});
+	if (!original) return null;
+
+	return await prismaInstance.$transaction(async (tx) => {
+		const reverseMv = await tx.stockMovement.create({
+			data: {
+				companyId: original.companyId,
+				storeId: original.storeId,
+				type: 'IN',
+				reason: 'Cancelamento de pedido',
+				note: `Reverse:Order:${orderId}`,
+			},
+		});
+		for (const it of original.items) {
+			await tx.stockMovementItem.create({
+				data: {
+					stockMovementId: reverseMv.id,
+					ingredientId: it.ingredientId,
+					quantity: it.quantity,
+					unitCost: it.unitCost,
+				},
+			});
+			const ing = await tx.ingredient.findUnique({ where: { id: it.ingredientId } });
+			if (ing) {
+				await tx.ingredient.update({
+					where: { id: it.ingredientId },
+					data: { currentStock: Number(ing.currentStock || 0) + Number(it.quantity) },
+				});
+			}
+		}
+		await tx.stockMovement.update({
+			where: { id: original.id },
+			data: { reversedAt: new Date(), reversedBy: userId },
+		});
+		return reverseMv;
+	});
+}
+
 export default buildAndPersistStockMovementFromOrderItems;
 
 
