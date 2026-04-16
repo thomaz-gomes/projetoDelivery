@@ -10,6 +10,9 @@
           <li class="nav-item" role="presentation">
             <button :class="['nav-link', { active: activeTab === 'marketplace' }]" id="tab-marketplace" type="button" @click="activeTab = 'marketplace'">MARKETPLACE</button>
           </li>
+          <li class="nav-item" role="presentation">
+            <button :class="['nav-link', { active: activeTab === 'pricing' }]" type="button" @click="activeTab = 'pricing'">PRECIFICAÇÃO</button>
+          </li>
         </ul>
         <div class="tab-content">
           <div :class="['tab-pane', activeTab === 'general' ? 'show active' : '']" id="general" role="tabpanel" aria-labelledby="tab-general">
@@ -154,6 +157,16 @@
           <div :class="['tab-pane', activeTab === 'marketplace' ? 'show active' : '']" id="marketplace" role="tabpanel" aria-labelledby="tab-marketplace">
             <MarketplaceTab :cmv="sheetCost" :initial="form.marketplace" @change="onMarketplaceChange" />
           </div>
+
+          <div :class="['tab-pane', activeTab === 'pricing' ? 'show active' : '']" role="tabpanel">
+            <PricingPanel
+              v-if="isEdit && id"
+              :product-id="id"
+              :current-price="form.price"
+              @apply-suggested-price="form.price = $event"
+            />
+            <div v-else class="alert alert-info">Salve o produto primeiro para ver a análise de precificação.</div>
+          </div>
         </div>
 
         <div class="d-flex justify-content-between align-items-center">
@@ -184,6 +197,7 @@ import CurrencyInput from '../components/form/input/CurrencyInput.vue'
 import SelectInput from '../components/form/select/SelectInput.vue'
 import MarketplaceTab from '../components/MarketplaceTab.vue'
 import AvailabilityScheduler from '../components/AvailabilityScheduler.vue'
+import PricingPanel from '../components/PricingPanel.vue'
 import { normalizeToIngredientUnit } from '../utils/unitConversion.js'
 
 const saas = useSaasStore()
