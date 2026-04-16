@@ -577,6 +577,7 @@ model Store {
   financialTransactions FinancialTransaction[]
   cashFlowEntries       CashFlowEntry[]
   ifoodChatMessages     IfoodChatMessage[]
+  pricingDefaults       StorePricingDefaults?
 }
 
 model Menu {
@@ -947,6 +948,8 @@ model Product {
   productOptionGroups ProductOptionGroup[]
   // options that are linked to this product (inverse relation for Option.linkedProduct)
   linkedOptions       Option[]
+  packagingCost         Decimal?
+  targetMarginPercent   Decimal?
 
   @@index([companyId, integrationCode], name: "company_product_integration_idx")
   @@index([companyId, name], name: "company_product_name_idx")
@@ -2356,4 +2359,19 @@ model QuickReply {
 
   @@unique([companyId, shortcut])
   @@index([companyId])
+}
+
+model StorePricingDefaults {
+  storeId               String   @id
+  store                 Store    @relation(fields: [storeId], references: [id])
+  salesTaxPercent       Decimal  @default(0)
+  salesTaxLabel         String?
+  marketplaceFeePercent Decimal  @default(0)
+  cardFeePercent        Decimal  @default(0)
+  defaultPackagingCost  Decimal  @default(0)
+  targetMarginPercent   Decimal  @default(30)
+  cmvHealthyMin         Decimal  @default(25)
+  cmvHealthyMax         Decimal  @default(35)
+  cmvCriticalAbove      Decimal  @default(40)
+  updatedAt             DateTime @updatedAt
 }

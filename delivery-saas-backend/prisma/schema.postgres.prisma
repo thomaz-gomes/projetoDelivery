@@ -468,6 +468,7 @@ model Store {
   nfeProtocols   NfeProtocol[]
   // stock movements originating/associated with this store
   stockMovements StockMovement[]
+  pricingDefaults       StorePricingDefaults?
 }
 
 model Menu {
@@ -694,6 +695,8 @@ model Product {
   productOptionGroups ProductOptionGroup[]
   // options that are linked to this product (inverse relation for Option.linkedProduct)
   linkedOptions       Option[]
+  packagingCost         Decimal?
+  targetMarginPercent   Decimal?
 
   @@index([companyId, name], name: "company_product_name_idx")
 }
@@ -1503,4 +1506,19 @@ model MetaPixel {
   @@unique([companyId, menuId], name: "company_menu_pixel")
   @@index([companyId], name: "idx_metapixel_company")
   @@index([menuId], name: "idx_metapixel_menu")
+}
+
+model StorePricingDefaults {
+  storeId               String   @id
+  store                 Store    @relation(fields: [storeId], references: [id])
+  salesTaxPercent       Decimal  @default(0)
+  salesTaxLabel         String?
+  marketplaceFeePercent Decimal  @default(0)
+  cardFeePercent        Decimal  @default(0)
+  defaultPackagingCost  Decimal  @default(0)
+  targetMarginPercent   Decimal  @default(30)
+  cmvHealthyMin         Decimal  @default(25)
+  cmvHealthyMax         Decimal  @default(35)
+  cmvCriticalAbove      Decimal  @default(40)
+  updatedAt             DateTime @updatedAt
 }
