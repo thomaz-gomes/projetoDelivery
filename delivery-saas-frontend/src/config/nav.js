@@ -45,8 +45,9 @@ export const nav = [
     { name: 'Fichas Técnicas', to: '/technical-sheets', icon: 'bi bi-file-earmark-text' },
     { name: 'Importação de Compras', to: '/stock/purchase-imports', icon: 'bi bi-receipt' }
   ] },
-  { name: 'Financeiro', to: '/financial', icon: 'bi bi-cash-coin', moduleKey: 'financial', lockable: true, role: 'ADMIN', children: [
-    { name: 'Dashboard', to: '/financial', icon: 'bi bi-speedometer2' },
+  { name: 'Financeiro', to: '/financial/health', icon: 'bi bi-cash-coin', moduleKey: 'financial', lockable: true, role: 'ADMIN', children: [
+    { name: 'Saúde do Negócio', to: '/financial/health', icon: 'bi bi-heart-pulse' },
+    { name: 'Dashboard', to: '/financial/dashboard', icon: 'bi bi-speedometer2' },
     { name: 'Contas a Pagar/Receber', to: '/financial/transactions', icon: 'bi bi-receipt' },
     { name: 'Fluxo de Caixa', to: '/financial/cash-flow', icon: 'bi bi-graph-up' },
     { name: 'DRE', to: '/financial/dre', icon: 'bi bi-file-earmark-spreadsheet' },

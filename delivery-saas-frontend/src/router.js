@@ -278,7 +278,9 @@ const router = createRouter({
     { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },
     { path: '/relatorios/nfe-emissoes', component: NfeEmissoesRelatorio, meta: { requiresAuth: true, role: ['ADMIN', 'SUPER_ADMIN'], requiresModule: 'FISCAL' } },
     // ---- Módulo Financeiro ----
-    { path: '/financial', component: FinancialDashboard, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial', redirect: '/financial/health' },
+    { path: '/financial/health', name: 'BusinessHealth', component: () => import('@/views/financial/BusinessHealth.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/dashboard', name: 'FinancialDashboard', component: FinancialDashboard, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     { path: '/financial/accounts', component: FinancialAccounts, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     { path: '/financial/transactions', component: FinancialTransactions, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     { path: '/financial/cash-flow', component: FinancialCashFlow, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },

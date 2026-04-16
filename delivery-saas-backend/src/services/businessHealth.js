@@ -214,5 +214,16 @@ export async function getBusinessHealth(prisma, { companyId, storeId, period }) 
 
   const alerts = evaluateAlerts({ kpis, breakEven, bottomProducts, storeDefaults, opexDeltaPct });
 
-  return { period: range, kpis, breakEven, topProducts, bottomProducts, alerts };
+  // Task 3.4: earliest snapshot date (for data availability banner)
+  const earliest = await prisma.stockMovementItem.findFirst({
+    where: {
+      unitCost: { not: null },
+      stockMovement: { type: 'OUT', companyId },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { createdAt: true },
+  });
+  const dataStartDate = earliest?.createdAt || null;
+
+  return { period: range, kpis, breakEven, topProducts, bottomProducts, alerts, dataStartDate };
 }
