@@ -63,7 +63,7 @@ test('calculateCmvByProduct skips movements without Order: note', async () => {
   const prismaMock = {
     stockMovement: {
       findMany: async () => [
-        { id: 'mv1', note: 'Manual adjustment', items: [{ quantity: 10, unitCost: 1.0 }] },
+        { id: 'mv1', note: 'Manual adjustment', items: [{ quantity: 10, unitCost: 1.0, ingredient: { composesCmv: true } }] },
       ],
     },
     order: { findUnique: async () => null },
@@ -77,7 +77,7 @@ test('calculateCmvByProduct skips items with null unitCost', async () => {
   const prismaMock = {
     stockMovement: {
       findMany: async () => [
-        { id: 'mv1', note: 'Order:o1', items: [{ quantity: 10, unitCost: null }] },
+        { id: 'mv1', note: 'Order:o1', items: [{ quantity: 10, unitCost: null, ingredient: { composesCmv: true } }] },
       ],
     },
     order: { findUnique: async () => ({ id: 'o1', items: [{ productId: 'p1', quantity: 1, totalPrice: 20 }] }) },

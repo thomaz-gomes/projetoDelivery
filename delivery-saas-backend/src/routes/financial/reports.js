@@ -283,7 +283,16 @@ export async function calculatePurchases(prismaInstance, companyId, from, to, st
 export async function calculateCmvByProduct(prismaInstance, companyId, from, to, storeId) {
   const mvWhere = { companyId, type: 'OUT', reversedAt: null, createdAt: { gte: from, lte: to } };
   if (storeId) mvWhere.storeId = storeId;
-  const movements = await prismaInstance.stockMovement.findMany({ where: mvWhere });
+  const movements = await prismaInstance.stockMovement.findMany({
+    where: mvWhere,
+    include: {
+      items: {
+        include: {
+          ingredient: { select: { composesCmv: true } },
+        },
+      },
+    },
+  });
 
   // Agregar CMV por orderId
   const cmvByOrder = new Map();
@@ -292,6 +301,7 @@ export async function calculateCmvByProduct(prismaInstance, companyId, from, to,
     const orderId = mv.note.slice('Order:'.length);
     let mvCost = 0;
     for (const it of mv.items || []) {
+      if (!it.ingredient?.composesCmv) continue;
       if (it.unitCost == null) continue;
       mvCost += Number(it.quantity) * Number(it.unitCost);
     }

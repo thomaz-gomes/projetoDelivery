@@ -201,13 +201,13 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 }
 
 export async function reverseStockMovementForOrder(prismaInstance, orderId, userId = null) {
-	const original = await prismaInstance.stockMovement.findFirst({
-		where: { type: 'OUT', note: `Order:${orderId}`, reversedAt: null },
-		include: { items: true },
-	});
-	if (!original) return null;
-
 	return await prismaInstance.$transaction(async (tx) => {
+		const original = await tx.stockMovement.findFirst({
+			where: { type: 'OUT', note: `Order:${orderId}`, reversedAt: null },
+			include: { items: true },
+		});
+		if (!original) return null;
+
 		const reverseMv = await tx.stockMovement.create({
 			data: {
 				companyId: original.companyId,

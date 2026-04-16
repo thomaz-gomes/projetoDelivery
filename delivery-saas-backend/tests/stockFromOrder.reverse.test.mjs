@@ -40,7 +40,7 @@ test('reverseStockMovementForOrder creates IN mirror and marks original OUT reve
 });
 
 test('reverseStockMovementForOrder is idempotent (returns null if already reversed)', async () => {
-  const prismaMock = { stockMovement: { findFirst: async () => null } };
+  const prismaMock = { stockMovement: { findFirst: async () => null }, $transaction: async (fn) => fn(prismaMock) };
   const result = await reverseStockMovementForOrder(prismaMock, 'o1', 'user-1');
   assert.equal(result, null);
 });
