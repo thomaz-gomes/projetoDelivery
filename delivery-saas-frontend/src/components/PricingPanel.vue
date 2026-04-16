@@ -127,6 +127,7 @@
           <button
             type="button"
             class="btn btn-primary"
+            :disabled="!data?.suggestedPrice"
             @click="$emit('apply-suggested-price', data.suggestedPrice)"
           >
             Aplicar preço sugerido
@@ -206,7 +207,11 @@ async function fetchPricing() {
 
 onMounted(() => fetchPricing())
 
-watch(() => props.currentPrice, () => fetchPricing())
+let debounceTimer = null;
+watch(() => props.currentPrice, () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => fetchPricing(), 400);
+})
 </script>
 
 <style scoped>

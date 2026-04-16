@@ -23,17 +23,20 @@ test('getOrCreateDefaults creates with defaults when not found', async () => {
 });
 
 test('applyUpdate rejects negative values', async () => {
-  await assert.rejects(() => applyUpdate({}, 's1', { targetMarginPercent: -5 }), /inválido/i);
+  const existing = { cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40 };
+  await assert.rejects(() => applyUpdate({}, 's1', { targetMarginPercent: -5 }, existing), /inválido/i);
 });
 
 test('applyUpdate rejects cmvHealthyMin >= cmvHealthyMax', async () => {
-  await assert.rejects(() => applyUpdate({}, 's1', { cmvHealthyMin: 50, cmvHealthyMax: 30 }), /cmvHealthy/i);
+  const existing = { cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40 };
+  await assert.rejects(() => applyUpdate({}, 's1', { cmvHealthyMin: 50 }, existing), /cmvHealthy/i);
 });
 
 test('applyUpdate calls prisma update with valid data', async () => {
   const updates = [];
   const prismaMock = { storePricingDefaults: { update: async ({ data }) => { updates.push(data); return data; } } };
-  await applyUpdate(prismaMock, 's1', { salesTaxPercent: 6, salesTaxLabel: 'Simples Nacional' });
+  const existing = { cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40 };
+  await applyUpdate(prismaMock, 's1', { salesTaxPercent: 6, salesTaxLabel: 'Simples Nacional' }, existing);
   assert.equal(updates.length, 1);
   assert.equal(Number(updates[0].salesTaxPercent), 6);
   assert.equal(updates[0].salesTaxLabel, 'Simples Nacional');
