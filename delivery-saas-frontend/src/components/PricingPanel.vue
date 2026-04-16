@@ -53,6 +53,10 @@
                 <td>Imposto (Simples)</td>
                 <td class="text-end">{{ formatPercent(data.taxBreakdown?.salesTax) }}</td>
               </tr>
+              <tr v-if="data.taxBreakdown?.otherFees > 0">
+                <td>Outras taxas</td>
+                <td class="text-end">{{ formatPercent(data.taxBreakdown.otherFees) }}</td>
+              </tr>
               <tr>
                 <td>Marketplace</td>
                 <td class="text-end">{{ formatPercent(data.taxBreakdown?.marketplaceFee) }}</td>

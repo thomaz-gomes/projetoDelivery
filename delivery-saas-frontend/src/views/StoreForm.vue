@@ -267,6 +267,18 @@
             </fieldset>
 
             <fieldset class="mb-4 p-3 border rounded bg-light">
+              <legend class="h6 text-muted mb-2" style="font-size:0.8rem; letter-spacing:0.04em; text-transform:uppercase;">Outras taxas (royalties, etc.)</legend>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <TextInput type="number" label="Alíquota (%)" labelClass="form-label" v-model="pricing.otherFeesPercent" placeholder="Ex: 2" inputClass="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <TextInput label="Descrição" labelClass="form-label" v-model="pricing.otherFeesLabel" placeholder="Ex: Royalties" inputClass="form-control" />
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="mb-4 p-3 border rounded bg-light">
               <legend class="h6 text-muted mb-2" style="font-size:0.8rem; letter-spacing:0.04em; text-transform:uppercase;">Taxas operacionais médias</legend>
               <div class="row g-3">
                 <div class="col-md-6">
@@ -485,6 +497,8 @@ function setActiveTab(t){
 const pricing = ref({
   salesTaxPercent: 0,
   salesTaxLabel: '',
+  otherFeesPercent: 0,
+  otherFeesLabel: '',
   marketplaceFeePercent: 0,
   cardFeePercent: 0,
   defaultPackagingCost: 0,
@@ -502,6 +516,8 @@ async function loadPricing() {
     const { data } = await api.get(`/stores/${id}/pricing-defaults`)
     pricing.value.salesTaxPercent = data.salesTaxPercent ?? 0
     pricing.value.salesTaxLabel = data.salesTaxLabel ?? ''
+    pricing.value.otherFeesPercent = data.otherFeesPercent ?? 0
+    pricing.value.otherFeesLabel = data.otherFeesLabel ?? ''
     pricing.value.marketplaceFeePercent = data.marketplaceFeePercent ?? 0
     pricing.value.cardFeePercent = data.cardFeePercent ?? 0
     pricing.value.defaultPackagingCost = data.defaultPackagingCost ?? 0
@@ -517,7 +533,7 @@ async function loadPricing() {
 
 function validatePricing() {
   const p = pricing.value
-  const numFields = ['salesTaxPercent', 'marketplaceFeePercent', 'cardFeePercent', 'defaultPackagingCost', 'targetMarginPercent', 'cmvHealthyMin', 'cmvHealthyMax', 'cmvCriticalAbove']
+  const numFields = ['salesTaxPercent', 'otherFeesPercent', 'marketplaceFeePercent', 'cardFeePercent', 'defaultPackagingCost', 'targetMarginPercent', 'cmvHealthyMin', 'cmvHealthyMax', 'cmvCriticalAbove']
   for (const f of numFields) {
     const v = Number(p[f])
     if (isNaN(v) || v < 0) {
@@ -548,6 +564,8 @@ async function savePricing() {
     await api.put(`/stores/${id}/pricing-defaults`, {
       salesTaxPercent: Number(p.salesTaxPercent),
       salesTaxLabel: p.salesTaxLabel,
+      otherFeesPercent: Number(p.otherFeesPercent),
+      otherFeesLabel: p.otherFeesLabel,
       marketplaceFeePercent: Number(p.marketplaceFeePercent),
       cardFeePercent: Number(p.cardFeePercent),
       defaultPackagingCost: Number(p.defaultPackagingCost),

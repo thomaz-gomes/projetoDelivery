@@ -6,6 +6,8 @@ export interface MarketplaceDTO {
   marketplaceFeePercent: number // 0-100
   paymentFeePercent: number // 0-100
   desiredMarginPercent: number // 0-100
+  salesTaxPercent: number // 0-100
+  otherFeesPercent: number // 0-100
   coupon: Coupon | null
   freeDelivery: boolean
   deliveryCostForRestaurant: number
@@ -16,6 +18,8 @@ export interface ComputeResult {
   suggestedPrice: number | null
   marketplaceFeeAmount: number
   paymentFeeAmount: number
+  salesTaxAmount: number
+  otherFeesAmount: number
   couponAmount: number
   totalCostBase: number
   netProfit: number | null
@@ -31,26 +35,32 @@ export function computeSuggestedPrice(
   marketplaceFeePercent: number,
   paymentFeePercent: number,
   desiredMarginPercent: number,
-  coupon: Coupon | null
+  coupon: Coupon | null,
+  salesTaxPercent: number = 0,
+  otherFeesPercent: number = 0
 ): ComputeResult {
   const toDecimal = (p: number) => p / 100
 
   const mkt = toDecimal(marketplaceFeePercent)
   const pay = toDecimal(paymentFeePercent)
   const margin = toDecimal(desiredMarginPercent)
+  const tax = toDecimal(salesTaxPercent)
+  const other = toDecimal(otherFeesPercent)
 
   const couponPercent = coupon && coupon.type === 'percent' ? toDecimal(coupon.value) : 0
   const couponFixed = coupon && coupon.type === 'fixed' ? coupon.value : 0
 
   const totalCostBase = cmv + packagingCost + deliveryCostForRestaurant + couponFixed
 
-  const denominator = 1 - (mkt + pay + margin + couponPercent)
+  const denominator = 1 - (mkt + pay + margin + tax + other + couponPercent)
 
   const denominatorValid = denominator > 0
 
   let suggestedPrice: number | null = null
   let mktAmt = 0
   let payAmt = 0
+  let taxAmt = 0
+  let otherAmt = 0
   let couponAmt = couponFixed
   let netProfit: number | null = null
 
@@ -58,9 +68,11 @@ export function computeSuggestedPrice(
     suggestedPrice = totalCostBase / denominator
     mktAmt = suggestedPrice * mkt
     payAmt = suggestedPrice * pay
+    taxAmt = suggestedPrice * tax
+    otherAmt = suggestedPrice * other
     if (coupon && coupon.type === 'percent') couponAmt = suggestedPrice * couponPercent
 
-    const totalFees = mktAmt + payAmt + couponAmt
+    const totalFees = mktAmt + payAmt + taxAmt + otherAmt + couponAmt
     netProfit = suggestedPrice - (cmv + packagingCost + deliveryCostForRestaurant + totalFees)
   }
 
@@ -68,6 +80,8 @@ export function computeSuggestedPrice(
     suggestedPrice: suggestedPrice !== null ? round(suggestedPrice) : null,
     marketplaceFeeAmount: round(mktAmt),
     paymentFeeAmount: round(payAmt),
+    salesTaxAmount: round(taxAmt),
+    otherFeesAmount: round(otherAmt),
     couponAmount: round(couponAmt),
     totalCostBase: round(totalCostBase),
     netProfit: netProfit !== null ? round(netProfit) : null,
@@ -85,6 +99,8 @@ export function mapToDTO(state: Partial<MarketplaceDTO>): MarketplaceDTO {
     marketplaceFeePercent: state.marketplaceFeePercent ?? 0,
     paymentFeePercent: state.paymentFeePercent ?? 0,
     desiredMarginPercent: state.desiredMarginPercent ?? 0,
+    salesTaxPercent: state.salesTaxPercent ?? 0,
+    otherFeesPercent: state.otherFeesPercent ?? 0,
     coupon: state.coupon ?? null,
     freeDelivery: state.freeDelivery ?? false,
     deliveryCostForRestaurant: state.deliveryCostForRestaurant ?? 0,
