@@ -9,6 +9,7 @@ import { isCardapioSimplesOnly } from '../modules.js'
 import { generateProductCode } from '../utils/integrationCode.js'
 import { computePricingAnalysis } from '../services/pricingAnalysis.js'
 import { getOrCreateDefaults } from './storePricingDefaults.js'
+import { normalizeToIngredientUnit, areUnitsCompatible } from '../utils/unitConversion.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -740,7 +741,11 @@ router.get('/products/:id/pricing-analysis', async (req, res) => {
         include: { items: { include: { ingredient: true } } },
       });
       for (const si of sheet?.items || []) {
-        if (si.ingredient) sheetCost += Number(si.quantity || 0) * Number(si.ingredient.avgCost || 0);
+        if (!si.ingredient) continue;
+        const itemUnit = si.unit || si.ingredient.unit;
+        if (!areUnitsCompatible(itemUnit, si.ingredient.unit)) continue; // skip legacy bad rows silently
+        const qty = normalizeToIngredientUnit(Number(si.quantity || 0), itemUnit, si.ingredient.unit);
+        sheetCost += qty * Number(si.ingredient.avgCost || 0);
       }
     }
 

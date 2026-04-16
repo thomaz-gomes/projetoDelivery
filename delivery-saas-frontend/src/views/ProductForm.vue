@@ -48,7 +48,7 @@
           <div class="col-md-4">
             <label class="form-label">Categoria</label>
             <SelectInput   v-model="form.categoryId"  class="form-control">
-              <option :value="null">Sem categoria</option>
+              <option :value="null">— Sem categoria —</option>
               <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
             </SelectInput>
           </div>
@@ -185,7 +185,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
+import { ref, onMounted, nextTick, onBeforeUnmount, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
@@ -240,6 +240,22 @@ async function generateDescription() {
   }
 }
 
+async function loadCategories(){
+  try{
+    const menuId = form.value.menuId || route.query.menuId
+    const menuQuery = menuId ? `?menuId=${encodeURIComponent(menuId)}` : ''
+    const cr = await api.get(`/menu/categories${menuQuery}`)
+    // Dedupe by id and filter out stray "Sem categoria" rows from backend
+    const seen = new Set()
+    categories.value = (cr.data || []).filter(c => {
+      if(seen.has(c.id)) return false
+      seen.add(c.id)
+      if((c.name || '').trim().toLowerCase() === 'sem categoria') return false
+      return true
+    })
+  }catch(e){ categories.value = [] }
+}
+
 async function load(){
   try{
     const gr = await api.get('/menu/options')
@@ -252,12 +268,8 @@ async function load(){
       // load attached groups
       try{ const att = await api.get(`/menu/products/${id}/option-groups`); form.value.optionGroupIds = att.data.attachedIds || [] }catch(e){}
     }
-    // load categories for select — if a menuId was provided in the query, request categories scoped to that menu
-    try{
-      const menuQuery = route.query.menuId ? `?menuId=${encodeURIComponent(route.query.menuId)}` : ''
-      const cr = await api.get(`/menu/categories${menuQuery}`)
-      categories.value = cr.data || []
-    }catch(e){ categories.value = [] }
+    // load categories for select — scoped to form.menuId (set when editing) or route query menuId
+    await loadCategories()
     // load menus for select
     try{ const mr = await api.get('/menu/menus'); menus.value = mr.data || [] }catch(e){ menus.value = [] }
     // load technical sheets for select and CMV calc
@@ -342,6 +354,15 @@ async function save(){
 }
 
 onMounted(()=> load())
+
+// Reload categories when form.menuId changes, and clear stale categoryId selections
+watch(() => form.value.menuId, async (newMenuId, oldMenuId) => {
+  if(newMenuId === oldMenuId) return
+  await loadCategories()
+  if(form.value.categoryId && !categories.value.some(c => c.id === form.value.categoryId)){
+    form.value.categoryId = null
+  }
+})
 
 function onMarketplaceChange(dto, calc){
   form.value.marketplace = dto
