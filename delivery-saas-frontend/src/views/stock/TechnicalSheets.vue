@@ -6,7 +6,7 @@ import Swal from 'sweetalert2';
 import ListCard from '../../components/ListCard.vue';
 import TechnicalSheetForm from '../../components/TechnicalSheetForm.vue';
 import TechnicalSheetAiImportModal from '../../components/TechnicalSheetAiImportModal.vue';
-import { normalizeToIngredientUnit } from '../../utils/unitConversion.js';
+import { normalizeToIngredientUnit, areUnitsCompatible } from '../../utils/unitConversion.js';
 
 const list = ref([]);
 const showAiImport = ref(false);
@@ -36,9 +36,12 @@ function fmtMoney(v){
 function sheetCost(s) {
   if (!s.items || !s.items.length) return 0;
   return s.items.reduce((acc, it) => {
+    const ingUnit = it.ingredient?.unit;
+    // skip rows with incompatible units — they would produce bogus numbers
+    if (it.unit && ingUnit && !areUnitsCompatible(it.unit, ingUnit)) return acc;
     const cost = Number(it.ingredient?.avgCost) || 0;
     const rawQty = Number(it.quantity) || 0;
-    const qty = normalizeToIngredientUnit(rawQty, it.unit, it.ingredient?.unit);
+    const qty = normalizeToIngredientUnit(rawQty, it.unit, ingUnit);
     return acc + cost * qty;
   }, 0);
 }
@@ -212,10 +215,20 @@ function onQuickClear(){ q.value = '' }
           <tbody>
             <tr v-for="it in selected.items" :key="it.id">
               <td>{{ it.ingredient.description }}</td>
-              <td>{{ it.unit || it.ingredient.unit || '-' }}</td>
+              <td>
+                {{ it.unit || it.ingredient.unit || '-' }}
+                <span v-if="it.unit && !areUnitsCompatible(it.unit, it.ingredient.unit)" class="badge bg-danger ms-1" :title="'Incompatível com ' + it.ingredient.unit">⚠ Inválida</span>
+              </td>
               <td>{{ fmtMoney(it.ingredient.avgCost) }}/{{ it.ingredient.unit }}</td>
               <td>{{ it.quantity }}</td>
-              <td>{{ fmtMoney((it.ingredient.avgCost || 0) * normalizeToIngredientUnit(Number(it.quantity || 0), it.unit, it.ingredient?.unit)) }}</td>
+              <td>
+                <template v-if="it.unit && !areUnitsCompatible(it.unit, it.ingredient.unit)">
+                  <span class="text-danger" :title="'Não é possível calcular: ' + it.unit + ' não converte para ' + it.ingredient.unit">—</span>
+                </template>
+                <template v-else>
+                  {{ fmtMoney((it.ingredient.avgCost || 0) * normalizeToIngredientUnit(Number(it.quantity || 0), it.unit, it.ingredient?.unit)) }}
+                </template>
+              </td>
               <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(it.id)">Remover</button></td>
             </tr>
           </tbody>

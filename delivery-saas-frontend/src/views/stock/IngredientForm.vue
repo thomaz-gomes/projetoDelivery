@@ -143,13 +143,23 @@
                         v-model="item.ingredientId"
                         :options="availableIngredientOptions"
                         placeholder="-- Selecione --"
+                        @update:modelValue="onCompositionIngredientChange(item)"
                       />
                     </td>
                     <td>
                       <TextInput v-model="item.quantity" type="number" />
                     </td>
                     <td>
-                      <SelectInput v-model="item.unit" :options="unitOptions" />
+                      <SelectInput
+                        v-model="item.unit"
+                        :options="unitOptionsFor(item)"
+                        :disabled="!item.ingredientId"
+                      />
+                      <span
+                        v-if="isItemIncompatible(item)"
+                        class="badge bg-danger mt-1"
+                        :title="'Incompatível com ' + (findIngredient(item.ingredientId)?.unit || '')"
+                      >⚠ Inválida</span>
                     </td>
                     <td class="text-end text-muted small">{{ itemCostDisplay(item) }}</td>
                     <td class="text-center">
@@ -222,6 +232,12 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../../api';
+import {
+  normalizeToIngredientUnit,
+  areUnitsCompatible,
+  compatibleUnits,
+  preferredSheetUnit,
+} from '../../utils/unitConversion.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -311,12 +327,36 @@ function formatCost(value) {
   return Number(value).toFixed(4);
 }
 
+/** Opções de unidade para a linha, filtradas pela família da unidade do ingrediente base. */
+function unitOptionsFor(item) {
+  const ing = findIngredient(item?.ingredientId);
+  if (!ing) return unitOptions;
+  return compatibleUnits(ing.unit).map(u => ({ value: u, label: u }));
+}
+
+/** Quando muda o ingrediente da linha, pré-seleciona a unidade preferida. */
+function onCompositionIngredientChange(item) {
+  const ing = findIngredient(item.ingredientId);
+  if (ing) {
+    item.unit = preferredSheetUnit(ing.unit);
+  }
+}
+
+/** Retorna true se a linha tem unit incompatível com a do ingrediente base. */
+function isItemIncompatible(item) {
+  const ing = findIngredient(item?.ingredientId);
+  if (!ing || !item?.unit) return false;
+  return !areUnitsCompatible(item.unit, ing.unit);
+}
+
 function itemCostDisplay(item) {
   const ing = findIngredient(item.ingredientId);
   if (!ing || ing.avgCost == null || !item.quantity) return '—';
   const qty = Number(item.quantity);
   if (!Number.isFinite(qty)) return '—';
-  return formatCost(Number(ing.avgCost) * qty);
+  if (item.unit && !areUnitsCompatible(item.unit, ing.unit)) return '—';
+  const qtyInIng = normalizeToIngredientUnit(qty, item.unit, ing.unit);
+  return formatCost(Number(ing.avgCost) * qtyInIng);
 }
 
 const totalCompositionCost = computed(() => {
@@ -324,7 +364,9 @@ const totalCompositionCost = computed(() => {
     const ing = findIngredient(item.ingredientId);
     const qty = Number(item.quantity);
     if (!ing || ing.avgCost == null || !Number.isFinite(qty)) return acc;
-    return acc + Number(ing.avgCost) * qty;
+    if (item.unit && !areUnitsCompatible(item.unit, ing.unit)) return acc;
+    const qtyInIng = normalizeToIngredientUnit(qty, item.unit, ing.unit);
+    return acc + Number(ing.avgCost) * qtyInIng;
   }, 0);
 });
 

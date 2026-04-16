@@ -27,3 +27,39 @@ export function normalizeToIngredientUnit(quantity, itemUnit, ingredientUnit) {
   if (!itemUnit || itemUnit === ingredientUnit) return quantity
   return convertUnit(quantity, itemUnit, ingredientUnit)
 }
+
+/**
+ * Retorna true se as duas unidades pertencem à mesma família (weight/volume/unit)
+ * ou forem idênticas. Valores vazios são considerados compatíveis (fallback na
+ * unidade do ingrediente). Unidades desconhecidas retornam false.
+ */
+export function areUnitsCompatible(unitA, unitB) {
+  const a = String(unitA || '').toUpperCase()
+  const b = String(unitB || '').toUpperCase()
+  if (!a || !b) return true
+  if (a === b) return true
+  if (!FAMILY[a] || !FAMILY[b]) return false
+  return FAMILY[a] === FAMILY[b]
+}
+
+/** Retorna as unidades compatíveis com a unidade base do ingrediente. */
+export function compatibleUnits(ingredientUnit) {
+  const u = String(ingredientUnit || '').toUpperCase()
+  if (!FAMILY[u]) return [u].filter(Boolean)
+  const family = FAMILY[u]
+  return Object.keys(FAMILY).filter(k => FAMILY[k] === family)
+}
+
+/**
+ * Retorna a "granularidade preferida" para a unidade de um ingrediente
+ * ao ser usado numa ficha técnica.
+ *  KG → GR (mais comum em receitas)
+ *  L  → ML
+ *  demais → ela mesma
+ */
+export function preferredSheetUnit(ingredientUnit) {
+  const u = String(ingredientUnit || '').toUpperCase()
+  if (u === 'KG') return 'GR'
+  if (u === 'L') return 'ML'
+  return u
+}
