@@ -6,6 +6,8 @@ const router = express.Router();
 const DEFAULTS = {
   salesTaxPercent: 0,
   salesTaxLabel: null,
+  otherFeesPercent: 0,
+  otherFeesLabel: null,
   marketplaceFeePercent: 0,
   cardFeePercent: 0,
   defaultPackagingCost: 0,
@@ -22,7 +24,7 @@ export async function getOrCreateDefaults(prismaInstance, storeId) {
 }
 
 export async function applyUpdate(prismaInstance, storeId, body, existing) {
-  const numFields = ['salesTaxPercent', 'marketplaceFeePercent', 'cardFeePercent', 'defaultPackagingCost', 'targetMarginPercent', 'cmvHealthyMin', 'cmvHealthyMax', 'cmvCriticalAbove'];
+  const numFields = ['salesTaxPercent', 'otherFeesPercent', 'marketplaceFeePercent', 'cardFeePercent', 'defaultPackagingCost', 'targetMarginPercent', 'cmvHealthyMin', 'cmvHealthyMax', 'cmvCriticalAbove'];
   const data = {};
   for (const f of numFields) {
     if (body[f] != null) {
@@ -32,6 +34,7 @@ export async function applyUpdate(prismaInstance, storeId, body, existing) {
     }
   }
   if (body.salesTaxLabel !== undefined) data.salesTaxLabel = body.salesTaxLabel != null ? String(body.salesTaxLabel) : null;
+  if (body.otherFeesLabel !== undefined) data.otherFeesLabel = body.otherFeesLabel != null ? String(body.otherFeesLabel) : null;
   const min = data.cmvHealthyMin ?? Number(existing.cmvHealthyMin);
   const max = data.cmvHealthyMax ?? Number(existing.cmvHealthyMax);
   const crit = data.cmvCriticalAbove ?? Number(existing.cmvCriticalAbove);
