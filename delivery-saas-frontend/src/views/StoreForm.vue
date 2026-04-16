@@ -10,6 +10,7 @@
           <ul class="nav nav-tabs mb-3">
                   <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='geral'}" href="#" @click.prevent="setActiveTab('geral')">Geral</a></li>
                   <li v-if="hasFiscal" class="nav-item"><a class="nav-link" :class="{active: activeTab==='fiscal'}" href="#" @click.prevent="setActiveTab('fiscal')">Fiscal</a></li>
+                  <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='pricing'}" href="#" @click.prevent="setActiveTab('pricing')">Precificação</a></li>
                 </ul>
 
                 <div v-show="activeTab==='geral'">
@@ -252,6 +253,62 @@
 
           </div>
 
+          <div v-show="activeTab==='pricing'">
+            <fieldset class="mb-4 p-3 border rounded bg-light">
+              <legend class="h6 text-muted mb-2" style="font-size:0.8rem; letter-spacing:0.04em; text-transform:uppercase;">Impostos sobre venda</legend>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <TextInput type="number" label="Alíquota (%)" labelClass="form-label" v-model="pricing.salesTaxPercent" inputClass="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <TextInput label="Descrição do regime" labelClass="form-label" v-model="pricing.salesTaxLabel" placeholder="Ex: Simples Nacional" inputClass="form-control" />
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="mb-4 p-3 border rounded bg-light">
+              <legend class="h6 text-muted mb-2" style="font-size:0.8rem; letter-spacing:0.04em; text-transform:uppercase;">Taxas operacionais médias</legend>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <TextInput type="number" label="Taxa marketplace (%)" labelClass="form-label" v-model="pricing.marketplaceFeePercent" placeholder="Ex: 12" inputClass="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <TextInput type="number" label="Taxa cartão (%)" labelClass="form-label" v-model="pricing.cardFeePercent" placeholder="Ex: 3.5" inputClass="form-control" />
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="mb-4 p-3 border rounded bg-light">
+              <legend class="h6 text-muted mb-2" style="font-size:0.8rem; letter-spacing:0.04em; text-transform:uppercase;">Defaults de produto</legend>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <CurrencyInput label="Custo embalagem padrão (R$)" labelClass="form-label" v-model="pricing.defaultPackagingCost" inputClass="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <TextInput type="number" label="Margem-alvo padrão (%)" labelClass="form-label" v-model="pricing.targetMarginPercent" placeholder="Ex: 30" inputClass="form-control" />
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="mb-4 p-3 border rounded bg-light">
+              <legend class="h6 text-muted mb-2" style="font-size:0.8rem; letter-spacing:0.04em; text-transform:uppercase;">Faixas de saúde do CMV</legend>
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <TextInput type="number" label="CMV saudável - mínimo (%)" labelClass="form-label" v-model="pricing.cmvHealthyMin" inputClass="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <TextInput type="number" label="CMV saudável - máximo (%)" labelClass="form-label" v-model="pricing.cmvHealthyMax" inputClass="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <TextInput type="number" label="CMV crítico acima de (%)" labelClass="form-label" v-model="pricing.cmvCriticalAbove" inputClass="form-control" />
+                </div>
+              </div>
+              <small class="text-muted d-block mt-2">Esses valores definem os semáforos no painel de Precificação do produto e na Saúde do Negócio.</small>
+            </fieldset>
+
+            <BaseButton variant="primary" :loading="savingPricing" @click="savePricing">Salvar Precificação</BaseButton>
+          </div>
+
           <div class="d-flex gap-2 mt-3">
             <button class="btn btn-primary" @click="save" :disabled="saving">Salvar</button>
             <button class="btn btn-outline-secondary" @click="cancel">Cancelar</button>
@@ -419,7 +476,93 @@ function _clearPauseTicker(){ if(_pauseTicker){ clearInterval(_pauseTicker); _pa
 const certInput = ref(null)
 const showDeleteModal = ref(false)
 
-function setActiveTab(t){ activeTab.value = t }
+function setActiveTab(t){
+  activeTab.value = t
+  if (t === 'pricing' && !pricingLoaded.value && id) loadPricing()
+}
+
+// ── Pricing defaults ──
+const pricing = ref({
+  salesTaxPercent: 0,
+  salesTaxLabel: '',
+  marketplaceFeePercent: 0,
+  cardFeePercent: 0,
+  defaultPackagingCost: 0,
+  targetMarginPercent: 0,
+  cmvHealthyMin: 25,
+  cmvHealthyMax: 35,
+  cmvCriticalAbove: 40
+})
+const savingPricing = ref(false)
+const pricingLoaded = ref(false)
+
+async function loadPricing() {
+  if (!id) return
+  try {
+    const { data } = await api.get(`/stores/${id}/pricing-defaults`)
+    pricing.value.salesTaxPercent = data.salesTaxPercent ?? 0
+    pricing.value.salesTaxLabel = data.salesTaxLabel ?? ''
+    pricing.value.marketplaceFeePercent = data.marketplaceFeePercent ?? 0
+    pricing.value.cardFeePercent = data.cardFeePercent ?? 0
+    pricing.value.defaultPackagingCost = data.defaultPackagingCost ?? 0
+    pricing.value.targetMarginPercent = data.targetMarginPercent ?? 0
+    pricing.value.cmvHealthyMin = data.cmvHealthyMin ?? 25
+    pricing.value.cmvHealthyMax = data.cmvHealthyMax ?? 35
+    pricing.value.cmvCriticalAbove = data.cmvCriticalAbove ?? 40
+    pricingLoaded.value = true
+  } catch (e) {
+    console.error('Failed to load pricing defaults', e)
+  }
+}
+
+function validatePricing() {
+  const p = pricing.value
+  const numFields = ['salesTaxPercent', 'marketplaceFeePercent', 'cardFeePercent', 'defaultPackagingCost', 'targetMarginPercent', 'cmvHealthyMin', 'cmvHealthyMax', 'cmvCriticalAbove']
+  for (const f of numFields) {
+    const v = Number(p[f])
+    if (isNaN(v) || v < 0) {
+      Swal.fire({ icon: 'error', text: `O campo "${f}" deve ser um número >= 0.` })
+      return false
+    }
+  }
+  const min = Number(p.cmvHealthyMin)
+  const max = Number(p.cmvHealthyMax)
+  const crit = Number(p.cmvCriticalAbove)
+  if (min >= max) {
+    Swal.fire({ icon: 'error', text: 'CMV saudável mínimo deve ser menor que o máximo.' })
+    return false
+  }
+  if (max >= crit) {
+    Swal.fire({ icon: 'error', text: 'CMV saudável máximo deve ser menor que o valor crítico.' })
+    return false
+  }
+  return true
+}
+
+async function savePricing() {
+  if (!id) { Swal.fire({ icon: 'warning', text: 'Salve a loja antes de configurar precificação.' }); return }
+  if (!validatePricing()) return
+  savingPricing.value = true
+  try {
+    const p = pricing.value
+    await api.put(`/stores/${id}/pricing-defaults`, {
+      salesTaxPercent: Number(p.salesTaxPercent),
+      salesTaxLabel: p.salesTaxLabel,
+      marketplaceFeePercent: Number(p.marketplaceFeePercent),
+      cardFeePercent: Number(p.cardFeePercent),
+      defaultPackagingCost: Number(p.defaultPackagingCost),
+      targetMarginPercent: Number(p.targetMarginPercent),
+      cmvHealthyMin: Number(p.cmvHealthyMin),
+      cmvHealthyMax: Number(p.cmvHealthyMax),
+      cmvCriticalAbove: Number(p.cmvCriticalAbove)
+    })
+    Swal.fire({ icon: 'success', text: 'Salvo com sucesso', timer: 1500, showConfirmButton: false })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao salvar' })
+  } finally {
+    savingPricing.value = false
+  }
+}
 
 async function load() {
   loading.value = true
