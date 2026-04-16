@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolvePeriodRange, computeBreakEven, evaluateAlerts } from '../src/services/businessHealth.js';
+import {
+  resolvePeriodRange,
+  resolvePrevPeriodRange,
+  computeBreakEven,
+  evaluateAlerts,
+} from '../src/services/businessHealthHelpers.js';
 
 test('resolvePeriodRange — current_month', () => {
   const ref = new Date('2026-04-15T12:00:00Z');
@@ -98,11 +103,14 @@ test('evaluateAlerts — CMV global critical', () => {
   assert.ok(alerts.some(a => a.code === 'CMV_GLOBAL_CRITICAL'));
 });
 
-test('evaluateAlerts — product with negative margin', () => {
+test('evaluateAlerts — product with CMV above threshold', () => {
   const alerts = evaluateAlerts({
     kpis: { cmv: { pct: 30 }, netProfit: { pct: 10 } },
     breakEven: { safetyMarginPct: 12 },
-    bottomProducts: [{ marginPct: -5 }, { marginPct: 2 }],
+    bottomProducts: [
+      { cmvTotal: 50, revenueTotal: 100, marginPct: 50 }, // cmvPct=50% > 40% crit
+      { cmvTotal: 20, revenueTotal: 100, marginPct: 80 }, // cmvPct=20% ok
+    ],
     storeDefaults: { cmvCriticalAbove: 40 },
     opexDeltaPct: 5,
   });
@@ -142,4 +150,31 @@ test('evaluateAlerts — low net margin triggers warning', () => {
     opexDeltaPct: 5,
   });
   assert.ok(alerts.some(a => a.code === 'MARGIN_LOSS'));
+});
+
+test('resolvePrevPeriodRange — current_month returns previous calendar month', () => {
+  const ref = new Date('2026-04-15T12:00:00Z');
+  const curr = resolvePeriodRange('current_month', ref);
+  const prev = resolvePrevPeriodRange('current_month', curr, ref);
+  assert.equal(prev.from.getUTCMonth(), 2); // March
+  assert.equal(prev.from.getUTCDate(), 1);
+  assert.equal(prev.to.getUTCMonth(), 2);
+  assert.equal(prev.to.getUTCDate(), 31);
+});
+
+test('resolvePrevPeriodRange — current_year returns previous calendar year', () => {
+  const ref = new Date('2026-04-15T12:00:00Z');
+  const curr = resolvePeriodRange('current_year', ref);
+  const prev = resolvePrevPeriodRange('current_year', curr, ref);
+  assert.equal(prev.from.getUTCFullYear(), 2025);
+  assert.equal(prev.from.getUTCMonth(), 0);
+  assert.equal(prev.to.getUTCFullYear(), 2025);
+  assert.equal(prev.to.getUTCMonth(), 11);
+});
+
+test('resolvePrevPeriodRange — last_30d uses span subtraction', () => {
+  const ref = new Date('2026-04-15T12:00:00Z');
+  const curr = resolvePeriodRange('last_30d', ref);
+  const prev = resolvePrevPeriodRange('last_30d', curr, ref);
+  assert.ok(prev.to.getTime() < curr.from.getTime());
 });
