@@ -1,5 +1,6 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
+import { getBusinessHealth } from '../../services/businessHealth.js';
 
 const router = express.Router();
 
@@ -341,5 +342,41 @@ export async function calculateCmvByProduct(prismaInstance, companyId, from, to,
   }
   return result;
 }
+
+// ===== In-memory LRU cache for business-health (Task 3.2) =====
+const _bhCache = new Map();
+const BH_TTL_MS = 60 * 1000;
+const BH_MAX = 200;
+function _bhKey({ companyId, storeId, period }) {
+  return `${companyId}|${storeId || ''}|${period}`;
+}
+
+// GET /financial/reports/business-health
+router.get('/business-health', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const period = req.query.period || 'current_month';
+    const storeId = req.query.storeId || null;
+
+    const key = _bhKey({ companyId, storeId, period });
+    const cached = _bhCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      return res.json(cached.data);
+    }
+
+    const data = await getBusinessHealth(prisma, { companyId, storeId, period });
+
+    _bhCache.set(key, { expiresAt: Date.now() + BH_TTL_MS, data });
+    if (_bhCache.size > BH_MAX) {
+      const firstKey = _bhCache.keys().next().value;
+      _bhCache.delete(firstKey);
+    }
+
+    res.json(data);
+  } catch (e) {
+    console.error('GET /financial/reports/business-health error:', e);
+    res.status(500).json({ message: e?.message || 'Erro ao calcular saúde do negócio' });
+  }
+});
 
 export default router;
