@@ -190,7 +190,7 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 			const ingredient = await tx.ingredient.findUnique({ where: { id: it.ingredientId } });
 			if (!ingredient) throw new Error(`Ingrediente não encontrado: ${it.ingredientId}`);
 			const qty = Number(it.quantity || 0);
-			await tx.stockMovementItem.create({ data: { stockMovementId: movement.id, ingredientId: it.ingredientId, quantity: qty, unitCost: null } });
+			await tx.stockMovementItem.create({ data: { stockMovementId: movement.id, ingredientId: it.ingredientId, quantity: qty, unitCost: ingredient.avgCost ?? null } });
 			const newStock = Number(ingredient.currentStock || 0) - qty;
 			await tx.ingredient.update({ where: { id: it.ingredientId }, data: { currentStock: newStock } });
 		}
