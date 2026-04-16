@@ -1004,10 +1004,12 @@ model StockMovement {
   storeId   String?
   store     Store?              @relation(fields: [storeId], references: [id])
   type      MovementType
-  reason    String?
-  note      String?
-  createdAt DateTime            @default(now())
-  items     StockMovementItem[]
+  reason          String?
+  note            String?
+  reversedAt      DateTime?
+  reversedBy      String?
+  createdAt       DateTime            @default(now())
+  items           StockMovementItem[]
 
   @@index([companyId], name: "idx_stockmovement_company")
   @@index([storeId], name: "idx_stockmovement_store")
