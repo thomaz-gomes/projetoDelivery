@@ -34,6 +34,7 @@ import menuIntegrationRouter from './routes/menuIntegration.js'
 import { nfeRouter } from './routes/nfe.js'
 import companiesRouter from './routes/companies.js'
 import storesRouter from './routes/stores.js'
+import storePricingDefaultsRouter from './routes/storePricingDefaults.js'
 import usersRouter from './routes/users.js'
 import rolesRouter from './routes/rolePermissions.js'
 import ingredientGroupsRouter from './routes/stock/ingredientGroups.js'
@@ -252,6 +253,7 @@ app.use('/settings', companiesRouter);
 // same handlers available at both /menu/* and /settings/*.
 app.use('/settings', menuAdminRouter);
 app.use('/stores', storesRouter);
+app.use('/stores', storePricingDefaultsRouter);
 app.use('/users', usersRouter);
 app.use('/roles', rolesRouter);
 app.use('/ingredient-groups', requireModule('STOCK'), ingredientGroupsRouter);

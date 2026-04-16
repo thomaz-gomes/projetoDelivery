@@ -7,6 +7,8 @@ import path from 'path'
 import { assertLimit } from '../utils/saas.js'
 import { isCardapioSimplesOnly } from '../modules.js'
 import { generateProductCode } from '../utils/integrationCode.js'
+import { computePricingAnalysis } from '../services/pricingAnalysis.js'
+import { getOrCreateDefaults } from './storePricingDefaults.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -721,5 +723,43 @@ router.delete('/payment-methods/:id', requireRole('ADMIN'), async (req, res) => 
   await prisma.paymentMethod.delete({ where: { id } })
   res.json({ message: 'Removido' })
 })
+
+// GET /products/:id/pricing-analysis
+router.get('/products/:id/pricing-analysis', async (req, res) => {
+  try {
+    const product = await prisma.product.findFirst({
+      where: { id: req.params.id, companyId: req.user.companyId },
+      include: { menu: { include: { store: true } } },
+    });
+    if (!product) return res.status(404).json({ message: 'Produto não encontrado' });
+
+    let sheetCost = 0;
+    if (product.technicalSheetId) {
+      const sheet = await prisma.technicalSheet.findUnique({
+        where: { id: product.technicalSheetId },
+        include: { items: { include: { ingredient: true } } },
+      });
+      for (const si of sheet?.items || []) {
+        if (si.ingredient) sheetCost += Number(si.quantity || 0) * Number(si.ingredient.avgCost || 0);
+      }
+    }
+
+    const storeId = product.menu?.store?.id || (await prisma.store.findFirst({ where: { companyId: req.user.companyId } }))?.id;
+    if (!storeId) return res.status(400).json({ message: 'Nenhuma loja encontrada' });
+    const storeDefaults = await getOrCreateDefaults(prisma, storeId);
+
+    const analysis = computePricingAnalysis({
+      currentPrice: product.price,
+      sheetCost,
+      productPackagingCost: product.packagingCost,
+      productTargetMargin: product.targetMarginPercent,
+      storeDefaults,
+    });
+    res.json(analysis);
+  } catch (e) {
+    console.error('GET pricing-analysis error:', e);
+    res.status(500).json({ message: e.message });
+  }
+});
 
 export default router
