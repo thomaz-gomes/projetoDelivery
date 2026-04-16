@@ -50,7 +50,7 @@ export async function saveNfeProtocol({ companyId, orderId, nProt, cStat, xMotiv
   await prisma.order.update({ where: { id: orderId }, data: { payload: newPayload, status: 'INVOICE_AUTHORIZED' } })
 
         // emit app-level event so socket layer can notify frontend
-        const payload = { id: order.id, displayId: order.displayId, status: order.status, nfe: nfeInfo }
+        const payload = { id: order.id, companyId: order.companyId, displayId: order.displayId, status: order.status, nfe: nfeInfo }
         try { events.emit('nfe.authorized', payload) } catch (e) { console.warn('Failed to emit nfe.authorized', e) }
       }
     }

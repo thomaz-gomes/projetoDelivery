@@ -643,7 +643,7 @@ export async function processIFoodWebhook(eventId) {
           try {
             const io = app && app.locals && app.locals.io;
             if (io) {
-              io.to(`company:${companyId}`).emit('ifood-negotiation', {
+              io.to(`company_${companyId}`).emit('ifood-negotiation', {
                 type: negotiationType,
                 orderId: localOrder?.id || null,
                 externalId: orderId,
