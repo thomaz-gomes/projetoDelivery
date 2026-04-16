@@ -16,7 +16,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { parseNfeXml, matchItemsWithAI, parseReceiptPhoto } from '../../services/purchaseImportService.js';
-import { getMdeStatus, activateMde } from '../../services/mdeService.js';
+import { getMdeStatus, activateMde, fetchFullNFe } from '../../services/mdeService.js';
 import { enqueueSync, enqueueFetchXml, getQueueStatus } from '../../services/mdeQueue.js';
 
 const router = express.Router();
@@ -277,6 +277,8 @@ async function runParseJob(jobId, method, storeId, companyId, input, userId) {
       }
       importData.source = 'ACCESS_KEY';
       importData.accessKey = key;
+      // Seed resNFe marker so fetchFullNFe's type guard accepts this record.
+      importData.parsedItems = { _type: 'resNFe', _pending: true };
     } else if (method === 'receipt_photo') {
       // Load existing ingredients for matching
       const existingIngredients = await prisma.ingredient.findMany({
@@ -305,6 +307,18 @@ async function runParseJob(jobId, method, storeId, companyId, input, userId) {
       }
     }
     record = await prisma.purchaseImport.create({ data: importData });
+
+    // For access_key the parse only stored the key; fetch the full procNFe from
+    // SEFAZ now so /match finds items. On failure, remove the zombie record.
+    if (method === 'access_key') {
+      try {
+        const fetchResult = await fetchFullNFe(record.id, companyId);
+        console.log(`[purchaseImport:${jobId}] Fetched ${fetchResult.itemCount} items from SEFAZ for ${record.id}`);
+      } catch (fetchErr) {
+        await prisma.purchaseImport.delete({ where: { id: record.id } }).catch(() => {});
+        throw new Error(`Falha ao buscar NFe na SEFAZ: ${fetchErr?.message || 'erro desconhecido'}`);
+      }
+    }
 
     job.done = true;
     job.importId = record.id;
