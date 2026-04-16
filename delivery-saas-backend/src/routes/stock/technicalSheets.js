@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { assertCompatibleUnit } from '../../utils/unitConversion.js';
+import { auditSheetItems } from '../../services/auditUnits.js';
 
 export const technicalSheetsRouter = express.Router();
 technicalSheetsRouter.use(authMiddleware);
@@ -14,6 +15,18 @@ technicalSheetsRouter.get('/', async (req, res) => {
   // map with count
   const mapped = rows.map(r => ({ ...r, itemCount: (r.items || []).length }));
   res.json(mapped);
+});
+
+// Audit: list sheet items whose unit is incompatible with the ingredient's unit.
+// MUST be declared BEFORE `/:id` so Express doesn't capture "audit-units" as an id.
+technicalSheetsRouter.get('/audit-units', async (req, res) => {
+  try {
+    const bad = await auditSheetItems(prisma, req.user.companyId);
+    res.json({ items: bad, count: bad.length });
+  } catch (e) {
+    console.error('GET /technical-sheets/audit-units error:', e);
+    res.status(500).json({ message: e?.message });
+  }
 });
 
 // get single

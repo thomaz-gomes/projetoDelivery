@@ -21,6 +21,18 @@ const router = useRouter();
 const ingredients = ref([]);
 const itemQty = ref('');
 const itemIng = ref(null);
+const auditItems = ref([]);
+const auditCount = computed(() => auditItems.value.length);
+const showAuditModal = ref(false);
+
+async function loadAudit() {
+  try {
+    const { data } = await api.get('/technical-sheets/audit-units');
+    auditItems.value = data.items || [];
+  } catch (e) {
+    // ignore — just don't show the banner
+  }
+}
 
 const selectedIngredient = computed(() => {
   try{
@@ -96,7 +108,7 @@ async function removeItem(id){
   try{ await api.delete(`/technical-sheets/${selected.value.id}/items/${id}`); await loadSheet(selected.value.id); }catch(e){ alert('Erro ao remover item') }
 }
 
-onMounted(fetch);
+onMounted(() => { fetch(); loadAudit(); });
 
 const displayed = computed(() => {
   if(!q.value) return list.value
@@ -129,6 +141,54 @@ function onQuickClear(){ q.value = '' }
 
 <template>
   <div class="p-4">
+
+    <div v-if="auditCount > 0" class="alert alert-warning d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <i class="bi-exclamation-triangle me-2"></i>
+        <strong>{{ auditCount }}</strong> item(ns) com unidade incompatível precisam ser revisados.
+        Essas fichas estão com custo incorreto.
+      </div>
+      <button class="btn btn-sm btn-warning" @click="showAuditModal = true">
+        Ver itens
+      </button>
+    </div>
+
+    <div v-if="showAuditModal" class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Itens com unidade incompatível</h5>
+            <button type="button" class="btn-close" @click="showAuditModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small text-muted">Estes itens foram salvos com unidades que não convertem para a unidade do ingrediente. O custo exibido e a baixa de estoque para esses itens estão incorretos. Clique em "Abrir ficha" para corrigi-los.</p>
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Ficha</th>
+                  <th>Ingrediente</th>
+                  <th>Qtd atual</th>
+                  <th>Unidade</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="a in auditItems" :key="a.itemId">
+                  <td>{{ a.sheetName }}</td>
+                  <td>{{ a.ingredientName }}</td>
+                  <td>{{ a.quantity }} {{ a.itemUnit }}</td>
+                  <td><span class="badge bg-danger">{{ a.itemUnit }}</span> → <span class="badge bg-light text-dark">{{ a.ingredientUnit }}</span></td>
+                  <td><router-link :to="`/technical-sheets/${a.sheetId}/edit`" class="btn btn-sm btn-outline-primary">Abrir ficha</router-link></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="showAuditModal = false">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <ListCard title="Fichas Técnicas" icon="bi bi-file-earmark-text" :subtitle="list.length ? `${list.length} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
       <template #actions>
