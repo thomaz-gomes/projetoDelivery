@@ -231,6 +231,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import Swal from 'sweetalert2';
+import 'sweetalert2/dist/sweetalert2.min.css';
 import api from '../../api';
 import {
   normalizeToIngredientUnit,
@@ -376,37 +378,113 @@ const derivedAvgCost = computed(() => {
   return totalCompositionCost.value / y;
 });
 
+function buildPayload() {
+  return {
+    description: form.value.description,
+    unit: form.value.unit,
+    groupId: form.value.groupId || null,
+    controlsStock: !!form.value.controlsStock,
+    composesCmv: !!form.value.composesCmv,
+    minStock: form.value.minStock === '' ? null : Number(form.value.minStock),
+    currentStock: form.value.currentStock === '' ? null : Number(form.value.currentStock),
+    avgCost: form.value.avgCost === '' ? null : Number(form.value.avgCost),
+    isComposite: !!form.value.isComposite,
+    yieldQuantity: form.value.isComposite ? Number(form.value.yieldQuantity) : null,
+    yieldUnit: form.value.isComposite ? form.value.yieldUnit : null,
+    compositionItems: form.value.isComposite
+      ? form.value.compositionItems
+          .filter(i => i.ingredientId && Number(i.quantity) > 0)
+          .map(i => ({
+            ingredientId: i.ingredientId,
+            quantity: Number(i.quantity),
+            unit: i.unit,
+          }))
+      : [],
+  };
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+}
+
+async function handleUnitConflict(conflicts, payload) {
+  const sheets = conflicts.filter(c => c.type === 'sheet');
+  const composites = conflicts.filter(c => c.type === 'composite');
+
+  const rowsHtml = [];
+  if (sheets.length) {
+    rowsHtml.push('<div class="fw-semibold mt-2 mb-1">Fichas técnicas:</div>');
+    rowsHtml.push('<ul class="list-unstyled small mb-2">');
+    for (const s of sheets) {
+      rowsHtml.push(`<li>• <strong>${escapeHtml(s.sheetName || '?')}</strong> <span class="text-muted">(unidade atual do item: ${escapeHtml(s.itemUnit || '?')})</span></li>`);
+    }
+    rowsHtml.push('</ul>');
+  }
+  if (composites.length) {
+    rowsHtml.push('<div class="fw-semibold mt-2 mb-1">Insumos compostos:</div>');
+    rowsHtml.push('<ul class="list-unstyled small mb-2">');
+    for (const c of composites) {
+      rowsHtml.push(`<li>• <strong>${escapeHtml(c.compositeName || '?')}</strong> <span class="text-muted">(unidade atual do item: ${escapeHtml(c.itemUnit || '?')})</span></li>`);
+    }
+    rowsHtml.push('</ul>');
+  }
+
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: 'Mudança de unidade bloqueada',
+    html: `
+      <div class="text-start small">
+        <p>Os seguintes itens ficariam com unidade incompatível:</p>
+        ${rowsHtml.join('')}
+        <p class="mt-2 mb-0 text-muted">Você pode cancelar e manter a unidade atual, ou remover esses itens das fichas/insumos compostos e aplicar a mudança.</p>
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: 'Remover e salvar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#dc3545',
+    width: 560,
+  });
+
+  if (!result.isConfirmed) return;
+
+  saving.value = true;
+  try {
+    await api.patch(`/ingredients/${id}?force=remove_conflicts`, payload);
+    await Swal.fire({
+      icon: 'success',
+      text: `Unidade atualizada. ${conflicts.length} item(ns) removidos.`,
+      timer: 1800,
+      showConfirmButton: false,
+    });
+    router.push('/ingredients');
+  } catch (e) {
+    await Swal.fire({
+      icon: 'error',
+      text: e?.response?.data?.message || 'Falha ao aplicar mudança com remoção',
+    });
+  } finally {
+    saving.value = false;
+  }
+}
+
 async function save() {
   saving.value = true;
   error.value = '';
+  const payload = buildPayload();
   try {
-    const payload = {
-      description: form.value.description,
-      unit: form.value.unit,
-      groupId: form.value.groupId || null,
-      controlsStock: !!form.value.controlsStock,
-      composesCmv: !!form.value.composesCmv,
-      minStock: form.value.minStock === '' ? null : Number(form.value.minStock),
-      currentStock: form.value.currentStock === '' ? null : Number(form.value.currentStock),
-      avgCost: form.value.avgCost === '' ? null : Number(form.value.avgCost),
-      isComposite: !!form.value.isComposite,
-      yieldQuantity: form.value.isComposite ? Number(form.value.yieldQuantity) : null,
-      yieldUnit: form.value.isComposite ? form.value.yieldUnit : null,
-      compositionItems: form.value.isComposite
-        ? form.value.compositionItems
-            .filter(i => i.ingredientId && Number(i.quantity) > 0)
-            .map(i => ({
-              ingredientId: i.ingredientId,
-              quantity: Number(i.quantity),
-              unit: i.unit,
-            }))
-        : [],
-    };
     if (id) await api.patch(`/ingredients/${id}`, payload);
     else await api.post('/ingredients', payload);
     router.push('/ingredients');
   } catch (e) {
-    error.value = e?.response?.data?.message || 'Erro ao salvar';
+    const data = e?.response?.data;
+    if (e?.response?.status === 400 && data?.code === 'INGREDIENT_UNIT_CHANGE_BREAKS_ITEMS') {
+      // Don't leak the terse inline error — the modal takes over.
+      saving.value = false;
+      await handleUnitConflict(data.conflicts || [], payload);
+      return;
+    }
+    error.value = data?.message || 'Erro ao salvar';
   } finally {
     saving.value = false;
   }
