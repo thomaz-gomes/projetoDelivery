@@ -15,6 +15,7 @@ import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { checkCredits, debitCredits, AI_SERVICE_COSTS, logTokenUsage } from '../../services/aiCreditManager.js';
 import { callTextAI, callVisionAI } from '../../services/aiProvider.js';
+import { areUnitsCompatible } from '../../utils/unitConversion.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -369,6 +370,8 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
     const ingredientByDesc = new Map(
       companyIngredients.map(i => [`${i.description.trim().toUpperCase()}||${i.unit || 'UN'}`, i.id])
     );
+    // Map ingredient id -> unit, for incompatible-family validation before persist
+    const ingredientUnitById = new Map(companyIngredients.map(i => [i.id, i.unit || 'UN']));
 
     // Pre-load valid product IDs for this company
     const companyProducts = await prisma.product.findMany({
@@ -420,6 +423,7 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
             ingredientId = newIngredient.id;
             validIngredientIds.add(ingredientId);
             ingredientByDesc.set(dedupKey, ingredientId);
+            ingredientUnitById.set(ingredientId, unit);
             createdIngredients++;
           }
         }
@@ -429,6 +433,16 @@ router.post('/ai-import/apply', requireRole('ADMIN'), async (req, res) => {
 
         const quantity = parseFloat(item.quantity) || 1;
         const itemUnit = ALLOWED_UNITS.includes(String(item.unit || '').toUpperCase()) ? String(item.unit).toUpperCase() : null;
+
+        // Drop items whose unit is incompatible with the matched ingredient's family
+        // (e.g. AI extracted "UN" for an ingredient cadastrado em KG). Persisting
+        // would corrupt cost/stock — skip instead of failing the whole import.
+        const ingUnit = ingredientUnitById.get(ingredientId);
+        if (itemUnit && ingUnit && !areUnitsCompatible(itemUnit, ingUnit)) {
+          console.warn(`[techSheetImport] Pulando item ${item.description}: unidade ${itemUnit} incompatível com ingrediente ${ingredientId} (${ingUnit})`);
+          continue;
+        }
+
         resolvedItems.push({ ingredientId, quantity, unit: itemUnit });
       }
 
