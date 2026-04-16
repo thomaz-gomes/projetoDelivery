@@ -4,6 +4,7 @@ import { authMiddleware, requireRole } from '../../auth.js';
 import { areUnitsCompatible, convertQuantity } from '../../services/unitConversion.js';
 // areUnitsCompatible above re-exports from utils/unitConversion.js (single source of truth)
 import { assertNoCycle, cascadeRecomputeComposites, computeCompositeAvgCost } from '../../services/compositeCost.js';
+import { makeCopyName } from '../../utils/copyName.js';
 
 export const ingredientsRouter = express.Router();
 ingredientsRouter.use(authMiddleware);
@@ -413,6 +414,68 @@ ingredientsRouter.delete('/:id', requireRole('ADMIN'), async (req, res) => {
     await tx.ingredient.delete({ where: { id } });
   });
   res.json({ ok: true });
+});
+
+// Duplicate an ingredient (and its composition items, if composite).
+// Copies shared FKs (groupId, ingredientId of composition items).
+// Resets currentStock to 0 — the new ingredient starts with no stock.
+ingredientsRouter.post('/:id/duplicate', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const source = await prisma.ingredient.findFirst({
+      where: { id: req.params.id, companyId },
+      include: { compositionItems: true },
+    });
+    if (!source) return res.status(404).json({ message: 'Ingrediente não encontrado' });
+
+    const existing = await prisma.ingredient.findMany({
+      where: { companyId },
+      select: { description: true },
+    });
+    const newDescription = makeCopyName(source.description, existing.map(r => r.description));
+
+    const created = await prisma.$transaction(async (tx) => {
+      const ing = await tx.ingredient.create({
+        data: {
+          companyId,
+          description: newDescription,
+          unit: source.unit,
+          groupId: source.groupId,
+          controlsStock: source.controlsStock,
+          composesCmv: source.composesCmv,
+          minStock: source.controlsStock ? source.minStock : null,
+          currentStock: source.controlsStock ? 0 : null,
+          avgCost: source.avgCost,
+          isComposite: source.isComposite,
+          yieldQuantity: source.isComposite ? source.yieldQuantity : null,
+          yieldUnit: source.isComposite ? source.yieldUnit : null,
+        },
+      });
+      if (source.isComposite && source.compositionItems && source.compositionItems.length) {
+        await tx.compositeIngredientItem.createMany({
+          data: source.compositionItems.map(it => ({
+            compositeId: ing.id,
+            ingredientId: it.ingredientId,
+            quantity: it.quantity,
+            unit: it.unit,
+          })),
+        });
+        const derivedCost = await computeCompositeAvgCost(ing.id, tx);
+        if (derivedCost != null) {
+          await tx.ingredient.update({ where: { id: ing.id }, data: { avgCost: derivedCost } });
+        }
+      }
+      return tx.ingredient.findUnique({
+        where: { id: ing.id },
+        include: { group: true, compositionItems: { include: { ingredient: true } } },
+      });
+    });
+
+    res.status(201).json(created);
+  } catch (e) {
+    console.error('POST /ingredients/:id/duplicate error:', e);
+    res.status(500).json({ message: e?.message || 'Erro ao duplicar ingrediente' });
+  }
 });
 
 export default ingredientsRouter;

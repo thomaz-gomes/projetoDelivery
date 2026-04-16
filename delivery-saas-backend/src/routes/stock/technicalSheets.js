@@ -3,6 +3,7 @@ import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { assertCompatibleUnit } from '../../utils/unitConversion.js';
 import { auditSheetItems } from '../../services/auditUnits.js';
+import { makeCopyName } from '../../utils/copyName.js';
 
 export const technicalSheetsRouter = express.Router();
 technicalSheetsRouter.use(authMiddleware);
@@ -166,6 +167,55 @@ technicalSheetsRouter.delete('/:id/items/:itemId', requireRole('ADMIN'), async (
 
   await prisma.technicalSheetItem.delete({ where: { id: itemId } });
   res.json({ ok: true });
+});
+
+// Duplicate a technical sheet and all its items (atomic).
+// Copies shared FKs (ingredientId) — does NOT deep-copy ingredients.
+technicalSheetsRouter.post('/:id/duplicate', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const source = await prisma.technicalSheet.findFirst({
+      where: { id: req.params.id, companyId },
+      include: { items: true },
+    });
+    if (!source) return res.status(404).json({ message: 'Ficha técnica não encontrada' });
+
+    const existing = await prisma.technicalSheet.findMany({
+      where: { companyId },
+      select: { name: true },
+    });
+    const newName = makeCopyName(source.name, existing.map(s => s.name));
+
+    const created = await prisma.$transaction(async (tx) => {
+      const sheet = await tx.technicalSheet.create({
+        data: {
+          companyId,
+          name: newName,
+          notes: source.notes,
+          yield: source.yield,
+        },
+      });
+      if (source.items && source.items.length) {
+        await tx.technicalSheetItem.createMany({
+          data: source.items.map(it => ({
+            technicalSheetId: sheet.id,
+            ingredientId: it.ingredientId,
+            quantity: it.quantity,
+            unit: it.unit,
+          })),
+        });
+      }
+      return tx.technicalSheet.findUnique({
+        where: { id: sheet.id },
+        include: { items: { include: { ingredient: true } } },
+      });
+    });
+
+    res.status(201).json(created);
+  } catch (e) {
+    console.error('POST /technical-sheets/:id/duplicate error:', e);
+    res.status(500).json({ message: e?.message || 'Erro ao duplicar ficha técnica' });
+  }
 });
 
 export default technicalSheetsRouter;

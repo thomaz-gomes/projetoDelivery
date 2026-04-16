@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import Swal from 'sweetalert2';
 import api from '../../api';
 import ListCard from '../../components/ListCard.vue';
 import IngredientAiImportModal from '../../components/IngredientAiImportModal.vue';
@@ -62,6 +63,46 @@ const displayed = computed(() => {
 
 function onQuickSearch(val){ q.value = val }
 function onQuickClear(){ q.value = '' }
+
+async function duplicateIngredient(i) {
+  const { isConfirmed } = await Swal.fire({
+    title: 'Duplicar ingrediente?',
+    text: `Uma cópia de "${i.description}" será criada${i.isComposite ? ' com sua composição' : ''}.`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Duplicar',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!isConfirmed) return;
+  try {
+    await api.post(`/ingredients/${i.id}/duplicate`);
+    await Swal.fire({ icon: 'success', text: 'Cópia criada', timer: 1200, showConfirmButton: false });
+    await fetchList();
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao duplicar' });
+  }
+}
+
+async function deleteIngredient(i) {
+  const { isConfirmed } = await Swal.fire({
+    title: 'Excluir ingrediente?',
+    text: `"${i.description}" será removido permanentemente.`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'Excluir',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!isConfirmed) return;
+  try {
+    await api.delete(`/ingredients/${i.id}`);
+    await Swal.fire({ icon: 'success', text: 'Excluído', timer: 1200, showConfirmButton: false });
+    await fetchList();
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao excluir' });
+  }
+}
+
 onUnmounted(() => { try{ document.removeEventListener('keydown', onKeydown); }catch(e){} });
 </script>
 
@@ -113,7 +154,9 @@ onUnmounted(() => { try{ document.removeEventListener('keydown', onKeydown); }ca
                   >
                     <i class="bi bi-arrow-repeat me-1"></i>Produzir
                   </button>
-                  <button class="btn btn-sm btn-outline-secondary" @click="goToEdit(i)">Editar</button>
+                  <button class="btn btn-sm btn-outline-secondary me-1" @click="goToEdit(i)">Editar</button>
+                  <button class="btn btn-sm btn-outline-secondary me-1" @click="duplicateIngredient(i)" title="Duplicar"><i class="bi bi-files"></i></button>
+                  <button class="btn btn-sm btn-outline-danger" @click="deleteIngredient(i)" title="Excluir"><i class="bi bi-trash"></i></button>
                 </td>
               </tr>
               <tr v-if="!list.length"><td colspan="7" class="text-center text-muted py-4">Nenhum ingrediente cadastrado.</td></tr>

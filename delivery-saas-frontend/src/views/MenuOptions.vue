@@ -74,6 +74,7 @@
                         </div>
                         <div class="product-actions d-flex align-items-center" style="gap:8px">
                           <button class="btn btn-sm btn-outline-primary" @click.stop="editOption(opt)"><i class="bi bi-pencil me-1"></i>Editar</button>
+                          <button class="btn btn-sm btn-outline-secondary" @click.stop="duplicateOption(opt)" title="Duplicar"><i class="bi bi-files"></i></button>
                           <button class="btn btn-sm btn-danger" @click.stop="removeOption(opt)"><i class="bi bi-trash me-1"></i>Remover</button>
                         </div>
                       </div>
@@ -194,6 +195,26 @@ async function removeOption(opt){
     await load()
     Swal.fire({ icon: 'success', text: 'Opção removida' })
   }catch(e){ console.error(e); Swal.fire({ icon: 'error', text: 'Falha ao remover opção' }) }
+}
+
+async function duplicateOption(opt){
+  const r = await Swal.fire({
+    title: 'Duplicar opção?',
+    text: `Uma cópia de "${opt.name}" será criada neste grupo.`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Duplicar',
+    cancelButtonText: 'Cancelar',
+  })
+  if(!r.isConfirmed) return
+  try{
+    await api.post(`/menu/options/options/${opt.id}/duplicate`)
+    await Swal.fire({ icon: 'success', text: 'Cópia criada', timer: 1200, showConfirmButton: false })
+    await load()
+  }catch(e){
+    console.error(e)
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao duplicar opção' })
+  }
 }
 
 // inline edit/remove helpers removed — navigation + single removeOption kept above

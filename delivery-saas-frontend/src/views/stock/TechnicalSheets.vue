@@ -139,6 +139,25 @@ async function deleteSheet(s) {
   }
 }
 
+async function duplicateSheet(s) {
+  const { isConfirmed } = await Swal.fire({
+    title: 'Duplicar ficha técnica?',
+    text: `Uma cópia de "${s.name}" será criada com todos os itens.`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Duplicar',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!isConfirmed) return;
+  try {
+    await api.post(`/technical-sheets/${s.id}/duplicate`);
+    await Swal.fire({ icon: 'success', text: 'Cópia criada', timer: 1200, showConfirmButton: false });
+    await fetch();
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao duplicar' });
+  }
+}
+
 function onQuickSearch(val){ q.value = val }
 function onQuickClear(){ q.value = '' }
 </script>
@@ -225,6 +244,7 @@ function onQuickClear(){ q.value = '' }
                 <td class="text-end">R$ {{ fmtMoney(sheetCost(s)) }}</td>
                 <td class="text-end">
                   <button class="btn btn-sm btn-outline-secondary me-1" @click="edit(s)">Editar</button>
+                  <button class="btn btn-sm btn-outline-secondary me-1" @click="duplicateSheet(s)" title="Duplicar"><i class="bi bi-files"></i></button>
                   <button class="btn btn-sm btn-outline-danger" @click="deleteSheet(s)" title="Excluir"><i class="bi bi-trash"></i></button>
                 </td>
               </tr>

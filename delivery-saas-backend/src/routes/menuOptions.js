@@ -3,6 +3,7 @@ import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { isCardapioSimplesOnly } from '../modules.js'
 import { generateOptionCode } from '../utils/integrationCode.js'
+import { makeCopyName } from '../utils/copyName.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -262,6 +263,54 @@ router.delete('/options/:id', requireRole('ADMIN'), async (req, res) => {
   } catch (e) {
     console.error('Error deleting option', e)
     res.status(500).json({ message: 'Erro ao remover opção' })
+  }
+})
+
+// Duplicate a single Option within its OptionGroup.
+// Shared FKs (groupId, technicalSheetId, linkedProductId) are preserved.
+// Scoped to the user's company via the parent OptionGroup.
+router.post('/options/:id/duplicate', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    const source = await prisma.option.findFirst({
+      where: { id: req.params.id, group: { companyId } },
+      include: { group: true },
+    })
+    if (!source) return res.status(404).json({ message: 'Opção não encontrada' })
+
+    // Unique name within the parent group (options are unique per group, not per company).
+    const existing = await prisma.option.findMany({
+      where: { groupId: source.groupId },
+      select: { name: true },
+    })
+    const newName = makeCopyName(source.name, existing.map(o => o.name))
+
+    let integrationCode = null
+    try { integrationCode = await generateOptionCode(source.groupId) } catch (e) { integrationCode = null }
+
+    const created = await prisma.$transaction(async (tx) => {
+      return tx.option.create({
+        data: {
+          groupId: source.groupId,
+          name: newName,
+          price: source.price,
+          image: source.image,
+          position: source.position,
+          isAvailable: source.isAvailable,
+          technicalSheetId: source.technicalSheetId,
+          linkedProductId: source.linkedProductId,
+          highlightOnSlip: source.highlightOnSlip,
+          alwaysAvailable: source.alwaysAvailable,
+          weeklySchedule: source.weeklySchedule,
+          integrationCode,
+        },
+      })
+    })
+
+    res.status(201).json(created)
+  } catch (e) {
+    console.error('POST /menu/options/options/:id/duplicate error:', e)
+    res.status(500).json({ message: e?.message || 'Erro ao duplicar opção' })
   }
 })
 

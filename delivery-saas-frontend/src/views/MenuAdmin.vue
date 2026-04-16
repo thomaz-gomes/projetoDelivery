@@ -101,6 +101,7 @@
                   </div>
                   <div class="product-actions d-flex align-items-center" style="gap:8px">
                     <button v-if="isAdmin" class="btn btn-sm btn-outline-primary" @click="edit(p)" :aria-label="`Editar ${p.name || 'produto'}`"><i class="bi bi-pencil me-1"></i></button>
+                    <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary" @click="duplicateProduct(p)" :aria-label="`Duplicar ${p.name || 'produto'}`" title="Duplicar"><i class="bi bi-files"></i></button>
                     <button v-if="isAdmin" class="btn btn-sm btn-danger" @click="remove(p)" :aria-label="`Remover ${p.name || 'produto'}`"><i class="bi bi-trash me-1"></i></button>
                   </div>
                 </div>
@@ -277,6 +278,26 @@ async function remove(p){
     await load()
     Swal.fire({ icon: 'success', text: 'Produto removido' })
   }catch(e){ console.error(e); Swal.fire({ icon: 'error', text: 'Falha ao remover' }) }
+}
+
+async function duplicateProduct(p){
+  const res = await Swal.fire({
+    title: 'Duplicar produto?',
+    text: `Uma cópia de "${p.name}" será criada com seus complementos.`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Duplicar',
+    cancelButtonText: 'Cancelar'
+  })
+  if(!res.isConfirmed) return
+  try{
+    await api.post(`/menu/products/${p.id}/duplicate`)
+    await Swal.fire({ icon: 'success', text: 'Cópia criada', timer: 1200, showConfirmButton: false })
+    await load()
+  }catch(e){
+    console.error(e)
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao duplicar produto' })
+  }
 }
 
 async function toggleActive(p){

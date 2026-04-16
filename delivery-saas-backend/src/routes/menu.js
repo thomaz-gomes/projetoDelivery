@@ -10,6 +10,7 @@ import { generateProductCode } from '../utils/integrationCode.js'
 import { computePricingAnalysis } from '../services/pricingAnalysis.js'
 import { getOrCreateDefaults } from './storePricingDefaults.js'
 import { normalizeToIngredientUnit, areUnitsCompatible } from '../utils/unitConversion.js'
+import { makeCopyName } from '../utils/copyName.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -622,6 +623,74 @@ router.delete('/products/:id', requireRole('ADMIN'), async (req, res) => {
   if (!existing) return res.status(404).json({ message: 'Produto não encontrado' })
   await prisma.product.delete({ where: { id } })
   res.json({ message: 'Removido' })
+})
+
+// Duplicate a product (and its attached OptionGroup links) atomically.
+// Shared FKs (categoryId, menuId, technicalSheetId, dadosFiscaisId, groupId) are preserved.
+// The new product starts active (isActive: true) and keeps the same image URL.
+router.post('/products/:id/duplicate', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    const source = await prisma.product.findFirst({
+      where: { id: req.params.id, companyId },
+      include: { productOptionGroups: true },
+    })
+    if (!source) return res.status(404).json({ message: 'Produto não encontrado' })
+
+    const existing = await prisma.product.findMany({
+      where: { companyId },
+      select: { name: true },
+    })
+    const newName = makeCopyName(source.name, existing.map(r => r.name))
+
+    // Generate a fresh integrationCode so the copy doesn't collide with the original.
+    let integrationCode = null
+    try { integrationCode = await generateProductCode(companyId) } catch (e) { integrationCode = null }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const prod = await tx.product.create({
+        data: {
+          companyId,
+          name: newName,
+          description: source.description,
+          price: source.price,
+          cashbackPercent: source.cashbackPercent,
+          categoryId: source.categoryId,
+          menuId: source.menuId,
+          technicalSheetId: source.technicalSheetId,
+          dadosFiscaisId: source.dadosFiscaisId,
+          packagingCost: source.packagingCost,
+          targetMarginPercent: source.targetMarginPercent,
+          position: source.position,
+          image: source.image,
+          isActive: true,
+          highlightOnSlip: source.highlightOnSlip,
+          integrationCode,
+          alwaysAvailable: source.alwaysAvailable,
+          weeklySchedule: source.weeklySchedule,
+        },
+      })
+
+      if (source.productOptionGroups && source.productOptionGroups.length) {
+        await tx.productOptionGroup.createMany({
+          data: source.productOptionGroups.map(pog => ({
+            productId: prod.id,
+            groupId: pog.groupId,
+          })),
+        })
+      }
+
+      return tx.product.findUnique({
+        where: { id: prod.id },
+        include: { menu: { select: { name: true } }, category: { select: { name: true } } },
+      })
+    })
+
+    res.status(201).json(created)
+  } catch (e) {
+    console.error('POST /menu/products/:id/duplicate error:', e)
+    res.status(500).json({ message: e?.message || 'Erro ao duplicar produto' })
+  }
 })
 
 // ------- Product <-> OptionGroup associations -------
