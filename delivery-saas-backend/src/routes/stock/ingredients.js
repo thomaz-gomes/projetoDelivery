@@ -161,35 +161,58 @@ ingredientsRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
 
     // Guard: if unit is changing, ensure no existing TechnicalSheetItem or
     // CompositeIngredientItem would become incompatible with the new unit.
+    const force = req.query?.force;
+    let unitChangeConflicts = [];
     if (unit && String(unit).toUpperCase() !== String(existing.unit).toUpperCase()) {
       const [sheetConflicts, compositeConflicts] = await Promise.all([
         prisma.technicalSheetItem.findMany({
-          where: { ingredientId: id, unit: { not: null } },
-          include: { technicalSheet: { select: { name: true } } },
+          where: {
+            ingredientId: id,
+            unit: { not: null },
+            technicalSheet: { companyId },
+          },
+          include: { technicalSheet: { select: { name: true, companyId: true } } },
         }),
         prisma.compositeIngredientItem.findMany({
-          where: { ingredientId: id, unit: { not: null } },
-          include: { composite: { select: { description: true } } },
+          where: {
+            ingredientId: id,
+            unit: { not: null },
+            composite: { companyId },
+          },
+          include: { composite: { select: { description: true, companyId: true } } },
         }).catch(() => []),
       ]);
       const bad = [];
       for (const si of sheetConflicts) {
         if (!areUnitsCompatible(si.unit, unit)) {
-          bad.push({ type: 'sheet', sheetName: si.technicalSheet?.name, itemUnit: si.unit });
+          bad.push({
+            type: 'sheet',
+            itemId: si.id,
+            sheetId: si.technicalSheetId,
+            sheetName: si.technicalSheet?.name,
+            itemUnit: si.unit,
+          });
         }
       }
       for (const ci of compositeConflicts) {
         if (!areUnitsCompatible(ci.unit, unit)) {
-          bad.push({ type: 'composite', compositeName: ci.composite?.description, itemUnit: ci.unit });
+          bad.push({
+            type: 'composite',
+            itemId: ci.id,
+            compositeId: ci.compositeId,
+            compositeName: ci.composite?.description,
+            itemUnit: ci.unit,
+          });
         }
       }
-      if (bad.length > 0) {
+      if (bad.length > 0 && force !== 'remove_conflicts') {
         return res.status(400).json({
           message: `Mudança de unidade bloqueada: ${bad.length} item(ns) ficariam incompatíveis`,
           code: 'INGREDIENT_UNIT_CHANGE_BREAKS_ITEMS',
           conflicts: bad,
         });
       }
+      unitChangeConflicts = bad;
     }
 
     const nextIsComposite = isComposite === undefined ? existing.isComposite : !!isComposite;
@@ -234,6 +257,19 @@ ingredientsRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
         data.avgCost = existing.avgCost;
       } else {
         data.avgCost = avgCost !== undefined ? (avgCost === null ? null : Number(avgCost)) : existing.avgCost;
+      }
+
+      // If force=remove_conflicts and we detected conflicts above, delete them
+      // inside the same transaction so deletion + unit change are atomic.
+      if (unitChangeConflicts.length > 0 && force === 'remove_conflicts') {
+        const sheetItemIds = unitChangeConflicts.filter(b => b.type === 'sheet').map(b => b.itemId);
+        const compositeItemIds = unitChangeConflicts.filter(b => b.type === 'composite').map(b => b.itemId);
+        if (sheetItemIds.length > 0) {
+          await tx.technicalSheetItem.deleteMany({ where: { id: { in: sheetItemIds } } });
+        }
+        if (compositeItemIds.length > 0) {
+          await tx.compositeIngredientItem.deleteMany({ where: { id: { in: compositeItemIds } } });
+        }
       }
 
       await tx.ingredient.update({ where: { id }, data });
