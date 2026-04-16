@@ -1,4 +1,4 @@
-import { normalizeToIngredientUnit } from '../utils/unitConversion.js';
+import { normalizeToIngredientUnit, areUnitsCompatible } from '../utils/unitConversion.js';
 
 export async function buildAndPersistStockMovementFromOrderItems(prismaInstance, order) {
 	if (!order || !order.items || !Array.isArray(order.items) || order.items.length === 0) return null;
@@ -34,6 +34,10 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 					if (sheet && Array.isArray(sheet.items)) {
 						for (const si of sheet.items) {
 							if (si.ingredient && si.ingredient.controlsStock) {
+								if (!areUnitsCompatible(si.unit, si.ingredient.unit)) {
+									console.warn(`[stockFromOrder] Skipping ingredient ${si.ingredient.description} — unit ${si.unit} incompatible with ${si.ingredient.unit}`);
+									continue;
+								}
 								const qty = normalizeToIngredientUnit(Number(si.quantity || 0), si.unit, si.ingredient.unit);
 								addDed(si.ingredientId, qty * itemQty);
 							}
@@ -106,7 +110,14 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 									const psheet = await prismaInstance.technicalSheet.findUnique({ where: { id: matchedProd.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 									if (psheet && Array.isArray(psheet.items)) {
 										for (const psi of psheet.items) {
-											if (psi.ingredient && psi.ingredient.controlsStock) { const pqty = normalizeToIngredientUnit(Number(psi.quantity || 0), psi.unit, psi.ingredient.unit); addDed(psi.ingredientId, pqty * itemQty * optQty); }
+											if (psi.ingredient && psi.ingredient.controlsStock) {
+												if (!areUnitsCompatible(psi.unit, psi.ingredient.unit)) {
+													console.warn(`[stockFromOrder] Skipping ingredient ${psi.ingredient.description} — unit ${psi.unit} incompatible with ${psi.ingredient.unit}`);
+													continue;
+												}
+												const pqty = normalizeToIngredientUnit(Number(psi.quantity || 0), psi.unit, psi.ingredient.unit);
+												addDed(psi.ingredientId, pqty * itemQty * optQty);
+											}
 										}
 									}
 								}
@@ -124,7 +135,14 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 									const osheet = await prismaInstance.technicalSheet.findUnique({ where: { id: linked.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 									if (osheet && Array.isArray(osheet.items)) {
 										for (const osi of osheet.items) {
-											if (osi.ingredient && osi.ingredient.controlsStock) { const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit); addDed(osi.ingredientId, oqty * itemQty * optQty); }
+											if (osi.ingredient && osi.ingredient.controlsStock) {
+											if (!areUnitsCompatible(osi.unit, osi.ingredient.unit)) {
+												console.warn(`[stockFromOrder] Skipping ingredient ${osi.ingredient.description} — unit ${osi.unit} incompatible with ${osi.ingredient.unit}`);
+												continue;
+											}
+											const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit);
+											addDed(osi.ingredientId, oqty * itemQty * optQty);
+										}
 										}
 									}
 								}
@@ -134,7 +152,14 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 								const osheet = await prismaInstance.technicalSheet.findUnique({ where: { id: option.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 								if (osheet && Array.isArray(osheet.items)) {
 									for (const osi of osheet.items) {
-										if (osi.ingredient && osi.ingredient.controlsStock) { const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit); addDed(osi.ingredientId, oqty * itemQty * optQty); }
+										if (osi.ingredient && osi.ingredient.controlsStock) {
+											if (!areUnitsCompatible(osi.unit, osi.ingredient.unit)) {
+												console.warn(`[stockFromOrder] Skipping ingredient ${osi.ingredient.description} — unit ${osi.unit} incompatible with ${osi.ingredient.unit}`);
+												continue;
+											}
+											const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit);
+											addDed(osi.ingredientId, oqty * itemQty * optQty);
+										}
 									}
 								}
 							} catch (e) { /* ignore */ }
@@ -160,7 +185,14 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 								const osheet = await prismaInstance.technicalSheet.findUnique({ where: { id: linked.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 								if (osheet && Array.isArray(osheet.items)) {
 									for (const osi of osheet.items) {
-										if (osi.ingredient && osi.ingredient.controlsStock) { const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit); addDed(osi.ingredientId, oqty * itemQty * optQty); }
+										if (osi.ingredient && osi.ingredient.controlsStock) {
+											if (!areUnitsCompatible(osi.unit, osi.ingredient.unit)) {
+												console.warn(`[stockFromOrder] Skipping ingredient ${osi.ingredient.description} — unit ${osi.unit} incompatible with ${osi.ingredient.unit}`);
+												continue;
+											}
+											const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit);
+											addDed(osi.ingredientId, oqty * itemQty * optQty);
+										}
 									}
 								}
 							}
@@ -168,7 +200,14 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 							const osheet = await prismaInstance.technicalSheet.findUnique({ where: { id: option.technicalSheetId }, include: { items: { include: { ingredient: true } } } });
 							if (osheet && Array.isArray(osheet.items)) {
 								for (const osi of osheet.items) {
-									if (osi.ingredient && osi.ingredient.controlsStock) { const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit); addDed(osi.ingredientId, oqty * itemQty * optQty); }
+									if (osi.ingredient && osi.ingredient.controlsStock) {
+										if (!areUnitsCompatible(osi.unit, osi.ingredient.unit)) {
+											console.warn(`[stockFromOrder] Skipping ingredient ${osi.ingredient.description} — unit ${osi.unit} incompatible with ${osi.ingredient.unit}`);
+											continue;
+										}
+										const oqty = normalizeToIngredientUnit(Number(osi.quantity || 0), osi.unit, osi.ingredient.unit);
+										addDed(osi.ingredientId, oqty * itemQty * optQty);
+									}
 								}
 							}
 						}

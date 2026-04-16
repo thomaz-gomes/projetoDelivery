@@ -70,3 +70,41 @@ export function normalizeToIngredientUnit(quantity, itemUnit, ingredientUnit) {
   if (!itemUnit || itemUnit === ingredientUnit) return quantity
   return convertUnit(quantity, itemUnit, ingredientUnit)
 }
+
+/**
+ * Verifica se duas unidades são da mesma família (peso, volume ou unidade).
+ * Unidade vazia/nula é considerada compatível (cai para a unidade do ingrediente).
+ *
+ * @param {string|null|undefined} unitA
+ * @param {string|null|undefined} unitB
+ * @returns {boolean}
+ */
+export function areUnitsCompatible(unitA, unitB) {
+  const a = String(unitA || '').toUpperCase()
+  const b = String(unitB || '').toUpperCase()
+  if (!a || !b) return true // empty = use ingredient's unit, always ok
+  if (a === b) return true
+  const familyA = FAMILY[a]
+  const familyB = FAMILY[b]
+  if (!familyA || !familyB) return false
+  return familyA === familyB
+}
+
+/**
+ * Lança erro 400 se as unidades não forem compatíveis.
+ * Use antes de persistir TechnicalSheetItem / CompositeIngredientItem para
+ * impedir salvar UN em ingrediente KG (ou similar), o que causaria corrupção
+ * de custo e estoque.
+ *
+ * @param {string|null|undefined} itemUnit      - unidade informada pelo usuário
+ * @param {string} ingredientUnit               - unidade cadastrada no ingrediente
+ * @throws {Error} com `status=400` e `code='UNIT_INCOMPATIBLE'`
+ */
+export function assertCompatibleUnit(itemUnit, ingredientUnit) {
+  if (!areUnitsCompatible(itemUnit, ingredientUnit)) {
+    const err = new Error(`Unidade incompatível: ${itemUnit} não converte para ${ingredientUnit}`)
+    err.status = 400
+    err.code = 'UNIT_INCOMPATIBLE'
+    throw err
+  }
+}

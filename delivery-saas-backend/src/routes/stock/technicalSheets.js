@@ -1,6 +1,8 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
+import { assertCompatibleUnit } from '../../utils/unitConversion.js';
+import { auditSheetItems } from '../../services/auditUnits.js';
 
 export const technicalSheetsRouter = express.Router();
 technicalSheetsRouter.use(authMiddleware);
@@ -13,6 +15,18 @@ technicalSheetsRouter.get('/', async (req, res) => {
   // map with count
   const mapped = rows.map(r => ({ ...r, itemCount: (r.items || []).length }));
   res.json(mapped);
+});
+
+// Audit: list sheet items whose unit is incompatible with the ingredient's unit.
+// MUST be declared BEFORE `/:id` so Express doesn't capture "audit-units" as an id.
+technicalSheetsRouter.get('/audit-units', async (req, res) => {
+  try {
+    const result = await auditSheetItems(prisma, req.user.companyId);
+    res.json(result);
+  } catch (e) {
+    console.error('GET /technical-sheets/audit-units error:', e);
+    res.status(500).json({ message: e?.message });
+  }
 });
 
 // get single
@@ -93,6 +107,15 @@ technicalSheetsRouter.post('/:id/items', requireRole('ADMIN'), async (req, res) 
   if (!ing) return res.status(400).json({ message: 'Ingrediente inválido' });
 
   const itemUnit = unit && ALLOWED_UNITS.includes(String(unit).toUpperCase()) ? String(unit).toUpperCase() : null;
+
+  // Reject incompatible unit families (e.g. UN against a KG ingredient) — this would
+  // silently corrupt cost calculation and stock deduction on sales.
+  try {
+    assertCompatibleUnit(itemUnit, ing.unit);
+  } catch (e) {
+    return res.status(e.status || 400).json({ message: e.message, code: e.code });
+  }
+
   const created = await prisma.technicalSheetItem.create({ data: { technicalSheetId: id, ingredientId, quantity: Number(quantity), unit: itemUnit } });
   res.status(201).json(created);
 });
@@ -114,6 +137,18 @@ technicalSheetsRouter.patch('/:id/items/:itemId', requireRole('ADMIN'), async (r
   const data = {};
   if (quantity !== undefined) data.quantity = Number(quantity);
   if (unit !== undefined) data.unit = unit && ALLOWED_UNITS.includes(String(unit).toUpperCase()) ? String(unit).toUpperCase() : null;
+
+  // If unit is being updated, validate it against the target ingredient's unit
+  // (loaded from the existing item) to prevent incompatible family mismatches.
+  if (unit !== undefined) {
+    const ing = await prisma.ingredient.findUnique({ where: { id: existing.ingredientId } });
+    if (!ing) return res.status(404).json({ message: 'Ingrediente não encontrado' });
+    try {
+      assertCompatibleUnit(data.unit, ing.unit);
+    } catch (e) {
+      return res.status(e.status || 400).json({ message: e.message, code: e.code });
+    }
+  }
 
   const updated = await prisma.technicalSheetItem.update({ where: { id: itemId }, data: Object.keys(data).length ? data : { quantity: existing.quantity } });
   res.json(updated);

@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import api from '../../api';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
-import { normalizeToIngredientUnit } from '../../utils/unitConversion.js';
+import { normalizeToIngredientUnit, areUnitsCompatible, compatibleUnits, preferredSheetUnit } from '../../utils/unitConversion.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -20,6 +20,21 @@ const ingredients = ref([]);
 
 const selectedIngredient = computed(() => {
   try{ return ingredients.value.find(i => String(i.id) === String(itemIng.value)) || null }catch(e){ return null }
+});
+
+const availableUnits = computed(() => {
+  const ing = selectedIngredient.value;
+  if (!ing) return [];
+  return compatibleUnits(ing.unit);
+});
+
+const previewCost = computed(() => {
+  const ing = selectedIngredient.value;
+  const q = Number(itemQty.value);
+  if (!ing || !Number.isFinite(q) || q <= 0) return null;
+  if (!areUnitsCompatible(itemUnit.value, ing.unit)) return null;
+  const qtyInIngredientUnit = normalizeToIngredientUnit(q, itemUnit.value, ing.unit);
+  return qtyInIngredientUnit * Number(ing.avgCost || 0);
 });
 
 function fmtMoney(v){ if (v === null || v === undefined || Number.isNaN(Number(v))) return '-'; return Number(v).toFixed(2); }
@@ -76,15 +91,14 @@ onMounted(fetch);
           <div class="col-md-3"><TextInput v-model="sheet.yield" inputClass="form-control" placeholder="Rendimento (ex: 10 porções)" /></div>
         </div>
         <div class="mb-3 d-flex gap-2 align-items-start">
-          <select v-model="itemIng" class="form-select" @change="itemUnit = selectedIngredient?.unit || ''"><option :value="null">-- Selecione ingrediente --</option><option v-for="i in ingredients" :key="i.id" :value="i.id">{{ i.description }} ({{ i.unit }})</option></select>
+          <select v-model="itemIng" class="form-select" @change="itemUnit = preferredSheetUnit(selectedIngredient?.unit || '')"><option :value="null">-- Selecione ingrediente --</option><option v-for="i in ingredients" :key="i.id" :value="i.id">{{ i.description }} ({{ i.unit }})</option></select>
           <input v-model="itemQty" type="number" step="any" class="form-control" style="max-width:120px" placeholder="Qtd" />
-          <select v-model="itemUnit" class="form-select" style="max-width:100px">
-            <option value="UN">UN</option>
-            <option value="GR">GR</option>
-            <option value="KG">KG</option>
-            <option value="ML">ML</option>
-            <option value="L">L</option>
+          <select v-model="itemUnit" class="form-select" style="max-width:100px" :disabled="!selectedIngredient">
+            <option v-for="u in availableUnits" :key="u" :value="u">{{ u }}</option>
           </select>
+          <div v-if="previewCost !== null" class="small text-muted d-flex align-items-center">
+            = {{ fmtMoney(previewCost) }}
+          </div>
           <button class="btn btn-primary" @click="addItem">Adicionar</button>
         </div>
 
@@ -102,10 +116,20 @@ onMounted(fetch);
           <tbody>
             <tr v-for="it in sheet.items" :key="it.id">
               <td>{{ it.ingredient.description }}</td>
-              <td>{{ it.unit || it.ingredient.unit || '-' }}</td>
+              <td>
+                {{ it.unit || it.ingredient.unit || '-' }}
+                <span v-if="it.unit && !areUnitsCompatible(it.unit, it.ingredient.unit)" class="badge bg-danger ms-1" :title="'Incompatível com ' + it.ingredient.unit"><i class="bi-exclamation-triangle"></i> Inválida</span>
+              </td>
               <td>{{ fmtMoney(it.ingredient.avgCost) }}/{{ it.ingredient.unit }}</td>
               <td>{{ it.quantity }}</td>
-              <td>{{ fmtMoney(itemCost(it)) }}</td>
+              <td>
+                <template v-if="it.unit && !areUnitsCompatible(it.unit, it.ingredient.unit)">
+                  <span class="text-danger" :title="'Não é possível calcular: ' + it.unit + ' não converte para ' + it.ingredient.unit">—</span>
+                </template>
+                <template v-else>
+                  {{ fmtMoney(itemCost(it)) }}
+                </template>
+              </td>
               <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(it.id)">Remover</button></td>
             </tr>
           </tbody>
