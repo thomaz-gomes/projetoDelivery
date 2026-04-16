@@ -192,6 +192,22 @@ router.get('/cmv', async (req, res) => {
   }
 });
 
+// GET /financial/reports/cmv-by-product
+router.get('/cmv-by-product', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { dateFrom, dateTo, storeId } = req.query;
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ message: 'dateFrom e dateTo são obrigatórios' });
+    }
+    const data = await calculateCmvByProduct(prisma, companyId, new Date(dateFrom), new Date(dateTo), storeId);
+    res.json(data);
+  } catch (e) {
+    console.error('GET /financial/reports/cmv-by-product error:', e);
+    res.status(500).json({ message: 'Erro ao calcular CMV por produto', error: e?.message });
+  }
+});
+
 // Helper: calcular CMV pelo CONSUMO (movimentos OUT × unitCost snapshotado)
 export async function calculateCMV(prismaInstance, companyId, from, to, storeId) {
   try {
@@ -261,6 +277,59 @@ export async function calculatePurchases(prismaInstance, companyId, from, to, st
     console.error('calculatePurchases error:', e);
     return { total: 0, error: e?.message };
   }
+}
+
+// Helper: CMV agregado por produto (usado pelo painel Saúde do Negócio)
+export async function calculateCmvByProduct(prismaInstance, companyId, from, to, storeId) {
+  const mvWhere = { companyId, type: 'OUT', reversedAt: null, createdAt: { gte: from, lte: to } };
+  if (storeId) mvWhere.storeId = storeId;
+  const movements = await prismaInstance.stockMovement.findMany({ where: mvWhere });
+
+  // Agregar CMV por orderId
+  const cmvByOrder = new Map();
+  for (const mv of movements) {
+    if (!mv.note?.startsWith('Order:')) continue;
+    const orderId = mv.note.slice('Order:'.length);
+    let mvCost = 0;
+    for (const it of mv.items || []) {
+      if (it.unitCost == null) continue;
+      mvCost += Number(it.quantity) * Number(it.unitCost);
+    }
+    cmvByOrder.set(orderId, (cmvByOrder.get(orderId) || 0) + mvCost);
+  }
+
+  // Para cada order, distribuir CMV pelos products proporcionalmente à receita
+  const byProduct = new Map();
+  for (const [orderId, orderCmv] of cmvByOrder.entries()) {
+    const order = await prismaInstance.order.findUnique({
+      where: { id: orderId },
+      select: { items: true },
+    }).catch(() => null);
+    if (!order || !Array.isArray(order.items)) continue;
+    const orderRevenue = order.items.reduce((s, it) => s + Number(it.totalPrice || 0), 0) || 1;
+    for (const it of order.items) {
+      const productId = it.productId;
+      if (!productId) continue;
+      const share = Number(it.totalPrice || 0) / orderRevenue;
+      const entry = byProduct.get(productId) || { productId, qtySold: 0, cmvTotal: 0, revenueTotal: 0 };
+      entry.qtySold += Number(it.quantity || 0);
+      entry.cmvTotal += orderCmv * share;
+      entry.revenueTotal += Number(it.totalPrice || 0);
+      byProduct.set(productId, entry);
+    }
+  }
+
+  // Hidratar nome do produto e calcular margens
+  const result = [];
+  for (const entry of byProduct.values()) {
+    const product = await prismaInstance.product
+      .findUnique({ where: { id: entry.productId }, select: { name: true } })
+      .catch(() => null);
+    const marginAbs = entry.revenueTotal - entry.cmvTotal;
+    const marginPct = entry.revenueTotal ? (marginAbs / entry.revenueTotal) * 100 : 0;
+    result.push({ ...entry, productName: product?.name || '?', marginAbs, marginPct });
+  }
+  return result;
 }
 
 export default router;
