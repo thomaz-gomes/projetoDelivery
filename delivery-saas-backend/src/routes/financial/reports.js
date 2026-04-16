@@ -78,7 +78,7 @@ router.get('/dre', async (req, res) => {
     }
 
     // Calcular CMV
-    const cmv = await calculateCMV(companyId, from, to, storeId);
+    const cmv = await calculateCMV(prisma, companyId, from, to, storeId);
 
     // Montar DRE final
     const revenue = dreGroups['REVENUE']?.total || 0;
@@ -184,7 +184,7 @@ router.get('/cmv', async (req, res) => {
       return res.status(400).json({ message: 'dateFrom e dateTo são obrigatórios' });
     }
 
-    const cmv = await calculateCMV(companyId, new Date(dateFrom), new Date(dateTo), storeId);
+    const cmv = await calculateCMV(prisma, companyId, new Date(dateFrom), new Date(dateTo), storeId);
     res.json(cmv);
   } catch (e) {
     console.error('GET /financial/reports/cmv error:', e);
@@ -192,54 +192,74 @@ router.get('/cmv', async (req, res) => {
   }
 });
 
-// Helper: calcular CMV usando dados de estoque (composesCmv = true)
-async function calculateCMV(companyId, from, to, storeId) {
+// Helper: calcular CMV pelo CONSUMO (movimentos OUT × unitCost snapshotado)
+export async function calculateCMV(prismaInstance, companyId, from, to, storeId) {
   try {
-    // Buscar movimentações de entrada (compras) no período para ingredientes que compõem CMV
     const mvWhere = {
       companyId,
-      type: 'IN',
+      type: 'OUT',
+      reversedAt: null,
       createdAt: { gte: from, lte: to },
     };
     if (storeId) mvWhere.storeId = storeId;
 
-    const movements = await prisma.stockMovement.findMany({
+    const movements = await prismaInstance.stockMovement.findMany({
       where: mvWhere,
       include: {
         items: {
           include: {
-            ingredient: {
-              select: { id: true, description: true, composesCmv: true, unit: true },
-            },
+            ingredient: { select: { id: true, description: true, composesCmv: true, unit: true } },
           },
         },
       },
     });
 
-    // Filtrar apenas itens que compõem CMV e calcular custo total
     let total = 0;
     const details = [];
     for (const mv of movements) {
       for (const item of mv.items) {
         if (!item.ingredient?.composesCmv) continue;
-        const cost = Number(item.quantity) * Number(item.unitCost || 0);
+        if (item.unitCost == null) continue; // pré-snapshot: ignora
+        const cost = Number(item.quantity) * Number(item.unitCost);
         total += cost;
         details.push({
           ingredientId: item.ingredientId,
           description: item.ingredient.description,
           unit: item.ingredient.unit,
           quantity: Number(item.quantity),
-          unitCost: Number(item.unitCost || 0),
+          unitCost: Number(item.unitCost),
           totalCost: cost,
           movementDate: mv.createdAt,
         });
       }
     }
-
-    return { total: -total, details, period: { from, to } };
+    return { total: total === 0 ? 0 : -total, details, period: { from, to } };
   } catch (e) {
     console.error('calculateCMV error:', e);
     return { total: 0, details: [], error: e?.message };
+  }
+}
+
+// Helper: somar Compras do período (movimentos IN × unitCost) — visão alternativa
+export async function calculatePurchases(prismaInstance, companyId, from, to, storeId) {
+  try {
+    const mvWhere = { companyId, type: 'IN', createdAt: { gte: from, lte: to } };
+    if (storeId) mvWhere.storeId = storeId;
+    const movements = await prismaInstance.stockMovement.findMany({
+      where: mvWhere,
+      include: { items: { include: { ingredient: { select: { composesCmv: true } } } } },
+    });
+    let total = 0;
+    for (const mv of movements) {
+      for (const item of mv.items) {
+        if (!item.ingredient?.composesCmv) continue;
+        total += Number(item.quantity) * Number(item.unitCost || 0);
+      }
+    }
+    return { total, period: { from, to } };
+  } catch (e) {
+    console.error('calculatePurchases error:', e);
+    return { total: 0, error: e?.message };
   }
 }
 
