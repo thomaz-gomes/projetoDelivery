@@ -4,10 +4,11 @@ export function computePricingAnalysis({ currentPrice, sheetCost, productPackagi
   const M = Number(productTargetMargin ?? storeDefaults.targetMarginPercent ?? 0);
   const taxes = {
     salesTax: Number(storeDefaults.salesTaxPercent || 0),
+    otherFees: Number(storeDefaults.otherFeesPercent || 0),
     marketplaceFee: Number(storeDefaults.marketplaceFeePercent || 0),
     cardFee: Number(storeDefaults.cardFeePercent || 0),
   };
-  const totalDeductionPct = taxes.salesTax + taxes.marketplaceFee + taxes.cardFee;
+  const totalDeductionPct = taxes.salesTax + taxes.otherFees + taxes.marketplaceFee + taxes.cardFee;
   const denom = 1 - (totalDeductionPct + M) / 100;
   const suggestedPrice = denom > 0 ? (C + E) / denom : null;
   const price = Number(currentPrice || 0);

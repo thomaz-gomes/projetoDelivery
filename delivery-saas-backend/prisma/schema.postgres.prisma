@@ -1513,6 +1513,8 @@ model StorePricingDefaults {
   store                 Store    @relation(fields: [storeId], references: [id])
   salesTaxPercent       Decimal  @default(0)
   salesTaxLabel         String?
+  otherFeesPercent      Decimal  @default(0)
+  otherFeesLabel        String?
   marketplaceFeePercent Decimal  @default(0)
   cardFeePercent        Decimal  @default(0)
   defaultPackagingCost  Decimal  @default(0)

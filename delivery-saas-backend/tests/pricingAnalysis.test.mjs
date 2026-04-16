@@ -10,7 +10,7 @@ test('computePricingAnalysis with store defaults', () => {
     productTargetMargin: null,
     storeDefaults: {
       defaultPackagingCost: 1, targetMarginPercent: 30,
-      salesTaxPercent: 6, marketplaceFeePercent: 12, cardFeePercent: 3.5,
+      salesTaxPercent: 6, otherFeesPercent: 0, marketplaceFeePercent: 12, cardFeePercent: 3.5,
       cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40,
     },
   });
@@ -30,7 +30,7 @@ test('computePricingAnalysis with product overrides', () => {
     productTargetMargin: 40,
     storeDefaults: {
       defaultPackagingCost: 1, targetMarginPercent: 30,
-      salesTaxPercent: 6, marketplaceFeePercent: 0, cardFeePercent: 3,
+      salesTaxPercent: 6, otherFeesPercent: 0, marketplaceFeePercent: 0, cardFeePercent: 3,
       cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40,
     },
   });
@@ -44,7 +44,7 @@ test('computePricingAnalysis with product overrides', () => {
 test('computePricingAnalysis handles zero price gracefully', () => {
   const r = computePricingAnalysis({
     currentPrice: 0, sheetCost: 5, productPackagingCost: null, productTargetMargin: null,
-    storeDefaults: { defaultPackagingCost: 0, targetMarginPercent: 30, salesTaxPercent: 0, marketplaceFeePercent: 0, cardFeePercent: 0, cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40 },
+    storeDefaults: { defaultPackagingCost: 0, targetMarginPercent: 30, salesTaxPercent: 0, otherFeesPercent: 0, marketplaceFeePercent: 0, cardFeePercent: 0, cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40 },
   });
   assert.equal(r.cmvPercent, null); // can't divide by 0
   assert.equal(r.cmvStatus, 'unknown');
@@ -53,7 +53,26 @@ test('computePricingAnalysis handles zero price gracefully', () => {
 test('computePricingAnalysis returns null suggestedPrice when deductions >= 100%', () => {
   const r = computePricingAnalysis({
     currentPrice: 10, sheetCost: 5, productPackagingCost: null, productTargetMargin: null,
-    storeDefaults: { defaultPackagingCost: 0, targetMarginPercent: 80, salesTaxPercent: 15, marketplaceFeePercent: 10, cardFeePercent: 5, cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40 },
+    storeDefaults: { defaultPackagingCost: 0, targetMarginPercent: 80, salesTaxPercent: 15, otherFeesPercent: 0, marketplaceFeePercent: 10, cardFeePercent: 5, cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40 },
   });
   assert.equal(r.suggestedPrice, null); // 80+30 = 110% > 100%
+});
+
+test('computePricingAnalysis includes otherFees in deductions', () => {
+  const r = computePricingAnalysis({
+    currentPrice: 20,
+    sheetCost: 5,
+    productPackagingCost: 0,
+    productTargetMargin: 20,
+    storeDefaults: {
+      defaultPackagingCost: 0, targetMarginPercent: 20,
+      salesTaxPercent: 6, otherFeesPercent: 4, marketplaceFeePercent: 12, cardFeePercent: 3,
+      cmvHealthyMin: 25, cmvHealthyMax: 35, cmvCriticalAbove: 40,
+    },
+  });
+  assert.equal(r.taxBreakdown.otherFees, 4);
+  // totalDeductionPct = 6 + 4 + 12 + 3 = 25
+  assert.equal(r.taxBreakdown.totalDeductionPct, 25);
+  // suggestedPrice = 5 / (1 - 0.45) = 5 / 0.55 = 9.0909...
+  assert.ok(Math.abs(r.suggestedPrice - 9.0909) < 0.01);
 });

@@ -20,6 +20,7 @@ test('getOrCreateDefaults creates with defaults when not found', async () => {
   assert.equal(Number(r.cmvHealthyMin), 25);
   assert.equal(Number(r.cmvHealthyMax), 35);
   assert.equal(Number(r.cmvCriticalAbove), 40);
+  assert.equal(Number(r.otherFeesPercent), 0);
 });
 
 test('applyUpdate rejects negative values', async () => {
