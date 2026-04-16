@@ -13,7 +13,7 @@ import * as cashbackSvc from '../services/cashback.js';
 import { canTransition } from '../stateMachine.js';
 import { notifyRiderAssigned, notifyCustomerStatus, notifyCustomerOrderSummary } from '../services/notify.js';
 import riderAccountService from '../services/riderAccount.js';
-import { buildAndPersistStockMovementFromOrderItems } from '../services/stockFromOrder.js';
+import { buildAndPersistStockMovementFromOrderItems, reverseStockMovementForOrder } from '../services/stockFromOrder.js';
 import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
 import { tryEmitIfoodChat } from '../services/ifoodChatEmitter.js';
 import { nextDisplaySimple } from '../utils/displaySimple.js';
@@ -646,6 +646,12 @@ ordersRouter.post('/:id/reject', requireRole('ADMIN', 'ATTENDANT', 'STORE'), asy
       include: { items: true, histories: true, rider: true },
     });
 
+    try {
+      await reverseStockMovementForOrder(prisma, updated.id, req?.user?.id || null);
+    } catch (e) {
+      console.warn('reverseStockMovementForOrder failed for order', updated.id, e?.message);
+    }
+
     try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) {}
     res.json(updated);
   } catch (e) {
@@ -945,6 +951,15 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
         })()
       }
     } catch (e) { console.error('Error while attempting to credit cashback on order status change:', e?.message || e); }
+
+    // Reversal of stock movement when order is cancelled (any prior state)
+    if (status === 'CANCELADO' && existing.status !== 'CANCELADO') {
+      try {
+        await reverseStockMovementForOrder(prisma, updated.id, req?.user?.id || null);
+      } catch (e) {
+        console.warn('reverseStockMovementForOrder failed for order', updated.id, e?.message);
+      }
+    }
 
     // Reversal of financial entries when cancelling a completed order
     if (existing.status === 'CONCLUIDO' && status === 'CANCELADO') {

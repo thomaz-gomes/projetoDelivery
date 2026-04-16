@@ -7,6 +7,7 @@ import { findOrCreateCustomer, normalizePhone, buildConcatenatedAddress, normali
 import { matchItemsToLocalProducts } from '../../utils/integrationMatcher.js';
 import { nextDisplaySimple } from '../../utils/displaySimple.js';
 import { aiqfomeGet, aiqfomePost } from './client.js';
+import { reverseStockMovementForOrder } from '../../services/stockFromOrder.js';
 
 /**
  * Resolve companyId from merchantId in ApiIntegration
@@ -92,6 +93,13 @@ export async function processAiqfomeWebhook(eventId) {
           },
           include: { items: true },
         });
+        if (status === 'CANCELADO') {
+          try {
+            await reverseStockMovementForOrder(prisma, updated.id, null);
+          } catch (e) {
+            console.warn('reverseStockMovementForOrder failed for order', updated.id, e?.message);
+          }
+        }
         emitirPedidoAtualizado(updated);
         console.log(`[aiqbridge] Order ${existingOrder.id}: ${existingOrder.status} -> ${status}`);
       }

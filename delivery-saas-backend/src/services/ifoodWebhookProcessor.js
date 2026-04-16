@@ -5,7 +5,7 @@ import { upsertCustomerFromIfood } from '../services/customers.js';
 import { emitirNovoPedido, emitirPedidoAtualizado, app } from '../index.js';
 import { notifyCustomerStatus, notifyCustomerOrderSummary } from './notify.js';
 import { tryEmitIfoodChat } from './ifoodChatEmitter.js';
-import buildAndPersistStockMovementFromOrderItems from './stockFromOrder.js';
+import buildAndPersistStockMovementFromOrderItems, { reverseStockMovementForOrder } from './stockFromOrder.js';
 import { canTransition } from '../stateMachine.js';
 import printQueue from '../printQueue.js'
 import { matchItemsToLocalProducts } from '../utils/integrationMatcher.js'
@@ -470,6 +470,15 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
       data: updateData,
       include: { items: true, histories: true },
     });
+
+    if (statusChanged && to === 'CANCELADO') {
+      try {
+        await reverseStockMovementForOrder(prisma, updated.id, null);
+      } catch (e) {
+        console.warn('reverseStockMovementForOrder failed for order', updated.id, e?.message);
+      }
+    }
+
     return { order: updated, created: false, statusChanged, from, to };
   } catch (e) {
     // Fallback: if update fails, log and rethrow
