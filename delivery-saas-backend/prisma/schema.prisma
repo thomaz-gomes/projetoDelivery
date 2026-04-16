@@ -1535,6 +1535,8 @@ model StockMovement {
   type            MovementType
   reason          String?
   note            String?
+  reversedAt      DateTime?
+  reversedBy      String?
   createdAt       DateTime            @default(now())
   items           StockMovementItem[]
   purchaseImports PurchaseImport[]
