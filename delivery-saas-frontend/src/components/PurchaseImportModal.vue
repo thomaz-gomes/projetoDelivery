@@ -765,7 +765,7 @@ async function loadReviewData() {
     try { const s = await api.get('/suppliers'); suppliers.value = s.data || [] } catch (e) { suppliers.value = [] }
 
     // Load payable payment methods
-    try { const pm = await api.get('/payable-payment-methods'); payablePaymentMethods.value = pm.data || [] } catch (e) { payablePaymentMethods.value = [] }
+    try { const pm = await api.get('/financial/payment-methods'); payablePaymentMethods.value = pm.data || [] } catch (e) { payablePaymentMethods.value = [] }
 
     // Default firstDueDate from import issue date
     if (imp.issueDate) {
