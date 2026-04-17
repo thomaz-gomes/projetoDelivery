@@ -392,7 +392,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, alwaysAvailable = true, weeklySchedule = null } = body
+  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, stockIngredientId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, alwaysAvailable = true, weeklySchedule = null } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -411,8 +411,16 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       const sheet = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
       if (!sheet || sheet.companyId !== companyId) return res.status(400).json({ message: 'Ficha técnica inválida' })
     }
+    // validate stockIngredientId (direct stock link for resale products)
+    if (stockIngredientId && technicalSheetId) {
+      return res.status(400).json({ message: 'Produto não pode ter ficha técnica e ingrediente de estoque ao mesmo tempo' })
+    }
+    if (stockIngredientId) {
+      const ing = await prisma.ingredient.findFirst({ where: { id: stockIngredientId, companyId, controlsStock: true } })
+      if (!ing) return res.status(400).json({ message: 'Ingrediente de estoque inválido' })
+    }
     const integrationCode = await generateProductCode(companyId)
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -474,7 +482,7 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId, cashbackPercent, dadosFiscaisId, highlightOnSlip, alwaysAvailable, weeklySchedule } = req.body || {}
+  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId, stockIngredientId, cashbackPercent, dadosFiscaisId, highlightOnSlip, alwaysAvailable, weeklySchedule } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -531,6 +539,16 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
     const sheet = await prisma.technicalSheet.findUnique({ where: { id: technicalSheetId } })
     if (!sheet || sheet.companyId !== companyId) return res.status(400).json({ message: 'Ficha técnica inválida' })
   }
+  // validate stockIngredientId (direct stock link for resale products)
+  if (stockIngredientId) {
+    const ing = await prisma.ingredient.findFirst({ where: { id: stockIngredientId, companyId, controlsStock: true } })
+    if (!ing) return res.status(400).json({ message: 'Ingrediente de estoque inválido' })
+  }
+  const finalTechSheet = technicalSheetId !== undefined ? technicalSheetId : existing.technicalSheetId
+  const finalStockIng = stockIngredientId !== undefined ? stockIngredientId : existing.stockIngredientId
+  if (finalTechSheet && finalStockIng) {
+    return res.status(400).json({ message: 'Produto não pode ter ficha técnica e ingrediente de estoque ao mesmo tempo' })
+  }
 
   const updated = await prisma.product.update({ where: { id }, data: {
     name: name ?? existing.name,
@@ -541,7 +559,8 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
     isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
     image: imageValue,
     menuId: menuId !== undefined ? menuId : existing.menuId,
-    technicalSheetId: technicalSheetId !== undefined ? technicalSheetId : existing.technicalSheetId
+    technicalSheetId: technicalSheetId !== undefined ? technicalSheetId : existing.technicalSheetId,
+    stockIngredientId: stockIngredientId !== undefined ? stockIngredientId : existing.stockIngredientId
   ,
     // set cashbackPercent if provided (allow null to clear)
     cashbackPercent: cashbackPercent !== undefined ? (cashbackPercent === null ? null : Number(cashbackPercent)) : existing.cashbackPercent,

@@ -18,6 +18,7 @@ import { authMiddleware, requireRole } from '../../auth.js';
 import { parseNfeXml, matchItemsWithAI, parseReceiptPhoto } from '../../services/purchaseImportService.js';
 import { getMdeStatus, activateMde, fetchFullNFe } from '../../services/mdeService.js';
 import { enqueueSync, enqueueFetchXml, getQueueStatus } from '../../services/mdeQueue.js';
+import { createFinancialEntriesForPurchase } from '../../services/financial/purchaseFinancialBridge.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -47,16 +48,41 @@ router.get('/', async (req, res) => {
       if (to) where.createdAt.lte = new Date(to);
     }
 
-    const [items, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       prisma.purchaseImport.findMany({
         where,
-        include: { store: true },
+        include: {
+          store: true,
+          supplier: { select: { id: true, name: true, cnpj: true } },
+        },
         orderBy: { createdAt: 'desc' },
         take,
         skip,
       }),
       prisma.purchaseImport.count({ where }),
     ]);
+
+    // Enrich with reconciliation status
+    const items = await Promise.all(rows.map(async (row) => {
+      const stockReconciled = row.status === 'APPLIED';
+
+      let financialStatus = 'NONE';
+      if (row.status === 'APPLIED') {
+        const txns = await prisma.financialTransaction.findMany({
+          where: { companyId, sourceType: 'STOCK_PURCHASE', sourceId: row.id },
+          select: { status: true },
+        });
+        if (txns.length > 0) {
+          const allPaid = txns.every(t => t.status === 'PAID');
+          const somePaid = txns.some(t => t.status === 'PAID');
+          if (allPaid) financialStatus = 'FULL';
+          else if (somePaid) financialStatus = 'PARTIAL';
+          else financialStatus = 'PENDING';
+        }
+      }
+
+      return { ...row, stockReconciled, financialStatus };
+    }));
 
     res.json({ items, total, page: Math.max(parseInt(page) || 1, 1), limit: take });
   } catch (e) {
@@ -388,7 +414,7 @@ router.post('/:id/apply', requireRole('ADMIN'), async (req, res) => {
       return res.status(400).json({ message: 'Importacao precisa estar com status MATCHED para ser aplicada' });
     }
 
-    const { items } = req.body;
+    const { items, paymentParams } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'items e obrigatorio (array de itens)' });
     }
@@ -491,7 +517,17 @@ router.post('/:id/apply', requireRole('ADMIN'), async (req, res) => {
       });
     });
 
-    res.json({ ok: true, stockMovement: result });
+    // Create financial transactions (accounts payable)
+    let financialResult = null
+    if (paymentParams) {
+      try {
+        financialResult = await createFinancialEntriesForPurchase(req.params.id, paymentParams)
+      } catch (e) {
+        console.warn('[purchaseImport] Failed to create financial entries:', e?.message || e)
+      }
+    }
+
+    res.json({ ok: true, stockMovement: result, financialResult });
   } catch (e) {
     console.error('[purchaseImport] POST /:id/apply error:', e?.message || e);
     res.status(500).json({ message: e?.message || 'Erro ao aplicar importacao' });

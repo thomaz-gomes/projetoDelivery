@@ -59,7 +59,7 @@ router.get('/', async (req, res) => {
 router.post('/preview-installments', async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { payablePaymentMethodId, purchaseDate, grossAmount, installmentCount, template, customDates } = req.body;
+    const { payablePaymentMethodId, purchaseDate, grossAmount, installmentCount, template, customDates, totalAmount } = req.body;
 
     if (!payablePaymentMethodId || !purchaseDate || !grossAmount || !installmentCount) {
       return res.status(400).json({ message: 'payablePaymentMethodId, purchaseDate, grossAmount e installmentCount são obrigatórios' });
@@ -77,11 +77,11 @@ router.post('/preview-installments', async (req, res) => {
       customDates,
     });
 
-    // Divide grossAmount equally; first installment gets the rounding remainder
-    const gross = Number(grossAmount);
+    // Distribute amount equally; first installment absorbs rounding remainder
+    const amountToDistribute = Number(totalAmount || grossAmount);
     const count = installments.length;
-    const baseAmount = Math.floor((gross * 100) / count) / 100;
-    const remainder = Math.round((gross - baseAmount * count) * 100) / 100;
+    const baseAmount = Math.floor((amountToDistribute * 100) / count) / 100;
+    const remainder = Math.round((amountToDistribute - baseAmount * count) * 100) / 100;
 
     const preview = installments.map((inst, idx) => ({
       number: inst.number,

@@ -388,6 +388,56 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- Payment Terms -->
+            <div class="card mt-3">
+              <div class="card-header py-2"><strong>Condições de Pagamento</strong></div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <label class="form-label">Método de Pagamento</label>
+                    <select v-model="paymentMethodId" class="form-select form-select-sm">
+                      <option :value="null">-- Selecione --</option>
+                      <option v-for="pm in payablePaymentMethods" :key="pm.id" :value="pm.id">
+                        {{ pm.name }}
+                      </option>
+                    </select>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Parcelas</label>
+                    <input v-model.number="installmentCount" type="number" min="1" max="48" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Primeiro Vencimento</label>
+                    <input v-model="firstDueDate" type="date" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-outline-primary btn-sm w-100" @click="generateInstallments" type="button">
+                      Gerar
+                    </button>
+                  </div>
+                </div>
+
+                <table class="table table-sm mt-3" v-if="installments.length > 0">
+                  <thead>
+                    <tr><th>Parcela</th><th>Vencimento</th><th>Valor (R$)</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(inst, idx) in installments" :key="idx">
+                      <td>{{ inst.number }}/{{ installments.length }}</td>
+                      <td><input v-model="inst.dueDate" type="date" class="form-control form-control-sm" /></td>
+                      <td><input v-model.number="inst.amount" type="number" step="0.01" class="form-control form-control-sm" /></td>
+                    </tr>
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="2" class="text-end"><strong>Total</strong></td>
+                      <td><strong>{{ installments.reduce((s, i) => s + Number(i.amount || 0), 0).toFixed(2) }}</strong></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
           </div>
 
           <!-- Loading overlay -->
@@ -487,6 +537,14 @@ const ingredientGroups = ref([])
 const ingredients = ref([])
 const applying = ref(false)
 const currentImportId = ref(null)
+
+// ── Step 3: Payment Terms ──────────────────────────────────────────────────
+const suppliers = ref([])
+const payablePaymentMethods = ref([])
+const paymentMethodId = ref(null)
+const installmentCount = ref(1)
+const firstDueDate = ref(null)
+const installments = ref([])
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 const canParse = computed(() => {
@@ -702,9 +760,43 @@ async function loadReviewData() {
     // Load ingredient groups for createNew
     const { data: groups } = await api.get('/ingredient-groups')
     ingredientGroups.value = Array.isArray(groups) ? groups : (groups?.items || [])
+
+    // Load suppliers
+    try { const s = await api.get('/suppliers'); suppliers.value = s.data || [] } catch (e) { suppliers.value = [] }
+
+    // Load payable payment methods
+    try { const pm = await api.get('/payable-payment-methods'); payablePaymentMethods.value = pm.data || [] } catch (e) { payablePaymentMethods.value = [] }
+
+    // Default firstDueDate from import issue date
+    if (imp.issueDate) {
+      firstDueDate.value = new Date(imp.issueDate).toISOString().substring(0, 10)
+    } else {
+      firstDueDate.value = new Date().toISOString().substring(0, 10)
+    }
   } catch (e) {
     console.error('Failed to load review data', e)
     Swal.fire({ icon: 'error', text: 'Erro ao carregar dados para revisao' })
+  }
+}
+
+async function generateInstallments() {
+  if (!installmentCount.value || installmentCount.value < 1) return
+  try {
+    const calcTotal = reviewItems.value.reduce((s, i) => s + (Number(i.qCom || 0) * Number(i.vUnCom || 0)), 0) || 0
+    const { data } = await api.post('/financial/transactions/preview-installments', {
+      payablePaymentMethodId: paymentMethodId.value,
+      installmentCount: installmentCount.value,
+      purchaseDate: firstDueDate.value || new Date().toISOString().substring(0, 10),
+      grossAmount: calcTotal,
+      totalAmount: calcTotal,
+    })
+    installments.value = (data.preview || []).map(i => ({
+      ...i,
+      dueDate: i.dueDate ? new Date(i.dueDate).toISOString().substring(0, 10) : '',
+      amount: Number(i.amount || 0),
+    }))
+  } catch (e) {
+    console.error('Failed to generate installments:', e)
   }
 }
 
@@ -741,7 +833,14 @@ async function applyToStock() {
       suggestedUnit: it.suggestedUnit,
     }))
 
-    await api.post(`/purchase-imports/${currentImportId.value}/apply`, { items })
+    const paymentParams = installments.value.length > 0 ? {
+      payablePaymentMethodId: paymentMethodId.value,
+      installmentCount: installmentCount.value,
+      firstDueDate: firstDueDate.value,
+      installments: installments.value,
+    } : null
+
+    await api.post(`/purchase-imports/${currentImportId.value}/apply`, { items, paymentParams })
 
     Swal.fire({ icon: 'success', text: 'Estoque atualizado com sucesso!', timer: 2000, showConfirmButton: false })
     emit('imported')

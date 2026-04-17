@@ -110,25 +110,40 @@
           <table class="table table-hover mb-0">
             <thead>
               <tr>
-                <th>Data</th>
-                <th>Fonte</th>
+                <th>Numero</th>
                 <th>Fornecedor</th>
-                <th>Loja</th>
-                <th>Nr Nota</th>
+                <th>CNPJ/CPF</th>
                 <th>Valor Total</th>
+                <th>Entrada</th>
+                <th>Emissao</th>
+                <th>Cadastro</th>
+                <th>Fonte</th>
                 <th>Status</th>
+                <th>Conc. Fin.</th>
+                <th>Conc. Estoq.</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in paged" :key="row.id">
+                <td>{{ row.nfeNumber || '-' }}</td>
+                <td>{{ row.supplierName || '-' }}</td>
+                <td>{{ formatCnpj(row.supplierCnpj) || '-' }}</td>
+                <td>{{ formatCurrency(row.totalValue) }}</td>
+                <td>{{ row.issueDate ? formatDate(row.issueDate) : formatDate(row.createdAt) }}</td>
+                <td>{{ row.issueDate ? formatDate(row.issueDate) : '-' }}</td>
                 <td>{{ formatDate(row.createdAt) }}</td>
                 <td><span :class="sourceBadgeClass(row.source)">{{ sourceLabel(row.source) }}</span></td>
-                <td>{{ row.supplierName || '-' }}</td>
-                <td>{{ row.store?.name || '-' }}</td>
-                <td>{{ row.nfeNumber || '-' }}</td>
-                <td>{{ formatCurrency(row.totalValue) }}</td>
                 <td><span :class="statusBadgeClass(row.status)">{{ statusLabel(row.status) }}</span></td>
+                <td>
+                  <span v-if="row.financialStatus === 'FULL'" class="badge bg-success">Sim</span>
+                  <span v-else-if="row.financialStatus === 'PARTIAL'" class="badge bg-warning text-dark">Parcial</span>
+                  <span v-else class="badge bg-danger">Nao</span>
+                </td>
+                <td>
+                  <span v-if="row.stockReconciled" class="badge bg-success">Sim</span>
+                  <span v-else class="badge bg-danger">Nao</span>
+                </td>
                 <td class="text-end">
                   <div class="d-flex gap-1 justify-content-end">
                     <button v-if="row.status === 'PENDING' && isResNFe(row)" class="btn btn-sm btn-outline-warning" :disabled="processingId === row.id" @click="fetchXml(row)">
@@ -158,7 +173,7 @@
                 </td>
               </tr>
               <tr v-if="!paged.length">
-                <td colspan="8" class="text-center text-muted py-4">
+                <td colspan="12" class="text-center text-muted py-4">
                   <span v-if="loading"><i class="bi bi-arrow-repeat spin me-1"></i>Carregando...</span>
                   <span v-else>Nenhuma importacao encontrada.</span>
                 </td>
@@ -401,6 +416,13 @@ function statusLabel(s) { return statusLabels[s] || s }
 function statusBadgeClass(s) {
   const map = { PENDING: 'badge bg-warning', MATCHED: 'badge bg-info', APPLIED: 'badge bg-success', ERROR: 'badge bg-danger' }
   return map[s] || 'badge bg-secondary'
+}
+
+function formatCnpj(cnpj) {
+  if (!cnpj) return ''
+  const c = String(cnpj).replace(/\D/g, '')
+  if (c.length !== 14) return cnpj
+  return c.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
 }
 
 function formatCurrency(n) {

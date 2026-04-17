@@ -44,6 +44,7 @@ import technicalSheetImportRouter from './routes/stock/technicalSheetImport.js'
 import ingredientImportRouter from './routes/stock/ingredientImport.js'
 import stockMovementsRouter from './routes/stock/stockMovements.js'
 import purchaseImportRouter from './routes/stock/purchaseImport.js'
+import suppliersRouter from './routes/stock/suppliers.js'
 import agentSetupRouter, { agentPairRouter } from './routes/agentSetup.js'
 import agentPrintRouter from './routes/agentPrint.js'
 import qrActionRouter from './routes/qrAction.js'
@@ -262,7 +263,8 @@ app.use('/ingredients', requireModule('STOCK'), ingredientImportRouter);
 app.use('/technical-sheets', requireModule('STOCK'), technicalSheetsRouter);
 app.use('/technical-sheets', requireModule('STOCK'), technicalSheetImportRouter);
 app.use('/stock-movements', requireModule('STOCK'), stockMovementsRouter);
-app.use('/purchase-imports', requireModule('STOCK'), purchaseImportRouter);
+app.use('/purchase-imports', requireModule('STOCK'), purchaseImportRouter)
+app.use('/suppliers', requireModule('STOCK'), suppliersRouter);
 // Agent pairing endpoint (unauthenticated - agent has no token yet)
 app.use('/agent-setup', agentPairRouter);
 // Agent setup endpoint: returns socket URL and store IDs for the authenticated user's company
