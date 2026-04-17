@@ -525,6 +525,7 @@ import Swal from 'sweetalert2'
 const props = defineProps({
   storeId: { type: String, default: null },
   reviewImportId: { type: String, default: null },
+  initialAccessKey: { type: String, default: null },
 })
 const emit = defineEmits(['close', 'imported'])
 
@@ -761,6 +762,39 @@ async function startParse() {
     Swal.fire({ icon: 'error', text: parseError.value })
   } finally {
     processing.value = false
+  }
+}
+
+// Watch for new access key (supports re-scan while modal is open)
+watch(() => props.initialAccessKey, (newKey) => {
+  if (!newKey || newKey.replace(/\D/g, '').length !== 44) return
+
+  // Reset state for fresh import
+  step.value = 2
+  method.value = 'access_key'
+  accessKey.value = newKey.replace(/\D/g, '')
+  parseError.value = ''
+  processing.value = false
+  importIds.value = []
+  reviewItems.value = []
+
+  // Auto-select and parse will be handled by the stores watcher below
+  autoSelectAndParse()
+}, { immediate: true })
+
+// Auto-select single store and start parse when stores finish loading
+watch(() => stores.value.length, () => {
+  if (method.value === 'access_key' && accessKey.value && !selectedStoreId.value) {
+    autoSelectAndParse()
+  }
+})
+
+function autoSelectAndParse() {
+  if (stores.value.length === 1 && !selectedStoreId.value) {
+    selectedStoreId.value = stores.value[0].id
+  }
+  if (selectedStoreId.value && canParse.value) {
+    startParse()
   }
 }
 

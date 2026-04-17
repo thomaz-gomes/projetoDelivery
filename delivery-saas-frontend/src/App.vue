@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from './api'
 import './assets/rider-theme.css'
@@ -17,9 +17,28 @@ import MediaLibraryModal from './components/MediaLibrary/MediaLibraryModal.vue';
 import ImportProgressBar from './components/ImportProgressBar.vue';
 import AiStudioModal from './components/AiStudio/AiStudioModal.vue';
 import OnboardingWizard from './components/OnboardingWizard.vue';
+import PurchaseImportModal from './components/PurchaseImportModal.vue';
+import { useBarcodeScanner } from './composables/useBarcodeScanner.js';
 
 const mobileOpen = ref(false);
 const auth = useAuthStore();
+
+// ── Barcode Scanner → Purchase Import ──────────────────────────────────────
+const scannerImportOpen = ref(false)
+const scannerAccessKey = ref(null)
+const scannerKeyCounter = ref(0)
+
+const scanner = useBarcodeScanner()
+scanner.onScan((digits) => {
+  scannerAccessKey.value = digits
+  scannerKeyCounter.value++
+  scannerImportOpen.value = true
+})
+
+function onScannerModalClose() {
+  scannerImportOpen.value = false
+  scannerAccessKey.value = null
+}
 const saas = useSaasStore();
 const modules = useModulesStore();
 const router = useRouter();
@@ -123,6 +142,9 @@ watch(() => auth.user, (user) => {
   }
 }, { immediate: true })
 onMounted(() => {
+  // Start barcode scanner listener
+  scanner.start()
+
   // Only load admin widgets when NOT on a public route (avoids stale-token 401 → /login redirect)
   if (!route.path.startsWith('/public')) {
     loadMenusWidget().catch(()=>{});
@@ -137,6 +159,7 @@ onMounted(() => {
     }
   }
 });
+onUnmounted(() => { scanner.stop() })
 
 // compute visible nav applying same filters as Sidebar.vue (role + enabled modules)
 const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules, nav));
@@ -315,6 +338,14 @@ function goToRiderQr(){
     <MediaLibraryModal />
     <AiStudioModal />
     <ImportProgressBar />
+    <!-- Barcode scanner → Purchase Import modal -->
+    <PurchaseImportModal
+      v-if="scannerImportOpen"
+      :initial-access-key="scannerAccessKey"
+      :key="scannerKeyCounter"
+      @close="onScannerModalClose"
+      @imported="onScannerModalClose"
+    />
     <!-- Atalho global do leitor QR para entregadores -->
     <button
       v-if="showRiderQrFab"
