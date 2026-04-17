@@ -139,8 +139,14 @@ function signEventoXml(eventoXml, privateKeyPem, certB64) {
   // Extract the infEvento element
   const infEventoMatch = eventoXml.match(/<infEvento[^>]*Id="([^"]+)"[^>]*>[\s\S]*?<\/infEvento>/);
   if (!infEventoMatch) throw new Error('infEvento not found in evento XML');
-  const infEventoXml = infEventoMatch[0];
+  let infEventoXml = infEventoMatch[0];
   const refId = infEventoMatch[1];
+
+  // C14N requires inherited namespaces to be explicitly declared on the signed element.
+  // The xmlns="http://www.portalfiscal.inf.br/nfe" is on <evento> but must appear on <infEvento> for digest.
+  if (!infEventoXml.includes('xmlns=') && eventoXml.includes('xmlns="http://www.portalfiscal.inf.br/nfe"')) {
+    infEventoXml = infEventoXml.replace('<infEvento', '<infEvento xmlns="http://www.portalfiscal.inf.br/nfe"');
+  }
 
   // Canonicalize infEvento
   const c14nInfEvento = simpleC14n(infEventoXml);
