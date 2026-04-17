@@ -481,17 +481,22 @@ export async function syncMde(storeId, companyId) {
   if (cStat !== '137' && cStat !== '138') {
     // Other statuses may indicate errors
     if (cStat === '656' || cStat === '657') {
-      // Save maxNSU even on 656 so next sync doesn't restart from 0
-      const numericMax = parseInt(maxNSU, 10) || 0;
-      if (numericMax > 0) {
+      // Save ultNSU/maxNSU on 656 so next sync uses the correct NSU
+      // SEFAZ may return maxNSU=0 but ultNSU with the correct value
+      const bestNsu = [ultNSUResp, maxNSU]
+        .map(v => String(v || '0').replace(/^0+/, '') || '0')
+        .sort((a, b) => parseInt(b, 10) - parseInt(a, 10))[0];
+      const numericBest = parseInt(bestNsu, 10) || 0;
+      if (numericBest > 0) {
+        const paddedNsu = bestNsu.padStart(15, '0');
         try {
           await prisma.purchaseImport.create({
             data: {
               companyId, storeId, source: 'MDE', status: 'APPLIED',
-              parsedItems: { _mdeActivation: true, _mdeMaxNSU: maxNSU, _mdeNsu: maxNSU },
+              parsedItems: { _mdeActivation: true, _mdeMaxNSU: paddedNsu, _mdeNsu: paddedNsu },
             },
           });
-          console.log(`[MDe] Saved maxNSU=${maxNSU} on 656 for store ${storeId}`);
+          console.log(`[MDe] Saved NSU=${paddedNsu} on ${cStat} for store ${storeId} (ultNSU=${ultNSUResp}, maxNSU=${maxNSU})`);
         } catch { /* ignore duplicate */ }
       }
       throw new Error(`SEFAZ MDe: Consumo indevido (${cStat}) — ${xMotivo}. Aguarde 1 hora antes de tentar novamente.`);
