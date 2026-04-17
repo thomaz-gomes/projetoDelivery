@@ -37,8 +37,8 @@ router.get('/', async (req, res) => {
 
     const where = {
       companyId,
-      // Exclude MDe activation marker records
-      NOT: { parsedItems: { path: ['_mdeActivation'], equals: true } },
+      // Exclude MDe activation/NSU marker records (source=MDE with no rawXml)
+      NOT: { source: 'MDE', rawXml: null },
     };
     if (storeId) where.storeId = storeId;
     if (status) where.status = status;
