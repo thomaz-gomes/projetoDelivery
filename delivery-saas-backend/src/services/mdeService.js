@@ -31,7 +31,7 @@ const EVENTO_ENDPOINTS = {
   homologation: 'https://hom1.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
 };
 
-const EVENTO_SOAP_ACTION = 'http://www.portalfiscal.inf.br/nfe/wsdl/RecepcaoEvento/nfeRecepcaoEvento';
+const EVENTO_SOAP_ACTION = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento';
 
 // Default UF code for Bahia
 const DEFAULT_CUFAUTOR = '29';
@@ -187,14 +187,12 @@ function buildSignedEventoEnvelope({ cnpj, chNFe, tpEvento, nSeqEvento, tpAmb, c
 <soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
   <soap12:Header/>
   <soap12:Body>
-    <nfeRecepcaoEvento xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/RecepcaoEvento">
-      <nfeDadosMsg>
-        <envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">
-          <idLote>${idLote}</idLote>
-          ${signedEvento}
-        </envEvento>
-      </nfeDadosMsg>
-    </nfeRecepcaoEvento>
+    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">
+      <envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">
+        <idLote>${idLote}</idLote>
+        ${signedEvento}
+      </envEvento>
+    </nfeDadosMsg>
   </soap12:Body>
 </soap12:Envelope>`;
 }
