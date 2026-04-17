@@ -15,7 +15,7 @@ import zlib from 'zlib';
 import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
 import forge from 'node-forge';
-import crypto from 'crypto';
+import { SignedXml } from '../../nfe-module/node_modules/xml-crypto/index.js';
 
 // MDe endpoints (Ambiente Nacional — not state-specific)
 const MDE_ENDPOINTS = {
@@ -128,46 +128,24 @@ function extractPemFromPfx(pfxBuf, passphrase) {
 /**
  * Canonicalize XML (simple C14N — remove XML declaration, normalize whitespace between tags).
  */
-function simpleC14n(xml) {
-  return xml.replace(/<\?xml[^?]*\?>\s*/, '').replace(/>\s+</g, '><').trim();
-}
-
 /**
- * Sign an infEvento XML element with RSA-SHA1 (required by SEFAZ RecepcaoEvento).
+ * Sign an infEvento XML element with RSA-SHA1 using xml-crypto (proper C14N).
  */
 function signEventoXml(eventoXml, privateKeyPem, certB64) {
-  // Extract the infEvento element
-  const infEventoMatch = eventoXml.match(/<infEvento[^>]*Id="([^"]+)"[^>]*>[\s\S]*?<\/infEvento>/);
-  if (!infEventoMatch) throw new Error('infEvento not found in evento XML');
-  let infEventoXml = infEventoMatch[0];
-  const refId = infEventoMatch[1];
-
-  // C14N requires inherited namespaces to be explicitly declared on the signed element.
-  // The xmlns="http://www.portalfiscal.inf.br/nfe" is on <evento> but must appear on <infEvento> for digest.
-  if (!infEventoXml.includes('xmlns=') && eventoXml.includes('xmlns="http://www.portalfiscal.inf.br/nfe"')) {
-    infEventoXml = infEventoXml.replace('<infEvento', '<infEvento xmlns="http://www.portalfiscal.inf.br/nfe"');
-  }
-
-  // Canonicalize infEvento
-  const c14nInfEvento = simpleC14n(infEventoXml);
-
-  // SHA-1 digest of canonicalized infEvento
-  const digestHash = crypto.createHash('sha1').update(c14nInfEvento, 'utf8').digest('base64');
-
-  // Build SignedInfo
-  const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#${refId}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>${digestHash}</DigestValue></Reference></SignedInfo>`;
-
-  // Sign the SignedInfo
-  const signer = crypto.createSign('RSA-SHA1');
-  signer.update(signedInfo);
-  const signatureValue = signer.sign(privateKeyPem, 'base64');
-
-  // Build Signature element
-  const signatureXml = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">${signedInfo}<SignatureValue>${signatureValue}</SignatureValue><KeyInfo><X509Data><X509Certificate>${certB64}</X509Certificate></X509Data></KeyInfo></Signature>`;
-
-  // Insert Signature after </infEvento> but inside <evento>
-  const signed = eventoXml.replace('</infEvento>', `</infEvento>${signatureXml}`);
-  return signed;
+  const sig = new SignedXml();
+  sig.signatureAlgorithm = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1';
+  sig.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
+  sig.addReference(
+    "//*[local-name(.)='infEvento']",
+    ['http://www.w3.org/2000/09/xmldsig#enveloped-signature', 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'],
+    'http://www.w3.org/2000/09/xmldsig#sha1'
+  );
+  sig.signingKey = privateKeyPem;
+  sig.keyInfoProvider = {
+    getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+  };
+  sig.computeSignature(eventoXml, { location: { reference: '//*[local-name(.)="evento"]', action: 'append' } });
+  return sig.getSignedXml();
 }
 
 /**
