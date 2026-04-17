@@ -65,6 +65,7 @@ model Company {
   // stock movements (entries/exits) for this company
   stockMovements       StockMovement[]
   purchaseImports      PurchaseImport[]
+  suppliers            Supplier[]
   // operating hours: if alwaysOpen is true the store accepts orders anytime
   alwaysOpen           Boolean               @default(true)
   // Toggle per-company to enable/disable Evolution (WhatsApp) integration
@@ -1573,6 +1574,8 @@ model PurchaseImport {
   company   Company @relation(fields: [companyId], references: [id])
   storeId   String
   store     Store   @relation(fields: [storeId], references: [id])
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
   source    String // MDE | XML | ACCESS_KEY | RECEIPT_PHOTO
   status    String  @default("PENDING") // PENDING | MATCHED | APPLIED | ERROR
 
@@ -1598,6 +1601,26 @@ model PurchaseImport {
   @@index([companyId])
   @@index([storeId])
   @@index([status])
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  cnpj        String?
+  name        String
+  phone       String?
+  email       String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchaseImports       PurchaseImport[]
+  financialTransactions FinancialTransaction[]
+
+  @@unique([companyId, cnpj])
+  @@index([companyId])
 }
 
 // =============================
@@ -1809,6 +1832,8 @@ model FinancialTransaction {
   // Vincula esta transação ao registro de origem (Order, RiderTransaction, AffiliateSale, Coupon, StockMovement, etc.)
   sourceType String? // Ex: "ORDER", "RIDER", "AFFILIATE", "COUPON", "STOCK_PURCHASE", "MANUAL"
   sourceId   String? // ID do registro de origem
+  supplierId            String?
+  supplier              Supplier?              @relation(fields: [supplierId], references: [id])
 
   // ---- Estorno ----
   reversedTransactionId String?
