@@ -6,6 +6,7 @@
           <div v-if="isAdmin" class="d-flex" style="gap:8px">
             <button class="btn btn-primary" @click="goNew" :disabled="atMenuLimit" :title="atMenuLimit ? `Limite do plano atingido (${menus.length}/${saas.menuLimit} cardápios)` : ''"><i class="bi bi-plus-lg me-1"></i> Novo cardápio</button>
             <button class="btn btn-outline-secondary" @click="goOptions"><i class="bi bi-list-check me-1"></i> Opções</button>
+            <button class="btn btn-outline-secondary" @click="goIntegration"><i class="bi bi-upc-scan me-1"></i> Códigos de Integração</button>
           </div>
           <div class="ms-2 d-flex align-items-center" style="gap:8px">
             <span class="small text-muted">Total:</span>
@@ -180,6 +181,7 @@ function openProductNew(m){ router.push({ path: '/menu/products/new', query: { m
 function openMenuAdmin(m){ router.push({ path: '/menu/admin', query: { menuId: m.id } }) }
 
 function goOptions(){ router.push({ path: '/menu/options' }) }
+function goIntegration(){ router.push({ path: '/menu/integration' }) }
 
 function openOptions(m){
   const q = {}

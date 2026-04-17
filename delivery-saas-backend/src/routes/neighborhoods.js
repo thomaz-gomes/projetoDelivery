@@ -67,4 +67,15 @@ neighborhoodsRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   res.json(updated);
 });
 
+// delete
+neighborhoodsRouter.delete('/:id', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const existing = await prisma.neighborhood.findFirst({ where: { id, companyId } });
+  if (!existing) return res.status(404).json({ message: 'Bairro não encontrado' });
+
+  await prisma.neighborhood.delete({ where: { id } });
+  res.json({ success: true });
+});
+
 export default neighborhoodsRouter;

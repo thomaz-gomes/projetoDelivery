@@ -58,7 +58,6 @@ export const nav = [
     { name: 'Formas de Pagamento', to: '/financial/payment-methods', icon: 'bi bi-credit-card' },
   ] },
   { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', role: 'ADMIN', children: [
-    { name: 'Códigos de Integração', to: '/menu/integration', icon: 'bi bi-upc-scan', moduleKey: 'cardapio_completo', lockable: true },
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt', moduleKey: 'cardapio_completo', lockable: true },
     { name: 'Dados Fiscais', to: '/settings/dados-fiscais', icon: 'bi bi-receipt', moduleKey: 'fiscal', lockable: true },
     { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug', moduleKey: 'cardapio_completo', lockable: true },
