@@ -24,6 +24,14 @@ const MDE_ENDPOINTS = {
 
 const SOAP_ACTION = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse';
 
+// RecepcaoEvento endpoints (Ambiente Nacional)
+const EVENTO_ENDPOINTS = {
+  production: 'https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
+  homologation: 'https://hom1.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
+};
+
+const EVENTO_SOAP_ACTION = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento';
+
 // Default UF code for Bahia
 const DEFAULT_CUFAUTOR = '29';
 
@@ -80,6 +88,92 @@ function buildDistDFeEnvelope({ cnpj, ultNSU, cUFAutor, tpAmb }) {
     </nfeDistDFeInteresse>
   </soap12:Body>
 </soap12:Envelope>`;
+}
+
+/**
+ * Build SOAP envelope for RecepcaoEvento (manifestação).
+ * tpEvento: 210200=Confirmacao, 210210=Ciencia, 210220=Desconhecimento, 210240=Nao Realizada
+ */
+function buildEventoEnvelope({ cnpj, chNFe, tpEvento, nSeqEvento, tpAmb, cOrgao }) {
+  const dhEvento = new Date().toISOString().replace(/\.\d{3}Z$/, '-03:00');
+  const idLote = Date.now().toString();
+  const eventId = `ID${tpEvento}${chNFe}${String(nSeqEvento).padStart(2, '0')}`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
+  <soap12:Header/>
+  <soap12:Body>
+    <nfeRecepcaoEvento xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">
+      <nfeDadosMsg>
+        <envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">
+          <idLote>${idLote}</idLote>
+          <evento versao="1.00">
+            <infEvento Id="${eventId}">
+              <cOrgao>${cOrgao || DEFAULT_CUFAUTOR}</cOrgao>
+              <tpAmb>${tpAmb}</tpAmb>
+              <CNPJ>${cnpj}</CNPJ>
+              <chNFe>${chNFe}</chNFe>
+              <dhEvento>${dhEvento}</dhEvento>
+              <tpEvento>${tpEvento}</tpEvento>
+              <nSeqEvento>${nSeqEvento}</nSeqEvento>
+              <verEvento>1.00</verEvento>
+              <detEvento versao="1.00">
+                <descEvento>${tpEvento === '210210' ? 'Ciencia da Operacao' : tpEvento === '210200' ? 'Confirmacao da Operacao' : tpEvento === '210220' ? 'Desconhecimento da Operacao' : 'Operacao nao Realizada'}</descEvento>
+              </detEvento>
+            </infEvento>
+          </evento>
+        </envEvento>
+      </nfeDadosMsg>
+    </nfeRecepcaoEvento>
+  </soap12:Body>
+</soap12:Envelope>`;
+}
+
+/**
+ * Send a manifestação event (210210 Ciência da Operação) to SEFAZ.
+ */
+async function sendManifestacao({ cnpj, chNFe, tpEvento, tpAmb, httpsAgent }) {
+  const environment = tpAmb === '1' ? 'production' : 'homologation';
+  const endpoint = EVENTO_ENDPOINTS[environment];
+
+  const envelope = buildEventoEnvelope({
+    cnpj,
+    chNFe,
+    tpEvento: tpEvento || '210210',
+    nSeqEvento: 1,
+    tpAmb,
+  });
+
+  const headers = {
+    'Content-Type': `application/soap+xml; charset=utf-8; action="${EVENTO_SOAP_ACTION}"`,
+  };
+
+  console.log(`[MDe] Sending manifestacao ${tpEvento || '210210'} for chNFe=${chNFe}`);
+
+  const res = await axios.post(endpoint, envelope, { headers, httpsAgent, timeout: 60000 });
+  const responseText = typeof res.data === 'string' ? res.data : res.data.toString();
+
+  const parsed = await parseStringPromise(responseText, { explicitArray: false, ignoreAttrs: false });
+  const retEvento = findKey(parsed, 'retEvento') || findKey(parsed, 'retEnvEvento');
+
+  if (!retEvento) {
+    console.warn('[MDe] Unexpected manifestacao response:', responseText.substring(0, 500));
+    throw new Error('Resposta inesperada do SEFAZ para manifestacao');
+  }
+
+  // retEvento can have infEvento inside it
+  const infEvento = findKey(retEvento, 'infEvento') || retEvento;
+  const cStat = infEvento.cStat || retEvento.cStat || '';
+  const xMotivo = infEvento.xMotivo || retEvento.xMotivo || '';
+
+  console.log(`[MDe] Manifestacao response: cStat=${cStat}, xMotivo=${xMotivo}`);
+
+  // 135 = Evento registrado e vinculado, 573 = Duplicidade de evento
+  if (cStat === '135' || cStat === '573') {
+    return { ok: true, cStat, xMotivo };
+  }
+
+  throw new Error(`Falha na manifestacao: cStat ${cStat} — ${xMotivo}`);
 }
 
 /**
@@ -599,7 +693,76 @@ export async function fetchFullNFe(importId, companyId) {
     }
   }
 
-  throw new Error('SEFAZ retornou o documento mas nao continha o XML completo da NFe. Pode ser necessario manifestar ciencia da operacao primeiro.');
+  // XML completo não veio — tentar manifestar ciência e buscar novamente
+  console.log(`[MDe] procNFe not found in response, attempting Ciencia da Operacao for chNFe=${importRecord.accessKey}`);
+
+  try {
+    await sendManifestacao({
+      cnpj,
+      chNFe: importRecord.accessKey,
+      tpEvento: '210210',
+      tpAmb,
+      httpsAgent,
+    });
+  } catch (manifErr) {
+    console.warn(`[MDe] Manifestacao failed: ${manifErr?.message}`);
+    throw new Error(`SEFAZ nao retornou o XML completo e a manifestacao de ciencia falhou: ${manifErr?.message}`);
+  }
+
+  // Wait a few seconds for SEFAZ to process the event
+  await new Promise(resolve => setTimeout(resolve, 5000));
+
+  // Retry fetch after manifestação
+  console.log(`[MDe] Retrying fetch after Ciencia da Operacao for chNFe=${importRecord.accessKey}`);
+  try {
+    const retryRes = await axios.post(endpoint, envelope, { headers, httpsAgent, timeout: 60000 });
+    const retryText = typeof retryRes.data === 'string' ? retryRes.data : retryRes.data.toString();
+
+    const retryParsed = await parseStringPromise(retryText, { explicitArray: false, ignoreAttrs: false });
+    const retryBody = findKey(retryParsed, 'retDistDFeInt');
+
+    if (retryBody && retryBody.cStat === '138') {
+      let retryDocs = retryBody.loteDistDFeInt?.docZip;
+      if (!Array.isArray(retryDocs)) retryDocs = retryDocs ? [retryDocs] : [];
+
+      for (const docZip of retryDocs) {
+        const base64Content = typeof docZip === 'string' ? docZip : (docZip._ || docZip['$value'] || '');
+        if (!base64Content) continue;
+
+        const xmlStr = decompressDocZip(base64Content);
+        const isProcNFe = xmlStr.includes('<procNFe') || xmlStr.includes('<nfeProc') || xmlStr.includes(':nfeProc');
+
+        if (isProcNFe) {
+          const nfeData = await parseNfeXml(xmlStr);
+          await prisma.purchaseImport.update({
+            where: { id: importId },
+            data: {
+              rawXml: xmlStr,
+              nfeNumber: nfeData.nfeNumber || importRecord.nfeNumber,
+              nfeSeries: nfeData.nfeSeries || importRecord.nfeSeries,
+              issueDate: nfeData.issueDate || importRecord.issueDate,
+              supplierCnpj: nfeData.supplierCnpj || importRecord.supplierCnpj,
+              supplierName: nfeData.supplierName || importRecord.supplierName,
+              totalValue: nfeData.totalValue || importRecord.totalValue,
+              parsedItems: {
+                ...(nfeData.items ? { items: nfeData.items } : {}),
+                _mdeNsu: parsedItems._mdeNsu,
+                _mdeMaxNSU: parsedItems._mdeMaxNSU,
+                _type: 'procNFe',
+              },
+            },
+          });
+
+          console.log(`[MDe] Updated import ${importId} with full procNFe after Ciencia (${nfeData.items?.length || 0} items)`);
+          return { ok: true, itemCount: nfeData.items?.length || 0 };
+        }
+      }
+    }
+  } catch (retryErr) {
+    console.warn(`[MDe] Retry fetch after manifestacao failed: ${retryErr?.message}`);
+  }
+
+  throw new Error('Ciencia da Operacao enviada com sucesso, mas o XML completo ainda nao esta disponivel. Tente novamente em alguns minutos.');
 }
 
 /**
