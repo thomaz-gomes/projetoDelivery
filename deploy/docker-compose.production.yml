@@ -84,6 +84,8 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
     volumes:
       - backend_uploads:/app/public/uploads
+      - backend_certs:/app/secure/certs
+      - backend_settings:/app/settings
       # Custom domain SSL: write nginx configs + trigger files, host cron does certbot
       - /etc/nginx/sites-enabled:/etc/nginx/sites-enabled
       - /var/www/certbot:/var/www/certbot
@@ -117,4 +119,8 @@ volumes:
   db_data:
     driver: local
   backend_uploads:
+    driver: local
+  backend_certs:
+    driver: local
+  backend_settings:
     driver: local

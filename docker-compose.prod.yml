@@ -31,6 +31,8 @@ services:
     # Persist uploads outside the ephemeral container filesystem
     volumes:
       - backend_uploads:/app/public/uploads
+      - backend_certs:/app/secure/certs
+      - backend_settings:/app/settings
       # Custom domain SSL: write nginx configs + trigger files, host cron does certbot
       - /etc/nginx/sites-enabled:/etc/nginx/sites-enabled
       - /var/www/certbot:/var/www/certbot
@@ -58,4 +60,8 @@ services:
 volumes:
   db_data:
   backend_uploads:
+    driver: local
+  backend_certs:
+    driver: local
+  backend_settings:
     driver: local
