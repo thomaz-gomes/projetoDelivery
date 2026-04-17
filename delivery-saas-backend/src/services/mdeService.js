@@ -15,6 +15,7 @@ import zlib from 'zlib';
 import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
 import forge from 'node-forge';
+import crypto from 'crypto';
 
 // MDe endpoints (Ambiente Nacional — not state-specific)
 const MDE_ENDPOINTS = {
@@ -91,13 +92,96 @@ function buildDistDFeEnvelope({ cnpj, ultNSU, cUFAutor, tpAmb }) {
 }
 
 /**
- * Build SOAP envelope for RecepcaoEvento (manifestação).
+ * Extract PEM key + base64 cert from a PFX buffer using node-forge.
+ */
+function extractPemFromPfx(pfxBuf, passphrase) {
+  const raw = pfxBuf.toString('binary');
+  const p12Asn1 = forge.asn1.fromDer(raw);
+  let p12;
+  try {
+    p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, passphrase || '');
+  } catch (e1) {
+    if (passphrase) {
+      try { p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, ''); } catch { throw e1; }
+    } else { throw e1; }
+  }
+  let keyObj = null;
+  const certs = [];
+  for (const sc of p12.safeContents) {
+    for (const sb of sc.safeBags) {
+      if (sb.type === forge.pki.oids.certBag && sb.cert) certs.push(sb.cert);
+      if (sb.type === forge.pki.oids.pkcs8ShroudedKeyBag || sb.type === forge.pki.oids.keyBag) keyObj = sb.key;
+    }
+  }
+  if (!keyObj || !certs.length) throw new Error('Failed to extract key/cert from PFX');
+  let certObj = certs[0];
+  if (certs.length > 1) {
+    const privMod = keyObj.n.toString(16);
+    for (const c of certs) { if (c.publicKey.n.toString(16) === privMod) { certObj = c; break; } }
+  }
+  const privateKeyPem = forge.pki.privateKeyToPem(keyObj);
+  const certPem = forge.pki.certificateToPem(certObj);
+  const certB64 = forge.util.encode64(forge.pem.decode(certPem)[0].body);
+  return { privateKeyPem, certPem, certB64 };
+}
+
+/**
+ * Canonicalize XML (simple C14N — remove XML declaration, normalize whitespace between tags).
+ */
+function simpleC14n(xml) {
+  return xml.replace(/<\?xml[^?]*\?>\s*/, '').replace(/>\s+</g, '><').trim();
+}
+
+/**
+ * Sign an infEvento XML element with RSA-SHA1 (required by SEFAZ RecepcaoEvento).
+ */
+function signEventoXml(eventoXml, privateKeyPem, certB64) {
+  // Extract the infEvento element
+  const infEventoMatch = eventoXml.match(/<infEvento[^>]*Id="([^"]+)"[^>]*>[\s\S]*?<\/infEvento>/);
+  if (!infEventoMatch) throw new Error('infEvento not found in evento XML');
+  const infEventoXml = infEventoMatch[0];
+  const refId = infEventoMatch[1];
+
+  // Canonicalize infEvento
+  const c14nInfEvento = simpleC14n(infEventoXml);
+
+  // SHA-1 digest of canonicalized infEvento
+  const digestHash = crypto.createHash('sha1').update(c14nInfEvento, 'utf8').digest('base64');
+
+  // Build SignedInfo
+  const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#${refId}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>${digestHash}</DigestValue></Reference></SignedInfo>`;
+
+  // Sign the SignedInfo
+  const signer = crypto.createSign('RSA-SHA1');
+  signer.update(signedInfo);
+  const signatureValue = signer.sign(privateKeyPem, 'base64');
+
+  // Build Signature element
+  const signatureXml = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">${signedInfo}<SignatureValue>${signatureValue}</SignatureValue><KeyInfo><X509Data><X509Certificate>${certB64}</X509Certificate></X509Data></KeyInfo></Signature>`;
+
+  // Insert Signature after </infEvento> but inside <evento>
+  const signed = eventoXml.replace('</infEvento>', `</infEvento>${signatureXml}`);
+  return signed;
+}
+
+/**
+ * Build and sign SOAP envelope for RecepcaoEvento (manifestação).
  * tpEvento: 210200=Confirmacao, 210210=Ciencia, 210220=Desconhecimento, 210240=Nao Realizada
  */
-function buildEventoEnvelope({ cnpj, chNFe, tpEvento, nSeqEvento, tpAmb, cOrgao }) {
+function buildSignedEventoEnvelope({ cnpj, chNFe, tpEvento, nSeqEvento, tpAmb, cOrgao, privateKeyPem, certB64 }) {
   const dhEvento = new Date().toISOString().replace(/\.\d{3}Z$/, '-03:00');
   const idLote = Date.now().toString();
   const eventId = `ID${tpEvento}${chNFe}${String(nSeqEvento).padStart(2, '0')}`;
+
+  const descEvento = tpEvento === '210210' ? 'Ciencia da Operacao'
+    : tpEvento === '210200' ? 'Confirmacao da Operacao'
+    : tpEvento === '210220' ? 'Desconhecimento da Operacao'
+    : 'Operacao nao Realizada';
+
+  const eventoXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><infEvento Id="${eventId}"><cOrgao>${cOrgao || DEFAULT_CUFAUTOR}</cOrgao><tpAmb>${tpAmb}</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${nSeqEvento}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>${descEvento}</descEvento></detEvento></infEvento></evento>`;
+
+  // Sign the evento
+  const signedEvento = signEventoXml(eventoXml, privateKeyPem, certB64);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
@@ -107,21 +191,7 @@ function buildEventoEnvelope({ cnpj, chNFe, tpEvento, nSeqEvento, tpAmb, cOrgao 
       <nfeDadosMsg>
         <envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">
           <idLote>${idLote}</idLote>
-          <evento versao="1.00">
-            <infEvento Id="${eventId}">
-              <cOrgao>${cOrgao || DEFAULT_CUFAUTOR}</cOrgao>
-              <tpAmb>${tpAmb}</tpAmb>
-              <CNPJ>${cnpj}</CNPJ>
-              <chNFe>${chNFe}</chNFe>
-              <dhEvento>${dhEvento}</dhEvento>
-              <tpEvento>${tpEvento}</tpEvento>
-              <nSeqEvento>${nSeqEvento}</nSeqEvento>
-              <verEvento>1.00</verEvento>
-              <detEvento versao="1.00">
-                <descEvento>${tpEvento === '210210' ? 'Ciencia da Operacao' : tpEvento === '210200' ? 'Confirmacao da Operacao' : tpEvento === '210220' ? 'Desconhecimento da Operacao' : 'Operacao nao Realizada'}</descEvento>
-              </detEvento>
-            </infEvento>
-          </evento>
+          ${signedEvento}
         </envEvento>
       </nfeDadosMsg>
     </nfeRecepcaoEvento>
@@ -131,24 +201,38 @@ function buildEventoEnvelope({ cnpj, chNFe, tpEvento, nSeqEvento, tpAmb, cOrgao 
 
 /**
  * Send a manifestação event (210210 Ciência da Operação) to SEFAZ.
+ * Requires certConfig with certPath/certBuffer + certPassword for signing.
  */
-async function sendManifestacao({ cnpj, chNFe, tpEvento, tpAmb, httpsAgent }) {
+async function sendManifestacao({ cnpj, chNFe, tpEvento, tpAmb, httpsAgent, certConfig }) {
   const environment = tpAmb === '1' ? 'production' : 'homologation';
   const endpoint = EVENTO_ENDPOINTS[environment];
 
-  const envelope = buildEventoEnvelope({
+  // Extract PEM for XML signing
+  let pfxBuf;
+  if (certConfig.certBuffer) {
+    pfxBuf = certConfig.certBuffer;
+  } else if (certConfig.certPath) {
+    pfxBuf = fs.readFileSync(certConfig.certPath);
+  } else {
+    throw new Error('Certificado necessario para assinar manifestacao');
+  }
+  const { privateKeyPem, certB64 } = extractPemFromPfx(pfxBuf, certConfig.certPassword || '');
+
+  const envelope = buildSignedEventoEnvelope({
     cnpj,
     chNFe,
     tpEvento: tpEvento || '210210',
     nSeqEvento: 1,
     tpAmb,
+    privateKeyPem,
+    certB64,
   });
 
   const headers = {
     'Content-Type': `application/soap+xml; charset=utf-8; action="${EVENTO_SOAP_ACTION}"`,
   };
 
-  console.log(`[MDe] Sending manifestacao ${tpEvento || '210210'} for chNFe=${chNFe}`);
+  console.log(`[MDe] Sending signed manifestacao ${tpEvento || '210210'} for chNFe=${chNFe}`);
 
   const res = await axios.post(endpoint, envelope, { headers, httpsAgent, timeout: 60000 });
   const responseText = typeof res.data === 'string' ? res.data : res.data.toString();
@@ -161,7 +245,6 @@ async function sendManifestacao({ cnpj, chNFe, tpEvento, tpAmb, httpsAgent }) {
     throw new Error('Resposta inesperada do SEFAZ para manifestacao');
   }
 
-  // retEvento can have infEvento inside it
   const infEvento = findKey(retEvento, 'infEvento') || retEvento;
   const cStat = infEvento.cStat || retEvento.cStat || '';
   const xMotivo = infEvento.xMotivo || retEvento.xMotivo || '';
@@ -703,6 +786,7 @@ export async function fetchFullNFe(importId, companyId) {
       tpEvento: '210210',
       tpAmb,
       httpsAgent,
+      certConfig,
     });
   } catch (manifErr) {
     console.warn(`[MDe] Manifestacao failed: ${manifErr?.message}`);
