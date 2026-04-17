@@ -44,6 +44,14 @@ export async function buildAndPersistStockMovementFromOrderItems(prismaInstance,
 						}
 					}
 				} catch (e) { /* ignore */ }
+			} else if (product && product.stockIngredientId) {
+				// Direct stock link for resale products (1 sold = 1 deducted)
+				try {
+					const ing = await prismaInstance.ingredient.findUnique({ where: { id: product.stockIngredientId } });
+					if (ing && ing.controlsStock) {
+						addDed(product.stockIngredientId, itemQty);
+					}
+				} catch (e) { /* ignore */ }
 			}
 
 			// Process options: support array or object map

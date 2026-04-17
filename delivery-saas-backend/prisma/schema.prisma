@@ -932,6 +932,8 @@ model Product {
   name                String
   description         String?
   technicalSheetId    String?
+  stockIngredientId   String?
+  stockIngredient     Ingredient?          @relation("ProductStockIngredient", fields: [stockIngredientId], references: [id])
   price               Decimal              @default(0)
   isActive            Boolean              @default(true)
   position            Int                  @default(0)
@@ -1473,6 +1475,7 @@ model Ingredient {
   stockMovementItems StockMovementItem[]
   compositionItems    CompositeIngredientItem[] @relation("CompositeParent")
   usedInCompositions  CompositeIngredientItem[] @relation("CompositeChild")
+  stockProducts       Product[]                 @relation("ProductStockIngredient")
 
   @@index([companyId, description], name: "company_ingredient_description_idx")
 }
