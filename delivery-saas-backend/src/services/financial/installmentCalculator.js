@@ -119,6 +119,18 @@ export function calculateBoletoInstallments(purchaseDate, installmentCount, temp
   // Parse template into an array of day-intervals that cycle
   let intervals;
   switch (template) {
+    case '7d':
+      intervals = [7];
+      break;
+    case '14d':
+      intervals = [14];
+      break;
+    case '21d':
+      intervals = [21];
+      break;
+    case '28d':
+      intervals = [28];
+      break;
     case '30d':
       intervals = [30];
       break;

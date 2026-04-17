@@ -1,6 +1,6 @@
 <template>
   <div class="modal d-block" tabindex="-1" style="z-index:2000;background:rgba(0,0,0,0.5)" @click.self="handleBackdropClick">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-fullscreen-sm-down">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-sm-down">
       <div class="modal-content">
 
         <!-- Header -->
@@ -291,6 +291,34 @@
 
           <!-- STEP 3: Review & Apply -->
           <div v-if="step === 3">
+            <!-- Note + Supplier summary -->
+            <div class="card mb-3" v-if="importRecord">
+              <div class="card-body py-2">
+                <div class="row g-2 small">
+                  <div class="col-md-3" v-if="importRecord.accessKey">
+                    <span class="text-muted">Chave de Acesso</span>
+                    <div class="text-truncate fw-semibold" style="font-size:11px">{{ importRecord.accessKey }}</div>
+                  </div>
+                  <div class="col-md-2" v-if="importRecord.nfeNumber">
+                    <span class="text-muted">Número</span>
+                    <div class="fw-semibold">{{ importRecord.nfeNumber }}</div>
+                  </div>
+                  <div class="col-md-3" v-if="importRecord.supplierName">
+                    <span class="text-muted">Fornecedor</span>
+                    <div class="fw-semibold">{{ importRecord.supplierName }}</div>
+                  </div>
+                  <div class="col-md-2" v-if="importRecord.supplierCnpj">
+                    <span class="text-muted">CNPJ</span>
+                    <div class="fw-semibold">{{ formatCnpj(importRecord.supplierCnpj) }}</div>
+                  </div>
+                  <div class="col-md-2" v-if="importRecord.totalValue">
+                    <span class="text-muted">Valor Total</span>
+                    <div class="fw-semibold text-success">R$ {{ Number(importRecord.totalValue).toFixed(2) }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="d-flex align-items-center justify-content-between mb-3">
               <h6 class="mb-0"><i class="bi bi-list-check me-2"></i>Revisao dos Itens</h6>
               <span class="badge bg-info">{{ reviewItems.length }} item(ns)</span>
@@ -403,7 +431,7 @@
                       </option>
                     </select>
                   </div>
-                  <div class="col-md-3">
+                  <div class="col-md-2">
                     <label class="form-label">Parcelas</label>
                     <input v-model.number="installmentCount" type="number" min="1" max="48" class="form-control form-control-sm" />
                   </div>
@@ -411,7 +439,17 @@
                     <label class="form-label">Primeiro Vencimento</label>
                     <input v-model="firstDueDate" type="date" class="form-control form-control-sm" />
                   </div>
-                  <div class="col-md-2 d-flex align-items-end">
+                  <div class="col-md-2" v-if="selectedMethodType === 'BOLETO'">
+                    <label class="form-label">Intervalo</label>
+                    <select v-model="boletoTemplate" class="form-select form-select-sm">
+                      <option value="7d">7 dias</option>
+                      <option value="14d">14 dias</option>
+                      <option value="21d">21 dias</option>
+                      <option value="28d">28 dias</option>
+                      <option value="30d">30 dias</option>
+                    </select>
+                  </div>
+                  <div class="col-md-1 d-flex align-items-end">
                     <button class="btn btn-outline-primary btn-sm w-100" @click="generateInstallments" type="button">
                       Gerar
                     </button>
@@ -533,6 +571,7 @@ const photoPreviews = ref([])
 
 // ── Step 3: Review State ────────────────────────────────────────────────────
 const reviewItems = ref([])
+const importRecord = ref(null)
 const ingredientGroups = ref([])
 const ingredients = ref([])
 const applying = ref(false)
@@ -544,6 +583,7 @@ const payablePaymentMethods = ref([])
 const paymentMethodId = ref(null)
 const installmentCount = ref(1)
 const firstDueDate = ref(null)
+const boletoTemplate = ref('30d')
 const installments = ref([])
 
 // ── Computed ─────────────────────────────────────────────────────────────────
@@ -736,6 +776,7 @@ async function loadReviewData() {
     // Load first import (handle one at a time for now)
     currentImportId.value = importIds.value[0]
     const { data: imp } = await api.get(`/purchase-imports/${currentImportId.value}`)
+    importRecord.value = imp
 
     // parsedItems can be a flat array (XML upload / after match) or object with .items (MDE procNFe)
     let rawItems = imp.parsedItems
@@ -779,6 +820,19 @@ async function loadReviewData() {
   }
 }
 
+function formatCnpj(cnpj) {
+  if (!cnpj) return ''
+  const c = String(cnpj).replace(/\D/g, '')
+  if (c.length !== 14) return cnpj
+  return c.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
+}
+
+const selectedMethodType = computed(() => {
+  if (!paymentMethodId.value) return null
+  const m = payablePaymentMethods.value.find(p => p.id === paymentMethodId.value)
+  return m?.type || null
+})
+
 async function generateInstallments() {
   if (!installmentCount.value || installmentCount.value < 1) return
   try {
@@ -789,6 +843,7 @@ async function generateInstallments() {
       purchaseDate: firstDueDate.value || new Date().toISOString().substring(0, 10),
       grossAmount: calcTotal,
       totalAmount: calcTotal,
+      template: selectedMethodType.value === 'BOLETO' ? boletoTemplate.value : undefined,
     })
     installments.value = (data.preview || []).map(i => ({
       ...i,
