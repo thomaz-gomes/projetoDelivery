@@ -695,7 +695,7 @@ async function startParse() {
     } else if (method.value === 'access_key') {
       payload.method = 'access_key'
       payload.input = accessKey.value.replace(/\D/g, '')
-      const { data } = await api.post('/purchase-imports/parse', payload)
+      const { data } = await api.post('/purchase-imports/parse', payload, { timeout: 30000 })
       const importId = await pollJob(data.jobId)
       importIds.value.push(importId)
     } else if (method.value === 'receipt_photo') {
@@ -708,10 +708,10 @@ async function startParse() {
       importIds.value = [...selectedMdeImports.value]
     }
 
-    // Trigger AI matching for non-photo methods
+    // Trigger AI matching for non-photo methods (longer timeout for AI processing)
     for (const id of importIds.value) {
       if (method.value !== 'receipt_photo') {
-        await api.post(`/purchase-imports/${id}/match`)
+        await api.post(`/purchase-imports/${id}/match`, {}, { timeout: 60000 })
       }
     }
 
