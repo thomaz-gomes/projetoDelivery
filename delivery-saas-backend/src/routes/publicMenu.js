@@ -1601,7 +1601,7 @@ publicMenuRouter.get('/:companyId/cashback-settings', async (req, res) => {
     const { companyId } = req.params
     if (!companyId) return res.status(400).json({ message: 'companyId é obrigatório' })
     const s = await cashbackSvc.getSettings(companyId)
-    res.json({ enabled: !!s?.enabled, minRedeemValue: Number(s?.minRedeemValue || 0) })
+    res.json({ enabled: !!s?.enabled, minRedeemValue: Number(s?.minRedeemValue || 0), defaultPercent: Number(s?.defaultPercent || 0) })
   } catch (e) {
     res.status(500).json({ message: 'Erro ao obter configurações de cashback', error: e?.message || String(e) })
   }

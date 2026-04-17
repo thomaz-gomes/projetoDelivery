@@ -224,6 +224,7 @@ async function sendManifestacao({ cnpj, chNFe, tpEvento, tpAmb, httpsAgent, cert
     tpEvento: tpEvento || '210210',
     nSeqEvento: 1,
     tpAmb,
+    cOrgao: '91', // Manifestação is always processed at Ambiente Nacional
     privateKeyPem,
     certB64,
   });
@@ -234,8 +235,19 @@ async function sendManifestacao({ cnpj, chNFe, tpEvento, tpAmb, httpsAgent, cert
 
   console.log(`[MDe] Sending signed manifestacao ${tpEvento || '210210'} for chNFe=${chNFe}`);
 
-  const res = await axios.post(endpoint, envelope, { headers, httpsAgent, timeout: 60000 });
-  const responseText = typeof res.data === 'string' ? res.data : res.data.toString();
+  let responseText;
+  try {
+    const res = await axios.post(endpoint, envelope, { headers, httpsAgent, timeout: 60000 });
+    responseText = typeof res.data === 'string' ? res.data : res.data.toString();
+  } catch (err) {
+    // Capture SOAP fault body on HTTP errors (e.g. 500)
+    const body = err?.response?.data;
+    const statusCode = err?.response?.status;
+    if (body) {
+      console.warn(`[MDe] Manifestacao HTTP ${statusCode} response:`, typeof body === 'string' ? body.substring(0, 500) : JSON.stringify(body).substring(0, 500));
+    }
+    throw new Error(`SEFAZ RecepcaoEvento retornou HTTP ${statusCode || 'timeout'}: ${err?.message}`);
+  }
 
   const parsed = await parseStringPromise(responseText, { explicitArray: false, ignoreAttrs: false });
   const retEvento = findKey(parsed, 'retEvento') || findKey(parsed, 'retEnvEvento');

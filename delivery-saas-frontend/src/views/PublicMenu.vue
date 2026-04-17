@@ -253,7 +253,7 @@
                       <div>
                       <div class="mt-2 d-flex flex-column align-items-start gap-2">
                         
-                        <div v-if="cashbackEnabled && (p.cashback || p.cashbackPercent) && Number(p.cashback || p.cashbackPercent) > 0" class="badge bg-success">{{ Number(p.cashback || p.cashbackPercent) }}% cashback ({{ formatCurrency(Number(p.price || 0) * Number(p.cashback || p.cashbackPercent) / 100) }})</div>
+                        <div v-if="getProductCashbackPercent(p) > 0" class="badge bg-success">{{ getProductCashbackPercent(p) }}% cashback ({{ formatCurrency(Number(p.price || 0) * getProductCashbackPercent(p) / 100) }})</div>
 
                         <strong class="product-price">
                           <span v-if="getStartingPrice(p) > Number(p.price || 0)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
@@ -1884,6 +1884,14 @@ const productCashbackMap = computed(() => {
   }catch(e){}
   return map
 })
+
+// effective cashback percent for a product (per-product override or global default)
+function getProductCashbackPercent(p) {
+  if (!cashbackEnabled.value) return 0
+  const perProduct = Number(p.cashback || p.cashbackPercent || 0)
+  if (perProduct > 0) return perProduct
+  return Number(cashbackSettings.value?.defaultPercent || 0)
+}
 
 // estimated total cashback for current cart (in R$)
 const estimatedCashbackTotal = computed(() => {
