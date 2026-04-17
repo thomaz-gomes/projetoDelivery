@@ -153,7 +153,9 @@ function signEventoXml(eventoXml, privateKeyPem, certB64) {
  * tpEvento: 210200=Confirmacao, 210210=Ciencia, 210220=Desconhecimento, 210240=Nao Realizada
  */
 function buildSignedEventoEnvelope({ cnpj, chNFe, tpEvento, nSeqEvento, tpAmb, cOrgao, privateKeyPem, certB64 }) {
-  const dhEvento = new Date().toISOString().replace(/\.\d{3}Z$/, '-03:00');
+  // Convert current time to BRT (UTC-3) with proper offset
+  const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const dhEvento = now.toISOString().replace(/\.\d{3}Z$/, '-03:00');
   const idLote = Date.now().toString();
   const eventId = `ID${tpEvento}${chNFe}${String(nSeqEvento).padStart(2, '0')}`;
 
