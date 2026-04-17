@@ -301,13 +301,13 @@
               <table class="table table-hover align-middle mb-0">
                 <thead>
                   <tr>
-                    <th style="min-width:180px">Item NFe</th>
-                    <th style="width:80px">Qtd</th>
-                    <th style="width:80px">Und</th>
-                    <th style="width:110px">Custo Unit.</th>
+                    <th style="min-width:160px">Item NFe</th>
+                    <th style="min-width:100px">Qtd</th>
+                    <th style="min-width:90px">Und</th>
+                    <th style="min-width:120px">Custo Unit.</th>
                     <th style="min-width:200px">Match Estoque</th>
-                    <th style="width:80px">Confianca</th>
-                    <th style="width:120px">Acao</th>
+                    <th style="min-width:80px">Confianca</th>
+                    <th style="min-width:110px">Acao</th>
                   </tr>
                 </thead>
                 <tbody>
