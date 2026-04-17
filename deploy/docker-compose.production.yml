@@ -74,6 +74,8 @@ services:
       # AI Parser
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       USE_AI_PARSER: ${USE_AI_PARSER:-false}
+      # NF-e certificate encryption
+      CERT_STORE_KEY: ${CERT_STORE_KEY:-}
       # SMTP / Email
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

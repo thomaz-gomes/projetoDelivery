@@ -27,6 +27,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://tomgomes:03t01F007TF@delivery_db:5432/tomgomes}
       NODE_ENV: production
       PORT: 3000
+      CERT_STORE_KEY: ${CERT_STORE_KEY:-}
     # Persist uploads outside the ephemeral container filesystem
     volumes:
       - backend_uploads:/app/public/uploads
