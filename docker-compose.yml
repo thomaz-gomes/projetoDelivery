@@ -45,6 +45,7 @@ services:
       - EVOLUTION_API_BASE_URL=${EVOLUTION_API_BASE_URL:-}
       - EVOLUTION_API_API_KEY=${EVOLUTION_API_API_KEY:-}
       - BACKEND_URL=${BACKEND_URL:-}
+      - CERT_STORE_KEY=${CERT_STORE_KEY:-}
     depends_on:
       db:
         condition: service_healthy
