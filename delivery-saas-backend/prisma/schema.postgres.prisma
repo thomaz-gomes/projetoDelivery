@@ -448,6 +448,8 @@ model Store {
   // optional URL-friendly slug (ex: "nomedaloja")
   slug            String?          @unique
   cnpj            String?          @unique
+  phone           String?
+  whatsapp        String?
   logoUrl         String?
   bannerUrl       String?
   timezone        String?

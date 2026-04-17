@@ -23,9 +23,6 @@
                   <small class="text-muted">Pausa ativa: <strong>{{ remainingPauseText }}</strong></small>
                   <button class="btn btn-sm btn-link" @click.prevent="clearPauseNow">Cancelar pausa</button>
                 </div>
-              <div class="mb-3"><TextInput label="Slug público (opcional)" labelClass="form-label" v-model="form.slug" placeholder="ex: nomedaloja" inputClass="form-control" />
-                <div class="form-text small">Se preenchido, a URL pública ficará em <code>/public/SEU_SLUG</code>. Caso vazio, o sistema gerará/resolve um slug automaticamente.</div>
-              </div>
             <div class="mb-3">
               <TextInput label="Endereço" labelClass="form-label" v-model="form.address" inputClass="form-control" />
             </div>
@@ -48,14 +45,6 @@
             <div class="mb-3"><TextInput label="Telefone" labelClass="form-label" v-model="form.phone" placeholder="(00) 0000-0000" maxlength="15" inputClass="form-control" @input="handlePhoneInput" /></div>
             <div class="mb-3"><TextInput label="WhatsApp" labelClass="form-label" v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" /></div>
             <div class="mb-3"><TextInput label="CNPJ" labelClass="form-label" v-model="form.cnpj" placeholder="00.000.000/0000-00" inputClass="form-control" /></div>
-            <div class="row">
-              <div class="col-md-6 mb-3">
-                <MediaField v-model="form.bannerUrl" label="Banner" field-id="store-banner" :crop-aspect="16/9" :target-width="1200" :target-height="675" />
-              </div>
-              <div class="col-md-6 mb-3">
-                <MediaField v-model="form.logoUrl" label="Logotipo" field-id="store-logo" />
-              </div>
-            </div>
           </div>
 
           <!-- Horário moved to menu configuration; store-level schedule removed -->
@@ -737,7 +726,6 @@ async function save(){
 
     const payload = {
       name: form.value.name || undefined,
-      slug: form.value.slug !== undefined ? (form.value.slug || undefined) : undefined,
       address: form.value.address || undefined,
       city: form.value.city || undefined,
       state: form.value.state || undefined,
@@ -746,9 +734,9 @@ async function save(){
       longitude: form.value.longitude != null && form.value.longitude !== '' ? Number(form.value.longitude) : null,
       timezone: form.value.timezone || undefined,
       cnpj: form.value.cnpj || undefined,
+      phone: form.value.phone || '',
+      whatsapp: form.value.whatsapp || '',
       isActive: form.value.isActive,
-      logoUrl: form.value.logoUrl || undefined,
-      bannerUrl: form.value.bannerUrl || undefined,
       weeklySchedule: form.value.open24Hours ? null : form.value.weeklySchedule,
       ie: form.value.ie || undefined,
       razaoSocial: form.value.razaoSocial || undefined,
