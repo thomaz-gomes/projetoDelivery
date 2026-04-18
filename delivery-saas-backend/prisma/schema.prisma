@@ -24,6 +24,7 @@ enum OrderStatus {
   CONCLUIDO
   CANCELADO
   INVOICE_AUTHORIZED
+  RIDER_DELIVERED
 }
 
 enum CustomerSource {
