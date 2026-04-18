@@ -31,6 +31,16 @@ async function waitForDb(retries = 120, delay = 3000) {
       process.exit(1)
     }
 
+    // Clean orphan FKs before pushing schema (prevents FK constraint failures)
+    console.log('Cleaning orphan foreign keys...')
+    try {
+      await prisma.$executeRawUnsafe(`UPDATE "Product" SET "technicalSheetId" = NULL WHERE "technicalSheetId" IS NOT NULL AND "technicalSheetId" NOT IN (SELECT id FROM "TechnicalSheet")`)
+      await prisma.$executeRawUnsafe(`UPDATE "Product" SET "stockIngredientId" = NULL WHERE "stockIngredientId" IS NOT NULL AND "stockIngredientId" NOT IN (SELECT id FROM "Ingredient")`)
+      console.log('  Orphan FKs cleaned')
+    } catch (e) {
+      console.warn('  Orphan FK cleanup warning (non-fatal):', e?.message)
+    }
+
     console.log('Running prisma db push...')
     execSync('npx prisma db push --skip-generate', { stdio: 'inherit', env: process.env })
 
