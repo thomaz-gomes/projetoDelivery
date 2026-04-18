@@ -8,6 +8,8 @@ import path from 'path';
 import { assertModuleEnabled } from '../utils/saas.js';
 import { createFinancialEntryForRider } from '../services/financial/orderFinancialBridge.js';
 import { emitirPosicaoEntregador, emitirEntregadorOffline } from '../index.js';
+import { getGoalsForRider } from '../services/riderGoals.js';
+import goalsRouter from './goals.js';
 
 export const ridersRouter = express.Router();
 ridersRouter.use(authMiddleware);
@@ -1347,6 +1349,51 @@ ridersRouter.get('/me/orders', async (req, res) => {
     return res.status(500).json({ message: 'Erro ao buscar pedidos do entregador' });
   }
 });
+
+// ==================== RIDER GOALS ====================
+
+// GET /riders/me/goals — rider's active goals with progress
+ridersRouter.get('/me/goals', requireRole('RIDER'), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const rider = await prisma.rider.findFirst({ where: { userId } });
+    if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
+
+    const goals = await getGoalsForRider(rider.id, rider.companyId);
+    res.json(goals);
+  } catch (e) {
+    console.error('GET /riders/me/goals error:', e);
+    res.status(500).json({ message: 'Erro ao buscar metas' });
+  }
+});
+
+// GET /riders/me/achievements — rider's achievement history
+ridersRouter.get('/me/achievements', requireRole('RIDER'), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const rider = await prisma.rider.findFirst({ where: { userId } });
+    if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
+
+    const achievements = await prisma.riderGoalAchievement.findMany({
+      where: { riderId: rider.id },
+      include: {
+        goal: {
+          select: { id: true, name: true, ruleType: true, rewardType: true, rewardDescription: true },
+        },
+      },
+      orderBy: { achievedAt: 'desc' },
+      take: 50,
+    });
+
+    res.json(achievements);
+  } catch (e) {
+    console.error('GET /riders/me/achievements error:', e);
+    res.status(500).json({ message: 'Erro ao buscar conquistas' });
+  }
+});
+
+// Mount admin goals CRUD router
+ridersRouter.use('/goals', requireRole('ADMIN', 'SUPER_ADMIN'), goalsRouter);
 
 // Admin: reset or set rider password (creates linked user if missing)
 ridersRouter.post('/:id/reset-password', requireRole('ADMIN'), async (req, res) => {
