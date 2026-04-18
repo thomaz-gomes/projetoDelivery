@@ -797,6 +797,9 @@ ridersRouter.get('/me/shifts', async (req, res) => {
   res.json(assignments.map(a => a.shift).filter(s => s.active));
 });
 
+// Mount admin goals CRUD router (must be BEFORE /:id routes to avoid capture)
+ridersRouter.use('/goals', requireRole('ADMIN', 'SUPER_ADMIN'), goalsRouter);
+
 // GET /riders/:id/shifts — listar turnos atribuídos ao motoboy
 ridersRouter.get('/:id/shifts', async (req, res) => {
   const companyId = req.user.companyId;
@@ -1398,8 +1401,6 @@ ridersRouter.get('/me/achievements', requireRole('RIDER'), async (req, res) => {
   }
 });
 
-// Mount admin goals CRUD router
-ridersRouter.use('/goals', requireRole('ADMIN', 'SUPER_ADMIN'), goalsRouter);
 
 // Admin: reset or set rider password (creates linked user if missing)
 ridersRouter.post('/:id/reset-password', requireRole('ADMIN'), async (req, res) => {
