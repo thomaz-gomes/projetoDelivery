@@ -4,12 +4,12 @@
 
     <div class="row">
       <div class="col-12">
-        <div class="mb-3 d-flex justify-content-between align-items-center">
-          <div class="w-50 d-flex">
+        <div class="mb-3 d-flex justify-content-between align-items-center gap-2 flex-wrap">
+          <div class="d-flex" style="min-width:200px; flex:1 1 auto; max-width:50%">
             <TextInput v-model="search" placeholder="Buscar um item" inputClass="form-control me-2" />
-            <button class="btn btn-sm btn-outline-secondary me-2" :class="{ active: compactMode }" @click="toggleCompact"><i class="bi bi-list"></i> {{ compactMode ? 'Denso' : 'Normal' }}</button>
+            <button class="btn btn-sm btn-outline-secondary" :class="{ active: compactMode }" @click="toggleCompact"><i class="bi bi-list"></i> {{ compactMode ? 'Denso' : 'Normal' }}</button>
           </div>
-          <div v-if="isAdmin" class="d-flex gap-2 flex-wrap">
+          <div v-if="isAdmin" class="d-flex gap-2 flex-wrap justify-content-end">
             <button class="btn btn-outline-secondary" @click="goNewCategory">Adicionar categoria</button>
             <button class="btn btn-primary" @click="goNewProduct">Adicionar produto</button>
             <button class="btn btn-outline-secondary" @click="showReorderModal = true" title="Reordenar categorias e produtos">
@@ -49,10 +49,10 @@
               </div>
 
                 <div class="category-actions">
-                  <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary me-2" @click.stop.prevent="editCategory(cat)" :aria-label="`Editar categoria ${cat.name || ''}`"><i class="bi bi-pencil me-1"></i>Editar</button>
-                  <button v-if="isAdmin" class="btn btn-sm btn-primary me-2" @click.stop.prevent="newProductForCategory(cat)" :aria-label="`Novo produto para ${cat.name || ''}`"><i class="bi bi-plus-circle me-1"></i>Novo produto</button>
-                  <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary me-2" @click.stop.prevent="duplicateCategory(cat)" :aria-label="`Duplicar categoria ${cat.name || ''}`"><i class="bi bi-files me-1"></i></button>
-                  <button v-if="isAdmin" class="btn btn-sm btn-danger" @click.stop.prevent="deleteCategory(cat)" :aria-label="`Excluir categoria ${cat.name || ''}`"><i class="bi bi-trash me-1"></i></button>
+                  <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary" @click.stop.prevent="editCategory(cat)" :aria-label="`Editar categoria ${cat.name || ''}`"><i class="bi bi-pencil me-1"></i>Editar</button>
+                  <button v-if="isAdmin" class="btn btn-sm btn-primary" @click.stop.prevent="newProductForCategory(cat)" :aria-label="`Novo produto para ${cat.name || ''}`"><i class="bi bi-plus-circle me-1"></i>Novo produto</button>
+                  <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary" @click.stop.prevent="duplicateCategory(cat)" :aria-label="`Duplicar categoria ${cat.name || ''}`"><i class="bi bi-files"></i></button>
+                  <button v-if="isAdmin" class="btn btn-sm btn-danger" @click.stop.prevent="deleteCategory(cat)" :aria-label="`Excluir categoria ${cat.name || ''}`"><i class="bi bi-trash"></i></button>
                 </div>
             </div>
 
@@ -89,7 +89,18 @@
                 <div class="product-card-body">
                   <h6 class="mb-1 product-title">{{ p.name }}</h6>
                   <div class="small text-muted product-desc">{{ p.description }}</div>
-                  <div v-if="p.image" class="ai-photo-cta mt-1">
+                  <div class="d-flex flex-wrap gap-1 mt-1">
+                    <span v-if="p.technicalSheet" class="badge bg-info text-dark stock-badge" :title="'Ficha técnica: ' + p.technicalSheet.name">
+                      <i class="bi bi-journal-text me-1"></i>{{ p.technicalSheet.name }}
+                    </span>
+                    <span v-if="p.stockIngredient" class="badge bg-warning text-dark stock-badge" :title="'Estoque: ' + p.stockIngredient.description">
+                      <i class="bi bi-box-seam me-1"></i>{{ p.stockIngredient.description }}
+                    </span>
+                  </div>
+                  <span v-if="p.imageAiEnhanced" class="badge bg-success-subtle text-success stock-badge mt-1">
+                    <i class="bi bi-stars me-1"></i>Otimizado por IA
+                  </span>
+                  <div v-else-if="p.image" class="ai-photo-cta mt-1">
                     <i class="bi bi-stars me-1"></i>
                     Otimize sua foto com IA — cardápios com fotos chamativas convertem até 60% a mais
                   </div>
@@ -100,9 +111,9 @@
                     <div class="price-pill">{{ formatCurrency(p.price) }}</div>
                   </div>
                   <div class="product-actions d-flex align-items-center" style="gap:8px">
-                    <button v-if="isAdmin" class="btn btn-sm btn-outline-primary" @click="edit(p)" :aria-label="`Editar ${p.name || 'produto'}`"><i class="bi bi-pencil me-1"></i></button>
+                    <button v-if="isAdmin" class="btn btn-sm btn-outline-primary" @click="edit(p)" :aria-label="`Editar ${p.name || 'produto'}`"><i class="bi bi-pencil"></i></button>
                     <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary" @click="duplicateProduct(p)" :aria-label="`Duplicar ${p.name || 'produto'}`" title="Duplicar"><i class="bi bi-files"></i></button>
-                    <button v-if="isAdmin" class="btn btn-sm btn-danger" @click="remove(p)" :aria-label="`Remover ${p.name || 'produto'}`"><i class="bi bi-trash me-1"></i></button>
+                    <button v-if="isAdmin" class="btn btn-sm btn-danger" @click="remove(p)" :aria-label="`Remover ${p.name || 'produto'}`"><i class="bi bi-trash"></i></button>
                   </div>
                 </div>
               </div>

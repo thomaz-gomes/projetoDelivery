@@ -6,7 +6,7 @@
 .product-title { font-size:1rem; font-weight:700 }
 .product-desc { color:#666; max-height:3.2em; overflow:hidden; text-overflow:ellipsis }
 .product-thumb { width:72px; flex:0 0 72px }
-.product-card-media { width:220px; flex:0 0 220px; display:flex; align-items:center; gap:12px }
+.product-card-media { flex:0 0 auto; display:flex; align-items:center; gap:12px }
 .admin-product-image { width:72px; height:72px; object-fit:cover; border-radius:8px }
 .admin-product-image-placeholder { width:72px; height:72px; border-radius:8px }
 .price-pill { background:#f5f6f7; padding:6px 10px; border-radius:999px; font-weight:700 }
@@ -14,9 +14,9 @@
 .category-list { display:flex; flex-direction:column; gap:12px }
 
 .category-box { background: #fff; border: 1px solid #eee; border-radius:12px; margin-bottom: 16px; overflow: hidden }
-.category-header { padding: 12px 16px; background:#f8f9fa; cursor: pointer }
+.category-header { padding: 12px 16px; background:#f8f9fa; cursor: pointer; overflow:hidden }
 .category-title { font-weight:700; font-size:1rem }
-.category-actions { display:flex; gap:8px }
+.category-actions { display:flex; gap:8px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end }
 .category-body { padding: 12px 16px; background: #fff }
 .category-toggle { width:34px; height:34px; border-radius:8px }
 .product-switch { width:40px; flex:0 0 40px }
@@ -67,6 +67,9 @@
 .option-row { background: #fff;  padding: 12px; margin-bottom: 8px; }
 .option-row .btn { margin-left: 8px; font-size:20px; 
     padding: 0px 10px; }
+
+/* Stock / technical sheet badges on product cards */
+.stock-badge { font-size:0.72rem; font-weight:500; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 
 /* smaller adjustments for mobile */
 @media (max-width: 575.98px) {

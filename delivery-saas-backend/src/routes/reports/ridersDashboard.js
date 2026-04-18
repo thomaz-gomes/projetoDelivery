@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
         rider: { select: { id: true, name: true } },
         histories: {
           where: {
-            to: { in: ['SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'RIDER_DELIVERED'] },
+            to: { in: ['SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO'] },
           },
           select: { to: true, createdAt: true },
           orderBy: { createdAt: 'asc' },
@@ -52,10 +52,9 @@ router.get('/', async (req, res) => {
       if (!order.rider) continue;
 
       const departed = order.histories.find(h => h.to === 'SAIU_PARA_ENTREGA');
-      // Prefer RIDER_DELIVERED (actual arrival) over CONFIRMACAO_PAGAMENTO/CONCLUIDO
+      // Prefer CONFIRMACAO_PAGAMENTO (rider confirmed at delivery) over CONCLUIDO
       // (iFood prepaid CONCLUIDO comes via webhook, not rider action)
-      const completed = order.histories.find(h => h.to === 'RIDER_DELIVERED')
-        || order.histories.find(h => h.to === 'CONFIRMACAO_PAGAMENTO')
+      const completed = order.histories.find(h => h.to === 'CONFIRMACAO_PAGAMENTO')
         || order.histories.find(h => h.to === 'CONCLUIDO');
 
       if (!departed || !completed) continue;

@@ -1032,6 +1032,7 @@ model Product {
   name                String
   description         String?
   technicalSheetId    String?
+  technicalSheet      TechnicalSheet?      @relation(fields: [technicalSheetId], references: [id])
   stockIngredientId   String?
   stockIngredient     Ingredient?          @relation("ProductStockIngredient", fields: [stockIngredientId], references: [id])
   price               Decimal              @default(0)
@@ -1605,7 +1606,8 @@ model TechnicalSheet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items TechnicalSheetItem[]
+  items    TechnicalSheetItem[]
+  products Product[]
 
   @@index([companyId, name], name: "company_technical_sheet_name_idx")
 }

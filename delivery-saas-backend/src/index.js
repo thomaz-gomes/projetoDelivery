@@ -431,6 +431,19 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+// Global error handler — ensures CORS headers are present even on unhandled errors
+app.use((err, req, res, _next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  }
+  console.error('Unhandled route error:', err);
+  res.status(err.status || 500).json({ message: err.message || 'Internal Server Error' });
+});
+
 // Socket.IO instance will be attached by server.js
 let io = null;
 

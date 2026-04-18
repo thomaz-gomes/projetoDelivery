@@ -126,14 +126,10 @@
                 <input type="number" class="form-control" v-model.number="form.grossAmount" step="0.01" min="0">
               </div>
               <div class="col-md-4">
-                <label class="form-label">Vencimento</label>
-                <input type="date" class="form-control" v-model="form.dueDate">
-              </div>
-              <div class="col-md-4">
                 <label class="form-label">Conta</label>
                 <SelectInput v-model="form.accountId" :options="accountOptions" optionValueKey="id" optionLabelKey="name" placeholder="Selecionar conta" />
               </div>
-              <div class="col-md-6">
+              <div class="col-md-4">
                 <label class="form-label">Centro de Custo</label>
                 <SelectInput v-model="form.costCenterId" :options="costCenterOptions" optionValueKey="id" optionLabelKey="label" placeholder="Selecionar" />
               </div>
@@ -150,6 +146,10 @@
                 <label class="form-label">Data da Compra</label>
                 <input type="date" class="form-control" v-model="form.purchaseDate">
               </div>
+              <div class="col-md-6" v-if="selectedMethodType !== 'CREDIT_CARD'">
+                <label class="form-label">Vencimento</label>
+                <input type="date" class="form-control" v-model="form.dueDate">
+              </div>
               <div class="col-md-4" v-if="selectedMethodType === 'CREDIT_CARD' || selectedMethodType === 'BOLETO'">
                 <label class="form-label">Parcelas</label>
                 <SelectInput v-model="form.installmentCount" :options="installmentOptions" />
@@ -158,12 +158,12 @@
                 <label class="form-label">Intervalo</label>
                 <SelectInput v-model="form.boletoTemplate" :options="boletoTemplateOptions" />
               </div>
-              <div class="col-12" v-if="form.payablePaymentMethodId && form.installmentCount > 1 && form.purchaseDate && form.grossAmount > 0">
+              <div class="col-12" v-if="form.payablePaymentMethodId && selectedMethodType !== 'CREDIT_CARD' && form.installmentCount > 1 && form.purchaseDate && form.grossAmount > 0">
                 <button type="button" class="btn btn-outline-primary btn-sm mb-2" @click="previewInstallments">
                   Calcular Parcelas
                 </button>
               </div>
-              <div class="col-12" v-if="installmentPreview.length > 1">
+              <div class="col-12" v-if="installmentPreview.length >= 1">
                 <h6>Parcelas</h6>
                 <table class="table table-sm">
                   <thead><tr><th>Parcela</th><th>Valor (R$)</th><th>Vencimento</th></tr></thead>
@@ -246,6 +246,12 @@ export default {
       return m?.type || null;
     },
   },
+  watch: {
+    'form.payablePaymentMethodId'() { this.autoPreviewCreditCard(); },
+    'form.purchaseDate'() { this.autoPreviewCreditCard(); },
+    'form.grossAmount'() { this.autoPreviewCreditCard(); },
+    'form.installmentCount'() { this.autoPreviewCreditCard(); },
+  },
   async mounted() {
     await Promise.all([this.load(), this.loadLookups()]);
   },
@@ -287,14 +293,29 @@ export default {
       this.load();
     },
     async createTransaction() {
-      if (!this.form.description || !this.form.grossAmount || !this.form.dueDate) {
-        alert('Preencha descrição, valor e vencimento');
+      const isCreditCard = this.selectedMethodType === 'CREDIT_CARD';
+      if (!this.form.description || !this.form.grossAmount) {
+        alert('Preencha descrição e valor');
+        return;
+      }
+      if (!isCreditCard && !this.form.dueDate) {
+        alert('Preencha a data de vencimento');
+        return;
+      }
+      if (isCreditCard && (!this.form.purchaseDate || !this.installmentPreview.length)) {
+        alert('Preencha a data da compra e calcule as parcelas');
         return;
       }
       this.saving = true;
       try {
         const payload = { ...this.form };
-        if (this.installmentPreview.length > 1) {
+        if (isCreditCard && this.installmentPreview.length) {
+          payload.installments = this.installmentPreview;
+          // Use first installment due date as the transaction dueDate
+          if (!payload.dueDate && this.installmentPreview[0]) {
+            payload.dueDate = this.installmentPreview[0].dueDate;
+          }
+        } else if (this.installmentPreview.length > 1) {
           payload.installments = this.installmentPreview;
         }
         await api.post('/financial/transactions', payload);
@@ -306,6 +327,12 @@ export default {
         alert(e.response?.data?.message || 'Erro ao criar');
       } finally {
         this.saving = false;
+      }
+    },
+    autoPreviewCreditCard() {
+      if (this.selectedMethodType === 'CREDIT_CARD' && this.form.purchaseDate && this.form.grossAmount > 0 && this.form.payablePaymentMethodId) {
+        clearTimeout(this._autoPreviewTimer);
+        this._autoPreviewTimer = setTimeout(() => this.previewInstallments(), 300);
       }
     },
     async previewInstallments() {
