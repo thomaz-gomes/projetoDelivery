@@ -126,7 +126,7 @@ router.post('/', async (req, res) => {
       type, description, accountId, costCenterId, gatewayConfigId,
       grossAmount, dueDate, sourceType, sourceId, notes,
       recurrence, installmentNumber, totalInstallments, parentTransactionId,
-      payablePaymentMethodId, installments,
+      payablePaymentMethodId, installments, supplierId,
     } = req.body;
 
     if (!type || !description || !grossAmount || !dueDate) {
@@ -146,6 +146,7 @@ router.post('/', async (req, res) => {
             costCenterId: costCenterId || null,
             gatewayConfigId: gatewayConfigId || null,
             payablePaymentMethodId: payablePaymentMethodId || null,
+            supplierId: supplierId || null,
             grossAmount: Number(grossAmount),
             feeAmount: 0,
             netAmount: Number(grossAmount),
@@ -185,6 +186,7 @@ router.post('/', async (req, res) => {
               costCenterId: costCenterId || null,
               gatewayConfigId: gatewayConfigId || null,
               payablePaymentMethodId: payablePaymentMethodId || null,
+              supplierId: supplierId || null,
               grossAmount: childGross,
               feeAmount: childFee,
               netAmount: childNet,
@@ -235,6 +237,7 @@ router.post('/', async (req, res) => {
         costCenterId: costCenterId || null,
         gatewayConfigId: gatewayConfigId || null,
         payablePaymentMethodId: payablePaymentMethodId || null,
+        supplierId: supplierId || null,
         grossAmount: Number(grossAmount),
         feeAmount,
         netAmount,

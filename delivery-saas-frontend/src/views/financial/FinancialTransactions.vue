@@ -133,11 +133,15 @@
                 <label class="form-label">Centro de Custo</label>
                 <SelectInput v-model="form.costCenterId" :options="costCenterOptions" optionValueKey="id" optionLabelKey="label" placeholder="Selecionar" />
               </div>
-              <div class="col-md-6">
+              <div class="col-md-4">
+                <label class="form-label">Fornecedor</label>
+                <SelectInput v-model="form.supplierId" :options="supplierOptions" optionValueKey="id" optionLabelKey="name" placeholder="Nenhum" />
+              </div>
+              <div class="col-md-4">
                 <label class="form-label">Operadora (taxas)</label>
                 <SelectInput v-model="form.gatewayConfigId" :options="gatewayOptions" optionValueKey="id" optionLabelKey="label" placeholder="Nenhuma (sem taxa)" />
               </div>
-              <div class="col-md-6">
+              <div class="col-md-4">
                 <label class="form-label">Forma de Pagamento</label>
                 <SelectInput v-model="form.payablePaymentMethodId" :options="paymentMethodOptions"
                   optionValueKey="id" optionLabelKey="name" placeholder="Nenhuma (avulso)" />
@@ -209,7 +213,7 @@ export default {
       showForm: false,
       saving: false,
       filters: { type: '', status: '', dueDateFrom: '', dueDateTo: '', sourceType: '' },
-      form: { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d' },
+      form: { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d', supplierId: '' },
       installmentPreview: [],
       installmentOptions: Array.from({ length: 24 }, (_, i) => ({ value: i + 1, label: `${i + 1}x` })),
       boletoTemplateOptions: [
@@ -222,6 +226,7 @@ export default {
       costCenters: [],
       gateways: [],
       paymentMethods: [],
+      suppliers: [],
       typeOptions: [{ value: 'PAYABLE', label: 'A Pagar' }, { value: 'RECEIVABLE', label: 'A Receber' }],
       statusOptions: [
         { value: 'PENDING', label: 'Pendente' }, { value: 'CONFIRMED', label: 'Confirmada' },
@@ -241,6 +246,7 @@ export default {
     costCenterOptions() { return this.costCenters.map(c => ({ id: c.id, label: `${c.code} - ${c.name}` })); },
     gatewayOptions() { return this.gateways.map(g => ({ id: g.id, label: `${g.provider} ${g.label || ''}`.trim() })); },
     paymentMethodOptions() { return this.paymentMethods.filter(m => m.isActive); },
+    supplierOptions() { return this.suppliers.filter(s => s.isActive); },
     selectedMethodType() {
       const m = this.paymentMethods.find(pm => pm.id === this.form.payablePaymentMethodId);
       return m?.type || null;
@@ -273,16 +279,18 @@ export default {
     },
     async loadLookups() {
       try {
-        const [acc, cc, gw, pm] = await Promise.all([
+        const [acc, cc, gw, pm, sup] = await Promise.all([
           api.get('/financial/accounts'),
           api.get('/financial/cost-centers', { params: { flat: 'true' } }),
           api.get('/financial/gateways'),
           api.get('/financial/payment-methods', { params: { activeOnly: 'true' } }),
+          api.get('/suppliers').catch(() => ({ data: [] })),
         ]);
         this.accounts = acc.data;
         this.costCenters = cc.data;
         this.gateways = gw.data;
         this.paymentMethods = pm.data;
+        this.suppliers = Array.isArray(sup.data) ? sup.data : (sup.data?.suppliers || []);
       } catch (e) {
         console.error('Failed to load lookups:', e);
       }
@@ -321,7 +329,7 @@ export default {
         await api.post('/financial/transactions', payload);
         this.showForm = false;
         this.installmentPreview = [];
-        this.form = { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d' };
+        this.form = { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d', supplierId: '' };
         await this.load();
       } catch (e) {
         alert(e.response?.data?.message || 'Erro ao criar');
