@@ -65,10 +65,8 @@
                 <option :value="null">-- Nenhuma --</option>
                 <option v-for="s in technicalSheets" :key="s.id" :value="s.id">{{ s.name }} ({{ s.itemCount || 0 }} itens)</option>
               </SelectInput>
-              <div class="small text-muted mt-1">
-                <div v-if="sheetCost !== undefined && sheetCost !== null">Custo da ficha: <strong>{{ sheetCost.toFixed(2) }}</strong></div>
-                <div v-if="cmvPercent !== null">CMV: <strong>{{ cmvPercent.toFixed(2) }}%</strong> (R$ {{ sheetCost.toFixed(2) }})</div>
-                <div v-else class="text-muted">Preencha o preço para ver o CMV</div>
+              <div v-if="sheetCost > 0" class="small text-muted mt-1">
+                Custo da ficha: <strong>R$ {{ sheetCost.toFixed(2) }}</strong>
               </div>
             </div>
             <div class="col-md-4">
@@ -87,10 +85,6 @@
               </SelectInput>
               <div class="small text-muted mt-1">Se selecionado, sobrescreve os dados fiscais da categoria</div>
             </div>
-          <div class="col-md-4">
-            <label class="form-label">Posição</label>
-            <input v-model.number="form.position" type="number" class="form-control" />
-          </div>
         </div>
 
         <!-- Disponibilidade e destaque -->
