@@ -157,16 +157,21 @@ technicalSheetsRouter.patch('/:id/items/:itemId', requireRole('ADMIN'), async (r
 
 // Items: delete
 technicalSheetsRouter.delete('/:id/items/:itemId', requireRole('ADMIN'), async (req, res) => {
-  const { id, itemId } = req.params;
-  const companyId = req.user.companyId;
-  const sheet = await prisma.technicalSheet.findFirst({ where: { id, companyId } });
-  if (!sheet) return res.status(404).json({ message: 'Ficha técnica não encontrada' });
+  try {
+    const { id, itemId } = req.params;
+    const companyId = req.user.companyId;
+    const sheet = await prisma.technicalSheet.findFirst({ where: { id, companyId } });
+    if (!sheet) return res.status(404).json({ message: 'Ficha técnica não encontrada' });
 
-  const existing = await prisma.technicalSheetItem.findUnique({ where: { id: itemId } });
-  if (!existing || existing.technicalSheetId !== id) return res.status(404).json({ message: 'Item não encontrado' });
+    const existing = await prisma.technicalSheetItem.findUnique({ where: { id: itemId } });
+    if (!existing || existing.technicalSheetId !== id) return res.status(404).json({ message: 'Item não encontrado' });
 
-  await prisma.technicalSheetItem.delete({ where: { id: itemId } });
-  res.json({ ok: true });
+    await prisma.technicalSheetItem.delete({ where: { id: itemId } });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE technical-sheet item error:', e);
+    res.status(500).json({ message: e.message || 'Erro ao remover item' });
+  }
 });
 
 // Duplicate a technical sheet and all its items (atomic).
