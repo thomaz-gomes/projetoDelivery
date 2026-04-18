@@ -439,7 +439,7 @@
                     <label class="form-label">Primeiro Vencimento</label>
                     <input v-model="firstDueDate" type="date" class="form-control form-control-sm" />
                   </div>
-                  <div class="col-md-2" v-if="selectedMethodType === 'BOLETO'">
+                  <div class="col-md-2" v-if="selectedMethodType === 'BOLETO' && installmentCount > 1">
                     <label class="form-label">Intervalo</label>
                     <select v-model="boletoTemplate" class="form-select form-select-sm">
                       <option value="7d">7 dias</option>
@@ -877,7 +877,7 @@ async function generateInstallments() {
       purchaseDate: firstDueDate.value || new Date().toISOString().substring(0, 10),
       grossAmount: calcTotal,
       totalAmount: calcTotal,
-      template: selectedMethodType.value === 'BOLETO' ? boletoTemplate.value : undefined,
+      template: selectedMethodType.value === 'BOLETO' && installmentCount.value > 1 ? boletoTemplate.value : undefined,
     })
     installments.value = (data.preview || []).map(i => ({
       ...i,
