@@ -14,6 +14,7 @@
       @blur="onBlur"
       @focus="onFocus"
       :value="displayValue"
+      :disabled="disabled"
       inputmode="decimal"
     />
   </div>
@@ -33,7 +34,8 @@ const props = defineProps({
   inputClass: { type: String, default: '' },
   // optional label support
   label: { type: String, default: null },
-  labelClass: { type: String, default: '' }
+  labelClass: { type: String, default: '' },
+  disabled: { type: Boolean, default: false },
 });
 const emit = defineEmits(['update:modelValue']);
 
