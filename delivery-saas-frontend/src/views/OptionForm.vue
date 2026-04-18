@@ -14,7 +14,11 @@
 
         <div class="row mb-3">
           <div class="col-md-3">
-            <CurrencyInput label="Preço" labelClass="form-label" v-model="form.price" inputClass="form-control" :min="0" placeholder="0,00" />
+            <CurrencyInput label="Preço" labelClass="form-label" v-model="effectivePrice" inputClass="form-control" :min="0" placeholder="0,00" :disabled="isLinked && !overridePrice" />
+            <div v-if="isLinked" class="form-check mt-1">
+              <input class="form-check-input" type="checkbox" id="overridePrice" v-model="overridePrice" />
+              <label class="form-check-label small text-muted" for="overridePrice">Usar preço personalizado</label>
+            </div>
           </div>
             <div class="col-md-3">
               <label class="form-label">Ficha Técnica (opcional)</label>
@@ -34,7 +38,7 @@
           </div>
           <div class="col-md-3 d-flex align-items-end">
             <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="optActive" v-model="form.isAvailable" />
+              <input class="form-check-input" type="checkbox" id="optActive" v-model="effectiveAvailable" :disabled="isLinked && !overrideAvailability" />
               <label class="form-check-label small text-muted" for="optActive">Disponível</label>
             </div>
           </div>
@@ -48,23 +52,68 @@
 
         <div class="mb-3">
           <label class="form-label">Vincular a produto (opcional)</label>
-          <SelectInput   v-model="form.linkedProductId"  class="form-select">
+          <SelectInput v-model="form.linkedProductId" class="form-select">
             <option :value="null">Nenhum</option>
             <option v-for="p in productsList" :key="p.id" :value="p.id">{{ p.name }}</option>
           </SelectInput>
-          <div v-if="form.linkedProductId" class="small text-muted mt-1">
-            Quando vinculada, a disponibilidade da opção segue a do produto vinculado.
+          <div v-if="isLinked" class="small text-muted mt-1">
+            Quando vinculada, preço, disponibilidade, horário e imagem herdam do produto vinculado. Marque as opções de personalização para usar valores próprios.
           </div>
         </div>
 
+        <!-- Availability scheduler: show linked product schedule (read-only) or own schedule -->
+        <div v-if="isLinked && !overrideAvailability" class="mb-3">
+          <div class="form-check mt-1 mb-2">
+            <input class="form-check-input" type="checkbox" id="overrideAvailability" v-model="overrideAvailability" />
+            <label class="form-check-label small text-muted" for="overrideAvailability">Usar horário personalizado</label>
+          </div>
+          <AvailabilityScheduler
+            v-if="linkedProduct && !linkedProduct.alwaysAvailable"
+            :alwaysAvailable="false"
+            :schedule="linkedProduct.weeklySchedule || []"
+            disabled
+          />
+          <div v-else class="small text-muted">Produto vinculado: sempre disponível</div>
+        </div>
+        <div v-else-if="isLinked && overrideAvailability" class="mb-3">
+          <div class="form-check mt-1 mb-2">
+            <input class="form-check-input" type="checkbox" id="overrideAvailability2" v-model="overrideAvailability" />
+            <label class="form-check-label small text-muted" for="overrideAvailability2">Usar horário personalizado</label>
+          </div>
+          <AvailabilityScheduler
+            v-model:alwaysAvailable="form.alwaysAvailable"
+            v-model:schedule="form.weeklySchedule"
+          />
+        </div>
         <AvailabilityScheduler
-          v-if="!form.linkedProductId"
+          v-else
           v-model:alwaysAvailable="form.alwaysAvailable"
           v-model:schedule="form.weeklySchedule"
         />
 
+        <!-- Image: show linked product image (read-only) or own image -->
         <div class="mb-3">
-          <MediaField v-model="form.image" label="Imagem da opção (opcional)" field-id="option-image" />
+          <div v-if="isLinked && !overrideImage">
+            <label class="form-label">Imagem (herdada do produto vinculado)</label>
+            <div v-if="linkedProduct && linkedProduct.image" class="mb-2">
+              <img :src="linkedProduct.image" alt="Imagem do produto" style="max-height: 120px; border-radius: 8px;" />
+            </div>
+            <div v-else class="small text-muted mb-2">Produto vinculado sem imagem.</div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="overrideImage" v-model="overrideImage" />
+              <label class="form-check-label small text-muted" for="overrideImage">Usar imagem própria</label>
+            </div>
+          </div>
+          <div v-else-if="isLinked && overrideImage">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="overrideImage2" v-model="overrideImage" />
+              <label class="form-check-label small text-muted" for="overrideImage2">Usar imagem própria</label>
+            </div>
+            <MediaField v-model="form.image" label="Imagem da opção" field-id="option-image" />
+          </div>
+          <div v-else>
+            <MediaField v-model="form.image" label="Imagem da opção (opcional)" field-id="option-image" />
+          </div>
         </div>
 
         <div class="d-flex justify-content-between align-items-center">
@@ -83,7 +132,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
@@ -108,6 +157,71 @@ const technicalSheets = ref([])
 const saving = ref(false)
 const error = ref('')
 
+// Override flags — when linked to a product, these control whether the option uses its own values
+const overridePrice = ref(false)
+const overrideImage = ref(false)
+const overrideAvailability = ref(false)
+
+const isLinked = computed(() => !!form.value.linkedProductId)
+const linkedProduct = computed(() => {
+  if (!form.value.linkedProductId) return null
+  return productsList.value.find(p => p.id === form.value.linkedProductId) || null
+})
+
+// Effective price: shows linked product price when no override, otherwise the option's own price
+const effectivePrice = computed({
+  get() {
+    if (isLinked.value && !overridePrice.value && linkedProduct.value) {
+      return Number(linkedProduct.value.price || 0)
+    }
+    return form.value.price
+  },
+  set(val) {
+    form.value.price = val
+  }
+})
+
+// Effective availability: shows linked product isActive when no override
+const effectiveAvailable = computed({
+  get() {
+    if (isLinked.value && !overrideAvailability.value && linkedProduct.value) {
+      return linkedProduct.value.isActive
+    }
+    return form.value.isAvailable
+  },
+  set(val) {
+    form.value.isAvailable = val
+  }
+})
+
+// When the user changes the linked product, reset overrides
+watch(() => form.value.linkedProductId, (newVal, oldVal) => {
+  if (newVal !== oldVal) {
+    overridePrice.value = false
+    overrideImage.value = false
+    overrideAvailability.value = false
+  }
+})
+
+// When disabling override, sync value from linked product
+watch(overridePrice, (val) => {
+  if (!val && linkedProduct.value) {
+    form.value.price = Number(linkedProduct.value.price || 0)
+  }
+})
+watch(overrideImage, (val) => {
+  if (!val) {
+    form.value.image = null
+  }
+})
+watch(overrideAvailability, (val) => {
+  if (!val && linkedProduct.value) {
+    form.value.isAvailable = linkedProduct.value.isActive
+    form.value.alwaysAvailable = linkedProduct.value.alwaysAvailable !== false
+    form.value.weeklySchedule = Array.isArray(linkedProduct.value.weeklySchedule) ? linkedProduct.value.weeklySchedule : []
+  }
+})
+
 const daysOfWeek = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 
 async function load(){
@@ -131,6 +245,19 @@ async function load(){
           technicalSheetId: o.technicalSheetId || null,
           highlightOnSlip: !!o.highlightOnSlip
         }
+        // Determine override states from saved data
+        if (o.linkedProductId && o.linkedProduct) {
+          const lp = o.linkedProduct
+          // Price override: if the option price differs from the product price, it was overridden
+          overridePrice.value = Number(o.price || 0) !== Number(lp.price || 0)
+          // Image override: if the option has its own image (different from product)
+          overrideImage.value = !!o.image && o.image !== lp.image
+          // Availability override: if the option has its own schedule different from the product
+          const sameAvailability = o.isAvailable === lp.isActive
+          const sameAlways = (o.alwaysAvailable !== false) === (lp.alwaysAvailable !== false)
+          const sameSchedule = JSON.stringify(o.weeklySchedule || []) === JSON.stringify(lp.weeklySchedule || [])
+          overrideAvailability.value = !(sameAvailability && sameAlways && sameSchedule)
+        }
       }
     } else if(groupId){
       // prefill groupId context if provided
@@ -147,31 +274,47 @@ async function save(){
   saving.value = true
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; saving.value = false; return }
-    if(isNaN(Number(form.value.price)) || Number(form.value.price) < 0){ error.value = 'Preço inválido'; saving.value = false; return }
+    if(isNaN(Number(effectivePrice.value)) || Number(effectivePrice.value) < 0){ error.value = 'Preço inválido'; saving.value = false; return }
+
+    // Resolve effective values before sending
+    const finalPrice = Number(effectivePrice.value || 0)
+    const finalAvailable = effectiveAvailable.value
+    const finalImage = isLinked.value && !overrideImage.value
+      ? (linkedProduct.value?.image || null)
+      : (form.value.image || null)
+
+    let finalAlwaysAvailable, finalWeeklySchedule
+    if (isLinked.value && !overrideAvailability.value && linkedProduct.value) {
+      finalAlwaysAvailable = linkedProduct.value.alwaysAvailable !== false
+      finalWeeklySchedule = finalAlwaysAvailable ? null : (linkedProduct.value.weeklySchedule || null)
+    } else {
+      finalAlwaysAvailable = !!form.value.alwaysAvailable
+      finalWeeklySchedule = finalAlwaysAvailable ? null : (form.value.weeklySchedule || null)
+    }
 
     const payload = {
       name: form.value.name,
       description: form.value.description,
       technicalSheetId: form.value.technicalSheetId || null,
-      price: Number(form.value.price || 0),
+      price: finalPrice,
       position: Number(form.value.position || 0),
-      isAvailable: !!form.value.isAvailable,
+      isAvailable: !!finalAvailable,
       highlightOnSlip: !!form.value.highlightOnSlip,
       linkedProductId: form.value.linkedProductId || null,
-      alwaysAvailable: !!form.value.alwaysAvailable,
-      weeklySchedule: form.value.linkedProductId || form.value.alwaysAvailable ? null : form.value.weeklySchedule,
+      alwaysAvailable: finalAlwaysAvailable,
+      weeklySchedule: finalWeeklySchedule,
+      image: finalImage,
     }
 
     if(isEdit){
-      if(form.value.image) payload.image = form.value.image
       await api.patch(`/menu/options/options/${id}`, payload)
       Swal.fire({ icon: 'success', text: 'Opção atualizada' })
     } else {
       if(!groupId){ await Swal.fire({ icon: 'warning', text: 'Grupo não especificado para a nova opção' }); saving.value = false; return }
       const res = await api.post(`/menu/options/${groupId}/options`, payload)
       const newId = res.data && res.data.id
-      if(form.value.image && newId){
-        try{ await api.patch(`/menu/options/options/${newId}`, { image: form.value.image }) }catch(e){ console.warn('image persist failed', e) }
+      if(finalImage && newId){
+        try{ await api.patch(`/menu/options/options/${newId}`, { image: finalImage }) }catch(e){ console.warn('image persist failed', e) }
       }
       Swal.fire({ icon: 'success', text: 'Opção criada' })
     }
@@ -195,7 +338,7 @@ function sheetTotalCost(sheet){
 }
 const sheetCost = computed(() => sheetTotalCost(selectedTechnicalSheet.value))
 const cmvPercent = computed(() => {
-  const price = Number(form.value.price || 0)
+  const price = Number(effectivePrice.value || 0)
   if(!price || price <= 0) return null
   return (sheetCost.value / price) * 100
 })

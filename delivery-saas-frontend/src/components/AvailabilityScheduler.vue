@@ -12,6 +12,7 @@
         :id="`always-${uid}`"
         :checked="alwaysAvailable"
         role="switch"
+        :disabled="disabled"
         @change="$emit('update:alwaysAvailable', $event.target.checked)"
       />
       <label class="form-check-label fw-semibold" :for="`always-${uid}`">
@@ -43,6 +44,7 @@
                 class="form-check-input"
                 type="checkbox"
                 v-model="localSchedule[idx].enabled"
+                :disabled="disabled"
                 @change="emitChange"
               />
             </td>
@@ -51,7 +53,7 @@
                 type="time"
                 class="form-control form-control-sm"
                 v-model="localSchedule[idx].from"
-                :disabled="!localSchedule[idx].enabled"
+                :disabled="disabled || !localSchedule[idx].enabled"
                 @change="emitChange"
               />
             </td>
@@ -60,7 +62,7 @@
                 type="time"
                 class="form-control form-control-sm"
                 v-model="localSchedule[idx].to"
-                :disabled="!localSchedule[idx].enabled"
+                :disabled="disabled || !localSchedule[idx].enabled"
                 @change="emitChange"
               />
             </td>
@@ -68,7 +70,7 @@
               <button
                 type="button"
                 class="btn btn-outline-secondary btn-sm"
-                :disabled="idx === 0"
+                :disabled="disabled || idx === 0"
                 @click="copyFromPrev(idx)"
                 title="Copiar horário do dia acima"
               >
@@ -88,6 +90,7 @@ import { ref, watch } from 'vue';
 const props = defineProps({
   alwaysAvailable: { type: Boolean, default: true },
   schedule: { type: Array, default: () => [] },
+  disabled: { type: Boolean, default: false },
 });
 const emit = defineEmits(['update:alwaysAvailable', 'update:schedule']);
 

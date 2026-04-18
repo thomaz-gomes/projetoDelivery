@@ -14,7 +14,7 @@ router.use(authMiddleware)
 router.get('/', async (req, res) => {
   const companyId = req.user.companyId
   try {
-    const rows = await prisma.optionGroup.findMany({ where: { companyId }, orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' }, include: { linkedProduct: { select: { id: true, name: true, isActive: true } } } } } })
+    const rows = await prisma.optionGroup.findMany({ where: { companyId }, orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' }, include: { linkedProduct: { select: { id: true, name: true, isActive: true, price: true, image: true, alwaysAvailable: true, weeklySchedule: true } } } } } })
     res.json(rows)
   } catch (e) {
     console.error('Error loading option groups', e)
@@ -143,15 +143,11 @@ router.post('/:groupId/options', requireRole('ADMIN'), async (req, res) => {
       data.technicalSheetId = technicalSheetId
     }
     if (linkedProductId) {
-      // Linked option inherits availability from the product; ignore schedule fields.
       data.linkedProductId = linkedProductId
-      data.alwaysAvailable = true
-      data.weeklySchedule = null
-    } else {
-      data.isAvailable = Boolean(isAvailable)
-      data.alwaysAvailable = alwaysAvailable !== false
-      data.weeklySchedule = alwaysAvailable === false ? (weeklySchedule || null) : null
     }
+    data.isAvailable = Boolean(isAvailable)
+    data.alwaysAvailable = alwaysAvailable !== false
+    data.weeklySchedule = alwaysAvailable === false ? (weeklySchedule || null) : null
 
     const created = await prisma.option.create({ data })
     return res.status(201).json(created)
@@ -196,18 +192,10 @@ router.patch('/options/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res)
 
     if (isAvailable !== undefined) data.isAvailable = Boolean(isAvailable)
 
-    if (nextLinkedProductId) {
-      // Linked option inherits availability from its product — clear own schedule.
-      if (alwaysAvailable !== undefined || weeklySchedule !== undefined) {
-        data.alwaysAvailable = true
-        data.weeklySchedule = null
-      }
-    } else {
-      if (alwaysAvailable !== undefined) data.alwaysAvailable = Boolean(alwaysAvailable)
-      data.weeklySchedule = alwaysAvailable !== undefined
-        ? (alwaysAvailable === false ? (weeklySchedule || null) : null)
-        : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule)
-    }
+    if (alwaysAvailable !== undefined) data.alwaysAvailable = Boolean(alwaysAvailable)
+    data.weeklySchedule = alwaysAvailable !== undefined
+      ? (alwaysAvailable === false ? (weeklySchedule || null) : null)
+      : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule)
 
     const updated = await prisma.option.update({ where: { id }, data })
     return res.json(updated)
@@ -222,7 +210,7 @@ router.get('/options/:id', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId
   try {
-    const opt = await prisma.option.findUnique({ where: { id }, include: { group: true, linkedProduct: { select: { id: true, name: true, isActive: true } } } })
+    const opt = await prisma.option.findUnique({ where: { id }, include: { group: true, linkedProduct: { select: { id: true, name: true, isActive: true, price: true, image: true, alwaysAvailable: true, weeklySchedule: true } } } })
     if (!opt || !opt.group || opt.group.companyId !== companyId) return res.status(404).json({ message: 'Opção não encontrada' })
     // strip group relation from response to avoid leaking internal group info
     const { group, ...rest } = opt
