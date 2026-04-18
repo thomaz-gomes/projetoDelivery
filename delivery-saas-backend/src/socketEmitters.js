@@ -229,6 +229,17 @@ export function emitirEntregadorOffline(companyId, riderId) {
   }
 }
 
+// ---- emit: goal-achieved ----
+export function emitirMetaAtingida(companyId, payload) {
+  if (!io) return;
+  if (!companyId) return;
+  try {
+    io.to(companyRoom(companyId)).emit('goal-achieved', payload);
+  } catch (e) {
+    console.warn('Falha ao emitir meta atingida:', e?.message || e);
+  }
+}
+
 // ---- emit: ifood:chat (to extension sockets only, scoped by company) ----
 export function emitirIfoodChat({ orderNumber, message, storeId, companyId }) {
   if (!io) {

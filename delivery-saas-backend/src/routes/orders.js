@@ -855,6 +855,14 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
       }
     } catch (e) { console.error('Failed to add rider transaction:', e?.message || e); }
 
+    // Check rider goals on order completion
+    if (status === 'CONCLUIDO' && updated.riderId) {
+      try {
+        const { checkGoalsOnEvent } = await import('../services/riderGoals.js');
+        await checkGoalsOnEvent('ORDER_COMPLETED', updated.riderId, updated.companyId);
+      } catch (e) { console.warn('[goals] check on order completion failed:', e?.message || e); }
+    }
+
     // If order was completed, attempt to track affiliate commission for coupon owner
     try {
       if (status === 'CONCLUIDO') {
@@ -951,6 +959,14 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
         })()
       }
     } catch (e) { console.error('Error while attempting to credit cashback on order status change:', e?.message || e); }
+
+    // Check rider goals on order cancellation
+    if (status === 'CANCELADO' && updated.riderId) {
+      try {
+        const { checkGoalsOnEvent } = await import('../services/riderGoals.js');
+        await checkGoalsOnEvent('ORDER_CANCELLED', updated.riderId, updated.companyId);
+      } catch (e) { console.warn('[goals] check on cancellation failed:', e?.message || e); }
+    }
 
     // Reversal of stock movement when order is cancelled (any prior state)
     if (status === 'CANCELADO' && existing.status !== 'CANCELADO') {

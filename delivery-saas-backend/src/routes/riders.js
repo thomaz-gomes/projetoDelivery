@@ -531,6 +531,12 @@ ridersRouter.post('/me/checkin', async (req, res) => {
     }
   });
 
+  // Check rider goals on check-in
+  try {
+    const { checkGoalsOnEvent } = await import('../services/riderGoals.js');
+    await checkGoalsOnEvent('CHECKIN', rider.id, companyId);
+  } catch (e) { console.warn('[goals] check on checkin failed:', e?.message || e); }
+
   res.status(201).json(checkin);
 });
 
