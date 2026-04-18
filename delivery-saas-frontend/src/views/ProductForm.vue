@@ -61,7 +61,7 @@
             </div>
             <div class="col-md-4">
               <label class="form-label">Ficha Técnica (opcional)</label>
-              <SelectInput v-model="form.technicalSheetId" class="form-control">
+              <SelectInput v-model="form.technicalSheetId" class="form-control" :disabled="!!form.stockIngredientId">
                 <option :value="null">-- Nenhuma --</option>
                 <option v-for="s in technicalSheets" :key="s.id" :value="s.id">{{ s.name }} ({{ s.itemCount || 0 }} itens)</option>
               </SelectInput>
@@ -70,6 +70,14 @@
                 <div v-if="cmvPercent !== null">CMV: <strong>{{ cmvPercent.toFixed(2) }}%</strong> (R$ {{ sheetCost.toFixed(2) }})</div>
                 <div v-else class="text-muted">Preencha o preço para ver o CMV</div>
               </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Ingrediente de Estoque (opcional)</label>
+              <SelectInput v-model="form.stockIngredientId" class="form-control" :disabled="!!form.technicalSheetId">
+                <option :value="null">-- Nenhum --</option>
+                <option v-for="i in stockIngredients" :key="i.id" :value="i.id">{{ i.description }} ({{ Number(i.currentStock || 0) }} un)</option>
+              </SelectInput>
+              <div class="small text-muted mt-1">Para produtos de revenda (1 vendido = 1 baixa)</div>
             </div>
             <div class="col-md-4">
               <label class="form-label">Dados Fiscais (opcional)</label>
@@ -155,7 +163,7 @@
         </div>
 
           <div :class="['tab-pane', activeTab === 'marketplace' ? 'show active' : '']" id="marketplace" role="tabpanel" aria-labelledby="tab-marketplace">
-            <MarketplaceTab :cmv="sheetCost" :initial="form.marketplace" @change="onMarketplaceChange" />
+            <MarketplaceTab :cmv="sheetCost" :store-price="Number(form.price || 0)" :initial="form.marketplace" @change="onMarketplaceChange" />
           </div>
 
           <div :class="['tab-pane', activeTab === 'pricing' ? 'show active' : '']" role="tabpanel">
@@ -207,13 +215,14 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [] })
+const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [] })
 const activeTab = ref('general')
 const cashbackEnabled = ref(false)
 const groups = ref([])
 const categories = ref([])
 const menus = ref([])
 const technicalSheets = ref([])
+const stockIngredients = ref([])
 const dadosFiscaisList = ref([])
 const saving = ref(false)
 const error = ref('')
@@ -274,6 +283,8 @@ async function load(){
     try{ const mr = await api.get('/menu/menus'); menus.value = mr.data || [] }catch(e){ menus.value = [] }
     // load technical sheets for select and CMV calc
     try{ const ts = await api.get('/technical-sheets'); technicalSheets.value = ts.data || [] }catch(e){ technicalSheets.value = [] }
+    // load stock ingredients for direct stock link (resale products)
+    try{ const si = await api.get('/ingredients'); stockIngredients.value = (si.data || []).filter(i => i.controlsStock && i.unit === 'UN') }catch(e){ stockIngredients.value = [] }
     // prefill category and menu if passed in query
     if(!isEdit){
       if(route.query.categoryId){ form.value.categoryId = route.query.categoryId }
@@ -306,7 +317,7 @@ async function save(){
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
     if(isEdit){
-      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
+      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
       if(form.value.marketplace) payload.marketplace = form.value.marketplace
       // include cashbackPercent when cashback module is enabled (allow null to clear)
       if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
@@ -326,7 +337,7 @@ async function save(){
         else { router.push({ path: '/menu/admin' }) }
       }
     } else {
-  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
+  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
   if(form.value.marketplace) payload.marketplace = form.value.marketplace
   if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       const res = await api.post('/menu/products', payload)
@@ -356,6 +367,10 @@ async function save(){
 onMounted(()=> load())
 
 // Reload categories when form.menuId changes, and clear stale categoryId selections
+// mutual exclusion: technicalSheet vs stockIngredient
+watch(() => form.value.technicalSheetId, (v) => { if (v) form.value.stockIngredientId = null })
+watch(() => form.value.stockIngredientId, (v) => { if (v) form.value.technicalSheetId = null })
+
 watch(() => form.value.menuId, async (newMenuId, oldMenuId) => {
   if(newMenuId === oldMenuId) return
   await loadCategories()
