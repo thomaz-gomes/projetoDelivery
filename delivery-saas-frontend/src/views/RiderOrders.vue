@@ -345,6 +345,10 @@ function formatMoney(v){ try{ return new Intl.NumberFormat('pt-BR',{style:'curre
 
 function hasDiscount(o) {
   if (!o) return false;
+  // Don't show "Cobrar" for prepaid/online orders — already paid
+  const pay = o.payload?.order?.payments || o.payload?.payments || o.payload?.payment || null;
+  const isPrepaid = pay && (pay.prepaid === true || (Array.isArray(pay.methods) && pay.methods.length > 0 && pay.methods.every(m => m.prepaid === true)));
+  if (isPrepaid) return false;
   return Number(o.couponDiscount || 0) > 0 || Number(o.discountMerchant || 0) > 0 ||
     Number(o.payload?.order?.total?.benefits || 0) > 0;
 }
