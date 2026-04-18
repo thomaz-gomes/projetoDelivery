@@ -15,7 +15,12 @@ router.get('/', async (req, res) => {
       page = 1, limit = 50,
     } = req.query;
 
-    const where = { companyId };
+    // Exclude parent/grouping transactions: they have totalInstallments > 1 but no installmentNumber.
+    // Only show actual installment children and non-installment (single) transactions.
+    const where = {
+      companyId,
+      NOT: { totalInstallments: { gt: 1 }, installmentNumber: null },
+    };
     if (type) where.type = type;
     if (status) where.status = status;
     if (accountId) where.accountId = accountId;
