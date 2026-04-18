@@ -141,6 +141,7 @@ model Company {
   riderCheckins    RiderCheckin[]
   riderBonusRules  RiderBonusRule[]
   checkinLocations CheckinLocation[]
+  riderGoals       RiderGoal[]
 
   // ---- Inbox / Messaging ----
   conversations Conversation[]
@@ -183,6 +184,8 @@ model Rider {
   position         RiderPosition?
   checkins         RiderCheckin[]
   shiftAssignments RiderShiftAssignment[]
+  goalAssignments  RiderGoalAssignment[]
+  goalAchievements RiderGoalAchievement[]
 }
 
 model Order {
@@ -794,10 +797,48 @@ enum RiderTransactionType {
   DAILY_RATE
   MANUAL_ADJUSTMENT
   EARLY_CHECKIN_BONUS
+  GOAL_REWARD
 }
 
 enum RiderBonusRuleType {
   EARLY_CHECKIN
+}
+
+enum GoalRuleType {
+  CANCELLATION_RATE
+  CODE_COMPLETION_RATE
+  CONSECUTIVE_CHECKINS
+  AVG_DELIVERY_TIME
+  DELIVERY_COUNT
+}
+
+enum GoalRuleOperator {
+  LTE
+  GTE
+}
+
+enum GoalScope {
+  GLOBAL
+  INDIVIDUAL
+}
+
+enum GoalPeriodType {
+  FIXED
+  WEEKLY
+  MONTHLY
+}
+
+enum GoalRewardType {
+  MONEY
+  CUSTOM
+  MONEY_AND_CUSTOM
+}
+
+enum GoalAchievementStatus {
+  PENDING_APPROVAL
+  APPROVED
+  CREDITED
+  REJECTED
 }
 
 model RiderAccount {
@@ -819,6 +860,61 @@ model RiderTransaction {
   date      DateTime // date of transaction (can be used for daily grouping)
   note      String?
   createdAt DateTime             @default(now())
+  goalAchievement  RiderGoalAchievement?
+}
+
+// ---- Rider Goals (Gamification) ----
+model RiderGoal {
+  id                String              @id @default(uuid())
+  companyId         String
+  company           Company             @relation(fields: [companyId], references: [id])
+  name              String
+  description       String?
+  ruleType          GoalRuleType
+  ruleOperator      GoalRuleOperator
+  ruleValue         Decimal
+  scope             GoalScope
+  periodType        GoalPeriodType
+  startDate         DateTime
+  endDate           DateTime?
+  rewardType        GoalRewardType
+  rewardAmount      Decimal?
+  rewardDescription String?
+  autoApprove       Boolean             @default(false)
+  active            Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  assignments       RiderGoalAssignment[]
+  achievements      RiderGoalAchievement[]
+
+  @@index([companyId, active])
+}
+
+model RiderGoalAssignment {
+  id       String    @id @default(uuid())
+  goalId   String
+  goal     RiderGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  riderId  String
+  rider    Rider     @relation(fields: [riderId], references: [id])
+
+  @@unique([goalId, riderId])
+}
+
+model RiderGoalAchievement {
+  id            String                @id @default(uuid())
+  goalId        String
+  goal          RiderGoal             @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  riderId       String
+  rider         Rider                 @relation(fields: [riderId], references: [id])
+  cycleStart    DateTime
+  cycleEnd      DateTime
+  achievedAt    DateTime              @default(now())
+  status        GoalAchievementStatus @default(PENDING_APPROVAL)
+  rewardAmount  Decimal?
+  transactionId String?               @unique
+  transaction   RiderTransaction?     @relation(fields: [transactionId], references: [id])
+
+  @@unique([goalId, riderId, cycleStart])
+  @@index([riderId, status])
 }
 
 // ---- Affiliate System ----
