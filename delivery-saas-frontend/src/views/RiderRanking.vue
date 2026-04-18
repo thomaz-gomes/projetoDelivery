@@ -1,54 +1,61 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import ListCard from '../components/ListCard.vue';
 
-const ranking = ref([]);
+const goals = ref([]);
+const achievements = ref([]);
 const loading = ref(false);
-const now = new Date();
-const filterFrom = ref(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10));
-const filterTo = ref(now.toISOString().slice(0, 10));
+
+const ruleTypeLabels = {
+  DELIVERY_COUNT: 'Entregas',
+  DELIVERY_STREAK: 'Sequência',
+  RATING: 'Avaliação',
+  PUNCTUALITY: 'Pontualidade',
+  ONLINE_TIME: 'Tempo Online',
+};
+
+const activeGoalsCount = computed(() => goals.value.length);
+
+const pendingApprovals = computed(() =>
+  achievements.value.filter(a => a.status === 'PENDING_APPROVAL').length
+);
+
+const achievementsThisMonth = computed(() => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  return achievements.value.filter(a => {
+    const d = new Date(a.createdAt);
+    return d.getFullYear() === y && d.getMonth() === m;
+  }).length;
+});
 
 async function load() {
   loading.value = true;
   try {
-    const { data } = await api.get('/riders/ranking', { params: { from: filterFrom.value, to: filterTo.value + 'T23:59:59' } });
-    ranking.value = data.ranking || data;
-  } catch (e) { console.error(e); }
-  finally { loading.value = false; }
-}
-
-function medalClass(pos) {
-  if (pos === 1) return 'bi-trophy-fill text-warning';
-  if (pos === 2) return 'bi-trophy-fill text-secondary';
-  if (pos === 3) return 'bi-trophy-fill text-bronze';
-  return '';
-}
-
-function fmt(val) {
-  if (val == null) return '-';
-  return Math.round(val) + '%';
+    const [goalsRes, achRes] = await Promise.all([
+      api.get('/riders/goals', { params: { active: true } }),
+      api.get('/riders/goals/achievements'),
+    ]);
+    goals.value = goalsRes.data;
+    achievements.value = achRes.data;
+  } catch (e) {
+    console.error(e);
+  } finally {
+    loading.value = false;
+  }
 }
 
 onMounted(load);
 </script>
 
 <template>
-  <ListCard title="Ranking de Entregadores" icon="bi-trophy" subtitle="Classificacao por desempenho no periodo">
-    <template #filters>
-      <div class="d-flex flex-wrap gap-2 align-items-end">
-        <div>
-          <label class="form-label mb-1 small">De</label>
-          <input type="date" class="form-control form-control-sm" v-model="filterFrom" />
-        </div>
-        <div>
-          <label class="form-label mb-1 small">Ate</label>
-          <input type="date" class="form-control form-control-sm" v-model="filterTo" />
-        </div>
-        <button class="btn btn-primary btn-sm" @click="load" :disabled="loading">
-          <i class="bi-search me-1"></i>Filtrar
-        </button>
-      </div>
+  <ListCard title="Ranking / Metas" icon="bi-trophy" subtitle="Visão geral das metas de entregadores">
+    <template #actions>
+      <router-link to="/settings/rider-goals" class="btn btn-primary btn-sm">
+        <i class="bi-bullseye me-1"></i>Gerenciar Metas
+      </router-link>
     </template>
 
     <div v-if="loading" class="text-center py-4">
@@ -56,44 +63,70 @@ onMounted(load);
       <span class="ms-2 text-muted">Carregando...</span>
     </div>
 
-    <div v-else-if="!ranking.length" class="text-center text-muted py-4">
-      Nenhum entregador encontrado no periodo.
-    </div>
+    <template v-else>
+      <!-- Summary cards -->
+      <div class="stat-grid mb-4 px-3 pt-3">
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--primary"><i class="bi-flag"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Metas Ativas</div>
+            <div class="stat-value">{{ activeGoalsCount }}</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--warning"><i class="bi-hourglass-split"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Aprovações Pendentes</div>
+            <div class="stat-value">{{ pendingApprovals }}</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--success"><i class="bi-trophy"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Conquistas Este Mês</div>
+            <div class="stat-value">{{ achievementsThisMonth }}</div>
+          </div>
+        </div>
+      </div>
 
-    <div v-else class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead>
-          <tr>
-            <th style="width:50px">#</th>
-            <th>Nome</th>
-            <th class="text-center">Entregas</th>
-            <th class="text-center">Tempo Medio</th>
-            <th class="text-center">Pontualidade</th>
-            <th class="text-center">Codigo iFood</th>
-            <th class="text-center">Conclusao</th>
-            <th class="text-center">Score</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(r, i) in ranking" :key="r.riderId">
-            <td>
-              <i v-if="medalClass(i + 1)" :class="medalClass(i + 1)" style="font-size:1.2rem"></i>
-              <span v-else class="fw-semibold">{{ i + 1 }}</span>
-            </td>
-            <td class="fw-semibold">{{ r.riderName }}</td>
-            <td class="text-center">{{ r.totalDeliveries }}</td>
-            <td class="text-center">{{ r.avgDeliveryTime != null ? Math.round(r.avgDeliveryTime) + ' min' : '-' }}</td>
-            <td class="text-center">{{ fmt(r.punctualityRate) }}</td>
-            <td class="text-center">{{ fmt(r.ifoodCodeRate) }}</td>
-            <td class="text-center">{{ fmt(r.completionRate) }}</td>
-            <td class="text-center fw-bold">{{ r.score != null ? Math.round(r.score) : '-' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+      <!-- Goals overview -->
+      <div v-if="!goals.length" class="text-center text-muted py-4">
+        Nenhuma meta ativa encontrada.
+      </div>
+
+      <div v-else class="px-3 pb-3">
+        <h6 class="text-muted mb-3" style="font-size:0.85rem; font-weight:600;">Metas Ativas</h6>
+        <div class="row g-3">
+          <div v-for="goal in goals" :key="goal.id" class="col-12 col-md-6 col-xl-4">
+            <div class="card h-100" style="border: 1px solid var(--border-color-soft);">
+              <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-2">
+                  <h6 class="mb-0 fw-semibold" style="font-size:0.95rem;">{{ goal.name }}</h6>
+                  <span class="badge bg-primary ms-2" style="font-size:0.72rem;">
+                    {{ ruleTypeLabels[goal.ruleType] || goal.ruleType }}
+                  </span>
+                </div>
+                <div class="d-flex gap-2 mb-2">
+                  <span class="badge" :class="goal.scope === 'GLOBAL' ? 'bg-info' : 'bg-light text-dark'" style="font-size:0.72rem;">
+                    {{ goal.scope === 'GLOBAL' ? 'Global' : 'Individual' }}
+                  </span>
+                </div>
+                <div class="d-flex align-items-center justify-content-between" style="font-size:0.85rem;">
+                  <span class="text-muted">
+                    <i class="bi-gift me-1"></i>
+                    <template v-if="goal.rewardType === 'BONUS'">Bônus R$ {{ Number(goal.rewardValue || 0).toFixed(2) }}</template>
+                    <template v-else-if="goal.rewardType === 'BADGE'">Badge</template>
+                    <template v-else>{{ goal.rewardType }}</template>
+                  </span>
+                  <span class="fw-semibold" style="color: var(--primary);">
+                    <i class="bi-award me-1"></i>{{ goal._count?.achievements ?? 0 }} conquistas
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
   </ListCard>
 </template>
-
-<style scoped>
-.text-bronze { color: #cd7f32; }
-</style>
