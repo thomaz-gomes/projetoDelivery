@@ -61,10 +61,13 @@
                   <td>{{ item.menu?.name || '—' }}</td>
                   <td>{{ item.category?.name || '—' }}</td>
                   <td>
-                    <span class="badge bg-primary font-monospace" style="font-size: 0.82rem;">{{ item.integrationCode || '—' }}</span>
-                    <button v-if="item.integrationCode" class="btn btn-sm btn-link p-0 ms-2" @click="copy(item.integrationCode)" title="Copiar">
-                      <i class="bi bi-clipboard"></i>
-                    </button>
+                    <template v-if="item.integrationCode">
+                      <code class="integration-code">{{ item.integrationCode }}</code>
+                      <button class="btn btn-sm btn-link p-0 ms-2" @click="copy(item.integrationCode)" title="Copiar">
+                        <i class="bi bi-clipboard"></i>
+                      </button>
+                    </template>
+                    <span v-else class="text-muted">—</span>
                   </td>
                 </tr>
               </tbody>
@@ -93,16 +96,19 @@
                   </td>
                   <td>{{ opt.group?.name || '—' }}</td>
                   <td>
-                    <span class="badge bg-secondary font-monospace" style="font-size: 0.82rem;">{{ opt.integrationCode || '—' }}</span>
-                    <button v-if="opt.integrationCode" class="btn btn-sm btn-link p-0 ms-2" @click="copy(opt.integrationCode)" title="Copiar">
-                      <i class="bi bi-clipboard"></i>
-                    </button>
+                    <template v-if="opt.integrationCode">
+                      <code class="integration-code">{{ opt.integrationCode }}</code>
+                      <button class="btn btn-sm btn-link p-0 ms-2" @click="copy(opt.integrationCode)" title="Copiar">
+                        <i class="bi bi-clipboard"></i>
+                      </button>
+                    </template>
+                    <span v-else class="text-muted">—</span>
                   </td>
                   <td>
                     <div v-if="opt.associatedProducts && opt.associatedProducts.length > 0">
                       <div v-for="p in opt.associatedProducts" :key="p.id" class="mb-1">
                         <span class="small">{{ p.name }}</span>
-                        <span v-if="p.specificCode" class="badge bg-dark font-monospace ms-1" style="font-size: 0.78rem;">{{ p.specificCode }}</span>
+                        <code v-if="p.specificCode" class="integration-code integration-code--dark ms-1">{{ p.specificCode }}</code>
                         <button v-if="p.specificCode" class="btn btn-sm btn-link p-0 ms-1" @click="copy(p.specificCode)" title="Copiar código específico">
                           <i class="bi bi-clipboard"></i>
                         </button>
@@ -233,7 +239,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.font-monospace {
+.integration-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace;
+  font-size: 0.85rem;
+  background: var(--bg-input, #f8f9fa);
+  color: var(--primary, #105784);
+  padding: 0.2em 0.55em;
+  border-radius: var(--border-radius-sm, 0.625rem);
+  border: 1px solid var(--border-color, #e6e6e6);
+  white-space: nowrap;
+}
+.integration-code--dark {
+  background: #2b2d31;
+  color: #e9ecef;
+  border-color: #2b2d31;
 }
 </style>
