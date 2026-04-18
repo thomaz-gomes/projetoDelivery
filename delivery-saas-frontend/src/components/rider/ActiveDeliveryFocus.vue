@@ -13,6 +13,16 @@ function formatMoney(v) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
 }
 
+function hasDiscount(o) {
+  if (!o) return false;
+  return Number(o.couponDiscount || 0) > 0 || Number(o.discountMerchant || 0) > 0 ||
+    Number(o.payload?.order?.total?.benefits || 0) > 0;
+}
+
+function customerCharge(o) {
+  return Number(o?.total || 0);
+}
+
 const address = computed(() => {
   const o = props.order;
   if (!o) return '';
@@ -89,6 +99,10 @@ const mapsUrl = computed(() => {
       <div class="adf__total">
         <span>Total:</span>
         <span class="fw-bold">{{ formatMoney(order.total) }}</span>
+      </div>
+      <div v-if="hasDiscount(order)" class="adf__total" style="font-size: 0.85rem; color: var(--success-dark, #6DAE1E);">
+        <span>Cobrar:</span>
+        <span class="fw-bold">{{ formatMoney(customerCharge(order)) }}</span>
       </div>
     </div>
 

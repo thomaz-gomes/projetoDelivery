@@ -33,6 +33,9 @@
               </div>
               <div class="text-end">
                 <div class="fw-bold text-success">{{ formatMoney(o.total) }}</div>
+                <div v-if="hasDiscount(o)" style="font-size: 0.72rem; color: var(--success-dark, #6DAE1E); font-weight: 600;">
+                  Cobrar: {{ formatMoney(customerCharge(o)) }}
+                </div>
                 <div class="text-muted" style="font-size: 0.7rem">{{ formatDate(o.createdAt) }}</div>
               </div>
             </div>
@@ -133,6 +136,13 @@
         <div class="mb-3">
           <div class="fw-semibold mb-1">Pagamento</div>
           <div class="text-muted">{{ formatPayment(selectedOrder) }}</div>
+        </div>
+        <div class="mb-3">
+          <div class="fw-semibold mb-1">Total</div>
+          <div class="fw-bold text-success">{{ formatMoney(selectedOrder.total) }}</div>
+          <div v-if="hasDiscount(selectedOrder)" style="font-size: 0.82rem; color: var(--success-dark, #6DAE1E); font-weight: 600;">
+            Cobrar do cliente: {{ formatMoney(customerCharge(selectedOrder)) }}
+          </div>
         </div>
         <div class="mb-3">
           <div class="fw-semibold mb-1">Itens</div>
@@ -332,6 +342,17 @@ function externalOpenScannerHandler(){
 }
 
 function formatMoney(v){ try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0)) }catch(e){ return v } }
+
+function hasDiscount(o) {
+  if (!o) return false;
+  return Number(o.couponDiscount || 0) > 0 || Number(o.discountMerchant || 0) > 0 ||
+    Number(o.payload?.order?.total?.benefits || 0) > 0;
+}
+
+function customerCharge(o) {
+  // o.total is the amount the customer actually pays (discounts already subtracted)
+  return Number(o?.total || 0);
+}
 function statusLabel(s) {
   const map = { PENDENTE_ACEITE: 'Pendente', EM_PREPARO: 'Em Preparo', PRONTO: 'Pronto', SAIU_PARA_ENTREGA: 'Em Entrega', CONFIRMACAO_PAGAMENTO: 'Aguardando Pgto' }
   return map[s] || s

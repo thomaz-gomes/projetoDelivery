@@ -256,9 +256,13 @@ export function determineStatusFromIFoodEvent(payload, orderObj) {
   if (code === 'CONFIRMED' || code === 'CFM') return 'EM_PREPARO';
   if (code === 'DISPATCHED' || code === 'DSP') return 'SAIU_PARA_ENTREGA';
   if (code === 'CONCLUDED' || code === 'CON') {
-    // iFood CONCLUDED means the order was confirmed via delivery code or system —
-    // always move to CONCLUIDO regardless of payment type
-    return 'CONCLUIDO';
+    // iFood CONCLUDED means the order was confirmed via delivery code or system.
+    // For COD (cash on delivery) orders, the rider still needs to report payment —
+    // route to CONFIRMACAO_PAGAMENTO so the operator confirms the cash was collected.
+    // NOTE: orderObj may come from lightweight polling events without payment data.
+    // When payment info is unavailable, return CONCLUIDO and let upsertOrder
+    // downgrade to CONFIRMACAO_PAGAMENTO using the full DB order payload.
+    return isPaymentOnline(orderObj) ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
   }
   if (code === 'READY_TO_PICKUP' || code === 'RTP') {
     // If this is a TAKEOUT/PICKUP order, READY_TO_PICKUP means the order is
@@ -419,8 +423,38 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
   try {
     const updateData = Object.assign({}, baseData);
     // Determine whether we should change the status
-    const incomingStatus = mapped.status || null;
+    let incomingStatus = mapped.status || null;
     const currentStatus = exists.status || null;
+
+    // iFood CONCLUDED on a COD order: rider still needs to report payment.
+    // determineStatusFromIFoodEvent may have used the lightweight event payload
+    // (which can lack payment data), so re-check using the full DB order payload.
+    // - CONCLUIDO + COD → downgrade to CONFIRMACAO_PAGAMENTO
+    // - CONFIRMACAO_PAGAMENTO + prepaid → upgrade to CONCLUIDO (event had no payment data)
+    // - CONFIRMACAO_PAGAMENTO already + COD CONCLUDED → same status, no-op (operator must confirm)
+    if (incomingStatus === 'CONCLUIDO' || incomingStatus === 'CONFIRMACAO_PAGAMENTO') {
+      try {
+        const existingPayload = typeof exists.payload === 'string' ? JSON.parse(exists.payload) : exists.payload;
+        const pm = existingPayload?.order?.payments || existingPayload?.payments || existingPayload?.payment || null;
+        let online = false;
+        if (pm) {
+          if (Array.isArray(pm)) {
+            online = pm.some(p => String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
+          } else if (pm.methods && Array.isArray(pm.methods)) {
+            online = pm.methods.some(p => (p.prepaid === true) || String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
+          } else {
+            online = String(pm.method || pm.methodCode || '').toUpperCase().includes('ONLINE');
+          }
+        }
+        const correctStatus = online ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
+        if (incomingStatus !== correctStatus) {
+          console.log(`[iFood Processor] payment check corrected status: ${incomingStatus} → ${correctStatus} (online=${online}) order:`, exists.id);
+          incomingStatus = correctStatus;
+        }
+      } catch (e) {
+        console.warn('[iFood Processor] failed to check payment method on CONCLUDED:', e?.message);
+      }
+    }
     let statusChanged = false;
     let from = null;
     let to = null;

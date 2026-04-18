@@ -3408,8 +3408,12 @@ function pulseButton() {
                 <!-- Row 4: time + total + actions -->
                  <div class="d-flex justify-content-between">
                   <span class="oc-time">{{ getCreatedDurationDisplay(o) }}</span>
-                  
-                  <span class="oc-total">{{ formatCurrency(storeRevenue(o)) }}</span></div>
+                  <span class="text-end">
+                    <span class="oc-total">{{ formatCurrency(storeRevenue(o)) }}</span>
+                    <div v-if="Number(normalizeOrder(o).couponDiscount || 0) > 0 || Number(o.discountMerchant || 0) > 0" class="small" style="color: var(--success-dark); font-size: 0.7rem; font-weight: 600;">
+                      Cobrar: {{ formatCurrency(Number(o.total || 0)) }}
+                    </div>
+                  </span></div>
                 <div class="oc-footer">
                   <span v-if="isIfoodOrder(o)" title="Pedido iFood">
                     <img src="https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png" alt="iFood" style="width:24px;height:24px;object-fit:contain;margin-right:4px;vertical-align:-2px;" />
@@ -3670,6 +3674,12 @@ function pulseButton() {
               <div class="od-pay-row od-pay-total">
                 <span class="od-pay-label">Total faturado</span>
                 <span class="od-pay-value">{{ formatCurrency(storeRevenue(selectedOrder || {})) }}</span>
+              </div>
+              <div class="od-pay-row" v-if="selectedNormalized?.couponDiscount > 0 || Number(selectedOrder?.discountMerchant || 0) > 0">
+                <span class="od-pay-label" style="color: var(--success-dark); font-weight: 600;">
+                  <i class="bi bi-cash-coin me-1"></i>Cobrar do cliente
+                </span>
+                <span class="od-pay-value" style="color: var(--success-dark); font-weight: 700;">{{ formatCurrency(Number(selectedOrder?.total || 0)) }}</span>
               </div>
             </div>
           </div>
