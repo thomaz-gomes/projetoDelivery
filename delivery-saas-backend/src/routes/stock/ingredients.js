@@ -409,7 +409,11 @@ ingredientsRouter.delete('/:id', requireRole('ADMIN'), async (req, res) => {
   const usedInComposites = await prisma.compositeIngredientItem.findFirst({ where: { ingredientId: id } });
   if (usedInComposites) return res.status(400).json({ message: 'Ingrediente usado em insumos compostos; remova referências antes' });
 
+  const usedInProducts = await prisma.product.findFirst({ where: { stockIngredientId: id } });
+  if (usedInProducts) return res.status(400).json({ message: 'Ingrediente vinculado a produtos; remova o vínculo antes' });
+
   await prisma.$transaction(async (tx) => {
+    await tx.stockMovementItem.deleteMany({ where: { ingredientId: id } });
     await tx.compositeIngredientItem.deleteMany({ where: { compositeId: id } });
     await tx.ingredient.delete({ where: { id } });
   });
