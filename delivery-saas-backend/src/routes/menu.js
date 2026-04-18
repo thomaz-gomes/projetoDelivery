@@ -381,8 +381,18 @@ router.get('/products', async (req, res) => {
   // support filtering by menuId
   const { menuId } = req.query
   if (menuId) where.menuId = menuId
-  const rows = await prisma.product.findMany({ where, orderBy: { position: 'asc' }, include: { menu: { select: { name: true } }, category: { select: { name: true } }, technicalSheet: { select: { id: true, name: true } }, stockIngredient: { select: { id: true, description: true } } } })
-  res.json(rows)
+  const rows = await prisma.product.findMany({ where, orderBy: { position: 'asc' }, include: { menu: { select: { name: true } }, category: { select: { name: true } }, technicalSheet: { select: { id: true, name: true } } } })
+
+  // Enrich products with aiEnhanced flag from Media table
+  const imageUrls = rows.filter(r => r.image).map(r => r.image)
+  let aiEnhancedMap = {}
+  if (imageUrls.length) {
+    const mediaRows = await prisma.media.findMany({ where: { companyId, url: { in: imageUrls }, aiEnhanced: true }, select: { url: true } })
+    for (const m of mediaRows) aiEnhancedMap[m.url] = true
+  }
+  const enriched = rows.map(r => ({ ...r, imageAiEnhanced: r.image ? (aiEnhancedMap[r.image] || false) : false }))
+
+  res.json(enriched)
 })
 
 router.post('/products', requireRole('ADMIN'), async (req, res) => {

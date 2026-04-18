@@ -58,10 +58,6 @@
                 <td class="text-end">{{ formatPercent(data.taxBreakdown.otherFees) }}</td>
               </tr>
               <tr>
-                <td>Marketplace</td>
-                <td class="text-end">{{ formatPercent(data.taxBreakdown?.marketplaceFee) }}</td>
-              </tr>
-              <tr>
                 <td>Cartão</td>
                 <td class="text-end">{{ formatPercent(data.taxBreakdown?.cardFee) }}</td>
               </tr>

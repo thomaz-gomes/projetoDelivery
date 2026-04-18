@@ -97,7 +97,10 @@
                       <i class="bi bi-box-seam me-1"></i>{{ p.stockIngredient.description }}
                     </span>
                   </div>
-                  <div v-if="p.image" class="ai-photo-cta mt-1">
+                  <span v-if="p.imageAiEnhanced" class="badge bg-success-subtle text-success stock-badge mt-1">
+                    <i class="bi bi-stars me-1"></i>Otimizado por IA
+                  </span>
+                  <div v-else-if="p.image" class="ai-photo-cta mt-1">
                     <i class="bi bi-stars me-1"></i>
                     Otimize sua foto com IA — cardápios com fotos chamativas convertem até 60% a mais
                   </div>
