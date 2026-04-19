@@ -18,7 +18,8 @@
 
     <!-- Hero banner -->
   <div class="public-hero position-relative text-white" ref="heroRef">
-    <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)'}" style="position:absolute;inset:0"></div>
+    <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center'}" style="position:absolute;inset:0"></div>
+    <div class="hero-gradient"></div>
     <!-- Top navigation overlay (desktop + mobile) -->
     <header class="top-public-nav position-absolute w-100" style="top:0;left:0;z-index:1015">
       <div class="container d-flex justify-content-end align-items-center p-4">
@@ -82,37 +83,44 @@
 
     <!-- Overlapping white panel with company info, delivery toggle and calc box -->
     <div class="hero-panel container">
-      <div class="d-flex align-items-start justify-content-between gap-3">
-        <div class="d-flex align-items-start gap-3">
-          <div class="company-logo-wrapper d-flex d-md-none d-lg-flex align-items-center justify-content-center">
-            <img :src="assetUrl(menu?.logo || company?.logo || 'default-logo.svg')" alt="logo" class="company-logo" />
-          </div>
-          <div>
-            <h3 class="company-name">{{ displayName }}</h3>
-            <div class="small company-address text-muted">{{ displayPickup || '' }}</div>
-            <div class="small"><a href="#" class="text-muted more-information" @click.prevent="openInfoModal">Mais informações</a></div>
-              <div class="d-flex align-items-center gap-2 mb-1">
-                      <div class="store-closed-panel d-flex align-items-center">
-                        <span v-if="isOpen" class="badge bg-primary">{{ openUntilText || ('Aberto — Horário: ' + companyHoursText) }}</span>
-                        <span v-else class="badge bg-secondary bg-danger">Fechado no momento{{ nextOpenText ? (', ' + nextOpenText) : '' }}</span>
-                    
-                      </div>
-              <div>
-           
-          </div>
-
+      <div class="d-flex align-items-start gap-3">
+        <div class="company-logo-wrapper d-flex align-items-center justify-content-center">
+          <img :src="assetUrl(menu?.logo || company?.logo || 'default-logo.svg')" alt="logo" class="company-logo" />
         </div>
-
-        <div class="d-flex align-items-center gap-2">
-            <span v-if="(menu?.allowDelivery ?? true)" class="badge bg-secondary me-1">Entrega</span>
-            <span v-if="(menu?.allowPickup ?? true)" class="badge bg-secondary">Retirada</span>
-            </div>
-
+        <div style="flex:1;min-width:0">
+          <h3 class="company-name">{{ displayName }}</h3>
+          <div class="small company-subtitle">{{ displayPickup || '' }}</div>
+          <div class="small"><a href="#" class="more-info-link" @click.prevent="openInfoModal">Mais informações <i class="bi bi-chevron-right" style="font-size:10px"></i></a></div>
+          <div class="d-flex align-items-center gap-2 mt-2">
+            <span :class="['status-pill', isOpen ? 'open' : 'closed']">
+              <span :class="['status-dot', isOpen ? 'open' : 'closed']"></span>
+              <span v-if="isOpen">Aberto agora</span>
+              <span v-else>Fechado{{ nextOpenText ? (' · ' + nextOpenText) : '' }}</span>
+            </span>
+          </div>
+          <div class="d-flex align-items-center gap-2 mt-2">
+            <span v-if="(menu?.allowDelivery ?? true)" class="service-tag">Entrega</span>
+            <span v-if="(menu?.allowPickup ?? true)" class="service-tag">Retirada</span>
           </div>
         </div>
-        
       </div>
-      
+
+      <div class="delivery-stats">
+        <div class="delivery-stat">
+          <div class="delivery-stat-label"><i class="bi bi-clock me-1"></i>Entrega</div>
+          <div class="delivery-stat-value">{{ menu?.estimatedDeliveryTime || '30-45 min' }}</div>
+        </div>
+        <div class="delivery-stat-divider"></div>
+        <div class="delivery-stat">
+          <div class="delivery-stat-label"><i class="bi bi-bicycle me-1"></i>Taxa</div>
+          <div class="delivery-stat-value">{{ menu?.deliveryFee ? formatCurrency(menu.deliveryFee) : 'Variável' }}</div>
+        </div>
+        <div class="delivery-stat-divider"></div>
+        <div class="delivery-stat">
+          <div class="delivery-stat-label"><i class="bi bi-info-circle me-1"></i>Mínimo</div>
+          <div class="delivery-stat-value">{{ menu?.minimumOrder ? formatCurrency(menu.minimumOrder) : '—' }}</div>
+        </div>
+      </div>
     </div>
     <!-- Catalog mode: fixed WhatsApp bar (mobile) -->
   <div v-if="isCatalogMode && !modalOpen" class="mobile-cart-bar d-lg-none d-flex justify-content-center align-items-center px-3 py-2" style="background:#fff; border-top:1px solid rgba(0,0,0,0.06); z-index:1070; bottom:0">
@@ -122,20 +130,11 @@
   </div>
 
     <!-- Mobile compact cart bar (visible on small screens) -->
-  <div v-if="!isCatalogMode && cart.length > 0 && !cartModalOpen && !modalOpen && !checkoutModalOpen" class="mobile-cart-bar d-lg-none d-flex justify-content-between align-items-center px-3 py-2" style="background:#fff; border-top:1px solid rgba(0,0,0,0.06); z-index:1070">
-      <div>
-        <strong>{{ formatCurrency(subtotal) }}</strong> / {{ cart.length }} item{{ cart.length>1 ? 's' : '' }}
-        <div class="small text-muted">Total sem entrega</div>
-      </div>
-      <div>
-        <template v-if="isOpen">
-          <button class="btn btn-primary btn-sm" @click="openCartModal">Ver carrinho</button>
-        </template>
-        <template v-else>
-          <div class="text-muted small">Fora do horário de atendimento</div>
-        </template>
-      </div>
-    </div>
+  <div v-if="!isCatalogMode && cart.length > 0 && !cartModalOpen && !modalOpen && !checkoutModalOpen" class="mobile-cart-bar d-lg-none" @click="openCartModal">
+    <div class="cart-bar-count">{{ cart.length }}</div>
+    <div class="cart-bar-label">Ver sacola</div>
+    <div class="cart-bar-total">{{ formatCurrency(subtotal) }}</div>
+  </div>
 
   <!-- Mobile bottom navigation (fixed) -->
   <nav v-if="!isCatalogMode" class="mobile-bottom-nav d-lg-none" v-show="!modalOpen && !cartModalOpen && !checkoutModalOpen">
@@ -178,15 +177,43 @@
       </div>
 
       <!-- Campo de busca -->
-      <div v-else class="search-categories-container mb-3">
+      <div v-else>
+      <!-- Featured carousel -->
+      <div v-if="highlightedProducts.length > 0 && !productSearchTerm" class="featured-section mb-3">
+        <div class="featured-header">
+          <span class="featured-title">Destaques da casa</span>
+          <i class="bi bi-star-fill featured-star"></i>
+        </div>
+        <div class="featured-scroll">
+          <div v-for="p in highlightedProducts" :key="'feat-'+p.id" class="featured-card" @click="openProductModal(p)">
+            <div class="featured-card-image">
+              <img v-if="p.image" :src="assetUrl(p.image)" loading="lazy" />
+              <div v-else class="featured-card-placeholder"></div>
+              <div v-if="p.featured" class="featured-card-tag">Destaque</div>
+              <div v-else class="featured-card-tag recent">Pedido recente</div>
+            </div>
+            <div class="featured-card-body">
+              <div class="featured-card-name">{{ p.name }}</div>
+              <div class="featured-card-footer">
+                <strong class="featured-card-price">{{ formatCurrency(p.price) }}</strong>
+                <button v-if="!isCatalogMode" class="featured-card-add" @click.stop="openProductModal(p)" aria-label="Adicionar">
+                  <i class="bi bi-plus"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="search-categories-container mb-3">
         <!-- unified category pills (mobile + desktop) -->
         <div v-if="categories.length" class="categories-pills" :class="{ 'search-active': searchExpanded }">
           <ul ref="navRef" class="nav nav-pills overflow-auto" :class="{ stuck: isNavSticky }" style="gap:2px;">
             <li class="nav-item" v-for="(cat, idx) in categories" :key="cat.id">
-              <a :href="`#cat-${cat.id}`" class="nav-link" :class="{ active: activeCategoryId === (cat.id) }" @click.prevent="selectCategory(cat.id)">{{ cat.name }}</a>
+              <a :href="`#cat-${cat.id}`" class="category-pill" :class="{ active: activeCategoryId === (cat.id) }" @click.prevent="selectCategory(cat.id)">{{ cat.name }}</a>
             </li>
             <li class="nav-item">
-              <a href="#products-start" class="nav-link" :class="{ active: activeCategoryId === null }" @click.prevent="selectCategory(null)">Todos</a>
+              <a href="#products-start" class="category-pill" :class="{ active: activeCategoryId === null }" @click.prevent="selectCategory(null)">Todos</a>
             </li>
           </ul>
         </div>
@@ -226,7 +253,8 @@
           </div>
         </div>
       </div>
-      
+      </div>
+
         <div class="row">
         
           <div :class="cart.length > 0 ? 'col-12' : 'col-sm-12'">
@@ -244,31 +272,32 @@
               <h5 class="mb-3">{{ cat.name }}</h5>
               <div class="row gx-3 gy-3">
                 <div class="col-12 col-lg-6" v-for="p in cat.products" :key="p.id">
-                  <div class="product-card d-flex justify-content-between align-items-start p-3" @click="openProductModal(p)" tabindex="0" @keydown.enter="openProductModal(p)">
-                    <div class="product-card-body d-flex flex-column justify-content-between">
+                  <div class="product-card" @click="openProductModal(p)" tabindex="0" @keydown.enter="openProductModal(p)">
+                    <div class="product-card-body">
                       <div>
-                      <h6 class="mb-1 product-title">{{ p.name }}</h6>
-                      <div class="small text-muted product-desc">{{ p.description }}</div>
+                        <div v-if="p.featured" class="product-tag">Destaque</div>
+                        <h6 class="product-title">{{ p.name }}</h6>
+                        <div class="product-desc">{{ p.description }}</div>
                       </div>
                       <div>
-                      <div class="mt-2 d-flex flex-column align-items-start gap-2">
-                        
-                        <div v-if="getProductCashbackPercent(p) > 0" class="badge bg-success">{{ getProductCashbackPercent(p) }}% cashback ({{ formatCurrency(Number(p.price || 0) * getProductCashbackPercent(p) / 100) }})</div>
-
+                        <div v-if="getProductCashbackPercent(p) > 0" class="cashback-pill">
+                          <span class="cashback-coin">$</span>
+                          <span>{{ getProductCashbackPercent(p) }}% cashback · {{ formatCurrency(Number(p.price || 0) * getProductCashbackPercent(p) / 100) }}</span>
+                        </div>
                         <strong class="product-price">
                           <span v-if="getStartingPrice(p) > Number(p.price || 0)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
                           <span v-else>{{ formatCurrency(p.price) }}</span>
                         </strong>
                       </div>
-                      </div>
                     </div>
-                    <div class="product-card-media text-end">
-                      <div v-if="!isCatalogMode" class="add-to-card-plus"><i class="bi bi-cart-plus"></i></div>
-                      <div>
-                        <img v-if="p.image" :src="assetUrl(p.image)" class="product-image" />
-                        <div v-else class="bg-light product-image-placeholder"></div>
+                    <div class="product-card-media">
+                      <div class="product-image-wrap">
+                        <img v-if="p.image" :src="assetUrl(p.image)" class="product-image" loading="lazy" />
+                        <div v-else class="product-image-placeholder"></div>
                       </div>
-                      
+                      <button v-if="!isCatalogMode" class="product-add-btn" @click.stop="openProductModal(p)" aria-label="Adicionar ao carrinho">
+                        <i class="bi bi-plus"></i>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -825,10 +854,13 @@
   <div class="drawer-backdrop" v-if="!isCatalogMode && cartModalOpen && cart.length > 0" @click="closeCartModal"></div>
   <aside v-if="!isCatalogMode" class="cart-drawer" :class="{ open: cartModalOpen && cart.length > 0 }" :aria-hidden="!cartModalOpen" role="dialog" aria-label="Carrinho">
           <div class="drawer-header d-flex justify-content-between align-items-center p-3 border-bottom">
-            <h5 class="m-0">Sua sacola</h5>
-            <div class="d-flex align-items-center gap-2">
-              <button class="btn btn-sm btn-outline-secondary close-x" @click="closeCartModal" aria-label="Fechar">&times;</button>
+            <div>
+              <div class="drawer-subtitle">Sacola</div>
+              <h5 class="m-0">{{ displayName }}</h5>
             </div>
+            <button class="btn-icon-round" @click="closeCartModal" aria-label="Fechar">
+              <i class="bi bi-x-lg"></i>
+            </button>
           </div>
           <div class="drawer-body p-3" style="overflow:auto;">
             <div v-if="cart.length===0" class="text-muted">Sua sacola está vazia.</div>
@@ -884,7 +916,12 @@
                         <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
                         <div v-if="discountsList.length>0" class="d-flex justify-content-between mb-2 text-success"><div>Desconto(s)</div><div>-{{ formatCurrency(discountsTotal) }}</div></div>
                         <div class="d-flex justify-content-between fw-bold mb-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0) - (discountsTotal || 0)) + currentDeliveryFee) }}</div></div>
-                        <div v-if="cashbackEnabled && estimatedCashbackTotal > 0" class="d-flex justify-content-between mb-2 small" style="color: #198754;"><div><i class="bi bi-cash-stack me-1"></i>Cashback estimado</div><div>+{{ formatCurrency(estimatedCashbackTotal) }}</div></div>
+                        <div v-if="cashbackEnabled && estimatedCashbackTotal > 0" class="cashback-summary-row">
+                          <div class="cashback-pill">
+                            <span class="cashback-coin">$</span>
+                            <span>Você receberá {{ formatCurrency(estimatedCashbackTotal) }} de cashback</span>
+                          </div>
+                        </div>
 
               <div class="coupon-block mt-3">
                 <div class="d-flex justify-content-between align-items-center">
@@ -1832,6 +1869,35 @@ const visibleCategories = computed(() => {
   
   return filtered
 })
+
+const recentProductIds = ref([]);
+
+async function fetchRecentlyOrdered() {
+  if (!publicCustomerConnected.value) return;
+  try {
+    const phone = publicCustomerConnected.value.contact || publicCustomerConnected.value.phone;
+    if (!phone) return;
+    const digits = String(phone).replace(/\D/g, '');
+    const { data } = await api.get(`/public/${companyId}/recently-ordered-products?phone=${encodeURIComponent(digits)}`);
+    recentProductIds.value = data || [];
+  } catch (e) {
+    recentProductIds.value = [];
+  }
+}
+
+const highlightedProducts = computed(() => {
+  const allProducts = categories.value.flatMap(c => c.products || []);
+  const featured = allProducts.filter(p => p.featured && p.isActive !== false);
+
+  if (recentProductIds.value.length > 0) {
+    const recentProducts = recentProductIds.value
+      .map(id => allProducts.find(p => p.id === id))
+      .filter(p => p && p.isActive !== false && !featured.some(f => f.id === p.id));
+    return [...featured, ...recentProducts.slice(0, 6)];
+  }
+
+  return featured;
+});
 
 // Handlers para busca de produtos
 function handleProductSearch() {
@@ -3580,6 +3646,9 @@ onMounted(async ()=>{
     isOffline.value = false
     if(!cacheApplied) loading.value = false
 
+    // fetch recently ordered products for featured carousel
+    fetchRecentlyOrdered();
+
     // prefer payment methods provided by public endpoint if available
     if(company.value && Array.isArray(company.value.paymentMethods) && company.value.paymentMethods.length){
       paymentMethods.value = company.value.paymentMethods
@@ -4207,12 +4276,32 @@ try{
 </script>
 
 <style scoped>
- #mainMenu{padding-bottom:140px;}
- .h5, h5 {
-    font-size: 1rem;
-    font-weight: 600;
-    text-align: center;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+ #mainMenu {
+  --pm-bg: #FFF8F0;
+  --pm-surface: #FFFFFF;
+  --pm-surface-alt: #FBF3E8;
+  --pm-border: #F0E6D2;
+  --pm-text: #1A1410;
+  --pm-text-muted: #7A6E62;
+  --pm-text-dim: #A89C90;
+  --pm-radius-card: 18px;
+  --pm-radius-pill: 999px;
+  --pm-radius-modal: 24px;
+  --pm-cashback-bg: #E8F5E9;
+  --pm-cashback-fg: #1B5E20;
+  --pm-cashback-pill: #2E7D32;
+  --pm-shadow-card: 0 2px 12px rgba(0,0,0,0.06);
+  --pm-shadow-elevated: 0 12px 32px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06);
+  --pm-font: 'Inter', -apple-system, system-ui, sans-serif;
+  font-family: var(--pm-font);
+  background: var(--pm-bg);
+  color: var(--pm-text);
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: 140px;
 }
+#mainMenu h5, #mainMenu .h5 { font-size: 19px; font-weight: 800; color: var(--pm-text); letter-spacing: -0.4px; text-align: left; margin-bottom: 4px; }
  .public-hero { background: #222; color: #fff; height: 220px; overflow: hidden; }
 .public-hero h3 { font-weight:700; color:#fff }
 .top-public-nav .nav-actions a, .top-public-nav .nav-actions button { color: #fff; opacity: .95 }
@@ -4298,23 +4387,71 @@ try{
   opacity: 0.75;
 }
 
+.category-pill {
+  all: unset;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: var(--pm-radius-pill);
+  background: var(--pm-surface);
+  color: var(--pm-text);
+  border: 1px solid var(--pm-border);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  transition: all 0.2s;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.category-pill.active {
+  background: var(--brand, #0d6efd);
+  color: #fff;
+  border-color: var(--brand, #0d6efd);
+}
+
 .nav-pills { position: sticky; top: 0; z-index: 5; padding-bottom: 8px; background: transparent; }
-.nav-pills.stuck { background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.06); padding-top: 8px; padding-bottom: 8px; z-index: 1040; }
+.nav-pills.stuck { background: var(--pm-bg); box-shadow: 0 6px 18px rgba(0,0,0,0.06); padding-top: 8px; padding-bottom: 8px; z-index: 1040; }
+
+/* hero gradient overlay */
+.hero-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.75) 100%);
+  z-index: 1;
+}
 
 /* hero overlapping white panel */
-.hero-panel { background: transparent; margin-top: -90px; padding: 18px; border-radius: 12px; max-width: 980px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); background: #fff; position: relative; z-index: 1046 }
-.hero-panel .company-name { color: #111; }
-.hero-panel .company-address { color: #666; font-size:0.8rem; font-style: italic; }
-.hero-panel .more-information{ color: var(--brand-dark) !important;}
-.store-closed-panel { color: #d23a3a; }
+.hero-panel { background: var(--pm-surface); margin-top: -48px; padding: 18px; border-radius: 20px; max-width: 980px; box-shadow: var(--pm-shadow-elevated); position: relative; z-index: 1046 }
+.company-name { font-size: 1.4rem; margin-bottom: 0; font-weight: 800; color: var(--pm-text); letter-spacing: -0.4px; }
+.company-subtitle { color: var(--pm-text-muted); font-size: 0.8rem; }
+.more-info-link { color: var(--brand-dark, #0d6efd) !important; font-weight: 600; text-decoration: none; font-size: 12.5px; }
+.company-logo-wrapper { width: 56px; height: 56px; background: var(--pm-surface); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); flex: 0 0 56px; }
+.company-logo { width: 100%; height: 100%; object-fit: cover; }
+
+.status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--pm-radius-pill); font-size: 12.5px; font-weight: 600; }
+.status-pill.open { background: #0E6B1F; color: #fff; }
+.status-pill.closed { background: #2A1A0E; color: #fff; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.status-dot.open { background: #6EE787; box-shadow: 0 0 8px #6EE787; }
+.status-dot.closed { background: #FF9B9B; }
+
+.service-tag { padding: 3px 10px; border-radius: var(--pm-radius-pill); background: rgba(0,0,0,0.06); color: var(--pm-text); font-size: 11.5px; font-weight: 500; }
+
+.delivery-stats { display: flex; align-items: center; padding: 12px 0 0; border-top: 1px solid var(--pm-border); margin-top: 14px; }
+.delivery-stat { flex: 1; text-align: center; }
+.delivery-stat-label { font-size: 11px; color: var(--pm-text-muted); margin-bottom: 2px; }
+.delivery-stat-value { font-size: 13px; font-weight: 700; color: var(--pm-text); }
+.delivery-stat-divider { width: 1px; height: 28px; background: var(--pm-border); }
+
 .delivery-pickup-btn { background: #f1fbfd; color: #0d6efd; border: 1px solid rgba(13,110,253,0.12); border-radius: 10px; padding: 8px 12px; font-weight:600 }
 .calc-delivery { background: #f8fafb; border: 1px solid #eef4f6; }
 .list-group-item, .payment-method {
-  border: 2px solid #DDD !important;
+  border: 1px solid var(--pm-border) !important;
   margin-bottom: 6px;
-  border-radius: 12px !important;
+  border-radius: 14px !important;
   padding: 8px;
-}/*
+}
+#mainMenu .form-control { border: 1px solid var(--pm-border); border-radius: 12px; }/*
 
 .list-group-item:last-child { border-bottom: none }*/
 li.list-group-item.selected, .payment-method.selected {
@@ -4328,48 +4465,40 @@ li.list-group-item.selected, .payment-method.selected {
 .hero-image { transition: transform .35s ease }
 .public-hero:hover .hero-image { transform: scale(1.02) }
 
-.product-card { background: #fff; border-radius: 18px; position: relative; padding:12px !important;}
-.product-card-body { flex: 1 1 auto; padding-right: 1rem; min-height:100px; }
-.product-title { font-size: 1.05rem; font-weight: 600; }
-.product-desc { color: #666; font-size:12px; line-height:135%; max-height: 3em; overflow: hidden; text-overflow: ellipsis; }
-.product-price {
-  line-height: 100%;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--brand-dark);
+.product-card {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  padding: 14px;
+  background: var(--pm-surface);
+  border-radius: var(--pm-radius-card);
+  border: 1px solid var(--pm-border);
+  cursor: pointer;
+  position: relative;
+  transition: box-shadow 0.2s;
 }
-.product-price small{font-size: 0.8rem; line-height: 95%;}
-.product-card-media { width: 110px; flex: 0 0 110px; position:relative}
-.product-image { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; }
-.product-image-placeholder { width: 96px; height: 96px; border-radius: 8px; }
-.badge.bg-success[data-v-85b00978] {
-    background-color: var(--brand-lightest) !important;
-    color: var(--brand-dark);
-    font-weight: 600;
-    border-radius: 19px;
-    padding: 5px 7px;
-    font-size: 0.7rem;
-}
+.product-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+.product-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; }
+.product-tag { display: inline-flex; padding: 2px 8px; border-radius: 4px; background: var(--brand-lightest, #FFE8EC); color: var(--brand-dark, #C8102E); font-size: 10px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 6px; }
+.product-title { font-size: 15.5px; font-weight: 700; color: var(--pm-text); letter-spacing: -0.2px; margin-bottom: 4px; line-height: 1.25; }
+.product-desc { font-size: 12.5px; color: var(--pm-text-muted); line-height: 1.4; margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.product-price { font-size: 17px; font-weight: 800; color: var(--brand-dark, #C8102E); letter-spacing: -0.3px; line-height: 1; }
+.product-price small { font-size: 0.75rem; }
 
-/* Cashback badge shown on product cards */
-.cashback-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: linear-gradient(180deg,#e6f9ef,#c8f1dc);
-  color: #056937;
-  font-weight:700;
-  padding:6px 8px;
-  border-radius:10px;
-  font-size:0.85rem;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.06);
-  z-index: 5;
-}
+.cashback-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px 4px 7px; border-radius: var(--pm-radius-pill); background: var(--pm-cashback-bg); color: var(--pm-cashback-fg); font-size: 11.5px; font-weight: 600; letter-spacing: -0.1px; border: 1px solid rgba(30,90,30,0.12); margin-bottom: 8px; }
+.cashback-coin { width: 16px; height: 16px; border-radius: 50%; background: var(--pm-cashback-pill); color: #fff; font-size: 10px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
-@media (max-width: 991px){
-  .product-card { border-radius: 8px; }
-  .product-card-media { width: 110px; flex: 0 0 110px; }
-  .product-image { width: 110px; height: 110px; }
+.product-card-media { position: relative; width: 104px; flex-shrink: 0; }
+.product-image-wrap { width: 104px; height: 104px; border-radius: 14px; overflow: hidden; background: var(--pm-surface-alt); }
+.product-image { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 0; }
+.product-image-placeholder { width: 100%; height: 100%; background: var(--pm-surface-alt); }
+.product-add-btn { all: unset; cursor: pointer; position: absolute; right: -6px; bottom: -6px; width: 36px; height: 36px; border-radius: 50%; background: var(--brand, #0d6efd); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2); border: 2px solid var(--pm-surface); font-size: 18px; transition: transform 0.15s; }
+.product-add-btn:hover { transform: scale(1.1); }
+
+@media (max-width: 991px) {
+  .product-card { border-radius: 14px; }
+  .product-card-media { width: 100px; }
+  .product-image-wrap { width: 100px; height: 100px; border-radius: 12px; }
 }
 
 /* Desktop sticky cart bar */
@@ -4390,16 +4519,16 @@ li.list-group-item.selected, .payment-method.selected {
 }
 
 /* modal product hero */
-.modal-product-hero { width:100%; height:220px; overflow:hidden; border-radius:8px; display:flex; align-items:center; justify-content:center; background:#f6f6f8 }
+.modal-product-hero { width:100%; height:220px; overflow:hidden; border-radius:0; display:flex; align-items:center; justify-content:center; background: var(--pm-surface-alt) }
 .modal-product-img { width:100%; height:100%; object-fit:cover; display:block; border-radius:6px }
 .modal-back-mobile { display:flex; position:absolute; left:12px; top:12px; width:44px; height:44px; border-radius:50%; background:#fff; border:none; align-items:center; justify-content:center; font-size:22px; box-shadow: 0 6px 18px rgba(0,0,0,0.14); z-index:22 }
   .modal-share-mobile { position:absolute; right:12px; top:12px; width:52px; height:52px; border-radius:50%; background:#fff; border:none; align-items:center; justify-content:center; font-size:20px; box-shadow: 0 6px 18px rgba(0,0,0,0.14); z-index:22 }
 .hero-down { position:absolute; left:50%; transform:translateX(-50%); bottom:8px; font-size:20px; color:rgba(0,0,0,0.6); z-index:20 }
 .option-thumb { width:48px; height:48px; object-fit:cover; border-radius:8px }
 .option-meta .option-name { font-weight:600 }
-.group-header{ background-color:#FAFAFA; padding:8px 16px; border-radius:16px; font-size:14px;}
+.group-header{ background-color: var(--pm-surface-alt); padding:14px 20px 10px; border-radius:0; font-size:14px;}
 /* replace inline padding used in option rows */
-.option-row { padding: 0 16px; font-size: 14px }
+.option-row { padding: 12px 20px; border-bottom: 1px solid var(--pm-border); font-size: 14px }
 .group-header .badge.bg-primary { background-color:#0d6efd; color:#fff }
 /* highlight failing required group briefly */
 .badge.bg-danger { background-color: #d9534f !important }
@@ -4419,9 +4548,10 @@ li.list-group-item.selected, .payment-method.selected {
   max-width: 95%;
   max-height: 90vh;
   overflow: auto;
-  border-radius: 12px;
+  border-radius: var(--pm-radius-modal);
   margin: 0 auto;
   padding: 0;
+  border: none;
 }
 
 /* checkout modal: use a slightly narrower width on desktop but remain fullscreen on mobile
@@ -4589,13 +4719,15 @@ li.list-group-item.selected, .payment-method.selected {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 8px 8px;
-  border-radius: 8px;
-  background: #0d6efd;
+  padding: 0 20px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--brand, #0d6efd);
   color: #fff;
   border: none;
   font-weight: 700;
-  /* animations/transitions removed for a stable button appearance */
+  font-size: 15px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.2);
   position: relative;
   overflow: hidden;
 }
@@ -4666,11 +4798,15 @@ li.list-group-item.selected, .payment-method.selected {
 
 /* Drawer styles for large screens */
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1050 }
-.cart-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: #fff; z-index: 1060; transform: translateX(100%); transition: transform .28s ease; display:flex; flex-direction:column }
+.cart-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: var(--pm-bg); z-index: 1060; transform: translateX(100%); transition: transform .28s ease; display:flex; flex-direction:column }
 .cart-drawer.open { transform: translateX(0) }
-.drawer-header { background: transparent }
+.drawer-header { background: var(--pm-surface); border-bottom-color: var(--pm-border) !important; }
+.drawer-subtitle { font-size: 11px; font-weight: 600; color: var(--pm-text-muted); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
+.btn-icon-round { all: unset; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; background: var(--pm-surface-alt); display: flex; align-items: center; justify-content: center; color: var(--pm-text); font-size: 14px; }
+.btn-icon-round:hover { background: var(--pm-border); }
 .drawer-body { flex: 1 1 auto }
-.drawer-footer { background: #fff }
+.drawer-footer { background: var(--pm-surface); border-top-color: var(--pm-border) !important; }
+.cashback-summary-row { padding: 8px 0; margin-bottom: 12px; }
 
 @media (max-width: 1199px){
   .cart-drawer { width: 360px }
@@ -4717,21 +4853,41 @@ li.list-group-item.selected, .payment-method.selected {
   }
   .cart-drawer.open { transform: translateY(0) }
   .drawer-body { overflow:auto; max-height: calc(100vh - 140px) }
-  /* reduce cart bar conflicts: hide mobile-cart-bar when drawer is open */
-  .mobile-cart-bar { bottom: calc(68vh + 8px); font-size:12px; bottom:60px; height:60px;}
+  /* reduce cart bar conflicts */
+  .mobile-cart-bar { bottom: 76px; }
 }
 
 /* Mobile bottom nav */
-.mobile-bottom-nav { display:flex; position:fixed; left:0; right:0; bottom:0; height:64px; background:#fff; border-top:1px solid rgba(0,0,0,0.06); z-index:10800; align-items:center; justify-content:space-around }
-.mobile-bottom-nav .nav-item { background:transparent; border:none; padding:6px 8px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#333; position:relative }
-.mobile-bottom-nav .nav-icon { font-size:20px; line-height:1 }
-.mobile-bottom-nav .nav-label { font-size:12px; margin-top:4px }
+.mobile-bottom-nav { display:flex; position:fixed; left:0; right:0; bottom:0; height:64px; background: var(--pm-surface); border-top: 1px solid var(--pm-border); z-index:10800; align-items:center; justify-content:space-around }
+.mobile-bottom-nav .nav-item { background:transparent; border:none; padding:6px 12px; display:flex; flex-direction:column; align-items:center; gap:4px; color: var(--pm-text-muted) }
+.mobile-bottom-nav .nav-icon { font-size:22px; line-height:1 }
+.mobile-bottom-nav .nav-label { font-size:10.5px }
 .mobile-bottom-nav .cart-badge { background:#0d6efd; color:#fff; border-radius:10px; padding:2px 6px; font-size:11px; position:absolute; top:6px; right:12px; margin-left:0 }
-.mobile-bottom-nav .nav-item.active, .mobile-bottom-nav .nav-item.active .nav-label, .mobile-bottom-nav .nav-item.active .nav-icon{ color: rgb(255 147 7) !important }
+.mobile-bottom-nav .nav-item.active, .mobile-bottom-nav .nav-item.active .nav-label, .mobile-bottom-nav .nav-item.active .nav-icon { color: var(--brand, #0d6efd) !important; font-weight: 700; }
 
 /* make mobile cart bar fixed above the bottom nav so it's always visible while scrolling */
-.mobile-cart-bar { position:fixed; left:0; right:0;  z-index:1048; display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:#fff; border-top:1px solid rgba(0,0,0,0.06) }
-.mobile-cart-bar .btn { margin:0 }
+.mobile-cart-bar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 76px;
+  z-index: 1048;
+  height: 56px;
+  border-radius: 16px;
+  background: var(--brand, #0d6efd);
+  color: #fff;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+  cursor: pointer;
+  animation: pm-pop 0.3s ease;
+}
+.cart-bar-count { width: 30px; height: 30px; border-radius: 8px; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; }
+.cart-bar-label { flex: 1; font-size: 14px; font-weight: 700; letter-spacing: -0.1px; }
+.cart-bar-total { font-size: 15px; font-weight: 800; }
+@keyframes pm-pop { 0% { transform: scale(0.85); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
 
 @media (max-width: 767px){
   /* add bottom padding so main content isn't hidden under the mobile cart bar + nav */
@@ -4740,58 +4896,24 @@ li.list-group-item.selected, .payment-method.selected {
 body { padding-bottom: 110px; }
 
 /* Header / hero customizations */
-.company-logo-wrapper { width:96px; height:96px; background: #fff; border-radius:12px; overflow:hidden; box-shadow: 0 6px 18px rgba(0,0,0,0.14); flex: 0 0 96px }
-.company-logo { width:100%; height:100%; object-fit:cover }
-.company-name { font-size:1.6rem; margin-bottom:0; font-weight:800 }
-.company-address { color: rgba(255,255,255,0.9);}
 .btn-light-outline { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.12); }
 .store-closed { background: rgba(255,255,255,0.06); }
 .store-closed .text-danger { color: #ff4d4f !important }
 
 @media (max-width: 767px){
-  .company-logo-wrapper { display:none }
-  .company-name { font-size:1.2rem }
+  .hero-panel { margin-top: -40px; padding: 14px; }
+  .company-name { font-size: 1.15rem; }
+  .company-logo-wrapper { width: 48px; height: 48px; flex: 0 0 48px; }
 }
 
-/* Mobile overrides for hero panel */
-@media (max-width: 767px){
-  .hero-panel { margin-top: -56px; padding: 14px }
-  .hero-panel .company-logo-wrapper { display:flex; width:72px; height:72px; flex: 0 0 72px }
-  .hero-panel .company-name { font-size: 1.1rem }
-  .nav-pills .nav-link { color:#000; font-size:12px; padding-bottom: 8px; position: relative }
-  /* animated underline using pseudo-element */
-  .nav-pills .nav-link::after { content: '';
-    position: absolute;
-    left: 15px;
-    right: 20%;
-    height: 3px;
-    bottom: -2px;
-    background: #42721a;
-    transform: scaleX(0);
-    transform-origin: left center;
-    transition: transform .18s ease; }
-  .nav-pills .nav-link.active { background: transparent; color: #111; font-weight:700; border-radius:0 }
-  .nav-pills .nav-link.active::after { transform: scaleX(1) }
-}
-.nav-item:first-child a {
-  padding-left: 10px;
-  margin-left: 0px;
-}
 /* Reduce hero height on small screens for better vertical space */
 @media (max-width: 767px){
   .public-hero { height: 125px }
 }
 
-/* Desktop/mobile animated underline and active styles handled by pseudo-element */
-.nav-pills { --nav-underline-offset: 12%; display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; scroll-padding-left: 12px }
+/* Category pills scroll layout */
+.nav-pills { display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; scroll-padding-left: 12px }
 .nav-pills .nav-item { flex: 0 0 auto; scroll-snap-align: start }
-.nav-pills .nav-link { position: relative; white-space: nowrap; 
-    color: #000 !important;
-    font-size: 14px;
-    font-weight: 600; }
-.nav-pills .nav-link::after { content: ''; position: absolute; left: 12%; right: 12%; height: 3px; bottom: -2px; background: #111; transform: scaleX(0); transform-origin: left center; transition: transform .18s ease; border-radius: 3px }
-.nav-pills .nav-link.active { background: transparent; color: #111; font-weight:700; border-radius:0 }
-.nav-pills .nav-link.active::after { transform: scaleX(1) }
 
 /* custom horizontal scrollbar for category pills */
 .nav-pills::-webkit-scrollbar { height: 8px }
@@ -5055,7 +5177,7 @@ body { padding-bottom: 110px; }
   }
   .categories-pills::after {
     content: '';
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 1) 100%) !important;
+    background: linear-gradient(90deg, rgba(255, 248, 240, 0) 0%, rgba(255, 248, 240, 1) 100%) !important;
     position: absolute;
     height: 38px;
     width: 63px;
@@ -5077,9 +5199,9 @@ body { padding-bottom: 110px; }
   .search-toggle-btn {
     width: 42px;
     height: 42px;
-    border-radius: 12px;
-    border: 2px solid #e9ecef;
-    background: white;
+    border-radius: 14px;
+    border: 1px solid var(--pm-border);
+    background: var(--pm-surface);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -5182,40 +5304,26 @@ body { padding-bottom: 110px; }
     font-size: 1.1rem;
     border-radius: 12px;
   }
-  .add-to-card-plus {
-    background-color: var(--brand);
-    color: #FFF;
-    display: flex;
-    text-align: center;
-    width: 0px;
-    height: 0px;
-    justify-content: center;
-    align-items: center;
-    border-radius: 150px;
-    position: absolute;
-    left: 23px;
-    transition: all 0.3s ease-in-out;
-    opacity: 0;
-}
-.product-card:hover{
-    cursor:pointer;
-  }
-.product-card:hover .add-to-card-plus {
-    animation: bounce 2s infinite;
-    opacity: .9;    
-    width: 50px;
-    height: 50px;
-  }
-@keyframes bounce {
-  0%, 20%, 50%, 80%, 100% {
-    transform: translateY(0);
-  }
-  40% {
-    transform: translateY(-15px);
-  }
-  60% {
-    transform: translateY(-8px);
-  }
-}
+
+/* Featured carousel */
+.featured-section { margin-top: 22px; }
+.featured-header { padding: 0 16px 10px; display: flex; align-items: center; gap: 8px; }
+.featured-title { font-size: 16px; font-weight: 700; color: var(--pm-text); letter-spacing: -0.2px; }
+.featured-star { color: #F2A900; font-size: 14px; }
+.featured-scroll { display: flex; gap: 12px; overflow-x: auto; padding: 0 16px 4px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.featured-scroll::-webkit-scrollbar { display: none; }
+.featured-card { flex-shrink: 0; width: 220px; scroll-snap-align: start; background: var(--pm-surface); border-radius: 16px; overflow: hidden; border: 1px solid var(--pm-border); cursor: pointer; transition: box-shadow 0.2s; }
+.featured-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+.featured-card-image { position: relative; width: 100%; height: 120px; background: var(--pm-surface-alt); }
+.featured-card-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.featured-card-placeholder { width: 100%; height: 100%; background: var(--pm-surface-alt); }
+.featured-card-tag { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 4px; background: #F2A900; color: #2A1A0E; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; }
+.featured-card-tag.recent { background: var(--pm-cashback-bg); color: var(--pm-cashback-fg); }
+.featured-card-body { padding: 12px; }
+.featured-card-name { font-size: 13.5px; font-weight: 700; color: var(--pm-text); letter-spacing: -0.2px; margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.featured-card-footer { display: flex; align-items: center; justify-content: space-between; }
+.featured-card-price { font-size: 15px; font-weight: 800; color: var(--brand-dark, #C8102E); letter-spacing: -0.2px; }
+.featured-card-add { all: unset; cursor: pointer; width: 30px; height: 30px; border-radius: 50%; background: var(--brand, #0d6efd); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.2); font-size: 16px; }
+.featured-card-add:hover { transform: scale(1.1); }
 
 </style>
