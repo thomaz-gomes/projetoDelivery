@@ -1525,7 +1525,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
     }
 
     // Return the stored total (already includes deliveryFee) and deliveryFee separately
-    res.status(201).json({ id: created.id, displayId: created.displayId, total: Number(created.total), deliveryFee: Number(created.deliveryFee || 0) })
+    res.status(201).json({ id: created.id, displayId: created.displayId, displaySimple: created.displaySimple, total: Number(created.total), deliveryFee: Number(created.deliveryFee || 0) })
   } catch (e) {
     console.error('Error creating public order', e)
     res.status(500).json({ message: 'Erro ao criar pedido' })

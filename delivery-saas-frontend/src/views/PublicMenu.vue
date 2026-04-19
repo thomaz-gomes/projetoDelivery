@@ -20,28 +20,25 @@
   <div class="public-hero position-relative text-white" ref="heroRef">
     <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center'}" style="position:absolute;inset:0"></div>
     <div class="hero-gradient"></div>
-    <!-- Top navigation overlay (desktop + mobile) -->
-    <header class="top-public-nav position-absolute w-100" style="top:0;left:0;z-index:1015">
-      <div class="container d-flex justify-content-end align-items-center p-4">
-        <div class="row">
-          <div class="col-12">
-
-              <div class="nav-actions d-flex align-items-center gap-3 text-white">
-                <a v-if="!isCatalogMode" href="#" class="d-none d-md-inline text-white small me-3" @click.prevent="openRegister">Entre ou Cadastre-se</a>
-                <button v-if="!isCatalogMode" class="btn btn-link text-white p-0 d-flex align-items-center" @click.prevent="goProfile" aria-label="Perfil"><i class="bi bi-person" aria-hidden="true"></i></button>
-                <button v-if="!isCatalogMode" class="btn btn-link text-white p-0 d-flex align-items-center position-relative" @click.prevent="openCartModal" aria-label="Carrinho">
-                  <i class="bi bi-cart-fill" aria-hidden="true"></i>
-                  <span v-if="cart.length>0" class="cart-badge-top badge bg-danger rounded-pill">{{ cart.length }}</span>
-                </button>
-                <button v-if="!isCatalogMode" class="btn btn-link text-white p-0 d-lg-none" @click.prevent="toggleMobileMenu" aria-label="Menu"><i class="bi bi-list"></i></button>
-              </div>
-
-
-          </div>
+    <!-- Top navigation overlay -->
+    <header class="hero-nav">
+      <div class="hero-nav-inner">
+        <button class="hero-nav-btn d-lg-none" @click="$router.back()" aria-label="Voltar"><i class="bi bi-chevron-left"></i></button>
+        <div class="flex-grow-1"></div>
+        <div class="d-flex align-items-center gap-2">
+          <button v-if="!isCatalogMode" class="hero-nav-btn" @click.prevent="toggleSearch" aria-label="Buscar"><i class="bi bi-search"></i></button>
+          <button v-if="!isCatalogMode" class="hero-nav-btn hero-nav-avatar" @click.prevent="goProfile" aria-label="Perfil">
+            <i class="bi bi-person"></i>
+          </button>
+          <!-- Desktop: text links -->
+          <a v-if="!isCatalogMode" href="#" class="d-none d-md-inline text-white small ms-2" @click.prevent="openRegister" style="text-decoration:underline;opacity:0.9">Entre ou Cadastre-se</a>
+          <button v-if="!isCatalogMode" class="hero-nav-btn d-none d-md-flex position-relative" @click.prevent="openCartModal" aria-label="Carrinho">
+            <i class="bi bi-cart-fill"></i>
+            <span v-if="cart.length>0" class="cart-badge-top badge bg-danger rounded-pill">{{ cart.length }}</span>
+          </button>
+          <button v-if="!isCatalogMode" class="hero-nav-btn d-lg-none" @click.prevent="toggleMobileMenu" aria-label="Menu"><i class="bi bi-list"></i></button>
         </div>
-        
       </div>
-      
     </header>
     </div>
 
@@ -81,44 +78,58 @@
       <span v-if="cacheTimestamp">sincronizado em {{ formatCacheDate(cacheTimestamp) }}</span>
     </div>
 
-    <!-- Overlapping white panel with company info, delivery toggle and calc box -->
+    <!-- Overlapping white panel with company info (iFood-style) -->
     <div class="hero-panel container">
-      <div class="d-flex align-items-start gap-3">
-        <div class="company-logo-wrapper d-flex align-items-center justify-content-center">
+      <div class="hero-panel-layout">
+        <!-- Left: Logo -->
+        <div class="company-logo-wrapper">
           <img :src="assetUrl(menu?.logo || company?.logo || 'default-logo.svg')" alt="logo" class="company-logo" />
         </div>
-        <div style="flex:1;min-width:0">
+
+        <!-- Center: Name + subtitle + status + delivery methods -->
+        <div class="hero-panel-info">
           <h3 class="company-name">{{ displayName }}</h3>
-          <div class="small company-subtitle">{{ displayPickup || '' }}</div>
-          <div class="small"><a href="#" class="more-info-link" @click.prevent="openInfoModal">Mais informações <i class="bi bi-chevron-right" style="font-size:10px"></i></a></div>
-          <div class="d-flex align-items-center gap-2 mt-2">
+          <div class="company-subtitle">{{ company?.subtitle || displayPickup || '' }}{{ company?.phone ? ' · ' + company.phone : '' }}</div>
+          <div class="company-status-row">
             <span :class="['status-pill', isOpen ? 'open' : 'closed']">
               <span :class="['status-dot', isOpen ? 'open' : 'closed']"></span>
-              <span v-if="isOpen">Aberto agora</span>
-              <span v-else>Fechado{{ nextOpenText ? (' · ' + nextOpenText) : '' }}</span>
+              <span v-if="isOpen">{{ openUntilText || 'Aberto agora' }}</span>
+              <span v-else>Fechado{{ nextOpenText ? ' - ' + nextOpenText : '' }}</span>
             </span>
+            <a href="#" class="more-info-link" @click.prevent="openInfoModal">Mais informações <i class="bi bi-chevron-right"></i></a>
           </div>
-          <div class="d-flex align-items-center gap-2 mt-2">
-            <span v-if="(menu?.allowDelivery ?? true)" class="service-tag">Entrega</span>
-            <span v-if="(menu?.allowPickup ?? true)" class="service-tag">Retirada</span>
+          <div class="delivery-methods">
+            <span v-if="menu?.allowDelivery !== false" class="delivery-method-badge">Entrega</span>
+            <span v-if="menu?.allowPickup !== false" class="delivery-method-badge">Retirada</span>
           </div>
         </div>
-      </div>
 
-      <div class="delivery-stats">
-        <div class="delivery-stat">
-          <div class="delivery-stat-label"><i class="bi bi-clock me-1"></i>Entrega</div>
-          <div class="delivery-stat-value">{{ menu?.estimatedDeliveryTime || '30-45 min' }}</div>
-        </div>
-        <div class="delivery-stat-divider"></div>
-        <div class="delivery-stat">
-          <div class="delivery-stat-label"><i class="bi bi-bicycle me-1"></i>Taxa</div>
-          <div class="delivery-stat-value">{{ menu?.deliveryFee ? formatCurrency(menu.deliveryFee) : 'Variável' }}</div>
-        </div>
-        <div class="delivery-stat-divider"></div>
-        <div class="delivery-stat">
-          <div class="delivery-stat-label"><i class="bi bi-info-circle me-1"></i>Mínimo</div>
-          <div class="delivery-stat-value">{{ menu?.minimumOrder ? formatCurrency(menu.minimumOrder) : '—' }}</div>
+        <!-- Right: Rating + Delivery time + Fee -->
+        <div class="hero-panel-stats">
+         <!-- <div v-if="company?.rating" class="hero-stat-box">
+            <div class="hero-stat-top">
+              <i class="bi bi-star-fill hero-stat-star"></i>
+              <span class="hero-stat-label">Avaliação</span>
+            </div>
+            <div class="hero-stat-value">{{ company.rating }}</div>
+            <div v-if="company?.reviewCount" class="hero-stat-sub">{{ company.reviewCount.toLocaleString('pt-BR') }} avaliações</div>
+          </div>
+          <div class="hero-stat-divider"></div> -->
+          <div class="hero-stat-box">
+            <div class="hero-stat-top">
+              <i class="bi bi-clock hero-stat-icon"></i>
+              <span class="hero-stat-label">Entrega</span>
+            </div>
+            <div class="hero-stat-value">{{ menu?.estimatedDeliveryTime || '30-45 min' }}</div>
+          </div>
+          <div class="hero-stat-divider"></div>
+          <div class="hero-stat-box">
+            <div class="hero-stat-top">
+              <i class="bi bi-bicycle hero-stat-icon"></i>
+              <span class="hero-stat-label">Taxa</span>
+            </div>
+            <div class="hero-stat-value">{{ menu?.deliveryFee ? formatCurrency(menu.deliveryFee) : 'Variável' }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -208,7 +219,7 @@
       <div class="search-categories-container mb-3">
         <!-- unified category pills (mobile + desktop) -->
         <div v-if="categories.length" class="categories-pills" :class="{ 'search-active': searchExpanded }">
-          <ul ref="navRef" class="nav nav-pills overflow-auto" :class="{ stuck: isNavSticky }" style="gap:2px;">
+          <ul ref="navRef" class="nav nav-pills overflow-auto" :class="{ stuck: isNavSticky }" style="gap: 2px;height: 47px;display: flex;align-items: center;">
             <li class="nav-item" v-for="(cat, idx) in categories" :key="cat.id">
               <a :href="`#cat-${cat.id}`" class="category-pill" :class="{ active: activeCategoryId === (cat.id) }" @click.prevent="selectCategory(cat.id)">{{ cat.name }}</a>
             </li>
@@ -255,19 +266,19 @@
       </div>
       </div>
 
-        <div class="row">
-        
-          <div :class="cart.length > 0 ? 'col-12' : 'col-sm-12'">
+        <div class="row products-and-sidebar">
+
+          <div class="col products-main">
             <!-- products list: category sections -->
             <div id="products-start"></div>
-            
+
             <!-- Mensagem quando nenhum produto é encontrado -->
             <div v-if="productSearchTerm && visibleCategories.length === 0" class="text-center py-5">
               <i class="bi bi-search" style="font-size: 3rem; color: #dee2e6;"></i>
               <p class="text-muted mt-3">Nenhum produto encontrado para "{{ productSearchTerm }}"</p>
               <button class="btn btn-outline-primary btn-sm" @click="clearProductSearch">Limpar busca</button>
             </div>
-            
+
             <div v-for="cat in visibleCategories" :key="cat.id" :id="`cat-${cat.id}`" class="mb-4">
               <h5 class="mb-3">{{ cat.name }}</h5>
               <div class="row gx-3 gy-3">
@@ -275,11 +286,11 @@
                   <div class="product-card" @click="openProductModal(p)" tabindex="0" @keydown.enter="openProductModal(p)">
                     <div class="product-card-body">
                       <div>
-                        <div v-if="p.featured" class="product-tag">Destaque</div>
+                        <!-- <div v-if="p.featured" class="product-tag">Destaque</div> -->
                         <h6 class="product-title">{{ p.name }}</h6>
                         <div class="product-desc">{{ p.description }}</div>
                       </div>
-                      <div>
+                      <div class="mt-2 d-flex flex-column align-items-start gap-2">
                         <div v-if="getProductCashbackPercent(p) > 0" class="cashback-pill">
                           <span class="cashback-coin">$</span>
                           <span>{{ getProductCashbackPercent(p) }}% cashback · {{ formatCurrency(Number(p.price || 0) * getProductCashbackPercent(p) / 100) }}</span>
@@ -307,7 +318,63 @@
             <!-- uncategorized products intentionally hidden from public menu -->
           </div>
 
-          <!-- sidebar removed on purpose: cart is accessed via bottom bar/modal -->
+          <!-- Desktop cart sidebar (lg only) -->
+          <div v-if="!isCatalogMode" class="desktop-cart-sidebar d-none d-lg-block">
+            <div class="cart-sidebar-inner">
+              <div class="cart-sidebar-header">
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-cart3" style="font-size:18px;color:var(--brand-dark)"></i>
+                  <div>
+                    <div class="cart-sidebar-title">Sacola</div>
+                    <div class="cart-sidebar-count">{{ cart.length }} {{ cart.length === 1 ? 'item' : 'itens' }}</div>
+                  </div>
+                </div>
+              </div>
+              
+
+              <div v-if="cart.length === 0" class="cart-sidebar-empty">
+                <div class="cart-sidebar-empty-icon"><i class="bi bi-cart3"></i></div>
+                <div class="cart-sidebar-empty-title">Sua sacola está vazia</div>
+                <div class="cart-sidebar-empty-sub">Adicione pratos ao pedido para começar</div>
+              </div>
+
+              <div v-else class="cart-sidebar-items">
+                <div v-for="(it, i) in cart" :key="'sidebar-'+it.lineId" class="cart-sidebar-item">
+                  <div class="d-flex gap-2">
+                    <img v-if="it.image" :src="assetUrl(it.image)" class="cart-sidebar-item-img" alt="" />
+                    <div class="flex-fill" style="min-width:0">
+                      <div class="cart-sidebar-item-name">{{ it.name }}</div>
+                      <div v-if="optionsSummaryNoPrice(it)" class="cart-sidebar-item-opts">{{ optionsSummaryNoPrice(it) }}</div>
+                    </div>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center mt-1">
+                    <div class="cart-sidebar-stepper">
+                      <button @click="it.quantity <= 1 ? removeItem(i) : decrementCartItem(i)" class="cart-sidebar-step-btn">
+                        <i :class="it.quantity <= 1 ? 'bi bi-trash3' : 'bi bi-dash'" style="font-size:11px"></i>
+                      </button>
+                      <span class="cart-sidebar-step-qty">{{ it.quantity }}</span>
+                      <button @click="incrementCartItem(i)" class="cart-sidebar-step-btn"><i class="bi bi-plus" style="font-size:13px"></i></button>
+                    </div>
+                    <div class="cart-sidebar-item-price">{{ formatCurrency(it.price * it.quantity) }}</div>
+                  </div>
+                </div>
+                <div class="cart-sidebar-cashback">
+                  <i class="bi bi-stars me-1"></i>
+                  <span v-if="cart.length > 0">Você ganhará {{ formatCurrency(estimatedCashbackTotal) }} de cashback</span>
+                  <span v-else>Ganhe até 2,5% de cashback neste pedido</span>
+                </div>
+                <div class="cart-sidebar-summary">
+                  <div class="d-flex justify-content-between mb-1"><span>Subtotal</span><span>{{ formatCurrency(subtotal) }}</span></div>
+                  <div class="d-flex justify-content-between mb-1"><span>Entrega</span><span>{{ orderType === 'DELIVERY' ? (Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee)) : '—' }}</span></div>
+                 
+                    
+                  <div class="d-flex justify-content-between cart-sidebar-total"><span>Total</span><span>{{ formatCurrency(finalTotal) }}</span></div>
+                </div>
+
+                <button class="cart-sidebar-checkout-btn" :disabled="!isOpen" @click="proceedFromCart">Finalizar pedido</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- mobile compact cart removed (we show a mobile cart bar above the bottom nav) -->
@@ -338,26 +405,32 @@
         <!-- Product options modal -->
         <div v-if="modalOpen" class="product-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:11000">
           <div class="modal-content bg-white rounded shadow p-0">
-            <div class="modal-body p-4" ref="modalContentRef" @pointerdown="onPointerDown" style="overflow:auto;max-height:100vh;padding-bottom:90px !important;">
-          <div class="row">
-              <!-- product image hero inside modal -->
-              <div class="col-12 col-sm-6">
-                  <div v-if="selectedProduct?.image" class="modal-product-hero mb-3 position-relative">
-                    <img :src="assetUrl(selectedProduct.image)" alt="Imagem do produto" class="modal-product-img" />
-                  <div class="hero-down">▾</div>
+            <!-- Close button floating over hero -->
+            <button class="modal-close-floating" @click="closeModal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
+            <div class="modal-body p-0" ref="modalContentRef" @pointerdown="onPointerDown" style="overflow:auto;max-height:100vh;padding-bottom:90px !important;">
+              <!-- Product image hero — full width -->
+              <div v-if="selectedProduct?.image" class="modal-product-hero position-relative">
+                <img :src="assetUrl(selectedProduct.image)" alt="Imagem do produto" class="modal-product-img" />
+              </div>
+
+              <!-- Product info -->
+              <div class="modal-product-info">
+                <h5 class="modal-product-name">{{ selectedProduct?.name }}</h5>
+                <div class="modal-product-desc">{{ selectedProduct?.description }}</div>
+                <div class="d-flex align-items-center gap-3 mt-2">
+                  <strong class="modal-product-price">{{ formatCurrency(selectedProduct?.price) }}</strong>
+                  <div v-if="getProductCashbackPercent(selectedProduct) > 0" class="cashback-pill">
+                    <span class="cashback-coin">$</span>
+                    <span>{{ getProductCashbackPercent(selectedProduct) }}% cashback · {{ formatCurrency(Number(selectedProduct?.price || 0) * getProductCashbackPercent(selectedProduct) / 100) }}</span>
                   </div>
-                  <div>
-                  <h5 class="mb-1">{{ selectedProduct?.name }}</h5>
-                  <div class="small text-muted">{{ selectedProduct?.description }}</div>
                 </div>
               </div>
-              <div class="col-12 col-sm-6 modal-options-scroll">
-              <div class="d-flex justify-content-between align-items-start mb-3">
-                    <!-- close control overlapping hero -->
-              <button class="modal-share-mobile modal-close-mobile d-flex d-sm-none" @click="closeModal" aria-label="Fechar">✕</button>
-                <div class="d-flex justify-content-between gap-4 w-100">
+
+              <!-- Options area -->
+              <div class="modal-options-scroll">
+              <div class="d-flex justify-content-between align-items-start mb-3 px-3 pt-2">
+                <div class="flex-grow-1">
                    <TextInput v-model="searchTerm" placeholder="Pesquise pelo nome" inputClass="form-control" />
-                  <button class="btn btn-sm btn-outline-secondary close-x d-none d-sm-flex" aria-label="Fechar" @click="closeModal">×</button>
                 </div>
               </div>
                 
@@ -430,19 +503,22 @@
                     </div>
                   </div>
                 </div>
-              
-              <div class="modal-footer">
-                <div>
-              <div v-if="modalError" class="alert alert-danger mt-3">{{ modalError }}</div>
+              </div><!-- /modal-options-scroll -->
+            </div><!-- /modal-body -->
+
+            <!-- Sticky footer -->
+            <div class="modal-footer">
+              <div>
+                <div v-if="modalError" class="alert alert-danger mt-3">{{ modalError }}</div>
               </div>
               <div v-if="!isCatalogMode" class="d-flex justify-content-between align-items-center modal-actions-footer gap-4 w-100">
                 <div class="d-flex align-items-center gap-2 qty-control">
-                  <button class="btn btn-outline-secondary btn-qty" @pointerdown.prevent="startModalAutoChange(-1, $event)" @pointerup.prevent="stopModalAutoChange($event)" @pointerleave.prevent="stopModalAutoChange($event)">-</button>
-                  <input type="number" v-model.number="modalQty" class="form-control text-center qty-input" style="width:60px" min="1" @blur="modalQty = Math.max(1, Math.floor(Number(modalQty) || 1))" />
-                  <button class="btn btn-outline-secondary btn-qty" @pointerdown.prevent="startModalAutoChange(1, $event)" @pointerup.prevent="stopModalAutoChange($event)" @pointerleave.prevent="stopModalAutoChange($event)">+</button>
+                  <button class="btn-qty" @pointerdown.prevent="startModalAutoChange(-1, $event)" @pointerup.prevent="stopModalAutoChange($event)" @pointerleave.prevent="stopModalAutoChange($event)">−</button>
+                  <input type="number" v-model.number="modalQty" class="form-control text-center qty-input" min="1" @blur="modalQty = Math.max(1, Math.floor(Number(modalQty) || 1))" />
+                  <button class="btn-qty" @pointerdown.prevent="startModalAutoChange(1, $event)" @pointerup.prevent="stopModalAutoChange($event)" @pointerleave.prevent="stopModalAutoChange($event)">+</button>
                 </div>
                 <div class="w-100">
-                  <button class="add-btn btn-primary w-100" @click="confirmAddFromModal" :style="{ '--accent': company?.primaryColor || '#0d6efd' }" aria-label="Adicionar ao carrinho">
+                  <button class="add-btn w-100" @click="confirmAddFromModal" aria-label="Adicionar ao carrinho">
                     <span class="add-label">Adicionar</span>
                     <span class="add-price">{{ formatCurrency(modalTotal) }}</span>
                   </button>
@@ -454,21 +530,13 @@
                 </button>
               </div>
             </div>
-              </div>
-            </div>
-
-            
-          </div>
-        </div>
+          </div><!-- /modal-content -->
+        </div><!-- /product-modal -->
        
 
         <!-- Cart view: unified drawer is used for all screen sizes (replaces the old centered mobile modal) -->
 
-  
-        
   <!-- Multi-step checkout modal -->
-  
-      </div>
       <div v-if="!isCatalogMode && checkoutModalOpen" class="product-modal checkout-modal full-mobile" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:11000">
   <div :class="['modal-content','bg-white','rounded','shadow','modal-content-padding']">
     <div class="d-flex align-items-center justify-content-between mb-3 checkout-header">
@@ -495,41 +563,70 @@
             </div>
 
             <div v-if="checkoutStep === 'customer'">
-              <!-- Match spacing and rhythm used in the review step -->
-              <div class="mb-3">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                  <div class="d-flex align-items-center">
-                    <i class="bi bi-person me-2 text-muted" aria-hidden="true"></i>
-                    <div>
-                      <div class="fw-bold">Cliente</div>
-                      <div class="small text-muted">Preencha seu nome e WhatsApp para prosseguir</div>
-                    </div>
+              <div class="checkout-section-card mb-3">
+                <div class="checkout-section-header mb-3">
+                  <div class="summary-icon"><i class="bi bi-person"></i></div>
+                  <div>
+                    <div class="fw-bold">Seus dados</div>
                   </div>
                 </div>
 
-                <div class="mb-2">
-                  <TextInput label="WhatsApp / Telefone" labelClass="form-label" v-model="customer.contact" inputClass="form-control" placeholder="(00) 9 0000-0000" maxlength="16" @input="handleContactInput" />
-                  <div class="small mt-1" :class="customerPhoneValid ? 'text-success' : 'text-danger'">
-                    <template v-if="customer.contact && customer.contact.length">
-                      <span v-if="customerPhoneValid">Número válido</span>
-                      <span v-else>Formato inválido — inclua DDD (ex: (11) 9 9123-4567)</span>
-                    </template>
+                <!-- Login / Register tabs -->
+                <div class="checkout-tabs mb-3">
+                  <button :class="['checkout-tab', { active: customerTab === 'login' }]" @click="customerTab = 'login'">Entrar</button>
+                  <button :class="['checkout-tab', { active: customerTab === 'register' }]" @click="customerTab = 'register'">Criar Conta</button>
+                </div>
+
+                <div v-if="customerFormMsg" class="alert mb-3" :class="customerFormMsgType" style="border-radius:10px;font-size:13px;padding:10px 14px">{{ customerFormMsg }}</div>
+
+                <!-- LOGIN tab -->
+                <div v-if="customerTab === 'login'">
+                  <div class="mb-3">
+                    <label class="form-label">WhatsApp / Telefone</label>
+                    <input :value="loginForm.phone" @input="onLoginPhoneInput" class="form-control" type="text" placeholder="(00) 9 0000-0000" maxlength="16" />
+                    <div class="small text-muted mt-1">Formato: (DD) 9 0000-0000 — inclua o DDD</div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Senha</label>
+                    <input v-model="loginForm.password" class="form-control" type="password" autocomplete="current-password" />
+                  </div>
+                  <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <button class="btn btn-primary btn-next" @click="doLoginInCheckout" :disabled="customerFormLoading" style="min-width:100px">
+                      <span v-if="customerFormLoading" class="spinner-border spinner-border-sm me-1"></span>
+                      Entrar
+                    </button>
+                    <a href="#" class="checkout-link d-flex align-items-center gap-1" @click.prevent="continueWithWhatsappFromLogin">
+                      <i class="bi bi-whatsapp"></i> Continuar com WhatsApp
+                    </a>
                   </div>
                 </div>
-                <div class="mb-2">
-                  <TextInput v-if="!accountHasPassword" label="Nome" labelClass="form-label" v-model="customer.name" inputClass="form-control" />
-                  <TextInput v-else type="password" label="Senha" labelClass="form-label" v-model="customerPassword" inputClass="form-control" autocomplete="current-password" />
-                  <div v-if="accountCheckLoading" class="small text-muted mt-1">Verificando conta...</div>
-                </div>
-                <div class="small mt-2">
-                  <a v-if="!accountHasPassword" href="#" @click.prevent="openRegister">Não tem conta? Criar conta</a>
-                  <span v-if="accountExists && !accountHasPassword" class="text-muted ms-2">Conta encontrada sem senha</span>
-                </div>
-              </div>
 
-              <div class="d-flex justify-content-between mt-3">
-                <button class="btn btn-outline-secondary" @click="closeCheckout">Cancelar</button>
-                <button class="btn btn-primary btn-confirm" @click="nextFromCustomer" :disabled="accountHasPassword ? (!customerPhoneValid || !customerPassword) : (!customer.name || !customerPhoneValid)">Próximo</button>
+                <!-- REGISTER tab -->
+                <div v-if="customerTab === 'register'">
+                  <div class="mb-3">
+                    <label class="form-label">Nome</label>
+                    <input v-model="regForm.name" class="form-control" type="text" />
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">WhatsApp</label>
+                    <input :value="regForm.whatsapp" @input="onRegWhatsappInput" class="form-control" type="text" placeholder="(00) 9 0000-0000" maxlength="16" />
+                    <div class="small text-muted mt-1">Utilize DDD, exemplo: (11) 9 9123-4567</div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">E-mail</label>
+                    <input v-model="regForm.email" class="form-control" type="email" />
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Senha</label>
+                    <input v-model="regForm.password" class="form-control" type="password" autocomplete="new-password" />
+                  </div>
+                  <div class="d-flex justify-content-end">
+                    <button class="btn btn-primary btn-next" @click="doRegisterInCheckout" :disabled="customerFormLoading" style="min-width:120px">
+                      <span v-if="customerFormLoading" class="spinner-border spinner-border-sm me-1"></span>
+                      Criar Conta
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -630,8 +727,8 @@
                 <!-- end else (has addresses) -->
               </div>
 
-              <div class="d-flex justify-content-between mt-3">
-                <button class="btn btn-primary btn-next d-none d-sm-block" @click="nextFromDelivery">Próximo <i class="bi bi-chevron-right"></i></button>
+              <div class="checkout-actions mt-3">
+                <button class="btn btn-primary btn-next w-100 d-none d-sm-block" @click="nextFromDelivery">Próximo <i class="bi bi-chevron-right ms-1"></i></button>
               </div>
             </div>
 
@@ -732,8 +829,8 @@
                 
                 
                 
-              <div class="d-flex justify-content-between mt-3">
-                <button class="btn btn-primary btn-next d-none d-sm-block" @click="goToReview">Próximo <i class="bi bi-chevron-right"></i></button>
+              <div class="checkout-actions mt-3">
+                <button class="btn btn-primary btn-next w-100 d-none d-sm-block" @click="goToReview">Próximo <i class="bi bi-chevron-right ms-1"></i></button>
               </div>
             </div>
 
@@ -829,19 +926,16 @@
                 <button class="btn btn-link btn-summary" @click="checkoutStep = 'payment'" aria-label="Editar pagamento"><i class="bi bi-pencil"></i></button>
               </div>
 
-              <div class="d-flex justify-content-between mt-3">
-                <button class="btn btn-success btn-next d-none d-sm-block" @click="performOrderFromModal">Confirmar pedido</button>
+              <div class="checkout-actions mt-3">
+                <button class="btn btn-success btn-next w-100 d-none d-sm-block" @click="performOrderFromModal"><i class="bi bi-check-circle me-2"></i>Confirmar pedido</button>
               </div>
             </div>
           </div>
     </div>
 
-    <!-- Mobile fixed footer for checkout actions (visible only on small screens) -->
-    <div class="checkout-footer d-flex d-lg-none justify-content-between align-items-center">
-      <!-- <button class="btn btn-outline-secondary flex-fill me-2" @click="stepIndex > 0 ? goBackFromStep() : closeCheckout()">{{ stepIndex > 0 ? 'Voltar' : 'Cancelar' }}</button>
-      <div style="width:12px"></div>-->
+    <!-- Mobile fixed footer for checkout actions (visible only on small screens, not on customer step which has inline buttons) -->
+    <div v-if="checkoutStep !== 'customer'" class="checkout-footer d-flex d-lg-none justify-content-between align-items-center">
       <button v-if="checkoutStep === 'review'" class="btn btn-success flex-fill btn-next" @click="performOrderFromModal">Confirmar pedido</button>
-      <button v-else-if="checkoutStep === 'customer'" class="btn btn-primary flex-fill btn-next" :disabled="!customer.name || !customerPhoneValid" @click="nextFromCustomer">Próximo</button>
       <button v-else-if="checkoutStep === 'delivery'" class="btn btn-primary flex-fill btn-next" @click="nextFromDelivery">Próximo</button>
       <button v-else-if="checkoutStep === 'payment'" class="btn btn-primary flex-fill btn-next" @click="goToReview">Próximo</button>
     </div>
@@ -853,184 +947,128 @@
    <!-- Unified slide-in drawer (used on desktop and mobile) -->
   <div class="drawer-backdrop" v-if="!isCatalogMode && cartModalOpen && cart.length > 0" @click="closeCartModal"></div>
   <aside v-if="!isCatalogMode" class="cart-drawer" :class="{ open: cartModalOpen && cart.length > 0 }" :aria-hidden="!cartModalOpen" role="dialog" aria-label="Carrinho">
-          <div class="drawer-header d-flex justify-content-between align-items-center p-3 border-bottom">
+          <div class="drawer-header d-flex justify-content-between align-items-center p-3">
             <div>
-              <div class="drawer-subtitle">Sacola</div>
+              <div class="drawer-subtitle">SACOLA</div>
               <h5 class="m-0">{{ displayName }}</h5>
             </div>
             <button class="btn-icon-round" @click="closeCartModal" aria-label="Fechar">
               <i class="bi bi-x-lg"></i>
             </button>
           </div>
-          <div class="drawer-body p-3" style="overflow:auto;">
-            <div v-if="cart.length===0" class="text-muted">Sua sacola está vazia.</div>
-            <ul v-else class="list-group mb-3">
-              <li class="list-group-item cart-line" v-for="(it, i) in cart" :key="it.lineId">
-                <div class="d-flex align-items-start">
-                  <div class="cart-item-qty text-muted me-3">{{ it.quantity }}x</div>
-                  <div class="d-flex flex-column w-100">
-                  <div class="d-flex w-100">
-                  <div class="cart-item-name flex-fill me-3" style="min-width:0">
-                    <div class="product-name">{{ it.name }}</div>
-                    <div v-for="(e, idx) in getLineDiscountEntries(it)" :key="'d2-'+idx" class="small text-success mt-1">{{ e.description }}: -{{ formatCurrency(e.amount) }}</div>
-                  </div>
-                  <div class="cart-item-price text-end me-3">
-                    <template v-if="computeLineDiscount(it) > 0">
-                      <div class="small text-muted text-decoration-line-through">{{ formatCurrency(it.price * it.quantity) }}</div>
-                      <div class="fw-bold">{{ formatCurrency((it.price * it.quantity) - computeLineDiscount(it)) }}</div>
-                    </template>
-                    <template v-else>
-                      {{ formatCurrency(it.price * it.quantity) }}
-                    </template>
-                  </div>
-                  </div>
-                  <div class="d-flex w-100 justify-content-between align-items-center">
-                    <div class="small text-muted option-summary drawer-wrap">{{ optionsSummaryNoPrice(it) }}</div>
-                    <div class="cart-item-actions d-flex align-items-center ms-3">
-                      <button class="btn btn-sm btn-outline-secondary me-2" @click="editCartItem(i)" aria-label="Editar item"><i class="bi bi-pencil"></i></button>
-                      <button class="btn btn-sm btn-outline-danger" @click="removeItem(i)" aria-label="Remover item"><i class="bi bi-trash"></i></button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              </li>
-            </ul>
-
-            <!-- summary and coupon area -->
-            <div class="cart-summary p-3 border-top">
-                        <div class="d-flex justify-content-between mb-2"><div>Subtotal</div><div>{{ formatCurrency(subtotal) }}</div></div>
-                        <div class="d-flex justify-content-between mb-2"><div>Taxa de entrega</div><div>
-                          <template v-if="orderType==='DELIVERY'">
-                            <template v-if="neighborhood && String(neighborhood).trim() !== ''">
-                              {{ Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee) }}
-                            </template>
-                            <template v-else>
-                              Será calculada após escolher o endereço
-                            </template>
-                          </template>
-                          <template v-else>
-                            —
-                          </template>
-                        </div></div>
-                        <hr />
-                        <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
-                        <div v-if="discountsList.length>0" class="d-flex justify-content-between mb-2 text-success"><div>Desconto(s)</div><div>-{{ formatCurrency(discountsTotal) }}</div></div>
-                        <div class="d-flex justify-content-between fw-bold mb-2"><div>Total</div><div>{{ formatCurrency(Math.max(0, subtotal - (couponDiscount || 0) - (discountsTotal || 0)) + currentDeliveryFee) }}</div></div>
-                        <div v-if="cashbackEnabled && estimatedCashbackTotal > 0" class="cashback-summary-row">
-                          <div class="cashback-pill">
-                            <span class="cashback-coin">$</span>
-                            <span>Você receberá {{ formatCurrency(estimatedCashbackTotal) }} de cashback</span>
-                          </div>
-                        </div>
-
-              <div class="coupon-block mt-3">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div class="small">Tem um cupom? Clique e insira o código</div>
-                  <button class="btn btn-sm btn-outline-secondary" @click="openCoupon = !openCoupon">›</button>
-                </div>
-                <div v-show="openCoupon" class="mt-2">
-                  <div class="input-group">
-                    <TextInput v-model="couponCode" placeholder="Código do cupom" inputClass="form-control" />
-                    <button class="btn btn-primary" @click="applyCoupon" :disabled="couponLoading">
-                      <span v-if="couponLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      Aplicar
+          <div class="drawer-body" style="overflow:auto;">
+            <div v-if="cart.length===0" class="text-muted p-3">Sua sacola está vazia.</div>
+            <div v-else class="drawer-items-list">
+              <div v-for="(it, i) in cart" :key="it.lineId" class="drawer-item">
+                <img v-if="it.image" :src="assetUrl(it.image)" class="drawer-item-img" alt="" />
+                <div v-else class="drawer-item-img drawer-item-img-placeholder"><i class="bi bi-image"></i></div>
+                <div class="drawer-item-info">
+                  <div class="drawer-item-name">{{ it.name }}</div>
+                  <div v-if="it.options && it.options.length" class="drawer-item-opts">{{ optionsSummaryNoPrice(it) }}</div>
+                  <div class="drawer-item-stepper">
+                    <button class="stepper-btn" @click="it.quantity <= 1 ? removeItem(i) : decrementCartItem(i)" :aria-label="it.quantity <= 1 ? 'Remover' : 'Diminuir'">
+                      <i :class="it.quantity <= 1 ? 'bi bi-trash3' : 'bi bi-dash'"></i>
                     </button>
-                  </div>
-                  <div class="mt-2">
-                    <div v-if="tipMessages['coupon']" class="small text-danger">{{ tipMessages['coupon'] }}</div>
-                    <div v-if="tipMessages['coupon-success']" class="small text-success">{{ tipMessages['coupon-success'] }}</div>
-                    <div v-if="couponApplied" class="mt-2 d-flex align-items-center gap-2">
-                      <small class="text-success">Cupom aplicado: <strong>{{ couponInfo?.code }} — {{ formatCurrency(couponDiscount) }}</strong></small>
-                      <button class="btn btn-sm btn-outline-secondary" @click="removeCoupon">Remover</button>
-                    </div>
+                    <span class="stepper-qty">{{ it.quantity }}</span>
+                    <button class="stepper-btn stepper-btn-add" @click="incrementCartItem(i)" aria-label="Aumentar"><i class="bi bi-plus"></i></button>
                   </div>
                 </div>
+                <div class="drawer-item-price">{{ formatCurrency(computeLineDiscount(it) > 0 ? (it.price * it.quantity) - computeLineDiscount(it) : it.price * it.quantity) }}</div>
               </div>
+            </div>
+
+            <!-- summary -->
+            <div v-if="cart.length > 0" class="drawer-summary">
+              <div class="d-flex justify-content-between mb-1"><span class="text-muted">Subtotal</span><span>{{ formatCurrency(subtotal) }}</span></div>
+              <div class="d-flex justify-content-between mb-1"><span class="text-muted">Entrega</span><span>
+                <template v-if="orderType==='DELIVERY'">
+                  <template v-if="neighborhood && String(neighborhood).trim() !== ''">{{ Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee) }}</template>
+                  <template v-else>—</template>
+                </template>
+                <template v-else>—</template>
+              </span></div>
+              <div v-if="couponApplied" class="d-flex justify-content-between mb-1 text-success"><span>Cupom</span><span>-{{ formatCurrency(couponDiscount) }}</span></div>
+              <div v-if="discountsTotal > 0" class="d-flex justify-content-between mb-1 text-success"><span>Descontos</span><span>-{{ formatCurrency(discountsTotal) }}</span></div>
+              
+              <div v-if="cashbackEnabled && estimatedCashbackTotal > 0" class="drawer-cashback-row">
+                <i class="bi bi-stars me-1"></i> Você receberá {{ formatCurrency(estimatedCashbackTotal) }} de cashback
+              </div>
+              <div class="d-flex justify-content-between fw-bold drawer-total"><span>Total</span><span class="drawer-total-value">{{ formatCurrency(finalTotal) }}</span></div>
             </div>
           </div>
-          <div class="drawer-footer p-3 border-top d-flex justify-content-end align-items-center">
-            <div class="d-flex gap-2 w-100">
-              <button class="btn btn-outline-secondary flex-fill" @click="closeCartModal">Continuar comprando</button>
-              <button class="btn btn-primary flex-fill d-flex align-items-center justify-content-center" :disabled="cart.length===0 || submitting || !isOpen" @click="proceedFromCart">
-                <div class="d-flex flex-column align-items-end me-3" style="line-height:1">
-                  <strong style="display:block">{{ formatCurrency(finalTotal) }}</strong>
-                  <small class="text-white" style="display:block">{{ cart.length }} item{{ cart.length>1 ? 's' : '' }}</small>
-                </div>
-                <span>Avançar</span>
-              </button>
-            </div>
+          <div class="drawer-footer p-3">
+            <button class="btn drawer-checkout-btn w-100" :disabled="cart.length===0 || submitting || !isOpen" @click="proceedFromCart">
+              Finalizar pedido
+            </button>
           </div>
         </aside>
-        <!-- Simple info modal (opened from 'Mais informações') with tabs -->
-        <div v-if="infoModalOpen" class="product-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:11100">
-          <div class="modal-content bg-white rounded shadow p-3" style="width:520px;max-width:94%;">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-              <h5 class="m-0">Informações da loja</h5>
-              <div><button class="btn btn-sm btn-outline-secondary close-x" @click="closeInfoModal" aria-label="Fechar">&times;</button></div>
+        <!-- Info modal (Mais informações) -->
+        <div v-if="infoModalOpen" class="product-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:flex-end;justify-content:center;z-index:11100">
+          <div class="info-modal-sheet">
+            <div class="info-modal-handle"></div>
+            <div class="info-modal-header">
+              <h5 class="m-0 fw-bold">Informações da loja</h5>
+              <button class="btn-icon-round" @click="closeInfoModal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
             </div>
-            <div class="modal-body p-2" style="max-height:60vh;overflow:auto">
-              <ul class="nav nav-tabs mb-3" role="tablist">
-                <li class="nav-item" role="presentation"><button type="button" :class="['nav-link', infoTab === 'hours' ? 'active' : '']" @click="infoTab = 'hours'">Horário</button></li>
-                <li class="nav-item" role="presentation"><button type="button" :class="['nav-link', infoTab === 'contacts' ? 'active' : '']" @click="infoTab = 'contacts'">Contatos</button></li>
-                <li class="nav-item" role="presentation"><button type="button" :class="['nav-link', infoTab === 'payments' ? 'active' : '']" @click="infoTab = 'payments'">Formas de pagamento</button></li>
-              </ul>
 
+            <div class="info-modal-tabs">
+              <button :class="['info-tab', { active: infoTab === 'hours' }]" @click="infoTab = 'hours'"><i class="bi bi-clock me-1"></i>Horário</button>
+              <button :class="['info-tab', { active: infoTab === 'contacts' }]" @click="infoTab = 'contacts'"><i class="bi bi-telephone me-1"></i>Contatos</button>
+              <button :class="['info-tab', { active: infoTab === 'payments' }]" @click="infoTab = 'payments'"><i class="bi bi-credit-card me-1"></i>Pagamento</button>
+            </div>
+
+            <div class="info-modal-body">
               <div v-show="infoTab === 'hours'">
-                <div class="mb-2">
-                  <strong>Horário</strong>
-                  <div v-if="scheduleList && scheduleList.length">
-                    <ul class="list-unstyled small mb-0">
-                      <li v-for="d in scheduleList" :key="d.day" :class="{ 'fw-bold': isTodaySchedule(d) }">
-                        <span>{{ weekDayNames[Number(d.day) || 0] }} - </span>
-                        <span v-if="d.enabled">Abre {{ d.from || '--:--' }} fecha {{ d.to || '--:--' }}</span>
-                        <span v-else class="text-muted">Fechado</span>
-                      </li>
-                    </ul>
-                    <div class="mt-2">
-                      <div v-if="isOpen" class="small text-success">{{ openUntilText }}</div>
-                      <div v-else class="small text-muted">{{ nextOpenText }}</div>
-                    </div>
+                <div v-if="scheduleList && scheduleList.length" class="info-schedule-list">
+                  <div v-for="d in scheduleList" :key="d.day" :class="['info-schedule-row', { today: isTodaySchedule(d) }]">
+                    <span class="info-schedule-day">{{ weekDayNames[Number(d.day) || 0] }}</span>
+                    <span v-if="d.enabled" class="info-schedule-time">{{ d.from || '--:--' }} — {{ d.to || '--:--' }}</span>
+                    <span v-else class="info-schedule-closed">Fechado</span>
                   </div>
-                  <div v-else>
-                    <div class="small text-muted">{{ companyHoursText }}</div>
-                    <div v-if="isOpen" class="small text-success">{{ openUntilText }}</div>
-                    <div v-else class="small text-muted">{{ nextOpenText }}</div>
-                  </div>
+                </div>
+                <div v-else class="small" style="color:var(--pm-text-muted)">{{ companyHoursText }}</div>
+                <div class="info-status-row mt-3">
+                  <span v-if="isOpen" class="info-status open"><i class="bi bi-check-circle me-1"></i>{{ openUntilText }}</span>
+                  <span v-else class="info-status closed"><i class="bi bi-x-circle me-1"></i>{{ nextOpenText || 'Fechado' }}</span>
                 </div>
               </div>
 
               <div v-show="infoTab === 'contacts'">
-                <div class="mb-2">
-                  <strong>Contatos</strong>
-                  <div class="small text-muted" v-if="company?.phone">Telefone: {{ company.phone }}</div>
-                  <div class="small text-muted" v-if="company?.email">E-mail: {{ company.email }}</div>
-                  <div v-if="company?.contacts && company.contacts.length">
-                    <div v-for="c in company.contacts" :key="c.type" class="small text-muted">{{ c.type }}: {{ c.value }}</div>
-                  </div>
-                  <div v-if="!company?.phone && !company?.email && !(company?.contacts && company.contacts.length)" class="small text-muted">Nenhum contato disponível</div>
+                <div v-if="company?.phone" class="info-contact-row">
+                  <div class="info-contact-icon"><i class="bi bi-telephone"></i></div>
+                  <div><div class="small fw-semibold">Telefone</div><div class="small" style="color:var(--pm-text-muted)">{{ company.phone }}</div></div>
                 </div>
+                <div v-if="company?.email" class="info-contact-row">
+                  <div class="info-contact-icon"><i class="bi bi-envelope"></i></div>
+                  <div><div class="small fw-semibold">E-mail</div><div class="small" style="color:var(--pm-text-muted)">{{ company.email }}</div></div>
+                </div>
+                <div v-if="company?.contacts && company.contacts.length">
+                  <div v-for="c in company.contacts" :key="c.type" class="info-contact-row">
+                    <div class="info-contact-icon"><i class="bi bi-chat-dots"></i></div>
+                    <div><div class="small fw-semibold">{{ c.type }}</div><div class="small" style="color:var(--pm-text-muted)">{{ c.value }}</div></div>
+                  </div>
+                </div>
+                <div v-if="!company?.phone && !company?.email && !(company?.contacts && company.contacts.length)" class="text-center py-3 small" style="color:var(--pm-text-muted)">Nenhum contato disponível</div>
               </div>
 
               <div v-show="infoTab === 'payments'">
-                <div class="mb-2">
-                  <strong>Formas de pagamento</strong>
-                  <div v-if="paymentMethods && paymentMethods.length">
-                    <ul class="list-unstyled mb-0 mt-2">
-                      <li v-for="m in paymentMethods" :key="m.code" class="small text-muted">{{ m.name }} <span v-if="m.description">— <em class="text-muted">{{ m.description }}</em></span></li>
-                    </ul>
+                <div v-if="paymentMethods && paymentMethods.length">
+                  <div v-for="m in paymentMethods" :key="m.code" class="info-payment-row">
+                    <div class="info-payment-icon"><i class="bi bi-wallet2"></i></div>
+                    <div>
+                      <div class="small fw-semibold">{{ m.name }}</div>
+                      <div v-if="m.description" class="small" style="color:var(--pm-text-muted)">{{ m.description }}</div>
+                    </div>
                   </div>
-                  <div v-else class="small text-muted">Dinheiro</div>
+                </div>
+                <div v-else class="info-payment-row">
+                  <div class="info-payment-icon"><i class="bi bi-cash"></i></div>
+                  <div class="small fw-semibold">Dinheiro</div>
                 </div>
               </div>
-
-            </div>
-            <div class="modal-footer p-2" style="border-top: none;">
-              <button class="btn btn-secondary" @click="closeInfoModal">Fechar</button>
             </div>
           </div>
         </div>
-
-        <!-- Info modal removed -->
       </template>
 
 <script setup>
@@ -1684,6 +1722,13 @@ const accountHasPassword = ref(false)
 const customerPassword = ref('')
 const accountCheckLoading = ref(false)
 const lastCheckedPhone = ref('')
+// Checkout customer tab: 'login' or 'register'
+const customerTab = ref('login')
+const regForm = ref({ name: '', whatsapp: '', email: '', password: '' })
+const loginForm = ref({ phone: '', password: '' })
+const customerFormMsg = ref('')
+const customerFormMsgType = ref('')
+const customerFormLoading = ref(false)
 // load persisted customer if any (after customer is defined)
 const savedCustomerRaw = localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || null
 const savedCustomer = JSON.parse(savedCustomerRaw || 'null')
@@ -2543,7 +2588,7 @@ function validatePersistedCart(){
 
       const unit = Number(p.price || 0) + optionsTotal
       const qty = Math.max(1, Number(it.quantity || 1))
-      newCart.push({ lineId: it.lineId || _makeLineId(), productId: p.id, name: p.name, price: unit, quantity: qty, options: validatedOptions, image: it.image, categoryId: p.categoryId || null })
+      newCart.push({ lineId: it.lineId || _makeLineId(), productId: p.id, name: p.name, price: unit, quantity: qty, options: validatedOptions, image: it.image || p.image || null, categoryId: p.categoryId || null })
       if(optionDropped) removedItems.push(`${it.name} (opções removidas)`)
     }
 
@@ -2559,7 +2604,7 @@ function addToCart(p, options = []){
   const idx = findCartIndex(p.id, options)
   if(idx >= 0){ cart.value[idx].quantity += 1 }
   else {
-    cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: Number(p.price), quantity: 1, options: options || [], categoryId: p.categoryId || null })
+    cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: Number(p.price), quantity: 1, options: options || [], image: p.image || null, categoryId: p.categoryId || null })
   }
 }
 
@@ -2581,7 +2626,7 @@ function addToCartWithOptions(p, selections, qty=1){
   // try to merge with existing line that has same productId+options
   const idx = findCartIndex(p.id, selectedOptions)
   if(idx >= 0){ cart.value[idx].quantity += qty }
-  else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, categoryId: p.categoryId || null }) }
+  else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, image: p.image || null, categoryId: p.categoryId || null }) }
   // Meta Pixel: track add to cart
   try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: p.price, options: selectedOptions }, qty) }catch(e){}
   try{ trackMenuEvent(companyId, menuId.value, 'ADD_TO_CART', { productId: p.id }) }catch(e){}
@@ -2897,6 +2942,8 @@ function stopModalAutoChange(ev){
 function incQuantity(i){ cart.value[i].quantity += 1; }
 function decQuantity(i){ cart.value[i].quantity = Math.max(1, cart.value[i].quantity - 1); }
 function removeItem(i){ cart.value.splice(i,1); }
+function decrementCartItem(i){ if(cart.value[i] && cart.value[i].quantity > 1) cart.value[i].quantity-- }
+function incrementCartItem(i){ if(cart.value[i]) cart.value[i].quantity++ }
 
 function incrementProduct(p){
   // Always open the product modal to force selection (even for products without option groups)
@@ -3289,6 +3336,100 @@ async function nextFromCustomer(){
     }
   }catch(e){ /* ignore */ }
 
+  saveCustomerToLocal()
+  checkoutStep.value = 'delivery'
+}
+
+function onLoginPhoneInput(e) {
+  try { loginForm.value.phone = applyPhoneMask(e && e.target ? e.target.value : String(e || '')) } catch(e) {}
+}
+function onRegWhatsappInput(e) {
+  try { regForm.value.whatsapp = applyPhoneMask(e && e.target ? e.target.value : String(e || '')) } catch(e) {}
+}
+
+async function doLoginInCheckout() {
+  customerFormMsg.value = ''
+  const raw = loginForm.value.phone || ''
+  const password = loginForm.value.password || ''
+  if (!raw || !password) { customerFormMsg.value = 'Informe WhatsApp e senha'; customerFormMsgType.value = 'alert-danger'; return }
+  const digits = removePhoneMask(raw)
+  if (!digits || String(digits).length < 10) { customerFormMsg.value = 'Informe um WhatsApp válido (DDD + número)'; customerFormMsgType.value = 'alert-danger'; return }
+  customerFormLoading.value = true
+  try {
+    const body = { whatsapp: digits, password }
+    const res = await api.post(`/public/${companyId}/login`, body, { headers: { 'x-no-redirect': '1' } })
+    if (res && res.data && res.data.token) {
+      try { localStorage.setItem(PUBLIC_TOKEN_KEY, res.data.token) } catch(e) {}
+      try { tokenRef.value = res.data.token } catch(e) {}
+      if (res.data.customer) {
+        try { localStorage.setItem(LOCAL_CUSTOMER_KEY, JSON.stringify(res.data.customer)) } catch(e) {}
+        try {
+          const prof = res.data.customer
+          customer.value = {
+            name: String(prof.name || prof.fullName || ''),
+            contact: String(prof.contact || prof.whatsapp || prof.phone || ''),
+            address: customer.value.address
+          }
+        } catch(e) {}
+      }
+      try { await fetchProfileAndAddresses() } catch(e) {}
+      try { window.dispatchEvent(new CustomEvent('app:user-logged-in')) } catch(e) {}
+      saveCustomerToLocal()
+      checkoutStep.value = 'delivery'
+    }
+  } catch(err) {
+    const status = err?.response?.status
+    if (status === 401) customerFormMsg.value = 'Usuário ou senha inválidos'
+    else customerFormMsg.value = err?.response?.data?.message || 'Erro ao autenticar'
+    customerFormMsgType.value = 'alert-danger'
+  } finally { customerFormLoading.value = false }
+}
+
+async function doRegisterInCheckout() {
+  customerFormMsg.value = ''
+  if (!regForm.value.whatsapp || !regForm.value.password) { customerFormMsg.value = 'WhatsApp e senha são obrigatórios'; customerFormMsgType.value = 'alert-danger'; return }
+  const digits = removePhoneMask(regForm.value.whatsapp || '')
+  if (!digits || String(digits).length < 10) { customerFormMsg.value = 'Informe um WhatsApp válido (DDD + número)'; customerFormMsgType.value = 'alert-danger'; return }
+  customerFormLoading.value = true
+  try {
+    const payload = { name: regForm.value.name, whatsapp: digits, email: regForm.value.email || null, password: regForm.value.password }
+    const res = await api.post(`/public/${companyId}/register`, payload)
+    if (res && res.data && res.data.token) {
+      try { localStorage.setItem(PUBLIC_TOKEN_KEY, res.data.token) } catch(e) {}
+      try { tokenRef.value = res.data.token } catch(e) {}
+      if (res.data.customer) {
+        try { localStorage.setItem(LOCAL_CUSTOMER_KEY, JSON.stringify(res.data.customer)) } catch(e) {}
+        try {
+          const prof = res.data.customer
+          customer.value = {
+            name: String(prof.name || prof.fullName || ''),
+            contact: String(prof.contact || prof.whatsapp || prof.phone || ''),
+            address: customer.value.address
+          }
+        } catch(e) {}
+      }
+      try { await fetchProfileAndAddresses() } catch(e) {}
+      try { window.dispatchEvent(new CustomEvent('app:user-logged-in')) } catch(e) {}
+      saveCustomerToLocal()
+      checkoutStep.value = 'delivery'
+    }
+  } catch(err) {
+    const status = err?.response?.status
+    if (status === 400) customerFormMsg.value = err?.response?.data?.message || 'Dados inválidos'
+    else customerFormMsg.value = err?.response?.data?.message || 'Erro ao criar conta'
+    customerFormMsgType.value = 'alert-danger'
+  } finally { customerFormLoading.value = false }
+}
+
+function continueWithWhatsappFromLogin() {
+  // Skip auth — use phone from login form, prompt for name, proceed
+  customerFormMsg.value = ''
+  const phone = loginForm.value.phone || ''
+  const digits = removePhoneMask(phone)
+  if (!digits || String(digits).length < 10) { customerFormMsg.value = 'Informe o WhatsApp primeiro'; customerFormMsgType.value = 'alert-danger'; return }
+  // set customer contact from login form phone
+  customer.value.contact = phone
+  if (!customer.value.name) { customer.value.name = 'Cliente' }
   saveCustomerToLocal()
   checkoutStep.value = 'delivery'
 }
@@ -4304,9 +4445,34 @@ try{
 #mainMenu h5, #mainMenu .h5 { font-size: 19px; font-weight: 800; color: var(--pm-text); letter-spacing: -0.4px; text-align: left; margin-bottom: 4px; }
  .public-hero { background: #222; color: #fff; height: 220px; overflow: hidden; }
 .public-hero h3 { font-weight:700; color:#fff }
-.top-public-nav .nav-actions a, .top-public-nav .nav-actions button { color: #fff; opacity: .95 }
-.top-public-nav .nav-actions a:hover, .top-public-nav .nav-actions button:hover { opacity: 1 }
-.cart-badge-top { font-size: 11px; position: absolute; top: -6px; right: -8px; padding: 3px 6px; }
+.cart-badge-top { font-size: 10px; position: absolute; top: -4px; right: -6px; padding: 2px 5px; min-width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+
+/* Hero nav — circular glassmorphic buttons */
+.hero-nav {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 1015;
+  padding: 48px 16px 0;
+}
+.hero-nav-inner {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.hero-nav-btn {
+  all: unset; cursor: pointer;
+  width: 38px; height: 38px; border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 16px;
+  transition: background 0.15s;
+  position: relative;
+}
+.hero-nav-btn:hover { background: rgba(255,255,255,0.3); }
+.hero-nav-avatar {
+  background: rgba(255,255,255,0.22);
+}
+@media (min-width: 992px) {
+  .hero-nav { padding: 20px 48px 0; }
+}
 
 /* Offcanvas Mobile Menu */
 .offcanvas-backdrop {
@@ -4420,28 +4586,121 @@ try{
   z-index: 1;
 }
 
-/* hero overlapping white panel */
-.hero-panel { background: var(--pm-surface); margin-top: -48px; padding: 18px; border-radius: 20px; max-width: 980px; box-shadow: var(--pm-shadow-elevated); position: relative; z-index: 1046 }
-.company-name { font-size: 1.4rem; margin-bottom: 0; font-weight: 800; color: var(--pm-text); letter-spacing: -0.4px; }
-.company-subtitle { color: var(--pm-text-muted); font-size: 0.8rem; }
-.more-info-link { color: var(--brand-dark, #0d6efd) !important; font-weight: 600; text-decoration: none; font-size: 12.5px; }
-.company-logo-wrapper { width: 56px; height: 56px; background: var(--pm-surface); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); flex: 0 0 56px; }
-.company-logo { width: 100%; height: 100%; object-fit: cover; }
-
-.status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--pm-radius-pill); font-size: 12.5px; font-weight: 600; }
-.status-pill.open { background: #0E6B1F; color: #fff; }
-.status-pill.closed { background: #2A1A0E; color: #fff; }
+/* ===== Hero panel — overlapping card (faithful to design) ===== */
+.hero-panel {
+  background: var(--pm-surface);
+  margin-top: -60px;
+  padding: 20px;
+  border-radius: 20px;
+  max-width: 1216px;
+  box-shadow: var(--pm-shadow-elevated);
+  position: relative;
+  z-index: 1046;
+}
+.hero-panel-layout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hero-panel-info { flex: 1; min-width: 0; }
+.company-logo-wrapper {
+  width: 72px; height: 72px;
+  background: var(--pm-surface);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+  flex-shrink: 0;
+}
+.company-logo { width: 100%; height: 100%; object-fit: cover; display: block; }
+.company-name {
+  font-size: 1.5rem; margin-bottom: 2px; font-weight: 800;
+  color: var(--pm-text); letter-spacing: -0.5px; line-height: 1.1;
+}
+.company-subtitle { color: var(--pm-text-muted); font-size: 13px; margin-bottom: 6px; }
+.company-status-row {
+  display: flex; align-items: center; gap: 16px; margin-bottom: 8px; flex-wrap: wrap;
+}
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 14px; border-radius: var(--pm-radius-pill);
+  font-size: 12px; font-weight: 600; letter-spacing: -0.1px;
+}
+.status-pill.open { background: #2b8a3e; color: #fff; }
+.status-pill.closed { background: #e8384f; color: #fff; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-.status-dot.open { background: #6EE787; box-shadow: 0 0 8px #6EE787; }
-.status-dot.closed { background: #FF9B9B; }
+.status-dot.open { background: #8ce99a; }
+.status-dot.closed { background: #ffc9c9; }
+.more-info-link {
+  color: var(--brand-dark, #0d6efd) !important; font-weight: 600;
+  text-decoration: none; font-size: 13px; white-space: nowrap;
+}
+.more-info-link .bi-chevron-right { font-size: 10px; }
+.more-info-link:hover { text-decoration: underline; }
+.delivery-methods { display: flex; gap: 8px; flex-wrap: wrap; }
+.delivery-method-badge {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: var(--pm-radius-pill);
+  border: 1px solid var(--pm-border);
+  font-size: 12px; font-weight: 500;
+  color: var(--pm-text);
+  background: var(--pm-surface);
+}
+/* Right stats (iFood-style) */
+.hero-panel-stats {
+  display: none; /* hidden on mobile, shown on desktop */
+  align-items: stretch;
+  gap: 0;
+  flex-shrink: 0;
+  border-left: 1px solid var(--pm-border);
+  padding-left: 20px;
+  margin-left: auto;
+}
+.hero-stat-box {
+  text-align: center;
+  padding: 0 18px;
+  min-width: 90px;
+}
+.hero-stat-top {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  margin-bottom: 4px;
+}
+.hero-stat-star { color: #F2A900; font-size: 12px; }
+.hero-stat-icon { color: var(--pm-text-muted); font-size: 12px; }
+.hero-stat-label { font-size: 11px; color: var(--pm-text-muted); font-weight: 500; }
+.hero-stat-value { font-size: 16px; font-weight: 700; color: var(--pm-text); line-height: 1.2; }
+.hero-stat-sub { font-size: 11px; color: var(--pm-text-muted); margin-top: 2px; }
+.hero-stat-divider { width: 1px; background: var(--pm-border); align-self: stretch; }
 
-.service-tag { padding: 3px 10px; border-radius: var(--pm-radius-pill); background: rgba(0,0,0,0.06); color: var(--pm-text); font-size: 11.5px; font-weight: 500; }
-
-.delivery-stats { display: flex; align-items: center; padding: 12px 0 0; border-top: 1px solid var(--pm-border); margin-top: 14px; }
-.delivery-stat { flex: 1; text-align: center; }
-.delivery-stat-label { font-size: 11px; color: var(--pm-text-muted); margin-bottom: 2px; }
-.delivery-stat-value { font-size: 13px; font-weight: 700; color: var(--pm-text); }
-.delivery-stat-divider { width: 1px; height: 28px; background: var(--pm-border); }
+/* Mobile hero */
+@media (max-width: 767px) {
+  .public-hero { height: 180px; }
+  .hero-panel { margin-top: -48px; padding: 16px; }
+  .hero-panel-layout { flex-wrap: wrap; }
+  .company-logo-wrapper { width: 56px; height: 56px; border-radius: 12px; }
+  .company-name { font-size: 1.25rem; }
+  .hero-panel-stats {
+    display: flex;
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--pm-border);
+    padding-left: 0;
+    padding-top: 12px;
+    margin-top: 12px;
+    margin-left: 0;
+    justify-content: center;
+  }
+  .hero-stat-box { padding: 0 12px; min-width: 70px; }
+  .hero-stat-value { font-size: 14px; }
+}
+/* Desktop hero */
+@media (min-width: 992px) {
+  .public-hero { height: 240px; }
+  .hero-panel { margin-top: -70px; padding: 24px 28px; }
+  .company-logo-wrapper { width: 80px; height: 80px; border-radius: 16px; }
+  .company-name { font-size: 1.8rem; }
+  .hero-panel-stats { display: flex; }
+}
 
 .delivery-pickup-btn { background: #f1fbfd; color: #0d6efd; border: 1px solid rgba(13,110,253,0.12); border-radius: 10px; padding: 8px 12px; font-weight:600 }
 .calc-delivery { background: #f8fafb; border: 1px solid #eef4f6; }
@@ -4455,9 +4714,9 @@ try{
 
 .list-group-item:last-child { border-bottom: none }*/
 li.list-group-item.selected, .payment-method.selected {
-    border-color: #8cbf62 !important;
-    background-color: #d6ffb3 !important;
-    color: rgb(66, 114, 26) !important;
+    border-color: var(--brand, #8cbf62) !important;
+    background-color: var(--brand-lightest, #d6ffb3) !important;
+    color: var(--brand-dark, rgb(66, 114, 26)) !important;
 }
 .payment-method.selected {
   font-weight: 600;
@@ -4502,34 +4761,52 @@ li.list-group-item.selected, .payment-method.selected {
 }
 
 /* Desktop sticky cart bar */
-.desktop-cart-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1060; padding: 12px 20px; background: #fff; border-top: 1px solid rgba(0,0,0,0.06); box-shadow: 0 -6px 20px rgba(0,0,0,0.04); }
+.desktop-cart-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1060; padding: 12px 20px; background: var(--pm-surface); border-top: 1px solid var(--pm-border); box-shadow: 0 -6px 20px rgba(0,0,0,0.04); }
+/* Desktop info card improvements */
 .desktop-cart-bar .cart-info { display:flex; flex-direction:column; gap:2px }
 .desktop-cart-bar .cart-action { display:flex; align-items:center }
-.btn-advance { background: linear-gradient(180deg,#d81b1b,#b81616); color: #fff; border: none; min-width: 300px; padding: 12px 28px; font-weight: 700; border-radius: 8px; box-shadow: 0 6px 18px rgba(216,27,27,0.16); }
+.btn-advance { background: var(--brand, #0d6efd); color: #fff; border: none; min-width: 300px; padding: 14px 28px; font-weight: 700; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.15); }
 .btn-advance:hover { filter: brightness(0.95); }
 .catalog-whatsapp-btn { font-weight: 700; font-size: 1rem; padding: 12px 28px; border-radius: 8px; box-shadow: 0 6px 18px rgba(37,211,102,0.22); }
 .catalog-whatsapp-btn:hover { filter: brightness(0.95); }
 
 /* Close X button styling (match mocks) */
-.close-x { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; color: #444; border-radius: 8px; border-color: rgba(0,0,0,0.08); }
-.close-x:hover { background: rgba(0,0,0,0.04); color: #111; }
+.close-x { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; color: var(--pm-text); border-radius: 50%; border: 1px solid var(--pm-border); background: var(--pm-surface); }
+.close-x:hover { background: var(--pm-surface-alt); color: var(--pm-text); }
 
 @media (max-width: 1199px){
   .btn-advance { min-width: 260px; padding: 10px 20px }
 }
 
 /* modal product hero */
-.modal-product-hero { width:100%; height:220px; overflow:hidden; border-radius:0; display:flex; align-items:center; justify-content:center; background: var(--pm-surface-alt) }
-.modal-product-img { width:100%; height:100%; object-fit:cover; display:block; border-radius:6px }
+.modal-product-hero { width:100%; height:240px; overflow:hidden; border-radius:0; display:flex; align-items:center; justify-content:center; background: var(--pm-surface-alt) }
+.modal-product-img { width:100%; height:100%; object-fit:cover; display:block; border-radius: 0; }
 .modal-back-mobile { display:flex; position:absolute; left:12px; top:12px; width:44px; height:44px; border-radius:50%; background:#fff; border:none; align-items:center; justify-content:center; font-size:22px; box-shadow: 0 6px 18px rgba(0,0,0,0.14); z-index:22 }
-  .modal-share-mobile { position:absolute; right:12px; top:12px; width:52px; height:52px; border-radius:50%; background:#fff; border:none; align-items:center; justify-content:center; font-size:20px; box-shadow: 0 6px 18px rgba(0,0,0,0.14); z-index:22 }
+.modal-close-mobile, .modal-share-mobile { width: 44px; height: 44px; border-radius: 50%; background: var(--pm-surface); border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.12); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--pm-text); z-index: 22; }
 .hero-down { position:absolute; left:50%; transform:translateX(-50%); bottom:8px; font-size:20px; color:rgba(0,0,0,0.6); z-index:20 }
 .option-thumb { width:48px; height:48px; object-fit:cover; border-radius:8px }
 .option-meta .option-name { font-weight:600 }
-.group-header{ background-color: var(--pm-surface-alt); padding:14px 20px 10px; border-radius:0; font-size:14px;}
+.group-header{ background-color: var(--pm-surface-alt); padding:14px 16px; border-radius:12px; font-size:14px;}
 /* replace inline padding used in option rows */
-.option-row { padding: 12px 20px; border-bottom: 1px solid var(--pm-border); font-size: 14px }
-.group-header .badge.bg-primary { background-color:#0d6efd; color:#fff }
+.option-row { padding: 12px 16px; border-bottom: 1px solid var(--pm-border); font-size: 14px }
+.group-header .badge.bg-secondary {
+  background: var(--pm-text) !important;
+  color: var(--pm-surface) !important;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 4px;
+}
+.group-header .badge.bg-primary {
+  background: var(--pm-cashback-bg) !important;
+  color: var(--pm-cashback-fg) !important;
+  font-weight: 700;
+  font-size: 10.5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
 /* highlight failing required group briefly */
 .badge.bg-danger { background-color: #d9534f !important }
 /* pulse animation used when scrolling to a required group */
@@ -4552,6 +4829,8 @@ li.list-group-item.selected, .payment-method.selected {
   margin: 0 auto;
   padding: 0;
   border: none;
+  background: var(--pm-surface);
+  box-shadow: var(--pm-shadow-elevated);
 }
 
 /* checkout modal: use a slightly narrower width on desktop but remain fullscreen on mobile
@@ -4564,6 +4843,8 @@ li.list-group-item.selected, .payment-method.selected {
   border-radius: 12px;
   margin: 0 auto;
   padding: 0;
+  background: var(--pm-surface);
+  border: none;
 }
 
 /* slide up animation for mobile modal entrance */
@@ -4578,7 +4859,7 @@ li.list-group-item.selected, .payment-method.selected {
     max-width: 100%;
     max-height: 100vh;
     overflow: auto;
-    border-radius: 0 !important;
+    border-radius: var(--pm-radius-modal) var(--pm-radius-modal) 0 0 !important;
     margin: 0;
     padding: 0;
     transform: translateY(100%);
@@ -4586,9 +4867,9 @@ li.list-group-item.selected, .payment-method.selected {
   }
 
   /* mobile floating close button styling */
-  .modal-close-mobile { display:flex; position:absolute; top:12px; right:12px; width:44px; height:44px; border-radius:50%; background:#fff; border:none; align-items:center; justify-content:center; font-size:20px; line-height:1; box-shadow: 0 6px 18px rgba(0,0,0,0.14); z-index:20 }
+  .modal-close-mobile { display:flex; position:absolute; top:12px; right:12px; }
   .modal-close-mobile:active { transform: scale(.98) }
-  .modal-close-mobile:hover { background:#fafafa }
+  .modal-close-mobile:hover { background:var(--pm-surface-alt) }
 
   /* ensure modal body reserves space for the fixed footer on small screens */
   .product-modal .modal-body { padding-bottom: 100px }
@@ -4683,11 +4964,13 @@ li.list-group-item.selected, .payment-method.selected {
 }
 
 /* keep modal footer fixed at bottom inside modal */
-.product-modal .modal-footer { left: 0; transform: none; bottom: 0; width: 100%; max-width: 100%; padding: 12px; background: #fff; box-shadow:none; z-index: 30; display:flex; justify-content:space-between; align-items:center }
+.product-modal .modal-footer { left: 0; transform: none; bottom: 0; width: 100%; max-width: 100%; padding: 12px 16px; background: var(--pm-surface); border-top: 1px solid var(--pm-border); box-shadow:none; z-index: 30; display:flex; justify-content:space-between; align-items:center }
 
 /* quantity control tweaks */
 /* unified qty visuals for buttons used across options, modal footer and cart */
-.btn-qty { width:40px; height:40px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; transition: transform .12s ease, box-shadow .12s ease }
+.qty-control { background: var(--pm-surface-alt); border-radius: var(--pm-radius-pill); padding: 4px; display: flex; align-items: center; gap: 0; }
+.btn-qty { width:40px; height:40px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; border: none; background: var(--pm-surface); color: var(--pm-text); font-weight: 600; transition: transform .12s ease }
+.btn-qty:hover { background: var(--pm-border); }
 .btn-qty.pressed { transform: scale(0.92); box-shadow: 0 6px 18px rgba(0,0,0,0.12) }
 
 /* cart drawer thumbnail */
@@ -4704,13 +4987,13 @@ li.list-group-item.selected, .payment-method.selected {
   .product-modal .modal-footer { position: fixed;}
 }
 /* numeric input matching qty visuals */
-.qty-input { width:60px; border-radius:8px; padding:6px 10px; font-weight:600; text-align:center; }
+.qty-input { width:50px; border:none; background:transparent; text-align:center; font-weight:700; font-size:15px; color:var(--pm-text); border-radius: 8px; }
 /* hide native number spinners */
 .qty-input::-webkit-outer-spin-button, .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0 }
 .qty-input { -moz-appearance: textfield; appearance: textfield }
 
 /* modal footer fixed and centered to match modal width */
-.product-modal .modal-footer {left: 0; transform: none; bottom: 0; width: 100%; max-width: 100%; padding: 12px; background: #fff; box-shadow:none; z-index: 30; display:flex; justify-content:space-between; align-items:center }
+.product-modal .modal-footer {left: 0; transform: none; bottom: 0; width: 100%; max-width: 100%; padding: 12px 16px; background: var(--pm-surface); border-top: 1px solid var(--pm-border); box-shadow:none; z-index: 30; display:flex; justify-content:space-between; align-items:center }
 .product-modal .modal-body { max-height: calc(90vh - 120px); overflow:auto }
 
 /* Add button inside modal footer: label left, price right */
@@ -4727,17 +5010,45 @@ li.list-group-item.selected, .payment-method.selected {
   border: none;
   font-weight: 700;
   font-size: 15px;
+  letter-spacing: -0.1px;
   box-shadow: 0 6px 16px rgba(0,0,0,0.2);
   position: relative;
   overflow: hidden;
 }
 .add-btn i { font-size: 1.05rem; display: inline-flex; align-items: center; margin-right: 6px; }
-.add-btn .add-label { font-size:0.9rem; }
-.add-btn .add-price { font-size:0.9rem; }
+.add-btn .add-label { font-size:15px; }
+.add-btn .add-price { font-size:15px; font-weight:800; }
 .add-btn:focus { outline: none; }
+
+/* Option +/- buttons in modal */
+.product-modal .btn-primary {
+  background: var(--brand, #0d6efd);
+  border-color: var(--brand, #0d6efd);
+  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+.product-modal .btn-outline-secondary {
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--pm-border);
+  color: var(--pm-text);
+}
 
 @media (max-width: 991px){
   .desktop-cart-bar { display: none !important }
+}
+/* Hide desktop bottom cart bar on lg+ since sidebar is visible */
+@media (min-width: 992px) {
+  .desktop-cart-bar { display: none !important; }
 }
 
 /* small tweaks for options display inside cart and review */
@@ -4754,29 +5065,7 @@ li.list-group-item.selected, .payment-method.selected {
 .icon-only { width:32px; height:32px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:8px }
 .icon-only .bi { font-size: 16px; line-height:1 }
 .option-summary { font-size: 0.82rem; color: #666 }
-/* ensure truncation works inside the drawer context too */
-.cart-drawer .cart-item-name .text-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-
-/* Drawer specific tweaks to match provided mock */
-.cart-drawer .cart-item-qty { width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid rgba(0,0,0,0.06); background:#fafafa; font-weight:700; margin-right:12px }
-.cart-drawer .product-name { font-size:0.95rem; font-weight:700 }
-.cart-drawer .option-summary { font-size:0.82rem; color: #6c757d; margin-top:4px; line-height:1.3 }
-.cart-drawer .drawer-wrap { white-space: normal }
-.cart-drawer .cart-item-price { font-weight:600; font-size:0.9rem }
-.cart-drawer .cart-item-actions { min-width:64px }
-.cart-drawer .cart-item-actions .btn { padding: 6px 4px !important; margin-bottom: 2px;}
-
-@media (max-width: 767px){
-  .cart-drawer .product-name { font-size:0.9rem }
-  .cart-drawer .option-summary { font-size:0.75rem }
-  .cart-drawer .cart-item-qty { width:36px; height:36px }
-}
-
-/* hide thumbnails inside drawer (photos not required) */
-.cart-drawer .cart-thumb, .cart-drawer img { display: none !important }
-
-/* slightly tighten list-group item paddings to match mock */
-.cart-drawer .list-group-item { padding: 12px; border-radius: 10px; }
+/* Legacy cart item styles (kept for checkout review step) */
 
 /* Action button responsive: show text on small screens, icons on larger screens */
 .action-btn { color: inherit }
@@ -4797,64 +5086,206 @@ li.list-group-item.selected, .payment-method.selected {
 .option-summary { line-height: 1.35 }
 
 /* Drawer styles for large screens */
-.drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1050 }
-.cart-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: var(--pm-bg); z-index: 1060; transform: translateX(100%); transition: transform .28s ease; display:flex; flex-direction:column }
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 10850 }
+.cart-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: var(--pm-surface); font-family: var(--pm-font); z-index: 10860; transform: translateX(100%); transition: transform .28s ease; display:flex; flex-direction:column }
 .cart-drawer.open { transform: translateX(0) }
-.drawer-header { background: var(--pm-surface); border-bottom-color: var(--pm-border) !important; }
+.drawer-header { background: var(--pm-surface); border-bottom: 1px solid var(--pm-border) !important; }
 .drawer-subtitle { font-size: 11px; font-weight: 600; color: var(--pm-text-muted); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
 .btn-icon-round { all: unset; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; background: var(--pm-surface-alt); display: flex; align-items: center; justify-content: center; color: var(--pm-text); font-size: 14px; }
 .btn-icon-round:hover { background: var(--pm-border); }
-.drawer-body { flex: 1 1 auto }
-.drawer-footer { background: var(--pm-surface); border-top-color: var(--pm-border) !important; }
-.cashback-summary-row { padding: 8px 0; margin-bottom: 12px; }
+.drawer-body { flex: 1 1 auto; background: var(--pm-surface); }
+.drawer-footer { background: var(--pm-surface); border-top: 1px solid var(--pm-border) !important; }
+
+/* Drawer items list */
+.drawer-items-list { padding: 0; }
+.drawer-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--pm-border);
+}
+.drawer-item:last-child { border-bottom: none; }
+.drawer-item-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.drawer-item-img-placeholder {
+  background: var(--pm-surface-alt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pm-text-dim, #ccc);
+  font-size: 18px;
+}
+.drawer-item-info {
+  flex: 1;
+  min-width: 0;
+}
+.drawer-item-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--pm-text);
+  margin-bottom: 2px;
+  line-height: 1.3;
+}
+.drawer-item-opts {
+  font-size: 11.5px;
+  color: var(--pm-text-muted);
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
+.drawer-item-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+.stepper-btn {
+  all: unset;
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--pm-text-muted);
+  transition: color 0.12s;
+}
+.stepper-btn:hover { color: var(--pm-text); }
+.stepper-btn-add { color: var(--brand, #2E7D32); }
+.stepper-qty {
+  min-width: 24px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pm-text);
+}
+.drawer-item-price {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--pm-text);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+/* Drawer summary */
+.drawer-summary {
+  padding: 12px 16px;
+  border-top: 1px solid var(--pm-border);
+  font-size: 13px;
+  color: var(--pm-text);
+}
+.drawer-summary .text-muted { color: var(--pm-text-muted) !important; }
+/*
+.drawer-cashback-row {
+  background: var(--pm-surface-alt);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: var(--pm-text-muted);
+  margin: 6px 0;
+}*/
+ .drawer-cashback-row { 
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #E8F5E9;
+    color: #1B5E20;
+    font-size: 11.5px;
+    font-weight: 600;
+    margin-top: 12px;
+    margin-bottom: 8px;
+    text-align:center;
+    
+  }
+.drawer-total {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--pm-border);
+  font-size: 15px;
+}
+.drawer-total-value {
+  color: var(--brand, #2E7D32);
+  font-size: 17px;
+}
+
+/* Drawer checkout button */
+.drawer-checkout-btn {
+  background: var(--brand, #0d6efd);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 16px;
+  padding: 14px;
+  transition: background 0.15s;
+}
+.drawer-checkout-btn:hover:not(:disabled) { background: var(--brand-dark, #0b5ed7); }
+.drawer-checkout-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Legacy coupon block (kept for checkout modal) */
+.coupon-block {
+  background: var(--pm-surface-alt);
+  border-radius: 12px;
+  padding: 12px;
+}
+.coupon-block .btn-outline-secondary {
+  border-color: var(--pm-border);
+  color: var(--pm-text-muted);
+  border-radius: 8px;
+}
 
 @media (max-width: 1199px){
   .cart-drawer { width: 360px }
 }
 
-/* Mobile: use drawer as a bottom-sheet and adjust typography/sizing for readability */
+/* Mobile: bottom-sheet drawer */
 @media (max-width: 767px){
-  .drawer-backdrop { z-index: 1050 }
+  .drawer-backdrop { z-index: 10850 !important }
   .cart-drawer {
-    /* bottom-sheet style by default; on small screens we'll switch to full-screen */
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 64px;
-    top: auto;
-    height: 68vh;
-    width: 100%;
-    max-width: 100%;
-    border-radius: 12px 12px 0 0;
-    transform: translateY(100%);
-    transition: transform .28s ease;
-    box-shadow: 0 -12px 30px rgba(0,0,0,0.12);
-    display: flex;
-    flex-direction: column;
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 75vh !important;
+    max-width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    transform: translateY(100%) !important;
+    transition: transform .28s cubic-bezier(.2,.9,.3,1) !important;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.15) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    z-index: 10860 !important;
+    background: var(--pm-surface, #fff) !important;
   }
-  .cart-drawer.open { transform: translateY(0) }
-  .cart-drawer .drawer-header { padding: 12px 16px }
-  .cart-drawer .drawer-header h5 { font-size: 1.05rem }
-  .cart-thumb { width:56px; height:56px }
-  .list-group-item.py-3 { padding-top:8px; padding-bottom:8px }
-  .cart-drawer .list-group-item { padding: 10px }
-  .icon-only { width:28px; height:28px }
-  .cart-summary { font-size: 0.92rem }
-  .cart-summary .fw-bold { font-size: 0.98rem }
-  .drawer-footer .btn { font-size: 0.9rem; padding:8px 10px }
+  .cart-drawer.open { transform: translateY(0) !important }
+  .cart-drawer .drawer-header { padding: 14px 20px; border-bottom: 1px solid var(--pm-border) !important; }
   .cart-drawer .drawer-header h5 { font-size: 1rem }
-  /* make drawer full screen on mobile when opened */
-  .cart-drawer {
-    top: 0;
-    bottom: 0;
-    height: 100vh;
-    border-radius: 0;
-    transform: translateY(100%);
-  }
-  .cart-drawer.open { transform: translateY(0) }
-  .drawer-body { overflow:auto; max-height: calc(100vh - 140px) }
-  /* reduce cart bar conflicts */
+  .cart-drawer .drawer-subtitle { font-size: 10px; }
+  .drawer-body { overflow: auto; flex: 1 1 auto; max-height: calc(75vh - 140px); }
+  .drawer-footer { padding: 12px 16px !important; }
   .mobile-cart-bar { bottom: 76px; }
+  /* handle bar indicator */
+  .cart-drawer::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--pm-border, #ddd);
+    margin: 8px auto 0;
+    flex-shrink: 0;
+  }
 }
 
 /* Mobile bottom nav */
@@ -4900,16 +5331,7 @@ body { padding-bottom: 110px; }
 .store-closed { background: rgba(255,255,255,0.06); }
 .store-closed .text-danger { color: #ff4d4f !important }
 
-@media (max-width: 767px){
-  .hero-panel { margin-top: -40px; padding: 14px; }
-  .company-name { font-size: 1.15rem; }
-  .company-logo-wrapper { width: 48px; height: 48px; flex: 0 0 48px; }
-}
-
-/* Reduce hero height on small screens for better vertical space */
-@media (max-width: 767px){
-  .public-hero { height: 125px }
-}
+/* Extra-small mobile hero adjustments handled by main breakpoint above */
 
 /* Category pills scroll layout */
 .nav-pills { display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; scroll-padding-left: 12px }
@@ -4939,11 +5361,11 @@ body { padding-bottom: 110px; }
 .form-check-input {
   width: 1.4em !important;
   height: 1.4em !important;
-  border: 2px solid #CCC !important;
+  border: 2px solid var(--pm-border) !important;
 }
 .form-check-input:checked {
-    background-color: var(--brand) !important;
-    border-color: var(--brand) !important;
+    background-color: var(--brand, #0d6efd) !important;
+    border-color: var(--brand, #0d6efd) !important;
 }
 /* migration toast (small unobtrusive notice) */
 .migration-toast {
@@ -5022,15 +5444,18 @@ body { padding-bottom: 110px; }
 /* No-connection error page */
 .no-connection-page { max-width: 420px; margin: 0 auto; }
 
+/* Checkout modal warm styling */
+.checkout-modal .modal-content { background: var(--pm-surface); border: none; }
+
 /* Checkout modal / review styling to match drawer visual */
-.product-modal .cart-item-qty { width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid rgba(0,0,0,0.06); background:#fafafa; font-weight:700; margin-right:12px }
-.product-modal .product-name { font-size:0.95rem; font-weight:700 }
-.product-modal .option-summary { font-size:0.82rem; color:#6c757d; margin-top:4px; line-height:1.3; white-space:normal }
-.product-modal .cart-item-price { width:110px; font-weight:700; font-size:1rem }
+.product-modal .cart-item-qty { width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid var(--pm-border); background:var(--pm-surface-alt); font-weight:700; color:var(--pm-text); margin-right:12px; font-size:13px }
+.product-modal .product-name { font-size:14px; font-weight:700; color:var(--pm-text) }
+.product-modal .option-summary { font-size:12px; color:var(--pm-text-muted); margin-top:4px; line-height:1.3; white-space:normal }
+.product-modal .cart-item-price { width:110px; font-weight:700; font-size:14px; color:var(--pm-text) }
 .product-modal .cart-item-actions { min-width:64px }
 /*.product-modal .cart-item-actions .btn { padding:0; margin:0; text-decoration:none }*/
 /*.product-modal img, .product-modal .cart-thumb { display:none !important }*/
-.product-modal .list-group-item { padding: 12px; border-radius: 10px }
+.product-modal .list-group-item { padding: 12px; border-radius: 12px !important; background: var(--pm-surface); border: 1px solid var(--pm-border) !important; }
 
 @media (max-width:767px){
   .product-modal .product-name { font-size:0.95rem }
@@ -5043,21 +5468,112 @@ body { padding-bottom: 110px; }
 .modal-content .nav-tabs .nav-link {
   border: none;
   padding: 8px 12px;
-  color: #444;
+  color: var(--pm-text-muted);
   background: transparent;
   border-radius: 10px;
   transition: background .12s ease, box-shadow .12s ease, color .12s ease;
 }
 .modal-content .nav-tabs .nav-link.active {
-  background: rgba(13,110,253,0.06);
-  color: #0d6efd;
+  background: var(--pm-surface-alt);
+  color: var(--brand-dark, #0d6efd);
   font-weight: 700;
-  box-shadow: 0 6px 18px rgba(13,110,253,0.06);
-  border: 1px solid rgba(13,110,253,0.08);
+  border: 1px solid var(--pm-border);
 }
 @media (max-width:480px){
   .modal-content .nav-tabs .nav-link { padding: 8px 10px; font-size: 0.95rem }
 }
+/* Info modal (bottom-sheet style) */
+.info-modal-sheet {
+  background: #FFFFFF;
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUpModal .28s ease forwards;
+  box-shadow: 0 -10px 40px rgba(0,0,0,0.15);
+}
+.info-modal-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--pm-border); margin: 10px auto 0;
+}
+.info-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px 12px;
+}
+.info-modal-tabs {
+  display: flex; gap: 6px; padding: 0 20px 12px;
+  border-bottom: 1px solid var(--pm-border);
+}
+.info-tab {
+  all: unset; cursor: pointer;
+  padding: 8px 14px; border-radius: 10px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--pm-text-muted);
+  background: transparent;
+  transition: background 0.15s, color 0.15s;
+}
+.info-tab.active {
+  background: var(--pm-surface-alt);
+  color: var(--pm-text);
+  border: 1px solid var(--pm-border);
+}
+.info-tab:hover:not(.active) { color: var(--pm-text); }
+.info-modal-body {
+  padding: 16px 20px 24px;
+  overflow: auto;
+  flex: 1;
+}
+
+/* Schedule rows */
+.info-schedule-list { display: flex; flex-direction: column; gap: 6px; }
+.info-schedule-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-radius: 10px;
+  font-size: 13px; color: var(--pm-text);
+}
+.info-schedule-row.today { background: var(--pm-surface-alt); font-weight: 600; }
+.info-schedule-day { min-width: 110px; }
+.info-schedule-time { color: var(--pm-text); font-weight: 500; }
+.info-schedule-closed { color: var(--pm-text-muted); font-style: italic; }
+.info-status-row { text-align: center; }
+.info-status {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 16px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 600;
+}
+.info-status.open { background: #E8F5E9; color: #2E7D32; }
+.info-status.closed { background: #FFEBEE; color: #C62828; }
+
+/* Contact rows */
+.info-contact-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--pm-border);
+}
+.info-contact-row:last-child { border-bottom: none; }
+.info-contact-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--pm-surface-alt); display: flex; align-items: center; justify-content: center;
+  color: var(--pm-text-muted); font-size: 16px; flex-shrink: 0;
+}
+
+/* Payment rows */
+.info-payment-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--pm-border);
+}
+.info-payment-row:last-child { border-bottom: none; }
+.info-payment-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--pm-surface-alt); display: flex; align-items: center; justify-content: center;
+  color: var(--pm-text-muted); font-size: 16px; flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .info-modal-sheet { border-radius: 20px; margin-bottom: 40px; }
+}
+
 .btn-delete{
   background: #f8d7da;
   color: #842029;
@@ -5079,38 +5595,96 @@ body { padding-bottom: 110px; }
   border-radius:12px !important;
 }
 /* Checkout stepper */
-.checkout-stepper{ display:flex; gap:12px; align-items:center; position:relative }
-.checkout-stepper .step{ flex:1 1 0; display:flex; flex-direction:column; align-items:center; position:relative; text-align:center; padding:6px 8px }
-.checkout-stepper .step::after{ content: '';
-    position: absolute;
-    right: -45%;
-    top: 17px;
-    width: 73%;
-    height: 4px;
-    background: #eef2f5;
-    z-index: 0;
-    margin: 0 auto;
-    border-radius: 88px;
-   }
-.checkout-stepper .step:last-child::after{ display:none }
-.checkout-stepper .step .step-icon{ width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#f3f5f7; border:2px solid #e0e6ea; z-index:2 }
-.checkout-stepper .step .step-icon .bi{ font-size:0.7rem }
-.checkout-stepper .step .step-label{ font-size:0.6rem; margin-top:6px; color:#556 }
-.checkout-stepper .step.completed .step-icon{ background:#8cbf62; border-color:#8cbf62; color:#fff }
-.checkout-stepper .step.completed::after{ background:#c9e9a8 }
-.checkout-stepper .step.active .step-icon{ background:rgb(66, 114, 26) !important; border-color:rgb(66, 114, 26) !important; color:#fff }
-.checkout-stepper .step.active .step-label{ font-weight:700; color:rgb(66, 114, 26) !important}
-.checkout-stepper .step-close{ position: absolute; right: 8px; top: 6px; z-index:3 }
+.checkout-stepper { display: flex; gap: 0; align-items: center; position: relative; padding: 0 8px; }
+.checkout-stepper .step { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; position: relative; text-align: center; padding: 4px 6px; }
+.checkout-stepper .step::after {
+  content: '';
+  position: absolute;
+  right: -45%;
+  top: 15px;
+  width: 73%;
+  height: 3px;
+  background: var(--pm-border);
+  z-index: 0;
+  border-radius: 88px;
+}
+.checkout-stepper .step:last-child::after { display: none; }
+.checkout-stepper .step .step-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--pm-surface-alt); border: 2px solid var(--pm-border); z-index: 2; color: var(--pm-text-dim); transition: all 0.2s ease; }
+.checkout-stepper .step .step-icon .bi { font-size: 0.75rem; }
+.checkout-stepper .step .step-label { font-size: 0.68rem; margin-top: 6px; color: var(--pm-text-muted); font-weight: 500; }
+.checkout-stepper .step.completed .step-icon { background: var(--brand, #8cbf62); border-color: var(--brand, #8cbf62); color: #fff; }
+.checkout-stepper .step.completed::after { background: var(--brand-light, #c9e9a8); }
+.checkout-stepper .step.completed .step-label { color: var(--brand, #8cbf62); }
+.checkout-stepper .step.active .step-icon { background: var(--brand-dark, rgb(66, 114, 26)) !important; border-color: var(--brand-dark, rgb(66, 114, 26)) !important; color: #fff; box-shadow: 0 0 0 4px rgba(66, 114, 26, 0.15); }
+.checkout-stepper .step.active .step-label { font-weight: 700; color: var(--brand-dark, rgb(66, 114, 26)) !important; }
+.checkout-stepper .step-close { position: absolute; right: 8px; top: 6px; z-index: 3; }
+
+/* Checkout section card */
+.checkout-section-card {
+  background: var(--pm-surface);
+  border-radius: 14px;
+  padding: 0;
+}
+.checkout-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--pm-border);
+}
+.checkout-link {
+  color: var(--brand-dark, #0d6efd);
+  font-weight: 500;
+  text-decoration: none;
+}
+.checkout-link:hover { text-decoration: underline; }
+
+/* Checkout tabs (Entrar / Criar Conta) */
+.checkout-tabs {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid var(--pm-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--pm-surface-alt);
+}
+.checkout-tab {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--pm-text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.checkout-tab.active {
+  background: var(--pm-surface);
+  color: var(--pm-text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.checkout-tab:hover:not(.active) {
+  color: var(--pm-text);
+}
+
+/* Checkout actions */
+.checkout-actions {
+  padding-top: 8px;
+}
+
+/* Spin animation for loading indicator */
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { display: inline-block; animation: spin 1s linear infinite; }
 
 
 .summary-icon{
-    padding: 5px 10px;
-    background-color: var(--brand-lightest);
+    padding: 8px 10px;
+    background-color: var(--pm-surface-alt);
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 8px;
-    margin-right: 8px;
+    border-radius: 10px;
+    margin-right: 10px;
 }
 /* Search box styles */
 .search-categories-container {
@@ -5280,30 +5854,123 @@ body { padding-bottom: 110px; }
   font-size: 1.1rem;
 }
     
-
+.modal-title h5 {
+  text-align:center !important;
+}
   .summary-icon i{
-    color: #42721a !important;
+    color: var(--brand-dark, #42721a) !important;
+    font-size: 16px;
     }
-    .btn-summary{    
-      background-color: #e5e5e5 !important;;
-      color: #7b7b7b !important;
-      padding: 4px 8px !important;
-      border-radius: 8px !important;
+    .btn-summary{
+      background-color: var(--pm-surface-alt) !important;
+      color: var(--pm-text-muted) !important;
+      padding: 6px 10px !important;
+      border-radius: 10px !important;
+      border: 1px solid var(--pm-border) !important;
     }
   .btn-next{
-    background-color: var(--brand);
-    width: 100%;
-    border: 2px solid var(--brand);
-    font-weight: bold;
-    font-size: 1.1rem;
-    border-radius: 12px;
+    background-color: var(--brand, #0d6efd);
+    border: none;
+    font-weight: 700;
+    font-size: 15px;
+    border-radius: 14px;
+    padding: 12px 20px !important;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
   }
-   .btn-confirm{
-    background-color: var(--brand);
-    border: 2px solid var(--brand);
-    font-size: 1.1rem;
-    border-radius: 12px;
+  .btn-next:hover:not(:disabled) {
+    background-color: var(--brand-dark, #0b5ed7);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   }
+  .btn-next:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+/* Checkout header */
+.checkout-header {
+  border-bottom: 1px solid var(--pm-border);
+  padding-bottom: 12px;
+}
+.checkout-header h5 {
+  color: var(--pm-text);
+  font-weight: 700;
+}
+
+/* Order type toggle */
+.order-type-toggle .ot-btn {
+  border-radius: 12px;
+  border: 1px solid var(--pm-border);
+  background: var(--pm-surface);
+  padding: 12px 16px;
+}
+.order-type-toggle .ot-btn.active {
+  border-color: var(--brand, #0d6efd);
+  background: var(--brand-lightest, #d6ffb3);
+}
+
+/* Checkout totals */
+.checkout-totals {
+  background: var(--pm-surface-alt);
+  border-radius: 12px;
+  padding: 14px;
+}
+.checkout-totals .text-muted {
+  color: var(--pm-text-muted) !important;
+}
+
+/* Checkout footer (mobile) */
+.checkout-footer {
+  background: var(--pm-surface);
+  border-top: 1px solid var(--pm-border);
+  padding: 12px 16px;
+}
+
+/* Alert cards in checkout */
+.checkout-modal .alert-light,
+.checkout-body .alert-light {
+  background: var(--pm-surface-alt);
+  border: 1px solid var(--pm-border);
+  border-radius: 12px;
+  color: var(--pm-text);
+}
+
+/* ListGroup items in checkout */
+.checkout-body .list-group-item {
+  background: var(--pm-surface);
+  border: 1px solid var(--pm-border) !important;
+  border-radius: 12px !important;
+}
+.checkout-body .list-group-item.selected {
+  border-color: var(--brand) !important;
+  background-color: var(--brand-lightest, #d6ffb3) !important;
+}
+
+/* Cashback toggle in payment */
+.cashback-toggle {
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.cashback-toggle.active {
+  background: var(--brand, #0d6efd);
+  border-color: var(--brand, #0d6efd);
+}
+
+/* TextInput and form controls in checkout */
+.checkout-body .form-control,
+.checkout-body .form-select {
+  border: 1px solid var(--pm-border);
+  border-radius: 12px;
+  background: var(--pm-surface);
+  color: var(--pm-text);
+}
+.checkout-body .form-control:focus,
+.checkout-body .form-select:focus {
+  border-color: var(--brand, #0d6efd);
+  box-shadow: 0 0 0 3px rgba(13,110,253,0.1);
+}
 
 /* Featured carousel */
 .featured-section { margin-top: 22px; }
@@ -5325,5 +5992,322 @@ body { padding-bottom: 110px; }
 .featured-card-price { font-size: 15px; font-weight: 800; color: var(--brand-dark, #C8102E); letter-spacing: -0.2px; }
 .featured-card-add { all: unset; cursor: pointer; width: 30px; height: 30px; border-radius: 50%; background: var(--brand, #0d6efd); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.2); font-size: 16px; }
 .featured-card-add:hover { transform: scale(1.1); }
+
+/* Desktop cart sidebar */
+.desktop-cart-sidebar {
+  width: 340px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 80px;
+  align-self: flex-start;
+  margin-left: 24px;
+}
+.cart-sidebar-inner {
+  background: var(--pm-surface);
+  border-radius: 16px;
+  border: 1px solid var(--pm-border);
+  overflow: hidden;
+  max-height: calc(100vh - 100px);
+  display: flex;
+  flex-direction: column;
+}
+.cart-sidebar-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--pm-border);
+}
+.cart-sidebar-title { font-size: 15px; font-weight: 700; color: var(--pm-text); }
+.cart-sidebar-count { font-size: 11.5px; color: var(--pm-text-muted); }
+.cart-sidebar-cashback {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 14px; padding: 8px 12px; border-radius: 10px;
+  background: var(--pm-cashback-bg); color: var(--pm-cashback-fg);
+  font-size: 11.5px; font-weight: 600; margin-top: 12px; margin-bottom: 8px;
+}
+.cart-sidebar-empty { padding: 40px 24px; text-align: center; }
+.cart-sidebar-empty-icon { width: 64px; height: 64px; border-radius: 50%; background: var(--pm-surface-alt); color: var(--pm-text-dim); margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+.cart-sidebar-empty-title { font-size: 14px; font-weight: 700; color: var(--pm-text); margin-bottom: 3px; }
+.cart-sidebar-empty-sub { font-size: 12.5px; color: var(--pm-text-muted); }
+.cart-sidebar-items { flex: 1; overflow-y: auto; padding: 4px 20px; }
+.cart-sidebar-item { padding: 12px 0; border-bottom: 1px solid var(--pm-border); }
+.cart-sidebar-item-img { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+.cart-sidebar-item:last-child { border-bottom: none; }
+.cart-sidebar-item-name { font-size: 13px; font-weight: 600; color: var(--pm-text); }
+.cart-sidebar-item-opts { font-size: 11px; color: var(--pm-text-muted); margin-top: 2px; }
+.cart-sidebar-stepper { display: flex; align-items: center; gap: 0; border-radius: var(--pm-radius-pill); background: var(--pm-surface-alt); padding: 2px; }
+.cart-sidebar-step-btn { all: unset; cursor: pointer; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--pm-text); }
+.cart-sidebar-step-btn:hover { background: var(--pm-border); }
+.cart-sidebar-step-qty { min-width: 20px; text-align: center; font-size: 12px; font-weight: 700; color: var(--pm-text); }
+.cart-sidebar-item-price { font-size: 13px; font-weight: 700; color: var(--pm-text); }
+.cart-sidebar-summary { padding: 14px 0; margin-top: 8px; border-top: 1px solid var(--pm-border); font-size: 12.5px; color: var(--pm-text-muted); }
+.cart-sidebar-cashback-row{ display: flex; align-items: center; gap: 4px; padding: 6px 0; color: var(--pm-cashback-fg); font-size: 11.5px; font-weight: 600; margin: 4px 0; }
+.cart-sidebar-total { font-size: 16px; font-weight: 800; color: var(--pm-text); padding-top: 8px; margin-top: 4px; border-top: 1px dashed var(--pm-border); }
+.cart-sidebar-total span:last-child { color: var(--brand-dark, #C8102E); }
+.cart-sidebar-checkout-btn {
+  all: unset; cursor: pointer; width: calc(100% - 28px); box-sizing: border-box;
+  height: 46px; border-radius: 12px; margin: 12px 14px 14px;
+  background: var(--brand, #0d6efd); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+}
+.cart-sidebar-checkout-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* On desktop, wrap products + sidebar in flex row */
+@media (min-width: 992px) {
+  .products-and-sidebar { display: flex; gap: 0; }
+  .products-and-sidebar > .products-main { flex: 1; min-width: 0; }
+}
+
+/* ===== Modal redesign: single-column, hero on top ===== */
+.modal-close-floating {
+  all: unset; cursor: pointer;
+  position: absolute; top: 14px; right: 14px; z-index: 30;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--pm-surface); color: var(--pm-text);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+  font-size: 16px;
+}
+.modal-close-floating:hover { background: var(--pm-surface-alt); }
+.modal-product-info {
+  padding: 18px 20px 10px;
+}
+.modal-product-name {
+  font-size: 20px; font-weight: 800; color: var(--pm-text);
+  letter-spacing: -0.3px; line-height: 1.2; margin: 0 0 6px;
+}
+.modal-product-desc {
+  font-size: 13.5px; color: var(--pm-text-muted); line-height: 1.5; margin-bottom: 6px;
+}
+.modal-product-price {
+  font-size: 22px; font-weight: 800; color: var(--brand-dark, #C8102E);
+  letter-spacing: -0.5px;
+}
+
+/* ===== Checkout warm styling (comprehensive) ===== */
+.checkout-modal .modal-content {
+  background: var(--pm-surface) !important;
+  border: none !important;
+}
+.checkout-modal .modal-content-padding {
+  padding: 24px !important;
+}
+.checkout-modal .checkout-body {
+  background: var(--pm-surface);
+  color: var(--pm-text);
+}
+@media (max-width: 767px) {
+  .checkout-modal .modal-content-padding {
+    padding: 16px !important;
+  }
+}
+.checkout-header {
+  border-bottom: 1px solid var(--pm-border) !important;
+  padding-bottom: 12px;
+}
+.checkout-header h5 {
+  color: var(--pm-text) !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
+}
+/* Stepper — warm + brand colors */
+.checkout-stepper .step .step-icon {
+  width: 32px; height: 32px;
+  background: var(--pm-surface-alt);
+  border: 2px solid var(--pm-border);
+  color: var(--pm-text-dim);
+}
+.checkout-stepper .step .step-icon .bi { font-size: 0.75rem; }
+.checkout-stepper .step .step-label { color: var(--pm-text-muted); font-size: 0.65rem; }
+.checkout-stepper .step::after { background: var(--pm-border); height: 3px; border-radius: 3px; }
+.checkout-stepper .step.completed .step-icon { background: var(--brand, #8cbf62); border-color: var(--brand, #8cbf62); color: #fff; }
+.checkout-stepper .step.completed::after { background: var(--brand-light, #c9e9a8); }
+.checkout-stepper .step.active .step-icon { background: var(--brand-dark) !important; border-color: var(--brand-dark) !important; color: #fff; }
+.checkout-stepper .step.active .step-label { font-weight: 700; color: var(--brand-dark) !important; }
+/* Summary icons */
+.summary-icon {
+  padding: 8px 10px;
+  background-color: var(--pm-surface-alt);
+  border-radius: 10px;
+  margin-right: 10px;
+}
+.summary-icon i { color: var(--brand-dark, #42721a) !important; font-size: 16px; }
+.btn-summary {
+  background-color: var(--pm-surface-alt) !important;
+  color: var(--pm-text-muted) !important;
+  padding: 6px 10px !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--pm-border) !important;
+}
+.btn-summary:hover { background-color: var(--pm-border) !important; }
+/* Buttons — warm rounded */
+.btn-next {
+  background-color: var(--brand) !important;
+  width: 100%;
+  border: none !important;
+  font-weight: 700;
+  font-size: 16px;
+  border-radius: 14px;
+  padding: 14px 20px;
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-next:hover { filter: brightness(0.95); color: #fff; }
+.btn-confirm {
+  background-color: var(--brand) !important;
+  border: none !important;
+  font-size: 16px;
+  border-radius: 14px;
+  padding: 14px;
+  color: #fff;
+  font-weight: 700;
+}
+/* Checkout footer mobile */
+.checkout-footer {
+  background: var(--pm-surface);
+  border-top: 1px solid var(--pm-border) !important;
+  padding: 14px 20px;
+}
+/* Checkout totals block */
+.checkout-totals {
+  background: var(--pm-surface-alt);
+  border-radius: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--pm-border);
+}
+.checkout-totals .text-muted { color: var(--pm-text-muted) !important; }
+.checkout-totals .fw-bold { color: var(--pm-text); }
+/* Form controls inside checkout */
+.checkout-body .form-control,
+.checkout-body .form-select {
+  border: 1px solid var(--pm-border) !important;
+  border-radius: 12px !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-text) !important;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+.checkout-body .form-control:focus,
+.checkout-body .form-select:focus {
+  border-color: var(--brand, #0d6efd) !important;
+  box-shadow: 0 0 0 3px rgba(13,110,253,0.08) !important;
+}
+.checkout-body .form-control::placeholder { color: var(--pm-text-dim) !important; }
+.checkout-body .form-label { color: var(--pm-text); font-weight: 600; font-size: 13px; }
+/* Alerts inside checkout */
+.checkout-body .alert-light,
+.checkout-modal .alert-light {
+  background: var(--pm-surface-alt) !important;
+  border: 1px solid var(--pm-border) !important;
+  border-radius: 12px !important;
+  color: var(--pm-text) !important;
+}
+/* Order type toggle */
+.order-type-toggle .ot-btn {
+  border-radius: 12px;
+  border: 2px solid var(--pm-border);
+  background: var(--pm-surface);
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.order-type-toggle .ot-btn.active {
+  border-color: var(--brand, #0d6efd);
+  background: var(--brand-lightest, #d6ffb3);
+}
+.order-type-toggle .ot-btn .ot-circle {
+  border-color: var(--pm-border);
+}
+.order-type-toggle .ot-btn.active .ot-circle {
+  border-color: var(--brand, #0d6efd);
+  background: var(--brand, #0d6efd);
+}
+/* Address form card */
+.checkout-body .border {
+  border-color: var(--pm-border) !important;
+  border-radius: 14px !important;
+  background: var(--pm-surface);
+  padding: 16px !important;
+}
+.checkout-body .border h6 {
+  color: var(--pm-text);
+  font-weight: 700;
+}
+/* ListGroup items in checkout */
+.checkout-body .list-group-item {
+  background: var(--pm-surface) !important;
+  border: 1px solid var(--pm-border) !important;
+  border-radius: 12px !important;
+  margin-bottom: 6px;
+  padding: 12px !important;
+}
+.checkout-body .list-group-item.selected,
+.checkout-body li.list-group-item.selected {
+  border-color: var(--brand) !important;
+  background-color: var(--brand-lightest, #d6ffb3) !important;
+}
+/* Cashback toggle button */
+.cashback-toggle {
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  background: var(--brand) !important;
+  border-color: var(--brand) !important;
+}
+/* Connected-as banner */
+.checkout-body .btn-delete {
+  background: rgba(200,16,46,0.08);
+  color: #C8102E;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.checkout-body .btn-action {
+  background: var(--pm-surface-alt);
+  color: var(--pm-text);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+/* Review step: cart items */
+.checkout-body .cart-item-qty {
+  background: var(--pm-surface-alt);
+  border: 1px solid var(--pm-border);
+  border-radius: 10px;
+  color: var(--pm-text);
+}
+.checkout-body .product-name { color: var(--pm-text); font-weight: 700; }
+.checkout-body .cart-item-price { color: var(--pm-text); }
+/* Cancel button in customer step */
+.checkout-body .btn-outline-secondary {
+  border-color: var(--pm-border);
+  color: var(--pm-text-muted);
+  border-radius: 12px;
+  font-weight: 600;
+}
+.checkout-body .btn-outline-secondary:hover {
+  background: var(--pm-surface-alt);
+  color: var(--pm-text);
+}
+
+/* ===== Cart drawer warm ===== */
+.cart-drawer { background: var(--pm-surface); font-family: var(--pm-font); }
+.drawer-body { background: var(--pm-bg); }
+.cart-summary { background: var(--pm-surface); border-radius: 14px; border: 1px solid var(--pm-border); font-size: 14px; color: var(--pm-text); }
+.cart-summary hr { border-color: var(--pm-border); }
+.coupon-block { background: var(--pm-surface-alt); border-radius: 12px; padding: 12px; }
+.drawer-footer .btn-outline-secondary { border-color: var(--pm-border); color: var(--pm-text); border-radius: 12px; font-weight: 600; }
+.drawer-footer .btn-primary { background: var(--brand, #0d6efd); border-color: var(--brand, #0d6efd); border-radius: 12px; font-weight: 700; box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+
+/* ===== Info modal tabs ===== */
+.modal-content .nav-tabs .nav-link { border: none; padding: 8px 12px; color: var(--pm-text-muted); background: transparent; border-radius: 10px; }
+.modal-content .nav-tabs .nav-link.active { background: var(--pm-surface-alt); color: var(--brand-dark); font-weight: 700; border: 1px solid var(--pm-border); }
 
 </style>
