@@ -118,6 +118,16 @@
                     <div class="price-pill">{{ formatCurrency(p.price) }}</div>
                   </div>
                   <div class="product-actions d-flex align-items-center" style="gap:8px">
+                    <button
+                      v-if="isAdmin"
+                      class="btn btn-sm"
+                      :class="p.featured ? 'btn-warning' : 'btn-outline-warning'"
+                      @click.stop="toggleFeatured(p)"
+                      :aria-label="`${p.featured ? 'Remover destaque' : 'Destacar'} ${p.name || 'produto'}`"
+                      :title="p.featured ? 'Remover dos destaques' : 'Destacar produto'"
+                    >
+                      <i :class="['bi', p.featured ? 'bi-star-fill' : 'bi-star']"></i>
+                    </button>
                     <button v-if="isAdmin" class="btn btn-sm btn-outline-primary" @click="edit(p)" :aria-label="`Editar ${p.name || 'produto'}`"><i class="bi bi-pencil"></i></button>
                     <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary" @click="duplicateProduct(p)" :aria-label="`Duplicar ${p.name || 'produto'}`" title="Duplicar"><i class="bi bi-files"></i></button>
                     <button v-if="isAdmin" class="btn btn-sm btn-danger" @click="remove(p)" :aria-label="`Remover ${p.name || 'produto'}`"><i class="bi bi-trash"></i></button>
@@ -312,6 +322,16 @@ async function duplicateProduct(p){
   }catch(e){
     console.error(e)
     Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao duplicar produto' })
+  }
+}
+
+async function toggleFeatured(product) {
+  try {
+    const newVal = !product.featured;
+    await api.patch(`/menu/products/${product.id}`, { featured: newVal });
+    product.featured = newVal;
+  } catch (err) {
+    console.error('toggleFeatured error:', err);
   }
 }
 
