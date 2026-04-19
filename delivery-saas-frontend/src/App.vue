@@ -18,6 +18,7 @@ import ImportProgressBar from './components/ImportProgressBar.vue';
 import AiStudioModal from './components/AiStudio/AiStudioModal.vue';
 import OnboardingWizard from './components/OnboardingWizard.vue';
 import PurchaseImportModal from './components/PurchaseImportModal.vue';
+import LuccaChat from './components/LuccaChat.vue';
 import { useBarcodeScanner } from './composables/useBarcodeScanner.js';
 
 const mobileOpen = ref(false);
@@ -357,6 +358,7 @@ function goToRiderQr(){
     >
       <i class="bi bi-qr-code-scan"></i>
     </button>
+    <LuccaChat />
   </div>
 </template>
 
