@@ -7,7 +7,7 @@
         <div class="mb-3 d-flex justify-content-between align-items-center gap-2 flex-wrap">
           <div class="d-flex" style="min-width:200px; flex:1 1 auto; max-width:50%">
             <TextInput v-model="search" placeholder="Buscar um item" inputClass="form-control me-2" />
-            <button class="btn btn-sm btn-outline-secondary" :class="{ active: compactMode }" @click="toggleCompact"><i class="bi bi-list"></i> {{ compactMode ? 'Denso' : 'Normal' }}</button>
+           
           </div>
           <div v-if="isAdmin" class="d-flex gap-2 flex-wrap justify-content-end">
             <button class="btn btn-outline-secondary" @click="goNewCategory">Adicionar categoria</button>
@@ -58,21 +58,8 @@
 
             <transition name="collapse">
               <div class="category-body" v-if="!collapsed[cat.id]" :id="'category-body-'+cat.id" role="region" :aria-labelledby="'cat-header-'+cat.id">
-              <div :class="['product-card mb-2 d-flex align-items-start', { compact: compactMode, inactive: !p.isActive }]" v-for="p in cat.products" :key="p.id">
-                <div class="product-switch me-3 d-flex align-items-start">
-                  <div class="form-check form-switch">
-                    <input
-                      class="form-check-input"
-                      type="checkbox"
-                      :id="'prod-active-'+p.id"
-                      v-model="p.isActive"
-                      :aria-checked="p.isActive"
-                      :disabled="togglingIds.includes(p.id)"
-                      @change.stop="toggleActive(p)"
-                    />
-                  </div>
-                </div>
-
+              <div :class="['product-card mb-2 d-flex align-items-start']" v-for="p in cat.products" :key="p.id">
+                <div>
                 <div class="product-thumb me-3">
                   <div v-if="p.image" class="admin-product-image-wrapper" role="button" tabindex="0" @click.stop.prevent="openMediaFor(p)" @keydown.enter.stop.prevent="openMediaFor(p)" aria-label="Substituir imagem do produto">
                     <img :src="assetUrl(p.image)" class="admin-product-image" loading="lazy" />
@@ -86,9 +73,28 @@
                   </div>
                 </div>
 
+                </div>
+
                 <div class="product-card-body">
+                  <div class="d-flex">
+                  <div class="product-switch me-3 d-flex align-items-start">
+                  <div class="form-check form-switch">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      :id="'prod-active-'+p.id"
+                      v-model="p.isActive"
+                      :aria-checked="p.isActive"
+                      :disabled="togglingIds.includes(p.id)"
+                      @change.stop="toggleActive(p)"
+                    />
+                  </div>
+                </div>
+
                   <h6 class="mb-1 product-title">{{ p.name }}</h6>
+                  </div>
                   <div class="small text-muted product-desc">{{ p.description }}</div>
+                  <div class="d-flex gap-1" style="align-items: center;">
                   <div class="d-flex flex-wrap gap-1 mt-1">
                     <span v-if="p.technicalSheet" class="badge bg-info text-dark stock-badge" :title="'Ficha técnica: ' + p.technicalSheet.name">
                       <i class="bi bi-journal-text me-1"></i>{{ p.technicalSheet.name }}
@@ -103,6 +109,7 @@
                   <div v-else-if="p.image" class="ai-photo-cta mt-1">
                     <i class="bi bi-stars me-1"></i>
                     Otimize sua foto com IA — cardápios com fotos chamativas convertem até 60% a mais
+                  </div>
                   </div>
                 </div>
 
@@ -166,7 +173,6 @@ bindLoading(loading)
 const products = ref([])
 const categoriesList = ref([])
 const collapsed = reactive({})
-const compactMode = ref(false)
 const search = ref('')
 const groups = ref([])
 const togglingIds = ref([])
@@ -248,8 +254,6 @@ async function load(){
       const ids = categoriesList.value.map(c=>c.id).filter(Boolean)
       ids.forEach(id => { if(collapsed[id] === undefined) collapsed[id] = false })
     }
-    // compact mode from localStorage
-    try{ compactMode.value = JSON.parse(localStorage.getItem('menu_admin_compact') || 'false') }catch(e){ compactMode.value = false }
   }catch(e){
     console.error(e); error.value = 'Falha ao carregar produtos'
   }finally{ loading.value = false }
@@ -378,10 +382,7 @@ function toggleCategory(id){
   try{ localStorage.setItem('menu_admin_collapsed', JSON.stringify(collapsed)) }catch(e){ }
 }
 
-function toggleCompact(){
-  compactMode.value = !compactMode.value
-  try{ localStorage.setItem('menu_admin_compact', JSON.stringify(compactMode.value)) }catch(e){}
-}
+
 
 // helper to fetch image URL and return a dataURL (base64)
 async function fetchImageAsBase64(url){
