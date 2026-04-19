@@ -1702,6 +1702,31 @@ publicMenuRouter.get('/:companyId/orders', async (req, res) => {
   }
 })
 
+// Public: GET recently ordered product IDs for a phone number
+publicMenuRouter.get('/:companyId/recently-ordered-products', async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const phone = req.query.phone || req.session?.public_phone;
+    if (!phone) return res.json([]);
+
+    const recentOrders = await prisma.order.findMany({
+      where: { companyId, customerPhone: phone },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      include: { items: { select: { productId: true } } },
+    });
+
+    const productIds = [...new Set(
+      recentOrders.flatMap(o => o.items.map(i => i.productId).filter(Boolean))
+    )];
+
+    res.json(productIds);
+  } catch (err) {
+    console.error('recently-ordered-products error:', err);
+    res.json([]);
+  }
+});
+
 // Public: POST logout (limpa cookie public_phone)
 publicMenuRouter.post('/:companyId/logout', async (req, res) => {
   try {

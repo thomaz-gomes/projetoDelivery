@@ -1043,6 +1043,7 @@ model Product {
   dadosFiscais        DadosFiscais?        @relation(fields: [dadosFiscaisId], references: [id])
   integrationCode     String?
   highlightOnSlip     Boolean              @default(false)
+  featured            Boolean              @default(false)
   // Availability scheduling (product-level; category-level wins on conflict)
   alwaysAvailable     Boolean              @default(true)
   weeklySchedule      Json?
