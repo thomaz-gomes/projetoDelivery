@@ -333,7 +333,7 @@ router.post('/:id/pay', async (req, res) => {
     });
     if (!existing) return res.status(404).json({ message: 'Transação não encontrada' });
 
-    const { amount, accountId, notes } = req.body;
+    const { amount, accountId, notes, paidDate } = req.body;
     const payAmount = amount !== undefined ? Number(amount) : Number(existing.netAmount);
     const targetAccountId = accountId || existing.accountId;
 
@@ -375,7 +375,7 @@ router.post('/:id/pay', async (req, res) => {
         where: { id: existing.id },
         data: {
           paidAmount: newPaidAmount,
-          paidAt: fullyPaid ? new Date() : existing.paidAt,
+          paidAt: fullyPaid ? (paidDate ? new Date(paidDate) : new Date()) : existing.paidAt,
           status: fullyPaid ? 'PAID' : 'PARTIALLY',
           accountId: targetAccountId,
           updatedBy: req.user.id,

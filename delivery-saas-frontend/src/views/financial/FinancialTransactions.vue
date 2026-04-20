@@ -73,7 +73,7 @@
               <td><span class="badge bg-light text-dark">{{ tx.sourceType || 'MANUAL' }}</span></td>
               <td class="text-end">
                 <div class="btn-group btn-group-sm">
-                  <button v-if="tx.status === 'PENDING' || tx.status === 'CONFIRMED'" class="btn btn-outline-success" @click="payTransaction(tx)">
+                  <button v-if="tx.status === 'PENDING' || tx.status === 'CONFIRMED'" class="btn btn-outline-success" @click="openPayModal(tx)">
                     {{ tx.type === 'RECEIVABLE' ? 'Receber' : 'Pagar' }}
                   </button>
                   <button v-if="tx.status === 'PENDING'" class="btn btn-outline-danger" @click="cancelTransaction(tx)">Cancelar</button>
@@ -100,6 +100,56 @@
             </li>
           </ul>
         </nav>
+      </div>
+    </div>
+
+    <!-- Modal de pagamento / edição -->
+    <div v-if="showPayModal" class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5)">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">{{ payForm.type === 'RECEIVABLE' ? 'Receber' : 'Pagar' }} Transação</h5>
+            <button type="button" class="btn-close" @click="showPayModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Descrição</label>
+                <TextInput v-model="payForm.description" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Valor Bruto (R$)</label>
+                <input type="number" class="form-control" v-model.number="payForm.grossAmount" step="0.01" min="0">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Vencimento</label>
+                <input type="date" class="form-control" v-model="payForm.dueDate">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Conta</label>
+                <SelectInput v-model="payForm.accountId" :options="accountOptions" optionValueKey="id" optionLabelKey="name" placeholder="Selecionar conta" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Valor do Pagamento (R$)</label>
+                <input type="number" class="form-control" v-model.number="payForm.payAmount" step="0.01" min="0">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Data de Pagamento</label>
+                <input type="date" class="form-control" v-model="payForm.paidDate">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Observações</label>
+                <textarea class="form-control" v-model="payForm.notes" rows="2" placeholder="Observações do pagamento..."></textarea>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline-secondary" @click="showPayModal = false">Cancelar</button>
+            <button class="btn btn-primary" @click="confirmPay" :disabled="payingSaving">
+              {{ payingSaving ? 'Processando...' : (payForm.type === 'RECEIVABLE' ? 'Confirmar Recebimento' : 'Confirmar Pagamento') }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -212,6 +262,9 @@ export default {
       limit: 30,
       showForm: false,
       saving: false,
+      showPayModal: false,
+      payingSaving: false,
+      payForm: { id: '', type: '', description: '', grossAmount: 0, dueDate: '', accountId: '', payAmount: 0, paidDate: '', notes: '' },
       filters: { type: '', status: '', dueDateFrom: '', dueDateTo: '', sourceType: '' },
       form: { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d', supplierId: '' },
       installmentPreview: [],
@@ -357,14 +410,53 @@ export default {
         alert(e.response?.data?.message || 'Erro ao calcular parcelas');
       }
     },
-    async payTransaction(tx) {
-      const label = tx.type === 'RECEIVABLE' ? 'recebimento' : 'pagamento';
-      if (!confirm(`Confirmar ${label} de ${this.formatCurrency(tx.netAmount)}?`)) return;
+    openPayModal(tx) {
+      const today = new Date().toISOString().slice(0, 10);
+      this.payForm = {
+        id: tx.id,
+        type: tx.type,
+        description: tx.description,
+        grossAmount: Number(tx.grossAmount),
+        dueDate: tx.dueDate ? tx.dueDate.slice(0, 10) : '',
+        accountId: tx.accountId || '',
+        payAmount: Number(tx.netAmount),
+        paidDate: today,
+        notes: tx.notes || '',
+      };
+      this.showPayModal = true;
+    },
+    async confirmPay() {
+      if (!this.payForm.accountId) {
+        alert('Selecione uma conta');
+        return;
+      }
+      if (!this.payForm.paidDate) {
+        alert('Preencha a data de pagamento');
+        return;
+      }
+      this.payingSaving = true;
       try {
-        await api.post(`/financial/transactions/${tx.id}/pay`, { accountId: tx.accountId });
+        // 1) Update transaction fields if changed
+        await api.put(`/financial/transactions/${this.payForm.id}`, {
+          description: this.payForm.description,
+          grossAmount: this.payForm.grossAmount,
+          dueDate: this.payForm.dueDate,
+          accountId: this.payForm.accountId,
+          notes: this.payForm.notes,
+        });
+        // 2) Register payment
+        await api.post(`/financial/transactions/${this.payForm.id}/pay`, {
+          amount: this.payForm.payAmount,
+          accountId: this.payForm.accountId,
+          notes: this.payForm.notes,
+          paidDate: this.payForm.paidDate,
+        });
+        this.showPayModal = false;
         await this.load();
       } catch (e) {
         alert(e.response?.data?.message || 'Erro ao registrar pagamento');
+      } finally {
+        this.payingSaving = false;
       }
     },
     async cancelTransaction(tx) {
