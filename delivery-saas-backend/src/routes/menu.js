@@ -183,8 +183,12 @@ router.get('/categories', async (req, res) => {
   const companyId = req.user.companyId
   const { menuId } = req.query || {}
   const where = { companyId }
-  if (menuId) where.menuId = menuId
-  const rows = await prisma.menuCategory.findMany({ where, orderBy: { position: 'asc' } })
+  if (menuId) where.menuLinks = { some: { menuId } }
+  const rows = await prisma.menuCategory.findMany({
+    where,
+    orderBy: { position: 'asc' },
+    include: { menuLinks: { include: { menu: { select: { id: true, name: true } } }, orderBy: { position: 'asc' } } }
+  })
   res.json(rows)
 })
 
@@ -193,7 +197,10 @@ router.get('/categories/:id', async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId
   try {
-    const row = await prisma.menuCategory.findFirst({ where: { id, companyId } })
+    const row = await prisma.menuCategory.findFirst({
+      where: { id, companyId },
+      include: { menuLinks: { include: { menu: { select: { id: true, name: true } } }, orderBy: { position: 'asc' } } }
+    })
     if (!row) return res.status(404).json({ message: 'Categoria não encontrada' })
     return res.json(row)
   } catch (e) {
@@ -204,15 +211,38 @@ router.get('/categories/:id', async (req, res) => {
 
 router.post('/categories', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
-  const { name, position = 0, isActive = true, menuId = null, dadosFiscaisId = null, description = null, alwaysAvailable = true, weeklySchedule = null } = req.body || {}
+  const { name, position = 0, isActive = true, menuId = null, menuIds = null, dadosFiscaisId = null, description = null, alwaysAvailable = true, weeklySchedule = null } = req.body || {}
   if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
-  // if menuId provided, validate it belongs to a menu whose store is in this company
-  if (menuId) {
-    const menu = await prisma.menu.findUnique({ where: { id: menuId }, include: { store: true } })
+
+  // Build the list of menu IDs to link (accept menuIds array or single menuId for backward compat)
+  const resolvedMenuIds = Array.isArray(menuIds) ? menuIds : (menuId ? [menuId] : [])
+
+  // Validate all menu IDs belong to this company
+  for (const mid of resolvedMenuIds) {
+    const menu = await prisma.menu.findUnique({ where: { id: mid }, include: { store: true } })
     if (!menu) return res.status(400).json({ message: 'Menu inválido' })
     if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
   }
-  const created = await prisma.menuCategory.create({ data: { companyId, name, position: Number(position || 0), isActive: Boolean(isActive), menuId, dadosFiscaisId: dadosFiscaisId || null, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
+
+  // Backward compat: set legacy menuId to the first linked menu (or null)
+  const legacyMenuId = resolvedMenuIds.length > 0 ? resolvedMenuIds[0] : null
+
+  const created = await prisma.$transaction(async (tx) => {
+    const cat = await tx.menuCategory.create({ data: { companyId, name, position: Number(position || 0), isActive: Boolean(isActive), menuId: legacyMenuId, dadosFiscaisId: dadosFiscaisId || null, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
+
+    // Create N:N join links
+    if (resolvedMenuIds.length > 0) {
+      await tx.menuCategoryMenu.createMany({
+        data: resolvedMenuIds.map((mid, idx) => ({ menuCategoryId: cat.id, menuId: mid, position: idx }))
+      })
+    }
+
+    return tx.menuCategory.findUnique({
+      where: { id: cat.id },
+      include: { menuLinks: { include: { menu: { select: { id: true, name: true } } }, orderBy: { position: 'asc' } } }
+    })
+  })
+
   res.status(201).json(created)
 })
 
@@ -228,24 +258,65 @@ router.patch('/categories/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, r
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, position, isActive, menuId, dadosFiscaisId, alwaysAvailable, weeklySchedule } = req.body || {}
-  if (menuId) {
-    const menu = await prisma.menu.findUnique({ where: { id: menuId }, include: { store: true } })
-    if (!menu) return res.status(400).json({ message: 'Menu inválido' })
-    if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
-  }
+  const { name, position, isActive, dadosFiscaisId, alwaysAvailable, weeklySchedule } = req.body || {}
   const updated = await prisma.menuCategory.update({ where: { id }, data: {
     name: name ?? existing.name,
     position: position !== undefined ? Number(position) : existing.position,
     isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
-    menuId: menuId !== undefined ? menuId : existing.menuId,
     dadosFiscaisId: dadosFiscaisId !== undefined ? (dadosFiscaisId || null) : existing.dadosFiscaisId,
     alwaysAvailable: alwaysAvailable !== undefined ? Boolean(alwaysAvailable) : existing.alwaysAvailable,
     weeklySchedule: alwaysAvailable !== undefined
       ? (alwaysAvailable === false ? (weeklySchedule || null) : null)
       : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule),
-  } })
+  }, include: { menuLinks: { include: { menu: { select: { id: true, name: true } } }, orderBy: { position: 'asc' } } } })
   res.json(updated)
+})
+
+// POST /menu/categories/:id/menus — sync menu links for a category
+router.post('/categories/:id/menus', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params
+  const companyId = req.user.companyId
+  const { menuIds = [] } = req.body || {}
+
+  if (!Array.isArray(menuIds)) return res.status(400).json({ message: 'menuIds deve ser um array' })
+
+  const existing = await prisma.menuCategory.findFirst({ where: { id, companyId } })
+  if (!existing) return res.status(404).json({ message: 'Categoria não encontrada' })
+
+  // Validate all menu IDs belong to this company
+  for (const mid of menuIds) {
+    const menu = await prisma.menu.findUnique({ where: { id: mid }, include: { store: true } })
+    if (!menu) return res.status(400).json({ message: 'Menu inválido' })
+    if (!menu.store || menu.store.companyId !== companyId) return res.status(400).json({ message: 'Menu inválido para esta empresa' })
+  }
+
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      // Delete all existing links for this category
+      await tx.menuCategoryMenu.deleteMany({ where: { menuCategoryId: id } })
+
+      // Create new links
+      if (menuIds.length > 0) {
+        await tx.menuCategoryMenu.createMany({
+          data: menuIds.map((mid, idx) => ({ menuCategoryId: id, menuId: mid, position: idx }))
+        })
+      }
+
+      // Backward compat: update legacy menuId to first linked menu or null
+      const legacyMenuId = menuIds.length > 0 ? menuIds[0] : null
+      await tx.menuCategory.update({ where: { id }, data: { menuId: legacyMenuId } })
+
+      return tx.menuCategory.findUnique({
+        where: { id },
+        include: { menuLinks: { include: { menu: { select: { id: true, name: true } } }, orderBy: { position: 'asc' } } }
+      })
+    })
+
+    res.json(updated)
+  } catch (e) {
+    console.error('POST /categories/:id/menus error', e)
+    res.status(500).json({ message: 'Erro ao sincronizar menus', error: e?.message || String(e) })
+  }
 })
 
 // POST /menu/reorder — atomic bulk reorder of categories and products
@@ -304,8 +375,8 @@ router.post('/categories/:id/duplicate', requireRole('ADMIN'), async (req, res) 
   const { id } = req.params
   const companyId = req.user.companyId
 
-  // load category and its products
-  const existing = await prisma.menuCategory.findFirst({ where: { id, companyId }, include: { products: true } })
+  // load category, its products, and menu links
+  const existing = await prisma.menuCategory.findFirst({ where: { id, companyId }, include: { products: true, menuLinks: true } })
   if (!existing) return res.status(404).json({ message: 'Categoria não encontrada' })
 
   const copiedFiles = []
@@ -315,8 +386,16 @@ router.post('/categories/:id/duplicate', requireRole('ADMIN'), async (req, res) 
         companyId,
         name: `${existing.name} (copy)`,
         position: (existing.position ?? 0) + 1,
-        isActive: existing.isActive ?? true
+        isActive: existing.isActive ?? true,
+        menuId: existing.menuId || null
       } })
+
+      // duplicate menu links (N:N)
+      if (existing.menuLinks && existing.menuLinks.length > 0) {
+        await tx.menuCategoryMenu.createMany({
+          data: existing.menuLinks.map(link => ({ menuCategoryId: newCat.id, menuId: link.menuId, position: link.position }))
+        })
+      }
 
       // duplicate each product
       for (const p of (existing.products || [])) {

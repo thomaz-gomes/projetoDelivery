@@ -41,6 +41,9 @@ async function main(){
       if(!f) f = await prisma.menuCategory.create({ data: { companyId: company.id, menuId: menu.id, name: catNames[i], position: i+1 } })
       return f
     })
+    // Ensure N:N join link
+    const linkEx = await prisma.menuCategoryMenu.findFirst({ where: { menuCategoryId: c.id, menuId: menu.id } })
+    if (!linkEx) await prisma.menuCategoryMenu.create({ data: { menuCategoryId: c.id, menuId: menu.id, position: i+1 } })
     categories.push(c)
   }
 

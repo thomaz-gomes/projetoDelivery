@@ -611,6 +611,7 @@ model Menu {
   isActive       Boolean        @default(true)
   position       Int            @default(0)
   categories     MenuCategory[]
+  categoryLinks  MenuCategoryMenu[]
   // products optionally assigned to this menu
   products       Product[]
   createdAt      DateTime       @default(now())
@@ -1014,9 +1015,23 @@ model MenuCategory {
   alwaysAvailable Boolean      @default(true)
   weeklySchedule  Json?
   createdAt      DateTime      @default(now())
+  menuLinks      MenuCategoryMenu[]
   updatedAt      DateTime      @updatedAt
 
   @@index([companyId, name], name: "company_category_name_idx")
+}
+
+model MenuCategoryMenu {
+  id             String       @id @default(uuid())
+  menuCategoryId String
+  menuCategory   MenuCategory @relation(fields: [menuCategoryId], references: [id], onDelete: Cascade)
+  menuId         String
+  menu           Menu         @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  position       Int          @default(0)
+  createdAt      DateTime     @default(now())
+
+  @@unique([menuCategoryId, menuId])
+  @@index([menuId])
 }
 
 model Product {

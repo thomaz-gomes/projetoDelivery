@@ -44,6 +44,15 @@
                 </tr>
               </thead>
               <tbody>
+                <tr class="table-light" style="cursor:pointer" @click="openAllItems">
+                  <td>
+                    <div><strong class="text-white"><i class="bi bi-grid-3x3-gap me-2"></i>Todos os itens</strong></div>
+                    <div class="desc small text-muted">Gestão unificada de categorias e produtos</div>
+                  </td>
+                  <td><span class="text-muted">—</span></td>
+                  <td><span class="text-muted">—</span></td>
+                  <td></td>
+                </tr>
                 <tr v-for="m in filtered" :key="m.id">
                   <td>
                     <div><strong><a role="button" class="text-white" @click.prevent="openMenuAdmin(m)">{{ m.name }}</a></strong></div>
@@ -179,6 +188,9 @@ function edit(m){ router.push({ path: `/menu/menus/${m.id}` }) }
 
 function openProductNew(m){ router.push({ path: '/menu/products/new', query: { menuId: m.id } }) }
 function openMenuAdmin(m){ router.push({ path: '/menu/admin', query: { menuId: m.id } }) }
+function openAllItems() {
+  router.push({ path: '/menu/admin' })
+}
 
 function goOptions(){ router.push({ path: '/menu/options' }) }
 function goIntegration(){ router.push({ path: '/menu/integration' }) }
