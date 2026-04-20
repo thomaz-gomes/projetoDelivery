@@ -229,40 +229,7 @@
           </ul>
         </div>
         
-        <!-- Search box -->
-        <div class="search-box" :class="{ expanded: searchExpanded }">
-          <!-- Ícone de busca clicável em mobile -->
-          <button 
-            class="search-toggle-btn d-lg-none"
-            :class="{ hidden: searchExpanded }"
-            @click="toggleSearch"
-            aria-label="Abrir busca"
-          >
-            <i class="bi bi-search"></i>
-          </button>
-          
-          <!-- Container do input (sempre visível em desktop, expansível em mobile) -->
-          <div class="search-input-container" :class="{ show: searchExpanded }">
-            <i class="bi bi-search search-icon d-none d-lg-inline"></i>
-            <input 
-              ref="searchInputRef"
-              v-model="productSearchTerm" 
-              type="text" 
-              class="form-control search-input" 
-              placeholder="Buscar produtos..." 
-              @input="handleProductSearch"
-            />
-            <!-- Botão X para fechar em mobile ou limpar em desktop -->
-            <button 
-              v-if="searchExpanded || productSearchTerm"
-              class="btn btn-link search-clear" 
-              @click="searchExpanded ? closeSearch() : clearProductSearch()"
-              :aria-label="searchExpanded ? 'Fechar busca' : 'Limpar busca'"
-            >
-              <i class="bi bi-x-circle"></i>
-            </button>
-          </div>
-        </div>
+        
       </div>
       </div>
 
