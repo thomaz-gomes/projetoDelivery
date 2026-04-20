@@ -99,21 +99,31 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in items" :key="item.id" :class="{'table-success': item.matchStatus === 'MATCHED', 'table-warning': item.matchStatus === 'PENDING'}">
+            <tr v-for="item in items" :key="item.id" :class="{'table-success': item.matchStatus === 'MATCHED' || item.matchStatus === 'MANUAL', 'table-warning': item.matchStatus === 'PENDING'}">
               <td>{{ formatDate(item.ofxDate) }}</td>
               <td>{{ item.memo || '-' }}</td>
               <td :class="Number(item.amount) >= 0 ? 'text-success' : 'text-danger'">
                 {{ formatCurrency(item.amount) }}
               </td>
               <td><small class="text-muted">{{ item.fitId || '-' }}</small></td>
-              <td><span :class="matchBadge(item.matchStatus)">{{ item.matchStatus }}</span></td>
+              <td><span :class="matchBadge(item.matchStatus)">{{ statusLabel(item.matchStatus) }}</span></td>
               <td>
-                <small v-if="item.transaction">{{ item.transaction.description }}</small>
+                <template v-if="item.transaction">
+                  <small>{{ item.transaction.description }}</small>
+                  <span v-if="item.matchConfidence" class="badge bg-light text-dark ms-1" style="font-size: 0.7rem">
+                    {{ item.matchMethod === 'EXACT' ? 'Exato' : Math.round(item.matchConfidence * 100) + '%' }}
+                  </span>
+                </template>
                 <small v-else class="text-muted">-</small>
               </td>
               <td class="text-end">
-                <button v-if="item.matchStatus === 'PENDING' || item.matchStatus === 'UNMATCHED'"
-                        class="btn btn-sm btn-outline-secondary me-1" @click="ignoreItem(item)">Ignorar</button>
+                <template v-if="item.matchStatus === 'PENDING' || item.matchStatus === 'UNMATCHED'">
+                  <button class="btn btn-sm btn-primary me-1" @click="openDrawer(item)">Conciliar</button>
+                  <button class="btn btn-sm btn-outline-secondary" @click="ignoreItem(item)">Ignorar</button>
+                </template>
+                <template v-else-if="item.matchStatus === 'MATCHED' || item.matchStatus === 'MANUAL'">
+                  <button class="btn btn-sm btn-outline-warning" @click="undoMatch(item)">Desfazer</button>
+                </template>
               </td>
             </tr>
           </tbody>
@@ -140,16 +150,23 @@
         </div>
       </div>
     </div>
+
+    <ReconciliationDrawer
+      v-model="drawerOpen"
+      :item="drawerItem"
+      @reconciled="onReconciled"
+    />
   </div>
 </template>
 
 <script>
 import api from '../../api';
 import SelectInput from '../../components/form/select/SelectInput.vue';
+import ReconciliationDrawer from '../../components/financial/ReconciliationDrawer.vue';
 
 export default {
   name: 'FinancialOFX',
-  components: { SelectInput },
+  components: { SelectInput, ReconciliationDrawer },
   data() {
     return {
       accounts: [],
@@ -164,6 +181,8 @@ export default {
       items: [],
       aiSuggestions: [],
       itemFilter: '',
+      drawerOpen: false,
+      drawerItem: null,
     };
   },
   computed: {
@@ -277,6 +296,32 @@ export default {
       } catch (e) {
         console.error(e);
       }
+    },
+    openDrawer(item) {
+      this.drawerItem = item;
+      this.drawerOpen = true;
+    },
+    async undoMatch(item) {
+      try {
+        await api.post(`/financial/ofx/items/${item.id}/match`, { action: 'undo' });
+        await this.loadItems();
+      } catch (e) {
+        alert(e.response?.data?.message || 'Erro ao desfazer conciliação');
+      }
+    },
+    onReconciled() {
+      this.loadItems();
+      this.loadImports();
+    },
+    statusLabel(status) {
+      const map = {
+        PENDING: 'Pendente',
+        MATCHED: 'Conciliado',
+        MANUAL: 'Conciliado (manual)',
+        IGNORED: 'Ignorado',
+        UNMATCHED: 'Sem correspondência',
+      };
+      return map[status] || status;
     },
     matchBadge(status) {
       const map = { PENDING: 'badge bg-warning text-dark', MATCHED: 'badge bg-success', MANUAL: 'badge bg-info', IGNORED: 'badge bg-secondary', UNMATCHED: 'badge bg-danger' };

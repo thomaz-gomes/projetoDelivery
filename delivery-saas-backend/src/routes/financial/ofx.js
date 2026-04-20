@@ -157,6 +157,24 @@ router.post('/items/:id/match', async (req, res) => {
       return res.json(updated);
     }
 
+    if (action === 'undo') {
+      const updated = await prisma.ofxReconciliationItem.update({
+        where: { id: req.params.id },
+        data: {
+          matchStatus: 'PENDING',
+          transactionId: null,
+          cashFlowEntryId: null,
+          matchConfidence: null,
+          matchMethod: null,
+          resolvedBy: null,
+          resolvedAt: null,
+          matchNotes: null,
+          aiReasoning: null,
+        },
+      });
+      return res.json(updated);
+    }
+
     if (!transactionId && !cashFlowEntryId) {
       return res.status(400).json({ message: 'transactionId ou cashFlowEntryId é obrigatório' });
     }
@@ -197,6 +215,163 @@ router.post('/:importId/reconcile', async (req, res) => {
     res.json(results);
   } catch (e) {
     res.status(500).json({ message: 'Erro na conciliação', error: e?.message });
+  }
+});
+
+// GET /financial/ofx/items/:id/candidates - buscar lançamentos candidatos para conciliação manual
+router.get('/items/:id/candidates', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const item = await prisma.ofxReconciliationItem.findFirst({
+      where: { id: req.params.id },
+      include: { import: { select: { companyId: true } } },
+    });
+    if (!item || item.import.companyId !== companyId) {
+      return res.status(404).json({ message: 'Item não encontrado' });
+    }
+
+    const { search } = req.query;
+    const ofxDate = new Date(item.ofxDate);
+    const ofxAmount = Math.abs(Number(item.amount));
+    const isCredit = Number(item.amount) > 0;
+
+    const daysBefore = new Date(ofxDate);
+    daysBefore.setDate(daysBefore.getDate() - 7);
+    const daysAfter = new Date(ofxDate);
+    daysAfter.setDate(daysAfter.getDate() + 7);
+
+    const where = {
+      companyId,
+      type: isCredit ? 'RECEIVABLE' : 'PAYABLE',
+      status: { in: ['PENDING', 'CONFIRMED', 'PAID'] },
+    };
+
+    if (search) {
+      where.description = { contains: search, mode: 'insensitive' };
+    } else {
+      where.dueDate = { gte: daysBefore, lte: daysAfter };
+    }
+
+    const candidates = await prisma.financialTransaction.findMany({
+      where,
+      include: {
+        costCenter: { select: { id: true, name: true } },
+      },
+      orderBy: { dueDate: 'asc' },
+      take: 20,
+    });
+
+    // Calcular score para cada candidato
+    const scored = candidates.map(c => {
+      const candidateAmount = Math.abs(Number(c.netAmount));
+      const valueDiff = Math.abs(ofxAmount - candidateAmount);
+      const valueScore = valueDiff <= 0.05 ? 1.0 : valueDiff <= 1.0 ? 0.8 : valueDiff <= 5.0 ? 0.5 : 0;
+
+      const dateDiff = Math.abs(ofxDate.getTime() - new Date(c.dueDate).getTime()) / (1000 * 60 * 60 * 24);
+      const dateScore = dateDiff <= 0 ? 1.0 : dateDiff <= 1 ? 0.9 : dateDiff <= 3 ? 0.6 : 0.3;
+
+      let descScore = 0;
+      if (item.memo && c.description) {
+        const memoLower = (item.memo || '').toLowerCase();
+        const descLower = (c.description || '').toLowerCase();
+        if (memoLower.includes(descLower) || descLower.includes(memoLower)) descScore = 1.0;
+        else {
+          const memoWords = memoLower.split(/\s+/).filter(w => w.length > 3);
+          const descWords = descLower.split(/\s+/).filter(w => w.length > 3);
+          const commonWords = memoWords.filter(w => descWords.some(d => d.includes(w) || w.includes(d)));
+          descScore = memoWords.length > 0 ? commonWords.length / memoWords.length : 0;
+        }
+      }
+
+      const score = (valueScore * 0.5) + (dateScore * 0.3) + (descScore * 0.2);
+      return {
+        id: c.id,
+        description: c.description,
+        grossAmount: c.grossAmount,
+        netAmount: c.netAmount,
+        dueDate: c.dueDate,
+        status: c.status,
+        costCenter: c.costCenter,
+        score: Math.round(score * 100),
+      };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    res.json(scored);
+  } catch (e) {
+    console.error('GET /financial/ofx/items/:id/candidates error:', e);
+    res.status(500).json({ message: 'Erro ao buscar candidatos', error: e?.message });
+  }
+});
+
+// POST /financial/ofx/items/:id/create-and-match - criar lançamento e vincular ao item OFX
+router.post('/items/:id/create-and-match', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const item = await prisma.ofxReconciliationItem.findFirst({
+      where: { id: req.params.id },
+      include: { import: { select: { companyId: true, accountId: true } } },
+    });
+    if (!item || item.import.companyId !== companyId) {
+      return res.status(404).json({ message: 'Item não encontrado' });
+    }
+
+    const {
+      type, description, grossAmount, feeAmount = 0,
+      issueDate, dueDate, costCenterId, notes,
+    } = req.body;
+
+    if (!type || !description || grossAmount == null || !dueDate) {
+      return res.status(400).json({ message: 'type, description, grossAmount e dueDate são obrigatórios' });
+    }
+
+    const netAmount = Number(grossAmount) - Number(feeAmount);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const transaction = await tx.financialTransaction.create({
+        data: {
+          companyId,
+          type,
+          status: 'PAID',
+          description,
+          accountId: item.import.accountId,
+          costCenterId: costCenterId || null,
+          grossAmount: Number(grossAmount),
+          feeAmount: Number(feeAmount),
+          netAmount,
+          issueDate: new Date(issueDate || item.ofxDate),
+          dueDate: new Date(dueDate),
+          paidAt: new Date(item.ofxDate),
+          paidAmount: netAmount,
+          sourceType: 'MANUAL',
+          createdBy: req.user.id,
+          notes: notes || null,
+        },
+      });
+
+      const updated = await tx.ofxReconciliationItem.update({
+        where: { id: item.id },
+        data: {
+          matchStatus: 'MANUAL',
+          transactionId: transaction.id,
+          matchConfidence: 1.0,
+          matchMethod: 'MANUAL',
+          resolvedBy: req.user.id,
+          resolvedAt: new Date(),
+          matchNotes: 'Lançamento criado e vinculado manualmente',
+        },
+        include: {
+          transaction: { select: { id: true, description: true, grossAmount: true, dueDate: true } },
+        },
+      });
+
+      return updated;
+    });
+
+    res.status(201).json(result);
+  } catch (e) {
+    console.error('POST /financial/ofx/items/:id/create-and-match error:', e);
+    res.status(500).json({ message: 'Erro ao criar e vincular lançamento', error: e?.message });
   }
 });
 
