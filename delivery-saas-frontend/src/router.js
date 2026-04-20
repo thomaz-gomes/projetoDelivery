@@ -179,6 +179,7 @@ const router = createRouter({
   { path: '/stock-movements/new', component: StockMovementForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'STOCK' } },
   { path: '/stock-movements/:id', component: StockMovementForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'STOCK' } },
   { path: '/stock/purchase-imports', component: PurchaseImports, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'STOCK' } },
+  { path: '/stock/suppliers', name: 'Suppliers', component: () => import('./views/stock/Suppliers.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'STOCK' } },
     { path: '/inbox', component: Inbox, meta: { requiresAuth: true, requiresModule: 'WHATSAPP' } },
     { path: '/inbox/quick-replies', component: QuickReplies, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'WHATSAPP' } },
     { path: '/inbox/automation', component: InboxAutomation, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'WHATSAPP' } },
