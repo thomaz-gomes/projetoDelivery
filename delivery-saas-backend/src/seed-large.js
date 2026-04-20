@@ -49,8 +49,15 @@ async function upsertMenu(storeId, slug, name, position = 0) {
 async function ensureCategory(companyId, menuId, name, position = 0) {
   // try find existing category by name + company
   const existing = await prisma.menuCategory.findFirst({ where: { companyId, name, menuId } });
-  if (existing) return existing;
-  return prisma.menuCategory.create({ data: { companyId, menuId, name, position } });
+  if (existing) {
+    // Ensure N:N join link exists
+    const linkEx = await prisma.menuCategoryMenu.findFirst({ where: { menuCategoryId: existing.id, menuId } })
+    if (!linkEx) await prisma.menuCategoryMenu.create({ data: { menuCategoryId: existing.id, menuId, position } })
+    return existing;
+  }
+  const cat = await prisma.menuCategory.create({ data: { companyId, menuId, name, position } });
+  await prisma.menuCategoryMenu.create({ data: { menuCategoryId: cat.id, menuId, position } })
+  return cat;
 }
 
 async function ensureProduct(companyId, menuId, categoryId, name, price, position = 0) {

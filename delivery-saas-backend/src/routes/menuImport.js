@@ -657,8 +657,30 @@ router.post('/ai-import/apply', async (req, res) => {
         const ids = productsToDelete.map(p => p.id);
         await prisma.productOptionGroup.deleteMany({ where: { productId: { in: ids } } });
       }
-      // 2. Deletar produtos e categorias
+      // 2. Delete join links for this menu, then delete orphan categories, then products
+      // First: find categories linked to this menu via the join table
+      const linkedCatLinks = await prisma.menuCategoryMenu.findMany({ where: { menuId }, select: { menuCategoryId: true } });
+      const linkedCatIds = linkedCatLinks.map(l => l.menuCategoryId);
+
+      // Delete join links for this menu
+      await prisma.menuCategoryMenu.deleteMany({ where: { menuId } });
+
+      // Delete products belonging to this menu
       await prisma.product.deleteMany({ where: { menuId, companyId } });
+
+      // Delete categories that were linked to this menu and now have no other menu links
+      // (also match legacy menuId for backward compat)
+      if (linkedCatIds.length > 0) {
+        for (const catId of linkedCatIds) {
+          const remainingLinks = await prisma.menuCategoryMenu.count({ where: { menuCategoryId: catId } });
+          if (remainingLinks === 0) {
+            // Unlink products from this category before deleting
+            await prisma.product.updateMany({ where: { categoryId: catId }, data: { categoryId: null } });
+            await prisma.menuCategory.delete({ where: { id: catId } });
+          }
+        }
+      }
+      // Also delete any categories still using the legacy menuId field only
       await prisma.menuCategory.deleteMany({ where: { menuId, companyId } });
     }
 
@@ -715,6 +737,12 @@ router.post('/ai-import/apply', async (req, res) => {
       const newCat = await prisma.menuCategory.create({
         data: { companyId, menuId, name: String(cat.name || 'Geral').trim(), isActive: true, position: ci },
       });
+      // Also create N:N join link for this menu
+      if (menuId) {
+        await prisma.menuCategoryMenu.create({
+          data: { menuCategoryId: newCat.id, menuId, position: 0 }
+        });
+      }
       totalCategories++;
 
       for (let pi = 0; pi < items.length; pi++) {

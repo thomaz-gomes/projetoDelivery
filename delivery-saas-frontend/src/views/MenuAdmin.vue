@@ -1,6 +1,6 @@
 <template>
   <div class="container py-4">
-  <h2>Cardápio (Admin) <small v-if="menuInfo">- {{ menuInfo.name }}</small></h2>
+  <h2>{{ menuId ? 'Cardápio (Admin)' : 'Todos os itens' }} <small v-if="menuInfo">- {{ menuInfo.name }}</small></h2>
 
     <div class="row">
       <div class="col-12">
@@ -12,7 +12,7 @@
           <div v-if="isAdmin" class="d-flex gap-2 flex-wrap justify-content-end">
             <button class="btn btn-outline-secondary" @click="goNewCategory">Adicionar categoria</button>
             <button class="btn btn-primary" @click="goNewProduct">Adicionar produto</button>
-            <button class="btn btn-outline-secondary" @click="showReorderModal = true" title="Reordenar categorias e produtos">
+            <button v-if="menuId" class="btn btn-outline-secondary" @click="showReorderModal = true" title="Reordenar categorias e produtos">
               <i class="bi bi-arrows-move me-1"></i><span class="d-none d-sm-inline">Reordenar</span>
             </button>
             <button v-if="menuId" class="btn btn-outline-warning" @click="showImportModal = true" title="Importar cardápio com IA">
@@ -44,11 +44,37 @@
                 </button>
                 <div>
                   <div class="category-title">{{ cat.name || 'Sem categoria' }}</div>
-                  <div class="small text-muted">{{ cat.products.length }} itens</div>
+                  <div class="d-flex align-items-center gap-1 flex-wrap">
+                    <span class="small text-muted me-1">{{ cat.products.length }} itens</span>
+                    <template v-if="!menuId && cat.menuLinks && cat.menuLinks.length > 0">
+                      <span v-for="ml in cat.menuLinks" :key="ml.id" class="badge bg-info text-dark" style="font-size:0.65em">
+                        {{ ml.menu?.name || 'Menu' }}
+                      </span>
+                    </template>
+                    <span v-else-if="!menuId" class="badge bg-secondary" style="font-size:0.65em">
+                      Sem cardápio
+                    </span>
+                  </div>
                 </div>
               </div>
 
                 <div class="category-actions">
+                  <div v-if="!menuId && isAdmin" class="dropdown d-inline-block me-1">
+                    <button class="btn btn-sm btn-outline-info" @click.stop="toggleMenuDropdown(cat.id)" title="Vincular a cardápios">
+                      <i class="bi bi-link-45deg"></i>
+                    </button>
+                    <div v-if="menuDropdownCatId === cat.id" class="dropdown-menu show p-2 shadow" style="min-width:200px;z-index:1050" @click.stop>
+                      <div class="small fw-bold mb-1">Cardápios vinculados:</div>
+                      <div v-for="m in allMenus" :key="m.id" class="form-check">
+                        <input class="form-check-input" type="checkbox" :id="'ml-'+cat.id+'-'+m.id"
+                          :checked="isCategoryLinkedToMenu(cat.id, m.id)"
+                          @change="toggleMenuLink(cat.id, m.id, $event.target.checked)"
+                        />
+                        <label class="form-check-label small" :for="'ml-'+cat.id+'-'+m.id">{{ m.name }}</label>
+                      </div>
+                      <div v-if="!allMenus.length" class="text-muted small">Nenhum cardápio</div>
+                    </div>
+                  </div>
                   <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary" @click.stop.prevent="editCategory(cat)" :aria-label="`Editar categoria ${cat.name || ''}`"><i class="bi bi-pencil me-1"></i>Editar</button>
                   <button v-if="isAdmin" class="btn btn-sm btn-primary" @click.stop.prevent="newProductForCategory(cat)" :aria-label="`Novo produto para ${cat.name || ''}`"><i class="bi bi-plus-circle me-1"></i>Novo produto</button>
                   <button v-if="isAdmin" class="btn btn-sm btn-outline-secondary" @click.stop.prevent="duplicateCategory(cat)" :aria-label="`Duplicar categoria ${cat.name || ''}`"><i class="bi bi-files"></i></button>
@@ -164,7 +190,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, computed, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import api from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -191,6 +217,53 @@ const error = ref('')
 const route = useRoute()
 const menuId = computed(() => route.query.menuId || null)
 const menuInfo = ref(null)
+
+// Menu link dropdown state
+const allMenus = ref([])
+const menuDropdownCatId = ref(null)
+
+async function loadAllMenus() {
+  if (menuId.value) return
+  try {
+    const r = await api.get('/menu/menus')
+    allMenus.value = r.data || []
+  } catch (e) { allMenus.value = [] }
+}
+
+function toggleMenuDropdown(catId) {
+  menuDropdownCatId.value = menuDropdownCatId.value === catId ? null : catId
+}
+
+function isCategoryLinkedToMenu(catId, mid) {
+  const cat = categoriesList.value.find(c => c.id === catId)
+  if (!cat || !cat.menuLinks) return false
+  return cat.menuLinks.some(l => l.menuId === mid)
+}
+
+async function toggleMenuLink(catId, mid, checked) {
+  const cat = categoriesList.value.find(c => c.id === catId)
+  if (!cat) return
+  const currentIds = (cat.menuLinks || []).map(l => l.menuId)
+  let newIds
+  if (checked) {
+    newIds = [...currentIds, mid]
+  } else {
+    newIds = currentIds.filter(id => id !== mid)
+  }
+  try {
+    const res = await api.post(`/menu/categories/${catId}/menus`, { menuIds: newIds })
+    // Update local state
+    cat.menuLinks = res.data.menuLinks || []
+  } catch (e) {
+    console.error('toggleMenuLink error', e)
+    Swal.fire({ icon: 'error', text: 'Falha ao vincular cardápio', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false })
+  }
+}
+
+// Close dropdown when clicking outside
+function handleClickOutside() {
+  if (menuDropdownCatId.value) menuDropdownCatId.value = null
+}
 
 // AI Import
 const showImportModal = ref(false)
@@ -264,6 +337,8 @@ async function load(){
       const ids = categoriesList.value.map(c=>c.id).filter(Boolean)
       ids.forEach(id => { if(collapsed[id] === undefined) collapsed[id] = false })
     }
+    // load all menus for unified view dropdown
+    await loadAllMenus()
   }catch(e){
     console.error(e); error.value = 'Falha ao carregar produtos'
   }finally{ loading.value = false }
@@ -354,7 +429,11 @@ async function toggleActive(p){
   }
 }
 
-onMounted(()=> load())
+onMounted(() => {
+  load()
+  document.addEventListener('click', handleClickOutside)
+})
+onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
 const filteredProducts = computed(() => {
   const q = (search.value || '').toLowerCase().trim()
@@ -381,7 +460,7 @@ const groupedCategories = computed(() => {
 
   // return in categoriesList order then uncategorized
   const ordered = []
-  categoriesList.value.forEach(c => { const entry = map.get(c.id) || { id: c.id, name: c.name, products: [] }; entry.isActive = c.isActive !== undefined ? c.isActive : true; ordered.push(entry) })
+  categoriesList.value.forEach(c => { const entry = map.get(c.id) || { id: c.id, name: c.name, products: [] }; entry.isActive = c.isActive !== undefined ? c.isActive : true; entry.menuLinks = c.menuLinks || []; ordered.push(entry) })
   if(map.has('uncategorized')) ordered.push(map.get('uncategorized'))
   return ordered
 })

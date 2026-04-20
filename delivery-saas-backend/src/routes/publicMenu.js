@@ -152,7 +152,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
       // which caused the same categories to appear across multiple menus.
       // For independent menus, fetch only categories assigned to this menu.
       categories = await prisma.menuCategory.findMany({
-        where: { companyId, isActive: true, menuId },
+        where: { companyId, isActive: true, menuLinks: { some: { menuId } } },
         orderBy: { position: 'asc' },
         include: {
           products: {
@@ -265,7 +265,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                 // do not include company-shared categories (menuId == null) to avoid
                 // repeating the same categories across different menus.
                 categories = await prisma.menuCategory.findMany({
-                  where: { companyId, isActive: true, menuId: menuForStore.id },
+                  where: { companyId, isActive: true, menuLinks: { some: { menuId: menuForStore.id } } },
                   orderBy: { position: 'asc' },
                   include: {
                     products: {

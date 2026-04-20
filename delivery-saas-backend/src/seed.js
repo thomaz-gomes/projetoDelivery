@@ -82,6 +82,9 @@ async function createDemoData() {
     } else {
       cat = await prisma.menuCategory.create({ data: { companyId: company.id, menuId: menu.id, name, position: i } })
     }
+    // Ensure N:N join link exists
+    const linkExists = await prisma.menuCategoryMenu.findFirst({ where: { menuCategoryId: cat.id, menuId: menu.id } })
+    if (!linkExists) await prisma.menuCategoryMenu.create({ data: { menuCategoryId: cat.id, menuId: menu.id, position: i } })
     categories.push(cat)
   }
 
@@ -96,6 +99,8 @@ async function createDemoData() {
     } else {
       cat = await prisma.menuCategory.create({ data: { companyId: company.id, menuId: menu2.id, name, position: i + 1 } })
     }
+    const linkExists2 = await prisma.menuCategoryMenu.findFirst({ where: { menuCategoryId: cat.id, menuId: menu2.id } })
+    if (!linkExists2) await prisma.menuCategoryMenu.create({ data: { menuCategoryId: cat.id, menuId: menu2.id, position: i + 1 } })
     categoriesMenu2.push(cat)
   }
 
@@ -260,8 +265,12 @@ async function createDemoData() {
     const menu2 = await prisma.menu.upsert({ where: { slug: 'main-menu-2' }, update: { name: 'Cardápio Demo 2', storeId: otherStore.id }, create: { slug: 'main-menu-2', name: 'Cardápio Demo 2', storeId: otherStore.id } })
     let catA = await prisma.menuCategory.findFirst({ where: { companyId: otherCompany.id, menuId: menu2.id, name: 'Lanches' } })
     if (!catA) catA = await prisma.menuCategory.create({ data: { companyId: otherCompany.id, menuId: menu2.id, name: 'Lanches', position: 1 } })
+    const linkA = await prisma.menuCategoryMenu.findFirst({ where: { menuCategoryId: catA.id, menuId: menu2.id } })
+    if (!linkA) await prisma.menuCategoryMenu.create({ data: { menuCategoryId: catA.id, menuId: menu2.id, position: 1 } })
     let catB = await prisma.menuCategory.findFirst({ where: { companyId: otherCompany.id, menuId: menu2.id, name: 'Sobremesas' } })
     if (!catB) catB = await prisma.menuCategory.create({ data: { companyId: otherCompany.id, menuId: menu2.id, name: 'Sobremesas', position: 2 } })
+    const linkB = await prisma.menuCategoryMenu.findFirst({ where: { menuCategoryId: catB.id, menuId: menu2.id } })
+    if (!linkB) await prisma.menuCategoryMenu.create({ data: { menuCategoryId: catB.id, menuId: menu2.id, position: 2 } })
 
     await prisma.product.createMany({ data: [
       { companyId: otherCompany.id, menuId: menu2.id, categoryId: catA.id, name: 'Hambúrguer Demo', price: '22.00', position: 1 },

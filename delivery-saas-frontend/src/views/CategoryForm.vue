@@ -18,11 +18,17 @@
                 <input v-model.number="position" type="number" class="form-control" />
               </div>
                         <div class="col-md-6 mb-3">
-                          <label class="form-label">Menu (opcional)</label>
-                          <SelectInput  class="form-select"  v-model="menuId" >
-                            <option :value="null">-- Nenhum --</option>
-                            <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }} (loja: {{ storesMap[m.storeId]?.name || m.storeId }})</option>
-                          </SelectInput>
+                          <label class="form-label">Cardápios vinculados</label>
+                          <div class="border rounded p-2" style="max-height:150px;overflow-y:auto">
+                            <div v-for="m in menus" :key="m.id" class="form-check">
+                              <input class="form-check-input" type="checkbox" :id="'cf-menu-'+m.id"
+                                :value="m.id" v-model="selectedMenuIds" />
+                              <label class="form-check-label" :for="'cf-menu-'+m.id">
+                                {{ m.name }} <small class="text-muted">({{ storesMap[m.storeId]?.name || '' }})</small>
+                              </label>
+                            </div>
+                            <div v-if="!menus.length" class="text-muted small">Nenhum cardápio</div>
+                          </div>
                         </div>
               <div class="col-md-6 mb-3 d-flex align-items-center">
                 <div class="form-check form-switch ms-2">
@@ -77,7 +83,7 @@ const id = route.params.id || null
 const isEdit = Boolean(id)
 const menus = ref([])
 const storesMap = {}
-const menuId = ref(null)
+const selectedMenuIds = ref([])
 const dadosFiscaisId = ref(null)
 const dadosFiscaisList = ref([])
 const alwaysAvailable = ref(true)
@@ -96,6 +102,9 @@ async function load(){
       dadosFiscaisId.value = c.dadosFiscaisId || null;
       alwaysAvailable.value = c.alwaysAvailable !== false;
       weeklySchedule.value = Array.isArray(c.weeklySchedule) ? c.weeklySchedule : [];
+      if (c.menuLinks) {
+        selectedMenuIds.value = c.menuLinks.map(l => l.menuId || l.menu?.id).filter(Boolean)
+      }
     }
   }catch(e){ console.error(e); error.value = 'Falha ao carregar categoria' }
 }
@@ -110,20 +119,24 @@ async function loadMenus(){
     menus.value = r.data || []
     // fetch stores to build a simple map for display
     try{ const st = await api.get('/stores'); (st.data||[]).forEach(s=>storesMap[s.id]=s) }catch(e){}
-    if(isEdit){
-      try{ const res = await api.get(`/menu/categories/${id}`); menuId.value = res.data.menuId || null }catch(e){}
-    }
   }catch(e){ console.warn('Failed to load menus', e) }
 }
 
-onMounted(()=> load())
-onMounted(()=> loadMenus())
-onMounted(()=> loadDadosFiscais())
+onMounted(() => {
+  load()
+  loadMenus()
+  loadDadosFiscais()
+  // Pre-select menu from query param when creating from a specific menu
+  const qMenuId = route.query.menuId
+  if (qMenuId && !isEdit) {
+    selectedMenuIds.value = [qMenuId]
+  }
+})
 
 function cancel(){
   const prevHistory = (typeof window !== 'undefined' && window.history && window.history.length > 1)
   if(prevHistory){ router.back(); return }
-  const qMenu = route.query.menuId || menuId.value
+  const qMenu = route.query.menuId || (selectedMenuIds.value.length > 0 ? selectedMenuIds.value[0] : null)
   if(qMenu) router.push({ path: '/menu/admin', query: { menuId: qMenu } })
   else router.push({ path: '/menu/admin' })
 }
@@ -138,22 +151,23 @@ async function save(){
       position: position.value,
       description: description.value,
       isActive: isActive.value,
-      menuId: menuId.value,
+      menuIds: selectedMenuIds.value,
       dadosFiscaisId: dadosFiscaisId.value,
       alwaysAvailable: !!alwaysAvailable.value,
       weeklySchedule: alwaysAvailable.value ? null : weeklySchedule.value,
     }
     if(isEdit){
       await api.patch(`/menu/categories/${id}`, payload)
+      // sync menu links
+      await api.post(`/menu/categories/${id}/menus`, { menuIds: selectedMenuIds.value })
       Swal.fire({ icon: 'success', text: 'Categoria atualizada' })
     } else {
       const res = await api.post('/menu/categories', payload)
       const created = res && res.data ? res.data : null
       Swal.fire({ icon: 'success', text: 'Categoria criada' })
       // If category was created for a specific menu, redirect back to the Menu Admin
-      // for that same menu so the user can continue editing its categories/products.
-      if(menuId.value){
-        router.push({ path: '/menu/admin', query: { menuId: menuId.value } })
+      if(selectedMenuIds.value.length > 0){
+        router.push({ path: '/menu/admin', query: { menuId: selectedMenuIds.value[0] } })
         return
       }
       // fallback: if no menu selected, try to go back, else generic admin
