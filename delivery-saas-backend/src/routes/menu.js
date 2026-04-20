@@ -457,9 +457,14 @@ router.get('/products', async (req, res) => {
   const { categoryId } = req.query
   const where = { companyId }
   if (categoryId) where.categoryId = categoryId
-  // support filtering by menuId
+  // support filtering by menuId — include products with direct menuId OR in categories linked via join table
   const { menuId } = req.query
-  if (menuId) where.menuId = menuId
+  if (menuId) {
+    where.OR = [
+      { menuId },
+      { category: { menuLinks: { some: { menuId } } } }
+    ]
+  }
   const rows = await prisma.product.findMany({ where, orderBy: { position: 'asc' }, include: { menu: { select: { name: true } }, category: { select: { name: true } }, technicalSheet: { select: { id: true, name: true } }, stockIngredient: { select: { id: true, description: true } } } })
 
   // Enrich products with aiEnhanced flag from Media table
