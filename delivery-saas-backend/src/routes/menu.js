@@ -323,7 +323,7 @@ router.post('/categories/:id/menus', requireRole('ADMIN'), async (req, res) => {
 // Body: { categories?: [{id, position}], products?: [{id, position, categoryId?}] }
 router.post('/reorder', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
-  const { categories = [], products = [] } = req.body || {}
+  const { categories = [], products = [], optionGroups = [], options = [] } = req.body || {}
   try {
     await prisma.$transaction(async (tx) => {
       for (const c of Array.isArray(categories) ? categories : []) {
@@ -349,6 +349,18 @@ router.post('/reorder', requireRole('ADMIN'), async (req, res) => {
           }
         }
         await tx.product.update({ where: { id: p.id }, data })
+      }
+      for (const g of Array.isArray(optionGroups) ? optionGroups : []) {
+        if (!g?.id) continue
+        const existing = await tx.optionGroup.findFirst({ where: { id: g.id, companyId } })
+        if (!existing) continue
+        await tx.optionGroup.update({ where: { id: g.id }, data: { position: Number(g.position) || 0 } })
+      }
+      for (const o of Array.isArray(options) ? options : []) {
+        if (!o?.id) continue
+        const existing = await tx.option.findFirst({ where: { id: o.id, group: { companyId } } })
+        if (!existing) continue
+        await tx.option.update({ where: { id: o.id }, data: { position: Number(o.position) || 0 } })
       }
     })
     return res.json({ ok: true })
