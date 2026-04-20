@@ -156,7 +156,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
         orderBy: { position: 'asc' },
         include: {
           products: {
-            where: { isActive: true, menuId },
+            where: { isActive: true },
             orderBy: { position: 'asc' },
             include: {
               productOptionGroups: {
@@ -269,7 +269,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                   orderBy: { position: 'asc' },
                   include: {
                     products: {
-                      where: { isActive: true, menuId: menuForStore.id },
+                      where: { isActive: true },
                       orderBy: { position: 'asc' },
                       include: {
                         productOptionGroups: {
