@@ -2520,5 +2520,434 @@
       }
     },
     "storeId": "d9952923-ed61-4294-8166-0935d608c69d"
+  },
+  {
+    "id": "1776347395219-353553",
+    "createdAt": 1776347395219,
+    "order": {
+      "id": "ord-1",
+      "companyId": "AAA",
+      "displayId": "#001"
+    },
+    "storeId": null
+  },
+  {
+    "id": "1776347395238-175443",
+    "createdAt": 1776347395238,
+    "order": {
+      "id": "ord-2",
+      "companyId": "AAA",
+      "displayId": "#002"
+    },
+    "storeId": null
+  },
+  {
+    "id": "1776347463792-905657",
+    "createdAt": 1776347463792,
+    "order": {
+      "id": "ord-1",
+      "companyId": "AAA",
+      "displayId": "#001"
+    },
+    "storeId": null
+  },
+  {
+    "id": "1776347463809-822231",
+    "createdAt": 1776347463809,
+    "order": {
+      "id": "ord-2",
+      "companyId": "AAA",
+      "displayId": "#002"
+    },
+    "storeId": null
+  },
+  {
+    "id": "1776347495045-164405",
+    "createdAt": 1776347495045,
+    "order": {
+      "id": "ord-1",
+      "companyId": "AAA",
+      "displayId": "#001"
+    },
+    "storeId": null
+  },
+  {
+    "id": "1776347495081-574917",
+    "createdAt": 1776347495081,
+    "order": {
+      "id": "ord-2",
+      "companyId": "AAA",
+      "displayId": "#002"
+    },
+    "storeId": null
+  },
+  {
+    "id": "1776636080715-285754",
+    "createdAt": 1776636080715,
+    "order": {
+      "id": "bfcc18be-46e8-4d4d-b9a6-97731bc3b381",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": 1,
+      "orderType": "PICKUP",
+      "status": "EM_PREPARO",
+      "customerName": "Tomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "f87d98c9-2c0b-4714-bcc3-f6080e15e372",
+      "address": null,
+      "latitude": null,
+      "longitude": null,
+      "total": "111.79",
+      "deliveryNeighborhood": null,
+      "couponCode": null,
+      "couponDiscount": "0",
+      "discountIfood": null,
+      "discountMerchant": null,
+      "deliveryFee": "0",
+      "additionalFees": null,
+      "payload": {
+        "total": 111.79,
+        "payment": {
+          "raw": null,
+          "amount": 111.79,
+          "method": "Dinheiro",
+          "changeFor": null,
+          "methodCode": "Dinheiro"
+        },
+        "orderType": "PICKUP",
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Parmegiana De Frango",
+              "notes": null,
+              "price": 55.9,
+              "options": [
+                {
+                  "id": "baa5ae5f-5073-44fc-af58-73b9a48b380c",
+                  "name": "Fanta",
+                  "price": 12
+                },
+                {
+                  "id": "2650cc44-1734-406c-8b8a-f09772f73a1d",
+                  "name": "Queijo extra",
+                  "price": 3.5
+                },
+                {
+                  "id": "e25fb3ed-dd24-49e9-bb44-efd9033d0cb6",
+                  "name": "Bacon",
+                  "price": 4.5
+                },
+                {
+                  "id": "e25fb3ed-dd24-49e9-bb44-efd9033d0cb6",
+                  "name": "Bacon",
+                  "price": 4.5
+                },
+                {
+                  "id": "1e862de2-61b8-4aa6-8138-6aaac46b1e02",
+                  "name": "Bacon",
+                  "price": 4.5
+                },
+                {
+                  "id": "f80435a9-f59c-4e61-bfc6-709413f9fc91",
+                  "name": "Pequeno",
+                  "price": 0
+                }
+              ],
+              "quantity": 1,
+              "productId": "9c6437f0-92d1-4976-b1c6-816de6aef2dd"
+            },
+            {
+              "name": "Strogonoff de frango",
+              "notes": null,
+              "price": 19.99,
+              "options": [],
+              "quantity": 1,
+              "productId": "09835bba-6bd9-46a0-aff8-9d2410166bf5"
+            },
+            {
+              "name": "Parmegiana De Frango",
+              "notes": null,
+              "price": 35.9,
+              "options": [
+                {
+                  "id": "2794faaa-a315-4a3e-b924-0110859f9da2",
+                  "name": "Coca",
+                  "price": 3
+                },
+                {
+                  "id": "2b9c18e9-2a01-4061-aff5-cd0de9ce017f",
+                  "name": "Médio",
+                  "price": 6
+                }
+              ],
+              "quantity": 1,
+              "productId": "9c6437f0-92d1-4976-b1c6-816de6aef2dd"
+            }
+          ],
+          "store": {
+            "id": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25",
+            "name": "Minha Loja de Testes - Loja 1",
+            "slug": "minha-loja-de-testes-store"
+          },
+          "address": {
+            "city": null,
+            "state": null,
+            "reference": null,
+            "complement": null,
+            "postalCode": null,
+            "streetName": null,
+            "coordinates": null,
+            "observation": null,
+            "neighborhood": null,
+            "streetNumber": null,
+            "formattedAddress": null
+          },
+          "payment": {
+            "raw": null,
+            "amount": 111.79,
+            "method": "Dinheiro",
+            "changeFor": null,
+            "methodCode": "Dinheiro"
+          },
+          "customer": {
+            "name": "Tomaz",
+            "contact": "73991429676"
+          },
+          "orderType": "PICKUP",
+          "neighborhood": ""
+        },
+        "publicOrder": true,
+        "computedTotal": 111.79,
+        "appliedCashback": 0
+      },
+      "createdAt": "2026-04-19T22:01:20.662Z",
+      "updatedAt": "2026-04-19T22:01:20.662Z",
+      "riderId": null,
+      "closedByIfoodCode": false,
+      "cashSessionId": null,
+      "outOfSession": false,
+      "items": [
+        {
+          "id": "4661ffa8-18b3-4c8a-a897-093d7b1de0e2",
+          "orderId": "bfcc18be-46e8-4d4d-b9a6-97731bc3b381",
+          "productId": "9c6437f0-92d1-4976-b1c6-816de6aef2dd",
+          "name": "Parmegiana De Frango",
+          "quantity": 1,
+          "price": "55.9",
+          "notes": null,
+          "options": [
+            {
+              "id": "baa5ae5f-5073-44fc-af58-73b9a48b380c",
+              "name": "Fanta",
+              "price": 12
+            },
+            {
+              "id": "2650cc44-1734-406c-8b8a-f09772f73a1d",
+              "name": "Queijo extra",
+              "price": 3.5
+            },
+            {
+              "id": "e25fb3ed-dd24-49e9-bb44-efd9033d0cb6",
+              "name": "Bacon",
+              "price": 4.5
+            },
+            {
+              "id": "e25fb3ed-dd24-49e9-bb44-efd9033d0cb6",
+              "name": "Bacon",
+              "price": 4.5
+            },
+            {
+              "id": "1e862de2-61b8-4aa6-8138-6aaac46b1e02",
+              "name": "Bacon",
+              "price": 4.5
+            },
+            {
+              "id": "f80435a9-f59c-4e61-bfc6-709413f9fc91",
+              "name": "Pequeno",
+              "price": 0
+            }
+          ]
+        },
+        {
+          "id": "69af8b7c-f3e5-42ff-bf8e-0f2d19796404",
+          "orderId": "bfcc18be-46e8-4d4d-b9a6-97731bc3b381",
+          "productId": "09835bba-6bd9-46a0-aff8-9d2410166bf5",
+          "name": "Strogonoff de frango",
+          "quantity": 1,
+          "price": "19.99",
+          "notes": null,
+          "options": []
+        },
+        {
+          "id": "86487916-676c-4e2e-a443-b7e06f379058",
+          "orderId": "bfcc18be-46e8-4d4d-b9a6-97731bc3b381",
+          "productId": "9c6437f0-92d1-4976-b1c6-816de6aef2dd",
+          "name": "Parmegiana De Frango",
+          "quantity": 1,
+          "price": "35.9",
+          "notes": null,
+          "options": [
+            {
+              "id": "2794faaa-a315-4a3e-b924-0110859f9da2",
+              "name": "Coca",
+              "price": 3
+            },
+            {
+              "id": "2b9c18e9-2a01-4061-aff5-cd0de9ce017f",
+              "name": "Médio",
+              "price": 6
+            }
+          ]
+        }
+      ]
+    },
+    "storeId": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25"
+  },
+  {
+    "id": "1776638127884-166701",
+    "createdAt": 1776638127884,
+    "order": {
+      "id": "e9c29676-ecbb-4922-8721-1b48c8133cd4",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": 2,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "Tomaz",
+      "customerPhone": "73991429676",
+      "customerSource": "PUBLIC",
+      "customerId": "f87d98c9-2c0b-4714-bcc3-f6080e15e372",
+      "address": "Avenida tordesilha, 243, Dinah borges",
+      "latitude": null,
+      "longitude": null,
+      "total": "58.9",
+      "deliveryNeighborhood": "Dinah borges",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "discountIfood": null,
+      "discountMerchant": null,
+      "deliveryFee": "10",
+      "additionalFees": null,
+      "payload": {
+        "total": 58.9,
+        "payment": {
+          "raw": null,
+          "amount": 58.9,
+          "method": "Dinheiro",
+          "changeFor": null,
+          "methodCode": "Dinheiro"
+        },
+        "delivery": {
+          "deliveryAddress": {
+            "city": null,
+            "state": null,
+            "country": "BR",
+            "latitude": null,
+            "longitude": null,
+            "reference": null,
+            "complement": null,
+            "postalCode": null,
+            "streetName": null,
+            "observation": null,
+            "neighborhood": "Dinah borges",
+            "streetNumber": "243",
+            "formattedAddress": "Avenida tordesilha, 243"
+          }
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Parmegiana De Frango",
+              "notes": null,
+              "price": 48.9,
+              "options": [
+                {
+                  "id": "e506719f-6389-45cd-b3da-6a5e6764b411",
+                  "name": "Sprite",
+                  "price": 12
+                },
+                {
+                  "id": "0a2c7dfb-b0a4-4841-9c54-00796e35b135",
+                  "name": "Grande",
+                  "price": 10
+                }
+              ],
+              "quantity": 1,
+              "productId": "9c6437f0-92d1-4976-b1c6-816de6aef2dd"
+            }
+          ],
+          "store": {
+            "id": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25",
+            "name": "Minha Loja de Testes - Loja 1",
+            "slug": "minha-loja-de-testes-store"
+          },
+          "address": {
+            "city": null,
+            "state": null,
+            "reference": null,
+            "complement": null,
+            "postalCode": null,
+            "streetName": null,
+            "coordinates": null,
+            "observation": null,
+            "neighborhood": "Dinah borges",
+            "streetNumber": "243",
+            "formattedAddress": "Avenida tordesilha, 243"
+          },
+          "payment": {
+            "raw": null,
+            "amount": 58.9,
+            "method": "Dinheiro",
+            "changeFor": null,
+            "methodCode": "Dinheiro"
+          },
+          "customer": {
+            "name": "Tomaz",
+            "contact": "73991429676"
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Dinah borges"
+        },
+        "publicOrder": true,
+        "computedTotal": 58.9,
+        "appliedCashback": 0
+      },
+      "createdAt": "2026-04-19T22:35:27.866Z",
+      "updatedAt": "2026-04-19T22:35:27.866Z",
+      "riderId": null,
+      "closedByIfoodCode": false,
+      "cashSessionId": null,
+      "outOfSession": false,
+      "items": [
+        {
+          "id": "59108ff3-e818-4603-a587-7d8071c6b379",
+          "orderId": "e9c29676-ecbb-4922-8721-1b48c8133cd4",
+          "productId": "9c6437f0-92d1-4976-b1c6-816de6aef2dd",
+          "name": "Parmegiana De Frango",
+          "quantity": 1,
+          "price": "48.9",
+          "notes": null,
+          "options": [
+            {
+              "id": "e506719f-6389-45cd-b3da-6a5e6764b411",
+              "name": "Sprite",
+              "price": 12
+            },
+            {
+              "id": "0a2c7dfb-b0a4-4841-9c54-00796e35b135",
+              "name": "Grande",
+              "price": 10
+            }
+          ]
+        }
+      ]
+    },
+    "storeId": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25"
   }
 ]
