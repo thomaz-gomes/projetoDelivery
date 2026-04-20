@@ -46,7 +46,7 @@
               <tbody>
                 <tr class="table-light" style="cursor:pointer" @click="openAllItems">
                   <td>
-                    <div><strong class="text-white"><i class="bi bi-grid-3x3-gap me-2"></i>Todos os itens</strong></div>
+                    <div><strong style="color: #8cbe1f;"><i class="bi bi-grid-3x3-gap me-2"></i>Todos os itens</strong></div>
                     <div class="desc small text-muted">Gestão unificada de categorias e produtos</div>
                   </td>
                   <td><span class="text-muted">—</span></td>
@@ -59,7 +59,12 @@
                     <div class="desc small text-muted">{{ m.description || '' }}</div>
                   </td>
                   <td>{{ m.storeId ? (storesMap[m.storeId]?.name || m.storeId) : 'Nenhuma' }}</td>
-                  <td><span class="text-monospace">/public/{{ (storesMap[m.storeId] && slugify(storesMap[m.storeId].name)) || companyId }}</span></td>
+                  <td>
+                    <div class="d-flex align-items-center gap-1">
+                      <a :href="getPublicLink(m)" target="_blank" class="text-monospace small text-truncate" style="max-width: 220px" :title="getPublicLink(m)">{{ getPublicLink(m) }}</a>
+                      <button class="btn btn-sm btn-link p-0 text-muted" @click.stop="copyPublicLink(m)" title="Copiar link"><i class="bi bi-clipboard"></i></button>
+                    </div>
+                  </td>
                   <td>
                     <div class="d-flex align-items-center">
                       <div class="form-check form-switch me-2">
@@ -76,8 +81,6 @@
                       <button v-if="isAdmin" class="btn btn-sm btn-light me-2" @click="edit(m)" title="Editar"><i class="bi bi-pencil-square"></i></button>
 
                       <button class="btn btn-sm btn-outline-primary me-2" @click="openMenuAdmin(m)" title="Gerenciar itens deste cardápio"><i class="bi bi-box-seam"></i></button>
-
-                      <button class="btn btn-sm btn-outline-secondary me-2" @click="copyPublicLink(m)" title="Copiar link público"><i class="bi bi-link-45deg"></i></button>
 
                       <button v-if="isAdmin" class="btn btn-sm btn-outline-danger" @click="remove(m)" title="Remover"><i class="bi bi-trash"></i></button>
 
@@ -222,6 +225,12 @@ async function toggleMenuActive(m){
   }
 }
 
+function getPublicLink(m){
+  const store = storesMap[m.storeId]
+  const slug = m && m.slug ? m.slug : (store ? (store.slug || slugify(store.name || String(store.id))) : companyId)
+  return `${window.location.origin}/public/${slug}`
+}
+
 function copyPublicLink(m){
   try{
     // prefer menu slug when available, then store slug, then fallback to companyId
@@ -267,4 +276,8 @@ onMounted(() => { load(); saas.fetchMySubscription().catch(() => {}) })
 
 <style scoped>
 .text-monospace { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace; }
+.table a {
+    color: #8cbe1f !important;
+    text-decoration: none !important;
+}
 </style>
