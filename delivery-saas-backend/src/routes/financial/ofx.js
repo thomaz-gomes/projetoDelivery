@@ -224,9 +224,9 @@ router.get('/items/:id/candidates', async (req, res) => {
     const companyId = req.user.companyId;
     const item = await prisma.ofxReconciliationItem.findFirst({
       where: { id: req.params.id },
-      include: { import: { select: { companyId: true } } },
+      include: { import_: { select: { companyId: true } } },
     });
-    if (!item || item.import.companyId !== companyId) {
+    if (!item || item.import_.companyId !== companyId) {
       return res.status(404).json({ message: 'Item não encontrado' });
     }
 
@@ -310,9 +310,9 @@ router.post('/items/:id/create-and-match', async (req, res) => {
     const companyId = req.user.companyId;
     const item = await prisma.ofxReconciliationItem.findFirst({
       where: { id: req.params.id },
-      include: { import: { select: { companyId: true, accountId: true } } },
+      include: { import_: { select: { companyId: true, accountId: true } } },
     });
-    if (!item || item.import.companyId !== companyId) {
+    if (!item || item.import_.companyId !== companyId) {
       return res.status(404).json({ message: 'Item não encontrado' });
     }
 
@@ -334,7 +334,7 @@ router.post('/items/:id/create-and-match', async (req, res) => {
           type,
           status: 'PAID',
           description,
-          accountId: item.import.accountId,
+          accountId: item.import_.accountId,
           costCenterId: costCenterId || null,
           grossAmount: Number(grossAmount),
           feeAmount: Number(feeAmount),
