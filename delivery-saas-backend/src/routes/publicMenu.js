@@ -644,10 +644,39 @@ publicMenuRouter.get('/:companyId/profile', authMiddleware, async (req, res) => 
     const custId = req.user.customerId || req.user.id
     const customer = await prisma.customer.findFirst({ where: { id: custId, companyId }, include: { addresses: { orderBy: { isDefault: 'desc' } } } })
     if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' })
-    return res.json(customer)
+    // Map DB field names to frontend-friendly names
+    return res.json({ ...customer, name: customer.fullName, birthDate: customer.birthday })
   } catch (e) {
     console.error('GET /public/:companyId/profile failed', e)
     return res.status(500).json({ message: 'Erro ao carregar perfil' })
+  }
+})
+
+// POST /public/:companyId/profile
+// Update the authenticated customer's profile fields (name, whatsapp, birthDate, cpf, email).
+publicMenuRouter.post('/:companyId/profile', authMiddleware, async (req, res) => {
+  const { companyId } = req.params
+  try {
+    if (!req.user || !req.user.customerId || String(req.user.companyId) !== String(companyId)) {
+      return res.status(403).json({ message: 'Forbidden' })
+    }
+    const custId = req.user.customerId || req.user.id
+    const existing = await prisma.customer.findFirst({ where: { id: custId, companyId } })
+    if (!existing) return res.status(404).json({ message: 'Cliente não encontrado' })
+
+    const { name, whatsapp, birthDate, cpf, email } = req.body || {}
+    const data = {}
+    if (name !== undefined) data.fullName = name
+    if (whatsapp !== undefined) data.whatsapp = whatsapp
+    if (birthDate !== undefined) data.birthday = birthDate ? new Date(birthDate) : null
+    if (cpf !== undefined) data.cpf = cpf
+    if (email !== undefined) data.email = email
+
+    const updated = await prisma.customer.update({ where: { id: custId }, data })
+    return res.json(updated)
+  } catch (e) {
+    console.error('POST /public/:companyId/profile failed', e)
+    return res.status(500).json({ message: 'Erro ao atualizar perfil' })
   }
 })
 

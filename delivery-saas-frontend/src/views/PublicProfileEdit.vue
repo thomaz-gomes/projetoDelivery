@@ -73,9 +73,9 @@ async function load() {
       return
     }
     const { data } = await api.get(`/public/${companyId}/profile`)
-    if (data && data.profile) {
-      profile.value = data.profile
-      localStorage.setItem(key, JSON.stringify(data.profile))
+    if (data) {
+      profile.value = { name: data.name || data.fullName || '', whatsapp: data.whatsapp || '', birthDate: data.birthDate || data.birthday || '', cpf: data.cpf || '', email: data.email || '' }
+      localStorage.setItem(key, JSON.stringify(profile.value))
     }
   } catch (e) {
     console.warn('load profile failed', e?.message || e)
