@@ -271,12 +271,17 @@ const showReorderModal = ref(false)
 const reorderCategories = computed(() => {
   const list = categoriesList.value || []
   if (!menuId.value) return list
-  return list.filter(c => String(c.menuId || '') === String(menuId.value))
+  return list.filter(c => {
+    if (String(c.menuId || '') === String(menuId.value)) return true
+    if (c.menuLinks && c.menuLinks.some(l => String(l.menuId) === String(menuId.value))) return true
+    return false
+  })
 })
 const reorderProducts = computed(() => {
   const list = products.value || []
   if (!menuId.value) return list
-  return list.filter(p => String(p.menuId || '') === String(menuId.value))
+  const catIds = new Set(reorderCategories.value.map(c => c.id))
+  return list.filter(p => catIds.has(p.categoryId))
 })
 function onImported() {
   showImportModal.value = false

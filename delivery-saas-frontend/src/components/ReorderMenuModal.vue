@@ -10,8 +10,23 @@
           <button type="button" class="btn-close" @click="$emit('close')" :disabled="saving"></button>
         </div>
 
+        <!-- Tabs -->
+        <ul class="nav nav-tabs px-3 pt-2">
+          <li class="nav-item">
+            <a class="nav-link" :class="{ active: activeTab === 'menu' }" href="#" @click.prevent="activeTab = 'menu'">
+              <i class="bi bi-folder me-1"></i>Categorias e Produtos
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" :class="{ active: activeTab === 'options' }" href="#" @click.prevent="activeTab = 'options'; loadOptionGroups()">
+              <i class="bi bi-list-check me-1"></i>Opções
+            </a>
+          </li>
+        </ul>
+
         <div class="modal-body p-0">
-          <div class="row g-0">
+          <!-- Tab: Categorias e Produtos -->
+          <div v-show="activeTab === 'menu'" class="row g-0">
             <!-- Categorias -->
             <div class="col-md-5 border-end reorder-col">
               <div class="reorder-col-header">
@@ -72,6 +87,75 @@
               </ul>
             </div>
           </div>
+
+          <!-- Tab: Opções -->
+          <div v-show="activeTab === 'options'" class="row g-0">
+            <!-- Grupos de Opções -->
+            <div class="col-md-5 border-end reorder-col">
+              <div class="reorder-col-header">
+                <i class="bi bi-collection me-1"></i>Grupos de opções
+                <span class="badge bg-secondary ms-1">{{ localOptionGroups.length }}</span>
+              </div>
+              <div class="reorder-col-hint">Arraste para reordenar</div>
+              <div v-if="loadingOptions" class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-primary"></div>
+              </div>
+              <ul v-else ref="optionGroupsEl" class="reorder-list list-unstyled mb-0">
+                <li
+                  v-for="g in localOptionGroups"
+                  :key="g.id"
+                  :data-id="g.id"
+                  class="reorder-item"
+                  :class="{ 'reorder-item-active': g.id === selectedGroupId }"
+                  @click="selectGroup(g.id)"
+                >
+                  <i class="bi bi-grip-vertical text-muted me-2 drag-handle"></i>
+                  <span class="flex-grow-1">{{ g.name }}</span>
+                  <span class="badge bg-light text-dark border ms-2">
+                    {{ (g.options || []).length }}
+                  </span>
+                </li>
+                <li v-if="!localOptionGroups.length" class="text-muted small p-3">
+                  Nenhum grupo de opções.
+                </li>
+              </ul>
+            </div>
+
+            <!-- Opções do grupo -->
+            <div class="col-md-7 reorder-col">
+              <div class="reorder-col-header">
+                <i class="bi bi-list-ul me-1"></i>
+                {{ selectedGroup ? `Opções — ${selectedGroup.name}` : 'Opções' }}
+                <span v-if="selectedGroup" class="badge bg-secondary ms-1">
+                  {{ filteredOptions.length }}
+                </span>
+              </div>
+              <div class="reorder-col-hint">
+                {{ selectedGroup
+                    ? 'Arraste para reordenar dentro do grupo'
+                    : 'Selecione um grupo à esquerda' }}
+              </div>
+              <ul ref="optionsEl" class="reorder-list list-unstyled mb-0">
+                <li
+                  v-for="o in filteredOptions"
+                  :key="o.id"
+                  :data-id="o.id"
+                  class="reorder-item"
+                >
+                  <i class="bi bi-grip-vertical text-muted me-2 drag-handle"></i>
+                  <span class="flex-grow-1">{{ o.name }}</span>
+                  <span v-if="o.price > 0" class="text-muted small ms-2">
+                    +{{ formatCurrency(o.price) }}
+                  </span>
+                  <span v-if="!o.isAvailable" class="badge bg-warning text-dark ms-2">Inativo</span>
+                </li>
+                <li v-if="selectedGroup && !filteredOptions.length"
+                    class="text-muted small p-3">
+                  Nenhuma opção neste grupo.
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
 
         <div class="modal-footer">
@@ -97,12 +181,14 @@ import Sortable from 'sortablejs';
 import api from '../api';
 
 const props = defineProps({
-  categories: { type: Array, required: true }, // [{id, name, position}]
-  products: { type: Array, required: true },   // [{id, name, position, categoryId, isActive}]
+  categories: { type: Array, required: true },
+  products: { type: Array, required: true },
 });
 const emit = defineEmits(['close', 'saved']);
 
-// Work on deep copies so we can compare with the original state to detect "dirty"
+const activeTab = ref('menu');
+
+// ── Menu tab state ──
 const localCategories = ref(
   [...props.categories]
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
@@ -145,14 +231,47 @@ const productCountsByCategory = computed(() => {
   return map;
 });
 
+// ── Options tab state ──
+const localOptionGroups = ref([]);
+const localOptions = ref([]);
+const loadingOptions = ref(false);
+const optionsLoaded = ref(false);
+const initialGroupOrder = ref([]);
+const initialOptionOrder = ref([]);
+const selectedGroupId = ref(null);
+
+const optionGroupsEl = ref(null);
+const optionsEl = ref(null);
+let optionGroupsSortable = null;
+let optionsSortable = null;
+
+const selectedGroup = computed(() =>
+  localOptionGroups.value.find(g => g.id === selectedGroupId.value) || null
+);
+
+const filteredOptions = computed(() => {
+  if (!selectedGroupId.value) return [];
+  return localOptions.value.filter(o => o.groupId === selectedGroupId.value);
+});
+
+// ── Dirty state ──
 const dirty = computed(() => {
+  // Menu tab
   const currentCatOrder = localCategories.value.map(c => c.id);
   if (currentCatOrder.join() !== initialCategoryOrder.join()) return true;
   const currentProdOrder = localProducts.value.map(p => `${p.categoryId || 'none'}|${p.id}`);
   if (currentProdOrder.join() !== initialProductOrder.join()) return true;
+  // Options tab
+  if (optionsLoaded.value) {
+    const currentGroupOrder = localOptionGroups.value.map(g => g.id);
+    if (currentGroupOrder.join() !== initialGroupOrder.value.join()) return true;
+    const currentOptOrder = localOptions.value.map(o => `${o.groupId}|${o.id}`);
+    if (currentOptOrder.join() !== initialOptionOrder.value.join()) return true;
+  }
   return false;
 });
 
+// ── Menu tab methods ──
 function selectCategory(id) {
   selectedCategoryId.value = id;
 }
@@ -183,7 +302,6 @@ function initProductsSortable() {
       const ids = Array.from(productsEl.value.children)
         .filter(el => el.dataset.id)
         .map(el => el.dataset.id);
-      // rebuild full list: reorder the slice for current category, keep others intact
       const otherProducts = localProducts.value.filter(p => p.categoryId !== selectedCategoryId.value);
       const byId = new Map(localProducts.value.map(p => [p.id, p]));
       const reorderedForCat = ids.map((id, idx) => {
@@ -195,6 +313,81 @@ function initProductsSortable() {
   });
 }
 
+// ── Options tab methods ──
+function selectGroup(id) {
+  selectedGroupId.value = id;
+}
+
+async function loadOptionGroups() {
+  if (optionsLoaded.value) return;
+  loadingOptions.value = true;
+  try {
+    const { data } = await api.get('/menu/options');
+    const groups = (data || []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    localOptionGroups.value = groups.map(g => ({ ...g }));
+    const allOpts = [];
+    for (const g of groups) {
+      for (const o of (g.options || [])) {
+        allOpts.push({ ...o, groupId: g.id });
+      }
+    }
+    localOptions.value = allOpts.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    initialGroupOrder.value = groups.map(g => g.id);
+    initialOptionOrder.value = allOpts.map(o => `${o.groupId}|${o.id}`);
+    selectedGroupId.value = groups[0]?.id || null;
+    optionsLoaded.value = true;
+    await nextTick();
+    initOptionGroupsSortable();
+    initOptionsSortable();
+  } catch (e) {
+    console.error('Erro ao carregar opções:', e);
+  } finally {
+    loadingOptions.value = false;
+  }
+}
+
+function initOptionGroupsSortable() {
+  if (!optionGroupsEl.value) return;
+  optionGroupsSortable?.destroy();
+  optionGroupsSortable = Sortable.create(optionGroupsEl.value, {
+    animation: 150,
+    handle: '.drag-handle',
+    onEnd: () => {
+      const ids = Array.from(optionGroupsEl.value.children)
+        .filter(el => el.dataset.id)
+        .map(el => el.dataset.id);
+      const byId = new Map(localOptionGroups.value.map(g => [g.id, g]));
+      localOptionGroups.value = ids.map((id, idx) => ({ ...byId.get(id), position: idx }));
+    },
+  });
+}
+
+function initOptionsSortable() {
+  if (!optionsEl.value) return;
+  optionsSortable?.destroy();
+  optionsSortable = Sortable.create(optionsEl.value, {
+    animation: 150,
+    handle: '.drag-handle',
+    onEnd: () => {
+      const ids = Array.from(optionsEl.value.children)
+        .filter(el => el.dataset.id)
+        .map(el => el.dataset.id);
+      const otherOptions = localOptions.value.filter(o => o.groupId !== selectedGroupId.value);
+      const byId = new Map(localOptions.value.map(o => [o.id, o]));
+      const reorderedForGroup = ids.map((id, idx) => {
+        const opt = byId.get(id);
+        return opt ? { ...opt, position: idx } : null;
+      }).filter(Boolean);
+      localOptions.value = [...otherOptions, ...reorderedForGroup];
+    },
+  });
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+}
+
+// ── Lifecycle ──
 onMounted(() => {
   nextTick(() => {
     initCategoriesSortable();
@@ -202,40 +395,57 @@ onMounted(() => {
   });
 });
 
-// Re-init products sortable when the selected category changes (DOM list swaps).
 watch(selectedCategoryId, async () => {
   await nextTick();
   initProductsSortable();
 });
 
+watch(selectedGroupId, async () => {
+  await nextTick();
+  initOptionsSortable();
+});
+
 onBeforeUnmount(() => {
   categoriesSortable?.destroy();
   productsSortable?.destroy();
+  optionGroupsSortable?.destroy();
+  optionsSortable?.destroy();
 });
 
+// ── Save ──
 async function save() {
   saving.value = true;
   try {
     const payload = {
       categories: localCategories.value.map((c, idx) => ({ id: c.id, position: idx })),
-      products: localProducts.value.map(p => ({
-        id: p.id,
-        position: p.position,
-        categoryId: p.categoryId,
-      })),
+      products: [],
     };
-    // Recompute position per category cleanly (0-based) for products
+    // Recompute position per category cleanly (0-based)
     const groupedByCat = {};
     for (const p of localProducts.value) {
       const key = p.categoryId || 'none';
       groupedByCat[key] = groupedByCat[key] || [];
       groupedByCat[key].push(p);
     }
-    payload.products = [];
     for (const key of Object.keys(groupedByCat)) {
       groupedByCat[key].forEach((p, idx) => {
         payload.products.push({ id: p.id, position: idx, categoryId: key === 'none' ? null : key });
       });
+    }
+    // Options
+    if (optionsLoaded.value) {
+      payload.optionGroups = localOptionGroups.value.map((g, idx) => ({ id: g.id, position: idx }));
+      payload.options = [];
+      const groupedByGroup = {};
+      for (const o of localOptions.value) {
+        groupedByGroup[o.groupId] = groupedByGroup[o.groupId] || [];
+        groupedByGroup[o.groupId].push(o);
+      }
+      for (const key of Object.keys(groupedByGroup)) {
+        groupedByGroup[key].forEach((o, idx) => {
+          payload.options.push({ id: o.id, position: idx });
+        });
+      }
     }
     await api.post('/menu/reorder', payload);
     emit('saved');
