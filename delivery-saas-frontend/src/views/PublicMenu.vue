@@ -283,7 +283,7 @@
               <h5 class="mb-3">{{ cat.name }}</h5>
               <div class="row gx-3 gy-3">
                 <div class="col-12 col-lg-6" v-for="p in cat.products" :key="p.id">
-                  <div class="product-card" @click="openProductModal(p)" tabindex="0" @keydown.enter="openProductModal(p)">
+                  <div class="product-card h-100" @click="openProductModal(p)" tabindex="0" @keydown.enter="openProductModal(p)">
                     <div class="product-card-body">
                       <div>
                         <!-- <div v-if="p.featured" class="product-tag">Destaque</div> -->
