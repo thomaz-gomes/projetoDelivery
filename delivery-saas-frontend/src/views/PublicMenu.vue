@@ -1905,7 +1905,7 @@ const highlightedProducts = computed(() => {
     const recentProducts = recentProductIds.value
       .map(id => allProducts.find(p => p.id === id))
       .filter(p => p && p.isActive !== false && !featured.some(f => f.id === p.id));
-    return [...featured, ...recentProducts.slice(0, 6)];
+    return [...recentProducts.slice(0, 1), ...featured, ...recentProducts.slice(1, 6)];
   }
 
   return featured;
