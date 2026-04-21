@@ -1,11 +1,11 @@
-const sharp = require('sharp');
+import sharp from 'sharp'
 
 /**
  * Optimize an image for web display — returns WebP optimized + thumbnail.
  * @param {Buffer} buffer - Raw image buffer
  * @returns {Promise<{ optimized: Buffer, thumbnail: Buffer }>}
  */
-async function optimizeForWeb(buffer) {
+export async function optimizeForWeb(buffer) {
   const [optimized, thumbnail] = await Promise.all([
     sharp(buffer)
       .resize({ width: 800, withoutEnlargement: true })
@@ -15,9 +15,9 @@ async function optimizeForWeb(buffer) {
       .resize({ width: 200, withoutEnlargement: true })
       .webp({ quality: 60 })
       .toBuffer(),
-  ]);
+  ])
 
-  return { optimized, thumbnail };
+  return { optimized, thumbnail }
 }
 
 /**
@@ -26,10 +26,8 @@ async function optimizeForWeb(buffer) {
  * @param {Buffer} buffer - Raw image buffer
  * @returns {Promise<Buffer>}
  */
-async function preserveHighQuality(buffer) {
+export async function preserveHighQuality(buffer) {
   return sharp(buffer)
     .jpeg({ quality: 92 })
-    .toBuffer();
+    .toBuffer()
 }
-
-module.exports = { optimizeForWeb, preserveHighQuality };

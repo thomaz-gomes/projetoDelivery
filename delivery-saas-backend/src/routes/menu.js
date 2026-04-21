@@ -11,6 +11,7 @@ import { computePricingAnalysis } from '../services/pricingAnalysis.js'
 import { getOrCreateDefaults } from './storePricingDefaults.js'
 import { normalizeToIngredientUnit, areUnitsCompatible } from '../utils/unitConversion.js'
 import { makeCopyName } from '../utils/copyName.js'
+import { optimizeForWeb } from '../utils/imageOptimizer.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -704,28 +705,28 @@ router.post('/products/:id/image', requireRole('ADMIN'), async (req, res) => {
       if (ext.includes('+')) ext = ext.split('+')[0]
     }
   const buffer = Buffer.from(data, 'base64')
-  // use already-imported `path` and `fs` (file is ESM module)
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'products')
     try {
-      // ensure directory exists (async)
       await fs.promises.mkdir(uploadsDir, { recursive: true })
     } catch (e) {
       console.error('Failed to create uploads directory:', uploadsDir, e)
       return res.status(500).json({ message: 'Falha ao criar pasta de uploads', error: e?.message || String(e) })
     }
 
-    const outName = `${id}.${ext}`
-    const outPath = path.join(uploadsDir, outName)
-    console.log('Writing product image to:', outPath)
+    const { optimized, thumbnail } = await optimizeForWeb(buffer)
+    const outName = `${id}.webp`
+    const thumbName = `${id}_thumb.webp`
     try {
-      await fs.promises.writeFile(outPath, buffer)
-      console.log('Wrote file successfully:', outPath)
+      await Promise.all([
+        fs.promises.writeFile(path.join(uploadsDir, outName), optimized),
+        fs.promises.writeFile(path.join(uploadsDir, thumbName), thumbnail),
+      ])
     } catch (e) {
-      console.error('Failed to write product image file:', outPath, e)
+      console.error('Failed to write product image file:', e)
       return res.status(500).json({ message: 'Falha ao salvar arquivo de imagem', error: e?.message || String(e) })
     }
 
-    const publicUrl = `${req.protocol}://${req.get('host')}/public/uploads/products/${outName}`
+    const publicUrl = `/public/uploads/products/${outName}`
     try {
       const updated = await prisma.product.update({ where: { id }, data: { image: publicUrl } })
       console.log('Product image field updated to:', publicUrl)

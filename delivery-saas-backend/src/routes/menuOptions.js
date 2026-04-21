@@ -6,6 +6,7 @@ import { generateOptionCode } from '../utils/integrationCode.js'
 import { makeCopyName } from '../utils/copyName.js'
 import fs from 'fs'
 import path from 'path'
+import { optimizeForWeb } from '../utils/imageOptimizer.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -327,22 +328,29 @@ router.post('/options/:id/image', requireRole('ADMIN'), async (req, res) => {
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'options')
     try { await fs.promises.mkdir(uploadsDir, { recursive: true }) } catch (e) { console.error('Failed to create uploads dir', uploadsDir, e); return res.status(500).json({ message: 'Falha ao criar pasta de uploads', error: e?.message || String(e) }) }
 
-    const outName = `${id}.${ext}`
-    const outPath = path.join(uploadsDir, outName)
     // remove any previous files for this option id (avoid orphaned files with different extensions)
     try {
       const files = await fs.promises.readdir(uploadsDir)
       for (const f of files) {
-        if (f.startsWith(`${id}.`) && f !== outName) {
+        if (f.startsWith(`${id}.`) || f.startsWith(`${id}_thumb.`)) {
           try { await fs.promises.unlink(path.join(uploadsDir, f)) } catch (er) { /* ignore unlink errors */ }
         }
       }
     } catch (e) {
       // ignore readdir errors
     }
-    try { await fs.promises.writeFile(outPath, buffer) } catch (e) { console.error('Failed to write option image file:', outPath, e); return res.status(500).json({ message: 'Falha ao salvar arquivo de imagem', error: e?.message || String(e) }) }
 
-    const publicUrl = `${req.protocol}://${req.get('host')}/public/uploads/options/${outName}`
+    const { optimized, thumbnail } = await optimizeForWeb(buffer)
+    const outName = `${id}.webp`
+    const thumbName = `${id}_thumb.webp`
+    try {
+      await Promise.all([
+        fs.promises.writeFile(path.join(uploadsDir, outName), optimized),
+        fs.promises.writeFile(path.join(uploadsDir, thumbName), thumbnail),
+      ])
+    } catch (e) { console.error('Failed to write option image file:', e); return res.status(500).json({ message: 'Falha ao salvar arquivo de imagem', error: e?.message || String(e) }) }
+
+    const publicUrl = `/public/uploads/options/${outName}`
     try {
       const updated = await prisma.option.update({ where: { id }, data: { image: publicUrl } })
       return res.json(updated)

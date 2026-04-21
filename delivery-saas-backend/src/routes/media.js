@@ -4,6 +4,7 @@ import { authMiddleware, requireRole } from '../auth.js'
 import path from 'path'
 import fs from 'fs'
 import { randomUUID } from 'crypto'
+import { optimizeForWeb } from '../utils/imageOptimizer.js'
 
 const router = Router()
 router.use(authMiddleware)
@@ -49,24 +50,28 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
       return res.status(400).json({ message: 'Formato inválido. Use JPG, PNG, GIF ou WebP.' })
     }
 
-    const ext = mimeType.split('/')[1] === 'jpeg' ? '.jpg' : `.${mimeType.split('/')[1]}`
     const id = randomUUID()
-    const safeName = `${id}${ext}`
 
     const dir = path.join(process.cwd(), 'public', 'uploads', 'media', companyId)
     await fs.promises.mkdir(dir, { recursive: true })
-    const filePath = path.join(dir, safeName)
-    await fs.promises.writeFile(filePath, buf)
 
-    const url = `/public/uploads/media/${companyId}/${safeName}`
+    const { optimized, thumbnail } = await optimizeForWeb(buf)
+    const webpName = `${id}.webp`
+    const thumbName = `${id}_thumb.webp`
+    await Promise.all([
+      fs.promises.writeFile(path.join(dir, webpName), optimized),
+      fs.promises.writeFile(path.join(dir, thumbName), thumbnail),
+    ])
+
+    const url = `/public/uploads/media/${companyId}/${webpName}`
 
     const media = await prisma.media.create({
       data: {
         id,
         companyId,
-        filename: filename || safeName,
-        mimeType,
-        size: buf.length,
+        filename: filename || webpName,
+        mimeType: 'image/webp',
+        size: optimized.length,
         url
       }
     })
