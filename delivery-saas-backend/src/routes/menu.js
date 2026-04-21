@@ -430,18 +430,21 @@ router.post('/categories/:id/duplicate', requireRole('ADMIN'), async (req, res) 
           await tx.productOptionGroup.createMany({ data })
         }
 
-        // copy image file if it resides under our uploads folder
+        // copy and optimize image file if it resides under our uploads folder
         try {
-          if (p.image && typeof p.image === 'string' && p.image.startsWith('/public/uploads/products/')) {
+          if (p.image && typeof p.image === 'string' && p.image.includes('/public/uploads/products/')) {
             const filename = path.basename(p.image)
             const srcPath = path.join(process.cwd(), 'public', 'uploads', 'products', filename)
             if (fs.existsSync(srcPath)) {
-              const ext = path.extname(filename)
-              const destName = `${prod.id}${ext}`
-              const destPath = path.join(process.cwd(), 'public', 'uploads', 'products', destName)
-              fs.copyFileSync(srcPath, destPath)
-              copiedFiles.push(destPath)
-              const publicUrl = `${req.protocol}://${req.get('host')}/public/uploads/products/${destName}`
+              const srcBuffer = fs.readFileSync(srcPath)
+              const { optimized, thumbnail } = await optimizeForWeb(srcBuffer)
+              const destName = `${prod.id}.webp`
+              const thumbName = `${prod.id}_thumb.webp`
+              const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'products')
+              fs.writeFileSync(path.join(uploadsDir, destName), optimized)
+              fs.writeFileSync(path.join(uploadsDir, thumbName), thumbnail)
+              copiedFiles.push(path.join(uploadsDir, destName), path.join(uploadsDir, thumbName))
+              const publicUrl = `/public/uploads/products/${destName}`
               await tx.product.update({ where: { id: prod.id }, data: { image: publicUrl } })
             }
           }
@@ -546,21 +549,25 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
         const buffer = Buffer.from(data, 'base64')
         const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'products')
         await fs.promises.mkdir(uploadsDir, { recursive: true })
-        const outName = `${created.id}.${ext}`
-        const outPath = path.join(uploadsDir, outName)
-        // remove any previous files for this product id (avoid orphaned files with different extensions)
+        // remove any previous files for this product id
         try {
           const files = await fs.promises.readdir(uploadsDir)
           for (const f of files) {
-            if (f.startsWith(`${created.id}.`) && f !== outName) {
+            if (f.startsWith(`${created.id}.`) || f.startsWith(`${created.id}_thumb.`)) {
               try { await fs.promises.unlink(path.join(uploadsDir, f)) } catch (er) { /* ignore unlink errors */ }
             }
           }
         } catch (e) {
           // ignore readdir errors, continue to write
         }
-        await fs.promises.writeFile(outPath, buffer)
-  const publicUrl = `${req.protocol}://${req.get('host')}/public/uploads/products/${outName}`
+        const { optimized, thumbnail } = await optimizeForWeb(buffer)
+        const outName = `${created.id}.webp`
+        const thumbName = `${created.id}_thumb.webp`
+        await Promise.all([
+          fs.promises.writeFile(path.join(uploadsDir, outName), optimized),
+          fs.promises.writeFile(path.join(uploadsDir, thumbName), thumbnail),
+        ])
+  const publicUrl = `/public/uploads/products/${outName}`
   await prisma.product.update({ where: { id: created.id }, data: { image: publicUrl } })
   created.image = publicUrl
         console.log('Saved initial image for product', created.id, publicUrl)
@@ -609,21 +616,25 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
         const buffer = Buffer.from(data, 'base64')
         const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'products')
         await fs.promises.mkdir(uploadsDir, { recursive: true })
-        const outName = `${id}.${ext}`
-        const outPath = path.join(uploadsDir, outName)
-        // remove any previous files for this product id (avoid orphaned files with different extensions)
+        // remove any previous files for this product id
         try {
           const files = await fs.promises.readdir(uploadsDir)
           for (const f of files) {
-            if (f.startsWith(`${id}.`) && f !== outName) {
+            if (f.startsWith(`${id}.`) || f.startsWith(`${id}_thumb.`)) {
               try { await fs.promises.unlink(path.join(uploadsDir, f)) } catch (er) { /* ignore unlink errors */ }
             }
           }
         } catch (e) {
           // ignore readdir errors
         }
-        await fs.promises.writeFile(outPath, buffer)
-  const publicUrl = `${req.protocol}://${req.get('host')}/public/uploads/products/${outName}`
+        const { optimized, thumbnail } = await optimizeForWeb(buffer)
+        const outName = `${id}.webp`
+        const thumbName = `${id}_thumb.webp`
+        await Promise.all([
+          fs.promises.writeFile(path.join(uploadsDir, outName), optimized),
+          fs.promises.writeFile(path.join(uploadsDir, thumbName), thumbnail),
+        ])
+  const publicUrl = `/public/uploads/products/${outName}`
   imageValue = publicUrl
       } catch (e) {
         console.error('Failed to persist base64 image on product update for', id, e)

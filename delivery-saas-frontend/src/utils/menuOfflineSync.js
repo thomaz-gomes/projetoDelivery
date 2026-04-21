@@ -8,7 +8,7 @@
  *  4. registerMenuServiceWorker() — register /sw-menu.js once
  */
 
-import { assetUrl } from './assetUrl.js';
+import { assetUrl, thumbUrl } from './assetUrl.js';
 
 const IMAGE_CACHE_NAME = 'menu-images-v1';
 
@@ -48,13 +48,7 @@ export function extractMenuImageUrls(data) {
         for (const o of g.options || []) {
           addPath(o.image);
           // Also cache the thumbnail variant used by optionThumbUrl()
-          if (o.image) {
-            if (o.image.includes('/public/uploads/options/')) {
-              addPath(o.image.replace('/public/uploads/options/', '/public/uploads/options/thumbs/'));
-            } else if (o.image.includes('public/uploads/options/')) {
-              addPath(o.image.replace('public/uploads/options/', 'public/uploads/options/thumbs/'));
-            }
-          }
+          if (o.image) addPath(thumbUrl(o.image));
         }
       }
     }

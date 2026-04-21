@@ -2353,17 +2353,7 @@ function optionThumbUrl(opt){
     if(!opt) return ''
     const s = String(opt.image || '')
     if(!s) return ''
-    // If path contains '/public/uploads/options/', insert 'thumbs/' segment
-    // Works for full absolute URLs and relative paths.
-    if(s.includes('/public/uploads/options/')){
-      return assetUrl(s.replace('/public/uploads/options/', '/public/uploads/options/thumbs/'))
-    }
-    // also handle when path starts with 'public/uploads/options/' (no leading slash)
-    if(s.startsWith('public/uploads/options/')){
-      return assetUrl(s.replace('public/uploads/options/', 'public/uploads/options/thumbs/'))
-    }
-    // fallback: return original image URL via assetUrl
-    return assetUrl(s)
+    return assetUrl(thumbUrl(s))
   }catch(e){ return assetUrl(opt.image) }
 }
 
