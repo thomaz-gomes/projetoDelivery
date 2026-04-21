@@ -29,6 +29,7 @@ import { callVisionAI } from '../services/aiProvider.js'
 import path from 'path'
 import fs from 'fs'
 import { randomUUID } from 'crypto'
+import { optimizeForWeb, preserveHighQuality } from '../utils/imageOptimizer.js'
 
 const router = Router()
 router.use(authMiddleware)
@@ -222,15 +223,19 @@ router.post('/enhance', requireRole('ADMIN'), async (req, res) => {
     // 7. Decodifica base64
     const generatedBuffer = Buffer.from(b64, 'base64')
 
-    // 8. Salva no disco
-    const generatedMime = imagePart?.inlineData?.mimeType || 'image/png'
-    const generatedExt  = generatedMime === 'image/png' ? 'png' : 'jpg'
+    // 8. Otimiza e salva no disco (WebP para web + HQ JPEG para download)
     const newId = randomUUID()
-    const safeName = `${newId}.${generatedExt}`
     const dir = path.join(process.cwd(), 'public', 'uploads', 'media', companyId)
     await fs.promises.mkdir(dir, { recursive: true })
-    await fs.promises.writeFile(path.join(dir, safeName), generatedBuffer)
-    const newUrl = `/public/uploads/media/${companyId}/${safeName}`
+
+    const { optimized, thumbnail } = await optimizeForWeb(generatedBuffer)
+    const hqBuffer = await preserveHighQuality(generatedBuffer)
+    await Promise.all([
+      fs.promises.writeFile(path.join(dir, `${newId}.webp`), optimized),
+      fs.promises.writeFile(path.join(dir, `${newId}_thumb.webp`), thumbnail),
+      fs.promises.writeFile(path.join(dir, `${newId}_hq.jpg`), hqBuffer),
+    ])
+    const newUrl = `/public/uploads/media/${companyId}/${newId}.webp`
 
     // 9. Cria ou atualiza registro no banco
     const baseName = media.filename.replace(/^ai_studio_[^_]+_[^_]+_/, '')
@@ -246,11 +251,11 @@ router.post('/enhance', requireRole('ADMIN'), async (req, res) => {
       } catch { /* não-fatal */ }
       resultMedia = await prisma.media.update({
         where: { id: media.id },
-        data: { filename: enhancedFilename, mimeType: generatedMime, size: generatedBuffer.length, url: newUrl, aiEnhanced: true },
+        data: { filename: enhancedFilename, mimeType: 'image/webp', size: optimized.length, url: newUrl, aiEnhanced: true },
       })
     } else {
       resultMedia = await prisma.media.create({
-        data: { id: newId, companyId, filename: enhancedFilename, mimeType: generatedMime, size: generatedBuffer.length, url: newUrl, aiEnhanced: true },
+        data: { id: newId, companyId, filename: enhancedFilename, mimeType: 'image/webp', size: optimized.length, url: newUrl, aiEnhanced: true },
       })
     }
 
@@ -346,7 +351,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
                 },
               ],
             }],
-            generationConfig: { maxOutputTokens: 500, temperature: 0.1 },
+            generationConfig: { maxOutputTokens: 2048, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
             }),
           signal: AbortSignal.timeout(30_000),
         }
@@ -419,21 +424,25 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
     if (!b64) throw new Error('Nano Banana não retornou imagem')
 
     const generatedBuffer = Buffer.from(b64, 'base64')
-    const generatedMime = imagePart?.inlineData?.mimeType || 'image/png'
-    const generatedExt  = generatedMime === 'image/png' ? 'png' : 'jpg'
 
     const newId = randomUUID()
-    const safeName = `${newId}.${generatedExt}`
     const dir = path.join(process.cwd(), 'public', 'uploads', 'media', companyId)
     await fs.promises.mkdir(dir, { recursive: true })
-    await fs.promises.writeFile(path.join(dir, safeName), generatedBuffer)
-    const newUrl = `/public/uploads/media/${companyId}/${safeName}`
+
+    const { optimized, thumbnail } = await optimizeForWeb(generatedBuffer)
+    const hqBuffer = await preserveHighQuality(generatedBuffer)
+    await Promise.all([
+      fs.promises.writeFile(path.join(dir, `${newId}.webp`), optimized),
+      fs.promises.writeFile(path.join(dir, `${newId}_thumb.webp`), thumbnail),
+      fs.promises.writeFile(path.join(dir, `${newId}_hq.jpg`), hqBuffer),
+    ])
+    const newUrl = `/public/uploads/media/${companyId}/${newId}.webp`
 
     const slug = descTrimmed.slice(0, 40).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase()
-    const filename = `ai_gen_${style}_${angle}_${slug || newId.slice(0, 8)}.${generatedExt}`
+    const filename = `ai_gen_${style}_${angle}_${slug || newId.slice(0, 8)}.webp`
 
     const resultMedia = await prisma.media.create({
-      data: { id: newId, companyId, filename, mimeType: generatedMime, size: generatedBuffer.length, url: newUrl, aiEnhanced: true },
+      data: { id: newId, companyId, filename, mimeType: 'image/webp', size: optimized.length, url: newUrl, aiEnhanced: true },
     })
 
     await debitCredits(companyId, 'AI_STUDIO_ENHANCE', 1, {
@@ -653,8 +662,9 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
             ],
           }],
           generationConfig: {
-            maxOutputTokens: 500,
+            maxOutputTokens: 2048,
             temperature: 0.1,
+            thinkingConfig: { thinkingBudget: 0 },
             responseMimeType: 'application/json',
             responseSchema: {
               type: 'OBJECT',
@@ -817,17 +827,20 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
       if (!b64) throw new Error(`Imagen não retornou imagem (image ${index + 1})`)
 
       const generatedBuffer = Buffer.from(b64, 'base64')
-      const generatedMime = imagePart?.inlineData?.mimeType || 'image/png'
-      const generatedExt  = generatedMime === 'image/png' ? 'png' : 'jpg'
 
       const newId = randomUUID()
-      const safeName = `${newId}.${generatedExt}`
-      await fs.promises.writeFile(path.join(dir, safeName), generatedBuffer)
-      const newUrl = `/public/uploads/media/${companyId}/${safeName}`
-      const filename = `ai_pack_${slug}_${index + 1}.${generatedExt}`
+      const { optimized, thumbnail } = await optimizeForWeb(generatedBuffer)
+      const hqBuffer = await preserveHighQuality(generatedBuffer)
+      await Promise.all([
+        fs.promises.writeFile(path.join(dir, `${newId}.webp`), optimized),
+        fs.promises.writeFile(path.join(dir, `${newId}_thumb.webp`), thumbnail),
+        fs.promises.writeFile(path.join(dir, `${newId}_hq.jpg`), hqBuffer),
+      ])
+      const newUrl = `/public/uploads/media/${companyId}/${newId}.webp`
+      const filename = `ai_pack_${slug}_${index + 1}.webp`
 
       const mediaRecord = await prisma.media.create({
-        data: { id: newId, companyId, filename, mimeType: generatedMime, size: generatedBuffer.length, url: newUrl, aiEnhanced: true },
+        data: { id: newId, companyId, filename, mimeType: 'image/webp', size: optimized.length, url: newUrl, aiEnhanced: true },
       })
 
       return mediaRecord

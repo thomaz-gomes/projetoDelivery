@@ -19,6 +19,7 @@ import { authMiddleware } from '../auth.js';
 import { requireModuleStrict } from '../modules.js';
 import { checkCredits, debitCredits, AI_SERVICE_COSTS, logTokenUsage } from '../services/aiCreditManager.js';
 import { callTextAI, callVisionAI } from '../services/aiProvider.js';
+import { optimizeForWeb } from '../utils/imageOptimizer.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -802,33 +803,34 @@ async function downloadAndSaveProductImage(productId, imageUrl, baseUrl, company
         ...(origin ? { 'Referer': origin + '/' } : {}),
       },
     });
-    const contentType = resp.headers['content-type'] || 'image/jpeg';
-    const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : contentType.includes('gif') ? 'gif' : 'jpg';
     const uploadsDir = path.join(__dirname, '../../public/uploads/products');
     fs.mkdirSync(uploadsDir, { recursive: true });
-    const fileName = `${productId}.${ext}`;
-    const filePath = path.join(uploadsDir, fileName);
-    fs.writeFileSync(filePath, resp.data);
-    const imagePublicUrl = `${baseUrl}/public/uploads/products/${fileName}`;
+
+    const { optimized, thumbnail } = await optimizeForWeb(Buffer.from(resp.data));
+    const fileName = `${productId}.webp`;
+    const thumbName = `${productId}_thumb.webp`;
+    fs.writeFileSync(path.join(uploadsDir, fileName), optimized);
+    fs.writeFileSync(path.join(uploadsDir, thumbName), thumbnail);
+
+    const imagePublicUrl = `/public/uploads/products/${fileName}`;
     await prisma.product.update({ where: { id: productId }, data: { image: imagePublicUrl } });
 
     // Registrar na biblioteca de mídia da empresa
     if (companyId) {
-      const mimeType = contentType.split(';')[0].trim();
-      const displayName = productName ? `${productName}.${ext}` : fileName;
+      const displayName = productName ? `${productName}.webp` : fileName;
       await prisma.media.create({
         data: {
           id: randomUUID(),
           companyId,
           filename: displayName,
-          mimeType,
-          size: resp.data.byteLength,
+          mimeType: 'image/webp',
+          size: optimized.length,
           url: imagePublicUrl,
         },
       });
     }
 
-    console.log(`[menuImport] Imagem salva: ${fileName} (${Math.round(resp.data.byteLength / 1024)}KB)`);
+    console.log(`[menuImport] Imagem salva: ${fileName} (${Math.round(resp.data.byteLength / 1024)}KB → ${Math.round(optimized.length / 1024)}KB WebP)`);
   } catch (e) {
     console.warn(`[menuImport] image download failed for ${productId}: ${e.message}`);
   }

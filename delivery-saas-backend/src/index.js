@@ -325,7 +325,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Serve public files (e.g., generated reports)
 const publicDir = path.join(process.cwd(), 'public');
-app.use('/public', express.static(publicDir));
+app.use('/public', express.static(publicDir, { maxAge: '365d', immutable: true }));
 
 // Serve downloads (e.g., delivery-print-agent-setup.exe)
 const downloadsDir = path.join(process.cwd(), 'downloads');
