@@ -198,7 +198,7 @@
         <div class="featured-scroll">
           <div v-for="p in highlightedProducts" :key="'feat-'+p.id" class="featured-card" @click="openProductModal(p)">
             <div class="featured-card-image">
-              <img v-if="p.image" :src="assetUrl(p.image)" loading="lazy" />
+              <img v-if="p.image" :src="assetUrl(thumbUrl(p.image))" loading="lazy" />
               <div v-else class="featured-card-placeholder"></div>
               <div v-if="p.featured" class="featured-card-tag">Destaque</div>
               <div v-else class="featured-card-tag recent">Pedido recente</div>
@@ -270,7 +270,7 @@
                     </div>
                     <div class="product-card-media">
                       <div class="product-image-wrap">
-                        <img v-if="p.image" :src="assetUrl(p.image)" class="product-image" loading="lazy" />
+                        <img v-if="p.image" :src="assetUrl(thumbUrl(p.image))" class="product-image" loading="lazy" />
                         <div v-else class="product-image-placeholder"></div>
                       </div>
                       <button v-if="!isCatalogMode" class="product-add-btn" @click.stop="openProductModal(p)" aria-label="Adicionar ao carrinho">
@@ -308,7 +308,7 @@
               <div v-else class="cart-sidebar-items">
                 <div v-for="(it, i) in cart" :key="'sidebar-'+it.lineId" class="cart-sidebar-item">
                   <div class="d-flex gap-2">
-                    <img v-if="it.image" :src="assetUrl(it.image)" class="cart-sidebar-item-img" alt="" />
+                    <img v-if="it.image" :src="assetUrl(thumbUrl(it.image))" class="cart-sidebar-item-img" alt="" />
                     <div class="flex-fill" style="min-width:0">
                       <div class="cart-sidebar-item-name">{{ it.name }}</div>
                       <div v-if="optionsSummaryNoPrice(it)" class="cart-sidebar-item-opts">{{ optionsSummaryNoPrice(it) }}</div>
@@ -927,7 +927,7 @@
             <div v-if="cart.length===0" class="text-muted p-3">Sua sacola está vazia.</div>
             <div v-else class="drawer-items-list">
               <div v-for="(it, i) in cart" :key="it.lineId" class="drawer-item">
-                <img v-if="it.image" :src="assetUrl(it.image)" class="drawer-item-img" alt="" />
+                <img v-if="it.image" :src="assetUrl(thumbUrl(it.image))" class="drawer-item-img" alt="" />
                 <div v-else class="drawer-item-img drawer-item-img-placeholder"><i class="bi bi-image"></i></div>
                 <div class="drawer-item-info">
                   <div class="drawer-item-name">{{ it.name }}</div>
@@ -1044,7 +1044,7 @@ import { bindLoading } from '../state/globalLoading.js';
 import api from '../api';
 import { trackMenuEvent, flushEvents } from '../services/menuTracking.js'
 import { useRoute, useRouter } from 'vue-router';
-import { assetUrl } from '../utils/assetUrl.js';
+import { assetUrl, thumbUrl } from '../utils/assetUrl.js';
 import { applyPhoneMask, removePhoneMask } from '../utils/phoneMask';
 import { initMetaPixel, trackViewContent, trackAddToCart as trackPixelAddToCart, trackSearch as trackPixelSearch, trackInitiateCheckout, trackAddPaymentInfo, trackPurchase, trackLead, trackContact } from '../utils/metaPixel';
 import ListGroup from '../components/form/list-group/ListGroup.vue';

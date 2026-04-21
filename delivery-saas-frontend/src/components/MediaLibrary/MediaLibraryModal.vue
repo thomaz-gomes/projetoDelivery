@@ -59,6 +59,16 @@
                 >
                   <i class="bi bi-trash"></i>
                 </button>
+                <a
+                  v-if="item.aiEnhanced"
+                  :href="assetUrl(hqDownloadUrl(item.url))"
+                  :download="(item.filename || 'image') + '.jpg'"
+                  class="download-hq-trigger"
+                  title="Baixar HD para redes sociais"
+                  @click.stop
+                >
+                  <i class="bi bi-download"></i>
+                </a>
               </div>
             </div>
             <div v-else class="media-library-empty">
@@ -260,7 +270,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useMediaLibrary } from '../../composables/useMediaLibrary.js'
 import { useAiStudio } from '../../composables/useAiStudio.js'
-import { assetUrl } from '../../utils/assetUrl.js'
+import { assetUrl, hqDownloadUrl } from '../../utils/assetUrl.js'
 import api from '../../api.js'
 import Swal from 'sweetalert2'
 

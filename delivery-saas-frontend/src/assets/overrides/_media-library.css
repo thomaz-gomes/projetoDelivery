@@ -363,6 +363,35 @@
   background: #dc3545;
   color: #fff;
 }
+.media-library-grid__item .download-hq-trigger {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(10, 30, 10, 0.75);
+  color: #4ecdc4;
+  border: none;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 2;
+  cursor: pointer;
+  text-decoration: none;
+}
+.media-library-grid__item:hover .download-hq-trigger {
+  opacity: 1;
+  transform: translateY(0);
+}
+.media-library-grid__item .download-hq-trigger:hover {
+  background: #4ecdc4;
+  color: #000;
+}
 
 /* ── Criar com IA Tab ─────────────────────────────────────────── */
 

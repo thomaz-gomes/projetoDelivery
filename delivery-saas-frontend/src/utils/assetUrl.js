@@ -49,3 +49,21 @@ export function assetUrl(u){
     return s
   }catch(e){ return u }
 }
+
+/**
+ * Convert an image URL to its thumbnail variant.
+ * e.g. /public/uploads/products/abc.webp -> /public/uploads/products/abc_thumb.webp
+ */
+export function thumbUrl(url) {
+  if (!url) return url
+  return String(url).replace(/(\.\w+)$/, '_thumb.webp')
+}
+
+/**
+ * Convert an AI Studio image URL to its HQ JPEG download variant.
+ * e.g. /public/uploads/media/cid/abc.webp -> /public/uploads/media/cid/abc_hq.jpg
+ */
+export function hqDownloadUrl(url) {
+  if (!url) return url
+  return String(url).replace(/(\.\w+)$/, '_hq.jpg')
+}
