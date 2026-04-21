@@ -745,10 +745,22 @@ router.post('/products/:id/image', requireRole('ADMIN'), async (req, res) => {
 router.delete('/products/:id', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId
-  const existing = await prisma.product.findFirst({ where: { id, companyId } })
-  if (!existing) return res.status(404).json({ message: 'Produto não encontrado' })
-  await prisma.product.delete({ where: { id } })
-  res.json({ message: 'Removido' })
+  try {
+    const existing = await prisma.product.findFirst({ where: { id, companyId } })
+    if (!existing) return res.status(404).json({ message: 'Produto não encontrado' })
+    await prisma.$transaction(async (tx) => {
+      // Remove option group links
+      await tx.productOptionGroup.deleteMany({ where: { productId: id } })
+      // Unlink options that reference this product
+      await tx.option.updateMany({ where: { linkedProductId: id }, data: { linkedProductId: null } })
+      // Delete the product
+      await tx.product.delete({ where: { id } })
+    })
+    res.json({ message: 'Removido' })
+  } catch (e) {
+    console.error('DELETE /products/:id error', e)
+    res.status(500).json({ message: e?.message || 'Erro ao remover produto' })
+  }
 })
 
 // Duplicate a product (and its attached OptionGroup links) atomically.
