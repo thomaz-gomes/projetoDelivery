@@ -140,6 +140,10 @@
                 <label class="form-label">Data de Pagamento</label>
                 <input type="date" class="form-control" v-model="payForm.paidDate">
               </div>
+              <div class="col-md-6">
+                <label class="form-label">Centro de Custo</label>
+                <SelectInput v-model="payForm.costCenterId" :options="costCenterOptions" optionValueKey="id" optionLabelKey="label" placeholder="Nenhum" />
+              </div>
               <div class="col-12">
                 <label class="form-label">Observações</label>
                 <textarea class="form-control" v-model="payForm.notes" rows="2" placeholder="Observações do pagamento..."></textarea>
