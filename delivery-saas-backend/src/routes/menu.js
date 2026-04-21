@@ -184,7 +184,7 @@ router.get('/categories', async (req, res) => {
   const companyId = req.user.companyId
   const { menuId } = req.query || {}
   const where = { companyId }
-  if (menuId) where.menuLinks = { some: { menuId } }
+  if (menuId) where.OR = [{ menuLinks: { some: { menuId } } }, { menuId }]
   const rows = await prisma.menuCategory.findMany({
     where,
     orderBy: { position: 'asc' },
