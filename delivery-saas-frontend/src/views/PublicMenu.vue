@@ -2425,6 +2425,8 @@ watch(cartModalOpen, v => {
 // persist cart to localStorage on every change
 watch(cart, (v) => {
   try{ localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(v || [])) }catch(e){ console.warn('persist cart failed', e) }
+  // close cart drawer when cart becomes empty so bottom nav reappears
+  if ((!v || v.length === 0) && cartModalOpen.value) cartModalOpen.value = false
 }, { deep: true })
 
 // re-evaluate customer-group discounts when cart or customer state changes
