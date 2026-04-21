@@ -333,7 +333,7 @@ router.post('/:id/pay', async (req, res) => {
     });
     if (!existing) return res.status(404).json({ message: 'Transação não encontrada' });
 
-    const { amount, accountId, notes, paidDate } = req.body;
+    const { amount, accountId, costCenterId, notes, paidDate } = req.body;
     const payAmount = amount !== undefined ? Number(amount) : Number(existing.netAmount);
     const targetAccountId = accountId || existing.accountId;
 
@@ -371,15 +371,18 @@ router.post('/:id/pay', async (req, res) => {
       // Atualizar status da transação
       const newPaidAmount = Number(existing.paidAmount) + payAmount;
       const fullyPaid = newPaidAmount >= Number(existing.netAmount);
+      const txUpdateData = {
+        paidAmount: newPaidAmount,
+        paidAt: fullyPaid ? (paidDate ? new Date(paidDate) : new Date()) : existing.paidAt,
+        status: fullyPaid ? 'PAID' : 'PARTIALLY',
+        accountId: targetAccountId,
+        updatedBy: req.user.id,
+      };
+      if (costCenterId !== undefined) txUpdateData.costCenterId = costCenterId || null;
+
       const updatedTx = await tx.financialTransaction.update({
         where: { id: existing.id },
-        data: {
-          paidAmount: newPaidAmount,
-          paidAt: fullyPaid ? (paidDate ? new Date(paidDate) : new Date()) : existing.paidAt,
-          status: fullyPaid ? 'PAID' : 'PARTIALLY',
-          accountId: targetAccountId,
-          updatedBy: req.user.id,
-        },
+        data: txUpdateData,
       });
 
       return { transaction: updatedTx, entry };
@@ -392,7 +395,99 @@ router.post('/:id/pay', async (req, res) => {
   }
 });
 
-// POST /financial/transactions/:id/cancel
+// PUT /financial/transactions/:id/edit-payment - editar pagamento já realizado
+router.put('/:id/edit-payment', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const existing = await prisma.financialTransaction.findFirst({
+      where: { id: req.params.id, companyId },
+    });
+    if (!existing) return res.status(404).json({ message: 'Transação não encontrada' });
+    if (existing.status !== 'PAID' && existing.status !== 'PARTIALLY') {
+      return res.status(400).json({ message: 'Somente transações pagas podem ter o pagamento editado' });
+    }
+
+    const { amount, accountId, costCenterId, paidDate, notes, description } = req.body;
+    const newAmount = amount !== undefined ? Number(amount) : Number(existing.paidAmount);
+    const newAccountId = accountId || existing.accountId;
+
+    if (!newAccountId) {
+      return res.status(400).json({ message: 'accountId é obrigatório' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) Reverter TODOS os CashFlowEntries existentes desta transação
+      const oldEntries = await tx.cashFlowEntry.findMany({
+        where: { transactionId: existing.id },
+      });
+
+      for (const entry of oldEntries) {
+        const reverseChange = entry.type === 'INFLOW' ? -Number(entry.amount) : Number(entry.amount);
+        await tx.financialAccount.update({
+          where: { id: entry.accountId },
+          data: { currentBalance: { increment: reverseChange } },
+        });
+      }
+
+      // Remover entries antigas
+      await tx.cashFlowEntry.deleteMany({ where: { transactionId: existing.id } });
+
+      // 2) Criar novo CashFlowEntry com valores atualizados
+      const entryType = existing.type === 'RECEIVABLE' ? 'INFLOW' : 'OUTFLOW';
+      const balanceChange = entryType === 'INFLOW' ? newAmount : -newAmount;
+      const account = await tx.financialAccount.update({
+        where: { id: newAccountId },
+        data: { currentBalance: { increment: balanceChange } },
+      });
+
+      await tx.cashFlowEntry.create({
+        data: {
+          companyId,
+          accountId: newAccountId,
+          transactionId: existing.id,
+          type: entryType,
+          amount: newAmount,
+          balanceAfter: account.currentBalance,
+          description: `Pagamento (editado): ${description || existing.description}`,
+          createdBy: req.user.id,
+          notes: notes || null,
+        },
+      });
+
+      // 3) Atualizar a transação
+      const txData = {
+        paidAmount: newAmount,
+        accountId: newAccountId,
+        updatedBy: req.user.id,
+      };
+      if (costCenterId !== undefined) txData.costCenterId = costCenterId || null;
+      if (description !== undefined) txData.description = description;
+      if (notes !== undefined) txData.notes = notes;
+      if (paidDate) txData.paidAt = new Date(paidDate);
+
+      const fullyPaid = newAmount >= Number(existing.netAmount);
+      txData.status = fullyPaid ? 'PAID' : 'PARTIALLY';
+
+      const updatedTx = await tx.financialTransaction.update({
+        where: { id: existing.id },
+        data: txData,
+        include: {
+          account: { select: { id: true, name: true } },
+          costCenter: { select: { id: true, code: true, name: true } },
+        },
+      });
+
+      return updatedTx;
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error('PUT /financial/transactions/:id/edit-payment error:', e);
+    res.status(500).json({ message: 'Erro ao editar pagamento', error: e?.message });
+  }
+});
+
+// POST /financial/transactions/:id/cancel - cancelar (inclusive transações pagas, revertendo saldo)
 router.post('/:id/cancel', async (req, res) => {
   try {
     const companyId = req.user.companyId;
@@ -400,10 +495,40 @@ router.post('/:id/cancel', async (req, res) => {
       where: { id: req.params.id, companyId },
     });
     if (!existing) return res.status(404).json({ message: 'Transação não encontrada' });
-    if (existing.status === 'PAID') {
-      return res.status(400).json({ message: 'Não é possível cancelar transação já paga. Use estorno.' });
+    if (existing.status === 'CANCELED') {
+      return res.status(400).json({ message: 'Transação já está cancelada' });
     }
 
+    // Se já foi paga/parcialmente paga, reverter os lançamentos no fluxo de caixa
+    if (existing.status === 'PAID' || existing.status === 'PARTIALLY') {
+      const result = await prisma.$transaction(async (tx) => {
+        const oldEntries = await tx.cashFlowEntry.findMany({
+          where: { transactionId: existing.id },
+        });
+
+        for (const entry of oldEntries) {
+          const reverseChange = entry.type === 'INFLOW' ? -Number(entry.amount) : Number(entry.amount);
+          await tx.financialAccount.update({
+            where: { id: entry.accountId },
+            data: { currentBalance: { increment: reverseChange } },
+          });
+        }
+
+        // Remover entries
+        await tx.cashFlowEntry.deleteMany({ where: { transactionId: existing.id } });
+
+        const updated = await tx.financialTransaction.update({
+          where: { id: existing.id },
+          data: { status: 'CANCELED', paidAmount: 0, paidAt: null, updatedBy: req.user.id },
+        });
+
+        return updated;
+      });
+
+      return res.json(result);
+    }
+
+    // Transações não pagas: cancelar direto
     const updated = await prisma.financialTransaction.update({
       where: { id: req.params.id },
       data: { status: 'CANCELED', updatedBy: req.user.id },

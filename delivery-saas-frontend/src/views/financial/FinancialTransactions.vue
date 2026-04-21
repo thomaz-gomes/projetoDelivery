@@ -76,7 +76,10 @@
                   <button v-if="tx.status === 'PENDING' || tx.status === 'CONFIRMED'" class="btn btn-outline-success" @click="openPayModal(tx)">
                     {{ tx.type === 'RECEIVABLE' ? 'Receber' : 'Pagar' }}
                   </button>
-                  <button v-if="tx.status === 'PENDING'" class="btn btn-outline-danger" @click="cancelTransaction(tx)">Cancelar</button>
+                  <button v-if="tx.status === 'PAID' || tx.status === 'PARTIALLY'" class="btn btn-outline-primary" @click="openEditPayModal(tx)">
+                    <i class="bi-pencil me-1"></i>Editar
+                  </button>
+                  <button v-if="tx.status !== 'CANCELED'" class="btn btn-outline-danger" @click="cancelTransaction(tx)">Cancelar</button>
                 </div>
               </td>
             </tr>
@@ -419,9 +422,27 @@ export default {
         grossAmount: Number(tx.grossAmount),
         dueDate: tx.dueDate ? tx.dueDate.slice(0, 10) : '',
         accountId: tx.accountId || '',
+        costCenterId: tx.costCenterId || '',
         payAmount: Number(tx.netAmount),
         paidDate: today,
         notes: tx.notes || '',
+        isEditing: false,
+      };
+      this.showPayModal = true;
+    },
+    openEditPayModal(tx) {
+      this.payForm = {
+        id: tx.id,
+        type: tx.type,
+        description: tx.description,
+        grossAmount: Number(tx.grossAmount),
+        dueDate: tx.dueDate ? tx.dueDate.slice(0, 10) : '',
+        accountId: tx.accountId || '',
+        costCenterId: tx.costCenterId || '',
+        payAmount: Number(tx.paidAmount || tx.netAmount),
+        paidDate: tx.paidAt ? tx.paidAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        notes: tx.notes || '',
+        isEditing: true,
       };
       this.showPayModal = true;
     },
@@ -436,21 +457,35 @@ export default {
       }
       this.payingSaving = true;
       try {
-        // 1) Update transaction fields if changed
-        await api.put(`/financial/transactions/${this.payForm.id}`, {
-          description: this.payForm.description,
-          grossAmount: this.payForm.grossAmount,
-          dueDate: this.payForm.dueDate,
-          accountId: this.payForm.accountId,
-          notes: this.payForm.notes,
-        });
-        // 2) Register payment
-        await api.post(`/financial/transactions/${this.payForm.id}/pay`, {
-          amount: this.payForm.payAmount,
-          accountId: this.payForm.accountId,
-          notes: this.payForm.notes,
-          paidDate: this.payForm.paidDate,
-        });
+        if (this.payForm.isEditing) {
+          // Editar pagamento já realizado
+          await api.put(`/financial/transactions/${this.payForm.id}/edit-payment`, {
+            amount: this.payForm.payAmount,
+            accountId: this.payForm.accountId,
+            costCenterId: this.payForm.costCenterId || null,
+            paidDate: this.payForm.paidDate,
+            notes: this.payForm.notes,
+            description: this.payForm.description,
+          });
+        } else {
+          // 1) Update transaction fields if changed
+          await api.put(`/financial/transactions/${this.payForm.id}`, {
+            description: this.payForm.description,
+            grossAmount: this.payForm.grossAmount,
+            dueDate: this.payForm.dueDate,
+            accountId: this.payForm.accountId,
+            costCenterId: this.payForm.costCenterId || null,
+            notes: this.payForm.notes,
+          });
+          // 2) Register payment
+          await api.post(`/financial/transactions/${this.payForm.id}/pay`, {
+            amount: this.payForm.payAmount,
+            accountId: this.payForm.accountId,
+            costCenterId: this.payForm.costCenterId || null,
+            notes: this.payForm.notes,
+            paidDate: this.payForm.paidDate,
+          });
+        }
         this.showPayModal = false;
         await this.load();
       } catch (e) {
@@ -460,7 +495,11 @@ export default {
       }
     },
     async cancelTransaction(tx) {
-      if (!confirm('Cancelar esta transação?')) return;
+      const isPaid = tx.status === 'PAID' || tx.status === 'PARTIALLY';
+      const msg = isPaid
+        ? 'Esta transação já foi paga. Ao cancelar, o saldo será devolvido à conta. Deseja continuar?'
+        : 'Cancelar esta transação?';
+      if (!confirm(msg)) return;
       try {
         await api.post(`/financial/transactions/${tx.id}/cancel`);
         await this.load();
