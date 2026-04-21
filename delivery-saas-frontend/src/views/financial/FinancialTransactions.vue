@@ -70,7 +70,7 @@
               <td class="fw-bold">{{ formatCurrency(tx.netAmount) }}</td>
               <td>{{ formatDate(tx.dueDate) }}</td>
               <td><span :class="statusBadge(tx.status)">{{ statusLabel(tx.status) }}</span></td>
-              <td><span class="badge bg-light text-dark">{{ tx.sourceType || 'MANUAL' }}</span></td>
+              <td><span class="badge bg-light text-dark">{{ sourceLabel(tx.sourceType) }}</span></td>
               <td class="text-end">
                 <div class="btn-group btn-group-sm">
                   <button v-if="tx.status === 'PENDING' || tx.status === 'CONFIRMED'" class="btn btn-outline-success" @click="openPayModal(tx)">
@@ -517,6 +517,10 @@ export default {
     formatDate(d) {
       if (!d) return '-';
       return new Date(d).toLocaleDateString('pt-BR');
+    },
+    sourceLabel(s) {
+      const map = { ORDER: 'Pedido', RIDER: 'Motoboy', AFFILIATE: 'Afiliado', COUPON: 'Cupom', STOCK_PURCHASE: 'Compra Estoque', MANUAL: 'Manual' };
+      return map[s] || s || 'Manual';
     },
     statusLabel(s) {
       const map = { PENDING: 'Pendente', CONFIRMED: 'Confirmada', PAID: 'Paga', OVERDUE: 'Vencida', CANCELED: 'Cancelada', PARTIALLY: 'Parcial' };

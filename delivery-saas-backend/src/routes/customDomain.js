@@ -66,13 +66,13 @@ router.get('/resolve-public', async (req, res) => {
     // Try exact match first, then try with/without www prefix
     let record = await prisma.customDomain.findUnique({
       where: { domain },
-      select: { companyId: true, menuId: true, status: true, paidUntil: true }
+      select: { companyId: true, menuId: true, status: true, paidUntil: true, menu: { select: { storeId: true } } }
     })
     if (!record) {
       const alt = domain.startsWith('www.') ? domain.slice(4) : `www.${domain}`
       record = await prisma.customDomain.findUnique({
         where: { domain: alt },
-        select: { companyId: true, menuId: true, status: true, paidUntil: true }
+        select: { companyId: true, menuId: true, status: true, paidUntil: true, menu: { select: { storeId: true } } }
       })
     }
 
@@ -84,7 +84,8 @@ router.get('/resolve-public', async (req, res) => {
       return res.status(403).json({ message: 'Assinatura do domínio vencida' })
     }
 
-    res.json({ companyId: record.companyId, menuId: record.menuId })
+    const storeId = record.menu && record.menu.storeId ? record.menu.storeId : null
+    res.json({ companyId: record.companyId, menuId: record.menuId, storeId })
   } catch (e) {
     console.error('GET /custom-domains/resolve-public error:', e?.message || e)
     res.status(500).json({ message: 'Erro ao resolver domínio' })
@@ -205,14 +206,41 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
     const priceRecord = mod.prices.find(p => p.period === pricePeriod)
     if (!priceRecord) return res.status(500).json({ message: `Preço não configurado para período ${pricePeriod}` })
 
+    // Check if company already has CUSTOM_DOMAIN module active (via plan or add-on)
+    let moduleAlreadyActive = false
+    try {
+      // 1. Check via plan: company subscription -> plan -> plan modules
+      const sub = await prisma.saasSubscription.findUnique({
+        where: { companyId: req.user.companyId },
+        include: { plan: { include: { modules: true } } }
+      })
+      if (sub && sub.plan && sub.plan.modules) {
+        moduleAlreadyActive = sub.plan.modules.some(m => m.moduleId === mod.id)
+      }
+      // 2. Check via standalone add-on subscription
+      if (!moduleAlreadyActive) {
+        const addOn = await prisma.saasModuleSubscription.findUnique({
+          where: { companyId_moduleId: { companyId: req.user.companyId, moduleId: mod.id } }
+        })
+        if (addOn && addOn.status === 'ACTIVE') moduleAlreadyActive = true
+      }
+    } catch (e) { /* ignore check errors, fall through to payment */ }
+
+    // If module is already active, create domain as PENDING_DNS (skip payment)
+    const now = new Date()
+    const paidUntil = new Date(now)
+    if (cycle === 'YEARLY') paidUntil.setFullYear(paidUntil.getFullYear() + 1)
+    else paidUntil.setMonth(paidUntil.getMonth() + 1)
+
     const created = await prisma.customDomain.create({
       data: {
         domain: domain.toLowerCase(),
         menuId,
         companyId: req.user.companyId,
-        status: 'PENDING_PAYMENT',
+        status: moduleAlreadyActive ? 'PENDING_DNS' : 'PENDING_PAYMENT',
         price: priceRecord.price,
         billingCycle: cycle,
+        ...(moduleAlreadyActive ? { paidUntil } : {}),
       },
       include: { menu: { select: { id: true, name: true } } },
     })

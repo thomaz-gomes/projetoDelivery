@@ -366,6 +366,7 @@ router.beforeEach(async (to) => {
           if (data && data.companyId) {
             const query = {}
             if (data.menuId) query.menuId = data.menuId
+            if (data.storeId) query.storeId = data.storeId
             return { path: `/public/${data.companyId}/menu`, query }
           }
         }

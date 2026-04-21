@@ -151,7 +151,7 @@
               <p class="text-muted mb-3">Configure um domínio personalizado para seu cardápio. Ex: <strong>www.meucardapio.com.br</strong></p>
               <div class="mb-3">
                 <label class="form-label">Domínio</label>
-                <TextInput v-model="domainForm.domain" placeholder="www.meudominio.com.br" inputClass="form-control" disabled />
+                <TextInput v-model="domainForm.domain" placeholder="www.meudominio.com.br" inputClass="form-control" />
               </div>
               <div class="mb-3">
                 <label class="form-label">Ciclo de cobrança</label>
@@ -549,6 +549,13 @@ async function subscribeDomain() {
       billingCycle: domainForm.value.billingCycle
     })
     customDomain.value = domainRes.data
+    domainForm.value.domain = domainRes.data.domain
+
+    // If module is already active in the plan, backend returns PENDING_DNS directly
+    if (domainRes.data.status !== 'PENDING_PAYMENT') {
+      Swal.fire({ icon: 'success', text: 'Domínio registrado! Configure o DNS para ativá-lo.' })
+      return
+    }
 
     // 2. Create payment preference and go straight to checkout
     const period = domainForm.value.billingCycle === 'YEARLY' ? 'ANNUAL' : 'MONTHLY'

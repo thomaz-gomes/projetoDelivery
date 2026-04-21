@@ -3746,6 +3746,24 @@ onMounted(async ()=>{
 
     // Apply fresh network data and persist to IndexedDB
     applyMenuPayload(data)
+
+    // Persist storeId/menuId as soon as the payload is applied so that
+    // navigating to profile/history and back preserves the store context.
+    try {
+      if (!menuId.value && data.menu && data.menu.id) {
+        menuId.value = String(data.menu.id)
+        localStorage.setItem(menuStorageKey, String(data.menu.id))
+      }
+      if (!storeId.value && data.menu && data.menu.storeId) {
+        storeId.value = String(data.menu.storeId)
+        localStorage.setItem(storeStorageKey, String(data.menu.storeId))
+      }
+      if (!storeId.value && data.company && data.company.store && data.company.store.id) {
+        storeId.value = String(data.company.store.id)
+        localStorage.setItem(storeStorageKey, String(data.company.store.id))
+      }
+    } catch(e) { /* ignore persistence errors */ }
+
     try{
       console.log('[PublicMenu] about to save snapshot, cacheKey:', cacheKey, 'data keys:', Object.keys(data));
       await saveMenuSnapshot(cacheKey, data)
