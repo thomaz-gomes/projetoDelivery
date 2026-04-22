@@ -1283,6 +1283,20 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       include: { items: true, histories: true }
     });
 
+    // Check if there's an open cash session — mark outOfSession if not
+    try {
+      const { findMatchingSession } = await import('../services/cash/sessionMatcher.js');
+      const matchedSession = await findMatchingSession(created, req.user.id);
+      if (matchedSession) {
+        await prisma.order.update({ where: { id: created.id }, data: { cashSessionId: matchedSession.id, outOfSession: false } });
+        created.cashSessionId = matchedSession.id;
+        created.outOfSession = false;
+      } else {
+        await prisma.order.update({ where: { id: created.id }, data: { outOfSession: true } });
+        created.outOfSession = true;
+      }
+    } catch (e) { console.warn('[orders.create] cash session check failed:', e?.message); }
+
     // Async geocode if order has address but no coordinates (PDV orders)
     if (created.address && created.latitude == null) {
       geocodeOrderIfNeeded(created.id).catch(() => {});

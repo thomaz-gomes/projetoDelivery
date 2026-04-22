@@ -51,6 +51,66 @@ cashRouter.get('/current', async (req, res) => {
   res.json(session ? sessionToJSON(session) : null);
 });
 
+// ─── GET /cash/out-of-session-count ───────────────────────────────────
+
+// GET /cash/out-of-session-count — count active outOfSession orders
+cashRouter.get('/out-of-session-count', async (req, res) => {
+  const { companyId } = req.user;
+  if (!companyId) return res.json({ count: 0 });
+
+  const count = await prisma.order.count({
+    where: {
+      companyId,
+      outOfSession: true,
+      status: { notIn: ['CONCLUIDO', 'CANCELADO'] },
+    },
+  });
+
+  res.json({ count });
+});
+
+// ─── POST /cash/link-pending-orders ───────────────────────────────────
+
+// POST /cash/link-pending-orders — bulk-link outOfSession orders to current session
+cashRouter.post('/link-pending-orders', async (req, res) => {
+  const { companyId, id: userId } = req.user;
+  if (!companyId) return res.status(400).json({ message: 'Usuario sem empresa' });
+
+  // Find user's current open session
+  const session = await prisma.cashSession.findFirst({
+    where: {
+      companyId,
+      status: 'OPEN',
+      OR: [
+        { ownerId: userId },
+        { operators: { some: { userId } } },
+      ],
+    },
+  });
+  if (!session) return res.status(400).json({ message: 'Nenhuma sessao aberta' });
+
+  // Find active orders marked outOfSession
+  const result = await prisma.order.updateMany({
+    where: {
+      companyId,
+      outOfSession: true,
+      status: { notIn: ['CONCLUIDO', 'CANCELADO'] },
+    },
+    data: {
+      cashSessionId: session.id,
+      outOfSession: false,
+    },
+  });
+
+  // Emit socket event so connected clients refresh their kanban
+  try {
+    const io = req.app.get('io');
+    if (io) io.to(`company_${companyId}`).emit('cash-session-changed', { type: 'orders-linked', count: result.count });
+  } catch (e) {}
+
+  res.json({ linked: result.count, sessionId: session.id });
+});
+
 // ─── POST /cash/open ───────────────────────────────────────────────────
 
 cashRouter.post('/open', async (req, res) => {
@@ -169,6 +229,12 @@ cashRouter.post('/open', async (req, res) => {
       },
     });
   });
+
+  // Emit socket event so connected clients update cash session state
+  try {
+    const io = req.app.get('io');
+    if (io) io.to(`company_${companyId}`).emit('cash-session-changed', { type: 'opened', sessionId: session.id });
+  } catch (e) {}
 
   res.status(201).json(sessionToJSON(session));
 });
@@ -453,6 +519,12 @@ cashRouter.post('/close', async (req, res) => {
       console.error('Cash close (legacy) financial bridge error:', e?.message || e);
     }
   }
+
+  // Emit socket event so connected clients update cash session state
+  try {
+    const io = req.app.get('io');
+    if (io) io.to(`company_${companyId}`).emit('cash-session-changed', { type: 'closed', sessionId: closedSession.id });
+  } catch (e) {}
 
   res.json({ ok: true, session: sessionToJSON(closedSession) });
 });

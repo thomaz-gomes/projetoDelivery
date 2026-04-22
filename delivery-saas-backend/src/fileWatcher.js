@@ -514,7 +514,20 @@ async function processFile(companyId, filePath) {
       } catch (affiliateError) {
         console.warn('Failed to track affiliate sale for order', o.id, affiliateError?.message || affiliateError);
       }
-      
+
+      // Check cash session for new orders
+      if (result.wasNew) {
+        try {
+          const { findMatchingSession } = await import('./services/cash/sessionMatcher.js');
+          const matchedSession = await findMatchingSession(o, null);
+          if (matchedSession) {
+            await prisma.order.update({ where: { id: o.id }, data: { cashSessionId: matchedSession.id, outOfSession: false } });
+          } else {
+            await prisma.order.update({ where: { id: o.id }, data: { outOfSession: true } });
+          }
+        } catch (e) { console.warn('[fileWatcher] cash session check failed:', e?.message); }
+      }
+
       if (result.wasNew) {
         console.log('Imported order from file (transactional):', filePath, '-> order.id=', o.id);
         emitirNovoPedido({ id: o.id, externalId, companyId: company });
