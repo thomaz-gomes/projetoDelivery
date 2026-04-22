@@ -280,6 +280,7 @@ onMounted(async () => {
 
   try {
     await store.fetch();
+    checkCashSession();
     // ensure store names are hydrated when backend omitted the relation
     await hydrateMissingStores();
     if (ridersEnabled.value) await store.fetchRiders();
@@ -372,6 +373,7 @@ onMounted(async () => {
     } catch (e) {}
   };
   try { window.addEventListener('app:user-logged-in', onAppUserLoggedIn); } catch (e) {}
+  try { window.addEventListener('cash-session-opened', onCashSessionOpened); } catch (e) {}
 
   socket.value.on("novo-pedido", async (pedido) => {
     console.log("🆕 Novo pedido recebido via socket:", pedido);
@@ -657,6 +659,7 @@ onUnmounted(() => {
     socket.value.disconnect();
   }
   try { window.removeEventListener('app:user-logged-in', onAppUserLoggedIn); } catch (e) {}
+  try { window.removeEventListener('cash-session-opened', onCashSessionOpened); } catch (e) {}
   try { if (resizeHandler) window.removeEventListener('resize', resizeHandler); } catch (e) {}
   clearInterval(nowTimer);
   try { clearInterval(printerCheckInterval); } catch(e){}
@@ -2539,6 +2542,7 @@ function columnOrders(key) {
   try {
     return filteredOrders.value.filter((o) => {
       if (!o) return false;
+      if (!hasCashSession.value && o.outOfSession) return false;
       return accepted.includes((o.status || '').toUpperCase());
     }).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   } catch (e) {
@@ -2560,6 +2564,35 @@ function columnOrders(key) {
 const pendingOrders = computed(() => {
   return (store.orders || []).filter(o => o && (o.status || '').toUpperCase() === 'PENDENTE_ACEITE');
 });
+
+// Cash session awareness
+const hasCashSession = ref(true); // assume open until checked
+
+async function checkCashSession() {
+  try {
+    const { data } = await api.get('/cash/current');
+    hasCashSession.value = !!data;
+  } catch {
+    hasCashSession.value = false;
+  }
+}
+
+const noCashOrders = computed(() => {
+  if (hasCashSession.value) return [];
+  return (store.orders || []).filter(o => {
+    if (!o) return false;
+    const status = (o.status || '').toUpperCase();
+    return o.outOfSession === true
+      && status !== 'CONCLUIDO'
+      && status !== 'CANCELADO'
+      && status !== 'PENDENTE_ACEITE';
+  });
+});
+
+function onCashSessionOpened() {
+  hasCashSession.value = true;
+  store.fetch();
+}
 
 async function acceptPendingOrder(o) {
   try {
@@ -3362,6 +3395,27 @@ function pulseButton() {
       </div>
     </div>
 
+    <!-- Orders without cash session -->
+    <div v-if="noCashOrders.length > 0" class="no-cash-box mb-3">
+      <div class="no-cash-header">
+        <i class="bi bi-cash-coin"></i>
+        <span class="fw-semibold">{{ noCashOrders.length }} pedido(s) sem caixa aberto</span>
+        <span class="ms-2 small opacity-75">Abra o caixa para movimentar estes pedidos</span>
+      </div>
+      <div v-for="o in noCashOrders" :key="'nc-'+o.id" class="no-cash-card">
+        <div class="no-cash-card-info">
+          <div class="fw-semibold">#{{ formatDisplay(o) }} - {{ o.customerName || 'Cliente' }}</div>
+          <div class="small text-muted">
+            <span :class="statusBadge(o.status)">{{ statusLabel(o.status) }}</span>
+            <span v-if="normalizeOrder(o).channelLabel" class="ms-2 badge bg-light text-dark">{{ normalizeOrder(o).channelLabel }}</span>
+          </div>
+        </div>
+        <div class="no-cash-card-total fw-bold">
+          {{ formatCurrency(storeRevenue(o)) }}
+        </div>
+      </div>
+    </div>
+
     <!-- Orders board: columns with drag & drop -->
     <div v-if="store.orders && store.orders.length > 0" class="orders-board">
       <div class="boards d-flex gap-3 overflow-auto justify-content-between">
@@ -3807,6 +3861,38 @@ function pulseButton() {
   50% { box-shadow: 0 0 12px 4px rgba(255, 193, 7, 0.25); }
 }
 .pending-acceptance-box { animation: pending-pulse 2s ease-in-out infinite; }
+
+/* No cash session box */
+.no-cash-box {
+  border: 2px solid #e65100;
+  border-radius: 12px;
+  background: #fff3e0;
+  overflow: hidden;
+  animation: no-cash-pulse 2s ease-in-out infinite;
+}
+.no-cash-header {
+  background: #e65100;
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+}
+.no-cash-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid #ffcc80;
+}
+.no-cash-card:first-of-type { border-top: none; }
+.no-cash-card-info { flex: 1; min-width: 0; }
+.no-cash-card-total { flex-shrink: 0; margin-left: 12px; }
+@keyframes no-cash-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(230, 81, 0, 0.4); }
+  50% { box-shadow: 0 0 12px 4px rgba(230, 81, 0, 0.25); }
+}
 
 /* 🔄 Animação de "pulse" do botão de som */
 @keyframes pulse {
