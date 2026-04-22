@@ -227,6 +227,17 @@ export async function processAiqfomeWebhook(eventId) {
         }
       }
 
+      // Check cash session
+      try {
+        const { findMatchingSession } = await import('../../services/cash/sessionMatcher.js');
+        const matchedSession = await findMatchingSession(savedOrder, null);
+        if (matchedSession) {
+          await prisma.order.update({ where: { id: savedOrder.id }, data: { cashSessionId: matchedSession.id, outOfSession: false } });
+        } else {
+          await prisma.order.update({ where: { id: savedOrder.id }, data: { outOfSession: true } });
+        }
+      } catch (e) { console.warn('[aiqfome] cash session check failed:', e?.message); }
+
       // Pad displaySimple for emit
       if (savedOrder.displaySimple != null) savedOrder.displaySimple = String(savedOrder.displaySimple).padStart(2, '0');
 
