@@ -2,17 +2,14 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Install build tools for native addons (nfe-module/libxmljs2)
-# This layer is cached as long as package files don't change
-RUN apk add --no-cache python3 make g++ libxml2-dev
-
 # Main app dependencies
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 
-# nfe-module dependencies (separate layer — only rebuilds when its package.json changes)
+# nfe-module dependencies — libxmljs2 is optional (XSD validation only) and
+# its native C++ build takes 30+ min on Alpine. Skip it with --no-optional.
 COPY nfe-module/package.json nfe-module/
-RUN cd nfe-module && npm install --silent --omit=dev
+RUN cd nfe-module && npm install --silent --omit=dev --no-optional
 
 # ── Stage 2: build (prisma generate, etc.) ────────────────────────────────────
 FROM node:20-alpine AS builder
