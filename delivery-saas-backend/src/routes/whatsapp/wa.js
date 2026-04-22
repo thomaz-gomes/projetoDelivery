@@ -125,14 +125,32 @@ waRouter.get('/instances/:name/qr', requireRole('ADMIN'), async (req, res) => {
 	}
 });
 
-// Listar
+// Listar (com status real-time da Evolution API)
 waRouter.get('/instances', requireRole('ADMIN'), async (req, res) => {
 	const companyId = req.user.companyId;
 	const instances = await prisma.whatsAppInstance.findMany({
 		where: { companyId },
 		orderBy: { createdAt: 'desc' }
 	});
-	res.json(instances);
+
+	// Consultar status real de cada instância na Evolution API
+	const updated = await Promise.all(instances.map(async (inst) => {
+		try {
+			const evo = await evoGetStatus(inst.instanceName);
+			const liveStatus = (evo?.status || 'UNKNOWN').toUpperCase();
+			if (liveStatus !== inst.status) {
+				await prisma.whatsAppInstance.update({
+					where: { instanceName: inst.instanceName },
+					data: { status: liveStatus },
+				}).catch(() => {});
+			}
+			return { ...inst, status: liveStatus };
+		} catch {
+			return inst; // se a Evolution API falhar, retorna o cache
+		}
+	}));
+
+	res.json(updated);
 });
 
 // Atribuir uma instância a várias lojas (ou a todas). Uma loja só pode ter UMA instância.
