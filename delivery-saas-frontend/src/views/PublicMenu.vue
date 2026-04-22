@@ -198,7 +198,7 @@
         <div class="featured-scroll">
           <div v-for="p in highlightedProducts" :key="'feat-'+p.id" class="featured-card" @click="openProductModal(p)">
             <div class="featured-card-image">
-              <img v-if="p.image" :src="assetUrl(thumbUrl(p.image))" loading="lazy" />
+              <img v-if="p.image" :src="assetUrl(thumbUrl(p.image))" loading="lazy" @error="onThumbError($event, p.image)" />
               <div v-else class="featured-card-placeholder"></div>
               <div v-if="p.featured" class="featured-card-tag">Destaque</div>
               <div v-else class="featured-card-tag recent">Pedido recente</div>
@@ -270,7 +270,7 @@
                     </div>
                     <div class="product-card-media">
                       <div class="product-image-wrap">
-                        <img v-if="p.image" :src="assetUrl(thumbUrl(p.image))" class="product-image" loading="lazy" />
+                        <img v-if="p.image" :src="assetUrl(thumbUrl(p.image))" class="product-image" loading="lazy" @error="onThumbError($event, p.image)" />
                         <div v-else class="product-image-placeholder"></div>
                       </div>
                       <button v-if="!isCatalogMode" class="product-add-btn" @click.stop="openProductModal(p)" aria-label="Adicionar ao carrinho">
@@ -308,7 +308,7 @@
               <div v-else class="cart-sidebar-items">
                 <div v-for="(it, i) in cart" :key="'sidebar-'+it.lineId" class="cart-sidebar-item">
                   <div class="d-flex gap-2">
-                    <img v-if="it.image" :src="assetUrl(thumbUrl(it.image))" class="cart-sidebar-item-img" alt="" />
+                    <img v-if="it.image" :src="assetUrl(thumbUrl(it.image))" class="cart-sidebar-item-img" alt="" @error="onThumbError($event, it.image)" />
                     <div class="flex-fill" style="min-width:0">
                       <div class="cart-sidebar-item-name">{{ it.name }}</div>
                       <div v-if="optionsSummaryNoPrice(it)" class="cart-sidebar-item-opts">{{ optionsSummaryNoPrice(it) }}</div>
@@ -927,7 +927,7 @@
             <div v-if="cart.length===0" class="text-muted p-3">Sua sacola está vazia.</div>
             <div v-else class="drawer-items-list">
               <div v-for="(it, i) in cart" :key="it.lineId" class="drawer-item">
-                <img v-if="it.image" :src="assetUrl(thumbUrl(it.image))" class="drawer-item-img" alt="" />
+                <img v-if="it.image" :src="assetUrl(thumbUrl(it.image))" class="drawer-item-img" alt="" @error="onThumbError($event, it.image)" />
                 <div v-else class="drawer-item-img drawer-item-img-placeholder"><i class="bi bi-image"></i></div>
                 <div class="drawer-item-info">
                   <div class="drawer-item-name">{{ it.name }}</div>
@@ -1676,7 +1676,9 @@ try{
         name: item.name,
         price: Number(item.price || 0),
         quantity: Number(item.quantity || 0),
-        options: Array.isArray(item.options) ? item.options.map(o => ({ id: o.id, name: o.name, price: Number(o.price || 0) })) : []
+        options: Array.isArray(item.options) ? item.options.map(o => ({ id: o.id, name: o.name, price: Number(o.price || 0) })) : [],
+        image: item.image || null,
+        categoryId: item.categoryId || null
       }))
     }
   }
@@ -2355,6 +2357,14 @@ function optionThumbUrl(opt){
     if(!s) return ''
     return assetUrl(thumbUrl(s))
   }catch(e){ return assetUrl(opt.image) }
+}
+
+function onThumbError(evt, originalUrl){
+  try{
+    if(!evt || !evt.target) return
+    try{ evt.target.onerror = null }catch(e){}
+    evt.target.src = assetUrl(originalUrl || '')
+  }catch(e){ /* ignore */ }
 }
 
 function onOptionThumbError(evt, opt){
