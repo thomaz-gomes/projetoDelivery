@@ -97,6 +97,7 @@ app.set('trust proxy', true);
 app.use(helmet({
   contentSecurityPolicy: false, // managed separately / frontend serves its own CSP
   crossOriginEmbedderPolicy: false, // allow embedding images from external CDNs
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow frontend to load images/uploads from API domain
 }));
 
 // ==============================
