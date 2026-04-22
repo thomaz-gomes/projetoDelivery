@@ -571,6 +571,21 @@ router.post('/ai-import/parse', async (req, res) => {
   if (method === 'link') {
     const url = String(input).trim();
     if (!url.startsWith('http')) return res.status(400).json({ message: 'URL inválida. Deve começar com http://' });
+    // Block SSRF: reject internal/private IPs and metadata endpoints
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLowerCase();
+      const blocked = [
+        /^localhost$/i, /^127\./, /^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./,
+        /^0\./, /^169\.254\./, /^::1$/, /^fc00:/, /^fe80:/, /^fd/,
+        /\.local$/, /\.internal$/, /\.svc$/
+      ];
+      if (blocked.some(re => re.test(host))) {
+        return res.status(400).json({ message: 'URL não permitida. Não é possível acessar endereços internos.' });
+      }
+    } catch {
+      return res.status(400).json({ message: 'URL inválida.' });
+    }
   }
 
   // Verificar se a empresa tem saldo mínimo de créditos antes de iniciar o job

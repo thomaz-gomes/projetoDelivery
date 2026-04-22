@@ -9,6 +9,7 @@ import { Server } from "socket.io";
 import jwt from 'jsonwebtoken';
 import cors from "cors";
 import bodyParser from "body-parser";
+import helmet from "helmet";
 
 // ✅ importe as rotas
 import { webhooksRouter } from "./routes/webhooks.js";
@@ -55,7 +56,7 @@ import customerGroupsRouter from './routes/customerGroups.js'
 import cashbackRouter from './routes/cashback/cashback.js'
 import checkoutRouter from './routes/checkout.js'
 import events from './utils/events.js'
-import printQueue from './printQueue.js'
+import printQueue, { registerAgentSocket } from './printQueue.js'
 import { prisma } from './prisma.js'
 import { sha256 } from './utils.js'
 import { rotateAgentToken } from './agentTokenManager.js'
@@ -89,6 +90,14 @@ const app = express();
 // client IP. This ensures cookies marked `secure` and other proxy-sensitive
 // behaviors work as expected when TLS is terminated upstream.
 app.set('trust proxy', true);
+
+// ==============================
+// 🔒 Security headers
+// ==============================
+app.use(helmet({
+  contentSecurityPolicy: false, // managed separately / frontend serves its own CSP
+  crossOriginEmbedderPolicy: false, // allow embedding images from external CDNs
+}));
 
 // ==============================
 // 🌐 Middleware global
@@ -633,16 +642,12 @@ export function attachSocket(server) {
     const origin = socket.handshake && socket.handshake.headers && socket.handshake.headers.origin;
     console.log(`📡 Painel conectado: ${socket.id} (origin: ${origin})`);
 
-    // Verbose debug: log handshake.auth and selected handshake fields to help
-    // diagnose agents that connect anonymously or with a single storeId.
+    // Log basic connection info (avoid JSON.stringify on every connection — CPU cost)
     try {
       const hs = socket.handshake || {};
-      const hsAuth = hs.auth || null;
-      const hsInfo = { auth: hsAuth, address: hs.address || null, time: new Date().toISOString() };
-      console.log('Socket handshake info:', JSON.stringify(hsInfo, null, 2));
-    } catch (e) {
-      console.warn('Failed to log socket.handshake for debug', e && e.message);
-    }
+      const hasAgent = !!(hs.auth && hs.auth.token);
+      console.log(`Socket ${socket.id} connected — agent=${hasAgent} address=${hs.address || '?'}`);
+    } catch (e) { /* ignore */ }
 
     // Allow agents to request a freshly generated agent token for their stores
     socket.on('request-agent-token', async (payload, cb) => {
@@ -701,11 +706,14 @@ export function attachSocket(server) {
     try {
       if (socket.agent) {
         socket.agent.connectedAt = Date.now();
-        console.log('Agent metadata on connect:', socket.id, socket.agent);
+        // Register in store->socket index for O(1) lookup in print queue
+        if (Array.isArray(socket.agent.storeIds)) {
+          registerAgentSocket(socket, socket.agent.storeIds);
+        }
         // attempt to process queued print jobs for this agent's stores (fire-and-forget)
         try {
           processQueueForStoresThrottled(io, socket.agent.storeIds).then(r => {
-            if (r && r.ok) console.log('Processed print queue for stores', socket.agent.storeIds, 'results:', r.results)
+            if (r && r.ok) console.log('Processed print queue for stores', socket.agent.storeIds)
           }).catch(e => console.warn('printQueue.processForStores failed:', e && e.message))
         } catch (e) { /* ignore */ }
       } else {
@@ -714,9 +722,10 @@ export function attachSocket(server) {
         try {
           const hs = socket.handshake && socket.handshake.auth ? socket.handshake.auth : null;
           if (hs && Array.isArray(hs.storeIds) && hs.storeIds.length) {
+            registerAgentSocket(socket, hs.storeIds);
             try {
               processQueueForStoresThrottled(io, hs.storeIds).then(r => {
-                if (r && r.ok) console.log('Processed print queue for handshake storeIds', hs.storeIds, 'results:', r.results)
+                if (r && r.ok) console.log('Processed print queue for handshake storeIds', hs.storeIds)
               }).catch(e => console.warn('printQueue.processForStores failed for handshake storeIds:', e && e.message))
             } catch (e) { /* ignore */ }
           }
@@ -799,5 +808,15 @@ export const emitirPedidoAtualizado = _emitirPedidoAtualizado;
 export const emitirPosicaoEntregador = _emitirPosicaoEntregador;
 export const emitirEntregadorOffline = _emitirEntregadorOffline;
 export const emitirIfoodChat = _emitirIfoodChat;
+
+// ==============================
+// 🛡️ Global error handler — prevent stack trace leaks to clients
+// ==============================
+app.use((err, _req, res, _next) => {
+  console.error('[global-error-handler]', err.stack || err);
+  const status = err.status || err.statusCode || 500;
+  const message = status < 500 ? (err.message || 'Erro na requisição') : 'Erro interno do servidor';
+  res.status(status).json({ message });
+});
 
 export { app };

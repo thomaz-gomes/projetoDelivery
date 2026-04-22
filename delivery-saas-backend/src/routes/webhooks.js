@@ -53,10 +53,16 @@ const ENABLE_AUTO_PRINT = String(process.env.ENABLE_AUTO_PRINT || '').toLowerCas
 function verifySignature(req, secret) {
   try {
     const sig = req.headers["x-ifood-signature"] || "";
-    if (!sig || !secret) return true; // If there's no signature configured, treat as valid
+    if (!secret) {
+      console.warn('[webhook] IFOOD_WEBHOOK_SECRET não configurado — assinatura não verificada');
+      // In production, require a secret to be configured
+      if (process.env.NODE_ENV === 'production') return false;
+      return true; // Allow in dev for convenience
+    }
+    if (!sig) return false; // Secret configured but no signature sent = reject
     const raw = JSON.stringify(req.body);
     const h = crypto.createHmac("sha256", secret).update(raw).digest("hex");
-    return h === sig;
+    return crypto.timingSafeEqual(Buffer.from(h), Buffer.from(sig));
   } catch (e) {
     return false;
   }

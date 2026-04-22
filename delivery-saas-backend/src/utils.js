@@ -9,7 +9,8 @@ export function sha256(text) {
 }
 
 export function generateQrSig(orderId, action = 'assign') {
-  const secret = process.env.QR_SIGN_SECRET || (process.env.JWT_SECRET || 'dev-qr-secret');
+  const secret = process.env.QR_SIGN_SECRET || process.env.JWT_SECRET;
+  if (!secret) throw new Error('QR_SIGN_SECRET ou JWT_SECRET deve estar configurado');
   return crypto.createHmac('sha256', secret).update(`${orderId}|${action}`).digest('hex');
 }
 

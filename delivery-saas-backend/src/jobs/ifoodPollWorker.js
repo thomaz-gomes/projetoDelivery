@@ -5,25 +5,27 @@ import { processIFoodWebhook } from '../services/ifoodWebhookProcessor.js';
 
 const POLLING_INTERVAL_MS = process.env.IFOOD_POLL_INTERVAL_MS ? Number(process.env.IFOOD_POLL_INTERVAL_MS) : 30_000; // default 30s
 
+let polling = false;
+
 /**
- * Executa polling contínuo para todas as empresas com integração ativa do iFood
+ * Executa polling contínuo para todas as empresas com integração ativa do iFood.
+ * Usa setTimeout recursivo para evitar sobreposição de ciclos (o próximo ciclo
+ * só é agendado depois que o atual termina).
  */
 export async function startIFoodPollingWorker() {
   console.log('🚀 Iniciando iFood Polling Worker...');
 
   async function executePollingCycle() {
+    if (polling) return;
+    polling = true;
+
     try {
       // Busca todas as empresas com integração ativa
       const integrations = await prisma.apiIntegration.findMany({
         where: { provider: 'IFOOD', enabled: true },
       });
 
-      if (!integrations.length) {
-        console.log('⚠️ Nenhuma integração iFood ativa encontrada.');
-        return;
-      }
-
-      console.log(`🔁 Executando polling para ${integrations.length} empresa(s)...`);
+      if (!integrations.length) return;
 
       for (const integ of integrations) {
         try {
@@ -31,8 +33,7 @@ export async function startIFoodPollingWorker() {
           const events = result?.events || [];
           const count = events.length;
 
-          if (count > 0) console.log(`✅ [${integ.companyId}] Recebeu ${count} evento(s) iFood.`);
-          else console.log(`🟢 [${integ.companyId}] Nenhum evento novo.`);
+          if (count > 0) console.log(`[iFood Poll] [${integ.companyId}] ${count} evento(s)`);
 
           const ackCandidates = [];
 
@@ -66,17 +67,18 @@ export async function startIFoodPollingWorker() {
             }
           }
         } catch (err) {
-          console.error(`❌ [${integ.companyId}] Erro no polling iFood:`, err && err.message ? err.message : err);
+          console.error(`[iFood Poll] [${integ.companyId}] Erro:`, err && err.message ? err.message : err);
         }
       }
     } catch (globalErr) {
-      console.error('🔥 Erro no ciclo de polling iFood:', globalErr.message);
+      console.error('[iFood Poll] Erro no ciclo:', globalErr.message);
+    } finally {
+      polling = false;
+      // Agenda o PRÓXIMO ciclo somente após o atual terminar
+      setTimeout(executePollingCycle, POLLING_INTERVAL_MS);
     }
   }
 
-  // Executa imediatamente na inicialização
-  await executePollingCycle();
-
-  // E agenda repetição a cada 30s
-  setInterval(executePollingCycle, POLLING_INTERVAL_MS);
+  // Executa imediatamente na inicialização (setTimeout recursivo cuida do resto)
+  executePollingCycle();
 }

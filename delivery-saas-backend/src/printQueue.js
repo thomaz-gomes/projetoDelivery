@@ -6,6 +6,28 @@ const QUEUE_FILE = path.join(process.cwd(), 'tmp', 'print-queue.json')
 
 let queue = []
 
+// Cache: storeId -> Set<socketId> — avoids O(n) scan of all sockets
+const storeSocketIndex = new Map()
+
+/**
+ * Register a socket as serving the given storeIds.
+ * Call on agent connect (after auth).
+ */
+export function registerAgentSocket(socket, storeIds) {
+  if (!Array.isArray(storeIds)) return
+  for (const sid of storeIds) {
+    if (!storeSocketIndex.has(sid)) storeSocketIndex.set(sid, new Set())
+    storeSocketIndex.get(sid).add(socket.id)
+  }
+  // clean up on disconnect
+  socket.once('disconnect', () => {
+    for (const sid of storeIds) {
+      const set = storeSocketIndex.get(sid)
+      if (set) { set.delete(socket.id); if (set.size === 0) storeSocketIndex.delete(sid) }
+    }
+  })
+}
+
 function persist() {
   try {
     fs.mkdirSync(path.dirname(QUEUE_FILE), { recursive: true })
@@ -50,31 +72,30 @@ async function processForStores(io, storeIds = []) {
     if (!Array.isArray(storeIds)) storeIds = [storeIds]
     // find candidate jobs
     const candidates = queue.filter(j => !j.delivered && (!j.storeId || storeIds.includes(j.storeId)))
-    try { console.log(`printQueue.processForStores: storeIds=${JSON.stringify(storeIds)} candidates=${candidates.length}`); } catch(e){}
+    if (candidates.length > 0) console.log(`printQueue.processForStores: storeIds=${storeIds.join(',')} candidates=${candidates.length}`)
     for (const job of candidates) {
       let delivered = false
       if (io) {
-          // find agent sockets that match job.storeId. Accept either authenticated
-          // agents (s.agent) or sockets that provided storeIds in handshake.auth
-          const sockets = Array.from(io.sockets.sockets.values()).filter(s => {
-            const agentStoreIds = (s.agent && Array.isArray(s.agent.storeIds)) ? s.agent.storeIds : null;
-            const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
-            const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
-            const storeIds = agentStoreIds || handshakeStoreIds;
-            if (!storeIds) return false;
-            return job.storeId ? storeIds.includes(job.storeId) : true;
-          })
-          try {
-            console.log(`printQueue.processForStores: job=${job.id} foundCandidates=${sockets.length}`);
-            sockets.forEach(s => {
-              try {
-                const hs = (s.handshake && s.handshake.auth) ? Object.assign({}, s.handshake.auth) : null;
-                if (hs && hs.token) delete hs.token;
-                const agentMeta = s.agent ? { companyId: s.agent.companyId, storeIds: s.agent.storeIds } : null;
-                console.log(`  candidate socket ${s.id} connected=${s.connected} agent=${agentMeta ? JSON.stringify(agentMeta) : 'null'} handshake=${hs ? JSON.stringify(hs) : 'null'}`);
-              } catch (e) {}
+          // Use index for fast lookup when job has a storeId, fallback to scan otherwise
+          let sockets
+          const indexedIds = job.storeId ? storeSocketIndex.get(job.storeId) : null
+          if (indexedIds && indexedIds.size > 0) {
+            sockets = []
+            for (const sid of indexedIds) {
+              const s = io.sockets.sockets.get(sid)
+              if (s && s.connected) sockets.push(s)
+            }
+          } else {
+            // Fallback: scan all sockets (only for jobs without storeId)
+            sockets = Array.from(io.sockets.sockets.values()).filter(s => {
+              const agentStoreIds = (s.agent && Array.isArray(s.agent.storeIds)) ? s.agent.storeIds : null;
+              const hs = (s.handshake && s.handshake.auth) ? s.handshake.auth : null;
+              const handshakeStoreIds = hs ? (Array.isArray(hs.storeIds) ? hs.storeIds : (hs.storeId ? [hs.storeId] : null)) : null;
+              const ids = agentStoreIds || handshakeStoreIds;
+              if (!ids) return false;
+              return job.storeId ? ids.includes(job.storeId) : true;
             })
-          } catch (e) {}
+          }
         for (const s of sockets) {
           try {
             // Enrich order with printer settings before sending to agent

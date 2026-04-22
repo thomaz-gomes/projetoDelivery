@@ -9,8 +9,14 @@ import { randomToken, sha256 } from '../utils.js';
 import { rotateAgentToken } from '../agentTokenManager.js';
 import { normalizePhone } from '../wa.js';
 import { sendVerificationCode } from '../services/email.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 
 export const authRouter = express.Router();
+
+// Rate limiters for auth endpoints
+const loginLimiter = rateLimit({ windowMs: 15 * 60_000, max: 15, message: 'Muitas tentativas de login. Aguarde 15 minutos.' });
+const registerLimiter = rateLimit({ windowMs: 60 * 60_000, max: 5, message: 'Muitos cadastros deste IP. Aguarde 1 hora.' });
+const codeLimiter = rateLimit({ windowMs: 5 * 60_000, max: 5, message: 'Muitas solicitações de código. Aguarde 5 minutos.' });
 
 async function ensureAgentTokenForCompany(companyId) {
   if (!companyId) return null;
@@ -75,7 +81,7 @@ authRouter.get('/me', authMiddleware, async (req, res) => {
 });
 
 // Original email/password login (kept as before)
-authRouter.post('/login', async (req, res) => {
+authRouter.post('/login', loginLimiter, async (req, res) => {
   const { email, password, whatsapp, login } = req.body || {};
   if (!password) return res.status(400).json({ message: 'Informe senha' });
 
@@ -109,7 +115,7 @@ authRouter.post('/login', async (req, res) => {
 
 // New endpoint: login by WhatsApp (motoboy / afiliado)
 // Accepts { whatsapp, password } or { login, password } where whatsapp/login may be masked
-authRouter.post('/login-whatsapp', async (req, res) => {
+authRouter.post('/login-whatsapp', loginLimiter, async (req, res) => {
   const { whatsapp, login, password } = req.body || {};
   const raw = whatsapp || login || '';
   if (!raw || !password) return res.status(400).json({ message: 'Informe whatsapp e senha' });
@@ -259,7 +265,7 @@ authRouter.post('/login-whatsapp', async (req, res) => {
 });
 
 // fallback: allow affiliate login by whatsapp+password
-authRouter.post('/login-whatsapp-affiliate', async (req, res) => {
+authRouter.post('/login-whatsapp-affiliate', loginLimiter, async (req, res) => {
   const { whatsapp, login, password } = req.body || {};
   const raw = whatsapp || login || '';
   if (!raw || !password) return res.status(400).json({ message: 'Informe whatsapp e senha' });
@@ -297,7 +303,7 @@ function generateCode() {
 }
 
 // POST /auth/register — create a new ADMIN user (no company yet)
-authRouter.post('/register', async (req, res) => {
+authRouter.post('/register', registerLimiter, async (req, res) => {
   const { name, email, password } = req.body || {};
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'Nome, email e senha são obrigatórios' });
@@ -352,7 +358,7 @@ authRouter.post('/register', async (req, res) => {
 });
 
 // POST /auth/verify-email — validate 6-digit code and activate account
-authRouter.post('/verify-email', async (req, res) => {
+authRouter.post('/verify-email', codeLimiter, async (req, res) => {
   const { email, code } = req.body || {};
   if (!email || !code) {
     return res.status(400).json({ message: 'Email e código são obrigatórios' });
@@ -406,7 +412,7 @@ authRouter.post('/verify-email', async (req, res) => {
 });
 
 // POST /auth/resend-code — invalidate previous codes and send a new one
-authRouter.post('/resend-code', async (req, res) => {
+authRouter.post('/resend-code', codeLimiter, async (req, res) => {
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ message: 'Email é obrigatório' });
   const emailLower = String(email).toLowerCase().trim();

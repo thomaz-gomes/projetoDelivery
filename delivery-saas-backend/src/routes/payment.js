@@ -7,6 +7,9 @@ import { getActiveGateway, getGatewayByProvider, getBillingMode } from '../servi
 export const paymentRouter = express.Router()
 
 const WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || ''
+if (!WEBHOOK_SECRET && process.env.NODE_ENV === 'production') {
+  console.error('[payment] CRITICAL: PAYMENT_WEBHOOK_SECRET não configurado em produção!')
+}
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
@@ -17,7 +20,8 @@ function requireAuth(req, res, next) {
   try {
     const token = (req.headers.authorization || '').replace('Bearer ', '')
     if (!token) return res.status(401).json({ message: 'Token não fornecido' })
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret')
+    if (!process.env.JWT_SECRET) return res.status(500).json({ message: 'JWT_SECRET não configurado' })
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     req.user = decoded
     next()
   } catch (e) {
