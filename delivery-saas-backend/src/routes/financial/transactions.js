@@ -91,7 +91,7 @@ router.post('/preview-installments', async (req, res) => {
     const preview = installments.map((inst, idx) => ({
       number: inst.number,
       totalInstallments: count,
-      dueDate: inst.dueDate,
+      dueDate: inst.dueDate instanceof Date ? inst.dueDate.toISOString().slice(0, 10) : inst.dueDate,
       amount: idx === 0 ? Math.round((baseAmount + remainder) * 100) / 100 : baseAmount,
     }));
 
