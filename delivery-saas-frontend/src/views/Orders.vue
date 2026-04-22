@@ -3414,7 +3414,7 @@ function pulseButton() {
         <div class="no-cash-card-info">
           <div class="fw-semibold">#{{ formatDisplay(o) }} - {{ o.customerName || 'Cliente' }}</div>
           <div class="small text-muted">
-            <span :class="statusBadge(o.status)">{{ statusLabel(o.status) }}</span>
+            <span class="badge bg-secondary">{{ STATUS_LABEL[o.status] || o.status }}</span>
             <span v-if="normalizeOrder(o).channelLabel" class="ms-2 badge bg-light text-dark">{{ normalizeOrder(o).channelLabel }}</span>
           </div>
         </div>
