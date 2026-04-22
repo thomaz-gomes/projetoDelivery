@@ -197,7 +197,32 @@ async function openCash() {
     const { data } = await api.post('/cash/open', formValues);
     await loadCurrentSession(true);
     invalidateCashSummary();
-    Swal.fire('OK', 'Caixa aberto', 'success');
+
+    // Check for out-of-session orders and offer to link them
+    try {
+      const { data: oosData } = await api.get('/cash/out-of-session-count');
+      if (oosData.count > 0) {
+        const result = await Swal.fire({
+          title: 'Pedidos fora do caixa',
+          text: `Há ${oosData.count} pedido(s) que entraram sem caixa aberto. Deseja vinculá-los a esta sessão?`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'Sim, vincular',
+          cancelButtonText: 'Não',
+        });
+        if (result.isConfirmed) {
+          await api.post('/cash/link-pending-orders');
+          Swal.fire({ icon: 'success', text: `${oosData.count} pedido(s) vinculado(s) ao caixa`, timer: 2000, showConfirmButton: false });
+        }
+      } else {
+        Swal.fire({ icon: 'success', text: 'Caixa aberto', timer: 1500, showConfirmButton: false });
+      }
+    } catch (e) {
+      Swal.fire({ icon: 'success', text: 'Caixa aberto', timer: 1500, showConfirmButton: false });
+    }
+
+    // Notify Orders.vue to refresh
+    window.dispatchEvent(new CustomEvent('cash-session-opened'));
   } catch (e) {
     console.error(e);
     Swal.fire('Erro', e?.response?.data?.message || 'Falha ao abrir caixa', 'error');
