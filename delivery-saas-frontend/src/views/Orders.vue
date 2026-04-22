@@ -375,6 +375,14 @@ onMounted(async () => {
   try { window.addEventListener('app:user-logged-in', onAppUserLoggedIn); } catch (e) {}
   try { window.addEventListener('cash-session-opened', onCashSessionOpened); } catch (e) {}
 
+  socket.value.on('cash-session-changed', (data) => {
+    console.debug('[socket] cash-session-changed', data);
+    checkCashSession();
+    if (data?.type === 'orders-linked' || data?.type === 'closed') {
+      store.fetch();
+    }
+  });
+
   socket.value.on("novo-pedido", async (pedido) => {
     console.log("🆕 Novo pedido recebido via socket:", pedido);
     // se o payload do socket não trouxer displayId, buscar o pedido completo no backend

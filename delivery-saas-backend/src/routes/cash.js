@@ -102,6 +102,12 @@ cashRouter.post('/link-pending-orders', async (req, res) => {
     },
   });
 
+  // Emit socket event so connected clients refresh their kanban
+  try {
+    const io = req.app.get('io');
+    if (io) io.to(`company_${companyId}`).emit('cash-session-changed', { type: 'orders-linked', count: result.count });
+  } catch (e) {}
+
   res.json({ linked: result.count, sessionId: session.id });
 });
 
@@ -223,6 +229,12 @@ cashRouter.post('/open', async (req, res) => {
       },
     });
   });
+
+  // Emit socket event so connected clients update cash session state
+  try {
+    const io = req.app.get('io');
+    if (io) io.to(`company_${companyId}`).emit('cash-session-changed', { type: 'opened', sessionId: session.id });
+  } catch (e) {}
 
   res.status(201).json(sessionToJSON(session));
 });
@@ -507,6 +519,12 @@ cashRouter.post('/close', async (req, res) => {
       console.error('Cash close (legacy) financial bridge error:', e?.message || e);
     }
   }
+
+  // Emit socket event so connected clients update cash session state
+  try {
+    const io = req.app.get('io');
+    if (io) io.to(`company_${companyId}`).emit('cash-session-changed', { type: 'closed', sessionId: closedSession.id });
+  } catch (e) {}
 
   res.json({ ok: true, session: sessionToJSON(closedSession) });
 });
