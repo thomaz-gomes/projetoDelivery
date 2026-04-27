@@ -401,7 +401,8 @@ onUnmounted(() => { clearRefreshTimers(); });
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div class="d-flex align-items-center gap-3">
                 <div>
-                  <div class="fw-semibold">{{ storeName(integ) }}</div>
+                  <div class="fw-semibold">{{ integ.merchantName || storeName(integ) }}</div>
+                  <div class="text-muted small">{{ storeName(integ) }}</div>
                   <div class="text-muted small">
                     {{ integ.merchantUuid || integ.merchantId || 'Merchant ID não definido' }}
                   </div>

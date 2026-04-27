@@ -488,6 +488,7 @@ model ApiIntegration {
   clientSecret String?
   merchantId   String?
   merchantUuid String?
+  merchantName String?
   enabled      Boolean @default(true)
   autoAccept   Boolean @default(false) // auto-accept incoming orders (startPreparation on PLACED)
 

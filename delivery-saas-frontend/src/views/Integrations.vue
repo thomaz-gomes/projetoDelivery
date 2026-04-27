@@ -113,7 +113,12 @@ const nextPage = () => { if(offset.value + limit.value < total.value) { offset.v
 const prevPage = () => { offset.value = Math.max(0, offset.value - limit.value) }
 
 const allItems = computed(() => {
-  const apiInts = (integrations.value || []).map(i => ({ ...i, _type: 'API', _label: i.provider || 'API', _sublabel: storeName(i.storeId) }))
+  const apiInts = (integrations.value || []).map(i => {
+    const base = storeName(i.storeId);
+    const merchant = i.merchantName;
+    const sublabel = merchant && merchant !== base ? `${base} — ${merchant}` : base;
+    return { ...i, _type: 'API', _label: i.provider || 'API', _sublabel: sublabel };
+  })
   const pxInts = (metaPixels.value || []).map(p => ({ ...p, _type: 'META_PIXEL', _label: 'Meta Pixel', _sublabel: menuName(p.menuId), enabled: p.enabled }))
   return [...apiInts, ...pxInts]
 })

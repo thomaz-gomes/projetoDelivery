@@ -11,6 +11,8 @@ const AUTH_BASE =
 const USER_CODE_PATH = process.env.IFOOD_USER_CODE_PATH || '/oauth/userCode';
 const TOKEN_PATH = process.env.IFOOD_TOKEN_PATH || '/oauth/token';
 
+const MERCHANT_BASE = process.env.IFOOD_BASE_URL || 'https://merchant-api.ifood.com.br';
+
 // =========================
 // Helper para instanciar o axios
 // =========================
@@ -154,7 +156,22 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
     },
   });
 
+  // Best-effort: fetch merchant name from iFood and save it
+  fetchAndSaveMerchantName(integ.id, accessToken).catch(e =>
+    console.warn('[iFood] Could not fetch merchant name:', e?.response?.data ?? e?.message)
+  );
+
   return { ok: true, integration: updated };
+}
+
+async function fetchAndSaveMerchantName(integrationId, accessToken) {
+  const http = axios.create({ baseURL: MERCHANT_BASE, timeout: 10000 });
+  const { data } = await http.get('/merchant/v1.0/merchants', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const name = Array.isArray(data) ? data[0]?.name : data?.name;
+  if (!name) return;
+  await prisma.apiIntegration.update({ where: { id: integrationId }, data: { merchantName: name } });
 }
 
 // ================================================================
