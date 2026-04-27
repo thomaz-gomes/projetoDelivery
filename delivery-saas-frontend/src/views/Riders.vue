@@ -32,7 +32,7 @@ const load = async () => {
     let list = store.riders || []
     // apply simple client-side filters (name / whatsapp / active)
     if(q.value) list = list.filter(r => (r.name||'').toLowerCase().includes(q.value.toLowerCase()) || (r.whatsapp||'').includes(q.value))
-    if(filterActive.value !== '') list = list.filter(r => String(!!r.isActive) === String(filterActive.value))
+    if(filterActive.value !== '') list = list.filter(r => String(!!r.active) === String(filterActive.value))
     total.value = list.length
     // fetch balances for displayed riders (all for now)
     for (const r of store.riders) {
@@ -98,7 +98,7 @@ const prevPage = () => { offset.value = Math.max(0, offset.value - limit.value) 
 const displayed = computed(() => {
   let list = store.riders || []
   if(q.value) list = list.filter(r => (r.name||'').toLowerCase().includes(q.value.toLowerCase()) || (r.whatsapp||'').includes(q.value))
-  if(filterActive.value !== '') list = list.filter(r => String(!!r.isActive) === String(filterActive.value))
+  if(filterActive.value !== '') list = list.filter(r => String(!!r.active) === String(filterActive.value))
   total.value = list.length
   return list.slice(offset.value, offset.value + limit.value)
 })

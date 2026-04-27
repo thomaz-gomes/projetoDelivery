@@ -114,105 +114,73 @@ authRouter.post('/login', loginLimiter, async (req, res) => {
 });
 
 // New endpoint: login by WhatsApp (motoboy / afiliado)
-// Accepts { whatsapp, password } or { login, password } where whatsapp/login may be masked
+// Accepts { whatsapp, password } or { login, password } where whatsapp/login may be masked.
+// When the same WhatsApp number exists in multiple companies, returns requiresCompanySelection=true
+// so the client can show a company picker. Re-send with { companyId } to complete login.
 authRouter.post('/login-whatsapp', loginLimiter, async (req, res) => {
-  const { whatsapp, login, password } = req.body || {};
+  const { whatsapp, login, password, companyId: selectedCompanyId } = req.body || {};
   const raw = whatsapp || login || '';
   if (!raw || !password) return res.status(400).json({ message: 'Informe whatsapp e senha' });
 
   const digits = String(raw).replace(/\D/g, '');
   if (!digits) return res.status(400).json({ message: 'WhatsApp inválido' });
-    const phoneClean = normalizePhone(digits);
+  const phoneClean = normalizePhone(digits);
 
+  // Find ALL riders matching this WhatsApp number (across all companies)
+  let candidates = [];
   try {
-    console.debug('[auth] login-whatsapp payload received (raw):', raw);
-    console.debug('[auth] login-whatsapp normalized digits:', digits);
-  } catch (e) { /* ignore logging errors */ }
-
-  // Try to find user by rider.whatsapp using both raw digits and normalized (55-prefixed) form
-  let finalUser = null;
-  try {
-      const user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { rider: { whatsapp: phoneClean } },
-            { rider: { whatsapp: digits } },
-            { rider: { whatsapp: { endsWith: digits } } },
-            { rider: { whatsapp: { contains: digits } } }
-          ]
-        },
-        include: { rider: true }
-      });
-    if (user) finalUser = user;
-  } catch (eFindUser) {
-    console.warn('[auth] login-whatsapp: error searching user by rider relation:', eFindUser && eFindUser.message, eFindUser && eFindUser.code);
+    candidates = await prisma.rider.findMany({
+      where: {
+        userId: { not: null },
+        OR: [
+          { whatsapp: phoneClean },
+          { whatsapp: digits },
+          { whatsapp: { endsWith: digits } },
+          { whatsapp: { contains: digits } },
+        ],
+      },
+      include: {
+        user: true,
+        company: { select: { id: true, name: true } },
+      },
+    });
+  } catch (e) {
+    console.warn('[auth] login-whatsapp: error finding riders:', e && e.message);
   }
 
-  // Fallback: if no user was found, look for a Rider record and load its linked user (rider.userId)
-  if (!finalUser) {
-    try {
-        const rider = await prisma.rider.findFirst({
-          where: {
-            OR: [
-              { whatsapp: phoneClean },
-              { whatsapp: digits },
-              { whatsapp: { endsWith: digits } },
-              { whatsapp: { contains: digits } }
-            ]
-          }
-        });
-      if (rider) {
-        if (rider.userId) {
-          const u = await prisma.user.findUnique({ where: { id: rider.userId }, include: { rider: true } });
-          if (u) {
-            finalUser = u;
-            console.warn('[auth] login-whatsapp: located user via rider.userId for digits=', digits, 'userId=', u.id);
-          }
-        } else {
-          console.warn('[auth] login-whatsapp: rider found for digits but no linked user (riderId=' + rider.id + ').');
-        }
-      } else {
-        try {
-          const sample = await prisma.rider.findMany({ where: { whatsapp: { not: null } }, take: 10, select: { id: true, whatsapp: true, name: true } });
-          console.warn('[auth] login-whatsapp: no user found for digits=', digits, 'nearby rider samples:', sample);
-        } catch (eSample) {
-          console.warn('[auth] login-whatsapp: no user found for digits=', digits);
-        }
-      }
-    } catch (eFind) {
-      console.warn('[auth] login-whatsapp: error trying fallback rider lookup for digits=', digits, eFind && eFind.message);
-    }
-  }
-
-  // Fallback 2: raw SQL lookup stripping non-digit characters from stored whatsapp
-  // This handles cases where whatsapp was saved with formatting (e.g., "(73) 98128-7040")
-  if (!finalUser) {
+  // Fallback: raw SQL for whatsapp stored with formatting (e.g., "(73) 98128-7040")
+  if (candidates.length === 0) {
     try {
       const isPostgres = (process.env.DATABASE_URL || '').startsWith('postgres');
       let riderRows = [];
       if (isPostgres) {
         riderRows = await prisma.$queryRaw`
           SELECT r.* FROM "Rider" r
-          WHERE regexp_replace(r."whatsapp", '[^0-9]', '', 'g') LIKE ${'%' + digits}
-             OR regexp_replace(r."whatsapp", '[^0-9]', '', 'g') LIKE ${'%' + digits + '%'}
-          LIMIT 1
+          WHERE r."userId" IS NOT NULL
+            AND (
+              regexp_replace(r."whatsapp", '[^0-9]', '', 'g') LIKE ${'%' + digits}
+              OR regexp_replace(r."whatsapp", '[^0-9]', '', 'g') LIKE ${'%' + digits + '%'}
+            )
         `;
       } else {
         riderRows = await prisma.$queryRaw`
           SELECT r.* FROM "Rider" r
-          WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(r."whatsapp", ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ${'%' + digits}
-             OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(r."whatsapp", ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ${'%' + digits + '%'}
-          LIMIT 1
+          WHERE r."userId" IS NOT NULL
+            AND (
+              REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(r."whatsapp",' ',''),'-',''),'(',''),')',''),'+','') LIKE ${'%' + digits}
+              OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(r."whatsapp",' ',''),'-',''),'(',''),')',''),'+','') LIKE ${'%' + digits + '%'}
+            )
         `;
       }
       if (riderRows && riderRows.length > 0) {
-        const rider = riderRows[0];
-        console.warn('[auth] login-whatsapp: found rider via raw SQL digit-strip for digits=', digits, 'riderId=', rider.id, 'stored whatsapp=', rider.whatsapp);
-        if (rider.userId) {
-          const u = await prisma.user.findUnique({ where: { id: rider.userId }, include: { rider: true } });
-          if (u) finalUser = u;
-        } else {
-          console.warn('[auth] login-whatsapp: rider found via raw SQL but no linked user (riderId=' + rider.id + ')');
+        const userIds = riderRows.map(r => r.userId).filter(Boolean);
+        const users = await prisma.user.findMany({ where: { id: { in: userIds } } });
+        const companyIds = [...new Set(riderRows.map(r => r.companyId).filter(Boolean))];
+        const companies = await prisma.company.findMany({ where: { id: { in: companyIds } }, select: { id: true, name: true } });
+        for (const row of riderRows) {
+          const user = users.find(u => u.id === row.userId);
+          const company = companies.find(c => c.id === row.companyId);
+          if (user) candidates.push({ ...row, user, company: company || null });
         }
       }
     } catch (eRaw) {
@@ -220,47 +188,72 @@ authRouter.post('/login-whatsapp', loginLimiter, async (req, res) => {
     }
   }
 
-  if (!finalUser) return res.status(401).json({ message: 'Credenciais inválidas', reason: 'user-not-found' });
+  if (candidates.length === 0) {
+    return res.status(401).json({ message: 'Credenciais inválidas', reason: 'user-not-found' });
+  }
 
-  // Verify password: accept bcrypt hash or (legacy) plaintext and upgrade
-  try {
-    const okBcrypt = await bcrypt.compare(password, finalUser.password);
-    if (!okBcrypt) {
-      // compatibility: if stored password is plaintext, upgrade to bcrypt
-      if (typeof finalUser.password === 'string' && finalUser.password === String(password)) {
-        console.warn('[auth] login-whatsapp: detected plaintext password match for userId=' + finalUser.id + '; upgrading to bcrypt hash');
+  // Verify password for each candidate and collect matches
+  const matched = [];
+  for (const rider of candidates) {
+    const user = rider.user;
+    if (!user) continue;
+    try {
+      const okBcrypt = await bcrypt.compare(password, user.password);
+      if (okBcrypt) {
+        matched.push(rider);
+      } else if (typeof user.password === 'string' && user.password === String(password)) {
+        // Legacy plaintext password — upgrade to bcrypt
+        console.warn('[auth] login-whatsapp: upgrading plaintext password for userId=', user.id);
         try {
           const newHash = await bcrypt.hash(String(password), 10);
-          await prisma.user.update({ where: { id: finalUser.id }, data: { password: newHash } });
+          await prisma.user.update({ where: { id: user.id }, data: { password: newHash } });
+          rider.user.password = newHash;
+          matched.push(rider);
         } catch (eUpd) {
-          console.warn('[auth] login-whatsapp: failed to upgrade plaintext password for userId=', finalUser.id, eUpd && eUpd.message);
-          return res.status(401).json({ message: 'Credenciais inválidas', reason: 'invalid-password' });
+          console.warn('[auth] login-whatsapp: failed to upgrade plaintext password for userId=', user.id, eUpd && eUpd.message);
         }
-      } else {
-        console.warn('[auth] login-whatsapp: invalid password for userId=', finalUser.id);
-        return res.status(401).json({ message: 'Credenciais inválidas', reason: 'invalid-password' });
       }
+    } catch (eCheck) {
+      console.warn('[auth] login-whatsapp: password check error for userId=', user.id, eCheck && eCheck.message);
     }
-  } catch (eCheck) {
-    console.warn('[auth] login-whatsapp: password check error for userId=', finalUser.id, eCheck && eCheck.message);
+  }
+
+  if (matched.length === 0) {
     return res.status(401).json({ message: 'Credenciais inválidas', reason: 'invalid-password' });
   }
 
-  // Successful auth: issue JWT and agent token
-  const token = signToken({ id: finalUser.id, role: finalUser.role, companyId: finalUser.companyId ?? null, riderId: finalUser.rider?.id ?? null, name: finalUser.name });
-  try {
-    const { token: agentTokenPlain } = await rotateAgentToken(finalUser.companyId, req.app);
-    res.json({
-      token,
-      user: { id: finalUser.id, role: finalUser.role, name: finalUser.name, companyId: finalUser.companyId, riderId: finalUser.rider?.id ?? null },
-      agentToken: agentTokenPlain
+  // Multiple companies found and none selected yet — ask client to pick one
+  if (matched.length > 1 && !selectedCompanyId) {
+    return res.json({
+      requiresCompanySelection: true,
+      companies: matched.map(r => ({ id: r.companyId, name: r.company?.name || r.companyId })),
     });
-    return;
+  }
+
+  // Select target rider/company
+  let targetRider = matched[0];
+  if (selectedCompanyId) {
+    const byCompany = matched.find(r => r.companyId === selectedCompanyId);
+    if (!byCompany) return res.status(401).json({ message: 'Empresa não encontrada', reason: 'company-not-found' });
+    targetRider = byCompany;
+  }
+
+  const finalUser = targetRider.user;
+  const riderId = targetRider.id;
+  const companyId = finalUser.companyId ?? targetRider.companyId;
+
+  const token = signToken({ id: finalUser.id, role: finalUser.role, companyId: companyId ?? null, riderId, name: finalUser.name });
+  try {
+    const { token: agentTokenPlain } = await rotateAgentToken(companyId, req.app);
+    return res.json({
+      token,
+      user: { id: finalUser.id, role: finalUser.role, name: finalUser.name, companyId, riderId },
+      agentToken: agentTokenPlain,
+    });
   } catch (e) {
     console.warn('Failed to rotate agent token at login-whatsapp (falling back to ensure-only):', e && e.message ? e.message : e);
-    const agentTokenPlain = await ensureAgentTokenForCompany(finalUser.companyId);
-    res.json({ token, user: { id: finalUser.id, role: finalUser.role, name: finalUser.name, companyId: finalUser.companyId, riderId: finalUser.rider?.id ?? null }, agentToken: agentTokenPlain || undefined });
-    return;
+    const agentTokenPlain = await ensureAgentTokenForCompany(companyId);
+    return res.json({ token, user: { id: finalUser.id, role: finalUser.role, name: finalUser.name, companyId, riderId }, agentToken: agentTokenPlain || undefined });
   }
 });
 
