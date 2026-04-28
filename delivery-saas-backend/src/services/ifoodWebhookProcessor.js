@@ -556,15 +556,18 @@ export async function processIFoodWebhook(eventId) {
       // (already includes id, merchantId, merchantUuid, autoAccept — no extra query needed)
       const cachedInteg = resolved._integ || null;
 
-      // Auto-populate merchantId on the integration if missing (fixes x-polling-merchants warning)
+      // Auto-populate merchantId and merchantName on the integration if missing
       try {
         const payloadMerchantId = payload?.merchantId || payload?.order?.merchant?.id || null;
-        if (payloadMerchantId && cachedInteg && !cachedInteg.merchantId && !cachedInteg.merchantUuid) {
-          await prisma.apiIntegration.update({
-            where: { id: cachedInteg.id },
-            data: { merchantId: String(payloadMerchantId) },
-          });
-          console.log('[iFood Processor] auto-populated merchantId:', payloadMerchantId);
+        const payloadMerchantName = payload?.order?.merchant?.name || null;
+        const needsMerchantId = payloadMerchantId && cachedInteg && !cachedInteg.merchantId && !cachedInteg.merchantUuid;
+        const needsMerchantName = payloadMerchantName && cachedInteg && !cachedInteg.merchantName;
+        if (needsMerchantId || needsMerchantName) {
+          const data = {};
+          if (needsMerchantId) data.merchantId = String(payloadMerchantId);
+          if (needsMerchantName) data.merchantName = payloadMerchantName;
+          await prisma.apiIntegration.update({ where: { id: cachedInteg.id }, data });
+          if (needsMerchantName) console.log('[iFood Processor] auto-populated merchantName:', payloadMerchantName);
         }
       } catch (e) { /* non-fatal */ }
 

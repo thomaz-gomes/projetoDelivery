@@ -1158,8 +1158,11 @@ function normalizeOrder(o){
     // payload (public orders may include payload.store.name). Do NOT fallback to company.
     storeName: (function() {
       try {
+        // iFood orders carry merchant name directly in the order payload
+        const payloadMerchantName = o.payload?.order?.merchant?.name;
+        if (payloadMerchantName) return payloadMerchantName;
+        // Fallback: merchantName saved on the linked integration (set by admin or auto-sync)
         if (Array.isArray(o.store?.apiIntegrations) && o.store.apiIntegrations.length) {
-          // Try to match the specific integration by merchant ID from the iFood payload
           const payloadMerchantId = o.payload?.merchantId || o.payload?.order?.merchant?.id;
           if (payloadMerchantId) {
             const matched = o.store.apiIntegrations.find(a =>
@@ -1167,11 +1170,10 @@ function normalizeOrder(o){
             );
             if (matched?.merchantName) return matched.merchantName;
           }
-          // Fallback: any integration on this store with a merchant name
           const any = o.store.apiIntegrations.find(a => a.merchantName);
           if (any?.merchantName) return any.merchantName;
         }
-        return (o.store && o.store.name) || (o.payload && o.payload.store && o.payload.store.name) || (o.payload && o.payload.rawPayload && o.payload.rawPayload.store && o.payload.rawPayload.store.name) || null;
+        return (o.store && o.store.name) || null;
       } catch (e) { return null; }
     })(),
     channelLabel: (function() {

@@ -165,24 +165,15 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
 }
 
 export async function fetchAndSaveMerchantName(integrationId, accessToken, merchantUuid) {
-  // Don't overwrite a name the admin has already set manually
-  const existing = await prisma.apiIntegration.findUnique({ where: { id: integrationId }, select: { merchantName: true } });
-  if (existing?.merchantName) return existing.merchantName;
-
   const h = axios.create({ baseURL: MERCHANT_BASE, timeout: 10000 });
   const headers = { Authorization: `Bearer ${accessToken}` };
   let name = null;
-
-  function pickName(d) {
-    // iFood may return the legal name in `name` and the trading name in shortName/tradingName
-    return d?.shortName || d?.tradingName || d?.fantasyName || d?.name || null;
-  }
 
   // Try specific merchant endpoint first (more reliable)
   if (merchantUuid) {
     try {
       const { data } = await h.get(`/merchant/v1.0/merchants/${merchantUuid}`, { headers });
-      name = pickName(data);
+      name = data?.name || null;
     } catch (e) { /* fall through to list endpoint */ }
   }
 
@@ -190,12 +181,14 @@ export async function fetchAndSaveMerchantName(integrationId, accessToken, merch
   if (!name) {
     try {
       const { data } = await h.get('/merchant/v1.0/merchants', { headers });
-      const merchant = Array.isArray(data) ? data[0] : data;
-      name = pickName(merchant);
+      name = Array.isArray(data) ? data[0]?.name : data?.name;
     } catch (e) { /* ignore */ }
   }
 
   if (!name) return;
+  // Only save if admin hasn't already set a custom name
+  const existing = await prisma.apiIntegration.findUnique({ where: { id: integrationId }, select: { merchantName: true } });
+  if (existing?.merchantName) return existing.merchantName;
   await prisma.apiIntegration.update({ where: { id: integrationId }, data: { merchantName: name } });
   return name;
 }
