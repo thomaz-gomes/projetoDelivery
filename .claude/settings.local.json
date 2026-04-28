@@ -134,7 +134,11 @@
       "Read(//d/tmp/**)",
       "Read(//c/Users/gomes/AppData/Local/Temp/**)",
       "Read(//c/Users/gomes/.claude/plugins/cache/superpowers-dev/superpours/4.3.1/skills/subagent-driven-development/**)",
-      "Bash(timeout 5)"
+      "Bash(timeout 5)",
+      "Bash(grep -E \"\\(server|index\\)\\\\.js$\")",
+      "Bash(grep -rn '$queryRaw\\\\|$executeRaw' 'd:\\\\Users\\\\gomes\\\\Documents\\\\GitHub\\\\projetoDelivery-crud\\\\delivery-saas-backend\\\\src')",
+      "Bash(grep -r 'prisma\\\\.$executeRaw\\\\|prisma\\\\.$queryRaw\\\\|raw SQL\\\\|concat.*req\\\\|template.*req' 'd:\\\\Users\\\\gomes\\\\Documents\\\\GitHub\\\\projetoDelivery-crud\\\\delivery-saas-backend\\\\src')",
+      "Bash(grep -r \"findRaw\\\\|\\\\`SELECT\\\\|\\\\`UPDATE\\\\|query.*req\\\\.\" \"d:\\\\Users\\\\gomes\\\\Documents\\\\GitHub\\\\projetoDelivery-crud\\\\delivery-saas-backend\\\\src\")"
     ],
     "additionalDirectories": [
       "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery\\delivery-saas-backend\\src\\services",
@@ -185,7 +189,10 @@
       "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery-crud\\delivery-saas-frontend\\src\\components",
       "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery-crud\\delivery-saas-frontend\\src",
       "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery-crud\\delivery-saas-backend\\prisma",
-      "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery\\docs\\plans"
+      "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery\\docs\\plans",
+      "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery-crud\\delivery-saas-frontend",
+      "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery-crud\\delivery-saas-backend",
+      "d:\\Users\\gomes\\Documents\\GitHub\\projetoDelivery-crud\\deploy"
     ]
   }
 }
