@@ -6,6 +6,7 @@ import './assets/rider-theme.css'
 import { assetUrl } from './utils/assetUrl.js'
 import { useAuthStore } from './stores/auth';
 import { useSaasStore } from './stores/saas';
+import { useInboxStore } from './stores/inbox';
 import { useModulesStore } from './stores/modules';
 import { useAddOnStoreStore } from './stores/addOnStore';
 import { buildVisibleNav } from './utils/navVisibility.js'
@@ -23,6 +24,7 @@ import { useBarcodeScanner } from './composables/useBarcodeScanner.js';
 
 const mobileOpen = ref(false);
 const auth = useAuthStore();
+const inboxStore = useInboxStore();
 
 // ── Barcode Scanner → Purchase Import ──────────────────────────────────────
 const scannerImportOpen = ref(false)
@@ -162,6 +164,50 @@ onMounted(() => {
 });
 onUnmounted(() => { scanner.stop() })
 
+// ── Inbox unread: browser tab title + favicon badge ─────────────────────────
+const BASE_TITLE = 'Core Delivery';
+let _originalFaviconHref = null;
+
+function applyFaviconBadge(show) {
+  try {
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+    if (!_originalFaviconHref) _originalFaviconHref = link.href || '/favicon.ico';
+    if (!show) { link.href = _originalFaviconHref; return; }
+    const canvas = document.createElement('canvas');
+    canvas.width = 32; canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, 32, 32);
+      ctx.beginPath();
+      ctx.arc(26, 6, 7, 0, 2 * Math.PI);
+      ctx.fillStyle = '#dc3545';
+      ctx.fill();
+      link.href = canvas.toDataURL('image/png');
+    };
+    img.onerror = () => {
+      ctx.beginPath();
+      ctx.arc(26, 6, 7, 0, 2 * Math.PI);
+      ctx.fillStyle = '#dc3545';
+      ctx.fill();
+      link.href = canvas.toDataURL('image/png');
+    };
+    img.crossOrigin = 'anonymous';
+    img.src = _originalFaviconHref;
+  } catch (e) { /* favicon manipulation not critical */ }
+}
+
+watch(() => inboxStore.unreadTotal, (total) => {
+  if (total > 0) {
+    document.title = `(${total}) ${BASE_TITLE}`;
+    applyFaviconBadge(true);
+  } else {
+    document.title = BASE_TITLE;
+    applyFaviconBadge(false);
+  }
+}, { immediate: true });
+
 // compute visible nav applying same filters as Sidebar.vue (role + enabled modules)
 const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules, nav));
 
@@ -229,7 +275,14 @@ function goToRiderQr(){
           <i class="bi bi-list" style="font-size:1.5rem"></i>
         </button>
         <span class="mobile-topbar-title"><img src="/core.png" alt="" class="log" style="max-width:125px"></span>
-      
+
+        <router-link v-if="inboxStore.unreadTotal > 0" to="/inbox" class="btn btn-link text-dark p-1 position-relative ms-auto me-1" title="Mensagens não lidas" aria-label="Mensagens não lidas">
+          <i class="bi bi-chat-dots" style="font-size:1.3rem"></i>
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:0.6rem;min-width:18px">
+            {{ inboxStore.unreadTotal > 99 ? '99+' : inboxStore.unreadTotal }}
+          </span>
+        </router-link>
+
           <div v-if="!saas.isCardapioSimplesOnly" class="d-block d-sm-none dropdown ms-3">
           <button ref="quickMenuBtn" class="btn btn-light dropdown-toggle" type="button" id="quickMenuDropdown" @click.prevent="quickMenuOpen = !quickMenuOpen" :aria-expanded="quickMenuOpen">
             <template v-if="auth.user">
