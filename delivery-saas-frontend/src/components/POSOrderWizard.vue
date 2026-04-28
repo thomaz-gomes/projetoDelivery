@@ -809,7 +809,8 @@ async function loadMenu(){
       }
     }catch(e){ console.warn('PDV: error resolving store.companyId', e); }
     const params = {};
-    if(selectedStoreId.value) params.storeId = selectedStoreId.value;
+    // storeId is intentionally NOT sent here — it would filter to the store's linked menu
+    // and hide categories not assigned to that menu. The store is used only on order creation.
     console.log('PDV: requesting public menu with params=', params);
     let resp;
     try {
