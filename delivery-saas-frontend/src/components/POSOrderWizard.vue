@@ -114,27 +114,43 @@
         </div>
         <div v-if="menuLoading" class="small">Carregando menu...</div>
         <div v-else>
+          <!-- Category pills -->
+          <div class="category-pills mb-2">
+            <button
+              class="btn btn-sm pill-btn"
+              :class="selectedCategory === null ? 'btn-primary' : 'btn-outline-secondary'"
+              @click="selectedCategory = null; productSearch = ''"
+            >Todos</button>
+            <button
+              v-for="cat in allProducts" :key="cat.id"
+              class="btn btn-sm pill-btn"
+              :class="selectedCategory === cat.id ? 'btn-primary' : 'btn-outline-secondary'"
+              @click="selectedCategory = cat.id; productSearch = ''"
+            >{{ cat.name }}</button>
+          </div>
+          <!-- Search -->
           <input
             v-model="productSearch"
             type="text"
             class="form-control form-control-sm mb-2"
             placeholder="Buscar produto..."
             autocomplete="off"
+            @input="selectedCategory = null"
           />
-        <div class="menu-scroll">
-          <div v-if="filteredProducts.length === 0" class="small text-muted py-2 text-center">Nenhum produto encontrado.</div>
-          <div v-for="cat in filteredProducts" :key="cat.id" class="mb-3">
-            <div class="fw-semibold mb-1">{{ cat.name }}</div>
-            <div class="d-flex flex-column gap-1">
-              <button v-for="p in cat.products" :key="p.id" class="btn btn-light text-start position-relative" @click="selectProduct(p)">
-                  <div class="d-flex justify-content-between">
-                  <span>{{ p.name }}</span>
-                  <span class="small text-muted">{{ formatCurrency(p.price) }}</span>
-                </div>
-              </button>
+          <div class="menu-scroll">
+            <div v-if="filteredProducts.length === 0" class="small text-muted py-2 text-center">Nenhum produto encontrado.</div>
+            <div v-for="cat in filteredProducts" :key="cat.id" class="mb-3">
+              <div class="category-header">{{ cat.name }}</div>
+              <div class="d-flex flex-column gap-1">
+                <button v-for="p in cat.products" :key="p.id" class="btn btn-light text-start product-btn" @click="selectProduct(p)">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <span>{{ p.name }}</span>
+                    <span class="small text-muted ms-2 flex-shrink-0">{{ formatCurrency(p.price) }}</span>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
         </div><!-- end v-else (menu loaded) -->
         <div class="cart-box mt-3">
           <div v-if="!embedded" class="d-flex justify-content-between align-items-center mb-2">
@@ -347,12 +363,17 @@ const companyDefaults = ref({ city:'', state:'' });
 const menuLoading = ref(false);
 const allProducts = ref([]);
 const productSearch = ref('');
+const selectedCategory = ref(null);
 const filteredProducts = computed(() => {
   const q = productSearch.value.trim().toLowerCase();
-  if (!q) return allProducts.value;
-  return allProducts.value
+  let cats = allProducts.value;
+  if (selectedCategory.value !== null) {
+    cats = cats.filter(c => c.id === selectedCategory.value);
+  }
+  if (!q) return cats;
+  return cats
     .map(cat => ({ ...cat, products: cat.products.filter(p => p.name.toLowerCase().includes(q)) }))
-    .filter(cat => cat.products.length > 0 || cat.name.toLowerCase().includes(q));
+    .filter(cat => cat.products.length > 0);
 });
 const stores = ref([]);
 const storesLoading = ref(false);
@@ -935,6 +956,7 @@ async function finalize(){
 function resetWizard(){
   step.value=1;
   productSearch.value = '';
+  selectedCategory.value = null;
   cart.value=[];
   foundCustomer.value=null; 
   customerNotFound.value=false; 
@@ -1075,7 +1097,12 @@ watch(() => props.preset, async (val) => {
 <style scoped>
 .pos-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; justify-content:center; align-items:flex-start; padding:40px 20px; z-index:1050; overflow:auto; }
 .pos-panel{ background:#fff; width:100%; max-width:760px; border-radius:14px; padding:20px 22px; box-shadow:0 6px 18px rgba(0,0,0,.15); }
-.menu-scroll{ max-height:260px; overflow:auto; border:1px solid #eee; padding:8px 10px; border-radius:8px; }
+.menu-scroll{ max-height:380px; overflow-y:auto; border:1px solid #eee; padding:8px 10px; border-radius:8px; }
+.category-pills{ display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none; }
+.category-pills::-webkit-scrollbar{ display:none; }
+.pill-btn{ white-space:nowrap; flex-shrink:0; font-size:0.75rem; padding:2px 10px; border-radius:20px; }
+.category-header{ font-weight:600; font-size:0.8rem; padding:4px 0 2px; border-bottom:1px solid #eee; margin-bottom:4px; color:#555; }
+.product-btn{ font-size:0.85rem; padding:5px 8px; }
 .cart-box{ background:#f9fafb; border:1px solid #eceff3; border-radius:12px; padding:12px 14px; }
 .cart-item{ border-bottom:1px solid #eceff3; padding:6px 0; }
 .cart-item:last-child{ border-bottom:none; }
