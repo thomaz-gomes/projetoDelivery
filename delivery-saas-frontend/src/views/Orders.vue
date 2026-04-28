@@ -1158,11 +1158,19 @@ function normalizeOrder(o){
     // payload (public orders may include payload.store.name). Do NOT fallback to company.
     storeName: (function() {
       try {
-        // For iFood orders prefer the merchantName from the linked integration (iFood channel name)
-        const ifoodInteg = Array.isArray(o.store?.apiIntegrations)
-          ? o.store.apiIntegrations.find(a => a.provider === 'IFOOD' && a.merchantName)
-          : null;
-        if (ifoodInteg?.merchantName) return ifoodInteg.merchantName;
+        if (Array.isArray(o.store?.apiIntegrations) && o.store.apiIntegrations.length) {
+          // Try to match the specific integration by merchant ID from the iFood payload
+          const payloadMerchantId = o.payload?.merchantId || o.payload?.order?.merchant?.id;
+          if (payloadMerchantId) {
+            const matched = o.store.apiIntegrations.find(a =>
+              a.merchantName && (a.merchantId === payloadMerchantId || a.merchantUuid === payloadMerchantId)
+            );
+            if (matched?.merchantName) return matched.merchantName;
+          }
+          // Fallback: any integration on this store with a merchant name
+          const any = o.store.apiIntegrations.find(a => a.merchantName);
+          if (any?.merchantName) return any.merchantName;
+        }
         return (o.store && o.store.name) || (o.payload && o.payload.store && o.payload.store.name) || (o.payload && o.payload.rawPayload && o.payload.rawPayload.store && o.payload.rawPayload.store.name) || null;
       } catch (e) { return null; }
     })(),

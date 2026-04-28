@@ -37,7 +37,7 @@ ordersRouter.get('/', async (req, res) => {
   const orders = await prisma.order.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: { items: true, rider: true, histories: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true } } } }, company: true, customer: { include: { addresses: true } } }
+    include: { items: true, rider: true, histories: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } }, company: true, customer: { include: { addresses: true } } }
   });
 
   // compute a daily sequential visual id (displaySimple) per order date
@@ -254,7 +254,7 @@ ordersRouter.post('/:id/assign', requireRole('ADMIN', 'ATTENDANT', 'STORE'), asy
   if (alsoSetStatus === true) data.status = 'SAIU_PARA_ENTREGA';
 
   // se também alterou status, registre histórico
-  const fullInclude = { histories: true, rider: true, items: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true } } } }, company: true, customer: { include: { addresses: true } } };
+  const fullInclude = { histories: true, rider: true, items: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } }, company: true, customer: { include: { addresses: true } } };
   let order;
   if (data.status) {
     const existing = await prisma.order.findUnique({ where: { id } });
@@ -537,7 +537,7 @@ ordersRouter.patch('/:id', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (re
   const updated = await prisma.order.update({
     where: { id },
     data,
-    include: { items: true, rider: true, histories: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true } } } }, company: true, customer: { include: { addresses: true } } }
+    include: { items: true, rider: true, histories: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } }, company: true, customer: { include: { addresses: true } } }
   });
 
   return res.json(updated);

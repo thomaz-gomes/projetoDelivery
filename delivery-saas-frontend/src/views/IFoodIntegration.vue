@@ -7,6 +7,29 @@ import api from '../api';
 const integrations = ref([]);
 const stores = ref([]);
 
+// ── Inline name editing ──
+const editingNameId = ref(null);
+const editingNameValue = ref('');
+const savingNameId = ref(null);
+
+function startEditName(integ) {
+  editingNameId.value = integ.id;
+  editingNameValue.value = integ.merchantName || storeName(integ);
+}
+function cancelEditName() { editingNameId.value = null; editingNameValue.value = ''; }
+async function saveEditName(integ) {
+  const name = editingNameValue.value.trim();
+  if (!name) return;
+  savingNameId.value = integ.id;
+  try {
+    await api.put(`/integrations/${integ.id}`, { merchantName: name });
+    integ.merchantName = name;
+    cancelEditName();
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: 'Erro ao salvar nome', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+  } finally { savingNameId.value = null; }
+}
+
 // ── Wizard state ──
 const showWizard = ref(false);
 const wizardMode = ref('new'); // 'new' | 'relink'
@@ -405,7 +428,28 @@ onUnmounted(() => { clearRefreshTimers(); });
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div class="d-flex align-items-center gap-3">
                 <div>
-                  <div class="fw-semibold">{{ integ.merchantName || storeName(integ) }}</div>
+                  <!-- Inline name editor -->
+                  <div v-if="editingNameId === integ.id" class="d-flex align-items-center gap-1 mb-1">
+                    <input
+                      v-model="editingNameValue"
+                      class="form-control form-control-sm"
+                      style="max-width:200px"
+                      @keyup.enter="saveEditName(integ)"
+                      @keyup.escape="cancelEditName"
+                      autofocus
+                    />
+                    <button class="btn btn-sm btn-success py-0 px-2" @click="saveEditName(integ)" :disabled="savingNameId === integ.id">
+                      <span v-if="savingNameId === integ.id" class="spinner-border spinner-border-sm"></span>
+                      <i v-else class="bi bi-check"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-2" @click="cancelEditName"><i class="bi bi-x"></i></button>
+                  </div>
+                  <div v-else class="d-flex align-items-center gap-1">
+                    <span class="fw-semibold">{{ integ.merchantName || storeName(integ) }}</span>
+                    <button class="btn btn-link btn-sm p-0 text-muted" @click="startEditName(integ)" title="Renomear canal">
+                      <i class="bi bi-pencil" style="font-size:0.7rem"></i>
+                    </button>
+                  </div>
                   <div class="text-muted small">{{ storeName(integ) }}</div>
                   <div class="text-muted small">
                     {{ integ.merchantUuid || integ.merchantId || 'Merchant ID não definido' }}

@@ -97,6 +97,7 @@ integrationsRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       clientSecret: body.clientSecret ?? existing.clientSecret,
       merchantId: body.merchantId ?? existing.merchantId,
       merchantUuid: body.merchantUuid ?? existing.merchantUuid,
+      merchantName: body.merchantName !== undefined ? body.merchantName : existing.merchantName,
       enabled: body.enabled ?? existing.enabled,
       autoAccept: body.autoAccept ?? existing.autoAccept,
       storeId: body.storeId ?? existing.storeId,
