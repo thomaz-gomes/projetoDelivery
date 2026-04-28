@@ -2,22 +2,20 @@
   <div>
     <ListCard title="Bairros" icon="bi bi-geo-alt" :subtitle="list.length ? `${list.length} bairros` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome ou apelido" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
       <template #actions>
-        <div class="d-flex align-items-center gap-2">
-          <template v-if="!editMode">
-            <button class="btn btn-outline-secondary" @click="openTestModal"><i class="bi bi-search me-1"></i> Testar detecção</button>
-            <label class="btn btn-outline-secondary mb-0" style="cursor:pointer;">
-              <i class="bi bi-upload me-1"></i> Importar CSV
-              <input type="file" accept=".csv" style="display:none" @change="e => handleFileImport(e.target.files[0])" />
-            </label>
-            <button class="btn btn-outline-secondary" @click="startEditMode" :disabled="!list.length"><i class="bi bi-pencil me-1"></i> Editar valores</button>
-            <button class="btn btn-primary" @click="openNew"><i class="bi bi-plus-lg me-1"></i> Novo bairro</button>
-          </template>
-          <template v-else>
-            <button class="btn btn-outline-secondary" @click="cancelEditMode" :disabled="savingAll">Cancelar</button>
-            <button class="btn btn-success" @click="saveAll" :disabled="savingAll">
-              <i class="bi bi-check-lg me-1"></i>{{ savingAll ? 'Salvando...' : 'Salvar' }}
-            </button>
-          </template>
+        <div v-if="!editMode" class="d-flex align-items-center gap-2">
+          <button class="btn btn-outline-secondary" @click="openTestModal"><i class="bi bi-search me-1"></i> Testar detecção</button>
+          <label class="btn btn-outline-secondary mb-0" style="cursor:pointer;">
+            <i class="bi bi-upload me-1"></i> Importar CSV
+            <input type="file" accept=".csv" style="display:none" @change="e => handleFileImport(e.target.files[0])" />
+          </label>
+          <button class="btn btn-outline-secondary" @click="startEditMode" :disabled="!list.length"><i class="bi bi-pencil me-1"></i> Editar valores</button>
+          <button class="btn btn-primary" @click="openNew"><i class="bi bi-plus-lg me-1"></i> Novo bairro</button>
+        </div>
+        <div v-else class="d-flex align-items-center gap-2">
+          <button class="btn btn-outline-secondary" @click="cancelEditMode" :disabled="savingAll">Cancelar</button>
+          <button class="btn btn-success" @click="saveAll" :disabled="savingAll">
+            <i class="bi bi-check-lg me-1"></i>{{ savingAll ? 'Salvando...' : 'Salvar' }}
+          </button>
         </div>
       </template>
 
