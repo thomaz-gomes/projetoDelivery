@@ -1534,9 +1534,13 @@ async function bulkAdvanceStatus() {
     return;
   }
 
+  // Compute per-order next status to respect isPrepaid (online payments skip CONFIRMACAO_PAGAMENTO)
+  const uniqueDestinations = [...new Set(selectedOrdersList.value.map(o => getNextStatus(o.status, o)).filter(Boolean))];
+  const destinationLabel = uniqueDestinations.map(s => STATUS_LABEL[s] || s).join(' / ');
+
   const conf = await Swal.fire({
     title: `Avançar ${selectedOrdersList.value.length} pedidos?`,
-    text: `Mover para: ${STATUS_LABEL[next] || next}`,
+    text: `Mover para: ${destinationLabel}`,
     icon: 'question', showCancelButton: true,
     confirmButtonText: 'Sim, avançar', cancelButtonText: 'Cancelar'
   });
@@ -1546,7 +1550,9 @@ async function bulkAdvanceStatus() {
   let success = 0, fail = 0;
   for (const order of selectedOrdersList.value) {
     try {
-      await store.updateStatus(order.id, next);
+      const orderNext = getNextStatus(order.status, order);
+      if (!orderNext) { fail++; continue; }
+      await store.updateStatus(order.id, orderNext);
       success++;
     } catch (e) {
       console.error(`Falha ao avançar pedido ${order.id}`, e);

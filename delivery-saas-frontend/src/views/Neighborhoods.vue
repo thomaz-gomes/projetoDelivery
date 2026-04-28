@@ -3,18 +3,27 @@
     <ListCard title="Bairros" icon="bi bi-geo-alt" :subtitle="list.length ? `${list.length} bairros` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome ou apelido" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
       <template #actions>
         <div class="d-flex align-items-center gap-2">
-          <button class="btn btn-outline-secondary" @click="openTestModal"><i class="bi bi-search me-1"></i> Testar detecção</button>
-          <label class="btn btn-outline-secondary mb-0" style="cursor:pointer;">
-            <i class="bi bi-upload me-1"></i> Importar CSV
-            <input type="file" accept=".csv" style="display:none" @change="e => handleFileImport(e.target.files[0])" />
-          </label>
-          <button class="btn btn-primary" @click="openNew"><i class="bi bi-plus-lg me-1"></i> Novo bairro</button>
+          <template v-if="!editMode">
+            <button class="btn btn-outline-secondary" @click="openTestModal"><i class="bi bi-search me-1"></i> Testar detecção</button>
+            <label class="btn btn-outline-secondary mb-0" style="cursor:pointer;">
+              <i class="bi bi-upload me-1"></i> Importar CSV
+              <input type="file" accept=".csv" style="display:none" @change="e => handleFileImport(e.target.files[0])" />
+            </label>
+            <button class="btn btn-outline-secondary" @click="startEditMode" :disabled="!list.length"><i class="bi bi-pencil me-1"></i> Editar valores</button>
+            <button class="btn btn-primary" @click="openNew"><i class="bi bi-plus-lg me-1"></i> Novo bairro</button>
+          </template>
+          <template v-else>
+            <button class="btn btn-outline-secondary" @click="cancelEditMode" :disabled="savingAll">Cancelar</button>
+            <button class="btn btn-success" @click="saveAll" :disabled="savingAll">
+              <i class="bi bi-check-lg me-1"></i>{{ savingAll ? 'Salvando...' : 'Salvar' }}
+            </button>
+          </template>
         </div>
       </template>
 
       <template #default>
         <div v-if="loading" class="text-center py-4">Carregando...</div>
-        <div v-else-if="displayed.length === 0" class="alert alert-info">Nenhum bairro cadastrado</div>
+        <div v-else-if="!editMode && displayed.length === 0" class="alert alert-info">Nenhum bairro cadastrado</div>
         <div v-else class="table-responsive">
           <table class="table table-hover align-middle">
             <thead>
@@ -27,18 +36,51 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="n in displayed" :key="n.id">
-                <td><strong>{{ n.name }}</strong></td>
-                <td><span class="text-muted small">{{ Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '—') }}</span></td>
-                <td>{{ formatCurrency(n.deliveryFee) }}</td>
-                <td>{{ formatCurrency(n.riderFee) }}</td>
-                <td>
-                  <div class="d-flex gap-1">
-                    <button class="btn btn-sm btn-light" @click="edit(n)" title="Editar"><i class="bi bi-pencil-square"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" @click="removeNeighborhood(n)" title="Remover"><i class="bi bi-trash"></i></button>
-                  </div>
+              <!-- Bulk fill row (edit mode only) -->
+              <tr v-if="editMode" class="table-warning align-middle">
+                <td colspan="2" class="py-2">
+                  <span class="fw-semibold small"><i class="bi bi-lightning-fill text-warning me-1"></i>Preencher todos</span>
+                  <div class="text-muted" style="font-size:0.75rem">Digite um valor para aplicar a todos os bairros visíveis</div>
                 </td>
+                <td class="py-2">
+                  <CurrencyInput v-model="bulkDeliveryFee" placeholder="Aplicar a todos" style="max-width:140px" />
+                </td>
+                <td class="py-2">
+                  <CurrencyInput v-model="bulkRiderFee" placeholder="Aplicar a todos" style="max-width:140px" />
+                </td>
+                <td></td>
               </tr>
+
+              <!-- Normal mode rows -->
+              <template v-if="!editMode">
+                <tr v-for="n in displayed" :key="n.id">
+                  <td><strong>{{ n.name }}</strong></td>
+                  <td><span class="text-muted small">{{ Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '—') }}</span></td>
+                  <td>{{ formatCurrency(n.deliveryFee) }}</td>
+                  <td>{{ formatCurrency(n.riderFee) }}</td>
+                  <td>
+                    <div class="d-flex gap-1">
+                      <button class="btn btn-sm btn-light" @click="edit(n)" title="Editar"><i class="bi bi-pencil-square"></i></button>
+                      <button class="btn btn-sm btn-outline-danger" @click="removeNeighborhood(n)" title="Remover"><i class="bi bi-trash"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+
+              <!-- Edit mode rows -->
+              <template v-else>
+                <tr v-for="row in displayedEditRows" :key="row.id">
+                  <td><strong>{{ row.name }}</strong></td>
+                  <td><span class="text-muted small">{{ Array.isArray(row.aliases) ? row.aliases.join(', ') : (row.aliases || '—') }}</span></td>
+                  <td>
+                    <CurrencyInput v-model="row.deliveryFee" style="max-width:140px" @update:modelValue="row.deliveryOverridden = true" />
+                  </td>
+                  <td>
+                    <CurrencyInput v-model="row.riderFee" style="max-width:140px" @update:modelValue="row.riderOverridden = true" />
+                  </td>
+                  <td></td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
@@ -120,7 +162,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import api from '../api'
 import { formatCurrency } from '../utils/formatters.js'
 import ListCard from '@/components/ListCard.vue'
@@ -140,6 +182,91 @@ const displayed = computed(() => {
     return ((n.name || '') + ' ' + aliases).toLowerCase().includes(term)
   })
 })
+
+// Bulk edit mode
+const editMode = ref(false)
+const editRows = ref([])
+const bulkDeliveryFee = ref(null)
+const bulkRiderFee = ref(null)
+const savingAll = ref(false)
+
+const displayedEditRows = computed(() => {
+  if (!q.value) return editRows.value
+  const term = q.value.toLowerCase()
+  return editRows.value.filter(row => {
+    const aliases = Array.isArray(row.aliases) ? row.aliases.join(' ') : (row.aliases || '')
+    return ((row.name || '') + ' ' + aliases).toLowerCase().includes(term)
+  })
+})
+
+watch(bulkDeliveryFee, (val) => {
+  if (val == null) return
+  editRows.value.forEach(row => {
+    if (!row.deliveryOverridden) row.deliveryFee = val
+  })
+})
+
+watch(bulkRiderFee, (val) => {
+  if (val == null) return
+  editRows.value.forEach(row => {
+    if (!row.riderOverridden) row.riderFee = val
+  })
+})
+
+function startEditMode() {
+  editRows.value = list.value.map(n => ({
+    id: n.id,
+    name: n.name,
+    aliases: n.aliases,
+    deliveryFee: n.deliveryFee ?? 0,
+    riderFee: n.riderFee ?? 0,
+    deliveryOverridden: false,
+    riderOverridden: false,
+  }))
+  bulkDeliveryFee.value = null
+  bulkRiderFee.value = null
+  editMode.value = true
+}
+
+function cancelEditMode() {
+  editMode.value = false
+  editRows.value = []
+  bulkDeliveryFee.value = null
+  bulkRiderFee.value = null
+}
+
+async function saveAll() {
+  savingAll.value = true
+  let saved = 0, errors = 0
+  try {
+    for (const row of editRows.value) {
+      try {
+        await api.patch(`/neighborhoods/${row.id}`, {
+          name: row.name,
+          aliases: Array.isArray(row.aliases) ? row.aliases : (row.aliases || '').split(',').map(s => s.trim()).filter(Boolean),
+          deliveryFee: Number(row.deliveryFee) || 0,
+          riderFee: Number(row.riderFee) || 0,
+        })
+        saved++
+      } catch (e) {
+        errors++
+        console.error(`Falha ao salvar bairro ${row.id}`, e)
+      }
+    }
+    await fetchList()
+    cancelEditMode()
+    Swal.fire({
+      icon: errors ? 'warning' : 'success',
+      text: `${saved} bairro(s) salvo(s)` + (errors ? `, ${errors} com erro` : ''),
+      timer: 2000, showConfirmButton: false
+    })
+  } catch (e) {
+    console.error(e)
+    Swal.fire({ icon: 'error', text: 'Erro ao salvar bairros' })
+  } finally {
+    savingAll.value = false
+  }
+}
 
 // Form
 const showForm = ref(false)
