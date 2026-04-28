@@ -29,7 +29,7 @@ usersRouter.post('/', requirePermission('users:create'), async (req, res) => {
     if (!name || !email || !role) return res.status(400).json({ message: 'name, email e role são obrigatórios' })
     // password optional: if not provided, create a random temporary password
     const pwd = password || Math.random().toString(36).slice(2,10)
-    const created = await createUser({ name: String(name), email: String(email).toLowerCase(), password: String(pwd), role: String(role), companyId })
+    const created = await createUser({ name: String(name), email: String(email).toLowerCase(), password: String(pwd), role: String(role), companyId, emailVerified: true })
     // hide password/hash from response
     const out = { id: created.id, name: created.name, email: created.email, role: created.role, createdAt: created.createdAt }
     return res.status(201).json(out)

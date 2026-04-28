@@ -37,7 +37,7 @@ export function requireRole(...roles) {
 }
 
 // opcional: helper de criação
-export async function createUser({ name, email, password, role, companyId }) {
+export async function createUser({ name, email, password, role, companyId, emailVerified = false }) {
   const hash = await bcrypt.hash(password, 10);
-  return prisma.user.create({ data: { name, email, password: hash, role, companyId }});
+  return prisma.user.create({ data: { name, email, password: hash, role, companyId, emailVerified }});
 }

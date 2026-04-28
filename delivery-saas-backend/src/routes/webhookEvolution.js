@@ -304,7 +304,7 @@ async function processSingleMessage(req, msg, instanceName) {
       const newCustomer = await prisma.customer.create({
         data: {
           companyId,
-          fullName: pushName || normalizedPhone,
+          fullName: pushName || null,
           whatsapp: normalizedPhone,
         },
       });

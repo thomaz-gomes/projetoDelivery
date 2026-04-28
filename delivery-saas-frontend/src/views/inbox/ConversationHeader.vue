@@ -95,7 +95,7 @@ const showAssignUser = ref(false);
 const displayName = computed(() => {
   const c = props.conversation;
   if (!c) return '';
-  return c.customer?.fullName || c.contactName || c.channelContactId || 'Desconhecido';
+  return c.customer?.fullName || c.contactName || 'Não identificado';
 });
 
 async function toggleStatus() {
