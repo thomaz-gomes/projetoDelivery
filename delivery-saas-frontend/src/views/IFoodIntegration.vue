@@ -351,6 +351,10 @@ async function copyToClipboard(text) {
 onMounted(async () => {
   await loadStores();
   await load();
+  // Sync merchant names in background (no-op if already up-to-date)
+  api.post('/integrations/ifood/sync-merchant-names').then(async ({ data }) => {
+    if (data?.results?.some(r => r.ok && r.name)) await load();
+  }).catch(() => {});
 });
 onUnmounted(() => { clearRefreshTimers(); });
 </script>

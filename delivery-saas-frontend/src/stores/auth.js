@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import api from '../api';
 import printService from '../services/printService.js';
+import { useRidersStore } from './riders.js';
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -62,6 +63,7 @@ export const useAuthStore = defineStore('auth', {
       this.token = null;
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      try { useRidersStore().reset(); } catch(e) {}
     }
   }
 });

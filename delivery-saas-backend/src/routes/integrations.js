@@ -9,6 +9,7 @@ import {
   exchangeAuthorizationCode,     // troca authorizationCode + verifier por tokens
   refreshAccessToken,            // renova tokens
   getIFoodAccessToken,           // garante accessToken válido
+  fetchAndSaveMerchantName,
 } from '../integrations/ifood/oauth.js';
 
 import {
@@ -167,6 +168,30 @@ integrationsRouter.post('/ifood/token/refresh', requireRole('ADMIN'), async (req
   } catch (e) {
     console.error('ifood/token/refresh error:', e?.response?.data ?? e);
     res.status(500).json({ message: 'Falha ao renovar token', error: e?.message || String(e), details: e?.response?.data ?? null });
+  }
+});
+
+// Sync merchant names from iFood for all integrations of the company
+integrationsRouter.post('/ifood/sync-merchant-names', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const integrations = await prisma.apiIntegration.findMany({
+      where: { companyId, provider: 'IFOOD', accessToken: { not: null } },
+    });
+    const results = [];
+    for (const integ of integrations) {
+      try {
+        const accessToken = await getIFoodAccessToken({ companyId, integrationId: integ.id });
+        const name = await fetchAndSaveMerchantName(integ.id, accessToken, integ.merchantUuid);
+        results.push({ id: integ.id, name: name || null, ok: true });
+      } catch (e) {
+        results.push({ id: integ.id, ok: false, error: e?.message });
+      }
+    }
+    return res.json({ ok: true, results });
+  } catch (e) {
+    console.error('sync-merchant-names error:', e?.message);
+    return res.status(500).json({ message: 'Erro ao sincronizar nomes', error: e?.message });
   }
 });
 

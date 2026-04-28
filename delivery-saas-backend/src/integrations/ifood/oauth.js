@@ -157,21 +157,35 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
   });
 
   // Best-effort: fetch merchant name from iFood and save it
-  fetchAndSaveMerchantName(integ.id, accessToken).catch(e =>
+  fetchAndSaveMerchantName(integ.id, accessToken, merchantUuid).catch(e =>
     console.warn('[iFood] Could not fetch merchant name:', e?.response?.data ?? e?.message)
   );
 
   return { ok: true, integration: updated };
 }
 
-async function fetchAndSaveMerchantName(integrationId, accessToken) {
-  const http = axios.create({ baseURL: MERCHANT_BASE, timeout: 10000 });
-  const { data } = await http.get('/merchant/v1.0/merchants', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const name = Array.isArray(data) ? data[0]?.name : data?.name;
+export async function fetchAndSaveMerchantName(integrationId, accessToken, merchantUuid) {
+  const h = axios.create({ baseURL: MERCHANT_BASE, timeout: 10000 });
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  let name = null;
+
+  // Try specific merchant endpoint first (more reliable)
+  if (merchantUuid) {
+    try {
+      const { data } = await h.get(`/merchant/v1.0/merchants/${merchantUuid}`, { headers });
+      name = data?.name || null;
+    } catch (e) { /* fall through to list endpoint */ }
+  }
+
+  // Fall back to listing merchants
+  if (!name) {
+    const { data } = await h.get('/merchant/v1.0/merchants', { headers });
+    name = Array.isArray(data) ? data[0]?.name : data?.name;
+  }
+
   if (!name) return;
   await prisma.apiIntegration.update({ where: { id: integrationId }, data: { merchantName: name } });
+  return name;
 }
 
 // ================================================================
