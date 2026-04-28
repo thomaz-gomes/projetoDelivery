@@ -156,8 +156,8 @@
               <button class="btn btn-sm btn-outline-danger" @click="removeItem(idx)">Remover</button>
             </div>
           </div>
-          <div class="mt-3 d-flex justify-content-between">
-            <button v-if="!embedded" class="btn btn-outline-secondary" @click="prev">Voltar</button>
+          <div v-if="!embedded" class="mt-3 d-flex justify-content-between">
+            <button class="btn btn-outline-secondary" @click="prev">Voltar</button>
             <button class="btn btn-success" :disabled="cart.length===0" @click="next">Escolher pagamento</button>
           </div>
         </div>
@@ -270,7 +270,7 @@
           <CurrencyInput label="Troco para (opcional)" labelClass="form-label small" v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />
         </div>
         <div class="alert alert-light small">Total: <strong>{{ formatCurrency(totalWithDelivery) }}</strong> (Entrega: {{ formatCurrency(deliveryFee) }})</div>
-        <div class="d-flex justify-content-between mt-3">
+        <div v-if="!embedded" class="d-flex justify-content-between mt-3">
           <button class="btn btn-outline-secondary" @click="prev">Voltar</button>
           <button class="btn btn-success" :disabled="!paymentMethodCode" @click="finalize">Concluir pedido</button>
         </div>
@@ -319,9 +319,10 @@ const props = defineProps({
   visible: { type: Boolean, default: false },
   initialPhone: { type: String, default: '' },
   preset: { type: Object, default: null },
-  embedded: { type: Boolean, default: false }
+  embedded: { type: Boolean, default: false },
+  forceStep: { type: Number, default: null },
 });
-const emit = defineEmits(['update:visible','created']);
+const emit = defineEmits(['update:visible', 'created', 'cart-update']);
 
 const step = ref(1);
 const phoneInput = ref('');
@@ -864,6 +865,13 @@ async function applyCoupon(){
 
 function removeCoupon(){ couponApplied.value = false; couponDiscount.value = 0; couponInfo.value = null; couponCode.value = ''; couponError.value = ''; }
 
+async function applyCouponWithCode(code) {
+  couponCode.value = code;
+  await applyCoupon();
+}
+
+defineExpose({ applyCouponWithCode, removeCoupon, finalize, finalizing });
+
 async function finalize(){
   finalizing.value = true;
   try {
@@ -968,6 +976,26 @@ watch(()=>props.visible, async (v)=>{
   } 
 });
 watch(()=>orderType.value,(v)=>{ if(v==='DELIVERY' && neighborhoods.value.length===0) loadNeighborhoods(); });
+
+// Sync external step control (embedded mode)
+watch(() => props.forceStep, (v) => {
+  if (props.embedded && v != null) step.value = v;
+}, { immediate: true });
+
+// Emit cart state to parent so footer can show totals without needing to read internals
+const cartState = computed(() => ({
+  subtotal: subtotal.value,
+  deliveryFee: deliveryFee.value,
+  totalWithDelivery: totalWithDelivery.value,
+  couponApplied: couponApplied.value,
+  couponDiscount: couponDiscount.value,
+  couponInfo: couponInfo.value ? { code: couponInfo.value.code } : null,
+  couponError: couponError.value,
+  couponLoading: couponLoading.value,
+  cartLength: cart.value.length,
+  paymentMethodCode: paymentMethodCode.value,
+}));
+watch(cartState, (val) => { emit('cart-update', val); }, { deep: true, immediate: true });
 
 // Embedded mode: skip customer/address steps and go directly to products
 let embeddedInitialized = false;
