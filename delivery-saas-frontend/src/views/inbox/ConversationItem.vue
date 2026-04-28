@@ -45,8 +45,7 @@ const AVATAR_COLORS = ['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9
 const displayName = computed(() => {
   return props.conversation.customer?.fullName
     || props.conversation.contactName
-    || props.conversation.channelContactId
-    || 'Sem nome';
+    || 'Não identificado';
 });
 
 const phoneDisplay = computed(() => {
