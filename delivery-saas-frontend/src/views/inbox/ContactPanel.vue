@@ -26,6 +26,7 @@
     <div class="flex-grow-1 overflow-auto" style="min-height:0">
 
       <ContactInfo
+        v-if="!draft?.active || panelStep === 1"
         :customer-id="customerId"
         :phone="conversation?.channelContactId"
         :conversation-id="conversationId"

@@ -113,8 +113,17 @@
           </div>
         </div>
         <div v-if="menuLoading" class="small">Carregando menu...</div>
-        <div v-else class="menu-scroll">
-          <div v-for="cat in allProducts" :key="cat.id" class="mb-3">
+        <div v-else>
+          <input
+            v-model="productSearch"
+            type="text"
+            class="form-control form-control-sm mb-2"
+            placeholder="Buscar produto..."
+            autocomplete="off"
+          />
+        <div class="menu-scroll">
+          <div v-if="filteredProducts.length === 0" class="small text-muted py-2 text-center">Nenhum produto encontrado.</div>
+          <div v-for="cat in filteredProducts" :key="cat.id" class="mb-3">
             <div class="fw-semibold mb-1">{{ cat.name }}</div>
             <div class="d-flex flex-column gap-1">
               <button v-for="p in cat.products" :key="p.id" class="btn btn-light text-start position-relative" @click="selectProduct(p)">
@@ -126,14 +135,15 @@
             </div>
           </div>
         </div>
+        </div><!-- end v-else (menu loaded) -->
         <div class="cart-box mt-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
+          <div v-if="!embedded" class="d-flex justify-content-between align-items-center mb-2">
             <div class="fw-semibold">Carrinho</div>
             <div class="small text-muted">Subtotal: {{ formatCurrency(subtotal) }}</div>
           </div>
-          <!-- coupon summary / input -->
-          <div class="mt-2">
-              <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
+          <!-- coupon summary / input (hidden in embedded mode — handled by parent footer) -->
+          <div v-if="!embedded" class="mt-2">
+            <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
             <div v-else class="d-flex gap-2 align-items-center">
               <TextInput v-model="couponCode" placeholder="Código do cupom (opcional)" inputClass="form-control form-control-sm" />
               <button class="btn btn-sm btn-primary" @click="applyCoupon" :disabled="couponLoading">Aplicar</button>
@@ -336,6 +346,14 @@ const companyDefaults = ref({ city:'', state:'' });
 
 const menuLoading = ref(false);
 const allProducts = ref([]);
+const productSearch = ref('');
+const filteredProducts = computed(() => {
+  const q = productSearch.value.trim().toLowerCase();
+  if (!q) return allProducts.value;
+  return allProducts.value
+    .map(cat => ({ ...cat, products: cat.products.filter(p => p.name.toLowerCase().includes(q)) }))
+    .filter(cat => cat.products.length > 0 || cat.name.toLowerCase().includes(q));
+});
 const stores = ref([]);
 const storesLoading = ref(false);
 const selectedStoreId = ref(null);
@@ -914,9 +932,10 @@ async function finalize(){
   } catch(e){ console.error('Falha ao criar pedido PDV', e); }
   finally{ finalizing.value=false; }
 }
-function resetWizard(){ 
-  step.value=1; 
-  cart.value=[]; 
+function resetWizard(){
+  step.value=1;
+  productSearch.value = '';
+  cart.value=[];
   foundCustomer.value=null; 
   customerNotFound.value=false; 
   newCustomerName.value=''; 
