@@ -158,11 +158,11 @@ const router = createRouter({
   { path: '/customer-groups', component: CustomerGroupsList, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/customer-groups/new', component: CustomerGroupForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/customer-groups/:id', component: CustomerGroupForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
-  { path: '/riders', component: Riders, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } },
+  { path: '/riders', component: Riders, meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } },
   { path: '/riders/new', component: RiderForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } },
-  { path: '/riders/:id', component: RiderForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } },
-  { path: '/riders/:id/account', component: RiderAccountAdmin, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } },
-  { path: '/rider-adjustments', component: RiderAdjustments, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } },
+  { path: '/riders/:id', component: RiderForm, meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } },
+  { path: '/riders/:id/account', component: RiderAccountAdmin, meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } },
+  { path: '/rider-adjustments', component: RiderAdjustments, meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } },
   { path: '/settings/neighborhoods', component: Neighborhoods, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/settings/dados-fiscais', component: DadosFiscaisSettings, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },
   { path: '/settings/dados-fiscais/new', component: DadosFiscaisForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },
@@ -246,7 +246,7 @@ const router = createRouter({
   ,{ path: '/rider/checkin', component: () => import('./views/rider/Checkin.vue'), meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/rider/ranking', component: () => import('./views/rider/Ranking.vue'), meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/rider', component: RiderDashboard, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
-  ,{ path: '/riders/map', component: () => import('./views/RiderMap.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } }
+  ,{ path: '/riders/map', component: () => import('./views/RiderMap.vue'), meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } }
   ,{ path: '/settings/rider-tracking', component: () => import('./views/RiderTracking.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } }
   ,{ path: '/settings/rider-shifts', component: () => import('./views/RiderShifts.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } }
   ,{ path: '/settings/rider-bonus-rules', component: () => import('./views/RiderBonusRules.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } }
@@ -262,9 +262,9 @@ const router = createRouter({
   ,{ path: '/reports/cash-fronts', component: CashFronts, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/reports/products', component: ProductsReport, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/reports/menu-performance', component: MenuPerformanceReport, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } }
-  ,{ path: '/reports/riders-dashboard', component: RidersDashboard, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } }
-  ,{ path: '/reports/rider-checkins', component: () => import('./views/RiderCheckins.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } }
-  ,{ path: '/reports/rider-ranking', component: () => import('./views/RiderRanking.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } }
+  ,{ path: '/reports/riders-dashboard', component: RidersDashboard, meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } }
+  ,{ path: '/reports/rider-checkins', component: () => import('./views/RiderCheckins.vue'), meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } }
+  ,{ path: '/reports/rider-ranking', component: () => import('./views/RiderRanking.vue'), meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } }
   ,{ path: '/saas/plans', component: SaasPlans, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies', component: SaasCompanies, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/companies/new', component: SaasCompanyNew, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
@@ -399,7 +399,7 @@ router.beforeEach(async (to) => {
 
     // Attendant containment: attendants may only access allowed paths
     if (userRole === 'ATTENDANT') {
-      const attendantAllowed = ['/orders', '/customers', '/inbox', '/menu/admin', '/menu/menus', '/public', '/login', '/setup', '/billing', '/payment']
+      const attendantAllowed = ['/orders', '/customers', '/inbox', '/menu/admin', '/menu/menus', '/riders', '/rider-adjustments', '/reports/riders-dashboard', '/reports/rider-ranking', '/reports/rider-checkins', '/public', '/login', '/setup', '/billing', '/payment']
       const isAllowed = attendantAllowed.some(p => to.path === p || to.path.startsWith(p + '/'))
       if (!isAllowed && to.path !== '/') {
         return { path: '/orders' }
