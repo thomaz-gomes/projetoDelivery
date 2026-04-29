@@ -198,7 +198,6 @@
               <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
                   <h6 class="fw-semibold m-0">{{ activeProduct?.name }} <span class="text-muted small">{{ formatCurrency(activeProduct?.price) }}</span></h6>
-                  <div class="small text-muted">{{ activeProduct?.description }}</div>
                 </div>
                 <button class="btn btn-sm btn-outline-secondary d-sm-none" @click="closeOptions" aria-label="Fechar">✕</button>
               </div>
