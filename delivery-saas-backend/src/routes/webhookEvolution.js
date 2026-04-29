@@ -10,7 +10,7 @@ import { evoSendText, evoSendMediaUrl } from '../wa.js';
 
 function isStoreOpen(store) {
   if (!store) return true;
-  if (store.alwaysOpen || store.open24Hours) return true;
+  if (store.open24Hours) return true;
   const schedule = store.weeklySchedule;
   if (!schedule || !Array.isArray(schedule)) return true;
 
@@ -74,31 +74,31 @@ async function sendAutoReply(conversation, instanceName, quickReply) {
   }
 }
 
-async function runAutomations(conversation, incomingMessage, storeId, instanceName) {
-  if (!storeId) return;
-  const store = await prisma.store.findUnique({
-    where: { id: storeId },
+async function runAutomations(conversation, incomingMessage, menuId, instanceName) {
+  if (!menuId) return;
+  const menu = await prisma.menu.findUnique({
+    where: { id: menuId },
     select: {
       id: true,
       weeklySchedule: true,
-      alwaysOpen: true,
       open24Hours: true,
       timezone: true,
       outOfHoursReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
       greetingReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
-      company: { select: { evolutionEnabled: true } },
+      store: { select: { company: { select: { evolutionEnabled: true } } } },
     },
   });
-  if (!store || !store.company?.evolutionEnabled) return;
+  if (!menu) { console.warn('[automations] menu not found:', menuId); return; }
+  if (!menu.store?.company?.evolutionEnabled) { console.log('[automations] evolutionEnabled=false — skipping'); return; }
 
   // 1. Out-of-hours auto-reply
-  if (store.outOfHoursReply && !isStoreOpen(store)) {
-    await sendAutoReply(conversation, instanceName, store.outOfHoursReply);
+  if (menu.outOfHoursReply && !isStoreOpen(menu)) {
+    await sendAutoReply(conversation, instanceName, menu.outOfHoursReply);
     return;
   }
 
   // 2. Greeting after 6h of inactivity
-  if (store.greetingReply) {
+  if (menu.greetingReply) {
     const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
     const recentInbound = await prisma.message.findFirst({
       where: {
@@ -110,7 +110,7 @@ async function runAutomations(conversation, incomingMessage, storeId, instanceNa
       select: { id: true },
     });
     if (!recentInbound) {
-      await sendAutoReply(conversation, instanceName, store.greetingReply);
+      await sendAutoReply(conversation, instanceName, menu.greetingReply);
     }
   }
 
@@ -236,7 +236,10 @@ async function processSingleMessage(req, msg, instanceName) {
   // Look up WhatsAppInstance
   const waInstance = await prisma.whatsAppInstance.findUnique({
     where: { instanceName },
-    include: { stores: { select: { id: true } } },
+    include: {
+      menus: { select: { id: true, storeId: true }, take: 1 },
+      stores: { select: { id: true }, take: 1 },
+    },
   });
   if (!waInstance) {
     console.warn(`[webhookEvolution] Unknown instance: ${instanceName}`);
@@ -244,7 +247,11 @@ async function processSingleMessage(req, msg, instanceName) {
   }
 
   const companyId = waInstance.companyId;
-  const storeId = waInstance.stores.length > 0 ? waInstance.stores[0].id : null;
+  // Prefer menu-based linkage; fall back to legacy store-based linkage
+  const menuId = waInstance.menus.length > 0 ? waInstance.menus[0].id : null;
+  const storeId = menuId
+    ? (waInstance.menus[0].storeId || null)
+    : (waInstance.stores.length > 0 ? waInstance.stores[0].id : null);
 
   // Normalize phone: always store with DDI 55
   // Brazilian mobile numbers: WhatsApp may send without the 9th digit
@@ -330,6 +337,7 @@ async function processSingleMessage(req, msg, instanceName) {
       data: {
         companyId,
         storeId,
+        menuId,
         channel: 'WHATSAPP',
         channelContactId: normalizedPhone,
         instanceName,
@@ -427,6 +435,10 @@ async function processSingleMessage(req, msg, instanceName) {
   if (storeId && !conversation.storeId) {
     updateData.storeId = storeId;
   }
+  // Link menu if resolved and not already linked
+  if (menuId && !conversation.menuId) {
+    updateData.menuId = menuId;
+  }
 
   if (direction === 'INBOUND') {
     updateData.unreadCount = { increment: 1 };
@@ -472,11 +484,11 @@ async function processSingleMessage(req, msg, instanceName) {
     io.emit('inbox:new-message:broadcast', payload);
   }
 
-  // Run automations pipeline (best-effort, non-blocking)
-  // Runs on any inbound message type so out-of-hours/greeting reply fires even if first message is an image or audio
-  if (direction === 'INBOUND' && conversation.storeId) {
-    runAutomations(updatedConversation, message, conversation.storeId, instanceName).catch(e =>
-      console.warn('[automations] failed:', e.message)
+  // Run automations pipeline (best-effort, non-blocking).
+  const effectiveMenuId = updatedConversation.menuId || menuId;
+  if (direction === 'INBOUND' && effectiveMenuId) {
+    runAutomations(updatedConversation, message, effectiveMenuId, instanceName).catch(e =>
+      console.error('[automations] failed:', e)
     );
   }
 }

@@ -27,18 +27,18 @@
     <!-- ── Automações de chat ──────────────────────────────────────── -->
     <div v-if="tab === 'automations'">
       <div class="mb-4">
-        <label class="form-label">Loja</label>
+        <label class="form-label">Cardápio</label>
         <SelectInput
-          v-model="selectedStoreId"
-          :options="storeOptions"
+          v-model="selectedMenuId"
+          :options="menuOptions"
           optionValueKey="value"
           optionLabelKey="label"
-          placeholder="Selecione uma loja"
-          @update:modelValue="loadStore"
+          placeholder="Selecione um cardápio"
+          @update:modelValue="loadMenu"
         />
       </div>
 
-      <div v-if="selectedStoreId && currentStore">
+      <div v-if="selectedMenuId && currentMenu">
         <!-- Out-of-hours -->
         <div class="card mb-3">
           <div class="card-body">
@@ -174,14 +174,14 @@ const tab = ref('automations');
 // ── Automações de chat ────────────────────────────────────────────────────
 
 const inboxStore = useInboxStore();
-const stores = ref([]);
-const selectedStoreId = ref(null);
-const currentStore = ref(null);
+const menus = ref([]);
+const selectedMenuId = ref(null);
+const currentMenu = ref(null);
 const quickReplies = computed(() => inboxStore.quickReplies || []);
 const saving = ref(false);
 
-const storeOptions = computed(() =>
-  stores.value.map(s => ({ value: s.id, label: s.name }))
+const menuOptions = computed(() =>
+  menus.value.map(m => ({ value: m.id, label: m.name }))
 );
 
 const quickReplyOptions = computed(() =>
@@ -200,23 +200,23 @@ const greetingPreview = computed(() => {
   return r?.body || '';
 });
 
-async function loadStore(val) {
-  selectedStoreId.value = val || null;
-  if (!selectedStoreId.value) { currentStore.value = null; return; }
+async function loadMenu(val) {
+  selectedMenuId.value = val || null;
+  if (!selectedMenuId.value) { currentMenu.value = null; return; }
   try {
-    const { data } = await api.get(`/stores/${selectedStoreId.value}`);
-    currentStore.value = data;
+    const { data } = await api.get(`/menu/menus/${selectedMenuId.value}`);
+    currentMenu.value = data;
     form.value.outOfHoursReplyId = data.outOfHoursReplyId || null;
     form.value.greetingReplyId = data.greetingReplyId || null;
   } catch (e) {
-    Swal.fire('Erro', 'Falha ao carregar loja', 'error');
+    Swal.fire('Erro', 'Falha ao carregar cardápio', 'error');
   }
 }
 
 async function saveOutOfHours() {
   saving.value = true;
   try {
-    await api.patch(`/stores/${selectedStoreId.value}/inbox-automation`, { outOfHoursReplyId: form.value.outOfHoursReplyId || null });
+    await api.patch(`/menu/menus/${selectedMenuId.value}/inbox-automation`, { outOfHoursReplyId: form.value.outOfHoursReplyId || null });
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Salvo!', showConfirmButton: false, timer: 1500 });
   } catch (e) {
     Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar', 'error');
@@ -226,7 +226,7 @@ async function saveOutOfHours() {
 async function saveGreeting() {
   saving.value = true;
   try {
-    await api.patch(`/stores/${selectedStoreId.value}/inbox-automation`, { greetingReplyId: form.value.greetingReplyId || null });
+    await api.patch(`/menu/menus/${selectedMenuId.value}/inbox-automation`, { greetingReplyId: form.value.greetingReplyId || null });
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Salvo!', showConfirmButton: false, timer: 1500 });
   } catch (e) {
     Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar', 'error');
@@ -263,9 +263,9 @@ async function saveTemplates() {
 
 onMounted(async () => {
   try {
-    const { data } = await api.get('/stores');
-    stores.value = Array.isArray(data) ? data : (data.stores || []);
-  } catch (e) { stores.value = []; }
+    const { data } = await api.get('/menu/menus');
+    menus.value = Array.isArray(data) ? data : [];
+  } catch (e) { menus.value = []; }
   if (!inboxStore.quickReplies?.length) await inboxStore.fetchQuickReplies();
   await loadTemplates();
 });

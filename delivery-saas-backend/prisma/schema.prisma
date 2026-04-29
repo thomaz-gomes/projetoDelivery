@@ -336,6 +336,8 @@ model WhatsAppInstance {
   updatedAt    DateTime @updatedAt
   // stores assigned to this WhatsApp instance (one instance -> many stores)
   stores       Store[]
+  // menus assigned to this WhatsApp instance (preferred: link via menu/cardápio)
+  menus        Menu[]   @relation("MenuWhatsAppInstance")
 }
 
 model Customer {
@@ -627,6 +629,15 @@ model Menu {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   customDomain   CustomDomain?
+
+  // ---- WhatsApp / Inbox ----
+  whatsappInstanceId String?
+  whatsappInstance   WhatsAppInstance? @relation("MenuWhatsAppInstance", fields: [whatsappInstanceId], references: [id])
+  outOfHoursReplyId  String?
+  outOfHoursReply    QuickReply?       @relation("MenuOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
+  greetingReplyId    String?
+  greetingReply      QuickReply?       @relation("MenuGreetingReply", fields: [greetingReplyId], references: [id])
+  conversations      Conversation[]
 }
 
 model CustomDomain {
@@ -2450,6 +2461,8 @@ model Conversation {
   company          Company            @relation(fields: [companyId], references: [id])
   storeId          String?
   store            Store?             @relation(fields: [storeId], references: [id])
+  menuId           String?
+  menu             Menu?              @relation(fields: [menuId], references: [id])
   channel          Channel
   channelContactId String
   instanceName     String?
@@ -2512,6 +2525,8 @@ model QuickReply {
 
   storesOutOfHours Store[] @relation("StoreOutOfHoursReply")
   storesGreeting   Store[] @relation("StoreGreetingReply")
+  menusOutOfHours  Menu[]  @relation("MenuOutOfHoursReply")
+  menusGreeting    Menu[]  @relation("MenuGreetingReply")
 
   @@unique([companyId, shortcut])
   @@index([companyId])
