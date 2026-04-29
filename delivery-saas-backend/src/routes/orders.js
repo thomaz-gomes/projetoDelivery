@@ -1119,7 +1119,7 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const companyId = req.user.companyId;
   try {
     // Aceitar tanto `type` (legado) quanto `orderType` (frontend atual)
-    const { items = [], address: _rawAddress = {}, coupon, payment, type: _type, orderType: _orderType, customerPhone, customerName, requestedStoreId } = req.body || {};
+    const { items = [], address: _rawAddress = {}, coupon, payment, type: _type, orderType: _orderType, customerPhone, customerName, requestedStoreId, discountMerchant: _discountMerchant, additionalFees: _additionalFees } = req.body || {};
     const type = _type || _orderType;
     // address pode chegar como objeto {street,number,...} ou como string formatada (finalize envia string quando persiste no cliente)
     const address = typeof _rawAddress === 'string'
@@ -1271,6 +1271,8 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
         total,
         couponCode,
         couponDiscount: Number(couponDiscount || 0),
+        discountMerchant: _discountMerchant != null && Number(_discountMerchant) > 0 ? Number(_discountMerchant) : undefined,
+        additionalFees: _additionalFees != null && Number(_additionalFees) > 0 ? Number(_additionalFees) : undefined,
         orderType: type,
         deliveryFee,
         status: 'EM_PREPARO',

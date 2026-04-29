@@ -137,12 +137,29 @@
           </div>
           <!-- coupon summary / input -->
           <div class="mt-2">
-              <div v-if="couponApplied" class="d-flex justify-content-between mb-2 text-success"><div>Cupom ({{ couponInfo?.code || '' }})</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
+            <div v-if="couponApplied" class="d-flex justify-content-between align-items-center mb-2 text-success">
+              <div>Cupom ({{ couponInfo?.code || '' }})</div>
+              <div class="d-flex align-items-center gap-2">
+                <span>-{{ formatCurrency(couponDiscount) }}</span>
+                <button class="btn btn-sm btn-outline-danger py-0 px-1 lh-1" @click="removeCoupon" title="Remover cupom">✕</button>
+              </div>
+            </div>
             <div v-else class="d-flex gap-2 align-items-center">
               <TextInput v-model="couponCode" placeholder="Código do cupom (opcional)" inputClass="form-control form-control-sm" />
               <button class="btn btn-sm btn-primary" @click="applyCoupon" :disabled="couponLoading">Aplicar</button>
             </div>
             <div v-if="couponError" class="small text-danger mt-1">{{ couponError }}</div>
+          </div>
+          <!-- manual discount / surcharge -->
+          <div class="row g-2 mt-1">
+            <div class="col-6">
+              <label class="form-label small mb-0">Desconto (R$)</label>
+              <CurrencyInput v-model="manualDiscount" inputClass="form-control form-control-sm" placeholder="0,00" />
+            </div>
+            <div class="col-6">
+              <label class="form-label small mb-0">Acréscimo (R$)</label>
+              <CurrencyInput v-model="surcharge" inputClass="form-control form-control-sm" placeholder="0,00" />
+            </div>
           </div>
           <div v-if="cart.length===0" class="small text-muted">Nenhum item.</div>
           <div v-for="(it,idx) in cart" :key="idx" class="cart-item">
@@ -159,6 +176,13 @@
               <button class="btn btn-sm btn-outline-secondary" @click="editItem(idx)">Editar</button>
               <button class="btn btn-sm btn-outline-danger" @click="removeItem(idx)">Remover</button>
             </div>
+          </div>
+          <div v-if="cart.length > 0" class="mt-2 small text-end text-muted border-top pt-2">
+            <div v-if="couponDiscount > 0">Cupom: <span class="text-success">-{{ formatCurrency(couponDiscount) }}</span></div>
+            <div v-if="manualDiscount > 0">Desconto: <span class="text-danger">-{{ formatCurrency(manualDiscount) }}</span></div>
+            <div v-if="surcharge > 0">Acréscimo: <span class="text-primary">+{{ formatCurrency(surcharge) }}</span></div>
+            <div v-if="orderType === 'DELIVERY'">Entrega: <span :class="isFreeDeliveryActive ? 'text-success' : ''">{{ isFreeDeliveryActive ? 'Grátis' : formatCurrency(deliveryFee) }}</span></div>
+            <div class="fw-semibold text-dark">Total: {{ formatCurrency(totalWithDelivery) }}</div>
           </div>
           <div class="mt-3 d-flex justify-content-between">
             <button v-if="!embedded" class="btn btn-outline-secondary" @click="prev">Voltar</button>
@@ -745,10 +769,12 @@ const couponDiscount = ref(0);
 const couponInfo = ref(null);
 const couponLoading = ref(false);
 const couponError = ref('');
+const manualDiscount = ref(0);
+const surcharge = ref(0);
 
 const totalWithDelivery = computed(()=> {
   try{
-    const base = Math.max(0, subtotal.value - (Number(couponDiscount.value || 0)));
+    const base = Math.max(0, subtotal.value - Number(couponDiscount.value || 0) - Number(manualDiscount.value || 0) + Number(surcharge.value || 0));
     return base + Number(deliveryFee.value || 0);
   }catch(e){ return subtotal.value + deliveryFee.value }
 });
@@ -891,7 +917,7 @@ async function finalize(){
     const itemsPayload = cart.value.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes||null, options: it.options||null }));
     // Para pedido balcão sem identificação, usa nome genérico
     const customerNameFinal = newCustomerName.value.trim() || (orderType.value === 'BALCAO' ? 'Cliente Balcão' : '');
-    const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value };
+    const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value, discountMerchant: manualDiscount.value > 0 ? manualDiscount.value : undefined, additionalFees: surcharge.value > 0 ? surcharge.value : undefined };
     // If customer was found and we're using a new address (not selecting existing), persist address to customer first
     try{
       if(orderType.value === 'DELIVERY' && !selectedAddressId.value && foundCustomer.value){
@@ -927,15 +953,17 @@ async function finalize(){
   } catch(e){ console.error('Falha ao criar pedido PDV', e); }
   finally{ finalizing.value=false; }
 }
-function resetWizard(){ 
-  step.value=1; 
-  cart.value=[]; 
-  foundCustomer.value=null; 
-  customerNotFound.value=false; 
-  newCustomerName.value=''; 
-  paymentMethodCode.value=''; 
+function resetWizard(){
+  step.value=1;
+  cart.value=[];
+  foundCustomer.value=null;
+  customerNotFound.value=false;
+  newCustomerName.value='';
+  paymentMethodCode.value='';
   changeFor.value=null;
   phoneInput.value = '';
+  manualDiscount.value = 0;
+  surcharge.value = 0;
   // clear addresses and address form state to avoid reusing previous customer's data
   savedAddresses.value = [];
   selectedAddressId.value = null;
