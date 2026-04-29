@@ -91,27 +91,28 @@ async function runAutomations(conversation, incomingMessage, menuId, instanceNam
   if (!menu) { console.warn('[automations] menu not found:', menuId); return; }
   if (!menu.store?.company?.evolutionEnabled) { console.log('[automations] evolutionEnabled=false — skipping'); return; }
 
-  // 1. Out-of-hours auto-reply
-  if (menu.outOfHoursReply && !isStoreOpen(menu)) {
-    await sendAutoReply(conversation, instanceName, menu.outOfHoursReply);
-    return;
-  }
-
-  // 2. Greeting after 6h of inactivity
+  // 1. Greeting on first contact or after 6h inactivity (takes priority over out-of-hours)
   if (menu.greetingReply) {
     const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
     const recentInbound = await prisma.message.findFirst({
       where: {
         conversationId: conversation.id,
         direction: 'INBOUND',
-        createdAt: { gte: sixHoursAgo, lt: incomingMessage.createdAt },
+        createdAt: { gte: sixHoursAgo },
         id: { not: incomingMessage.id },
       },
       select: { id: true },
     });
     if (!recentInbound) {
       await sendAutoReply(conversation, instanceName, menu.greetingReply);
+      return; // greeting covers first contact — skip out-of-hours for this message
     }
+  }
+
+  // 2. Out-of-hours for subsequent messages when store is closed
+  if (menu.outOfHoursReply && !isStoreOpen(menu)) {
+    await sendAutoReply(conversation, instanceName, menu.outOfHoursReply);
+    return;
   }
 
   // 3. Keyword→tag matching (uses existing tags as keywords)
