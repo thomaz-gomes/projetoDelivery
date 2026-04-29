@@ -218,9 +218,9 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
   }
 });
 
-// GET /riders/map/positions — ADMIN only
+// GET /riders/map/positions — ADMIN/ATTENDANT
 // Shows riders who checked in today. If ?shiftOnly=true, filters by currently active shift.
-ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN', 'ATTENDANT'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
     const now = new Date();
@@ -279,7 +279,7 @@ ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN'), async (r
 });
 
 // GET /riders/map/deliveries — active orders with coordinates for the map
-ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN', 'ATTENDANT'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
     const stores = await prisma.store.findMany({ where: { companyId }, select: { id: true, name: true, address: true } });

@@ -13,7 +13,7 @@ export const nav = [
     { name: 'Respostas Rápidas', to: '/inbox/quick-replies', icon: 'bi bi-chat-quote', moduleKey: 'whatsapp', lockable: true, role: 'ADMIN' },
     { name: 'Automações', to: '/inbox/automation', icon: 'bi bi-robot', moduleKey: 'whatsapp', lockable: true, role: 'ADMIN' },
   ] },
-  { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', moduleKey: 'riders', lockable: true, role: 'ADMIN', children: [
+  { name: 'Entregadores', to: '/riders', icon: 'bi bi-bicycle', moduleKey: 'riders', lockable: true, children: [
     { name: 'Lista', to: '/riders', icon: 'bi bi-people' },
     { name: 'Créditos/Débitos', to: '/rider-adjustments', icon: 'bi bi-credit-card' },
     { name: 'Dashboard', to: '/reports/riders-dashboard', icon: 'bi bi-speedometer2' },
