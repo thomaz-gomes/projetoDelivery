@@ -1488,11 +1488,13 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
       if (address) addrCandidates.push(String(address));
       try {
         const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
-        if (p?.delivery?.deliveryAddress) {
-          const d = p.delivery.deliveryAddress;
+        // Handle both iFood wrapper format (p.order.delivery) and flat format (p.delivery)
+        const d = p?.order?.delivery?.deliveryAddress || p?.delivery?.deliveryAddress || null;
+        if (d) {
           if (d.neighborhood) addrCandidates.push(d.neighborhood);
           if (d.formattedAddress) addrCandidates.push(d.formattedAddress);
           if (d.formatted_address) addrCandidates.push(d.formatted_address);
+          if (d.streetName) addrCandidates.push(d.streetName);
         }
       } catch (e) {}
       if (!addrCandidates.length) return null;

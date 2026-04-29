@@ -13,7 +13,8 @@ export function normalizePhone(n) {
 }
 
 function mapAddressFromPayload(payload) {
-  const a = payload?.delivery?.deliveryAddress || {};
+  // iFood payloads may wrap everything inside `order` — handle both structures
+  const a = payload?.order?.delivery?.deliveryAddress || payload?.delivery?.deliveryAddress || {};
   // support either { coordinates: { latitude, longitude } } or top-level latitude/longitude
   const c = a.coordinates || {};
   const latRawRaw = (c && (c.latitude !== undefined && c.latitude !== null)) ? c.latitude : (a.latitude ?? null);
