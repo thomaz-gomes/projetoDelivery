@@ -1,9 +1,9 @@
 <template>
   <div>
     <!-- Free Delivery Settings -->
-    <div class="card mb-3">
+    <div class="card mb-4">
       <div class="card-body">
-        <h6 class="card-title mb-3"><i class="bi bi-truck me-2"></i>Entrega Grátis</h6>
+        <h6 class="fw-semibold mb-3"><i class="bi bi-truck me-2 text-primary"></i>Entrega Grátis</h6>
         <div class="form-check form-switch mb-3">
           <input class="form-check-input" type="checkbox" id="freeDeliveryToggle" v-model="freeSettings.enabled" />
           <label class="form-check-label fw-semibold" for="freeDeliveryToggle">Ativar entrega grátis</label>
@@ -12,34 +12,42 @@
           <CurrencyInput label="Pedido mínimo para entrega grátis" v-model="freeSettings.minOrder" placeholder="0,00" />
           <div class="form-text">Pedidos com subtotal igual ou acima desse valor terão entrega grátis.</div>
         </div>
-        <button class="btn btn-sm btn-primary" @click="saveSettings" :disabled="savingSettings">
-          <i class="bi bi-check-lg me-1"></i>{{ savingSettings ? 'Salvando...' : 'Salvar configuração' }}
-        </button>
+        <BaseButton variant="primary" size="sm" :loading="savingSettings" @click="saveSettings">
+          <i class="bi bi-check-lg me-1"></i>Salvar configuração
+        </BaseButton>
       </div>
     </div>
 
-    <ListCard title="Bairros" icon="bi bi-geo-alt" :subtitle="list.length ? `${list.length} bairros` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome ou apelido" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
+    <ListCard
+      title="Bairros"
+      icon="bi bi-geo-alt"
+      :subtitle="list.length ? `${list.length} bairros` : ''"
+      :quickSearch="true"
+      quickSearchPlaceholder="Buscar por nome ou apelido"
+      @quick-search="onQuickSearch"
+      @quick-clear="onQuickClear"
+    >
       <template #actions>
-        <div v-if="!editMode" class="d-flex align-items-center gap-2">
-          <button class="btn btn-outline-secondary" @click="openTestModal"><i class="bi bi-search me-1"></i> Testar detecção</button>
-          <label class="btn btn-outline-secondary mb-0" style="cursor:pointer;">
+        <div class="d-flex align-items-center gap-2">
+          <BaseButton variant="outline" size="sm" @click="openTestModal">
+            <i class="bi bi-search me-1"></i>Testar detecção
+          </BaseButton>
+          <BaseButton variant="outline" size="sm" @click="openRetroModal">
+            <i class="bi bi-arrow-clockwise me-1"></i>Taxas retroativas
+          </BaseButton>
+          <label class="btn btn-sm btn-outline-secondary mb-0" style="cursor:pointer;">
             <i class="bi bi-upload me-1"></i> Importar CSV
             <input type="file" accept=".csv" style="display:none" @change="e => handleFileImport(e.target.files[0])" />
           </label>
-          <button class="btn btn-outline-secondary" @click="startEditMode" :disabled="!list.length"><i class="bi bi-pencil me-1"></i> Editar valores</button>
-          <button class="btn btn-primary" @click="openNew"><i class="bi bi-plus-lg me-1"></i> Novo bairro</button>
-        </div>
-        <div v-else class="d-flex align-items-center gap-2">
-          <button class="btn btn-outline-secondary" @click="cancelEditMode" :disabled="savingAll">Cancelar</button>
-          <button class="btn btn-success" @click="saveAll" :disabled="savingAll">
-            <i class="bi bi-check-lg me-1"></i>{{ savingAll ? 'Salvando...' : 'Salvar' }}
-          </button>
+          <BaseButton variant="primary" size="sm" @click="openNew">
+            <i class="bi bi-plus-lg me-1"></i>Novo bairro
+          </BaseButton>
         </div>
       </template>
 
       <template #default>
-        <div v-if="loading" class="text-center py-4">Carregando...</div>
-        <div v-else-if="!editMode && displayed.length === 0" class="alert alert-info">Nenhum bairro cadastrado</div>
+        <div v-if="loading" class="text-center py-4 text-muted">Carregando...</div>
+        <div v-else-if="displayed.length === 0" class="alert alert-info m-3">Nenhum bairro cadastrado</div>
         <div v-else class="table-responsive">
           <table class="table table-hover align-middle">
             <thead>
@@ -52,51 +60,22 @@
               </tr>
             </thead>
             <tbody>
-              <!-- Bulk fill row (edit mode only) -->
-              <tr v-if="editMode" class="table-warning align-middle">
-                <td colspan="2" class="py-2">
-                  <span class="fw-semibold small"><i class="bi bi-lightning-fill text-warning me-1"></i>Preencher todos</span>
-                  <div class="text-muted" style="font-size:0.75rem">Digite um valor para aplicar a todos os bairros visíveis</div>
+              <tr v-for="n in displayed" :key="n.id">
+                <td><strong>{{ n.name }}</strong></td>
+                <td><span class="text-muted small">{{ Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '—') }}</span></td>
+                <td>{{ formatCurrency(n.deliveryFee) }}</td>
+                <td>{{ formatCurrency(n.riderFee) }}</td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <BaseIconButton color="primary" title="Editar" @click="edit(n)">
+                      <i class="bi bi-pencil-square"></i>
+                    </BaseIconButton>
+                    <BaseIconButton color="danger" title="Remover" @click="removeNeighborhood(n)">
+                      <i class="bi bi-trash"></i>
+                    </BaseIconButton>
+                  </div>
                 </td>
-                <td class="py-2">
-                  <CurrencyInput v-model="bulkDeliveryFee" placeholder="Aplicar a todos" style="max-width:140px" />
-                </td>
-                <td class="py-2">
-                  <CurrencyInput v-model="bulkRiderFee" placeholder="Aplicar a todos" style="max-width:140px" />
-                </td>
-                <td></td>
               </tr>
-
-              <!-- Normal mode rows -->
-              <template v-if="!editMode">
-                <tr v-for="n in displayed" :key="n.id">
-                  <td><strong>{{ n.name }}</strong></td>
-                  <td><span class="text-muted small">{{ Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '—') }}</span></td>
-                  <td>{{ formatCurrency(n.deliveryFee) }}</td>
-                  <td>{{ formatCurrency(n.riderFee) }}</td>
-                  <td>
-                    <div class="d-flex gap-1">
-                      <button class="btn btn-sm btn-light" @click="edit(n)" title="Editar"><i class="bi bi-pencil-square"></i></button>
-                      <button class="btn btn-sm btn-outline-danger" @click="removeNeighborhood(n)" title="Remover"><i class="bi bi-trash"></i></button>
-                    </div>
-                  </td>
-                </tr>
-              </template>
-
-              <!-- Edit mode rows -->
-              <template v-else>
-                <tr v-for="row in displayedEditRows" :key="row.id">
-                  <td><strong>{{ row.name }}</strong></td>
-                  <td><span class="text-muted small">{{ Array.isArray(row.aliases) ? row.aliases.join(', ') : (row.aliases || '—') }}</span></td>
-                  <td>
-                    <CurrencyInput v-model="row.deliveryFee" style="max-width:140px" @update:modelValue="row.deliveryOverridden = true" />
-                  </td>
-                  <td>
-                    <CurrencyInput v-model="row.riderFee" style="max-width:140px" @update:modelValue="row.riderOverridden = true" />
-                  </td>
-                  <td></td>
-                </tr>
-              </template>
             </tbody>
           </table>
         </div>
@@ -114,62 +93,150 @@
     </ListCard>
 
     <!-- Form Modal -->
-    <div v-if="showForm" class="modal-backdrop d-block" style="background:rgba(0,0,0,0.4);" @click.self="closeForm">
-      <div class="modal d-block" tabindex="-1" style="max-width:550px;margin:80px auto;">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">{{ form.id ? 'Editar bairro' : 'Novo bairro' }}</h5>
-              <button type="button" class="btn-close" @click="closeForm"></button>
-            </div>
-            <div class="modal-body">
-              <form @submit.prevent="save">
-                <div class="mb-3">
-                  <TextInput label="Nome" v-model="form.name" placeholder="Nome do bairro" required />
+    <div v-if="showForm" class="modal-backdrop" @click.self="closeForm">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">{{ form.id ? 'Editar bairro' : 'Novo bairro' }}</h5>
+            <button type="button" class="btn-close" @click="closeForm"></button>
+          </div>
+          <div class="modal-body">
+            <form @submit.prevent="save">
+              <div class="mb-3">
+                <TextInput label="Nome" v-model="form.name" placeholder="Nome do bairro" required />
+              </div>
+              <div class="mb-3">
+                <TextInput label="Apelidos" v-model="form.aliases" placeholder="Separados por vírgula" />
+                <div class="form-text">Nomes alternativos para detecção automática</div>
+              </div>
+              <div class="row g-3">
+                <div class="col-6">
+                  <CurrencyInput label="Taxa entrega" v-model="form.deliveryFee" placeholder="0,00" />
                 </div>
-                <div class="mb-3">
-                  <TextInput label="Apelidos" v-model="form.aliases" placeholder="Separados por vírgula" />
-                  <div class="form-text">Nomes alternativos para detecção automática</div>
+                <div class="col-6">
+                  <CurrencyInput label="Taxa motoboy" v-model="form.riderFee" placeholder="0,00" />
                 </div>
-                <div class="row g-3">
-                  <div class="col-6">
-                    <CurrencyInput label="Taxa entrega" v-model="form.deliveryFee" placeholder="0,00" />
-                  </div>
-                  <div class="col-6">
-                    <CurrencyInput label="Taxa motoboy" v-model="form.riderFee" placeholder="0,00" />
-                  </div>
-                </div>
-              </form>
-            </div>
-            <div class="modal-footer">
-              <button class="btn btn-outline-secondary" @click="closeForm">Cancelar</button>
-              <button class="btn btn-primary" @click="save" :disabled="saving">{{ saving ? 'Salvando...' : 'Salvar' }}</button>
-            </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <BaseButton variant="outline" @click="closeForm">Cancelar</BaseButton>
+            <BaseButton variant="primary" :loading="saving" @click="save">Salvar</BaseButton>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Test Match Modal -->
-    <div v-if="showTest" class="modal-backdrop d-block" style="background:rgba(0,0,0,0.4);" @click.self="closeTest">
-      <div class="modal d-block" tabindex="-1" style="max-width:550px;margin:80px auto;">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Testar detecção de bairro</h5>
-              <button type="button" class="btn-close" @click="closeTest"></button>
+    <div v-if="showTest" class="modal-backdrop" @click.self="closeTest">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Testar detecção de bairro</h5>
+            <button type="button" class="btn-close" @click="closeTest"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small text-muted mb-2">Cole um texto de endereço e verifique qual bairro é detectado pelo sistema.</p>
+            <textarea v-model="testText" class="form-control mb-3" rows="3" placeholder="Ex: Rua das Flores, Centro, São Paulo"></textarea>
+            <div v-if="matchResult !== null" class="alert mb-0" :class="matchResult ? 'alert-success' : 'alert-warning'">
+              <strong>Resultado:</strong> {{ matchResult || 'Nenhum bairro detectado' }}
             </div>
-            <div class="modal-body">
-              <p class="small text-muted mb-2">Cole um texto de endereço e verifique qual bairro é detectado pelo sistema.</p>
-              <textarea v-model="testText" class="form-control mb-3" rows="3" placeholder="Ex: Rua das Flores, Centro, São Paulo"></textarea>
-              <div v-if="matchResult !== null" class="alert mb-0" :class="matchResult ? 'alert-success' : 'alert-warning'">
-                <strong>Resultado:</strong> {{ matchResult || 'Nenhum bairro detectado' }}
+          </div>
+          <div class="modal-footer">
+            <BaseButton variant="outline" @click="closeTest">Fechar</BaseButton>
+            <BaseButton variant="primary" :loading="testing" @click="testMatch">Testar</BaseButton>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Retroactive Rider Fees Modal -->
+    <div v-if="showRetro" class="modal-backdrop" @click.self="closeRetroModal">
+      <div class="modal-dialog modal-dialog--wide">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-arrow-clockwise me-2"></i>Taxas retroativas de motoboys</h5>
+            <button type="button" class="btn-close" @click="closeRetroModal"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small text-muted mb-3">
+              Recalcula a taxa de entrega dos motoboys para pedidos concluídos cujo bairro não foi detectado no momento da conclusão.
+              Use <strong>Pré-visualizar</strong> antes de aplicar.
+            </p>
+
+            <div class="row g-3 mb-4">
+              <div class="col-6">
+                <TextInput label="De (opcional)" v-model="retro.startDate" type="date" />
+              </div>
+              <div class="col-6">
+                <TextInput label="Até (opcional)" v-model="retro.endDate" type="date" />
               </div>
             </div>
-            <div class="modal-footer">
-              <button class="btn btn-outline-secondary" @click="closeTest">Fechar</button>
-              <button class="btn btn-primary" @click="testMatch" :disabled="testing">{{ testing ? 'Testando...' : 'Testar' }}</button>
+
+            <!-- Preview results -->
+            <div v-if="retro.preview" class="retro-preview">
+              <div class="d-flex gap-3 mb-3">
+                <div class="retro-stat">
+                  <div class="retro-stat__value">{{ retro.preview.checked }}</div>
+                  <div class="retro-stat__label">Verificados</div>
+                </div>
+                <div class="retro-stat retro-stat--success">
+                  <div class="retro-stat__value">{{ retro.preview.corrected }}</div>
+                  <div class="retro-stat__label">Serão corrigidos</div>
+                </div>
+                <div class="retro-stat">
+                  <div class="retro-stat__value">{{ retro.preview.skipped }}</div>
+                  <div class="retro-stat__label">Sem match</div>
+                </div>
+                <div class="retro-stat retro-stat--primary">
+                  <div class="retro-stat__value">{{ formatCurrency(retro.preview.totalCredited) }}</div>
+                  <div class="retro-stat__label">Total a creditar</div>
+                </div>
+              </div>
+
+              <div v-if="retro.preview.results.length" class="table-responsive" style="max-height:240px;overflow-y:auto;">
+                <table class="table table-hover align-middle mb-0" style="font-size:0.8rem;">
+                  <thead>
+                    <tr>
+                      <th>Bairro do pedido</th>
+                      <th>Bairro detectado</th>
+                      <th class="text-end">Taxa</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="r in retro.preview.results" :key="r.orderId">
+                      <td>{{ r.deliveryNeighborhood || '—' }}</td>
+                      <td>{{ r.matchedNeighborhood || '—' }}</td>
+                      <td class="text-end">{{ formatCurrency(r.riderFee) }}</td>
+                      <td>
+                        <span v-if="r.willCredit" class="badge bg-success">Corrigir</span>
+                        <span v-else class="badge bg-light text-dark">Sem match</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
+
+            <div v-if="retro.applied" class="alert alert-success mb-0">
+              <i class="bi bi-check-circle me-2"></i>
+              <strong>{{ retro.applied.corrected }}</strong> pedidos corrigidos — total creditado: <strong>{{ formatCurrency(retro.applied.totalCredited) }}</strong>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <BaseButton variant="outline" @click="closeRetroModal">Fechar</BaseButton>
+            <BaseButton variant="outline" :loading="retro.previewing" @click="runRetro(true)">
+              <i class="bi bi-eye me-1"></i>Pré-visualizar
+            </BaseButton>
+            <BaseButton
+              variant="secondary"
+              :loading="retro.applying"
+              :disabled="!retro.preview || retro.preview.corrected === 0"
+              @click="runRetro(false)"
+            >
+              <i class="bi bi-check-lg me-1"></i>Aplicar
+            </BaseButton>
           </div>
         </div>
       </div>
@@ -178,7 +245,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 import { formatCurrency } from '../utils/formatters.js'
 import ListCard from '@/components/ListCard.vue'
@@ -209,7 +276,9 @@ async function saveSettings() {
   try {
     await api.patch('/neighborhoods/settings', {
       freeDeliveryEnabled: freeSettings.value.enabled,
-      freeDeliveryMinOrder: freeSettings.value.enabled ? parseFloat(String(freeSettings.value.minOrder || 0).replace(',', '.')) || 0 : null,
+      freeDeliveryMinOrder: freeSettings.value.enabled
+        ? parseFloat(String(freeSettings.value.minOrder || 0).replace(',', '.')) || 0
+        : null,
     })
     Swal.fire({ icon: 'success', text: 'Configuração salva', timer: 1500, showConfirmButton: false })
   } catch (e) {
@@ -228,91 +297,6 @@ const displayed = computed(() => {
   })
 })
 
-// Bulk edit mode
-const editMode = ref(false)
-const editRows = ref([])
-const bulkDeliveryFee = ref(null)
-const bulkRiderFee = ref(null)
-const savingAll = ref(false)
-
-const displayedEditRows = computed(() => {
-  if (!q.value) return editRows.value
-  const term = q.value.toLowerCase()
-  return editRows.value.filter(row => {
-    const aliases = Array.isArray(row.aliases) ? row.aliases.join(' ') : (row.aliases || '')
-    return ((row.name || '') + ' ' + aliases).toLowerCase().includes(term)
-  })
-})
-
-watch(bulkDeliveryFee, (val) => {
-  if (val == null) return
-  editRows.value.forEach(row => {
-    if (!row.deliveryOverridden) row.deliveryFee = val
-  })
-})
-
-watch(bulkRiderFee, (val) => {
-  if (val == null) return
-  editRows.value.forEach(row => {
-    if (!row.riderOverridden) row.riderFee = val
-  })
-})
-
-function startEditMode() {
-  editRows.value = list.value.map(n => ({
-    id: n.id,
-    name: n.name,
-    aliases: n.aliases,
-    deliveryFee: n.deliveryFee ?? 0,
-    riderFee: n.riderFee ?? 0,
-    deliveryOverridden: false,
-    riderOverridden: false,
-  }))
-  bulkDeliveryFee.value = null
-  bulkRiderFee.value = null
-  editMode.value = true
-}
-
-function cancelEditMode() {
-  editMode.value = false
-  editRows.value = []
-  bulkDeliveryFee.value = null
-  bulkRiderFee.value = null
-}
-
-async function saveAll() {
-  savingAll.value = true
-  let saved = 0, errors = 0
-  try {
-    for (const row of editRows.value) {
-      try {
-        await api.patch(`/neighborhoods/${row.id}`, {
-          name: row.name,
-          aliases: Array.isArray(row.aliases) ? row.aliases : (row.aliases || '').split(',').map(s => s.trim()).filter(Boolean),
-          deliveryFee: Number(row.deliveryFee) || 0,
-          riderFee: Number(row.riderFee) || 0,
-        })
-        saved++
-      } catch (e) {
-        errors++
-        console.error(`Falha ao salvar bairro ${row.id}`, e)
-      }
-    }
-    await fetchList()
-    cancelEditMode()
-    Swal.fire({
-      icon: errors ? 'warning' : 'success',
-      text: `${saved} bairro(s) salvo(s)` + (errors ? `, ${errors} com erro` : ''),
-      timer: 2000, showConfirmButton: false
-    })
-  } catch (e) {
-    console.error(e)
-    Swal.fire({ icon: 'error', text: 'Erro ao salvar bairros' })
-  } finally {
-    savingAll.value = false
-  }
-}
-
 // Form
 const showForm = ref(false)
 const form = ref({ id: null, name: '', aliases: '', deliveryFee: '0,00', riderFee: '0,00' })
@@ -324,6 +308,17 @@ const testText = ref('')
 const testing = ref(false)
 const matchResult = ref(null)
 
+// Retroactive fees
+const showRetro = ref(false)
+const retro = ref({
+  startDate: '',
+  endDate: '',
+  previewing: false,
+  applying: false,
+  preview: null,
+  applied: null,
+})
+
 // Import
 const importing = ref(false)
 const importProgress = ref({ total: 0, done: 0, errors: [] })
@@ -334,7 +329,6 @@ async function fetchList() {
     const { data } = await api.get('/neighborhoods')
     list.value = data
   } catch (e) {
-    console.error(e)
     Swal.fire({ icon: 'error', text: 'Falha ao carregar bairros' })
   } finally {
     loading.value = false
@@ -345,7 +339,6 @@ function openNew() {
   form.value = { id: null, name: '', aliases: '', deliveryFee: '0,00', riderFee: '0,00' }
   showForm.value = true
 }
-
 function closeForm() { showForm.value = false }
 
 function edit(n) {
@@ -354,7 +347,7 @@ function edit(n) {
     name: n.name,
     aliases: Array.isArray(n.aliases) ? n.aliases.join(', ') : (n.aliases || '').toString(),
     deliveryFee: (n.deliveryFee || 0).toString(),
-    riderFee: (n.riderFee || 0).toString()
+    riderFee: (n.riderFee || 0).toString(),
   }
   showForm.value = true
 }
@@ -378,7 +371,6 @@ async function save() {
     closeForm()
     Swal.fire({ icon: 'success', text: 'Bairro salvo com sucesso', timer: 1500, showConfirmButton: false })
   } catch (e) {
-    console.error(e)
     Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao salvar bairro' })
   } finally {
     saving.value = false
@@ -401,7 +393,6 @@ async function removeNeighborhood(n) {
     await fetchList()
     Swal.fire({ icon: 'success', text: 'Bairro removido', timer: 1500, showConfirmButton: false })
   } catch (e) {
-    console.error(e)
     Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao remover bairro' })
   }
 }
@@ -418,10 +409,54 @@ async function testMatch() {
     const { data } = await api.post('/neighborhoods/match', { text: testText.value })
     matchResult.value = data?.match ?? null
   } catch (e) {
-    console.error('Match test failed', e)
     matchResult.value = null
   } finally {
     testing.value = false
+  }
+}
+
+// Retroactive fees
+function openRetroModal() {
+  retro.value = { startDate: '', endDate: '', previewing: false, applying: false, preview: null, applied: null }
+  showRetro.value = true
+}
+function closeRetroModal() { showRetro.value = false }
+
+async function runRetro(dryRun) {
+  if (dryRun) {
+    retro.value.previewing = true
+    retro.value.preview = null
+  } else {
+    const confirm = await Swal.fire({
+      title: 'Aplicar taxas retroativas?',
+      text: `Serão creditados ${retro.value.preview.corrected} pedidos (${formatCurrency(retro.value.preview.totalCredited)}). Esta ação não pode ser desfeita.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Aplicar',
+      cancelButtonText: 'Cancelar',
+    })
+    if (!confirm.isConfirmed) return
+    retro.value.applying = true
+  }
+
+  try {
+    const body = { dryRun }
+    if (retro.value.startDate) body.startDate = retro.value.startDate
+    if (retro.value.endDate) body.endDate = retro.value.endDate
+
+    const { data } = await api.post('/orders/retroactive-rider-fees', body)
+
+    if (dryRun) {
+      retro.value.preview = data
+    } else {
+      retro.value.applied = data
+      retro.value.preview = null
+    }
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao processar taxas retroativas' })
+  } finally {
+    retro.value.previewing = false
+    retro.value.applying = false
   }
 }
 
@@ -465,13 +500,12 @@ function parseCsv(text) {
   }
 
   const header = parseLine(nonEmpty.shift()).map(h => h.replace(/^"|"$/g, ''))
-  const rows = nonEmpty.map(line => {
+  return nonEmpty.map(line => {
     const cols = parseLine(line)
     const obj = {}
     header.forEach((h, i) => { obj[h] = (cols[i] ?? '').replace(/^"|"$/g, '') })
     return obj
   })
-  return rows
 }
 
 async function handleFileImport(file) {
@@ -511,9 +545,66 @@ async function handleFileImport(file) {
   }
 }
 
-onMounted(() => { fetchList(); fetchSettings(); })
+onMounted(() => { fetchList(); fetchSettings() })
 </script>
 
 <style scoped>
-.modal-backdrop { position: fixed; inset: 0; display: flex; align-items: flex-start; justify-content: center; z-index: 1050; }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+  z-index: 1050;
+}
+
+.modal-dialog {
+  width: 100%;
+  max-width: 550px;
+}
+
+.modal-dialog--wide {
+  max-width: 720px;
+}
+
+/* Retroactive preview stats */
+.retro-preview {
+  background: var(--bg-input);
+  border-radius: var(--border-radius-sm);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.retro-stat {
+  flex: 1;
+  text-align: center;
+  padding: 0.625rem;
+  background: var(--bg-card);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.retro-stat--success { border-color: var(--success-light); }
+.retro-stat--primary { border-color: var(--primary-light); }
+
+.retro-stat__value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.retro-stat--success .retro-stat__value { color: var(--success-dark); }
+.retro-stat--primary .retro-stat__value { color: var(--primary); }
+
+.retro-stat__label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
 </style>
