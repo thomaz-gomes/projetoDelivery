@@ -232,7 +232,7 @@ saasRouter.get('/subscription/:companyId', requireRole('SUPER_ADMIN'), async (re
 
 // Get enabled modules for current user's company (ADMIN)
 // Merges modules from plan + add-on subscriptions
-saasRouter.get('/modules/me', requireRole('ADMIN'), async (req, res) => {
+saasRouter.get('/modules/me', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const companyId = req.user.companyId
   try {
     // 1. Modules from add-on subscriptions
