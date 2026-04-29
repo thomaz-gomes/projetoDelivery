@@ -243,18 +243,37 @@ export async function notifyCustomerStatus(orderId, newStatus) {
 
     const customerName = order.customerName || order.customerFullName || '';
     const shopName = (order.company && order.company.name) || (order.store && order.store.name) || 'sua loja';
-      const shortId = (await formatDisplayNumber(order)) || order.displayId || String(order.id).slice(0,8);
+    const shortId = (await formatDisplayNumber(order)) || order.displayId || String(order.id).slice(0, 8);
 
     const { lat, lng } = extractCoords(order);
 
-    const text =
-  `Olá ${customerName || ''}, aqui é o atendente virtual do *${shopName}* 👋
+    const DEFAULT_TEMPLATE =
+`Olá {{nome}}, aqui é o atendente virtual do *{{loja}}* 👋
 
-  *Seu pedido foi atualizado:* *${statusPt}* 🎯
+*Seu pedido foi atualizado:* *{{status}}* 🎯
 
-  Fique tranquilo(a) que vou enviar as atualizações do status do seu pedido por aqui. 😄
+Fique tranquilo(a) que vou enviar as atualizações do status do seu pedido por aqui. 😄
 
-  *️⃣ Nº do pedido:* ${shortId}`;
+*️⃣ Nº do pedido:* {{pedido}}`;
+
+    const templates = (order.company?.orderNotifyTemplates && typeof order.company.orderNotifyTemplates === 'object')
+      ? order.company.orderNotifyTemplates
+      : {};
+
+    const raw = Object.prototype.hasOwnProperty.call(templates, newStatus)
+      ? String(templates[newStatus])   // may be empty string (= disabled)
+      : DEFAULT_TEMPLATE;
+
+    if (!raw.trim()) {
+      console.log(`[notifyCustomerStatus] template vazio para status ${newStatus} — notificação suprimida`);
+      return;
+    }
+
+    const text = raw
+      .replace(/\{\{nome\}\}/g, customerName)
+      .replace(/\{\{loja\}\}/g, shopName)
+      .replace(/\{\{status\}\}/g, statusPt)
+      .replace(/\{\{pedido\}\}/g, shortId);
 
     console.log('[notifyCustomerStatus] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0,120) });
     await evoSendText({ instanceName: inst.instanceName, to: phone, text }).then(r => {

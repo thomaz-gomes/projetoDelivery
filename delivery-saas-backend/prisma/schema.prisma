@@ -151,6 +151,12 @@ model Company {
   // ---- Free Delivery ----
   freeDeliveryEnabled  Boolean  @default(false)
   freeDeliveryMinOrder Decimal?
+
+  // ---- Order notification templates ----
+  // JSON map of OrderStatus -> WhatsApp message template string.
+  // Variables: {{nome}}, {{loja}}, {{status}}, {{pedido}}.
+  // Absent key = use built-in default. Empty string = do not send for that status.
+  orderNotifyTemplates Json?
 }
 
 model User {
