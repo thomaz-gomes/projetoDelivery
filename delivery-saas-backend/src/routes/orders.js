@@ -1449,6 +1449,7 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
         id: true,
         displayId: true,
         displaySimple: true,
+        externalId: true,
         riderId: true,
         deliveryNeighborhood: true,
         address: true,
@@ -1526,7 +1527,7 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
 
       results.push({
         orderId: order.id,
-        orderNumber: order.displayId || (order.displaySimple ? `#${order.displaySimple}` : null),
+        orderNumber: order.displaySimple ? String(order.displaySimple) : (order.displayId || order.externalId?.slice(-6)?.toUpperCase() || order.id.slice(-6).toUpperCase()),
         orderDate: order.createdAt,
         transactionId: existingTxn?.id || null,
         riderId: order.riderId,
