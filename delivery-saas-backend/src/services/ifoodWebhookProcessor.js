@@ -305,7 +305,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     customerId: mapped.customerId || null,
     customerPhone: mapped.customerPhone,
     address: buildConcatenatedAddress(mapped.raw) || mapped.address,
-    deliveryNeighborhood: (mapped.raw && (mapped.raw.delivery && mapped.raw.delivery.deliveryAddress && mapped.raw.delivery.deliveryAddress.neighborhood)) || (normalizeDeliveryAddressFromPayload(mapped.raw || {})?.neighborhood) || mapped.raw?.neighborhood || null,
+    deliveryNeighborhood: (mapped.raw?.order?.delivery?.deliveryAddress?.neighborhood) || (mapped.raw?.delivery?.deliveryAddress?.neighborhood) || (normalizeDeliveryAddressFromPayload(mapped.raw || {})?.neighborhood) || null,
     latitude: mapped.latitude,
     longitude: mapped.longitude,
     total: mapped.total,
