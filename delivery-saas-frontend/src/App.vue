@@ -45,6 +45,7 @@ function onScannerModalClose() {
 const saas = useSaasStore();
 const modules = useModulesStore();
 const router = useRouter();
+const route = useRoute();
 
 // quick menu (mobile header) state copied minimal version from Sidebar
 const quickMenuOpen = ref(false);
@@ -144,6 +145,51 @@ watch(() => auth.user, (user) => {
     addOnStore.fetchPendingInvoiceCount()
   }
 }, { immediate: true })
+function injectRiderPwaMeta() {
+  document.querySelectorAll('link[rel="manifest"]').forEach(el => el.remove())
+  const manifest = document.createElement('link')
+  manifest.rel = 'manifest'
+  manifest.href = '/rider-manifest.webmanifest'
+  document.head.appendChild(manifest)
+
+  document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.remove())
+  const icon = document.createElement('link')
+  icon.rel = 'apple-touch-icon'
+  icon.href = '/icons/rider-192.svg'
+  document.head.appendChild(icon)
+
+  let titleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+  if (!titleMeta) {
+    titleMeta = document.createElement('meta')
+    titleMeta.name = 'apple-mobile-web-app-title'
+    document.head.appendChild(titleMeta)
+  }
+  titleMeta.content = 'Entregador'
+}
+
+function removeRiderPwaMeta() {
+  document.querySelectorAll('link[rel="manifest"]').forEach(el => el.remove())
+  document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.remove())
+  const titleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+  if (titleMeta) titleMeta.remove()
+}
+
+watch(() => route.path, (newPath, oldPath) => {
+  const isRider = newPath === '/rider' || newPath.startsWith('/rider/')
+  const wasRider = !oldPath || oldPath === '/rider' || oldPath.startsWith('/rider/')
+  if (isRider && !wasRider) {
+    document.title = 'Core Delivery — Entregador'
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.content = '#198754'
+    injectRiderPwaMeta()
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw-rider.js').catch(() => {})
+    }
+  } else if (!isRider && wasRider) {
+    removeRiderPwaMeta()
+  }
+})
+
 onMounted(() => {
   // Start barcode scanner listener
   scanner.start()
@@ -152,11 +198,12 @@ onMounted(() => {
   if (!route.path.startsWith('/public')) {
     loadMenusWidget().catch(()=>{});
   }
-  // Register rider service worker for /rider/* routes
+  // Inject rider PWA meta on initial load if already on a rider route
   if (route.path === '/rider' || route.path.startsWith('/rider/')) {
     document.title = 'Core Delivery — Entregador';
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = '#198754';
+    injectRiderPwaMeta()
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw-rider.js').catch(() => {});
     }
@@ -212,7 +259,6 @@ watch(() => inboxStore.unreadTotal, (total) => {
 const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules, nav));
 
 // show the dashboard layout (sidebar/topbar) for all routes except the login page and public menu
-const route = useRoute();
 const isInboxRoute = computed(() => route?.path?.startsWith('/inbox') === true);
 const isRiderRoute = computed(() => route?.path?.startsWith('/rider') === true);
 const showLayout = computed(() => {
