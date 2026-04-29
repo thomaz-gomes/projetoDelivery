@@ -441,7 +441,7 @@ ridersRouter.delete('/shifts/:id', async (req, res) => {
 // POST /riders/me/checkin — motoboy faz check-in
 ridersRouter.post('/me/checkin', async (req, res) => {
   const userId = req.user.id;
-  const rider = await prisma.rider.findFirst({ where: { userId } });
+  const rider = await prisma.rider.findFirst({ where: { userId, active: true } });
   if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
 
   const { lat, lng, shiftId } = req.body;
@@ -543,7 +543,7 @@ ridersRouter.post('/me/checkin', async (req, res) => {
 // GET /riders/me/checkins — histórico de check-ins do motoboy
 ridersRouter.get('/me/checkins', async (req, res) => {
   const userId = req.user.id;
-  const rider = await prisma.rider.findFirst({ where: { userId } });
+  const rider = await prisma.rider.findFirst({ where: { userId, active: true } });
   if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
 
   const { from, to } = req.query;

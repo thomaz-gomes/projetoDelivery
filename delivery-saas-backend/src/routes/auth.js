@@ -67,7 +67,7 @@ authRouter.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, role: true, name: true, companyId: true, emailVerified: true } });
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
-    const rider = await prisma.rider.findFirst({ where: { userId: user.id }, select: { id: true } });
+    const rider = await prisma.rider.findFirst({ where: { userId: user.id, active: true }, select: { id: true } });
     return res.json({ user: { ...user, riderId: rider?.id ?? null, needsSetup: !user.companyId } });
   } catch (e) {
     return res.status(500).json({ message: 'Erro ao buscar usuário' });
@@ -129,10 +129,10 @@ authRouter.post('/login-whatsapp', async (req, res) => {
       const user = await prisma.user.findFirst({
         where: {
           OR: [
-            { rider: { whatsapp: phoneClean } },
-            { rider: { whatsapp: digits } },
-            { rider: { whatsapp: { endsWith: digits } } },
-            { rider: { whatsapp: { contains: digits } } }
+            { rider: { whatsapp: phoneClean, active: true } },
+            { rider: { whatsapp: digits, active: true } },
+            { rider: { whatsapp: { endsWith: digits }, active: true } },
+            { rider: { whatsapp: { contains: digits }, active: true } }
           ]
         },
         include: { rider: true }
@@ -147,6 +147,7 @@ authRouter.post('/login-whatsapp', async (req, res) => {
     try {
         const rider = await prisma.rider.findFirst({
           where: {
+            active: true,
             OR: [
               { whatsapp: phoneClean },
               { whatsapp: digits },
