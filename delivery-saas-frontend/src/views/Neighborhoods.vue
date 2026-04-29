@@ -560,6 +560,10 @@ onMounted(() => { fetchList(); fetchSettings() })
   z-index: 1050;
 }
 
+.modal-content {
+  background: #fff;
+}
+
 .modal-dialog {
   width: 100%;
   max-width: 550px;

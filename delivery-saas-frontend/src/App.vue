@@ -517,7 +517,8 @@ button#quickMenuDropdown {
     padding: 2px 4px;
     border:none;
 }
-button#quickMenuDropdown[aria-expanded="true"], .btn:first-child:active {
+button#quickMenuDropdown[aria-expanded="true"],
+button#quickMenuDropdown:active {
   background: #89d136 !important;
   border-color: #89d136 !important;
   border-radius: 16px 16px 0px 0px;
