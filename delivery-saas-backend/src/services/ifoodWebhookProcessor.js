@@ -882,8 +882,8 @@ export async function processIFoodWebhook(eventId) {
             // Rider account credit
             try {
               if (savedOrder.riderId) {
-                const riderAccountService = await import('./riderAccountService.js').then(m => m.default || m);
-                await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId, riderId: savedOrder.riderId, orderId: savedOrder.id, orderDate: savedOrder.updatedAt || new Date() });
+                const riderAccountService = await import('./riderAccount.js').then(m => m.default || m);
+                await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId, riderId: savedOrder.riderId, orderId: savedOrder.id, neighborhoodName: savedOrder.deliveryNeighborhood || null, orderDate: savedOrder.updatedAt || new Date() });
               }
             } catch (e) { console.error('[iFood Processor] rider credit error:', e?.message); }
 

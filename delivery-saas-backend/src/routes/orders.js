@@ -417,7 +417,6 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
     if (!isIfood && isPrepaid) {
       try {
         if (updated.riderId) {
-          const riderAccountService = await import('../services/riderAccountService.js').then(m => m.default || m);
           await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId: updated.companyId, riderId: updated.riderId, orderId: updated.id, orderDate: updated.updatedAt || new Date() });
         }
       } catch (e) { console.error('[complete/prepaid] rider credit error:', e?.message); }
