@@ -642,8 +642,13 @@
                         <label class="form-label small">Bairro</label>
                         <SelectInput   v-model="_newAddrNeighborhood"  class="form-select">
                           <option value="" disabled>Escolha um bairro...</option>
-                          <option v-for="n in neighborhoodsList" :key="n.id" :value="n.name">{{ n.name }} — {{ formatCurrency(n.deliveryFee) }}</option>
+                          <option v-for="n in neighborhoodsList" :key="n.id" :value="n.name">{{ n.name }} — {{ isFreeDeliveryActive ? 'Grátis' : formatCurrency(n.deliveryFee) }}</option>
                         </SelectInput>
+                        <div v-if="freeDeliveryEnabled && freeDeliveryMinOrder != null" class="mt-1 small" :class="isFreeDeliveryActive ? 'text-success fw-semibold' : 'text-muted'">
+                          <i class="bi bi-truck me-1"></i>
+                          <span v-if="isFreeDeliveryActive">Entrega grátis ativa!</span>
+                          <span v-else>Falta {{ formatCurrency(freeDeliveryMinOrder - subtotal) }} para entrega grátis</span>
+                        </div>
                       </div>
                     <!-- Buttons removed: advancing will save and proceed; clear removed per UX request -->
                   </div>
@@ -675,8 +680,13 @@
                       <label class="form-label small">Bairro</label>
                       <SelectInput   v-model="_newAddrNeighborhood"  class="form-select">
                         <option value="" disabled>Escolha um bairro...</option>
-                        <option v-for="n in neighborhoodsList" :key="n.id" :value="n.name">{{ n.name }} — {{ formatCurrency(n.deliveryFee) }}</option>
+                        <option v-for="n in neighborhoodsList" :key="n.id" :value="n.name">{{ n.name }} — {{ isFreeDeliveryActive ? 'Grátis' : formatCurrency(n.deliveryFee) }}</option>
                       </SelectInput>
+                      <div v-if="freeDeliveryEnabled && freeDeliveryMinOrder != null" class="mt-1 small" :class="isFreeDeliveryActive ? 'text-success fw-semibold' : 'text-muted'">
+                        <i class="bi bi-truck me-1"></i>
+                        <span v-if="isFreeDeliveryActive">Entrega grátis ativa!</span>
+                        <span v-else>Falta {{ formatCurrency(freeDeliveryMinOrder - subtotal) }} para entrega grátis</span>
+                      </div>
                     </div>
                     <div class="mb-2"><TextInput v-model="_newAddrReference" placeholder="Referência (ex: próximo ao mercado)" inputClass="form-control" /></div>
                     <div class="mb-2"><TextInput v-model="_newAddrObservation" placeholder="Observação (ex: deixar na portaria)" inputClass="form-control" /></div>
@@ -1713,6 +1723,20 @@ if(savedCustomer) {
 const neighborhood = ref('');
 // list of neighborhoods (public) for this company
 const neighborhoodsList = ref([])
+const freeDeliveryEnabled = ref(false)
+const freeDeliveryMinOrder = ref(null)
+
+// Whether free delivery is currently active for the current cart subtotal
+const isFreeDeliveryActive = computed(() => {
+  try{
+    return freeDeliveryEnabled.value && freeDeliveryMinOrder.value != null && subtotal.value >= freeDeliveryMinOrder.value
+  }catch(e){ return false }
+})
+
+function _applyFreeDelivery(baseFee){
+  if(baseFee > 0 && freeDeliveryEnabled.value && freeDeliveryMinOrder.value != null && subtotal.value >= freeDeliveryMinOrder.value) return 0
+  return baseFee
+}
 
 const deliveryFee = computed(() => {
   try{
@@ -1741,7 +1765,7 @@ const deliveryFee = computed(() => {
         console.debug('[debug] deliveryFee lookup:', { needleRaw, found, neighborhoodsCount: (neighborhoodsList.value||[]).length })
       }
     }catch(e){}
-    return Number(found?.deliveryFee || 0)
+    return _applyFreeDelivery(Number(found?.deliveryFee || 0))
   }catch(e){ return 0 }
 })
 // explicit delivery fee used by UI/totals to ensure fee is calculated
@@ -1766,7 +1790,7 @@ function refreshDeliveryFee(){
       if(normalize(x.name) === needle) { found = x; break }
       if(Array.isArray(x.aliases) && x.aliases.some(a => normalize(a) === needle)){ found = x; break }
     }
-    currentDeliveryFee.value = Number(found?.deliveryFee || 0)
+    currentDeliveryFee.value = _applyFreeDelivery(Number(found?.deliveryFee || 0))
     if(typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV){
       console.debug('[debug] refreshDeliveryFee ->', { neighborhood: neighborhood.value, currentDeliveryFee: currentDeliveryFee.value, found })
     }
@@ -3787,8 +3811,14 @@ onMounted(async ()=>{
     }
     // fetch public neighborhoods for this company (used to compute delivery fee)
     try{
-  const nr = await api.get(publicPath(`/public/${companyId}/neighborhoods`))
-      neighborhoodsList.value = Array.isArray(nr.data) ? nr.data : []
+      const nr = await api.get(publicPath(`/public/${companyId}/neighborhoods`))
+      if(nr.data && Array.isArray(nr.data.neighborhoods)){
+        neighborhoodsList.value = nr.data.neighborhoods
+        freeDeliveryEnabled.value = nr.data.freeDeliveryEnabled ?? false
+        freeDeliveryMinOrder.value = nr.data.freeDeliveryMinOrder ?? null
+      } else {
+        neighborhoodsList.value = Array.isArray(nr.data) ? nr.data : []
+      }
       try{ refreshDeliveryFee() }catch(e){}
     }catch(e){ console.warn('failed to load public neighborhoods', e) }
 

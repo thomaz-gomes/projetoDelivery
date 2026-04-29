@@ -67,7 +67,7 @@
               <SelectInput   v-model="addr.neighborhood"  class="form-select">
                 <option value="">Selecione o bairro</option>
                 <option v-for="n in neighborhoods" :key="n.id" :value="n.name">
-                  {{ n.name }} - {{ formatCurrency(n.deliveryFee) }}
+                  {{ n.name }} - {{ isFreeDeliveryActive ? 'Grátis' : formatCurrency(n.deliveryFee) }}
                 </option>
               </SelectInput>
             </div>
@@ -88,8 +88,12 @@
               <div class="mt-2 small">
             <div v-if="neighborhoodsLoading">Calculando taxa...</div>
             <div v-else-if="addr.neighborhood">
-              <span v-if="matchedNeighborhood">Taxa: <strong>{{ formatCurrency(matchedNeighborhood.deliveryFee) }}</strong></span>
+              <span v-if="isFreeDeliveryActive" class="text-success fw-semibold"><i class="bi bi-truck me-1"></i>Entrega grátis ativa!</span>
+              <span v-else-if="matchedNeighborhood">Taxa: <strong>{{ formatCurrency(matchedNeighborhood.deliveryFee) }}</strong></span>
               <span v-else class="text-muted">Bairro sem taxa ({{ formatCurrency(0) }})</span>
+            </div>
+            <div v-if="freeDeliveryEnabled && freeDeliveryMinOrder != null && !isFreeDeliveryActive" class="text-muted mt-1">
+              <i class="bi bi-truck me-1"></i>Falta {{ formatCurrency(freeDeliveryMinOrder - subtotal) }} para entrega grátis
             </div>
           </div>
         </div>
@@ -269,7 +273,12 @@
         <div v-if="isCashPayment" class="mb-2">
           <CurrencyInput label="Troco para (opcional)" labelClass="form-label small" v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />
         </div>
-        <div class="alert alert-light small">Total: <strong>{{ formatCurrency(totalWithDelivery) }}</strong> (Entrega: {{ formatCurrency(deliveryFee) }})</div>
+        <div class="alert alert-light small">
+          Total: <strong>{{ formatCurrency(totalWithDelivery) }}</strong>
+          <span v-if="orderType === 'DELIVERY'">
+            (Entrega: <span v-if="isFreeDeliveryActive" class="text-success fw-semibold">Grátis</span><span v-else>{{ formatCurrency(deliveryFee) }}</span>)
+          </span>
+        </div>
         <div class="d-flex justify-content-between mt-3">
           <button class="btn btn-outline-secondary" @click="prev">Voltar</button>
           <button class="btn btn-success" :disabled="!paymentMethodCode" @click="finalize">Concluir pedido</button>
@@ -354,6 +363,8 @@ const requiredWarnings = ref({});
 const optionsBodyRef = ref(null);
 const neighborhoods = ref([]);
 const neighborhoodsLoading = ref(false);
+const freeDeliveryEnabled = ref(false);
+const freeDeliveryMinOrder = ref(null);
 const savedAddresses = ref([]);
 const selectedAddressId = ref(null);
 const showNewAddressForm = ref(false);
@@ -715,6 +726,7 @@ const subtotal = computed(()=> cart.value.reduce((s,it)=> {
   const optsPerUnit = (it.options || []).reduce((so,o)=> so + (Number(o.price || 0) * (Number(o.quantity || 1) || 1)), 0);
   return s + (unit + optsPerUnit) * qty;
 }, 0));
+const isFreeDeliveryActive = computed(()=> freeDeliveryEnabled.value && freeDeliveryMinOrder.value != null && subtotal.value >= freeDeliveryMinOrder.value);
 const deliveryFee = computed(()=> orderType.value==='DELIVERY' ? estimateDeliveryFee() : 0);
 const matchedNeighborhood = computed(()=>{
   if(orderType.value!=='DELIVERY') return null;
@@ -722,7 +734,11 @@ const matchedNeighborhood = computed(()=>{
   if(!name) return null;
   return neighborhoods.value.find(n => n.name.trim().toLowerCase() === name) || null;
 });
-function estimateDeliveryFee(){ return matchedNeighborhood.value ? Number(matchedNeighborhood.value.deliveryFee||0) : 0; }
+function estimateDeliveryFee(){
+  const base = matchedNeighborhood.value ? Number(matchedNeighborhood.value.deliveryFee||0) : 0;
+  if(base > 0 && isFreeDeliveryActive.value) return 0;
+  return base;
+}
 // account for coupon discount when computing final total
 const couponCode = ref('');
 const couponApplied = ref(false);
@@ -820,7 +836,13 @@ async function loadNeighborhoods(){
     const companyId = await resolveCompanyId();
     if(!companyId){ console.warn('PDV: companyId não encontrado (bairros)'); return; }
     const { data } = await api.get(`/public/${companyId}/neighborhoods`);
-    neighborhoods.value = Array.isArray(data) ? data : [];
+    if(data && Array.isArray(data.neighborhoods)){
+      neighborhoods.value = data.neighborhoods;
+      freeDeliveryEnabled.value = data.freeDeliveryEnabled ?? false;
+      freeDeliveryMinOrder.value = data.freeDeliveryMinOrder ?? null;
+    } else {
+      neighborhoods.value = Array.isArray(data) ? data : [];
+    }
     console.log('Bairros carregados:', neighborhoods.value);
     // Load company defaults (city/state) for address pre-fill
     if (!companyDefaults.value.city) {

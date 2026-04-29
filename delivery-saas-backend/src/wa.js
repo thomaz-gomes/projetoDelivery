@@ -228,10 +228,16 @@ export async function evoSendMediaUrl({ instanceName, to, mediaUrl, filename = '
   const number = normalizePhone(to);
   if (!number) throw new Error('Telefone inválido');
 
+  // Derive Evolution API mediatype from mime so images render as images, not documents
+  const mediatype = mimeType.startsWith('image/') ? 'image'
+    : mimeType.startsWith('video/') ? 'video'
+    : mimeType.startsWith('audio/') ? 'audio'
+    : 'document';
+
   const attempts = [
     // instance in path, media property is public url
-    { url: `/message/sendMedia/${encodeURIComponent(instanceName)}`, body: { number, mediatype: 'file', mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
-    { url: `/message/sendMedia`, body: { instanceName, to: number, mediatype: 'file', mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
+    { url: `/message/sendMedia/${encodeURIComponent(instanceName)}`, body: { number, mediatype, mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
+    { url: `/message/sendMedia`, body: { instanceName, to: number, mediatype, mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
     // alternative keys/names
     { url: `/message/sendMedia/${encodeURIComponent(instanceName)}`, body: { number, mediatype: 'document', mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
   ];

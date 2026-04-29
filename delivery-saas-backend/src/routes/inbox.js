@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, requireRole } from '../auth.js';
 import { prisma } from '../prisma.js';
 import { evoSendText, evoSendMediaUrl, evoSendLocation } from '../wa.js';
+import { transcribeAudio } from '../services/aiProvider.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -878,6 +879,64 @@ router.patch('/conversations/:id/tags', async (req, res) => {
     res.json(updated);
   } catch (e) {
     res.status(500).json({ message: 'Erro ao atualizar tags', error: e.message });
+  }
+});
+
+// ─── POST /messages/:messageId/transcribe ───────────────────────────────────
+
+router.post('/messages/:messageId/transcribe', async (req, res) => {
+  try {
+    const { companyId } = req.user;
+
+    const message = await prisma.message.findFirst({
+      where: { id: req.params.messageId },
+      include: { conversation: { select: { companyId: true } } },
+    });
+
+    if (!message || message.conversation.companyId !== companyId) {
+      return res.status(404).json({ message: 'Mensagem não encontrada' });
+    }
+    if (message.type !== 'AUDIO') {
+      return res.status(400).json({ message: 'Mensagem não é do tipo AUDIO' });
+    }
+    if (!message.mediaUrl) {
+      return res.status(400).json({ message: 'Mensagem sem arquivo de áudio' });
+    }
+
+    // Return cached transcription if already done
+    if (message.transcription) {
+      return res.json({ transcription: message.transcription });
+    }
+
+    const mimeType = message.mediaMimeType || 'audio/ogg';
+    let audioBuffer;
+    let filename;
+
+    if (!message.mediaUrl.startsWith('http')) {
+      // Local file: mediaUrl is like /public/uploads/inbox/...
+      const relativePart = message.mediaUrl.startsWith('/') ? message.mediaUrl.slice(1) : message.mediaUrl;
+      const filePath = path.join(process.cwd(), relativePart);
+      audioBuffer = fs.readFileSync(filePath);
+      filename = path.basename(filePath);
+    } else {
+      // External URL (fallback for Evolution-hosted media)
+      const response = await fetch(message.mediaUrl, { signal: AbortSignal.timeout(30_000) });
+      if (!response.ok) throw new Error('Falha ao baixar arquivo de áudio');
+      audioBuffer = Buffer.from(await response.arrayBuffer());
+      filename = 'audio.ogg';
+    }
+
+    const transcription = await transcribeAudio(audioBuffer, mimeType, filename);
+
+    await prisma.message.update({
+      where: { id: message.id },
+      data: { transcription },
+    });
+
+    return res.json({ transcription });
+  } catch (err) {
+    console.error('[transcribe] error:', err);
+    return res.status(500).json({ message: 'Erro ao transcrever áudio', error: err.message });
   }
 });
 

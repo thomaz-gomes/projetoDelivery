@@ -316,3 +316,34 @@ export async function callVisionAI(serviceKey, systemPrompt, textPrompt, imageBa
     ? geminiVision(systemPrompt, textPrompt, imageBase64, mimeType, options)
     : openaiVision(systemPrompt, textPrompt, imageBase64, mimeType, options);
 }
+
+/**
+ * Transcribes an audio buffer using OpenAI Whisper.
+ * @param {Buffer} audioBuffer - Raw audio bytes
+ * @param {string} mimeType - e.g. 'audio/ogg', 'audio/mpeg'
+ * @param {string} filename - Filename hint for Whisper (affects format detection)
+ * @returns {Promise<string>} Transcribed text
+ */
+export async function transcribeAudio(audioBuffer, mimeType = 'audio/ogg', filename = 'audio.ogg') {
+  const apiKey = await getOpenAIKey();
+
+  const formData = new FormData();
+  formData.append('file', new Blob([audioBuffer], { type: mimeType }), filename);
+  formData.append('model', 'whisper-1');
+  formData.append('language', 'pt');
+
+  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(60_000),
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Whisper API error ${res.status}: ${errBody}`);
+  }
+
+  const data = await res.json();
+  return data.text || '';
+}

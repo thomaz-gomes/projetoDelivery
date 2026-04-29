@@ -147,6 +147,10 @@ model Company {
   // ---- Inbox / Messaging ----
   conversations Conversation[]
   quickReplies  QuickReply[]
+
+  // ---- Free Delivery ----
+  freeDeliveryEnabled  Boolean  @default(false)
+  freeDeliveryMinOrder Decimal?
 }
 
 model User {
@@ -2476,6 +2480,7 @@ model Message {
   latitude        Float?
   longitude       Float?
   quotedMessageId String?
+  transcription   String?
   status          MessageStatus    @default(SENT)
   internal        Boolean          @default(false)
   authorUserId    String?

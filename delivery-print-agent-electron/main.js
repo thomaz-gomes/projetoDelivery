@@ -56,6 +56,9 @@ app.whenReady().then(async () => {
   if (!cfg.serverUrl || !cfg.token) {
     openSetupWindow();
   } else {
+    // Ensure auto-start is always active for configured agents — this is a
+    // "set it and forget it" service; the user should never need to re-enable this.
+    app.setLoginItemSettings({ openAtLogin: true, name: 'Delivery Print Agent' });
     // Start services
     await startServices(cfg);
     // App stays in tray (no main window)
@@ -77,9 +80,9 @@ function openSetupWindow() {
   }
   setupWindow = new BrowserWindow({
     width: 520,
-    height: 480,
+    height: 580,
     resizable: false,
-    title: 'Configuração Inicial - Delivery Print Agent',
+    title: 'Delivery Print Agent — Configuração',
     icon: path.join(__dirname, 'assets', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -414,6 +417,9 @@ function setupIpcHandlers() {
   ipcMain.on('window:close-setup', async (event, savedConfig) => {
     if (savedConfig) {
       config.save(savedConfig);
+      // Enable auto-start on Windows login when setup completes — the agent
+      // must survive reboots without requiring manual intervention.
+      app.setLoginItemSettings({ openAtLogin: true, name: 'Delivery Print Agent' });
       await startServices(savedConfig);
     }
     if (setupWindow) setupWindow.destroy();

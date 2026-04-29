@@ -45,6 +45,33 @@ neighborhoodsRouter.post('/match', async (req, res) => {
   }
 });
 
+// GET /neighborhoods/settings — free delivery configuration
+neighborhoodsRouter.get('/settings', async (req, res) => {
+  const companyId = req.user.companyId;
+  const company = await prisma.company.findUnique({ where: { id: companyId }, select: { freeDeliveryEnabled: true, freeDeliveryMinOrder: true } });
+  res.json({
+    freeDeliveryEnabled: company?.freeDeliveryEnabled ?? false,
+    freeDeliveryMinOrder: company?.freeDeliveryMinOrder != null ? Number(company.freeDeliveryMinOrder) : null,
+  });
+});
+
+// PATCH /neighborhoods/settings — update free delivery configuration
+neighborhoodsRouter.patch('/settings', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  const { freeDeliveryEnabled, freeDeliveryMinOrder } = req.body || {};
+  const updated = await prisma.company.update({
+    where: { id: companyId },
+    data: {
+      freeDeliveryEnabled: Boolean(freeDeliveryEnabled),
+      freeDeliveryMinOrder: freeDeliveryMinOrder != null ? Number(freeDeliveryMinOrder) : null,
+    },
+  });
+  res.json({
+    freeDeliveryEnabled: updated.freeDeliveryEnabled,
+    freeDeliveryMinOrder: updated.freeDeliveryMinOrder != null ? Number(updated.freeDeliveryMinOrder) : null,
+  });
+});
+
 // create (ADMIN)
 neighborhoodsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
