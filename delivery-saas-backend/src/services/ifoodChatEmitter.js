@@ -10,6 +10,9 @@ function mapStatusToChatKey(internalStatus) {
 }
 
 function isIfoodOrder(order) {
+  // Most reliable signal: all iFood orders have an externalId set by the webhook processor.
+  // Manual orders created in the system never have one.
+  if (order?.externalId) return true
   if (!order?.payload) return false
   const p = order.payload
   return (

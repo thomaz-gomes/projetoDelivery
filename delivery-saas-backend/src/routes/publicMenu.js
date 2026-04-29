@@ -547,10 +547,16 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
 publicMenuRouter.get('/:companyId/neighborhoods', async (req, res) => {
   const { companyId } = req.params
   try {
-    const rows = await prisma.neighborhood.findMany({ where: { companyId }, orderBy: { name: 'asc' } })
-    // return minimal payload to avoid leaking admin fields
-    const out = (rows || []).map(r => ({ id: r.id, name: r.name, deliveryFee: Number(r.deliveryFee || 0), aliases: Array.isArray(r.aliases) ? r.aliases : [] }))
-    return res.json(out)
+    const [rows, company] = await Promise.all([
+      prisma.neighborhood.findMany({ where: { companyId }, orderBy: { name: 'asc' } }),
+      prisma.company.findUnique({ where: { id: companyId }, select: { freeDeliveryEnabled: true, freeDeliveryMinOrder: true } }),
+    ])
+    const neighborhoods = (rows || []).map(r => ({ id: r.id, name: r.name, deliveryFee: Number(r.deliveryFee || 0), aliases: Array.isArray(r.aliases) ? r.aliases : [] }))
+    return res.json({
+      neighborhoods,
+      freeDeliveryEnabled: company?.freeDeliveryEnabled ?? false,
+      freeDeliveryMinOrder: company?.freeDeliveryMinOrder != null ? Number(company.freeDeliveryMinOrder) : null,
+    })
   } catch (e) {
     console.error('Error loading public neighborhoods', e)
     return res.status(500).json({ message: 'Erro ao carregar bairros' })
@@ -1083,6 +1089,16 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         return false
       })
       if (match) deliveryFee = Number(match.deliveryFee || 0)
+    }
+
+    // Apply free delivery when subtotal meets the configured threshold
+    if (deliveryFee > 0) {
+      try {
+        const comp = await prisma.company.findUnique({ where: { id: companyId }, select: { freeDeliveryEnabled: true, freeDeliveryMinOrder: true } })
+        if (comp?.freeDeliveryEnabled && comp?.freeDeliveryMinOrder != null && subtotal >= Number(comp.freeDeliveryMinOrder)) {
+          deliveryFee = 0
+        }
+      } catch(e) { /* non-blocking */ }
     }
 
   // If the client included a coupon in the payload, apply its discount amount (coupon.discountAmount)

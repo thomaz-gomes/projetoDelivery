@@ -43,7 +43,7 @@
 
       <!-- AUDIO -->
       <div v-else-if="message.type === 'AUDIO'">
-        <AudioPlayer :src="resolvedMediaUrl" />
+        <AudioPlayer :src="resolvedMediaUrl" :message-id="message.id" :transcription="message.transcription ?? null" />
       </div>
 
       <!-- VIDEO -->

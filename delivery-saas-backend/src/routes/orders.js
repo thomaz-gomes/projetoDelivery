@@ -1164,6 +1164,16 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       }
     } catch (e) { deliveryFee = 0; }
 
+    // Apply free delivery when subtotal meets the configured threshold
+    if (deliveryFee > 0) {
+      try {
+        const comp = await prisma.company.findUnique({ where: { id: companyId }, select: { freeDeliveryEnabled: true, freeDeliveryMinOrder: true } });
+        if (comp?.freeDeliveryEnabled && comp?.freeDeliveryMinOrder != null && subtotal >= Number(comp.freeDeliveryMinOrder)) {
+          deliveryFee = 0;
+        }
+      } catch(e) { /* non-blocking */ }
+    }
+
     // coupon handling (optional) — mimic public logic simplified
     let couponDiscount = 0;
     let couponCode = null;

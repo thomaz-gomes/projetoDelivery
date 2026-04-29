@@ -1,5 +1,23 @@
 <template>
   <div>
+    <!-- Free Delivery Settings -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <h6 class="card-title mb-3"><i class="bi bi-truck me-2"></i>Entrega Grátis</h6>
+        <div class="form-check form-switch mb-3">
+          <input class="form-check-input" type="checkbox" id="freeDeliveryToggle" v-model="freeSettings.enabled" />
+          <label class="form-check-label fw-semibold" for="freeDeliveryToggle">Ativar entrega grátis</label>
+        </div>
+        <div v-if="freeSettings.enabled" class="mb-3" style="max-width:280px">
+          <CurrencyInput label="Pedido mínimo para entrega grátis" v-model="freeSettings.minOrder" placeholder="0,00" />
+          <div class="form-text">Pedidos com subtotal igual ou acima desse valor terão entrega grátis.</div>
+        </div>
+        <button class="btn btn-sm btn-primary" @click="saveSettings" :disabled="savingSettings">
+          <i class="bi bi-check-lg me-1"></i>{{ savingSettings ? 'Salvando...' : 'Salvar configuração' }}
+        </button>
+      </div>
+    </div>
+
     <ListCard title="Bairros" icon="bi bi-geo-alt" :subtitle="list.length ? `${list.length} bairros` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por nome ou apelido" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
       <template #actions>
         <div v-if="!editMode" class="d-flex align-items-center gap-2">
@@ -171,6 +189,35 @@ const list = ref([])
 const q = ref('')
 const loading = ref(false)
 bindLoading(loading)
+
+// Free delivery settings
+const freeSettings = ref({ enabled: false, minOrder: '0,00' })
+const savingSettings = ref(false)
+
+async function fetchSettings() {
+  try {
+    const { data } = await api.get('/neighborhoods/settings')
+    freeSettings.value = {
+      enabled: data.freeDeliveryEnabled ?? false,
+      minOrder: data.freeDeliveryMinOrder != null ? String(data.freeDeliveryMinOrder) : '0,00',
+    }
+  } catch (e) { console.warn('Falha ao carregar configuração de entrega grátis', e) }
+}
+
+async function saveSettings() {
+  savingSettings.value = true
+  try {
+    await api.patch('/neighborhoods/settings', {
+      freeDeliveryEnabled: freeSettings.value.enabled,
+      freeDeliveryMinOrder: freeSettings.value.enabled ? parseFloat(String(freeSettings.value.minOrder || 0).replace(',', '.')) || 0 : null,
+    })
+    Swal.fire({ icon: 'success', text: 'Configuração salva', timer: 1500, showConfirmButton: false })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao salvar configuração' })
+  } finally {
+    savingSettings.value = false
+  }
+}
 
 const displayed = computed(() => {
   if (!q.value) return list.value || []
@@ -464,7 +511,7 @@ async function handleFileImport(file) {
   }
 }
 
-onMounted(fetchList)
+onMounted(() => { fetchList(); fetchSettings(); })
 </script>
 
 <style scoped>

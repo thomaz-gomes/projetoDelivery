@@ -1276,6 +1276,7 @@ function normalizeOrder(o){
                o.payload?.customer?.phone?.localizer || null;
       } catch (e) { return null; }
     })(),
+    ifoodConfirmationCode: o.customer?.ifoodConfirmationCode || null,
     subtotal: (function() {
       try {
         if (o.subtotal) return Number(o.subtotal);
@@ -3477,6 +3478,8 @@ function pulseButton() {
                 <!-- Row 2: info chips -->
                 <div class="oc-info">
                   <span v-if="o.customerPhone" class="oc-chip"><i class="bi bi-telephone"></i> {{ o.customerPhone }}</span>
+                  <span v-if="normalizeOrder(o).phoneLocalizer" class="oc-chip oc-chip--ifood" title="Localizador do pedido iFood"><i class="bi bi-hash"></i> {{ normalizeOrder(o).phoneLocalizer }}</span>
+                  <span v-if="normalizeOrder(o).ifoodConfirmationCode" class="oc-chip oc-chip--ifood" title="Código de confirmação iFood"><i class="bi bi-key"></i> {{ normalizeOrder(o).ifoodConfirmationCode }}</span>
                   <span class="oc-chip"><i class="bi bi-credit-card"></i> {{ normalizeOrder(o).paymentMethod }}<template v-if="normalizeOrder(o).paymentChange"> · Troco: {{ formatCurrency(normalizeOrder(o).paymentChange) }}</template></span>
                   <template v-if="ridersEnabled">
                     <span class="oc-chip">

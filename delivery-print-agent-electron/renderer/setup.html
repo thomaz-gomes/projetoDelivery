@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';" />
-<title>Configuração Inicial</title>
+<title>Delivery Print Agent — Configuração</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -19,59 +19,40 @@
     box-shadow: 0 8px 32px rgba(0,0,0,.4);
   }
   .logo { text-align: center; margin-bottom: 28px; }
+  .logo-icon { font-size: 40px; display: block; margin-bottom: 8px; }
   .logo h1 { font-size: 20px; color: #4ecca3; font-weight: 700; }
   .logo p  { font-size: 13px; color: #888; margin-top: 4px; }
 
-  /* Indicador de passos */
-  .steps-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .step-dot {
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 2px solid #2a3a5a;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 700; color: #555; flex-shrink: 0;
-    transition: all .3s;
-  }
-  .step-dot.active { border-color: #4ecca3; color: #4ecca3; }
-  .step-dot.done   { background: #4ecca3; border-color: #4ecca3; color: #1a1a2e; }
-  .step-line { flex: 1; height: 2px; background: #2a3a5a; transition: background .3s; }
-  .step-line.done { background: #4ecca3; }
-  .steps-labels {
-    display: flex; justify-content: space-between;
-    margin-bottom: 28px;
-  }
-  .step-label { font-size: 11px; color: #666; }
-
+  .field { margin-bottom: 18px; }
   label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
-  input {
+  label .optional { color: #555; font-size: 11px; margin-left: 4px; }
+
+  input[type="text"] {
     width: 100%; padding: 10px 12px;
     background: #0f3460; border: 1px solid #1a4a8a;
     border-radius: 6px; color: #fff; font-size: 14px; outline: none;
     transition: border-color .2s;
   }
-  input:focus { border-color: #4ecca3; }
-  input.code-input {
-    font-family: 'Consolas', monospace; font-size: 28px; font-weight: 700;
-    letter-spacing: 10px; text-align: center; text-transform: uppercase;
-    color: #4ecca3;
+  input[type="text"]:focus { border-color: #4ecca3; }
+
+  .code-input {
+    font-family: 'Consolas', monospace !important;
+    font-size: 26px !important; font-weight: 700 !important;
+    letter-spacing: 10px; text-align: center;
+    text-transform: uppercase; color: #4ecca3 !important;
   }
-  .field { margin-bottom: 18px; }
+
   .hint { font-size: 11px; color: #666; margin-top: 5px; line-height: 1.6; }
+  .divider { border: none; border-top: 1px solid #1e2d4a; margin: 20px 0; }
 
   .btn-primary {
-    width: 100%; padding: 12px;
+    width: 100%; padding: 13px;
     background: #4ecca3; color: #1a1a2e;
     border: none; border-radius: 6px; font-size: 15px; font-weight: 700;
-    cursor: pointer; transition: opacity .2s;
+    cursor: pointer; transition: opacity .2s; margin-top: 4px;
   }
   .btn-primary:hover { opacity: .9; }
   .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-  .btn-ghost {
-    width: 100%; padding: 10px; margin-top: 8px;
-    background: transparent; border: 1px solid #2a3a5a;
-    border-radius: 6px; color: #777; font-size: 13px; cursor: pointer;
-    transition: all .2s;
-  }
-  .btn-ghost:hover { border-color: #4ecca3; color: #4ecca3; }
 
   .status {
     margin-top: 14px; padding: 11px 14px;
@@ -81,187 +62,147 @@
   .status.err  { background:#4a1a1a; color:#ff6b6b; display:block; }
   .status.info { background:#0f3460; color:#88ccff; display:block; }
 
-  .server-badge {
-    background: #0f3460; border-radius: 6px; padding: 8px 12px;
-    font-size: 12px; color: #88ccff; margin-bottom: 20px; word-break: break-all;
-    border: 1px solid #1a4a8a;
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid #1a1a2e; border-top-color: transparent;
+    border-radius: 50%; animation: spin .7s linear infinite;
+    vertical-align: middle; margin-right: 6px;
   }
-  .server-badge .badge-label { color: #555; font-size: 11px; display: block; margin-bottom: 2px; }
-
-  .panel { display: none; }
-  .panel.active { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <div class="card">
   <div class="logo">
-    <h1>🖨 Delivery Print Agent</h1>
-    <p>Configuração inicial em 2 passos</p>
+    <span class="logo-icon">🖨</span>
+    <h1>Delivery Print Agent</h1>
+    <p>Configure uma vez — funciona para sempre</p>
   </div>
 
-  <!-- Indicador de passos -->
-  <div class="steps-row">
-    <div class="step-dot active" id="dot1">1</div>
-    <div class="step-line" id="line1"></div>
-    <div class="step-dot" id="dot2">2</div>
-  </div>
-  <div class="steps-labels">
-    <span class="step-label">URL do Servidor</span>
-    <span class="step-label">Código de Pareamento</span>
+  <div class="field">
+    <label for="serverUrl">URL do Servidor Backend</label>
+    <input id="serverUrl" type="text" placeholder="https://api.meudelivery.com.br" autocomplete="off" />
+    <p class="hint">Endereço da API do sistema (sem barra no final).</p>
   </div>
 
-  <!-- ── Passo 1: URL do servidor ─────────────────────────────────────────── -->
-  <div id="step1" class="panel active">
-    <div class="field">
-      <label for="serverUrl">URL do Servidor</label>
-      <input id="serverUrl" type="text" placeholder="https://meudelivery.com.br" autocomplete="off" />
-      <p class="hint">
-        Endereço base do sistema de delivery (sem barra no final).<br>
-        Ex: <code style="color:#4ecca3">https://meudelivery.com.br</code>
-      </p>
-    </div>
-    <button class="btn-primary" id="btnStep1">Continuar →</button>
-    <div class="status" id="status1"></div>
+  <div class="field">
+    <label for="frontendUrl">URL do Frontend <span class="optional">(opcional)</span></label>
+    <input id="frontendUrl" type="text" placeholder="https://meudelivery.com.br" autocomplete="off" />
+    <p class="hint">Usado para gerar QR codes de rastreio nas comandas.</p>
   </div>
 
-  <!-- ── Passo 2: Código de pareamento ────────────────────────────────────── -->
-  <div id="step2" class="panel">
-    <div class="server-badge">
-      <span class="badge-label">Servidor</span>
-      <span id="badgeUrl"></span>
-    </div>
+  <hr class="divider" />
 
-    <div class="field">
-      <label>Código de Pareamento</label>
-      <input
-        id="pairingCode"
-        class="code-input"
-        type="text"
-        maxlength="6"
-        placeholder="XXXXXX"
-        autocomplete="off"
-        spellcheck="false"
-      />
-      <p class="hint">
-        No painel do delivery: <strong>Configurações → Impressoras</strong><br>
-        → Clique em <strong>"Gerar código de pareamento"</strong><br>
-        → Digite aqui o código de 6 letras. Válido por 10 minutos.
-      </p>
-    </div>
-
-    <button class="btn-primary" id="btnPair">🔗 Conectar Agente</button>
-    <button class="btn-ghost" id="btnBack">← Voltar</button>
-    <div class="status" id="status2"></div>
+  <div class="field">
+    <label>Código de Pareamento</label>
+    <input
+      id="pairingCode"
+      class="code-input"
+      type="text"
+      maxlength="6"
+      placeholder="XXXXXX"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <p class="hint">
+      No painel: <strong>Configurações → Impressoras → Gerar código</strong><br>
+      O código tem 6 letras e expira em 10 minutos.
+    </p>
   </div>
+
+  <button class="btn-primary" id="btnInstall">🔗 Instalar e Conectar</button>
+  <div class="status" id="status"></div>
 </div>
 
 <script>
 const api = window.electronAPI;
-let _serverUrl = '';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-function showStatus(id, msg, type) {
-  const el = document.getElementById(id);
-  el.textContent = msg;
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.innerHTML = msg;
   el.className = 'status ' + type;
 }
 
-function setStep(n) {
-  document.getElementById('step1').classList.toggle('active', n === 1);
-  document.getElementById('step2').classList.toggle('active', n === 2);
-  document.getElementById('dot1').className = 'step-dot ' + (n >= 2 ? 'done' : 'active');
-  document.getElementById('line1').className = 'step-line ' + (n >= 2 ? 'done' : '');
-  document.getElementById('dot2').className = 'step-dot ' + (n === 2 ? 'active' : '');
+function setLoading(loading) {
+  const btn = document.getElementById('btnInstall');
+  if (loading) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Conectando…';
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = '🔗 Instalar e Conectar';
+  }
 }
 
-// ── Passo 1 — validar URL ────────────────────────────────────────────────────
-document.getElementById('btnStep1').addEventListener('click', () => {
-  const raw = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
-  if (!raw) {
-    showStatus('status1', 'Informe a URL do servidor.', 'err');
-    return;
-  }
-  if (!raw.startsWith('http')) {
-    showStatus('status1', 'URL deve começar com http:// ou https://', 'err');
-    return;
-  }
-  _serverUrl = raw;
-  document.getElementById('badgeUrl').textContent = _serverUrl;
-  document.getElementById('status1').className = 'status'; // esconde erro
-  setStep(2);
-  setTimeout(() => document.getElementById('pairingCode').focus(), 100);
-});
-
-document.getElementById('serverUrl').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('btnStep1').click();
-});
-
-// ── Passo 2 — parear ─────────────────────────────────────────────────────────
-document.getElementById('btnPair').addEventListener('click', async () => {
+document.getElementById('btnInstall').addEventListener('click', async () => {
+  const serverUrl = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+  const frontendUrl = document.getElementById('frontendUrl').value.trim().replace(/\/$/, '');
   const code = document.getElementById('pairingCode').value.trim().toUpperCase();
+
+  if (!serverUrl) {
+    showStatus('Informe a URL do servidor backend.', 'err');
+    document.getElementById('serverUrl').focus();
+    return;
+  }
+  if (!serverUrl.startsWith('http')) {
+    showStatus('URL deve começar com http:// ou https://', 'err');
+    document.getElementById('serverUrl').focus();
+    return;
+  }
   if (code.length < 4) {
-    showStatus('status2', 'Digite o código de 6 caracteres.', 'err');
+    showStatus('Digite o código de pareamento de 6 caracteres.', 'err');
+    document.getElementById('pairingCode').focus();
     return;
   }
 
-  const btn = document.getElementById('btnPair');
-  btn.disabled = true;
-  btn.textContent = 'Conectando...';
-  showStatus('status2', 'Enviando código ao servidor...', 'info');
+  setLoading(true);
+  showStatus('Conectando ao servidor…', 'info');
 
   try {
-    const result = await api.pairWithCode(_serverUrl, code);
+    const result = await api.pairWithCode(serverUrl, code);
 
     if (!result.ok) {
-      showStatus('status2', '✗ ' + result.error, 'err');
-      btn.disabled = false;
-      btn.textContent = '🔗 Conectar Agente';
+      showStatus('✗ ' + result.error, 'err');
+      setLoading(false);
       return;
     }
 
-    // Sucesso: salva config e fecha o wizard
-    showStatus('status2', '✓ Pareamento concluído! Iniciando agente...', 'ok');
-    btn.textContent = '✓ Conectado!';
+    showStatus('✓ Pareamento concluído! Iniciando agente…', 'ok');
 
     const existing = await api.loadConfig();
     const newCfg = {
       ...existing,
-      serverUrl: result.socketUrl || _serverUrl,
+      serverUrl: result.socketUrl || serverUrl,
+      frontendUrl: frontendUrl || existing.frontendUrl || '',
       token: result.token,
       storeIds: result.storeIds || [],
       companyId: result.companyId || null,
     };
 
-    setTimeout(() => api.closeSetup(newCfg), 1800);
+    setTimeout(() => api.closeSetup(newCfg), 1500);
 
   } catch (e) {
-    showStatus('status2', 'Erro inesperado: ' + e.message, 'err');
-    btn.disabled = false;
-    btn.textContent = '🔗 Conectar Agente';
+    showStatus('Erro inesperado: ' + e.message, 'err');
+    setLoading(false);
   }
 });
 
-document.getElementById('pairingCode').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('btnPair').click();
+// Enter em qualquer campo submete
+document.querySelectorAll('input').forEach(el => {
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btnInstall').click();
+  });
 });
 
-// Filtra input: apenas letras e números, maiúsculo, max 6 chars
-document.getElementById('pairingCode').addEventListener('input', (e) => {
+// Filtra código: apenas alfanumérico, maiúsculo, max 6
+document.getElementById('pairingCode').addEventListener('input', e => {
   e.target.value = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6);
 });
 
-document.getElementById('btnBack').addEventListener('click', () => {
-  setStep(1);
-  document.getElementById('status2').className = 'status';
-  document.getElementById('pairingCode').value = '';
-  const btn = document.getElementById('btnPair');
-  btn.disabled = false;
-  btn.textContent = '🔗 Conectar Agente';
-});
-
-// Pré-preenche se já houver URL salva
+// Pré-preenche se já houver config salva
 api.loadConfig().then(cfg => {
-  if (cfg.serverUrl) document.getElementById('serverUrl').value = cfg.serverUrl;
+  if (cfg.serverUrl)   document.getElementById('serverUrl').value   = cfg.serverUrl;
+  if (cfg.frontendUrl) document.getElementById('frontendUrl').value = cfg.frontendUrl;
 });
 </script>
 </body>

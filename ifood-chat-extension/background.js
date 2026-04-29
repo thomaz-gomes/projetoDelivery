@@ -155,6 +155,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'SET_ACTIVE_TAB') {
     activeTabId = msg.tabId;
     activeTabUrl = msg.tabUrl || '';
+    // Persist so the active tab survives MV3 service worker restarts
+    chrome.storage.local.set({ activeTabId, activeTabUrl });
     console.log('[iFood Extension] Aba ativada:', activeTabId, activeTabUrl);
     updateBadge();
     // Always inject content scripts on activation
@@ -177,6 +179,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'CLEAR_ACTIVE_TAB') {
     activeTabId = null;
     activeTabUrl = '';
+    chrome.storage.local.remove(['activeTabId', 'activeTabUrl']);
     console.log('[iFood Extension] Aba desativada');
     updateBadge();
     sendResponse({ ok: true });
@@ -213,6 +216,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     console.log('[iFood Extension] Aba ativada foi fechada');
     activeTabId = null;
     activeTabUrl = '';
+    chrome.storage.local.remove(['activeTabId', 'activeTabUrl']);
     updateBadge();
   }
 });
@@ -223,11 +227,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     console.log('[iFood Extension] Aba ativada saiu do iFood');
     activeTabId = null;
     activeTabUrl = '';
+    chrome.storage.local.remove(['activeTabId', 'activeTabUrl']);
     updateBadge();
   }
 });
 
-// Re-connect when service worker wakes up
 chrome.runtime.onStartup.addListener(() => {
   chrome.storage.local.get(['backendUrl', 'extensionToken', 'companyId'], (config) => {
     connect(config);
@@ -240,10 +244,27 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Initial connection
-chrome.storage.local.get(['backendUrl', 'extensionToken', 'companyId'], (config) => {
-  if (config && config.backendUrl && config.extensionToken && config.companyId) {
-    connect(config);
+// Initial connection — also restore activeTabId persisted from the previous service worker lifecycle
+chrome.storage.local.get(['backendUrl', 'extensionToken', 'companyId', 'activeTabId', 'activeTabUrl'], (data) => {
+  // Restore active tab (verify it still exists and is still on iFood)
+  if (data.activeTabId) {
+    chrome.tabs.get(data.activeTabId, (tab) => {
+      if (chrome.runtime.lastError || !tab) {
+        // Tab no longer exists — clear stale entry
+        chrome.storage.local.remove(['activeTabId', 'activeTabUrl']);
+      } else if (tab.url && tab.url.includes('gestordepedidos.ifood.com.br')) {
+        activeTabId = data.activeTabId;
+        activeTabUrl = data.activeTabUrl || tab.url || '';
+        console.log('[iFood Extension] Aba ativa restaurada após reinício:', activeTabId);
+      } else {
+        // Tab navigated away from iFood
+        chrome.storage.local.remove(['activeTabId', 'activeTabUrl']);
+      }
+      updateBadge();
+    });
+  }
+  if (data.backendUrl && data.extensionToken && data.companyId) {
+    connect(data);
   } else {
     updateBadge();
   }

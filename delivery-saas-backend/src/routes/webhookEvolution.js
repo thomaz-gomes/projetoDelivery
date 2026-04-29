@@ -473,7 +473,8 @@ async function processSingleMessage(req, msg, instanceName) {
   }
 
   // Run automations pipeline (best-effort, non-blocking)
-  if (direction === 'INBOUND' && type === 'TEXT' && conversation.storeId) {
+  // Runs on any inbound message type so out-of-hours/greeting reply fires even if first message is an image or audio
+  if (direction === 'INBOUND' && conversation.storeId) {
     runAutomations(updatedConversation, message, conversation.storeId, instanceName).catch(e =>
       console.warn('[automations] failed:', e.message)
     );
