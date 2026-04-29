@@ -2,67 +2,139 @@
   <div class="container py-4" style="max-width: 800px;">
     <h4 class="mb-4">Automações do Inbox</h4>
 
-    <div class="mb-4">
-      <label class="form-label">Loja</label>
-      <SelectInput
-        v-model="selectedStoreId"
-        :options="storeOptions"
-        optionValueKey="value"
-        optionLabelKey="label"
-        placeholder="Selecione uma loja"
-        @update:modelValue="loadStore"
-      />
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4">
+      <li class="nav-item">
+        <button
+          class="nav-link"
+          :class="{ active: tab === 'automations' }"
+          @click="tab = 'automations'"
+        >
+          <i class="bi bi-robot me-1"></i>Automações de chat
+        </button>
+      </li>
+      <li class="nav-item">
+        <button
+          class="nav-link"
+          :class="{ active: tab === 'templates' }"
+          @click="tab = 'templates'"
+        >
+          <i class="bi bi-bell me-1"></i>Notificações de pedido
+        </button>
+      </li>
+    </ul>
+
+    <!-- ── Automações de chat ──────────────────────────────────────── -->
+    <div v-if="tab === 'automations'">
+      <div class="mb-4">
+        <label class="form-label">Loja</label>
+        <SelectInput
+          v-model="selectedStoreId"
+          :options="storeOptions"
+          optionValueKey="value"
+          optionLabelKey="label"
+          placeholder="Selecione uma loja"
+          @update:modelValue="loadStore"
+        />
+      </div>
+
+      <div v-if="selectedStoreId && currentStore">
+        <!-- Out-of-hours -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title"><i class="bi bi-moon me-1"></i>Auto-resposta fora do horário</h6>
+            <p class="small text-muted mb-2">Disparada quando o cliente envia mensagem fora do horário de funcionamento da loja.</p>
+            <div class="mb-3">
+              <label class="form-label">Resposta rápida</label>
+              <SelectInput
+                v-model="form.outOfHoursReplyId"
+                :options="quickReplyOptions"
+                optionValueKey="value"
+                optionLabelKey="label"
+                placeholder="— Desabilitado —"
+              />
+            </div>
+            <div v-if="outOfHoursPreview" class="small bg-light rounded p-2 mb-3">
+              <strong class="d-block mb-1">Preview:</strong>
+              <span style="white-space: pre-wrap;">{{ outOfHoursPreview }}</span>
+            </div>
+            <BaseButton variant="primary" size="sm" :loading="saving" @click="saveOutOfHours">
+              Salvar
+            </BaseButton>
+          </div>
+        </div>
+
+        <!-- Greeting -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title"><i class="bi bi-emoji-smile me-1"></i>Saudação automática</h6>
+            <p class="small text-muted mb-2">Disparada na primeira mensagem do cliente após 6 horas de inatividade.</p>
+            <div class="mb-3">
+              <label class="form-label">Resposta rápida</label>
+              <SelectInput
+                v-model="form.greetingReplyId"
+                :options="quickReplyOptions"
+                optionValueKey="value"
+                optionLabelKey="label"
+                placeholder="— Desabilitado —"
+              />
+            </div>
+            <div v-if="greetingPreview" class="small bg-light rounded p-2 mb-3">
+              <strong class="d-block mb-1">Preview:</strong>
+              <span style="white-space: pre-wrap;">{{ greetingPreview }}</span>
+            </div>
+            <BaseButton variant="primary" size="sm" :loading="saving" @click="saveGreeting">
+              Salvar
+            </BaseButton>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div v-if="selectedStoreId && currentStore">
-      <!-- Out-of-hours -->
-      <div class="card mb-3">
+    <!-- ── Notificações de pedido ─────────────────────────────────── -->
+    <div v-if="tab === 'templates'">
+      <!-- Variable & formatting guide -->
+      <div class="alert alert-info py-2 mb-3">
+        <div class="fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>Variáveis disponíveis</div>
+        <div class="d-flex flex-wrap gap-2" style="font-size: 0.82rem;">
+          <code>{{nome}}</code> — nome do cliente &nbsp;
+          <code>{{loja}}</code> — nome da loja &nbsp;
+          <code>{{status}}</code> — status em português &nbsp;
+          <code>{{pedido}}</code> — número do pedido
+        </div>
+      </div>
+      <div class="alert alert-secondary py-2 mb-4" style="font-size: 0.82rem;">
+        <i class="bi bi-whatsapp me-1 text-success"></i>
+        <strong>Formatação WhatsApp:</strong>
+        <span class="ms-2"><code>*negrito*</code></span>
+        <span class="ms-2"><code>_itálico_</code></span>
+        <span class="ms-2"><code>~riscado~</code></span>
+        <span class="ms-2"><code>`monoespaçado`</code></span>
+        <span class="ms-2 text-muted">— Deixe em branco para não enviar notificação neste status.</span>
+      </div>
+
+      <div v-for="s in STATUSES" :key="s.key" class="card mb-3">
         <div class="card-body">
-          <h6 class="card-title"><i class="bi bi-moon me-1"></i>Auto-resposta fora do horário</h6>
-          <p class="small text-muted mb-2">Disparada quando o cliente envia mensagem fora do horário de funcionamento da loja.</p>
-          <div class="mb-3">
-            <label class="form-label">Resposta rápida</label>
-            <SelectInput
-              v-model="form.outOfHoursReplyId"
-              :options="quickReplyOptions"
-              optionValueKey="value"
-              optionLabelKey="label"
-              placeholder="— Desabilitado —"
-            />
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <i :class="`bi ${s.icon} text-secondary`"></i>
+            <h6 class="mb-0">{{ s.label }}</h6>
           </div>
-          <div v-if="outOfHoursPreview" class="small bg-light rounded p-2 mb-3">
-            <strong class="d-block mb-1">Preview:</strong>
-            <span style="white-space: pre-wrap;">{{ outOfHoursPreview }}</span>
-          </div>
-          <BaseButton variant="primary" size="sm" :loading="saving" @click="saveOutOfHours">
-            Salvar
-          </BaseButton>
+          <p class="small text-muted mb-2">{{ s.description }}</p>
+          <textarea
+            v-model="templates[s.key]"
+            class="form-control font-monospace"
+            :rows="6"
+            :placeholder="DEFAULT_TEMPLATE"
+            style="font-size: 0.82rem; resize: vertical; white-space: pre;"
+          ></textarea>
+          <div class="form-text">Deixe em branco para não enviar notificação neste status.</div>
         </div>
       </div>
 
-      <!-- Greeting -->
-      <div class="card mb-3">
-        <div class="card-body">
-          <h6 class="card-title"><i class="bi bi-emoji-smile me-1"></i>Saudação automática</h6>
-          <p class="small text-muted mb-2">Disparada na primeira mensagem do cliente após 6 horas de inatividade.</p>
-          <div class="mb-3">
-            <label class="form-label">Resposta rápida</label>
-            <SelectInput
-              v-model="form.greetingReplyId"
-              :options="quickReplyOptions"
-              optionValueKey="value"
-              optionLabelKey="label"
-              placeholder="— Desabilitado —"
-            />
-          </div>
-          <div v-if="greetingPreview" class="small bg-light rounded p-2 mb-3">
-            <strong class="d-block mb-1">Preview:</strong>
-            <span style="white-space: pre-wrap;">{{ greetingPreview }}</span>
-          </div>
-          <BaseButton variant="primary" size="sm" :loading="saving" @click="saveGreeting">
-            Salvar
-          </BaseButton>
-        </div>
+      <div class="d-flex justify-content-end mt-2">
+        <BaseButton variant="primary" :loading="savingTemplates" @click="saveTemplates">
+          <i class="bi bi-check-lg me-1"></i>Salvar templates
+        </BaseButton>
       </div>
     </div>
   </div>
@@ -76,27 +148,47 @@ import Swal from 'sweetalert2';
 import SelectInput from '@/components/form/select/SelectInput.vue';
 import BaseButton from '@/components/BaseButton.vue';
 
-const inboxStore = useInboxStore();
+// ── Constants ──────────────────────────────────────────────────────────────
 
+const STATUSES = [
+  { key: 'EM_PREPARO',             label: 'Em Preparo',               icon: 'bi-fire',        description: 'Disparada quando o pedido começa a ser preparado.' },
+  { key: 'SAIU_PARA_ENTREGA',      label: 'Saiu para Entrega',        icon: 'bi-bicycle',     description: 'Disparada quando o entregador sai com o pedido.' },
+  { key: 'CONFIRMACAO_PAGAMENTO',  label: 'Confirmação de Pagamento', icon: 'bi-credit-card', description: 'Disparada quando o pagamento está sendo confirmado.' },
+  { key: 'CONCLUIDO',              label: 'Concluído',                icon: 'bi-check-circle',description: 'Disparada quando o pedido é finalizado com sucesso.' },
+  { key: 'CANCELADO',              label: 'Cancelado',                icon: 'bi-x-circle',    description: 'Disparada quando o pedido é cancelado.' },
+];
+
+const DEFAULT_TEMPLATE =
+`Olá {{nome}}, aqui é o atendente virtual do *{{loja}}* 👋
+
+*Seu pedido foi atualizado:* *{{status}}* 🎯
+
+Fique tranquilo(a) que vou enviar as atualizações do status do seu pedido por aqui. 😄
+
+*️⃣ Nº do pedido:* {{pedido}}`;
+
+// ── Tab ───────────────────────────────────────────────────────────────────
+
+const tab = ref('automations');
+
+// ── Automações de chat ────────────────────────────────────────────────────
+
+const inboxStore = useInboxStore();
 const stores = ref([]);
 const selectedStoreId = ref(null);
-
 const currentStore = ref(null);
 const quickReplies = computed(() => inboxStore.quickReplies || []);
+const saving = ref(false);
 
 const storeOptions = computed(() =>
   stores.value.map(s => ({ value: s.id, label: s.name }))
 );
 
 const quickReplyOptions = computed(() =>
-  quickReplies.value.map(r => ({ value: r.id, label: r.title || r.shortcut }))
+  [{ value: null, label: '— Desabilitado —' }, ...quickReplies.value.map(r => ({ value: r.id, label: r.title || r.shortcut }))]
 );
-const saving = ref(false);
 
-const form = ref({
-  outOfHoursReplyId: null,
-  greetingReplyId: null,
-});
+const form = ref({ outOfHoursReplyId: null, greetingReplyId: null });
 
 const outOfHoursPreview = computed(() => {
   const r = quickReplies.value.find(q => q.id === form.value.outOfHoursReplyId);
@@ -110,10 +202,7 @@ const greetingPreview = computed(() => {
 
 async function loadStore(val) {
   selectedStoreId.value = val || null;
-  if (!selectedStoreId.value) {
-    currentStore.value = null;
-    return;
-  }
+  if (!selectedStoreId.value) { currentStore.value = null; return; }
   try {
     const { data } = await api.get(`/stores/${selectedStoreId.value}`);
     currentStore.value = data;
@@ -127,38 +216,57 @@ async function loadStore(val) {
 async function saveOutOfHours() {
   saving.value = true;
   try {
-    await api.patch(`/stores/${selectedStoreId.value}/inbox-automation`, {
-      outOfHoursReplyId: form.value.outOfHoursReplyId || null,
-    });
+    await api.patch(`/stores/${selectedStoreId.value}/inbox-automation`, { outOfHoursReplyId: form.value.outOfHoursReplyId || null });
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Salvo!', showConfirmButton: false, timer: 1500 });
   } catch (e) {
     Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar', 'error');
-  } finally {
-    saving.value = false;
-  }
+  } finally { saving.value = false; }
 }
 
 async function saveGreeting() {
   saving.value = true;
   try {
-    await api.patch(`/stores/${selectedStoreId.value}/inbox-automation`, {
-      greetingReplyId: form.value.greetingReplyId || null,
-    });
+    await api.patch(`/stores/${selectedStoreId.value}/inbox-automation`, { greetingReplyId: form.value.greetingReplyId || null });
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Salvo!', showConfirmButton: false, timer: 1500 });
   } catch (e) {
     Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar', 'error');
-  } finally {
-    saving.value = false;
+  } finally { saving.value = false; }
+}
+
+// ── Notificações de pedido ────────────────────────────────────────────────
+
+const templates = ref(Object.fromEntries(STATUSES.map(s => [s.key, ''])));
+const savingTemplates = ref(false);
+
+async function loadTemplates() {
+  try {
+    const { data } = await api.get('/settings/notification-templates');
+    for (const s of STATUSES) {
+      templates.value[s.key] = typeof data[s.key] === 'string' ? data[s.key] : '';
+    }
+  } catch (e) {
+    console.warn('Falha ao carregar templates de notificação', e);
   }
 }
+
+async function saveTemplates() {
+  savingTemplates.value = true;
+  try {
+    await api.patch('/settings/notification-templates', templates.value);
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Templates salvos!', showConfirmButton: false, timer: 1800 });
+  } catch (e) {
+    Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar templates', 'error');
+  } finally { savingTemplates.value = false; }
+}
+
+// ── Mount ─────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
   try {
     const { data } = await api.get('/stores');
     stores.value = Array.isArray(data) ? data : (data.stores || []);
   } catch (e) { stores.value = []; }
-  if (!inboxStore.quickReplies?.length) {
-    await inboxStore.fetchQuickReplies();
-  }
+  if (!inboxStore.quickReplies?.length) await inboxStore.fetchQuickReplies();
+  await loadTemplates();
 });
 </script>

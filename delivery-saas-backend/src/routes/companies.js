@@ -229,4 +229,33 @@ companiesRouter.patch('/company', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+// ─── Order notification templates ────────────────────────────────────────────
+
+const NOTIFY_STATUS_KEYS = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO'];
+
+companiesRouter.get('/notification-templates', async (req, res) => {
+  const companyId = req.user.companyId;
+  try {
+    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { orderNotifyTemplates: true } });
+    res.json((c?.orderNotifyTemplates && typeof c.orderNotifyTemplates === 'object') ? c.orderNotifyTemplates : {});
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao carregar templates', error: e.message });
+  }
+});
+
+companiesRouter.patch('/notification-templates', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  try {
+    const body = req.body || {};
+    const clean = {};
+    for (const key of NOTIFY_STATUS_KEYS) {
+      if (typeof body[key] === 'string') clean[key] = body[key];
+    }
+    await prisma.company.update({ where: { id: companyId }, data: { orderNotifyTemplates: clean } });
+    res.json(clean);
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao salvar templates', error: e.message });
+  }
+});
+
 export default companiesRouter
