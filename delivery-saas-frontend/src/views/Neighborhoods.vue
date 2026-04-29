@@ -198,6 +198,8 @@
                 <table class="table table-hover align-middle mb-0" style="font-size:0.8rem;">
                   <thead>
                     <tr>
+                      <th>Pedido</th>
+                      <th>Data</th>
                       <th>Bairro do pedido</th>
                       <th>Bairro detectado</th>
                       <th class="text-end">Taxa</th>
@@ -206,6 +208,8 @@
                   </thead>
                   <tbody>
                     <tr v-for="r in retro.preview.results" :key="r.orderId">
+                      <td class="text-nowrap">{{ r.orderNumber || '—' }}</td>
+                      <td class="text-nowrap">{{ r.orderDate ? formatRetroDate(r.orderDate) : '—' }}</td>
                       <td>{{ r.deliveryNeighborhood || '—' }}</td>
                       <td>{{ r.matchedNeighborhood || '—' }}</td>
                       <td class="text-end">{{ formatCurrency(r.riderFee) }}</td>
@@ -413,6 +417,13 @@ async function testMatch() {
   } finally {
     testing.value = false
   }
+}
+
+function formatRetroDate(d) {
+  try {
+    const dt = new Date(d)
+    return dt.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch { return '—' }
 }
 
 // Retroactive fees
