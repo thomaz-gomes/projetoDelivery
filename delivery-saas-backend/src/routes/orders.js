@@ -816,6 +816,7 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
             const candidates = [];
             if (p.delivery && p.delivery.deliveryAddress) {
               const d = p.delivery.deliveryAddress;
+              if (d.neighborhood) candidates.push(d.neighborhood);
               if (d.formattedAddress) candidates.push(d.formattedAddress);
               if (d.formatted_address) candidates.push(d.formatted_address);
               if (d.address) candidates.push(typeof d.address === 'string' ? d.address : (d.address.formatted || ''));
@@ -828,27 +829,48 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
           } catch (e) { return null; }
         }
 
-        const addrCandidates = [];
-        if (updated.address) addrCandidates.push(String(updated.address));
-        const payloadText = extractAddressTextFromPayload(updated.payload);
-        if (payloadText) addrCandidates.push(payloadText);
+        const neighs = await prisma.neighborhood.findMany({ where: { companyId: updated.companyId } });
 
-        if (addrCandidates.length) {
-          const addrText = addrCandidates.join(' ').toLowerCase();
-          const neighs = await prisma.neighborhood.findMany({ where: { companyId: updated.companyId } });
-          const matched = neighs.find(n => {
+        // Priority 1: use deliveryNeighborhood field stored on the order (set by iFood/AiqFome webhooks)
+        if (updated.deliveryNeighborhood) {
+          const stored = String(updated.deliveryNeighborhood).trim().toLowerCase();
+          const m = neighs.find(n => {
             if (!n || !n.name) return false;
-            const name = String(n.name).toLowerCase();
-            if (addrText.includes(name)) return true;
+            if (String(n.name).toLowerCase() === stored) return true;
             if (n.aliases) {
               try {
                 const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
-                if (arr.some(a => addrText.includes(String(a || '').toLowerCase()))) return true;
+                if (arr.some(a => String(a || '').toLowerCase() === stored)) return true;
               } catch (e) {}
             }
             return false;
           });
-          if (matched) neighborhoodName = matched.name;
+          if (m) neighborhoodName = m.name;
+        }
+
+        // Priority 2: fallback — substring search across address text and payload
+        if (!neighborhoodName) {
+          const addrCandidates = [];
+          if (updated.address) addrCandidates.push(String(updated.address));
+          const payloadText = extractAddressTextFromPayload(updated.payload);
+          if (payloadText) addrCandidates.push(payloadText);
+
+          if (addrCandidates.length) {
+            const addrText = addrCandidates.join(' ').toLowerCase();
+            const matched = neighs.find(n => {
+              if (!n || !n.name) return false;
+              const name = String(n.name).toLowerCase();
+              if (addrText.includes(name)) return true;
+              if (n.aliases) {
+                try {
+                  const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
+                  if (arr.some(a => addrText.includes(String(a || '').toLowerCase()))) return true;
+                } catch (e) {}
+              }
+              return false;
+            });
+            if (matched) neighborhoodName = matched.name;
+          }
         }
 
         await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId: updated.companyId, riderId: updated.riderId, orderId: updated.id, neighborhoodName, orderDate: updated.updatedAt || new Date() });
@@ -1399,3 +1421,143 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   }
 });
 
+// Retroactively fix rider delivery fees for completed orders where neighborhood was not matched
+// (i.e., DELIVERY_FEE transactions with amount = 0 that can now be matched)
+// Body: { dryRun?: boolean, startDate?: string, endDate?: string }
+ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  const { dryRun = false, startDate, endDate } = req.body || {};
+
+  try {
+    const dateFilter = {};
+    if (startDate) dateFilter.gte = new Date(startDate);
+    if (endDate) dateFilter.lte = new Date(endDate);
+
+    // Find all zero-amount DELIVERY_FEE transactions for completed orders of this company
+    const zeroTxns = await prisma.riderTransaction.findMany({
+      where: {
+        type: 'DELIVERY_FEE',
+        amount: { lte: 0 },
+        orderId: { not: null },
+        order: {
+          companyId,
+          status: 'CONCLUIDO',
+          riderId: { not: null },
+          ...(Object.keys(dateFilter).length ? { createdAt: dateFilter } : {}),
+        },
+      },
+      include: {
+        order: {
+          select: {
+            id: true,
+            companyId: true,
+            riderId: true,
+            deliveryNeighborhood: true,
+            address: true,
+            payload: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    // Load all neighborhoods once to avoid N+1
+    const allNeighs = await prisma.neighborhood.findMany({ where: { companyId } });
+
+    function matchNeighborhood(deliveryNeighborhood, address, payload) {
+      // Priority 1: exact match on stored deliveryNeighborhood field
+      if (deliveryNeighborhood) {
+        const needle = String(deliveryNeighborhood).trim().toLowerCase();
+        const m = allNeighs.find(n => {
+          if (!n?.name) return false;
+          if (String(n.name).trim().toLowerCase() === needle) return true;
+          if (n.aliases) {
+            try {
+              const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
+              return arr.some(a => String(a || '').trim().toLowerCase() === needle);
+            } catch (e) { return false; }
+          }
+          return false;
+        });
+        if (m) return m;
+      }
+
+      // Priority 2: substring search in address text + payload
+      const candidates = [];
+      if (address) candidates.push(String(address));
+      try {
+        const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        if (p?.delivery?.deliveryAddress) {
+          const d = p.delivery.deliveryAddress;
+          if (d.neighborhood) candidates.push(d.neighborhood);
+          if (d.formattedAddress) candidates.push(d.formattedAddress);
+          if (d.formatted_address) candidates.push(d.formatted_address);
+        }
+      } catch (e) {}
+      if (!candidates.length) return null;
+
+      const addrText = candidates.join(' ').toLowerCase();
+      return allNeighs.find(n => {
+        if (!n?.name) return false;
+        const name = String(n.name).toLowerCase();
+        if (addrText.includes(name)) return true;
+        if (n.aliases) {
+          try {
+            const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
+            return arr.some(a => addrText.includes(String(a || '').toLowerCase()));
+          } catch (e) { return false; }
+        }
+        return false;
+      }) || null;
+    }
+
+    const results = [];
+    let totalCredited = 0;
+
+    for (const txn of zeroTxns) {
+      const order = txn.order;
+      if (!order) continue;
+
+      const neigh = matchNeighborhood(order.deliveryNeighborhood, order.address, order.payload);
+      const riderFee = neigh ? Number(neigh.riderFee || 0) : 0;
+
+      results.push({
+        orderId: order.id,
+        transactionId: txn.id,
+        riderId: order.riderId,
+        deliveryNeighborhood: order.deliveryNeighborhood,
+        matchedNeighborhood: neigh?.name || null,
+        riderFee,
+        willCredit: riderFee > 0,
+      });
+
+      if (!dryRun && riderFee > 0) {
+        await prisma.$transaction([
+          prisma.riderTransaction.update({
+            where: { id: txn.id },
+            data: { amount: riderFee, note: `Taxa de entrega - ${neigh.name} (retroativo)` },
+          }),
+          prisma.riderAccount.upsert({
+            where: { riderId: order.riderId },
+            update: { balance: { increment: riderFee } },
+            create: { riderId: order.riderId, balance: riderFee },
+          }),
+        ]);
+      }
+
+      if (riderFee > 0) totalCredited += riderFee;
+    }
+
+    return res.json({
+      dryRun: !!dryRun,
+      checked: zeroTxns.length,
+      corrected: results.filter(r => r.willCredit).length,
+      skipped: results.filter(r => !r.willCredit).length,
+      totalCredited,
+      results,
+    });
+  } catch (e) {
+    console.error('[retroactive-rider-fees] error:', e?.message || e);
+    return res.status(500).json({ message: 'Erro ao processar taxas retroativas', error: e?.message });
+  }
+});
