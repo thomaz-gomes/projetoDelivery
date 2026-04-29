@@ -562,8 +562,8 @@
                       <span v-if="customerFormLoading" class="spinner-border spinner-border-sm me-1"></span>
                       Entrar
                     </button>
-                    <a href="#" class="checkout-link d-flex align-items-center gap-1" @click.prevent="continueWithWhatsappFromLogin">
-                      <i class="bi bi-whatsapp"></i> Continuar com WhatsApp
+                    <a href="#" class="btn btn-noCad checkout-link d-flex align-items-center gap-1" @click.prevent="continueWithWhatsappFromLogin">
+                      <i class="bi bi-whatsapp"></i> Pedir sem se cadastrar
                     </a>
                   </div>
                 </div>
@@ -4491,6 +4491,15 @@ try{
   .hero-nav { padding: 20px 48px 0; }
 }
 
+.btn-noCad {
+    background: none;
+    border: 2px solid;
+    text-align: center;
+    padding: 9px;
+    display: flex !important;
+    justify-content: center;
+    border-radius: 16px;
+}
 /* Offcanvas Mobile Menu */
 .offcanvas-backdrop {
   position: fixed;
