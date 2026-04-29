@@ -1430,41 +1430,44 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
   try {
     const dateFilter = {};
     if (startDate) dateFilter.gte = new Date(startDate);
-    if (endDate) dateFilter.lte = new Date(endDate);
+    if (endDate) {
+      // include the full end day
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      dateFilter.lte = end;
+    }
 
-    // Find all zero-amount DELIVERY_FEE transactions for completed orders of this company
-    const zeroTxns = await prisma.riderTransaction.findMany({
+    // Fetch all completed orders with a rider for this company in the date range
+    const orders = await prisma.order.findMany({
       where: {
-        type: 'DELIVERY_FEE',
-        amount: { lte: 0 },
-        orderId: { not: null },
-        order: {
-          companyId,
-          status: 'CONCLUIDO',
-          riderId: { not: null },
-          ...(Object.keys(dateFilter).length ? { createdAt: dateFilter } : {}),
-        },
+        companyId,
+        status: 'CONCLUIDO',
+        riderId: { not: null },
+        ...(Object.keys(dateFilter).length ? { createdAt: dateFilter } : {}),
       },
-      include: {
-        order: {
-          select: {
-            id: true,
-            companyId: true,
-            riderId: true,
-            deliveryNeighborhood: true,
-            address: true,
-            payload: true,
-            createdAt: true,
-          },
+      select: {
+        id: true,
+        riderId: true,
+        deliveryNeighborhood: true,
+        address: true,
+        payload: true,
+        createdAt: true,
+        riderTransactions: {
+          where: { type: 'DELIVERY_FEE' },
+          select: { id: true, amount: true },
         },
       },
     });
+
+    // Only keep orders that have no DELIVERY_FEE transaction OR have one with amount <= 0
+    const candidates = orders.filter(o =>
+      o.riderTransactions.length === 0 || o.riderTransactions.some(t => Number(t.amount) <= 0)
+    );
 
     // Load all neighborhoods once to avoid N+1
     const allNeighs = await prisma.neighborhood.findMany({ where: { companyId } });
 
     function matchNeighborhood(deliveryNeighborhood, address, payload) {
-      // Priority 1: exact match on stored deliveryNeighborhood field
       if (deliveryNeighborhood) {
         const needle = String(deliveryNeighborhood).trim().toLowerCase();
         const m = allNeighs.find(n => {
@@ -1481,21 +1484,20 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
         if (m) return m;
       }
 
-      // Priority 2: substring search in address text + payload
-      const candidates = [];
-      if (address) candidates.push(String(address));
+      const addrCandidates = [];
+      if (address) addrCandidates.push(String(address));
       try {
         const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
         if (p?.delivery?.deliveryAddress) {
           const d = p.delivery.deliveryAddress;
-          if (d.neighborhood) candidates.push(d.neighborhood);
-          if (d.formattedAddress) candidates.push(d.formattedAddress);
-          if (d.formatted_address) candidates.push(d.formatted_address);
+          if (d.neighborhood) addrCandidates.push(d.neighborhood);
+          if (d.formattedAddress) addrCandidates.push(d.formattedAddress);
+          if (d.formatted_address) addrCandidates.push(d.formatted_address);
         }
       } catch (e) {}
-      if (!candidates.length) return null;
+      if (!addrCandidates.length) return null;
 
-      const addrText = candidates.join(' ').toLowerCase();
+      const addrText = addrCandidates.join(' ').toLowerCase();
       return allNeighs.find(n => {
         if (!n?.name) return false;
         const name = String(n.name).toLowerCase();
@@ -1513,35 +1515,56 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
     const results = [];
     let totalCredited = 0;
 
-    for (const txn of zeroTxns) {
-      const order = txn.order;
-      if (!order) continue;
-
+    for (const order of candidates) {
       const neigh = matchNeighborhood(order.deliveryNeighborhood, order.address, order.payload);
       const riderFee = neigh ? Number(neigh.riderFee || 0) : 0;
+      const existingTxn = order.riderTransactions.find(t => Number(t.amount) <= 0) || null;
 
       results.push({
         orderId: order.id,
-        transactionId: txn.id,
+        transactionId: existingTxn?.id || null,
         riderId: order.riderId,
         deliveryNeighborhood: order.deliveryNeighborhood,
         matchedNeighborhood: neigh?.name || null,
         riderFee,
         willCredit: riderFee > 0,
+        missingTransaction: !existingTxn,
       });
 
       if (!dryRun && riderFee > 0) {
-        await prisma.$transaction([
-          prisma.riderTransaction.update({
-            where: { id: txn.id },
-            data: { amount: riderFee, note: `Taxa de entrega - ${neigh.name} (retroativo)` },
-          }),
-          prisma.riderAccount.upsert({
-            where: { riderId: order.riderId },
-            update: { balance: { increment: riderFee } },
-            create: { riderId: order.riderId, balance: riderFee },
-          }),
-        ]);
+        if (existingTxn) {
+          // Update existing zero-value transaction
+          await prisma.$transaction([
+            prisma.riderTransaction.update({
+              where: { id: existingTxn.id },
+              data: { amount: riderFee, note: `Taxa de entrega - ${neigh.name} (retroativo)` },
+            }),
+            prisma.riderAccount.upsert({
+              where: { riderId: order.riderId },
+              update: { balance: { increment: riderFee } },
+              create: { riderId: order.riderId, balance: riderFee },
+            }),
+          ]);
+        } else {
+          // Create missing transaction from scratch
+          await prisma.$transaction([
+            prisma.riderTransaction.create({
+              data: {
+                riderId: order.riderId,
+                orderId: order.id,
+                type: 'DELIVERY_FEE',
+                amount: riderFee,
+                date: order.createdAt || new Date(),
+                note: `Taxa de entrega - ${neigh.name} (retroativo)`,
+              },
+            }),
+            prisma.riderAccount.upsert({
+              where: { riderId: order.riderId },
+              update: { balance: { increment: riderFee } },
+              create: { riderId: order.riderId, balance: riderFee },
+            }),
+          ]);
+        }
       }
 
       if (riderFee > 0) totalCredited += riderFee;
@@ -1549,7 +1572,7 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
 
     return res.json({
       dryRun: !!dryRun,
-      checked: zeroTxns.length,
+      checked: candidates.length,
       corrected: results.filter(r => r.willCredit).length,
       skipped: results.filter(r => !r.willCredit).length,
       totalCredited,
