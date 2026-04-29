@@ -986,4 +986,44 @@ router.get('/products/:id/pricing-analysis', async (req, res) => {
   }
 });
 
+// ---- Inbox automation (outOfHours / greeting) per menu ----
+router.patch('/menus/:id/inbox-automation', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { id } = req.params;
+    const menu = await prisma.menu.findFirst({
+      where: { id, store: { companyId } },
+      select: { id: true },
+    });
+    if (!menu) return res.status(404).json({ message: 'Cardápio não encontrado' });
+
+    const { outOfHoursReplyId, greetingReplyId } = req.body || {};
+    const data = {};
+    if (outOfHoursReplyId !== undefined) {
+      if (outOfHoursReplyId) {
+        const exists = await prisma.quickReply.findFirst({ where: { id: outOfHoursReplyId, companyId }, select: { id: true } });
+        if (!exists) return res.status(400).json({ message: 'outOfHoursReplyId inválido' });
+      }
+      data.outOfHoursReplyId = outOfHoursReplyId || null;
+    }
+    if (greetingReplyId !== undefined) {
+      if (greetingReplyId) {
+        const exists = await prisma.quickReply.findFirst({ where: { id: greetingReplyId, companyId }, select: { id: true } });
+        if (!exists) return res.status(400).json({ message: 'greetingReplyId inválido' });
+      }
+      data.greetingReplyId = greetingReplyId || null;
+    }
+
+    const updated = await prisma.menu.update({
+      where: { id: menu.id },
+      data,
+      select: { id: true, outOfHoursReplyId: true, greetingReplyId: true },
+    });
+    res.json(updated);
+  } catch (e) {
+    console.error('[menu] inbox-automation error:', e);
+    res.status(500).json({ message: 'Erro ao salvar automação', error: e.message });
+  }
+});
+
 export default router

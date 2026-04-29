@@ -10,7 +10,7 @@ const qrDataUrl = ref('');
 const status = ref('');
 const pollTimer = ref(null);
 const evolutionEnabled = ref(false);
-const stores = ref([]);
+const menus = ref([]);
 
 // --- Normalizador robusto para data URL do QR ---
 function normalizeQrUrl(raw) {
@@ -40,27 +40,27 @@ async function loadInstances() {
   if (!selected.value && data.length) selected.value = data[0].instanceName;
 }
 
-async function loadStores() {
+async function loadMenus() {
   try {
-    const { data } = await api.get('/stores');
-    stores.value = data || [];
+    const { data } = await api.get('/menu/menus');
+    menus.value = Array.isArray(data) ? data : [];
   } catch (e) {
-    console.warn('Falha ao carregar lojas', e);
-    stores.value = [];
+    console.warn('Falha ao carregar cardápios', e);
+    menus.value = [];
   }
 }
 
 // (inline wizard removed; use modal flows instead)
 
 async function assignModal(inst) {
-  const selId = 'sw-select-stores';
+  const selId = 'sw-select-menus';
   const chkId = 'sw-assign-all';
   const html = `
     <div class="mb-2"><strong>Instância:</strong> ${inst.instanceName}</div>
-    <div class="form-check mb-2"><input id="${chkId}" class="form-check-input" type="checkbox" /> <label class="form-check-label">Atribuir a todas as lojas</label></div>
-    <div><label class="form-label">Escolha lojas (Ctrl/Cmd+click para múltipla)</label>
+    <div class="form-check mb-2"><input id="${chkId}" class="form-check-input" type="checkbox" /> <label class="form-check-label">Atribuir a todos os cardápios</label></div>
+    <div><label class="form-label">Escolha cardápios (Ctrl/Cmd+click para múltipla)</label>
       <select id="${selId}" multiple style="width:100%;min-height:150px;">
-        ${stores.value.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+        ${menus.value.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
       </select>
     </div>
   `;
@@ -75,26 +75,26 @@ async function assignModal(inst) {
       const all = document.getElementById(chkId).checked;
       const sel = Array.from(document.getElementById(selId).selectedOptions || []).map(o => o.value);
       if (!all && sel.length === 0) {
-        Swal.showValidationMessage('Selecione ao menos uma loja ou marque "Atribuir a todas as lojas"');
+        Swal.showValidationMessage('Selecione ao menos um cardápio ou marque "Atribuir a todos"');
         return false;
       }
-      return { all, storeIds: sel };
+      return { all, menuIds: sel };
     }
   });
 
   if (!result || !result.isConfirmed) return;
-  const body = result.value.all ? { all: true } : { storeIds: result.value.storeIds };
+  const body = result.value.all ? { all: true } : { menuIds: result.value.menuIds };
   try {
-    await api.post(`/wa/instances/${encodeURIComponent(inst.instanceName)}/assign-stores`, body);
+    await api.post(`/wa/instances/${encodeURIComponent(inst.instanceName)}/assign-menus`, body);
     await Swal.fire('OK', 'Atribuição realizada com sucesso', 'success');
     await loadInstances();
   } catch (err) {
-    console.error('Erro ao atribuir lojas via modal:', err);
+    console.error('Erro ao atribuir cardápios via modal:', err);
     if (err?.response?.status === 409) {
-      const conflicts = err.response.data?.conflictStoreIds || [];
-      await Swal.fire('Conflito', `Algumas lojas já têm outra instância atribuída: ${conflicts.join(', ')}`, 'warning');
+      const conflicts = err.response.data?.conflictMenuIds || [];
+      await Swal.fire('Conflito', `Alguns cardápios já têm outra instância atribuída: ${conflicts.join(', ')}`, 'warning');
     } else {
-      await Swal.fire('Erro', err?.response?.data?.message || err?.message || 'Falha ao atribuir lojas', 'error');
+      await Swal.fire('Erro', err?.response?.data?.message || err?.message || 'Falha ao atribuir cardápios', 'error');
     }
   }
 }
@@ -117,7 +117,7 @@ async function createInstance() {
   if (!name) return;
 
   // Step 2: configuration + assign
-  const selId = 'sw-create-select-stores';
+  const selId = 'sw-create-select-menus';
   const dispId = 'sw-create-display-name';
   const chkId = 'sw-create-assign-all';
   const html = `
@@ -125,10 +125,10 @@ async function createInstance() {
     <div class="mb-3"><label class="form-label">Nome exibido (opcional)</label>
       <input id="${dispId}" class="form-control" value="${name}" />
     </div>
-    <div class="form-check mb-2"><input id="${chkId}" class="form-check-input" type="checkbox" /> <label class="form-check-label">Atribuir a todas as lojas</label></div>
-    <div><label class="form-label">Escolha lojas (Ctrl/Cmd+click para múltipla)</label>
+    <div class="form-check mb-2"><input id="${chkId}" class="form-check-input" type="checkbox" /> <label class="form-check-label">Atribuir a todos os cardápios</label></div>
+    <div><label class="form-label">Escolha cardápios (Ctrl/Cmd+click para múltipla)</label>
       <select id="${selId}" multiple style="width:100%;min-height:150px;">
-        ${stores.value.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+        ${menus.value.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
       </select>
     </div>
   `;
@@ -145,10 +145,10 @@ async function createInstance() {
       const all = document.getElementById(chkId).checked;
       const sel = Array.from(document.getElementById(selId).selectedOptions || []).map(o => o.value);
       if (!all && sel.length === 0) {
-        Swal.showValidationMessage('Selecione ao menos uma loja ou marque "Atribuir a todas as lojas"');
+        Swal.showValidationMessage('Selecione ao menos um cardápio ou marque "Atribuir a todos"');
         return false;
       }
-      return { displayName, all, storeIds: sel };
+      return { displayName, all, menuIds: sel };
     }
   });
   if (!res || !res.isConfirmed) return;
@@ -157,11 +157,11 @@ async function createInstance() {
   try {
     // create instance
     await api.post('/wa/instances', { instanceName: name, displayName: res.value.displayName || name });
-    // assign stores
+    // assign menus
     if (res.value.all) {
-      await api.post(`/wa/instances/${encodeURIComponent(name)}/assign-stores`, { all: true });
-    } else if (res.value.storeIds && res.value.storeIds.length) {
-      await api.post(`/wa/instances/${encodeURIComponent(name)}/assign-stores`, { storeIds: res.value.storeIds });
+      await api.post(`/wa/instances/${encodeURIComponent(name)}/assign-menus`, { all: true });
+    } else if (res.value.menuIds && res.value.menuIds.length) {
+      await api.post(`/wa/instances/${encodeURIComponent(name)}/assign-menus`, { menuIds: res.value.menuIds });
     }
 
     await loadInstances();
@@ -288,7 +288,7 @@ function stopPolling() {
 onMounted(async () => {
   await loadInstances();
   await loadSettings();
-  await loadStores();
+  await loadMenus();
   if (selected.value) {
     await fetchStatus();
     await fetchQr();

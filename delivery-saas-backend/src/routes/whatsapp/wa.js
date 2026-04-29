@@ -183,6 +183,35 @@ waRouter.post('/instances/:name/assign-stores', requireRole('ADMIN'), async (req
 	res.json({ ok: true, assignedStoreIds: idsToUpdate });
 });
 
+// Atribuir uma instância a um ou mais cardápios (menus). Body: { menuIds: ["id1"] } ou { all: true }
+waRouter.post('/instances/:name/assign-menus', requireRole('ADMIN'), async (req, res) => {
+	const companyId = req.user.companyId;
+	const { name } = req.params;
+	const { menuIds, all } = req.body || {};
+
+	const instance = await prisma.whatsAppInstance.findUnique({ where: { instanceName: name } });
+	if (!instance || instance.companyId !== companyId) return res.status(404).json({ message: 'Instância não encontrada' });
+
+	let menus = [];
+	if (all) {
+		menus = await prisma.menu.findMany({ where: { store: { companyId } }, select: { id: true, whatsappInstanceId: true } });
+	} else {
+		if (!Array.isArray(menuIds) || menuIds.length === 0) return res.status(400).json({ message: 'menuIds obrigatório ou use all: true' });
+		menus = await prisma.menu.findMany({ where: { id: { in: menuIds }, store: { companyId } }, select: { id: true, whatsappInstanceId: true } });
+		if (menus.length !== menuIds.length) return res.status(404).json({ message: 'Um ou mais cardápios não foram encontrados' });
+	}
+
+	const conflicts = menus.filter(m => m.whatsappInstanceId && m.whatsappInstanceId !== instance.id).map(m => m.id);
+	if (conflicts.length > 0) return res.status(409).json({ ok: false, message: 'Alguns cardápios já têm outra instância atribuída', conflictMenuIds: conflicts });
+
+	const idsToUpdate = menus.map(m => m.id);
+	if (idsToUpdate.length === 0) return res.json({ ok: true, assignedMenuIds: [] });
+
+	await prisma.menu.updateMany({ where: { id: { in: idsToUpdate } }, data: { whatsappInstanceId: instance.id } });
+
+	res.json({ ok: true, assignedMenuIds: idsToUpdate });
+});
+
 // Enviar texto (verifica toggle por empresa da instância)
 waRouter.post('/instances/:name/send-text', requireRole('ADMIN'), async (req, res) => {
 	const { name } = req.params;
