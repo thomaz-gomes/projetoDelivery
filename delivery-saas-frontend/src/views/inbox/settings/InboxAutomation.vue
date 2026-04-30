@@ -88,6 +88,82 @@
             </BaseButton>
           </div>
         </div>
+
+        <!-- Greeting time rules -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <h6 class="card-title mb-0"><i class="bi bi-clock me-1"></i>Saudações por horário</h6>
+                <p class="small text-muted mb-0">Escolha uma mensagem diferente por faixa de horário. Tem prioridade sobre a saudação padrão.</p>
+              </div>
+              <BaseButton variant="outline-primary" size="sm" @click="openAddRule">
+                <i class="bi bi-plus-lg me-1"></i>Adicionar
+              </BaseButton>
+            </div>
+
+            <div v-if="!greetingRules.length" class="text-muted small py-2 text-center">
+              Nenhuma regra de horário configurada.
+            </div>
+
+            <div v-for="rule in greetingRules" :key="rule.id" class="d-flex align-items-center gap-2 p-2 border rounded mb-2">
+              <i class="bi bi-clock text-secondary"></i>
+              <div class="flex-grow-1">
+                <div class="fw-semibold small">{{ rule.label || rule.quickReply?.title }}</div>
+                <div class="text-muted small">{{ rule.startTime }} – {{ rule.endTime }}</div>
+              </div>
+              <div class="small text-truncate" style="max-width: 160px;">{{ rule.quickReply?.body || '—' }}</div>
+              <button class="btn btn-sm btn-outline-secondary" @click="openEditRule(rule)" title="Editar">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger" @click="deleteRule(rule)" title="Remover">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rule modal -->
+        <div v-if="showRuleForm" class="modal d-block" style="background:rgba(0,0,0,0.5);" @click.self="showRuleForm=false">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">{{ editingRuleId ? 'Editar' : 'Nova' }} regra de horário</h5>
+                <button type="button" class="btn-close" @click="showRuleForm=false"></button>
+              </div>
+              <div class="modal-body d-flex flex-column gap-3">
+                <div>
+                  <label class="form-label">Rótulo <span class="text-muted small">(opcional)</span></label>
+                  <input v-model="ruleForm.label" type="text" class="form-control" placeholder="Ex: Bom dia, Boa tarde..." />
+                </div>
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label">Início</label>
+                    <input v-model="ruleForm.startTime" type="time" class="form-control" required />
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">Fim</label>
+                    <input v-model="ruleForm.endTime" type="time" class="form-control" required />
+                  </div>
+                </div>
+                <div>
+                  <label class="form-label">Mensagem (resposta rápida)</label>
+                  <SelectInput
+                    v-model="ruleForm.quickReplyId"
+                    :options="quickReplyOptionsRequired"
+                    optionValueKey="value"
+                    optionLabelKey="label"
+                    placeholder="Selecione..."
+                  />
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @click="showRuleForm=false">Cancelar</button>
+                <BaseButton variant="primary" :loading="savingRule" @click="saveRule">Salvar</BaseButton>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -188,7 +264,17 @@ const quickReplyOptions = computed(() =>
   [{ value: null, label: '— Desabilitado —' }, ...quickReplies.value.map(r => ({ value: r.id, label: r.title || r.shortcut }))]
 );
 
+const quickReplyOptionsRequired = computed(() =>
+  quickReplies.value.map(r => ({ value: r.id, label: r.title || r.shortcut }))
+);
+
 const form = ref({ outOfHoursReplyId: null, greetingReplyId: null });
+
+const greetingRules = ref([]);
+const showRuleForm = ref(false);
+const savingRule = ref(false);
+const editingRuleId = ref(null);
+const ruleForm = ref({ label: '', startTime: '', endTime: '', quickReplyId: null });
 
 const outOfHoursPreview = computed(() => {
   const r = quickReplies.value.find(q => q.id === form.value.outOfHoursReplyId);
@@ -202,12 +288,13 @@ const greetingPreview = computed(() => {
 
 async function loadMenu(val) {
   selectedMenuId.value = val || null;
-  if (!selectedMenuId.value) { currentMenu.value = null; return; }
+  if (!selectedMenuId.value) { currentMenu.value = null; greetingRules.value = []; return; }
   try {
     const { data } = await api.get(`/menu/menus/${selectedMenuId.value}`);
     currentMenu.value = data;
     form.value.outOfHoursReplyId = data.outOfHoursReplyId || null;
     form.value.greetingReplyId = data.greetingReplyId || null;
+    await loadGreetingRules(selectedMenuId.value);
   } catch (e) {
     Swal.fire('Erro', 'Falha ao carregar cardápio', 'error');
   }
@@ -231,6 +318,83 @@ async function saveGreeting() {
   } catch (e) {
     Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar', 'error');
   } finally { saving.value = false; }
+}
+
+// ── Greeting time rules ───────────────────────────────────────────────────
+
+async function loadGreetingRules(menuId) {
+  if (!menuId) { greetingRules.value = []; return; }
+  try {
+    const { data } = await api.get('/inbox/greeting-rules', { params: { menuId } });
+    greetingRules.value = data;
+  } catch (e) {
+    console.error('Failed to load greeting rules', e);
+  }
+}
+
+function openAddRule() {
+  editingRuleId.value = null;
+  ruleForm.value = { label: '', startTime: '', endTime: '', quickReplyId: null };
+  showRuleForm.value = true;
+}
+
+function openEditRule(rule) {
+  editingRuleId.value = rule.id;
+  ruleForm.value = {
+    label: rule.label || '',
+    startTime: rule.startTime,
+    endTime: rule.endTime,
+    quickReplyId: rule.quickReplyId,
+  };
+  showRuleForm.value = true;
+}
+
+async function saveRule() {
+  if (!ruleForm.value.startTime || !ruleForm.value.endTime || !ruleForm.value.quickReplyId) {
+    Swal.fire('Erro', 'Preencha horário de início, fim e a mensagem', 'error');
+    return;
+  }
+  savingRule.value = true;
+  try {
+    const payload = {
+      menuId: selectedMenuId.value,
+      quickReplyId: ruleForm.value.quickReplyId,
+      startTime: ruleForm.value.startTime,
+      endTime: ruleForm.value.endTime,
+      label: ruleForm.value.label || null,
+    };
+    if (editingRuleId.value) {
+      await api.put(`/inbox/greeting-rules/${editingRuleId.value}`, payload);
+    } else {
+      await api.post('/inbox/greeting-rules', payload);
+    }
+    showRuleForm.value = false;
+    await loadGreetingRules(selectedMenuId.value);
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Salvo!', showConfirmButton: false, timer: 1500 });
+  } catch (e) {
+    Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar', 'error');
+  } finally {
+    savingRule.value = false;
+  }
+}
+
+async function deleteRule(rule) {
+  const result = await Swal.fire({
+    title: 'Remover regra?',
+    text: `A regra "${rule.label || rule.quickReply?.title}" será removida.`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'Remover',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!result.isConfirmed) return;
+  try {
+    await api.delete(`/inbox/greeting-rules/${rule.id}`);
+    greetingRules.value = greetingRules.value.filter(r => r.id !== rule.id);
+  } catch (e) {
+    Swal.fire('Erro', 'Falha ao remover', 'error');
+  }
 }
 
 // ── Notificações de pedido ────────────────────────────────────────────────

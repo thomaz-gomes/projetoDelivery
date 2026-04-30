@@ -145,8 +145,9 @@ model Company {
   riderGoals       RiderGoal[]
 
   // ---- Inbox / Messaging ----
-  conversations Conversation[]
-  quickReplies  QuickReply[]
+  conversations     Conversation[]
+  quickReplies      QuickReply[]
+  greetingTimeRules GreetingTimeRule[]
 
   // ---- Free Delivery ----
   freeDeliveryEnabled  Boolean  @default(false)
@@ -639,6 +640,7 @@ model Menu {
   greetingReplyId    String?
   greetingReply      QuickReply?       @relation("MenuGreetingReply", fields: [greetingReplyId], references: [id])
   conversations      Conversation[]
+  greetingTimeRules  GreetingTimeRule[]
 }
 
 model CustomDomain {
@@ -2515,7 +2517,7 @@ model QuickReply {
   id            String   @id @default(uuid())
   companyId     String
   company       Company  @relation(fields: [companyId], references: [id])
-  shortcut      String
+  shortcut      String?
   title         String
   body          String?
   mediaUrl      String?
@@ -2524,12 +2526,32 @@ model QuickReply {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  storesOutOfHours Store[] @relation("StoreOutOfHoursReply")
-  storesGreeting   Store[] @relation("StoreGreetingReply")
-  menusOutOfHours  Menu[]  @relation("MenuOutOfHoursReply")
-  menusGreeting    Menu[]  @relation("MenuGreetingReply")
+  storesOutOfHours  Store[]            @relation("StoreOutOfHoursReply")
+  storesGreeting    Store[]            @relation("StoreGreetingReply")
+  menusOutOfHours   Menu[]             @relation("MenuOutOfHoursReply")
+  menusGreeting     Menu[]             @relation("MenuGreetingReply")
+  greetingTimeRules GreetingTimeRule[]
 
   @@unique([companyId, shortcut])
+  @@index([companyId])
+}
+
+model GreetingTimeRule {
+  id           String     @id @default(uuid())
+  companyId    String
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  menuId       String
+  menu         Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  quickReplyId String
+  quickReply   QuickReply @relation(fields: [quickReplyId], references: [id], onDelete: Cascade)
+  startTime    String // "HH:MM"
+  endTime      String // "HH:MM"
+  label        String?
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([menuId])
   @@index([companyId])
 }
 

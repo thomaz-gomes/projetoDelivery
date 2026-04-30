@@ -74,6 +74,37 @@ async function sendAutoReply(conversation, instanceName, quickReply) {
   }
 }
 
+function timeInRange(current, start, end) {
+  // current, start, end are "HH:MM" strings
+  if (start <= end) {
+    return current >= start && current < end;
+  }
+  // overnight: e.g. 22:00–06:00
+  return current >= start || current < end;
+}
+
+function pickGreetingByTime(rules, timezone) {
+  if (!rules || !rules.length) return null;
+  const tz = timezone || 'America/Sao_Paulo';
+  const currentTime = new Date().toLocaleTimeString('pt-BR', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).substring(0, 5); // "HH:MM"
+
+  const sorted = [...rules].sort((a, b) => a.sortOrder - b.sortOrder);
+  for (const rule of sorted) {
+    if (timeInRange(currentTime, rule.startTime, rule.endTime)) {
+      const qr = rule.quickReply;
+      if ((qr.body && qr.body.trim()) || qr.mediaUrl) {
+        return qr;
+      }
+    }
+  }
+  return null;
+}
+
 async function runAutomations(conversation, incomingMessage, menuId, instanceName) {
   if (!menuId) return;
   const menu = await prisma.menu.findUnique({
@@ -85,6 +116,14 @@ async function runAutomations(conversation, incomingMessage, menuId, instanceNam
       timezone: true,
       outOfHoursReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
       greetingReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
+      greetingTimeRules: {
+        select: {
+          startTime: true,
+          endTime: true,
+          sortOrder: true,
+          quickReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
+        },
+      },
       store: { select: { company: { select: { evolutionEnabled: true } } } },
     },
   });
@@ -92,7 +131,11 @@ async function runAutomations(conversation, incomingMessage, menuId, instanceNam
   if (!menu.store?.company?.evolutionEnabled) { console.log('[automations] evolutionEnabled=false — skipping'); return; }
 
   // 1. Greeting on first contact or after 6h inactivity (takes priority over out-of-hours)
-  if (menu.greetingReply) {
+  const activeGreeting = menu.greetingTimeRules?.length
+    ? (pickGreetingByTime(menu.greetingTimeRules, menu.timezone) ?? menu.greetingReply)
+    : menu.greetingReply;
+
+  if (activeGreeting) {
     const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
     const recentInbound = await prisma.message.findFirst({
       where: {
@@ -104,7 +147,7 @@ async function runAutomations(conversation, incomingMessage, menuId, instanceNam
       select: { id: true },
     });
     if (!recentInbound) {
-      await sendAutoReply(conversation, instanceName, menu.greetingReply);
+      await sendAutoReply(conversation, instanceName, activeGreeting);
       return; // greeting covers first contact — skip out-of-hours for this message
     }
   }
