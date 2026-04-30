@@ -1,9 +1,10 @@
 import { prisma } from '../prisma.js';
 
+const BRT_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC-3
+
 // Returns the start of the BRT (UTC-3) calendar day as a UTC Date.
 // e.g. 22:04 BRT = 01:04 UTC next day → same BRT day as 20:27 BRT = 23:27 UTC.
 function toDateOnlyBRT(d) {
-  const BRT_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC-3
   const brtMs = new Date(d).getTime() - BRT_OFFSET_MS;
   const brtMidnight = new Date(brtMs);
   brtMidnight.setUTCHours(0, 0, 0, 0);
@@ -125,8 +126,9 @@ export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId,
       const [deadlineH, deadlineM] = rule.deadlineTime.split(':').map(Number);
       const qualifies = todayCheckins.some(c => {
         if (rule.shiftId && c.shiftId !== rule.shiftId) return false;
-        const checkinDate = new Date(c.checkinAt);
-        const checkinMinutes = checkinDate.getHours() * 60 + checkinDate.getMinutes();
+        // deadlineTime is stored in BRT; checkinAt is UTC — convert to BRT before comparing
+        const brtDate = new Date(new Date(c.checkinAt).getTime() - BRT_OFFSET_MS);
+        const checkinMinutes = brtDate.getUTCHours() * 60 + brtDate.getUTCMinutes();
         const deadlineMinutes = deadlineH * 60 + deadlineM;
         return checkinMinutes <= deadlineMinutes;
       });

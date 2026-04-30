@@ -813,12 +813,14 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
           try {
             const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
             const candidates = [];
-            if (p.delivery && p.delivery.deliveryAddress) {
-              const d = p.delivery.deliveryAddress;
-              if (d.neighborhood) candidates.push(d.neighborhood);
-              if (d.formattedAddress) candidates.push(d.formattedAddress);
-              if (d.formatted_address) candidates.push(d.formatted_address);
-              if (d.address) candidates.push(typeof d.address === 'string' ? d.address : (d.address.formatted || ''));
+            // handle both iFood wrapper format (p.order.delivery) and flat format (p.delivery)
+            const delivAddr = p?.order?.delivery?.deliveryAddress || p?.delivery?.deliveryAddress || null;
+            if (delivAddr) {
+              if (delivAddr.neighborhood) candidates.push(delivAddr.neighborhood);
+              if (delivAddr.formattedAddress) candidates.push(delivAddr.formattedAddress);
+              if (delivAddr.formatted_address) candidates.push(delivAddr.formatted_address);
+              if (delivAddr.streetName) candidates.push(delivAddr.streetName);
+              if (delivAddr.address) candidates.push(typeof delivAddr.address === 'string' ? delivAddr.address : (delivAddr.address.formatted || ''));
             }
             if (p.formattedAddress) candidates.push(p.formattedAddress);
             if (p.formatted_address) candidates.push(p.formatted_address);

@@ -312,6 +312,7 @@
                     <div class="flex-fill" style="min-width:0">
                       <div class="cart-sidebar-item-name">{{ it.name }}</div>
                       <div v-if="optionsSummaryNoPrice(it)" class="cart-sidebar-item-opts">{{ optionsSummaryNoPrice(it) }}</div>
+                      <div v-if="it.observation" class="cart-sidebar-item-obs"><i class="bi bi-chat-left-text me-1"></i>{{ it.observation }}</div>
                     </div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center mt-1">
@@ -470,6 +471,11 @@
                     </div>
                   </div>
                 </div>
+              <!-- Observation field -->
+              <div v-if="!isCatalogMode" class="modal-observation-wrap px-3 pb-3">
+                <label class="modal-observation-label">Observação</label>
+                <textarea v-model="modalObservation" class="form-control modal-observation-input" rows="2" maxlength="300" placeholder="Ex: sem cebola, ponto da carne bem passado…"></textarea>
+              </div>
               </div><!-- /modal-options-scroll -->
             </div><!-- /modal-body -->
 
@@ -858,6 +864,7 @@
                     <div class="cart-item-name flex-fill me-3" style="min-width:0">
                       <div class="product-name">{{ it.name }}</div>
                       <div v-if="it.options && it.options.length" class="small text-muted option-summary drawer-wrap">{{ optionsSummaryNoPrice(it) }}</div>
+                      <div v-if="it.observation" class="small text-muted mt-1"><i class="bi bi-chat-left-text me-1"></i>{{ it.observation }}</div>
                       <div v-for="(e, idx) in getLineDiscountEntries(it)" :key="idx" class="small text-success mt-1">{{ e.description }}: -{{ formatCurrency(e.amount) }}</div>
                     </div>
                     <div class="cart-item-price text-end">
@@ -942,6 +949,7 @@
                 <div class="drawer-item-info">
                   <div class="drawer-item-name">{{ it.name }}</div>
                   <div v-if="it.options && it.options.length" class="drawer-item-opts">{{ optionsSummaryNoPrice(it) }}</div>
+                  <div v-if="it.observation" class="drawer-item-obs"><i class="bi bi-chat-left-text me-1"></i>{{ it.observation }}</div>
                   <div class="drawer-item-stepper">
                     <button class="stepper-btn" @click="it.quantity <= 1 ? removeItem(i) : decrementCartItem(i)" :aria-label="it.quantity <= 1 ? 'Remover' : 'Diminuir'">
                       <i :class="it.quantity <= 1 ? 'bi bi-trash3' : 'bi bi-dash'"></i>
@@ -2282,6 +2290,7 @@ const selectedProduct = ref(null)
 const modalQty = ref(1)
 const optionSelections = ref({}) // map groupId -> Set(optionId)
 const modalError = ref('')
+const modalObservation = ref('')
 const searchTerm = ref('')
 // option groups are always expanded — no collapse state needed
 const tipMessages = reactive({}) // map key -> message for transient tips
@@ -2470,9 +2479,10 @@ function _makeLineId(){ return String(Date.now()) + '-' + Math.random().toString
 
 function _optionsKey(opts){ try{ return JSON.stringify((opts||[]).map(o=>({ id: o.id }))) }catch(e){ return '' } }
 
-function findCartIndex(productId, options){
+function findCartIndex(productId, options, observation = ''){
   const key = _optionsKey(options)
-  return cart.value.findIndex(i => i.productId === productId && _optionsKey(i.options) === key)
+  const obs = (observation || '').trim()
+  return cart.value.findIndex(i => i.productId === productId && _optionsKey(i.options) === key && (i.observation || '').trim() === obs)
 }
 
 function optionsSummary(it){
@@ -2571,7 +2581,7 @@ function validatePersistedCart(){
 
       const unit = Number(p.price || 0) + optionsTotal
       const qty = Math.max(1, Number(it.quantity || 1))
-      newCart.push({ lineId: it.lineId || _makeLineId(), productId: p.id, name: p.name, price: unit, quantity: qty, options: validatedOptions, image: it.image || p.image || null, categoryId: p.categoryId || null })
+      newCart.push({ lineId: it.lineId || _makeLineId(), productId: p.id, name: p.name, price: unit, quantity: qty, options: validatedOptions, observation: it.observation || null, image: it.image || p.image || null, categoryId: p.categoryId || null })
       if(optionDropped) removedItems.push(`${it.name} (opções removidas)`)
     }
 
@@ -2582,16 +2592,16 @@ function validatePersistedCart(){
   }catch(e){ console.warn('validatePersistedCart error', e) }
 }
 
-function addToCart(p, options = []){
-  // add/merge considering selected options
-  const idx = findCartIndex(p.id, options)
+function addToCart(p, options = [], observation = ''){
+  // add/merge considering selected options and observation
+  const idx = findCartIndex(p.id, options, observation)
   if(idx >= 0){ cart.value[idx].quantity += 1 }
   else {
-    cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: Number(p.price), quantity: 1, options: options || [], image: p.image || null, categoryId: p.categoryId || null })
+    cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: Number(p.price), quantity: 1, options: options || [], observation: observation || null, image: p.image || null, categoryId: p.categoryId || null })
   }
 }
 
-function addToCartWithOptions(p, selections, qty=1){
+function addToCartWithOptions(p, selections, qty=1, observation=''){
   // selections: { groupId: [optionIds] }
   // compute options total price
   let optionsTotal = 0
@@ -2606,10 +2616,11 @@ function addToCartWithOptions(p, selections, qty=1){
     }
   }
   const unitPrice = Number(p.price||0) + optionsTotal
-  // try to merge with existing line that has same productId+options
-  const idx = findCartIndex(p.id, selectedOptions)
+  const obs = (observation || '').trim() || null
+  // try to merge with existing line that has same productId+options+observation
+  const idx = findCartIndex(p.id, selectedOptions, obs || '')
   if(idx >= 0){ cart.value[idx].quantity += qty }
-  else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, image: p.image || null, categoryId: p.categoryId || null }) }
+  else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, observation: obs, image: p.image || null, categoryId: p.categoryId || null }) }
   // Meta Pixel: track add to cart
   try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: p.price, options: selectedOptions }, qty) }catch(e){}
   try{ trackMenuEvent(companyId, menuId.value, 'ADD_TO_CART', { productId: p.id }) }catch(e){}
@@ -2629,6 +2640,7 @@ function openProductModal(p, force = false){
   try{ trackViewContent(p) }catch(e){}
   modalQty.value = 1
   modalError.value = ''
+  modalObservation.value = ''
   searchTerm.value = ''
   // initialize selections with defaults (empty)
   const map = {}
@@ -2869,7 +2881,7 @@ function confirmAddFromModal(){
       return
     }
     // no required warnings -> proceed
-    addToCartWithOptions(p, selectionsForCart, modalQty.value)
+    addToCartWithOptions(p, selectionsForCart, modalQty.value, modalObservation.value)
     modalOpen.value = false
 }
 
@@ -2882,7 +2894,7 @@ function groupSelectedCount(g){
   return s
 }
 
-function closeModal(){ modalOpen.value = false; modalError.value = '' }
+function closeModal(){ modalOpen.value = false; modalError.value = ''; modalObservation.value = '' }
 
 function shareStub(){
   // placeholder for native share / copy link — no-op for now
@@ -3068,6 +3080,7 @@ function editCartItem(i){
     selectedProduct.value = p
     modalQty.value = Number(it.quantity || 1)
     modalError.value = ''
+    modalObservation.value = it.observation || ''
     const map = {}
     if(p.optionGroups){
       for(const g of p.optionGroups){
@@ -4281,6 +4294,7 @@ async function submitOrder(){
         name: i.name,
         price: Number(i.price || 0),
         quantity: Number(i.quantity || 0),
+        notes: i.observation || null,
         options: (i.options || []).map(o => ({ id: o.id, name: o.name, price: Number(o.price || 0) }))
       })),
   // payment.amount should reflect the final total (subtotal minus coupon + delivery)
@@ -5154,6 +5168,13 @@ li.list-group-item.selected, .payment-method.selected {
   line-height: 1.3;
   margin-bottom: 4px;
 }
+.drawer-item-obs {
+  font-size: 11.5px;
+  color: var(--pm-text-muted);
+  font-style: italic;
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
 .drawer-item-stepper {
   display: inline-flex;
   align-items: center;
@@ -5366,6 +5387,9 @@ body { padding-bottom: 110px; }
 .modal-options-scroll::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(13,110,253,0.18), rgba(13,110,253,0.12)); border-radius: 999px; border: 2px solid rgba(255,255,255,0.0) }
 .modal-options-scroll::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, rgba(13,110,253,0.22), rgba(13,110,253,0.14)) }
 .modal-options-scroll { scrollbar-width: thin; scrollbar-color: rgba(13,110,253,0.18) transparent }
+.modal-observation-wrap { border-top: 1px solid var(--pm-border); }
+.modal-observation-label { font-size: 12px; font-weight: 500; color: var(--pm-text-muted); margin-bottom: 4px; display: block; padding-top: 12px; }
+.modal-observation-input { font-size: 13px; resize: none; border-radius: 10px; }
 
 @media (max-width: 767px){
   /* on small screens use native-like thin scrollbar or hide to maximize space */
@@ -6049,6 +6073,7 @@ body { padding-bottom: 110px; }
 .cart-sidebar-item:last-child { border-bottom: none; }
 .cart-sidebar-item-name { font-size: 13px; font-weight: 600; color: var(--pm-text); }
 .cart-sidebar-item-opts { font-size: 11px; color: var(--pm-text-muted); margin-top: 2px; }
+.cart-sidebar-item-obs { font-size: 11px; color: var(--pm-text-muted); font-style: italic; margin-top: 2px; }
 .cart-sidebar-stepper { display: flex; align-items: center; gap: 0; border-radius: var(--pm-radius-pill); background: var(--pm-surface-alt); padding: 2px; }
 .cart-sidebar-step-btn { all: unset; cursor: pointer; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--pm-text); }
 .cart-sidebar-step-btn:hover { background: var(--pm-border); }
