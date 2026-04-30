@@ -1,9 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { Chart, registerables } from 'chart.js'
+import Chart from 'chart.js/auto'
 import api from '../api'
-
-Chart.register(...registerables)
 
 const SERVICE_KEYS = [
   'MENU_IMPORT_ITEM', 'MENU_IMPORT_LINK', 'MENU_IMPORT_PHOTO', 'MENU_IMPORT_PLANILHA',

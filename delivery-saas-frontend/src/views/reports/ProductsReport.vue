@@ -116,10 +116,8 @@
 </template>
 
 <script>
-import { Chart, registerables } from 'chart.js';
+import Chart from 'chart.js/auto';
 import api from '../../api';
-
-Chart.register(...registerables);
 
 const COLORS = [
   '#4f81e0', '#e04f4f', '#4fc97a', '#f5a623', '#9b59b6',
