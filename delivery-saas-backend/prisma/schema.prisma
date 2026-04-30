@@ -2543,8 +2543,8 @@ model GreetingTimeRule {
   menu         Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
   quickReplyId String
   quickReply   QuickReply @relation(fields: [quickReplyId], references: [id], onDelete: Cascade)
-  startTime    String
-  endTime      String
+  startTime    String // "HH:MM"
+  endTime      String // "HH:MM"
   label        String?
   sortOrder    Int        @default(0)
   createdAt    DateTime   @default(now())
