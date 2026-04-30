@@ -80,4 +80,50 @@ cron.schedule('30 2 * * *', async () => {
   timezone: 'America/Sao_Paulo',
 })
 
-console.log('[Cron] Tarefas agendadas registradas (reset de créditos IA: dia 1 de cada mês; domínios vencidos: diário às 01:00; cobrança recorrente: diário às 06:00 UTC; agregação eventos menu: diário às 02:30)')
+/**
+ * Auto-checkout de entregadores: a cada 30 minutos verifica check-ins ainda
+ * abertos e encerra automaticamente os que passaram 2h do fim do turno.
+ */
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const openCheckins = await prisma.riderCheckin.findMany({
+      where: { checkoutAt: null },
+      include: { shift: true },
+    });
+
+    const now = new Date();
+    let count = 0;
+
+    for (const checkin of openCheckins) {
+      if (!checkin.shift?.endTime) continue;
+      const [endH, endM] = checkin.shift.endTime.split(':').map(Number);
+
+      // Calcula o horário de fim do turno no dia BRT do check-in
+      const checkinBRT = new Date(new Date(checkin.checkinAt).getTime() - BRT_OFFSET_MS);
+      checkinBRT.setUTCHours(endH, endM, 0, 0);
+      let shiftEndUTC = new Date(checkinBRT.getTime() + BRT_OFFSET_MS);
+
+      // Turno noturno: se fim < início, avança 1 dia
+      if (shiftEndUTC <= checkin.checkinAt) {
+        shiftEndUTC = new Date(shiftEndUTC.getTime() + 24 * 60 * 60 * 1000);
+      }
+
+      const autoCheckout = new Date(shiftEndUTC.getTime() + 2 * 60 * 60 * 1000);
+
+      if (now >= autoCheckout) {
+        await prisma.riderCheckin.update({
+          where: { id: checkin.id },
+          data: { checkoutAt: autoCheckout },
+        });
+        count++;
+      }
+    }
+
+    if (count > 0) console.log(`[Cron] Auto-checkout: ${count} entregador(es) encerrado(s) automaticamente`);
+  } catch (err) {
+    console.error('[Cron] Erro no auto-checkout de entregadores:', err);
+  }
+});
+
+console.log('[Cron] Tarefas agendadas registradas (reset de créditos IA: dia 1 de cada mês; domínios vencidos: diário às 01:00; cobrança recorrente: diário às 06:00 UTC; agregação eventos menu: diário às 02:30; auto-checkout entregadores: a cada 30 min)')

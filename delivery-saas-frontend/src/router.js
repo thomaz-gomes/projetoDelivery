@@ -114,6 +114,7 @@ import PayablePaymentMethods from './views/financial/PayablePaymentMethods.vue';
 import ProductsReport from './views/reports/ProductsReport.vue';
 import MenuPerformanceReport from './views/reports/MenuPerformanceReport.vue';
 import RidersDashboard from './views/reports/RidersDashboard.vue';
+import RevenueReport from './views/reports/RevenueReport.vue';
 import StudioIA from './views/StudioIA.vue';
 import AddOnStore from './views/AddOnStore.vue';
 import AddOnDetail from './views/AddOnDetail.vue';
@@ -245,6 +246,7 @@ const router = createRouter({
   ,{ path: '/rider/account', component: RiderAccountSelf, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/rider/checkin', component: () => import('./views/rider/Checkin.vue'), meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/rider/ranking', component: () => import('./views/rider/Ranking.vue'), meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
+  ,{ path: '/rider/shifts', component: () => import('./views/rider/Shifts.vue'), meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/rider', component: RiderDashboard, meta: { requiresAuth: true, role: 'RIDER', noSidebar: true } }
   ,{ path: '/riders/map', component: () => import('./views/RiderMap.vue'), meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } }
   ,{ path: '/settings/rider-tracking', component: () => import('./views/RiderTracking.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'RIDERS' } }
@@ -260,6 +262,7 @@ const router = createRouter({
   ,{ path: '/sales', component: SalesHistory, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/sales/:id', component: SaleDetails, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/reports/cash-fronts', component: CashFronts, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } }
+  ,{ path: '/reports/revenue', component: RevenueReport, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/reports/products', component: ProductsReport, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/reports/menu-performance', component: MenuPerformanceReport, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } }
   ,{ path: '/reports/riders-dashboard', component: RidersDashboard, meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } }
@@ -445,6 +448,7 @@ const PAGE_TITLES = [
   ['/rider/account', 'Minha Conta'],
   ['/rider/checkin', 'Check-in'],
   ['/rider/ranking', 'Ranking'],
+  ['/rider/shifts', 'Histórico de Turnos'],
   ['/rider', 'Entregador'],
   ['/inbox/quick-replies', 'Respostas Rápidas'],
   ['/inbox/automation', 'Automações'],
