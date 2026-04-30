@@ -968,4 +968,141 @@ router.get('/tags', async (req, res) => {
   }
 });
 
+// ─── Greeting Time Rules ────────────────────────────────────────────────────
+
+router.get('/greeting-rules', async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const { menuId } = req.query;
+    if (!menuId) return res.status(400).json({ message: 'menuId obrigatório' });
+
+    const menu = await prisma.menu.findFirst({
+      where: { id: menuId, store: { companyId } },
+      select: { id: true },
+    });
+    if (!menu) return res.status(403).json({ message: 'Cardápio não encontrado' });
+
+    const rules = await prisma.greetingTimeRule.findMany({
+      where: { menuId },
+      include: { quickReply: { select: { id: true, title: true, shortcut: true, body: true } } },
+      orderBy: { sortOrder: 'asc' },
+    });
+    return res.json(rules);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Erro interno' });
+  }
+});
+
+router.post('/greeting-rules', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const { menuId, quickReplyId, startTime, endTime, label, sortOrder } = req.body;
+
+    if (!menuId || !quickReplyId || !startTime || !endTime) {
+      return res.status(400).json({ message: 'menuId, quickReplyId, startTime e endTime são obrigatórios' });
+    }
+
+    const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
+    if (!timeRe.test(startTime) || !timeRe.test(endTime)) {
+      return res.status(400).json({ message: 'startTime e endTime devem estar no formato HH:MM' });
+    }
+
+    const menu = await prisma.menu.findFirst({
+      where: { id: menuId, store: { companyId } },
+      select: { id: true },
+    });
+    if (!menu) return res.status(403).json({ message: 'Cardápio não encontrado' });
+
+    const qr = await prisma.quickReply.findFirst({
+      where: { id: quickReplyId, companyId },
+      select: { id: true },
+    });
+    if (!qr) return res.status(400).json({ message: 'quickReplyId inválido' });
+
+    const rule = await prisma.greetingTimeRule.create({
+      data: {
+        companyId,
+        menuId,
+        quickReplyId,
+        startTime,
+        endTime,
+        label: label || null,
+        sortOrder: sortOrder ?? 0,
+      },
+      include: { quickReply: { select: { id: true, title: true, shortcut: true, body: true } } },
+    });
+    return res.status(201).json(rule);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Erro interno' });
+  }
+});
+
+router.put('/greeting-rules/:id', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const { id } = req.params;
+    const { quickReplyId, startTime, endTime, label, sortOrder } = req.body;
+
+    const existing = await prisma.greetingTimeRule.findFirst({
+      where: { id, companyId },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ message: 'Regra não encontrada' });
+
+    const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
+    if (startTime && !timeRe.test(startTime)) {
+      return res.status(400).json({ message: 'startTime inválido' });
+    }
+    if (endTime && !timeRe.test(endTime)) {
+      return res.status(400).json({ message: 'endTime inválido' });
+    }
+
+    if (quickReplyId) {
+      const qr = await prisma.quickReply.findFirst({
+        where: { id: quickReplyId, companyId },
+        select: { id: true },
+      });
+      if (!qr) return res.status(400).json({ message: 'quickReplyId inválido' });
+    }
+
+    const data = {};
+    if (quickReplyId !== undefined) data.quickReplyId = quickReplyId;
+    if (startTime !== undefined) data.startTime = startTime;
+    if (endTime !== undefined) data.endTime = endTime;
+    if (label !== undefined) data.label = label || null;
+    if (sortOrder !== undefined) data.sortOrder = sortOrder;
+
+    const rule = await prisma.greetingTimeRule.update({
+      where: { id },
+      data,
+      include: { quickReply: { select: { id: true, title: true, shortcut: true, body: true } } },
+    });
+    return res.json(rule);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Erro interno' });
+  }
+});
+
+router.delete('/greeting-rules/:id', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const { id } = req.params;
+
+    const existing = await prisma.greetingTimeRule.findFirst({
+      where: { id, companyId },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ message: 'Regra não encontrada' });
+
+    await prisma.greetingTimeRule.delete({ where: { id } });
+    return res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Erro interno' });
+  }
+});
+
 export default router;
