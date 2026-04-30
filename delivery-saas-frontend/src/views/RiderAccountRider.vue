@@ -15,6 +15,10 @@ const loading = ref(false);
 const error = ref('');
 const transactions = ref([]);
 const periodBalance = ref(0);
+const periodDeliveries = ref(0);
+const periodBonusTotal = ref(0);
+const periodDailyRatesCount = ref(0);
+const periodDailyRatesTotal = ref(0);
 
 const filters = ref({ from: '', to: '' });
 
@@ -64,17 +68,31 @@ async function fetchSummary() {
     periodBalance.value = Number(acct.periodTotal || acct.balance || 0);
     const { data } = await api.get(`${base}/transactions`, { params: paramsForSummary() });
     transactions.value = data.items || [];
-    // compute periodBalance client-side when date filters are provided
-    if (filters.value.from || filters.value.to) {
-      try {
-        const p = { full: true };
-        if (filters.value.from) p.from = filters.value.from;
-        if (filters.value.to) p.to = filters.value.to;
-        const { data: all } = await api.get(`${base}/transactions`, { params: p });
-        const items = all.items || [];
-        periodBalance.value = items.reduce((acc, t) => acc + Number(t.amount || 0), 0);
-      } catch (e) { console.warn('period sum failed', e); }
-    }
+    // always fetch full period to compute metrics and balance
+    try {
+      const p = { full: true };
+      if (filters.value.from) p.from = filters.value.from;
+      if (filters.value.to) p.to = filters.value.to;
+      const { data: all } = await api.get(`${base}/transactions`, { params: p });
+      const items = all.items || [];
+      let balance = 0;
+      let deliveries = 0;
+      let bonusTotal = 0;
+      let dailyRatesCount = 0;
+      let dailyRatesTotal = 0;
+      for (const t of items) {
+        const amt = Number(t.amount || 0);
+        balance += amt;
+        if (t.type === 'DELIVERY_FEE') deliveries++;
+        if (t.type === 'EARLY_CHECKIN_BONUS' || t.type === 'GOAL_REWARD') bonusTotal += amt;
+        if (t.type === 'DAILY_RATE') { dailyRatesCount++; dailyRatesTotal += amt; }
+      }
+      if (filters.value.from || filters.value.to) periodBalance.value = balance;
+      periodDeliveries.value = deliveries;
+      periodBonusTotal.value = bonusTotal;
+      periodDailyRatesCount.value = dailyRatesCount;
+      periodDailyRatesTotal.value = dailyRatesTotal;
+    } catch (e) { console.warn('period metrics failed', e); }
   } catch (e) {
     console.error('fetchSummary failed', e);
     error.value = e?.response?.data?.message || 'Falha ao carregar resumo';
@@ -95,7 +113,35 @@ onMounted(() => { fetchSummary(); });
 
     <div class="card mb-3 p-3">
       <div class="small text-muted">Saldo no período</div>
-      <div class="h4 mb-2">{{ formatCurrency(periodBalance) }}</div>
+      <div class="h4 mb-3">{{ formatCurrency(periodBalance) }}</div>
+
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <div class="border rounded p-2 text-center">
+            <div class="small text-muted">Entregas</div>
+            <div class="fw-bold fs-5">{{ periodDeliveries }}</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="border rounded p-2 text-center">
+            <div class="small text-muted">Total bônus</div>
+            <div class="fw-bold fs-5 text-info">{{ formatCurrency(periodBonusTotal) }}</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="border rounded p-2 text-center">
+            <div class="small text-muted">Nº diárias</div>
+            <div class="fw-bold fs-5">{{ periodDailyRatesCount }}</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="border rounded p-2 text-center">
+            <div class="small text-muted">Total diárias</div>
+            <div class="fw-bold fs-5">{{ formatCurrency(periodDailyRatesTotal) }}</div>
+          </div>
+        </div>
+      </div>
+
       <div class="small text-muted">Últimas transações</div>
       <ul class="list-group list-group-flush mt-2">
         <li v-for="t in transactions" :key="t.id" class="list-group-item py-2 d-flex justify-content-between align-items-center">

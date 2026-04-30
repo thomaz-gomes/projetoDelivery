@@ -62,6 +62,10 @@ const exporting = ref(false);
 const periodBalance = ref(0);
 const periodEarnings = ref(0);
 const periodPaid = ref(0);
+const periodDeliveries = ref(0);
+const periodBonusTotal = ref(0);
+const periodDailyRatesCount = ref(0);
+const periodDailyRatesTotal = ref(0);
 
 function typeLabel(type) {
   switch (type) {
@@ -166,19 +170,34 @@ async function fetchPeriodFees() {
     const items = data.items || [];
     let earnings = 0;
     let paid = 0;
+    let deliveries = 0;
+    let bonusTotal = 0;
+    let dailyRatesCount = 0;
+    let dailyRatesTotal = 0;
     for (const t of items) {
       const amt = Number(t.amount || 0);
       if (amt >= 0) earnings += amt;
       else paid += Math.abs(amt);
+      if (t.type === 'DELIVERY_FEE') deliveries++;
+      if (t.type === 'EARLY_CHECKIN_BONUS' || t.type === 'GOAL_REWARD') bonusTotal += amt;
+      if (t.type === 'DAILY_RATE') { dailyRatesCount++; dailyRatesTotal += amt; }
     }
     periodEarnings.value = earnings;
     periodPaid.value = paid;
     periodBalance.value = earnings - paid;
+    periodDeliveries.value = deliveries;
+    periodBonusTotal.value = bonusTotal;
+    periodDailyRatesCount.value = dailyRatesCount;
+    periodDailyRatesTotal.value = dailyRatesTotal;
   } catch (e) {
     console.error('Failed to compute period total', e);
     periodEarnings.value = 0;
     periodPaid.value = 0;
     periodBalance.value = 0;
+    periodDeliveries.value = 0;
+    periodBonusTotal.value = 0;
+    periodDailyRatesCount.value = 0;
+    periodDailyRatesTotal.value = 0;
   }
 }
 
@@ -351,7 +370,35 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             </div>
           </div>
 
-          <!-- Linha 2: Conta de saída + Pagar + Ações -->
+          <!-- Linha 2: Métricas do período -->
+          <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Entregas</div>
+                <div class="h4 mb-0">{{ periodDeliveries }}</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Total bônus</div>
+                <div class="h4 mb-0 text-info">{{ formatCurrency(periodBonusTotal) }}</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Diárias</div>
+                <div class="h4 mb-0">{{ periodDailyRatesCount }}</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Total diárias</div>
+                <div class="h4 mb-0">{{ formatCurrency(periodDailyRatesTotal) }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Linha 3: Conta de saída + Pagar + Ações -->
           <div class="row align-items-end g-3">
             <!-- Conta de saída -->
             <div class="col-md-4" v-if="financialAccounts.length > 0">
