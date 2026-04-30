@@ -520,8 +520,8 @@ ordersRouter.patch('/:id', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (re
         }))
       });
     }
-    // Recalculate total from items
-    let total = items.reduce((s, it) => {
+    // Recalculate total from items, preserving existing discounts and delivery fee
+    let itemsSubtotal = items.reduce((s, it) => {
       const qty = Number(it.quantity) || 1;
       const price = Number(it.price) || 0;
       let optsSum = 0;
@@ -530,7 +530,9 @@ ordersRouter.patch('/:id', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (re
       }
       return s + (price * qty) + (optsSum * qty);
     }, 0);
-    data.total = total;
+    const existingDiscount = Number(order.discountMerchant || 0) + Number(order.couponDiscount || 0);
+    const existingDeliveryFee = Number(order.deliveryFee || 0);
+    data.total = Math.max(0, itemsSubtotal - existingDiscount) + existingDeliveryFee;
   }
 
   const updated = await prisma.order.update({
@@ -1217,10 +1219,12 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       } catch (e) { couponDiscount = 0; }
     }
 
-    const computedTotal = Math.max(0, subtotal - couponDiscount) + Number(deliveryFee || 0);
+    const discountMerchantAmt = Number(_discountMerchant || 0);
+    const computedTotal = Math.max(0, subtotal - couponDiscount - discountMerchantAmt) + Number(deliveryFee || 0);
 
-    // Prefer payment amount when provided by PDV client as authoritative total
-    const total = (payment && Number.isFinite(Number(payment.amount)) && Number(payment.amount) > 0) ? Number(payment.amount) : computedTotal;
+    // Prefer payment amount when provided by PDV client as authoritative total.
+    // Use >= 0 (not > 0) so that a 100% discount producing payment.amount = 0 is respected.
+    const total = (payment && payment.amount != null && Number.isFinite(Number(payment.amount)) && Number(payment.amount) >= 0) ? Number(payment.amount) : computedTotal;
 
     // validate payment method if provided
     let paymentPayload = null;

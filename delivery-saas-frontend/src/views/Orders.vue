@@ -1374,9 +1374,12 @@ function getNextStatus(current, order) {
 }
 
 async function advanceStatus(order) {
-  const next = getNextStatus(order.status, order);
+  let next = getNextStatus(order.status, order);
   if (!next) return;
-  // reuse existing changeStatus to preserve assign-modal behaviour for SAIU_PARA_ENTREGA
+  // For takeout in PRONTO, skip SAIU_PARA_ENTREGA ("aguardando retirada") and go straight to payment
+  if (isTakeoutOrder(order) && order.status === 'PRONTO' && next === 'SAIU_PARA_ENTREGA') {
+    next = 'CONFIRMACAO_PAGAMENTO';
+  }
   await changeStatus(order, next);
 }
 
@@ -2924,8 +2927,8 @@ async function changeRider(order) {
 async function changeStatus(order, to) {
   try {
     if (to === 'SAIU_PARA_ENTREGA') {
-      if (!ridersEnabled.value) {
-        // Riders module disabled: just change status without asking for a rider
+      if (!ridersEnabled.value || isTakeoutOrder(order)) {
+        // Riders module disabled or takeout order: just change status without asking for a rider
         await store.updateStatus(order.id, 'SAIU_PARA_ENTREGA')
         await store.fetch()
         return
@@ -2937,6 +2940,13 @@ async function changeStatus(order, to) {
     if (to === 'CONCLUIDO' && order && order.status === 'CONFIRMACAO_PAGAMENTO') {
       // Allow multiple payment methods with editable amounts.
       const orderTotal = Number(order.total || 0);
+
+      // Zero-value orders (bonifications, exchanges, etc.) skip payment modal
+      if (orderTotal === 0) {
+        await store.updateStatus(order.id, 'CONCLUIDO', { payment: { amount: 0 } });
+        await store.fetch();
+        return;
+      }
       const methods = (companyPaymentMethods.value && companyPaymentMethods.value.length) ? companyPaymentMethods.value : [{ code: 'CASH', name: 'Dinheiro' }];
       const pmOptionsHtml = methods.map(m => `<option value="${(m.code||m.name)}">${(m.name||m.code)}</option>`).join('');
 
@@ -3514,7 +3524,10 @@ function pulseButton() {
                     <button v-if="o.status === 'EM_PREPARO' && isTakeoutOrder(o)" class="btn btn-sm btn-info text-white" @click.stop="markReadyForPickup(o)" :disabled="loading" title="Pronto para Retirada">
                       <i class="bi bi-bag-check"></i> Pronto
                     </button>
-                    <button v-if="o.status !== 'CONCLUIDO' && o.status !== 'CANCELADO'" class="btn btn-sm btn-primary advance" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status, o) || !store.canTransition(o.status, getNextStatus(o.status, o)) || loading" title="Avançar status">
+                    <button v-if="o.status !== 'CONCLUIDO' && o.status !== 'CANCELADO' && o.status !== 'EM_PREPARO' && isTakeoutOrder(o)" class="btn btn-sm btn-info text-white" @click.stop="advanceStatus(o)" :disabled="!getNextStatus(o.status, o) || !store.canTransition(o.status, getNextStatus(o.status, o)) || loading" :title="o.status === 'CONFIRMACAO_PAGAMENTO' ? 'Confirmar pagamento' : 'Pedido Retirado'">
+                      <i class="bi bi-bag-check"></i> {{ o.status === 'CONFIRMACAO_PAGAMENTO' ? 'Confirmar' : 'Retirado' }}
+                    </button>
+                    <button v-if="o.status !== 'CONCLUIDO' && o.status !== 'CANCELADO' && !isTakeoutOrder(o)" class="btn btn-sm btn-primary advance" @click="advanceStatus(o)" :disabled="!getNextStatus(o.status, o) || !store.canTransition(o.status, getNextStatus(o.status, o)) || loading" title="Avançar status">
                       Avançar <i class="bi bi-arrow-right"></i>
                     </button>
                   </div>
@@ -3745,6 +3758,10 @@ function pulseButton() {
                   -{{ formatCurrency(selectedNormalized.couponDiscount) }}
                 </span>
               </div>
+              <div class="od-pay-row" v-if="Number(selectedOrder?.discountMerchant || 0) > 0">
+                <span class="od-pay-label"><i class="bi bi-tag me-1"></i>Desconto</span>
+                <span class="od-pay-value text-success">-{{ formatCurrency(Number(selectedOrder.discountMerchant)) }}</span>
+              </div>
               <div class="od-pay-row" v-if="selectedOrder?.orderType === 'DELIVERY'">
                 <span class="od-pay-label">Taxa de entrega</span>
                 <span class="od-pay-value">{{ Number(selectedNormalized?.deliveryFee || selectedOrder?.deliveryFee || 0) > 0 ? formatCurrency(selectedNormalized?.deliveryFee || selectedOrder?.deliveryFee) : 'Grátis' }}</span>
@@ -3803,6 +3820,12 @@ function pulseButton() {
               type="button" class="btn btn-info text-white" @click="markReadyForPickup(selectedOrder)"
               title="Pronto para Retirada">
               <i class="bi bi-bag-check"></i> Pronto p/ Retirada
+            </button>
+            <button v-if="selectedOrder && selectedOrder.status !== 'CONCLUIDO' && selectedOrder.status !== 'CANCELADO' && selectedOrder.status !== 'EM_PREPARO' && isTakeoutOrder(selectedOrder)"
+              type="button" class="btn btn-info text-white" @click="advanceStatus(selectedOrder)"
+              :disabled="!getNextStatus(selectedOrder.status, selectedOrder) || !store.canTransition(selectedOrder.status, getNextStatus(selectedOrder.status, selectedOrder)) || loading"
+              :title="selectedOrder.status === 'CONFIRMACAO_PAGAMENTO' ? 'Confirmar pagamento' : 'Pedido Retirado'">
+              <i class="bi bi-bag-check"></i> {{ selectedOrder.status === 'CONFIRMACAO_PAGAMENTO' ? 'Confirmar' : 'Pedido Retirado' }}
             </button>
             <button type="button" class="btn btn-outline-secondary" @click="printReceipt(selectedOrder)" title="Imprimir">
               <i class="bi bi-printer"></i> Imprimir
