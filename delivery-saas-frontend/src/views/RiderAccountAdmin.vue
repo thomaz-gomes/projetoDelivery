@@ -223,6 +223,32 @@ async function pagarPeriodo() {
   }
 }
 
+async function dedupDailyRates() {
+  const from = filters.value.from || null;
+  const to = filters.value.to || null;
+
+  const { data: preview } = await api.post(`/riders/${riderId}/dedup-daily-rates`, { dryRun: true, startDate: from, endDate: to });
+  if (preview.duplicatesFound === 0) {
+    return Swal.fire({ icon: 'success', text: 'Nenhuma diária duplicada encontrada no período.' });
+  }
+
+  const dayList = preview.duplicates.map(d => `• ${d.day} (R$ ${Number(d.amount).toFixed(2).replace('.', ',')})`).join('<br>');
+  const confirm = await Swal.fire({
+    title: `${preview.duplicatesFound} diária(s) duplicada(s)`,
+    html: `Serão removidas:<br>${dayList}`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Remover duplicatas',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!confirm.isConfirmed) return;
+
+  await api.post(`/riders/${riderId}/dedup-daily-rates`, { dryRun: false, startDate: from, endDate: to });
+  await fetchBalance();
+  await fetchTransactions();
+  Swal.fire({ icon: 'success', text: `${preview.duplicatesFound} diária(s) duplicada(s) removida(s).` });
+}
+
 async function fetchFinancialAccounts() {
   try {
     const { data } = await api.get('/financial/accounts');
@@ -341,11 +367,14 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             </div>
 
             <!-- Ações secundárias -->
-            <div class="col-md-4 d-flex gap-2 align-items-end">
+            <div class="col-md-4 d-flex gap-2 align-items-end flex-wrap">
               <button class="btn btn-sm btn-outline-secondary" @click="exportCsv" :disabled="exporting || !datesAreValid">
                 {{ exporting ? 'Exportando...' : 'Exportar CSV' }}
               </button>
               <button class="btn btn-sm btn-outline-secondary" @click="fetchBalance" :disabled="loading">Atualizar</button>
+              <button class="btn btn-sm btn-outline-warning" @click="dedupDailyRates" :disabled="!isAdmin" title="Remove diárias duplicadas no mesmo dia">
+                Corrigir diárias
+              </button>
             </div>
           </div>
 

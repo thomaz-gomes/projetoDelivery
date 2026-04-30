@@ -1,9 +1,13 @@
 import { prisma } from '../prisma.js';
 
-function toDateOnly(d) {
-  const dt = new Date(d);
-  dt.setHours(0, 0, 0, 0);
-  return dt;
+// Returns the start of the BRT (UTC-3) calendar day as a UTC Date.
+// e.g. 22:04 BRT = 01:04 UTC next day → same BRT day as 20:27 BRT = 23:27 UTC.
+function toDateOnlyBRT(d) {
+  const BRT_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC-3
+  const brtMs = new Date(d).getTime() - BRT_OFFSET_MS;
+  const brtMidnight = new Date(brtMs);
+  brtMidnight.setUTCHours(0, 0, 0, 0);
+  return new Date(brtMidnight.getTime() + BRT_OFFSET_MS); // back to UTC boundary
 }
 
 export async function findNeighborhoodForName(companyId, candidateName) {
@@ -83,7 +87,7 @@ export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId,
   if (daily <= 0) return;
 
   // check if there is any DAILY_RATE transaction for this rider on the date
-  const dayStart = toDateOnly(orderDate);
+  const dayStart = toDateOnlyBRT(orderDate);
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
 
@@ -102,7 +106,7 @@ export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId,
   // Check early check-in bonus rules (per delivery, never on daily rate alone)
   if (riderFee <= 0) return; // no delivery fee = no bonus
   try {
-    const bonusDayStart = toDateOnly(orderDate);
+    const bonusDayStart = toDateOnlyBRT(orderDate);
     const bonusDayEnd = new Date(bonusDayStart);
     bonusDayEnd.setDate(bonusDayEnd.getDate() + 1);
 

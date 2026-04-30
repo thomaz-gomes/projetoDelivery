@@ -1551,6 +1551,10 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
               update: { balance: { increment: riderFee } },
               create: { riderId: order.riderId, balance: riderFee },
             }),
+            prisma.order.update({
+              where: { id: order.id },
+              data: { deliveryNeighborhood: neigh.name },
+            }),
           ]);
         } else {
           // Create missing transaction from scratch
@@ -1569,6 +1573,10 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
               where: { riderId: order.riderId },
               update: { balance: { increment: riderFee } },
               create: { riderId: order.riderId, balance: riderFee },
+            }),
+            prisma.order.update({
+              where: { id: order.id },
+              data: { deliveryNeighborhood: neigh.name },
             }),
           ]);
         }
