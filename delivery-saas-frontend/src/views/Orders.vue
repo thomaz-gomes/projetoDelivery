@@ -1158,7 +1158,22 @@ function normalizeOrder(o){
     // payload (public orders may include payload.store.name). Do NOT fallback to company.
     storeName: (function() {
       try {
-        return (o.store && o.store.name) || (o.payload && o.payload.store && o.payload.store.name) || (o.payload && o.payload.rawPayload && o.payload.rawPayload.store && o.payload.rawPayload.store.name) || null;
+        // iFood orders carry merchant name directly in the order payload
+        const payloadMerchantName = o.payload?.order?.merchant?.name;
+        if (payloadMerchantName) return payloadMerchantName;
+        // Fallback: merchantName saved on the linked integration (set by admin or auto-sync)
+        if (Array.isArray(o.store?.apiIntegrations) && o.store.apiIntegrations.length) {
+          const payloadMerchantId = o.payload?.merchantId || o.payload?.order?.merchant?.id;
+          if (payloadMerchantId) {
+            const matched = o.store.apiIntegrations.find(a =>
+              a.merchantName && (a.merchantId === payloadMerchantId || a.merchantUuid === payloadMerchantId)
+            );
+            if (matched?.merchantName) return matched.merchantName;
+          }
+          const any = o.store.apiIntegrations.find(a => a.merchantName);
+          if (any?.merchantName) return any.merchantName;
+        }
+        return (o.store && o.store.name) || null;
       } catch (e) { return null; }
     })(),
     channelLabel: (function() {
@@ -1535,9 +1550,13 @@ async function bulkAdvanceStatus() {
     return;
   }
 
+  // Compute per-order next status to respect isPrepaid (online payments skip CONFIRMACAO_PAGAMENTO)
+  const uniqueDestinations = [...new Set(selectedOrdersList.value.map(o => getNextStatus(o.status, o)).filter(Boolean))];
+  const destinationLabel = uniqueDestinations.map(s => STATUS_LABEL[s] || s).join(' / ');
+
   const conf = await Swal.fire({
     title: `Avançar ${selectedOrdersList.value.length} pedidos?`,
-    text: `Mover para: ${STATUS_LABEL[next] || next}`,
+    text: `Mover para: ${destinationLabel}`,
     icon: 'question', showCancelButton: true,
     confirmButtonText: 'Sim, avançar', cancelButtonText: 'Cancelar'
   });
@@ -1547,7 +1566,9 @@ async function bulkAdvanceStatus() {
   let success = 0, fail = 0;
   for (const order of selectedOrdersList.value) {
     try {
-      await store.updateStatus(order.id, next);
+      const orderNext = getNextStatus(order.status, order);
+      if (!orderNext) { fail++; continue; }
+      await store.updateStatus(order.id, orderNext);
       success++;
     } catch (e) {
       console.error(`Falha ao avançar pedido ${order.id}`, e);

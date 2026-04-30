@@ -9,6 +9,11 @@ const password = ref('');
 const loading = ref(false);
 const error = ref('');
 
+// Company selection state
+const companies = ref([]);
+const pendingDigits = ref('');
+const pendingPassword = ref('');
+
 const auth = useAuthStore();
 const router = useRouter();
 
@@ -27,13 +32,48 @@ async function onSubmit() {
     if (!(digits.length === 10 || digits.length === 11)) {
       throw { message: 'Informe um WhatsApp válido com 10 ou 11 dígitos' };
     }
-    await auth.loginWhatsapp(digits.slice(-11), password.value);
+    const { data } = await api.post('/auth/login-whatsapp', { whatsapp: digits.slice(-11), password: password.value });
+    if (data.requiresCompanySelection) {
+      companies.value = data.companies || [];
+      pendingDigits.value = digits.slice(-11);
+      pendingPassword.value = password.value;
+      return;
+    }
+    auth.token = data.token;
+    auth.user = data.user;
+    localStorage.setItem('token', data.token);
+    try { localStorage.setItem('user', JSON.stringify(data.user)); } catch(e){}
     router.push('/rider');
   } catch (e) {
     error.value = e?.response?.data?.message || e?.message || 'Falha ao entrar';
   } finally {
     loading.value = false;
   }
+}
+
+async function selectCompany(companyId) {
+  loading.value = true;
+  error.value = '';
+  try {
+    const { data } = await api.post('/auth/login-whatsapp', { whatsapp: pendingDigits.value, password: pendingPassword.value, companyId });
+    auth.token = data.token;
+    auth.user = data.user;
+    localStorage.setItem('token', data.token);
+    try { localStorage.setItem('user', JSON.stringify(data.user)); } catch(e){}
+    router.push('/rider');
+  } catch (e) {
+    error.value = e?.response?.data?.message || e?.message || 'Falha ao entrar';
+    companies.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
+
+function backToLogin() {
+  companies.value = [];
+  pendingDigits.value = '';
+  pendingPassword.value = '';
+  error.value = '';
 }
 
 function onWhatsappInput(e) {
@@ -58,7 +98,29 @@ function onWhatsappInput(e) {
           <p class="text-muted small mb-0"><i class="bi bi-bicycle me-1"></i>Acesso do Motoboy</p>
         </div>
 
-        <form @submit.prevent="onSubmit" class="needs-validation">
+        <!-- Company selector (shown when same WhatsApp is in multiple companies) -->
+        <div v-if="companies.length > 0">
+          <p class="text-center small mb-3">Seu WhatsApp está cadastrado em mais de uma empresa. Selecione em qual deseja entrar:</p>
+          <div class="d-grid gap-2 mb-3">
+            <button
+              v-for="c in companies"
+              :key="c.id"
+              class="btn btn-outline-primary"
+              :disabled="loading"
+              @click="selectCompany(c.id)"
+            >
+              <span v-if="loading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              <i class="bi bi-building me-1"></i>{{ c.name || c.id }}
+            </button>
+          </div>
+          <div v-if="error" class="alert alert-danger py-2 small">{{ error }}</div>
+          <div class="text-center">
+            <button class="btn btn-sm btn-link text-muted" @click="backToLogin">Voltar</button>
+          </div>
+        </div>
+
+        <!-- Login form -->
+        <form v-else @submit.prevent="onSubmit" class="needs-validation">
           <div class="mb-3">
             <label for="whatsapp" class="form-label">WhatsApp (sem DDI)</label>
             <input

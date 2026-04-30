@@ -11,6 +11,8 @@ const AUTH_BASE =
 const USER_CODE_PATH = process.env.IFOOD_USER_CODE_PATH || '/oauth/userCode';
 const TOKEN_PATH = process.env.IFOOD_TOKEN_PATH || '/oauth/token';
 
+const MERCHANT_BASE = process.env.IFOOD_BASE_URL || 'https://merchant-api.ifood.com.br';
+
 // =========================
 // Helper para instanciar o axios
 // =========================
@@ -154,7 +156,41 @@ export async function exchangeAuthorizationCode({ companyId, authorizationCode }
     },
   });
 
+  // Best-effort: fetch merchant name from iFood and save it
+  fetchAndSaveMerchantName(integ.id, accessToken, merchantUuid).catch(e =>
+    console.warn('[iFood] Could not fetch merchant name:', e?.response?.data ?? e?.message)
+  );
+
   return { ok: true, integration: updated };
+}
+
+export async function fetchAndSaveMerchantName(integrationId, accessToken, merchantUuid) {
+  const h = axios.create({ baseURL: MERCHANT_BASE, timeout: 10000 });
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  let name = null;
+
+  // Try specific merchant endpoint first (more reliable)
+  if (merchantUuid) {
+    try {
+      const { data } = await h.get(`/merchant/v1.0/merchants/${merchantUuid}`, { headers });
+      name = data?.name || null;
+    } catch (e) { /* fall through to list endpoint */ }
+  }
+
+  // Fall back to listing merchants
+  if (!name) {
+    try {
+      const { data } = await h.get('/merchant/v1.0/merchants', { headers });
+      name = Array.isArray(data) ? data[0]?.name : data?.name;
+    } catch (e) { /* ignore */ }
+  }
+
+  if (!name) return;
+  // Only save if admin hasn't already set a custom name
+  const existing = await prisma.apiIntegration.findUnique({ where: { id: integrationId }, select: { merchantName: true } });
+  if (existing?.merchantName) return existing.merchantName;
+  await prisma.apiIntegration.update({ where: { id: integrationId }, data: { merchantName: name } });
+  return name;
 }
 
 // ================================================================

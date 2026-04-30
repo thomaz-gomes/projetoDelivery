@@ -11,6 +11,27 @@ router.use(authMiddleware)
 
 const MAX_SIZE = 2 * 1024 * 1024
 
+// Magic bytes for allowed image formats
+const MAGIC_BYTES = {
+  'image/jpeg': [Buffer.from([0xFF, 0xD8, 0xFF])],
+  'image/png':  [Buffer.from([0x89, 0x50, 0x4E, 0x47])],
+  'image/gif':  [Buffer.from('GIF87a'), Buffer.from('GIF89a')],
+  'image/webp': [Buffer.from('RIFF')], // RIFF header (WebP starts with RIFF????WEBP)
+}
+
+function detectImageType(buf) {
+  for (const [mime, signatures] of Object.entries(MAGIC_BYTES)) {
+    for (const sig of signatures) {
+      if (buf.length >= sig.length && buf.subarray(0, sig.length).equals(sig)) {
+        // Extra check for WebP: bytes 8-11 must be 'WEBP'
+        if (mime === 'image/webp' && buf.toString('ascii', 8, 12) !== 'WEBP') continue
+        return mime
+      }
+    }
+  }
+  return null
+}
+
 // GET /media — list media for the company
 router.get('/', requireRole('ADMIN'), async (req, res) => {
   try {
@@ -37,7 +58,6 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
 
     const raw = String(fileBase64)
     const m = raw.match(/^data:(.*?);base64,(.*)$/)
-    const mimeType = m ? m[1] : 'image/jpeg'
     const base64Data = m ? m[2] : raw
     const buf = Buffer.from(base64Data, 'base64')
 
@@ -45,9 +65,10 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
       return res.status(400).json({ message: `Arquivo muito grande (${(buf.length / 1024 / 1024).toFixed(1)} MB). Máximo: 2 MB.` })
     }
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-    if (!allowedTypes.includes(mimeType)) {
-      return res.status(400).json({ message: 'Formato inválido. Use JPG, PNG, GIF ou WebP.' })
+    // Validate actual file content via magic bytes (not user-declared MIME type)
+    const detectedType = detectImageType(buf)
+    if (!detectedType) {
+      return res.status(400).json({ message: 'Conteúdo do arquivo não é uma imagem válida. Use JPG, PNG, GIF ou WebP.' })
     }
 
     const id = randomUUID()

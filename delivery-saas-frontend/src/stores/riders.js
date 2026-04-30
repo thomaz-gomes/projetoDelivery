@@ -9,6 +9,10 @@ export const useRidersStore = defineStore('riders', {
       const { data } = await api.get('/riders');
       this.riders = data || [];
       this.loaded = true;
+    },
+    reset() {
+      this.riders = [];
+      this.loaded = false;
     }
     ,
     async get(id) {

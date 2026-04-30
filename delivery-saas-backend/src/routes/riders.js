@@ -37,9 +37,11 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
 
 ridersRouter.get('/', async (req, res) => {
   const companyId = req.user.companyId;
+  const includeInactive = req.query.includeInactive === 'true';
+  const where = includeInactive ? { companyId } : { companyId, active: true };
   const riders = await prisma.rider.findMany({
-    where: { companyId },
-    select: { id: true, name: true, whatsapp: true }
+    where,
+    select: { id: true, name: true, whatsapp: true, active: true }
   });
   res.json(riders);
 });
@@ -835,6 +837,14 @@ ridersRouter.put('/:id/shifts', async (req, res) => {
     include: { shift: true }
   });
   res.json(assignments.map(a => a.shift));
+});
+
+ridersRouter.delete('/:id', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  const rider = await prisma.rider.findFirst({ where: { id: req.params.id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+  await prisma.rider.update({ where: { id: rider.id }, data: { active: false } });
+  return res.json({ ok: true });
 });
 
 ridersRouter.get('/:id', async (req, res) => {

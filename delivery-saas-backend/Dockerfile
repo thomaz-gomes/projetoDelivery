@@ -1,27 +1,34 @@
-FROM node:20-alpine AS builder
+# ── Stage 1: install dependencies ─────────────────────────────────────────────
+FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Install dependencies (including devDeps to allow prisma generate)
+# Main app dependencies
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 
-# Copy source
+# nfe-module dependencies — libxmljs2 is optional (XSD validation only) and
+# its native C++ build takes 30+ min on Alpine. Skip it with --no-optional.
+COPY nfe-module/package.json nfe-module/
+RUN cd nfe-module && npm install --silent --omit=dev --no-optional
+
+# ── Stage 2: build (prisma generate, etc.) ────────────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/nfe-module/node_modules ./nfe-module/node_modules
+
+# Copy source AFTER deps are cached
 COPY . .
 
-# Install nfe-module dependencies (sub-project with its own package.json)
-# libxmljs2 is a native C++ addon — install build tools first
-RUN if [ -f nfe-module/package.json ]; then \
-    apk add --no-cache python3 make g++ libxml2-dev && \
-    cd nfe-module && npm ci --silent --omit=dev && cd ..; \
-fi
-
-# Gera Prisma Client (schema unificado — schema.prisma = PostgreSQL)
+# Generate Prisma Client
 RUN npx prisma generate
 
+# ── Stage 3: runtime (lean image) ────────────────────────────────────────────
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
-# Install runtime utilities + Chromium para Puppeteer (scraping headless)
+# Runtime-only system packages (no build tools)
 RUN apk add --no-cache \
     curl \
     ca-certificates \
@@ -31,12 +38,11 @@ RUN apk add --no-cache \
     harfbuzz \
     ttf-freefont
 
-# Puppeteer usa o Chromium do Alpine, não o bundled
+# Puppeteer uses Alpine's Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-# Copy node modules and built app from builder
-COPY --from=builder /app/node_modules ./node_modules
+# Copy built app from builder
 COPY --from=builder /app .
 
 ENV NODE_ENV=production
@@ -44,10 +50,5 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-# Keep container stateless: by default do not run migrations inside the runtime container.
-# Set RUN_MIGRATIONS=1 to run the included wait-and-migrate script at container start.
 ENV RUN_MIGRATIONS=1
-# When RUN_MIGRATIONS=1 use the `wait-for-db-and-migrate.js` script which waits for the
-# database to become ready and then runs `prisma db push` to sync the schema.
-# This avoids race conditions where Prisma tries to connect while Postgres is still initializing.
 CMD ["sh", "-lc", "if [ \"$RUN_MIGRATIONS\" = \"1\" ]; then node scripts/wait-for-db-and-migrate.js; fi; node src/server.js"]

@@ -99,8 +99,21 @@ export async function runReconciliation(companyId = null) {
 }
 
 let intervalId = null;
+let reconciling = false;
+
 export function startReconciliationJob() {
   if (intervalId) return;
-  intervalId = setInterval(() => runReconciliation(), 60 * 60 * 1000);
+  intervalId = setInterval(async () => {
+    if (reconciling) {
+      console.log('[reconciliation] Skipping — previous run still in progress');
+      return;
+    }
+    reconciling = true;
+    try {
+      await runReconciliation();
+    } finally {
+      reconciling = false;
+    }
+  }, 60 * 60 * 1000);
   console.log('[reconciliation] Job started — runs every 1h');
 }

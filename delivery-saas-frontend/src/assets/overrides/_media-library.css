@@ -393,6 +393,36 @@
   color: #000;
 }
 
+/* ── Zoom / ampliar imagem ── */
+.media-library-grid__item .zoom-media-trigger {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(10, 10, 30, 0.75);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 2;
+  cursor: pointer;
+}
+.media-library-grid__item:hover .zoom-media-trigger {
+  opacity: 1;
+  transform: translateY(0);
+}
+.media-library-grid__item .zoom-media-trigger:hover {
+  background: var(--bs-primary, #0d6efd);
+  color: #fff;
+}
+
 /* ── Criar com IA Tab ─────────────────────────────────────────── */
 
 /* Grid de estilos (2x2) */

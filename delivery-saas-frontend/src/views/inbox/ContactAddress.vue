@@ -51,6 +51,7 @@ import { useInboxStore } from '@/stores/inbox';
 import api from '@/api';
 
 const props = defineProps({ customerId: String });
+const emit = defineEmits(['address-selected']);
 const inboxStore = useInboxStore();
 
 const neighborhoods = ref([]);
@@ -98,6 +99,7 @@ function selectAddress(addr) {
     reference: addr.reference || '',
     observation: addr.observation || '',
   };
+  emit('address-selected', { ...form.value, id: addr.id });
 }
 
 function newAddress() {
@@ -124,9 +126,11 @@ async function saveField(field) {
         const data = await inboxStore.createAddress(props.customerId, { ...form.value });
         selectedAddrId.value = data.id;
         isNew.value = false;
+        emit('address-selected', { ...form.value, id: data.id });
       }
     } else if (selectedAddrId.value) {
       await inboxStore.updateAddressField(props.customerId, selectedAddrId.value, field, form.value[field]);
+      emit('address-selected', { ...form.value, id: selectedAddrId.value });
     }
     saved.value = true;
     clearTimeout(saveTimer);

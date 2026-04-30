@@ -69,6 +69,14 @@
                 >
                   <i class="bi bi-download"></i>
                 </a>
+                <button
+                  type="button"
+                  class="zoom-media-trigger"
+                  title="Ampliar imagem"
+                  @click.stop="lightboxSrc = assetUrl(item.url)"
+                >
+                  <i class="bi bi-zoom-in"></i>
+                </button>
               </div>
             </div>
             <div v-else class="media-library-empty">
@@ -261,6 +269,7 @@
         </div>
       </div>
     </div>
+    <ImageLightbox v-if="lightboxSrc" :src="lightboxSrc" @close="lightboxSrc = null" />
   </Teleport>
 
   <input ref="fileInput" type="file" accept="image/jpeg,image/png" style="display:none" @change="onFileChange" />
@@ -271,6 +280,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useMediaLibrary } from '../../composables/useMediaLibrary.js'
 import { useAiStudio } from '../../composables/useAiStudio.js'
 import { assetUrl, hqDownloadUrl } from '../../utils/assetUrl.js'
+import ImageLightbox from '../../views/inbox/ImageLightbox.vue'
 import api from '../../api.js'
 import Swal from 'sweetalert2'
 
@@ -291,6 +301,7 @@ const uploading = ref(false)
 // ── Library state ──
 const selectedUrl = ref(null)
 const selectedMedia = ref(null)
+const lightboxSrc = ref(null)
 const loading = ref(false)
 const libraryItems = ref([])
 

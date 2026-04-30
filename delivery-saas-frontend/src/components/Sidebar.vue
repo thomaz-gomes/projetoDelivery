@@ -709,6 +709,12 @@ function selectMenuOption(opt){
       </div>
 
       <div class="d-flex align-items-center">
+        <router-link v-if="inboxStore.unreadTotal > 0" to="/inbox" class="btn btn-light p-2 position-relative me-2 shortcut-btn" title="Mensagens não lidas" aria-label="Mensagens não lidas">
+          <i class="bi bi-chat-dots" style="font-size:1.1rem;"></i>
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:0.6rem;min-width:18px">
+            {{ inboxStore.unreadTotal > 99 ? '99+' : inboxStore.unreadTotal }}
+          </span>
+        </router-link>
         <div v-if="!saas.isCardapioSimplesOnly" class="quick-shortcuts d-none d-sm-flex align-items-center justify-content-end">
           <template v-if="!hasAnyShortcut">
             <button class="btn btn-light p-2 shortcut-btn" title="Configurar atalhos" @click.prevent="openManageShortcuts()">

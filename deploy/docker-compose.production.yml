@@ -24,6 +24,7 @@ services:
       start_period: 10s
 
   migrate:
+    image: delivery-backend:local
     build:
       context: ../delivery-saas-backend
       dockerfile: Dockerfile
@@ -40,9 +41,7 @@ services:
     restart: "no"
 
   backend:
-    build:
-      context: ../delivery-saas-backend
-      dockerfile: Dockerfile
+    image: delivery-backend:local
     environment:
       DATABASE_URL: ${DATABASE_URL}
       NODE_ENV: production
