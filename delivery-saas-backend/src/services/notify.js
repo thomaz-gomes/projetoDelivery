@@ -374,3 +374,49 @@ export async function notifyCustomerOrderSummary(orderId) {
     console.error('[notifyCustomerOrderSummary] erro:', e.response?.data || e.message || e);
   }
 }
+
+export async function notifyCashbackCredit(clientId, companyId, amount, newBalance) {
+  try {
+    const [customer, company] = await Promise.all([
+      prisma.customer.findUnique({ where: { id: clientId }, select: { fullName: true, whatsapp: true } }),
+      prisma.company.findUnique({ where: { id: companyId }, select: { name: true, evolutionEnabled: true, orderNotifyTemplates: true } }),
+    ]);
+    if (!company?.evolutionEnabled) return;
+    const phone = normalizePhone(customer?.whatsapp || '');
+    if (!phone) return;
+    const inst = await pickConnectedInstance(companyId);
+    if (!inst) return;
+
+    const DEFAULT_CASHBACK_TEMPLATE =
+`Olá {{nome}}, aqui é o atendente virtual do *{{loja}}* 👋
+
+🎉 *Você ganhou cashback!*
+
+*Valor ganho:* {{ganhou}}
+*Seu saldo total:* {{saldo}}
+
+Use seu cashback no próximo pedido. 😊`;
+
+    const templates = (company?.orderNotifyTemplates && typeof company.orderNotifyTemplates === 'object')
+      ? company.orderNotifyTemplates
+      : {};
+    const raw = Object.prototype.hasOwnProperty.call(templates, 'CASHBACK_CREDIT')
+      ? String(templates['CASHBACK_CREDIT'])
+      : DEFAULT_CASHBACK_TEMPLATE;
+
+    if (!raw.trim()) return;
+
+    const text = raw
+      .replace(/\{\{nome\}\}/g, customer?.fullName || '')
+      .replace(/\{\{loja\}\}/g, company?.name || 'sua loja')
+      .replace(/\{\{ganhou\}\}/g, fmtCurrency(amount))
+      .replace(/\{\{saldo\}\}/g, fmtCurrency(newBalance));
+
+    console.log('[notifyCashbackCredit] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0, 120) });
+    await evoSendText({ instanceName: inst.instanceName, to: phone, text }).catch(e => {
+      console.error('[notifyCashbackCredit] sendText erro:', e.response?.data || e.message || String(e));
+    });
+  } catch (e) {
+    console.error('[notifyCashbackCredit] erro:', e.response?.data || e.message || e);
+  }
+}

@@ -259,7 +259,10 @@ watch(() => inboxStore.unreadTotal, (total) => {
 const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules, nav));
 
 // show the dashboard layout (sidebar/topbar) for all routes except the login page and public menu
-const isInboxRoute = computed(() => route?.path?.startsWith('/inbox') === true);
+const isInboxRoute = computed(() => {
+  const p = route?.path || '';
+  return p.startsWith('/inbox') && p !== '/inbox/automation' && p !== '/inbox/quick-replies';
+});
 const isRiderRoute = computed(() => route?.path?.startsWith('/rider') === true);
 const showLayout = computed(() => {
   // hide layout for login, register, verify, setup and for any public routes (start with /public)

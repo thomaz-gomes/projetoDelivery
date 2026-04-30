@@ -72,6 +72,7 @@ import dadosFiscaisRouter from './routes/dadosFiscais.js'
 import productReportsRouter from './routes/reports/products.js'
 import menuPerformanceRouter from './routes/reports/menuPerformance.js'
 import ridersDashboardRouter from './routes/reports/ridersDashboard.js'
+import revenueReportRouter from './routes/reports/revenue.js'
 import aiCreditsRouter from './routes/aiCredits.js'
 import aiStudioRouter from './routes/aiStudio.js'
 import { paymentRouter } from './routes/payment.js'
@@ -299,6 +300,7 @@ app.use('/financial', requireModule('FINANCIAL'), financialRouter);
 app.use('/reports/products', productReportsRouter);
 app.use('/reports/menu-performance', menuPerformanceRouter);
 app.use('/reports/riders-dashboard', ridersDashboardRouter);
+app.use('/reports/revenue', revenueReportRouter);
 app.use('/meta-pixel', metaPixelRouter);
 app.use('/media', mediaRouter);
 app.use('/settings', dadosFiscaisRouter);

@@ -231,7 +231,7 @@ companiesRouter.patch('/company', requireRole('ADMIN'), async (req, res) => {
 
 // ─── Order notification templates ────────────────────────────────────────────
 
-const NOTIFY_STATUS_KEYS = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO'];
+const NOTIFY_STATUS_KEYS = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO', 'CASHBACK_CREDIT'];
 
 companiesRouter.get('/notification-templates', async (req, res) => {
   const companyId = req.user.companyId;
