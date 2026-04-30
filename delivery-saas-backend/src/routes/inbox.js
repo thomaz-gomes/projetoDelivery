@@ -547,15 +547,20 @@ router.post('/quick-replies', requireRole('ADMIN'), upload.single('file'), async
     const { companyId } = req.user;
     let { shortcut, title, body } = req.body;
 
-    if (!shortcut || !title) {
-      return res.status(400).json({ message: 'shortcut e title são obrigatórios' });
+    if (!title) {
+      return res.status(400).json({ message: 'title é obrigatório' });
     }
     if (!body?.trim() && !req.file) {
       return res.status(400).json({ message: 'Informe texto, anexo, ou ambos' });
     }
 
-    if (!shortcut.startsWith('/')) {
-      shortcut = '/' + shortcut;
+    if (shortcut) {
+      shortcut = shortcut.trim() || null;
+      if (shortcut && !shortcut.startsWith('/')) {
+        shortcut = '/' + shortcut;
+      }
+    } else {
+      shortcut = null;
     }
 
     const media = saveQuickReplyMedia(req.file, companyId);
@@ -600,7 +605,11 @@ router.put('/quick-replies/:id', requireRole('ADMIN'), upload.single('file'), as
 
     const data = {};
     if (shortcut !== undefined) {
-      data.shortcut = shortcut.startsWith('/') ? shortcut : '/' + shortcut;
+      if (!shortcut || !shortcut.trim()) {
+        data.shortcut = null;
+      } else {
+        data.shortcut = shortcut.startsWith('/') ? shortcut : '/' + shortcut;
+      }
     }
     if (title !== undefined) data.title = title;
     if (body !== undefined) data.body = body?.trim() || null;
