@@ -196,6 +196,7 @@
               <div v-if="it.options && it.options.length" class="small text-muted ms-2">
               <div v-for="(o,i2) in it.options" :key="i2">- {{ (o.quantity && Number(o.quantity) > 1) ? (o.quantity + 'x ') : '' }}{{ o.name }} ({{ formatCurrency(o.price) }})</div>
             </div>
+            <div v-if="it.notes" class="small text-muted ms-2 fst-italic">📝 {{ it.notes }}</div>
             <div class="small d-flex gap-2 mt-1">
               <button class="btn btn-sm btn-outline-secondary" @click="it.quantity++; recalc()">+1</button>
               <button class="btn btn-sm btn-outline-secondary" @click="decQty(it)">-1</button>
@@ -231,53 +232,47 @@
                 <input type="number" min="1" v-model.number="optionQty" class="form-control" />
               </div>
 
-                <div class="options-scroll" style="max-height:320px; overflow:auto;">
+                <div class="options-scroll">
                 <div v-if="activeProduct?.optionGroups?.length">
-                  <div class="small fw-semibold mb-2">Opcionais</div>
-                  <div v-for="g in activeProduct.optionGroups" :key="g.id" :id="'grp-'+g.id" class="mb-3">
-                    <div class="d-flex align-items-center justify-content-between mb-1">
-                      <div class="small text-muted">{{ g.name }}</div>
-                      <div v-if="requiredWarnings[g.id]" class="badge bg-danger ms-2">OBRIGATÓRIO</div>
+                  <div v-for="g in activeProduct.optionGroups" :key="g.id" :id="'grp-'+g.id" class="option-section mb-3">
+                    <div class="d-flex align-items-center justify-content-between option-section-header">
+                      <span class="option-section-title">{{ g.name }}</span>
+                      <span v-if="requiredWarnings[g.id]" class="badge bg-danger">OBRIGATÓRIO</span>
+                      <span v-else-if="g.min > 0" class="badge bg-secondary">Obrigatório</span>
                     </div>
-                      <div>
-                        <template v-if="g.max === 1">
-                          <div v-for="opt in g.options" :key="opt.id" class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center option-row">
-                              <div class="d-flex align-items-center gap-2 option-left">
-                                <div class="option-meta">
-                                  <div class="option-name">{{ opt.name }}</div>
-                                  <div class="small text-muted option-price">{{ Number(opt.price) > 0 ? formatCurrency(opt.price) : 'Grátis' }}</div>
-                                </div>
+                    <div class="option-group-card">
+                      <template v-if="g.max === 1">
+                        <div v-for="opt in g.options" :key="opt.id" class="option-group-item">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <div class="option-meta">
+                              <div class="option-name">{{ opt.name }}</div>
+                              <div class="option-price">{{ Number(opt.price) > 0 ? formatCurrency(opt.price) : 'Grátis' }}</div>
+                            </div>
+                            <input type="radio" :name="'grp-'+g.id" :id="'opt_'+g.id+'_'+opt.id" class="form-check-input" :checked="isOptionSelected(opt)" @change="selectRadio(g,opt)" />
+                          </div>
+                        </div>
+                      </template>
+                      <template v-else>
+                        <div v-for="opt in g.options" :key="opt.id" class="option-group-item">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <div class="option-meta">
+                              <div class="option-name">{{ opt.name }}</div>
+                              <div class="option-price">{{ Number(opt.price) > 0 ? formatCurrency(opt.price) : 'Grátis' }}</div>
+                            </div>
+                            <div style="min-width:110px;display:flex;justify-content:flex-end;align-items:center">
+                              <div v-if="qtyFor(g.id,opt.id) === 0">
+                                <button class="btn btn-sm btn-primary" @click.prevent="changeOptionQty(g,opt,1)">+</button>
                               </div>
-                              <div style="min-width:96px;display:flex;justify-content:flex-end;align-items:center">
-                                <input type="radio" :name="'grp-'+g.id" :id="'opt_'+g.id+'_'+opt.id" class="form-check-input" :checked="isOptionSelected(opt)" @change="selectRadio(g,opt)" />
+                              <div v-else class="d-flex align-items-center gap-2">
+                                <button class="btn btn-sm btn-outline-secondary" @click.prevent="changeOptionQty(g,opt,-1)">-</button>
+                                <div class="fw-bold">{{ qtyFor(g.id,opt.id) }}</div>
+                                <button class="btn btn-sm btn-primary" @click.prevent="changeOptionQty(g,opt,1)">+</button>
                               </div>
                             </div>
                           </div>
-                        </template>
-                        <template v-else>
-                          <div v-for="opt in g.options" :key="opt.id" class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center option-row">
-                              <div class="d-flex align-items-center gap-2 option-left">
-                                <div class="option-meta">
-                                  <div class="option-name">{{ opt.name }}</div>
-                                  <div class="small text-muted option-price">{{ Number(opt.price) > 0 ? formatCurrency(opt.price) : 'Grátis' }}</div>
-                                </div>
-                              </div>
-                              <div style="min-width:120px;display:flex;justify-content:flex-end;align-items:center" >
-                                <div v-if="qtyFor(g.id,opt.id) === 0">
-                                  <button class="btn btn-sm btn-primary" @click.prevent="changeOptionQty(g,opt,1)">+</button>
-                                </div>
-                                <div v-else class="d-flex align-items-center gap-2">
-                                  <button class="btn btn-sm btn-outline-secondary" @click.prevent="changeOptionQty(g,opt,-1)">-</button>
-                                  <div class="fw-bold">{{ qtyFor(g.id,opt.id) }}</div>
-                                  <button class="btn btn-sm btn-primary" @click.prevent="changeOptionQty(g,opt,1)">+</button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </template>
-                      </div>
+                        </div>
+                      </template>
+                    </div>
                   </div>
                 </div>
 
@@ -294,7 +289,10 @@
                 </div>
               </div>
 
-              
+              <div class="mt-3">
+                <label class="form-label small mb-1">Observação</label>
+                <textarea v-model="optionNote" class="form-control obs-textarea" rows="2" placeholder="Ex: sem cebola, bem passado..." maxlength="300"></textarea>
+              </div>
             </div>
 
             <div class="pos-options-footer mt-3 d-flex justify-content-between align-items-center">
@@ -420,6 +418,7 @@ const createdOrderDisplay = ref('');
 const showOptions = ref(false);
 const activeProduct = ref(null);
 const optionQty = ref(1);
+const optionNote = ref('');
 const chosenOptions = ref([]);
 const editingIndex = ref(null);
 const requiredWarnings = ref({});
@@ -582,7 +581,7 @@ const validAddress = computed(()=> {
 function next(){ step.value++; if(step.value===3) loadMenu(); }
 function prev(){ step.value--; }
 
-function selectProduct(p){ activeProduct.value = p; showOptions.value = true; optionQty.value=1; chosenOptions.value=[]; }
+function selectProduct(p){ activeProduct.value = p; showOptions.value = true; optionQty.value=1; chosenOptions.value=[]; optionNote.value=''; }
 function addToCart(payload){
   // persist product id when available so future edits can locate full product
   if(activeProduct.value && activeProduct.value.id) payload.productId = activeProduct.value.id;
@@ -596,6 +595,7 @@ function editItem(idx){
   // prepare modal in edit mode with current item data
   editingIndex.value = idx;
   optionQty.value = Number(it.quantity || 1);
+  optionNote.value = it.notes || '';
 
   // try to find the original product by id or name in loaded menu so we can show optionGroups
   let found = null;
@@ -667,12 +667,12 @@ const optionModalTotal = computed(()=> {
   return (unitPrice + optsPerUnit) * (Number(optionQty.value) || 1);
 });
 // ensure editingIndex cleared when closing options without saving
-function closeOptions(){ showOptions.value=false; editingIndex.value = null; requiredWarnings.value = {}; }
+function closeOptions(){ showOptions.value=false; editingIndex.value = null; requiredWarnings.value = {}; optionNote.value=''; }
 function confirmOptionsAdd(){
   if(!activeProduct.value) return;
   // validate required groups before adding
   if(!validateOptionGroups()) return;
-  const payload = { name: activeProduct.value.name, quantity: optionQty.value, price: Number(activeProduct.value.price||0), productId: activeProduct.value?.id || null, options: chosenOptions.value.map(o=>({ id: o.id, name: o.name, price: Number(o.price||0), quantity: Number(o.quantity||1) })) };
+  const payload = { name: activeProduct.value.name, quantity: optionQty.value, price: Number(activeProduct.value.price||0), productId: activeProduct.value?.id || null, notes: optionNote.value || null, options: chosenOptions.value.map(o=>({ id: o.id, name: o.name, price: Number(o.price||0), quantity: Number(o.quantity||1) })) };
   if(editingIndex.value !== null && typeof editingIndex.value !== 'undefined'){
     // update existing item
     cart.value.splice(editingIndex.value, 1, payload);
@@ -1159,13 +1159,56 @@ watch(() => props.preset, async (val) => {
 .pos-options-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; justify-content:center; align-items:center; z-index:1100; }
 .pos-options-panel{ background:#fff; width:100%; max-width:520px; padding:18px 20px; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,.2); display:flex; flex-direction:column; }
 .pos-options-panel .pos-options-body{  max-height: calc(80vh - 140px); }
-.pos-options-panel .options-scroll{ padding-right:6px; padding-bottom:18px; overscroll-behavior:contain; }
+.pos-options-panel .options-scroll{ max-height:260px; overflow-y:auto; padding-right:6px; padding-bottom:4px; overscroll-behavior:contain; }
 .pos-options-panel .pos-options-body{ position:relative; }
 .pos-options-panel .pos-options-footer{ flex:0 0 auto; }
-.option-meta .small {
-  font-weight: 300;
+/* Option group section */
+.option-section-header {
+  margin-bottom: 6px;
+}
+.option-section-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+}
+.option-group-card {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.option-group-item {
+  padding: 9px 12px;
+  border-bottom: 1px solid #e9ecef;
+  transition: background 0.1s;
+}
+.option-group-item:last-child {
+  border-bottom: none;
+}
+.option-group-item:hover {
+  background: #eff1f3;
+}
+.option-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.option-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #212529;
+}
+.option-price {
   font-size: 0.775rem;
+  color: #6c757d;
   font-style: italic;
+}
+.obs-textarea {
+  resize: none;
+  font-size: 0.875rem;
+  border-radius: 8px;
 }
 /* Custom scrollbars */
 .pos-options-panel .options-scroll{
@@ -1176,13 +1219,5 @@ watch(() => props.preset, async (val) => {
 .pos-options-panel .options-scroll::-webkit-scrollbar-track{ background: transparent; border-radius:8px; }
 .pos-options-panel .options-scroll::-webkit-scrollbar-thumb{ background: rgba(0,0,0,0.12); border-radius:8px; border: 2px solid transparent; background-clip: padding-box; }
 .pos-options-panel .options-scroll::-webkit-scrollbar-thumb:hover{ background: rgba(0,0,0,0.18); }
-
-/* Highlight for required groups when validation fails (removed) */
-.option-meta {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-weight: bold;
-}
 /* .products-step estilos específicos podem ser adicionados futuramente */
 </style>

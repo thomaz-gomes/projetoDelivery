@@ -344,52 +344,76 @@ async function movement() {
 
 async function partialSummary() {
   try {
-    // show loading spinner while fetching session and summary
     Swal.fire({ title: 'Carregando resumo...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     const { data: session } = await api.get('/cash/current');
     if (!session) { Swal.close(); currentSession.value = null; return Swal.fire('Nenhum caixa aberto', '', 'info'); }
 
-    // fetch precomputed summary from backend for the open session (cached)
     const summary = await fetchCashSummary();
-    const paymentsByMethod = (summary && summary.paymentsByMethod) ? summary.paymentsByMethod : {};
     const inRegisterByMethod = (summary && summary.inRegisterByMethod) ? summary.inRegisterByMethod : {};
-    const totalWithdrawals = (summary && summary.totalWithdrawals) ? summary.totalWithdrawals : 0;
-    const totalReinforcements = (summary && summary.totalReinforcements) ? summary.totalReinforcements : 0;
+    const totalWithdrawals = Number((summary && summary.totalWithdrawals) ? summary.totalWithdrawals : 0);
+    const totalReinforcements = Number((summary && summary.totalReinforcements) ? summary.totalReinforcements : 0);
     const expected = (summary && summary.expectedBalance) ? Number(summary.expectedBalance) : null;
-
-    // build HTML using session + summary
-    let parts = [];
     const storedBalance = Number(session.balance || 0);
-    if (expected != null) parts.push(`<div><strong>Aberto há:</strong> ${session.openedAt}<br/><strong>Saldo (registro):</strong> ${formatCurrency(storedBalance)}</div>`);
-    if (expected != null) parts.push(`<div><strong>Saldo (esperado incluindo recebimentos em dinheiro):</strong> ${formatCurrency(Number(expected||0))}</div>`);
-    const diff = expected != null ? (Number(expected||0) - storedBalance) : 0;
-    if (diff && Math.abs(diff) > 0.0001) parts.push(`<div style="color:crimson"><strong>Diferença:</strong> ${formatCurrency(diff)}</div>`);
-    parts.push('<hr/>');
-    parts.push('<div><strong>Valores em caixa por forma de pagamento</strong><ul>');
-    if (!inRegisterByMethod || Object.keys(inRegisterByMethod).length === 0) parts.push('<li>Nenhum valor em caixa desde a abertura</li>');
-    else {
-      for (const [m, v] of Object.entries(inRegisterByMethod)) {
-        parts.push(`<li>${m}: ${formatCurrency(Number(v||0))}</li>`);
-      }
-    }
-    parts.push('</ul></div>');
-    parts.push('<hr/>');
-    parts.push('<div><strong>Movimentos de caixa</strong><ul>');
-    parts.push(`<li>Retiradas: ${formatCurrency(Number(totalWithdrawals))}</li>`);
-    parts.push(`<li>Reforços: ${formatCurrency(Number(totalReinforcements))}</li>`);
-    parts.push('</ul></div>');
+    const diff = expected != null ? (Number(expected || 0) - storedBalance) : 0;
+    const hasDiff = diff && Math.abs(diff) > 0.0001;
+
+    const row = (label, value, isNegative = false) => {
+      const amount = Number(value || 0);
+      const color = amount === 0 ? '#adb5bd' : (isNegative ? '#dc3545' : '#2d8a4e');
+      const weight = amount !== 0 ? '600' : '400';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;border-bottom:1px solid #f0f0f0">
+        <span style="color:#495057;font-size:0.875rem">${label}</span>
+        <span style="color:${color};font-weight:${weight};font-size:0.875rem">${formatCurrency(amount)}</span>
+      </div>`;
+    };
+
+    const paymentRows = Object.keys(inRegisterByMethod).length > 0
+      ? Object.entries(inRegisterByMethod).map(([m, v]) => row(m, v)).join('')
+      : `<div style="color:#adb5bd;padding:10px 12px;font-size:0.875rem">Nenhum valor registrado</div>`;
+
+    const diffBanner = hasDiff ? `
+      <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:0.85rem;font-weight:600;color:#856404">Diferença encontrada</span>
+        <span style="font-weight:700;color:#dc3545">${formatCurrency(diff)}</span>
+      </div>` : '';
+
+    const sectionTitle = (label) =>
+      `<div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#adb5bd;padding:0 2px;margin-bottom:4px">${label}</div>`;
+
+    const html = `<div style="text-align:left">
+      ${diffBanner}
+      <div style="margin-bottom:14px">
+        ${sectionTitle('Valores em caixa por forma de pagamento')}
+        <div style="background:#f8f9fa;border-radius:8px;overflow:hidden">
+          ${paymentRows}
+        </div>
+      </div>
+      <div>
+        ${sectionTitle('Movimentos de caixa')}
+        <div style="background:#f8f9fa;border-radius:8px;overflow:hidden">
+          ${row('Retiradas', totalWithdrawals, true)}
+          <div style="border-bottom:none">${row('Reforços', totalReinforcements)}</div>
+        </div>
+      </div>
+    </div>`;
 
     Swal.close();
-    const html = parts.join('\n');
-    const swalResult = await Swal.fire({ title: 'Resumo parcial', html, width: 700, showCancelButton: diff && Math.abs(diff) > 0.0001, confirmButtonText: 'Reconciliar', cancelButtonText: 'OK' });
-    if (swalResult && swalResult.isConfirmed && diff && Math.abs(diff) > 0.0001) {
-      // user chose to reconcile: create a movement to adjust the stored balance
+    const swalResult = await Swal.fire({
+      title: 'Resumo parcial',
+      html,
+      width: 460,
+      confirmButtonText: 'Fechar',
+      showDenyButton: hasDiff,
+      denyButtonText: 'Reconciliar',
+      denyButtonColor: '#6c757d',
+    });
+
+    if (swalResult && swalResult.isDenied && hasDiff) {
       await reconcileBalance(Math.round(diff * 100));
-      // refresh the modal to show updated values
       await loadCurrentSession();
       await partialSummary();
     }
-  } catch (e) { console.error(e); Swal.fire('Erro', 'Falha ao buscar resumo parcial', 'error') }
+  } catch (e) { console.error(e); Swal.fire('Erro', 'Falha ao buscar resumo parcial', 'error'); }
 }
 
 async function reconcileBalance(diffCents) {
