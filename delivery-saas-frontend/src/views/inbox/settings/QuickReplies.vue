@@ -223,6 +223,12 @@ function markRemoveMedia() {
 }
 
 async function save() {
+  // Validation: shortcut required when toggle is on
+  if (form.value.useShortcut && !form.value.shortcut.trim()) {
+    Swal.fire('Erro', 'Informe o atalho ou desmarque a opção', 'error');
+    return;
+  }
+
   // Validation: body or attachment required
   const hasBody = form.value.body && form.value.body.trim();
   const willHaveMedia = !!selectedFile.value || (form.value.existingMediaUrl && !form.value.removeMedia);
