@@ -28,7 +28,10 @@
                 </td>
               </tr>
               <tr v-for="reply in inboxStore.quickReplies" :key="reply.id">
-                <td><code>{{ reply.shortcut }}</code></td>
+                <td>
+                  <code v-if="reply.shortcut">{{ reply.shortcut }}</code>
+                  <span v-else class="text-muted small">—</span>
+                </td>
                 <td>{{ reply.title }}</td>
                 <td>
                   <i v-if="reply.mediaUrl" class="bi bi-paperclip me-1 text-primary" :title="reply.mediaFileName || 'anexo'"></i>
@@ -61,8 +64,26 @@
             <form @submit.prevent="save">
               <div class="modal-body d-flex flex-column gap-3">
                 <div>
-                  <label class="form-label">Atalho</label>
-                  <input v-model="form.shortcut" type="text" class="form-control" placeholder="ex: ola" required />
+                  <div class="form-check mb-2">
+                    <input
+                      id="useShortcutCheck"
+                      v-model="form.useShortcut"
+                      class="form-check-input"
+                      type="checkbox"
+                    />
+                    <label class="form-check-label" for="useShortcutCheck">
+                      Adicionar atalho de teclado no chat
+                    </label>
+                  </div>
+                  <div v-if="form.useShortcut">
+                    <input
+                      v-model="form.shortcut"
+                      type="text"
+                      class="form-control"
+                      placeholder="ex: ola (sem a barra)"
+                    />
+                    <small class="text-muted">Disponível digitando /atalho no chat</small>
+                  </div>
                 </div>
                 <div>
                   <label class="form-label">Título</label>
@@ -133,6 +154,7 @@ const selectedFile = ref(null);
 const assetBase = API_URL;
 
 const form = ref({
+  useShortcut: false,
   shortcut: '',
   title: '',
   body: '',
@@ -147,6 +169,7 @@ onMounted(() => {
 
 function resetForm() {
   form.value = {
+    useShortcut: false,
     shortcut: '',
     title: '',
     body: '',
@@ -166,7 +189,8 @@ function openCreate() {
 function openEdit(reply) {
   editingId.value = reply.id;
   form.value = {
-    shortcut: reply.shortcut,
+    useShortcut: !!reply.shortcut,
+    shortcut: reply.shortcut ? reply.shortcut.replace(/^\//, '') : '',
     title: reply.title,
     body: reply.body || '',
     existingMediaUrl: reply.mediaUrl || null,
@@ -210,7 +234,11 @@ async function save() {
   saving.value = true;
   try {
     const fd = new FormData();
-    fd.append('shortcut', form.value.shortcut);
+    if (form.value.useShortcut && form.value.shortcut.trim()) {
+      fd.append('shortcut', form.value.shortcut.trim());
+    } else {
+      fd.append('shortcut', '');
+    }
     fd.append('title', form.value.title);
     if (hasBody) fd.append('body', form.value.body.trim());
     if (selectedFile.value) fd.append('file', selectedFile.value);
