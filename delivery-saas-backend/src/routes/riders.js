@@ -1514,3 +1514,59 @@ ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => 
   return res.json({ ok: true, message: 'Pagamento registrado', total: sum, tx: paymentTx });
 });
 
+// POST /riders/:id/dedup-daily-rates
+// Removes duplicate DAILY_RATE transactions for the same BRT calendar day,
+// keeping the earliest one per day and deleting extras. Adjusts rider balance.
+ridersRouter.post('/:id/dedup-daily-rates', requireRole('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const { dryRun = false, startDate, endDate } = req.body || {};
+
+  const rider = await prisma.rider.findFirst({ where: { id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+  const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+  const where = { riderId: id, type: 'DAILY_RATE' };
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) where.date.gte = new Date(startDate);
+    if (endDate) { const e = new Date(endDate); e.setDate(e.getDate() + 1); where.date.lte = e; }
+  }
+
+  const all = await prisma.riderTransaction.findMany({ where, orderBy: { date: 'asc' } });
+
+  // Group by BRT calendar day key (YYYY-MM-DD in BRT)
+  const byDay = new Map();
+  for (const t of all) {
+    const brtDate = new Date(new Date(t.date).getTime() - BRT_OFFSET_MS);
+    const key = brtDate.toISOString().slice(0, 10);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(t);
+  }
+
+  const duplicates = [];
+  for (const [day, txs] of byDay) {
+    if (txs.length > 1) {
+      // keep earliest, flag the rest
+      const extras = txs.slice(1);
+      for (const t of extras) duplicates.push({ day, id: t.id, amount: Number(t.amount) });
+    }
+  }
+
+  if (!dryRun && duplicates.length > 0) {
+    for (const dup of duplicates) {
+      await prisma.$transaction([
+        prisma.riderTransaction.delete({ where: { id: dup.id } }),
+        prisma.riderAccount.upsert({
+          where: { riderId: id },
+          update: { balance: { decrement: dup.amount } },
+          create: { riderId: id, balance: -dup.amount },
+        }),
+      ]);
+    }
+  }
+
+  return res.json({ dryRun: !!dryRun, duplicatesFound: duplicates.length, removed: dryRun ? 0 : duplicates.length, duplicates });
+});
+
