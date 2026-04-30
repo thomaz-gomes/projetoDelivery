@@ -874,29 +874,26 @@ ridersRouter.get('/:id/transactions', async (req, res) => {
   const page = Math.max(1, Number(req.query.page || 1));
   const pageSize = Math.max(1, Math.min(200, Number(req.query.pageSize || 25)));
 
-  // Helper: parse date-only strings (YYYY-MM-DD) as local dates to avoid
-  // timezone shifts when converting to UTC. Falls back to Date(string) for other formats.
-  function parseDateLocal(s) {
+  // Parse YYYY-MM-DD as BRT (UTC-3) midnight so that filters like "29/04"
+  // correctly include transactions up to 02:59 UTC on 30/04 (= 23:59 BRT on 29/04).
+  const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+  function parseDateBRT(s) {
     if (!s) return null;
     const str = String(s).trim();
-    // if date-only YYYY-MM-DD, construct using local date components
     const m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (m) {
-      const y = Number(m[1]);
-      const mo = Number(m[2]);
-      const d = Number(m[3]);
-      // new Date(year, monthIndex, day) creates a date at local midnight
-      return new Date(y, mo - 1, d);
+      // midnight BRT = 03:00 UTC
+      return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) + BRT_OFFSET_MS);
     }
     const dt = new Date(str);
     return isNaN(dt) ? null : dt;
   }
 
-  const from = req.query.from ? parseDateLocal(req.query.from) : null;
-  let to = req.query.to ? parseDateLocal(req.query.to) : null;
-  // make 'to' inclusive (end of day) when present
+  const from = req.query.from ? parseDateBRT(req.query.from) : null;
+  let to = req.query.to ? parseDateBRT(req.query.to) : null;
+  // make 'to' inclusive: end of BRT day = start of BRT day + 24h - 1ms
   if (to && !isNaN(to)) {
-    to.setHours(23, 59, 59, 999);
+    to = new Date(to.getTime() + 24 * 60 * 60 * 1000 - 1);
   }
   const type = req.query.type ? String(req.query.type) : null; // single type or comma-separated
   const sort = String(req.query.sort || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
@@ -1486,26 +1483,24 @@ ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => 
 
   const { from, to, accountId } = req.body || {};
 
-  // parse YYYY-MM-DD as local date
-  function parseDateLocal(s) {
+  // parse YYYY-MM-DD as BRT (UTC-3) so payment period covers full local day
+  const BRT_OFF = 3 * 60 * 60 * 1000;
+  function parseDateBRT(s) {
     if (!s) return null;
     const str = String(s).trim();
     const m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (m) {
-      const y = Number(m[1]); const mo = Number(m[2]); const d = Number(m[3]);
-      return new Date(y, mo - 1, d);
-    }
+    if (m) return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) + BRT_OFF);
     const dt = new Date(str);
     return isNaN(dt) ? null : dt;
   }
 
   const where = { riderId: id };
-  const fromDate = parseDateLocal(from);
-  let toDate = parseDateLocal(to);
+  const fromDate = parseDateBRT(from);
+  let toDate = parseDateBRT(to);
   if (fromDate || toDate) {
     where.date = {};
     if (fromDate && !isNaN(fromDate)) where.date.gte = fromDate;
-    if (toDate && !isNaN(toDate)) { toDate.setHours(23,59,59,999); where.date.lte = toDate; }
+    if (toDate && !isNaN(toDate)) where.date.lte = new Date(toDate.getTime() + 24 * 60 * 60 * 1000 - 1);
   }
 
   // fetch matching transactions and sum amounts
