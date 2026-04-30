@@ -63,6 +63,17 @@ const periodBalance = ref(0);
 const periodEarnings = ref(0);
 const periodPaid = ref(0);
 
+function typeLabel(type) {
+  switch (type) {
+    case 'DELIVERY_FEE': return 'Taxa de entrega';
+    case 'DAILY_RATE': return 'Diária';
+    case 'EARLY_CHECKIN_BONUS': return 'Bônus checkin';
+    case 'MANUAL_ADJUSTMENT': return 'Ajuste manual';
+    case 'GOAL_REWARD': return 'Recompensa meta';
+    default: return type || '';
+  }
+}
+
 function parseDateInput(s) {
   if (!s) return null;
   const str = String(s).trim();
@@ -295,9 +306,11 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             <label class="form-label small">Tipo</label>
             <SelectInput v-model="filters.type">
               <option value="">Todos</option>
-              <option value="DELIVERY_FEE">Delivery fee</option>
-              <option value="DAILY_RATE">Daily rate</option>
-              <option value="MANUAL_ADJUSTMENT">Manual adjustment</option>
+              <option value="DELIVERY_FEE">Taxa de entrega</option>
+              <option value="DAILY_RATE">Diária</option>
+              <option value="EARLY_CHECKIN_BONUS">Bônus checkin</option>
+              <option value="MANUAL_ADJUSTMENT">Ajuste manual</option>
+              <option value="GOAL_REWARD">Recompensa meta</option>
             </SelectInput>
           </div>
           <div class="col-md-3 d-flex align-items-end">
@@ -403,7 +416,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             <tbody>
               <tr v-for="t in transactions" :key="t.id">
                 <td>{{ formatDateWithOptionalTime(t.date) }}</td>
-                <td>{{ t.type }}</td>
+                <td>{{ typeLabel(t.type) }}</td>
                 <td>
                   <div v-if="isAdmin && editingId === t.id" class="d-flex gap-2 align-items-center">
                     <input class="form-control form-control-sm" v-model="editAmount" style="width:110px" />
