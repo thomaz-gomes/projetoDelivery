@@ -27,6 +27,7 @@ export const nav = [
   ] },
   { name: 'Relatórios', to: '/reports', icon: 'bi bi-file-earmark-bar-graph', moduleKey: 'cardapio_completo', lockable: true, role: 'ADMIN', children: [
     { name: 'Histórico de vendas', to: '/sales', icon: 'bi bi-clock-history' },
+    { name: 'Faturamento', to: '/reports/revenue', icon: 'bi bi-currency-dollar' },
     { name: 'Frentes de caixa', to: '/reports/cash-fronts', icon: 'bi bi-cash-stack' },
     { name: 'Produtos mais vendidos', to: '/reports/products', icon: 'bi bi-bar-chart-line' },
     { name: 'Desempenho do Cardápio', to: '/reports/menu-performance', icon: 'bi bi-graph-up' },
