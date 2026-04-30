@@ -69,8 +69,10 @@
           <div class="card-body">
             <h6 class="card-title"><i class="bi bi-emoji-smile me-1"></i>Saudação automática</h6>
             <p class="small text-muted mb-2">Disparada na primeira mensagem do cliente após 6 horas de inatividade.</p>
+
+            <!-- Default greeting -->
             <div class="mb-3">
-              <label class="form-label">Resposta rápida</label>
+              <label class="form-label">Mensagem padrão <span class="text-muted small">(usada quando nenhuma regra de horário se aplica)</span></label>
               <SelectInput
                 v-model="form.greetingReplyId"
                 :options="quickReplyOptions"
@@ -83,19 +85,16 @@
               <strong class="d-block mb-1">Preview:</strong>
               <span style="white-space: pre-wrap;">{{ greetingPreview }}</span>
             </div>
-            <BaseButton variant="primary" size="sm" :loading="saving" @click="saveGreeting">
-              Salvar
+            <BaseButton variant="primary" size="sm" :loading="saving" @click="saveGreeting" class="mb-4">
+              Salvar mensagem padrão
             </BaseButton>
-          </div>
-        </div>
 
-        <!-- Greeting time rules -->
-        <div class="card mb-3">
-          <div class="card-body">
+            <!-- Time rules -->
+            <hr class="my-3" />
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div>
-                <h6 class="card-title mb-0"><i class="bi bi-clock me-1"></i>Saudações por horário</h6>
-                <p class="small text-muted mb-0">Escolha uma mensagem diferente por faixa de horário. Tem prioridade sobre a saudação padrão.</p>
+                <div class="fw-semibold small"><i class="bi bi-clock me-1"></i>Por horário</div>
+                <div class="text-muted small">Tem prioridade sobre a mensagem padrão.</div>
               </div>
               <BaseButton variant="outline-primary" size="sm" @click="openAddRule">
                 <i class="bi bi-plus-lg me-1"></i>Adicionar
