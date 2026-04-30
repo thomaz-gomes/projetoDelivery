@@ -989,8 +989,8 @@ router.get('/greeting-rules', async (req, res) => {
     });
     return res.json(rules);
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Erro interno' });
+    console.error('[inbox] GET /greeting-rules error:', err);
+    return res.status(500).json({ message: 'Erro ao listar regras de saudação', error: err.message });
   }
 });
 
@@ -1034,8 +1034,8 @@ router.post('/greeting-rules', requireRole('ADMIN'), async (req, res) => {
     });
     return res.status(201).json(rule);
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Erro interno' });
+    console.error('[inbox] POST /greeting-rules error:', err);
+    return res.status(500).json({ message: 'Erro ao criar regra de saudação', error: err.message });
   }
 });
 
@@ -1059,20 +1059,21 @@ router.put('/greeting-rules/:id', requireRole('ADMIN'), async (req, res) => {
       return res.status(400).json({ message: 'endTime inválido' });
     }
 
-    if (quickReplyId) {
-      const qr = await prisma.quickReply.findFirst({
-        where: { id: quickReplyId, companyId },
-        select: { id: true },
-      });
-      if (!qr) return res.status(400).json({ message: 'quickReplyId inválido' });
-    }
-
     const data = {};
-    if (quickReplyId !== undefined) data.quickReplyId = quickReplyId;
+    if (quickReplyId !== undefined) {
+      if (quickReplyId) {
+        const qr = await prisma.quickReply.findFirst({
+          where: { id: quickReplyId, companyId },
+          select: { id: true },
+        });
+        if (!qr) return res.status(400).json({ message: 'quickReplyId inválido' });
+      }
+      data.quickReplyId = quickReplyId || null;
+    }
     if (startTime !== undefined) data.startTime = startTime;
     if (endTime !== undefined) data.endTime = endTime;
     if (label !== undefined) data.label = label || null;
-    if (sortOrder !== undefined) data.sortOrder = sortOrder;
+    if (sortOrder !== undefined) data.sortOrder = Number(sortOrder);
 
     const rule = await prisma.greetingTimeRule.update({
       where: { id },
@@ -1081,8 +1082,8 @@ router.put('/greeting-rules/:id', requireRole('ADMIN'), async (req, res) => {
     });
     return res.json(rule);
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Erro interno' });
+    console.error('[inbox] PUT /greeting-rules/:id error:', err);
+    return res.status(500).json({ message: 'Erro ao atualizar regra de saudação', error: err.message });
   }
 });
 
@@ -1098,10 +1099,10 @@ router.delete('/greeting-rules/:id', requireRole('ADMIN'), async (req, res) => {
     if (!existing) return res.status(404).json({ message: 'Regra não encontrada' });
 
     await prisma.greetingTimeRule.delete({ where: { id } });
-    return res.status(204).end();
+    return res.json({ message: 'Regra de saudação removida' });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Erro interno' });
+    console.error('[inbox] DELETE /greeting-rules/:id error:', err);
+    return res.status(500).json({ message: 'Erro ao remover regra de saudação', error: err.message });
   }
 });
 
