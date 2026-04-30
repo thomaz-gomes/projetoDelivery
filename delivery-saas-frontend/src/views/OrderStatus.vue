@@ -241,7 +241,8 @@ function goHistory(){
 
 function shareOnWhatsApp(){
   if(!order.value) return
-  const display = order.value.displayId || order.value.id
+  const displaySimple = order.value.displaySimple
+  const display = displaySimple ? `#${displaySimple}` : (order.value.displayId || `#${order.value.id.slice(0,6).toUpperCase()}`)
   const total = formatAmount(computedTotal.value)
   const phoneForQuery = phoneQuery || (JSON.parse(localStorage.getItem(`public_customer_${companyId}`) || 'null') || {}).contact || ''
   let orderUrl = `${window.location.origin}/public/${companyId}/order/${orderId}`
@@ -251,7 +252,7 @@ function shareOnWhatsApp(){
   if(menuId.value) params.set('menuId', menuId.value)
   const qs = params.toString()
   if(qs) orderUrl += `?${qs}`
-  const msg = `Pedido ${display} criado. Total: R$ ${total}. Acompanhe: ${orderUrl}`
+  const msg = `🛍️ Pedido ${display} realizado!\n💰 Total: R$ ${total}\n\n📍 Acompanhe seu pedido:\n${orderUrl}`
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank')
 }
 

@@ -726,10 +726,12 @@ ridersRouter.get('/ranking', async (req, res) => {
 
     // Punctuality (% check-ins before deadline)
     const riderCheckins = checkins.filter(c => c.riderId === rider.id);
+    const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
     let onTimeCount = 0;
     for (const c of riderCheckins) {
-      const checkinDate = new Date(c.checkinAt);
-      const checkinMinutes = checkinDate.getHours() * 60 + checkinDate.getMinutes();
+      // deadlineTime is in BRT; checkinAt is UTC — convert to BRT before comparing
+      const brtDate = new Date(new Date(c.checkinAt).getTime() - BRT_OFFSET_MS);
+      const checkinMinutes = brtDate.getUTCHours() * 60 + brtDate.getUTCMinutes();
       const isOnTime = bonusRules.some(rule => {
         if (rule.shiftId && c.shiftId !== rule.shiftId) return false;
         const [h, m] = rule.deadlineTime.split(':').map(Number);

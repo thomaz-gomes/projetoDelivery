@@ -78,17 +78,6 @@ function typeLabel(type) {
   }
 }
 
-function typeLabel(type) {
-  switch (type) {
-    case 'DELIVERY_FEE': return 'Taxa de entrega';
-    case 'DAILY_RATE': return 'Diária';
-    case 'EARLY_CHECKIN_BONUS': return 'Bônus checkin';
-    case 'MANUAL_ADJUSTMENT': return 'Ajuste manual';
-    case 'GOAL_REWARD': return 'Recompensa meta';
-    default: return type || '';
-  }
-}
-
 function parseDateInput(s) {
   if (!s) return null;
   const str = String(s).trim();
