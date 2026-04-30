@@ -96,7 +96,10 @@ function pickGreetingByTime(rules, timezone) {
   const sorted = [...rules].sort((a, b) => a.sortOrder - b.sortOrder);
   for (const rule of sorted) {
     if (timeInRange(currentTime, rule.startTime, rule.endTime)) {
-      return rule.quickReply;
+      const qr = rule.quickReply;
+      if ((qr.body && qr.body.trim()) || qr.mediaUrl) {
+        return qr;
+      }
     }
   }
   return null;
