@@ -139,18 +139,18 @@
                 <div class="row g-2">
                   <div class="col-6">
                     <label class="form-label">Início</label>
-                    <input v-model="ruleForm.startTime" type="time" class="form-control" />
+                    <input v-model="ruleForm.startTime" type="time" class="form-control" required />
                   </div>
                   <div class="col-6">
                     <label class="form-label">Fim</label>
-                    <input v-model="ruleForm.endTime" type="time" class="form-control" />
+                    <input v-model="ruleForm.endTime" type="time" class="form-control" required />
                   </div>
                 </div>
                 <div>
                   <label class="form-label">Mensagem (resposta rápida)</label>
                   <SelectInput
                     v-model="ruleForm.quickReplyId"
-                    :options="quickReplyOptions"
+                    :options="quickReplyOptionsRequired"
                     optionValueKey="value"
                     optionLabelKey="label"
                     placeholder="Selecione..."
@@ -262,6 +262,10 @@ const menuOptions = computed(() =>
 
 const quickReplyOptions = computed(() =>
   [{ value: null, label: '— Desabilitado —' }, ...quickReplies.value.map(r => ({ value: r.id, label: r.title || r.shortcut }))]
+);
+
+const quickReplyOptionsRequired = computed(() =>
+  quickReplies.value.map(r => ({ value: r.id, label: r.title || r.shortcut }))
 );
 
 const form = ref({ outOfHoursReplyId: null, greetingReplyId: null });
