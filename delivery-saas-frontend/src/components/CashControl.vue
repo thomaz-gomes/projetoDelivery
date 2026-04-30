@@ -353,7 +353,7 @@ async function partialSummary() {
     const totalWithdrawals = Number((summary && summary.totalWithdrawals) ? summary.totalWithdrawals : 0);
     const totalReinforcements = Number((summary && summary.totalReinforcements) ? summary.totalReinforcements : 0);
     const expected = (summary && summary.expectedBalance) ? Number(summary.expectedBalance) : null;
-    const storedBalance = Number(session.balance || 0);
+    const storedBalance = Number(session.currentBalance ?? session.balance ?? 0);
     const diff = expected != null ? (Number(expected || 0) - storedBalance) : 0;
     const hasDiff = diff && Math.abs(diff) > 0.0001;
 
