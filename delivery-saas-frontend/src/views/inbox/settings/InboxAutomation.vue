@@ -151,7 +151,9 @@
           <code>{{nome}}</code> — nome do cliente &nbsp;
           <code>{{loja}}</code> — nome da loja &nbsp;
           <code>{{status}}</code> — status em português &nbsp;
-          <code>{{pedido}}</code> — número do pedido
+          <code>{{pedido}}</code> — número do pedido &nbsp;
+          <code>{{ganhou}}</code> — valor ganho de cashback &nbsp;
+          <code>{{saldo}}</code> — saldo total de cashback
         </div>
       </div>
       <div class="alert alert-secondary py-2 mb-4" style="font-size: 0.82rem;">
@@ -207,6 +209,7 @@ const STATUSES = [
   { key: 'CONFIRMACAO_PAGAMENTO',  label: 'Confirmação de Pagamento', icon: 'bi-credit-card', description: 'Disparada quando o pagamento está sendo confirmado.' },
   { key: 'CONCLUIDO',              label: 'Concluído',                icon: 'bi-check-circle',description: 'Disparada quando o pedido é finalizado com sucesso.' },
   { key: 'CANCELADO',              label: 'Cancelado',                icon: 'bi-x-circle',    description: 'Disparada quando o pedido é cancelado.' },
+  { key: 'CASHBACK_CREDIT',        label: 'Cashback recebido',        icon: 'bi-piggy-bank',  description: 'Enviada ao cliente quando seu saldo de cashback aumenta. Variáveis extras: {{ganhou}} e {{saldo}}.' },
 ];
 
 const DEFAULT_TEMPLATE =

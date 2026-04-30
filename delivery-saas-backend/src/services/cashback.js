@@ -1,5 +1,6 @@
 import { prisma } from '../prisma.js'
 import { getEnabledModules, ENFORCE_MODULES } from '../modules.js'
+import { notifyCashbackCredit } from './notify.js'
 
 export async function getSettings(companyId){
   let s = await prisma.cashbackSetting.findFirst({ where: { companyId } })
@@ -157,26 +158,36 @@ export async function creditWalletForOrder(companyId, clientId, order, descripti
   if(!(totalCashback > 0)) return null
 
   // persist wallet tx and update balance in transaction
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     let wallet = await tx.cashbackWallet.findFirst({ where: { companyId, clientId } })
     if(!wallet) wallet = await tx.cashbackWallet.create({ data: { companyId, clientId, balance: 0 } })
     const newBalance = Number(wallet.balance) + totalCashback
     await tx.cashbackWallet.update({ where: { id: wallet.id }, data: { balance: String(newBalance) } })
     const txr = await tx.cashbackTransaction.create({ data: { walletId: wallet.id, orderId: order.id, type: 'CREDIT', amount: String(totalCashback), description: description || 'Cashback de compra' } })
-    return { walletId: wallet.id, amount: totalCashback, tx: txr }
+    return { walletId: wallet.id, amount: totalCashback, tx: txr, newBalance }
   })
+  if (result) {
+    notifyCashbackCredit(clientId, companyId, result.amount, result.newBalance).catch(e => {
+      console.error('[cashback] notifyCashbackCredit error:', e.message || e)
+    })
+  }
+  return result
 }
 
 export async function creditWalletManual(companyId, clientId, amount, description){
   if(Number(amount) <= 0) throw new Error('amount must be > 0')
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     let wallet = await tx.cashbackWallet.findFirst({ where: { companyId, clientId } })
     if(!wallet) wallet = await tx.cashbackWallet.create({ data: { companyId, clientId, balance: 0 } })
     const newBalance = Number(wallet.balance) + Number(amount)
     await tx.cashbackWallet.update({ where: { id: wallet.id }, data: { balance: String(newBalance) } })
     const txr = await tx.cashbackTransaction.create({ data: { walletId: wallet.id, type: 'CREDIT', amount: String(amount), description: description || 'Crédito manual' } })
-    return { walletId: wallet.id, amount: Number(amount), tx: txr }
+    return { walletId: wallet.id, amount: Number(amount), tx: txr, newBalance }
   })
+  notifyCashbackCredit(clientId, companyId, result.amount, result.newBalance).catch(e => {
+    console.error('[cashback] notifyCashbackCredit error:', e.message || e)
+  })
+  return result
 }
 
 export async function debitWallet(companyId, clientId, amount, orderId, description){
