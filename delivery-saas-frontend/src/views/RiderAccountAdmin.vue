@@ -158,7 +158,9 @@ async function saveEdit() {
 
 async function fetchPeriodFees() {
   try {
+    // Period totals must ignore the type filter — balance always reflects all transaction types.
     const params = buildParams(true);
+    delete params.type;
     params.full = true;
     const { data } = await api.get(`/riders/${riderId}/transactions`, { params });
     const items = data.items || [];
