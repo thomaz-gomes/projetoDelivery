@@ -118,12 +118,10 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { Chart, registerables } from 'chart.js'
+import Chart from 'chart.js/auto'
 import api from '../../api'
 import SelectInput from '../../components/form/select/SelectInput.vue'
 import BaseButton from '../../components/BaseButton.vue'
-
-Chart.register(...registerables)
 
 const COLORS = [
   '#105784', '#89D136', '#f5a623', '#e04f4f', '#9b59b6',

@@ -192,10 +192,8 @@
 </template>
 
 <script>
-import { Chart, registerables } from 'chart.js';
+import Chart from 'chart.js/auto';
 import api from '../../api';
-
-Chart.register(...registerables);
 
 const CHANNEL_COLORS = {
   'Delivery': '#4f81e0',
