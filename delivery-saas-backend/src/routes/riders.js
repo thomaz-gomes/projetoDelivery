@@ -542,6 +542,87 @@ ridersRouter.post('/me/checkin', async (req, res) => {
   res.status(201).json(checkin);
 });
 
+// GET /riders/me/shifts — resumo de turnos para o entregador
+ridersRouter.get('/me/shifts', requireRole('RIDER'), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const rider = await prisma.rider.findFirst({ where: { userId, active: true } });
+    if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
+
+    const checkins = await prisma.riderCheckin.findMany({
+      where: { riderId: rider.id },
+      include: { shift: { select: { name: true, startTime: true, endTime: true } } },
+      orderBy: { checkinAt: 'desc' },
+      take: 30,
+    });
+
+    const result = await Promise.all(checkins.map(async (c) => {
+      const windowEnd = c.checkoutAt || new Date();
+
+      // Orders concluídos neste turno
+      const orders = await prisma.order.findMany({
+        where: {
+          riderId: rider.id,
+          status: 'CONCLUIDO',
+          updatedAt: { gte: c.checkinAt, lte: windowEnd },
+        },
+        select: { id: true, deliveryNeighborhood: true },
+      });
+
+      // Bairro mais entregue
+      const neighCount = {};
+      for (const o of orders) {
+        const n = o.deliveryNeighborhood;
+        if (n) neighCount[n] = (neighCount[n] || 0) + 1;
+      }
+      const topNeighborhood = Object.entries(neighCount).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+      // Ganhos no turno
+      const txs = await prisma.riderTransaction.findMany({
+        where: { riderId: rider.id, date: { gte: c.checkinAt, lte: windowEnd } },
+        select: { amount: true, type: true },
+      });
+      const totalEarned = txs.reduce((s, t) => s + Number(t.amount || 0), 0);
+
+      // Metas atingidas no dia do turno
+      let goalsHit = 0, goalsTotal = 0;
+      try {
+        const dayStart = new Date(c.checkinAt);
+        dayStart.setUTCHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+        const goals = await prisma.riderGoal.findMany({
+          where: { companyId: rider.companyId, active: true },
+        });
+        goalsTotal = goals.length;
+        for (const g of goals) {
+          const progress = await prisma.riderGoalProgress.findFirst({
+            where: { riderId: rider.id, goalId: g.id, date: { gte: dayStart, lt: dayEnd } },
+          });
+          if (progress && progress.achieved) goalsHit++;
+        }
+      } catch (_) { /* metas opcionais */ }
+
+      return {
+        id: c.id,
+        checkinAt: c.checkinAt,
+        checkoutAt: c.checkoutAt,
+        shift: c.shift,
+        deliveries: orders.length,
+        topNeighborhood,
+        totalEarned,
+        goalsHit,
+        goalsTotal,
+        isActive: !c.checkoutAt,
+      };
+    }));
+
+    res.json(result);
+  } catch (e) {
+    console.error('GET /riders/me/shifts error:', e);
+    res.status(500).json({ message: 'Erro ao carregar histórico de turnos' });
+  }
+});
+
 // GET /riders/me/checkins — histórico de check-ins do motoboy
 ridersRouter.get('/me/checkins', async (req, res) => {
   const userId = req.user.id;

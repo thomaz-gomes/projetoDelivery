@@ -35,6 +35,14 @@
         <div class="nav-label">Extrato</div>
       </button>
 
+      <!-- Turnos -->
+      <button :class="['nav-item', { active: isActive('/rider/shifts') }]" @click.prevent="router.push('/rider/shifts')" aria-label="Turnos">
+        <span class="nav-icon-wrap">
+          <i :class="['bi', isActive('/rider/shifts') ? 'bi-clock-history' : 'bi-clock-history', 'nav-icon']" aria-hidden="true"></i>
+        </span>
+        <div class="nav-label">Turnos</div>
+      </button>
+
       <!-- Sair -->
       <button class="nav-item" @click.prevent="logout" aria-label="Sair">
         <span class="nav-icon-wrap">

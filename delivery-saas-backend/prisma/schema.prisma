@@ -781,6 +781,7 @@ model RiderCheckin {
   lng            Float
   address        String?
   checkinAt      DateTime
+  checkoutAt     DateTime?
   distanceMeters Float
   createdAt      DateTime   @default(now())
 
