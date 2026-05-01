@@ -658,9 +658,6 @@
                       </div>
                     <!-- Buttons removed: advancing will save and proceed; clear removed per UX request -->
                   </div>
-                  <div class="mt-2">
-                    <button class="btn btn-sm btn-outline-primary" @click="useMyLocation" :disabled="_locating">{{ _locating ? 'Localizando...' : 'Usar minha localização' }}</button>
-                  </div>
                 </div>
 
                 <!-- User has saved addresses: show selector + small shortcut to reveal the "new address" form -->
@@ -703,9 +700,6 @@
                     </div>
                   </div>
 
-                  <div class="mt-2">
-                    <button v-if="showNewAddressForm" class="btn btn-sm btn-outline-primary" @click="useMyLocation" :disabled="_locating">{{ _locating ? 'Localizando...' : 'Usar minha localização' }}</button>
-                  </div>
                 </div>
                 <!-- end else (has addresses) -->
               </div>

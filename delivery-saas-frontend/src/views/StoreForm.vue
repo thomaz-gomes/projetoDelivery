@@ -128,6 +128,31 @@
               </div>
             </div>
 
+            <!-- ── Responsável Técnico (infRespTec) ── -->
+            <div class="card mb-4">
+              <div class="card-header"><h6 class="mb-0"><i class="bi bi-person-badge me-2"></i>Responsável Técnico pelo Software (infRespTec)</h6></div>
+              <div class="card-body">
+                <p class="text-muted small mb-3">
+                  Identifica o fornecedor do software emissor de NF-e. Obrigatório por NT 2018.005 — sem este bloco alguns estados retornam <strong>Rejeição 972</strong>.
+                  Preencha com os dados da empresa que desenvolveu este sistema.
+                </p>
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <TextInput label="CNPJ do Responsável" labelClass="form-label fw-semibold" v-model="form.infRespTec.CNPJ" placeholder="00.000.000/0000-00" inputClass="form-control" />
+                  </div>
+                  <div class="col-md-4">
+                    <TextInput label="Nome do Contato" labelClass="form-label fw-semibold" v-model="form.infRespTec.xContato" placeholder="Nome completo" inputClass="form-control" />
+                  </div>
+                  <div class="col-md-4">
+                    <TextInput label="Telefone" labelClass="form-label fw-semibold" v-model="form.infRespTec.fone" placeholder="DDD + número" inputClass="form-control" />
+                  </div>
+                  <div class="col-md-6">
+                    <TextInput label="E-mail" labelClass="form-label fw-semibold" v-model="form.infRespTec.email" placeholder="email@empresa.com" inputClass="form-control" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- ── Certificado Digital ── -->
             <div class="card mb-4">
               <div class="card-header"><h6 class="mb-0"><i class="bi bi-shield-lock me-2"></i>Certificado Digital A1 (PFX)</h6></div>
@@ -370,7 +395,7 @@ const TIMEZONES = [
   'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
   'Asia/Shanghai', 'Australia/Sydney'
 ]
-const form = ref({ name: '', address: '', latitude: null, longitude: null, city: '', state: '', ibgeCode: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
+const form = ref({ name: '', address: '', latitude: null, longitude: null, city: '', state: '', ibgeCode: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', infRespTec: { CNPJ: '', xContato: '', email: '', fone: '' }, enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
 
 // IBGE API: states and cities
 const ibgeStates = ref([])
@@ -596,6 +621,9 @@ async function load() {
       form.value.nfeEnvironment = s.nfeEnvironment || 'homologation'
       form.value.csc = s.csc || ''
       form.value.cscId = s.cscId || ''
+      if (s.infRespTec && typeof s.infRespTec === 'object') {
+        form.value.infRespTec = { CNPJ: s.infRespTec.CNPJ || '', xContato: s.infRespTec.xContato || '', email: s.infRespTec.email || '', fone: s.infRespTec.fone || '' }
+      }
       if (s.enderEmit && typeof s.enderEmit === 'object') {
         form.value.enderEmit = { xLgr: s.enderEmit.xLgr || '', nro: s.enderEmit.nro || '', xBairro: s.enderEmit.xBairro || '', cMun: s.enderEmit.cMun || '', xMun: s.enderEmit.xMun || '', UF: s.enderEmit.UF || '', CEP: s.enderEmit.CEP || '' }
       }
@@ -744,6 +772,7 @@ async function save(){
       nfeEnvironment: form.value.nfeEnvironment || undefined,
       csc: form.value.csc || undefined,
       cscId: form.value.cscId || undefined,
+      infRespTec: form.value.infRespTec?.CNPJ ? form.value.infRespTec : undefined,
       enderEmit: form.value.enderEmit || undefined,
     }
 

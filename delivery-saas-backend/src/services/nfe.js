@@ -129,16 +129,22 @@ export function buildNfePayload(data) {
       const pIPI = Number(item.imposto?._pIPI || 0)
       const vProdNum = Number(item.prod.vProd || 0)
 
-      const pisTag = pPIS > 0
-        ? { PISAliq: { CST: '01', vBC: fmtDec2(vProdNum), pPIS: pPIS.toFixed(2), vPIS: fmtDec2(vProdNum * pPIS / 100) } }
-        : { PISNT: { CST: '07' } }
+      const configCstPis = item.imposto?._cstPis
+      const pisTag = configCstPis === '07' || (!configCstPis && pPIS === 0)
+        ? { PISNT: { CST: '07' } }
+        : pPIS > 0 || configCstPis === '01'
+          ? { PISAliq: { CST: configCstPis ?? '01', vBC: fmtDec2(vProdNum), pPIS: pPIS.toFixed(2), vPIS: fmtDec2(vProdNum * pPIS / 100) } }
+          : { PISNT: { CST: configCstPis ?? '07' } }
 
-      const cofinsTag = pCOFINS > 0
-        ? { COFINSAliq: { CST: '01', vBC: fmtDec2(vProdNum), pCOFINS: pCOFINS.toFixed(2), vCOFINS: fmtDec2(vProdNum * pCOFINS / 100) } }
-        : { COFINSNT: { CST: '07' } }
+      const configCstCofins = item.imposto?._cstCofins
+      const cofinsTag = configCstCofins === '07' || (!configCstCofins && pCOFINS === 0)
+        ? { COFINSNT: { CST: '07' } }
+        : pCOFINS > 0 || configCstCofins === '01'
+          ? { COFINSAliq: { CST: configCstCofins ?? '01', vBC: fmtDec2(vProdNum), pCOFINS: pCOFINS.toFixed(2), vCOFINS: fmtDec2(vProdNum * pCOFINS / 100) } }
+          : { COFINSNT: { CST: configCstCofins ?? '07' } }
 
       const impostoObj = {
-        ICMS: buildIcmsTag(item.imposto?.pICMS, item.imposto?._orig, item.imposto?._modBC),
+        ICMS: buildIcmsTag(item.imposto?.pICMS, item.imposto?._orig, item.imposto?._modBC, item.imposto?._csosn),
         PIS: pisTag,
         COFINS: cofinsTag
       }
@@ -243,38 +249,63 @@ export function buildNfePayload(data) {
   return infNFe
 }
 
-function buildIcmsTag(pICMS, orig, modBC) {
+// CSOSN 102, 103, 300, 400 → todos usam tag ICMSSN102 per leiauteNFe_v4.00.xsd
+function buildIcmsTag(pICMS, orig, modBC, csosn) {
   const aliq = Number(pICMS) || 0
   const origVal = orig != null ? String(orig) : '0'
   if (aliq > 0) {
-    return {
-      ICMS00: {
-        orig: origVal,
-        CST: '00',
-        modBC: modBC != null ? String(modBC) : '3',
-        vBC: '0.00',
-        pICMS: aliq.toFixed(2),
-        vICMS: '0.00'
-      }
-    }
+    return { ICMS00: { orig: origVal, CST: '00', modBC: modBC != null ? String(modBC) : '3', vBC: '0.00', pICMS: aliq.toFixed(2), vICMS: '0.00' } }
   }
-  return { ICMSSN102: { orig: origVal, CSOSN: '102' } }
+  const csosnVal = csosn || '102'
+  if (csosnVal === '500') {
+    return { ICMSSN500: { orig: origVal, CSOSN: '500', vBCSTRet: '0.00', pST: '0.00', vICMSSTRet: '0.00' } }
+  }
+  if (csosnVal === '900') {
+    return { ICMSSN900: { orig: origVal, CSOSN: '900', modBC: '3', vBC: '0.00', pRedBC: '0.00', pICMS: '0.00', vICMS: '0.00', modBCST: '3', pMVAST: '0.00', pRedBCST: '0.00', vBCST: '0.00', pICMSST: '0.00', vICMSST: '0.00', vCredICMSSN: '0.00' } }
+  }
+  return { ICMSSN102: { orig: origVal, CSOSN: csosnVal } }
 }
 
 export async function signNfeXml(infNFe, certConfig, fiscalOpts = {}) {
   const { generateAndSignSimpleNFCe } = nfeModule
 
-  const itens = infNFe.det.map((d, idx) => ({
-    id: idx + 1,
-    prodName: d.prod.xProd,
-    vProd: d.prod.vProd,
-    vUnCom: d.prod.vUnCom,
-    qCom: d.prod.qCom,
-    ncm: d.prod.NCM,
-    cfop: d.prod.CFOP,
-    unity: d.prod.uCom,
-    cProd: d.prod.cProd
-  }))
+  const itens = infNFe.det.map((d, idx) => {
+    // Extrai parâmetros fiscais do bloco imposto para repassar ao gerador XML
+    const icmsObj = d.imposto?.ICMS || {}
+    let csosn = null, icmsAliq = 0, orig = '0', modBC = null
+    if (icmsObj.ICMSSN102) { csosn = String(icmsObj.ICMSSN102.CSOSN || '102'); orig = icmsObj.ICMSSN102.orig || '0' }
+    else if (icmsObj.ICMSSN500) { csosn = '500'; orig = icmsObj.ICMSSN500.orig || '0' }
+    else if (icmsObj.ICMSSN900) { csosn = '900'; orig = icmsObj.ICMSSN900.orig || '0' }
+    else if (icmsObj.ICMS00) { icmsAliq = Number(icmsObj.ICMS00.pICMS || 0); orig = icmsObj.ICMS00.orig || '0'; modBC = icmsObj.ICMS00.modBC || null }
+
+    const pisObj = d.imposto?.PIS || {}
+    let cstPis = '07', pPIS = 0
+    if (pisObj.PISNT) cstPis = pisObj.PISNT.CST || '07'
+    else if (pisObj.PISAliq) { cstPis = pisObj.PISAliq.CST || '01'; pPIS = Number(pisObj.PISAliq.pPIS || 0) }
+
+    const cofinsObj = d.imposto?.COFINS || {}
+    let cstCofins = '07', pCOFINS = 0
+    if (cofinsObj.COFINSNT) cstCofins = cofinsObj.COFINSNT.CST || '07'
+    else if (cofinsObj.COFINSAliq) { cstCofins = cofinsObj.COFINSAliq.CST || '01'; pCOFINS = Number(cofinsObj.COFINSAliq.pCOFINS || 0) }
+
+    const pIPI = Number(d.imposto?.IPI?.IPITrib?.pIPI || 0)
+
+    return {
+      id: idx + 1,
+      prodName: d.prod.xProd,
+      vProd: d.prod.vProd,
+      vUnCom: d.prod.vUnCom,
+      qCom: d.prod.qCom,
+      ncm: d.prod.NCM,
+      cfop: d.prod.CFOP,
+      unity: d.prod.uCom,
+      cProd: d.prod.cProd,
+      csosn, icmsAliq, orig, modBC,
+      cstPis, pPIS,
+      cstCofins, pCOFINS,
+      pIPI,
+    }
+  })
 
   const example = {
     cnpj: infNFe.emit.CNPJ,
@@ -290,7 +321,9 @@ export async function signNfeXml(infNFe, certConfig, fiscalOpts = {}) {
     ie: infNFe.emit.IE,
     enderEmit: infNFe.emit.enderEmit || {},
     dest: infNFe.dest || {},
-    // enderDest is included inside dest already
+    indPres: infNFe.ide.indPres,
+    indIntermed: infNFe.ide.indIntermed,
+    infRespTec: fiscalOpts.infRespTec || null,
     itens,
     pag: {
       tPag: infNFe.pag?.detPag?.tPag || '99',
@@ -525,10 +558,23 @@ export async function emitNfeFromOrder(orderId) {
 
     const ncm = fiscal?.ncm ? String(fiscal.ncm).replace(/\D/g, '').padStart(8, '0').slice(0, 8) : '00000000'
     let cfop = '5102'
+    let csosn = null
+    let cstPis = null
+    let cstCofins = null
     if (fiscal?.cfops) {
       try {
         const cfopArr = typeof fiscal.cfops === 'string' ? JSON.parse(fiscal.cfops) : fiscal.cfops
-        if (Array.isArray(cfopArr) && cfopArr.length > 0) cfop = String(cfopArr[0]).replace('.', '')
+        if (Array.isArray(cfopArr) && cfopArr.length > 0) {
+          const first = cfopArr[0]
+          if (first && typeof first === 'object') {
+            cfop = String(first.code || first.cfop || '5102').replace('.', '')
+            csosn = first.csosn || null
+            cstPis = first.cstPis || null
+            cstCofins = first.cstCofins || null
+          } else {
+            cfop = String(first).replace('.', '')
+          }
+        }
       } catch { /* keep default */ }
     }
     const ean = fiscal?.ean ? String(fiscal.ean).replace(/\D/g, '') : null
@@ -554,6 +600,9 @@ export async function emitNfeFromOrder(orderId) {
         _pPIS: Number(fiscal?.pPIS || 0),
         _pCOFINS: Number(fiscal?.pCOFINS || 0),
         _pIPI: Number(fiscal?.pIPI || 0),
+        _csosn: csosn,
+        _cstPis: cstPis,
+        _cstCofins: cstCofins,
       }
     }
   })
@@ -582,13 +631,19 @@ export async function emitNfeFromOrder(orderId) {
       resolvedName: customerName
     })
 
+    // indPres: 1=presencial (balcão/retirada), 4=entrega em domicílio (delivery)
+    // NT2020.006: indIntermed obrigatório quando indPres ∈ {4} — sem intermediador=0
+    const orderTypeUpper = String(order.orderType || '').toUpperCase()
+    const indPres = orderTypeUpper === 'DELIVERY' ? '4' : '1'
+
     const data = {
     ide: {
       natOp: 'VENDA',
       mod: '65',
       serie: fiscalConfig.nfeSerie || '1',
       nNF: sanitizeNNF(String(order.displaySimple || order.displayId || Date.now())),
-      tpAmb
+      tpAmb,
+      indPres,
     },
     emit: {
       CNPJ: fiscalConfig.cnpj,
@@ -620,7 +675,11 @@ export async function emitNfeFromOrder(orderId) {
   }
 
   const infNFe = buildNfePayload(data)
-  const signed = await signNfeXml(infNFe, certConfig, { csc: fiscalConfig.csc, cscId: fiscalConfig.cscId })
+  const signed = await signNfeXml(infNFe, certConfig, {
+    csc: fiscalConfig.csc,
+    cscId: fiscalConfig.cscId,
+    infRespTec: fiscalConfig.infRespTec || null,
+  })
   const uf = (emitenteConfig.enderEmit?.UF || 'BA').toLowerCase()
   const result = await transmitNfe(signed.signedXml, { ...certConfig, tpAmb }, uf)
 
@@ -720,6 +779,7 @@ export async function getFiscalConfigForOrder(orderId) {
     nfeEnvironment: companyExtra.nfeEnvironment || null,
     csc: companyExtra.csc || null,
     cscId: companyExtra.cscId || null,
+    infRespTec: companyExtra.infRespTec || null,
     certPath: null,
     certExists: false,
     source: 'company',
@@ -741,6 +801,7 @@ export async function getFiscalConfigForOrder(orderId) {
     if (storeExtra.nfeEnvironment) result.nfeEnvironment = storeExtra.nfeEnvironment
     if (storeExtra.csc) result.csc = storeExtra.csc
     if (storeExtra.cscId) result.cscId = storeExtra.cscId
+    if (storeExtra.infRespTec) result.infRespTec = storeExtra.infRespTec
 
     // store-specified certificate filename (preferred)
     if (storeExtra.certFilename) {

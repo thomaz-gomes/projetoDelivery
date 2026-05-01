@@ -1937,7 +1937,7 @@ async function editAddress() {
   }
 }
 
-async function editItems() {
+async function editItems(openItemIndex = null) {
   const o = selectedOrder.value;
   if (!o) return;
   const currentItems = normalizeOrderItems(o).map(it => ({
@@ -1988,7 +1988,13 @@ async function editItems() {
             optionQty: 1,
             editingIndex: null,
             requiredWarnings: {},
+            startEditIdx: openItemIndex,
           };
+        },
+        created() {
+          if (this.startEditIdx !== null) {
+            this.editItem(this.startEditIdx);
+          }
         },
         computed: {
           subtotal() {
@@ -2220,7 +2226,7 @@ async function editItems() {
               h('div', { class: 'fw-semibold' }, 'Total: ' + vm.fmt(vm.optionsTotal)),
               h('div', { style: 'display:flex;gap:8px' }, [
                 h('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary',
-                  onClick: (e) => { e.preventDefault(); vm.editingIndex = null; vm.screen = vm.categories.length ? 'catalog' : 'cart'; } }, 'Voltar'),
+                  onClick: (e) => { e.preventDefault(); vm.editingIndex = null; vm.screen = (vm.startEditIdx === null && vm.categories.length) ? 'catalog' : 'cart'; } }, 'Voltar'),
                 h('button', { type: 'button', class: 'btn btn-sm btn-success',
                   onClick: (e) => { e.preventDefault(); vm.confirmOptions(); } }, vm.editingIndex !== null ? 'Atualizar' : 'Adicionar'),
               ])
@@ -3701,7 +3707,6 @@ function pulseButton() {
           <div class="od-section">
             <div class="od-section-header">
               <div class="od-section-title"><i class="bi bi-bag"></i> Itens do pedido</div>
-              <button v-if="orderEditable" class="btn btn-sm btn-outline-secondary od-edit-btn" @click="editItems" title="Editar itens"><i class="bi bi-pencil"></i></button>
             </div>
             <div class="od-items-list">
               <div v-for="(it, idx) in (selectedNormalized?.items) || normalizeOrderItems(selectedOrder || {})" :key="(it.id||idx)+''" class="od-item">
@@ -3709,6 +3714,7 @@ function pulseButton() {
                   <span class="od-item-qty">{{ it.quantity || 1 }}x</span>
                   <span class="od-item-name">{{ it.name }}</span>
                   <span class="od-item-price">{{ formatCurrency(itemLineTotal(it)) }}</span>
+                  <button v-if="orderEditable" class="btn btn-sm btn-outline-secondary od-item-edit-btn ms-2" @click="editItems(idx)" title="Editar item"><i class="bi bi-pencil-square"></i></button>
                 </div>
                 <div v-if="(it.quantity || 1) > 1" class="od-item-unit-hint">
                   {{ formatCurrency(it.unitPrice || it.price || 0) }} /un
@@ -4232,6 +4238,8 @@ button.btn.advance {
 }
 .od-item-name { flex: 1; font-size: 0.88rem; color: #212529; }
 .od-item-price { font-weight: 600; font-size: 0.85rem; color: #198754; white-space: nowrap; }
+.od-item-edit-btn { padding: 1px 6px; font-size: 0.75rem; opacity: 0.6; flex-shrink: 0; }
+.od-item-edit-btn:hover { opacity: 1; }
 .od-item-unit-hint { font-size: 0.75rem; color: var(--text-secondary, #6c757d); padding-left: 36px; margin-top: 1px; }
 .od-item-options { margin-top: 6px; padding-left: 28px; display: flex; flex-direction: column; gap: 3px; }
 .od-item-option { font-size: 0.8rem; color: #495057; display: flex; align-items: baseline; gap: 5px; line-height: 1.4; }
