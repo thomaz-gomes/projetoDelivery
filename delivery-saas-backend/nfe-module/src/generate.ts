@@ -97,6 +97,62 @@ function buildChaveAcesso(cUF: string, dhEmi: string, cnpj: string, mod: string,
 }
 
 /**
+ * Constrói o bloco <imposto> de cada item do det com base nos parâmetros fiscais.
+ * Suporta ICMSSN102/500/900 (Simples Nacional) e ICMS00 (Lucro Real/Presumido).
+ * CSOSN 102, 103, 300, 400 → todos usam a tag ICMSSN102 per leiauteNFe_v4.00.xsd.
+ */
+function buildItemImposto(it: any, vProdNum: number): any {
+  const orig = it.orig ?? '0'
+  const csosn = it.csosn
+  const icmsAliq = Number(it.icmsAliq ?? 0)
+
+  let ICMS: any
+  if (icmsAliq > 0) {
+    ICMS = { ICMS00: { orig, CST: '00', modBC: it.modBC ?? '3', vBC: '0.00', pICMS: icmsAliq.toFixed(2), vICMS: '0.00' } }
+  } else if (csosn === '500') {
+    ICMS = { ICMSSN500: { orig, CSOSN: '500', vBCSTRet: '0.00', pST: '0.00', vICMSSTRet: '0.00' } }
+  } else if (csosn === '900') {
+    ICMS = { ICMSSN900: { orig, CSOSN: '900', modBC: '3', vBC: '0.00', pRedBC: '0.00', pICMS: '0.00', vICMS: '0.00', modBCST: '3', pMVAST: '0.00', pRedBCST: '0.00', vBCST: '0.00', pICMSST: '0.00', vICMSST: '0.00', vCredICMSSN: '0.00' } }
+  } else {
+    // 102, 103, 300, 400 → todos usam ICMSSN102
+    ICMS = { ICMSSN102: { orig, CSOSN: csosn ?? '102' } }
+  }
+
+  // PIS
+  const cstPis = it.cstPis ?? null
+  const pPIS = Number(it.pPIS ?? 0)
+  let PIS: any
+  if (!cstPis || cstPis === '07') {
+    PIS = { PISNT: { CST: '07' } }
+  } else if (cstPis === '01' || pPIS > 0) {
+    PIS = { PISAliq: { CST: cstPis ?? '01', vBC: vProdNum.toFixed(2), pPIS: pPIS.toFixed(2), vPIS: (vProdNum * pPIS / 100).toFixed(2) } }
+  } else {
+    PIS = { PISNT: { CST: cstPis } }
+  }
+
+  // COFINS
+  const cstCofins = it.cstCofins ?? null
+  const pCOFINS = Number(it.pCOFINS ?? 0)
+  let COFINS: any
+  if (!cstCofins || cstCofins === '07') {
+    COFINS = { COFINSNT: { CST: '07' } }
+  } else if (cstCofins === '01' || pCOFINS > 0) {
+    COFINS = { COFINSAliq: { CST: cstCofins ?? '01', vBC: vProdNum.toFixed(2), pCOFINS: pCOFINS.toFixed(2), vCOFINS: (vProdNum * pCOFINS / 100).toFixed(2) } }
+  } else {
+    COFINS = { COFINSNT: { CST: cstCofins } }
+  }
+
+  const imposto: any = { ICMS, PIS, COFINS }
+
+  const pIPI = Number(it.pIPI ?? 0)
+  if (pIPI > 0) {
+    imposto.IPI = { IPITrib: { CST: '50', vBC: vProdNum.toFixed(2), pIPI: pIPI.toFixed(2), vIPI: (vProdNum * pIPI / 100).toFixed(2) } }
+  }
+
+  return imposto
+}
+
+/**
  * NFC-e (mod 65) v4.00 XML generator compliant with leiauteNFe_v4.00.xsd.
  *
  * NFC-e is used for direct-to-consumer sales (restaurants, retail).
@@ -116,6 +172,7 @@ export async function generateNFCeXml(payload: {
   cMunFG?: string       // 7-digit IBGE code
   tpEmis?: string
   indPres?: string
+  indIntermed?: string
   enderEmit?: {
     xLgr?: string; nro?: string; xBairro?: string; cMun?: string; xMun?: string; UF?: string; CEP?: string; cPais?: string; xPais?: string
   }
@@ -124,8 +181,19 @@ export async function generateNFCeXml(payload: {
   itens: Array<{
     id: number; prodName: string; cfop?: string; ncm?: string; unity?: string;
     qCom?: string; vUnCom?: string; vProd: string; cProd?: string
+    // campos fiscais por item
+    csosn?: string      // CSOSN (102, 300, 400, 500, 900) – Simples Nacional
+    orig?: string       // origem da mercadoria (0=nacional)
+    icmsAliq?: number   // alíquota ICMS (ICMS00 quando > 0)
+    modBC?: string      // modalidade base de cálculo ICMS
+    cstPis?: string     // CST PIS (07=NT, 01=Aliq)
+    pPIS?: number       // alíquota PIS %
+    cstCofins?: string  // CST COFINS (07=NT, 01=Aliq)
+    pCOFINS?: number    // alíquota COFINS %
+    pIPI?: number       // alíquota IPI %
   }>
   pag?: { tPag?: string; vPag?: string; vTroco?: string }
+  infRespTec?: { CNPJ: string; xContato: string; email: string; fone: string }
   csc?: string
   cscId?: string
 }) {
@@ -169,7 +237,12 @@ export async function generateNFCeXml(payload: {
       tpAmb,
       finNFe: '1',       // 1=Normal
       indFinal: '1',     // 1=Consumidor final
-      indPres: payload.indPres || (mod === '65' ? '1' : '0'), // 0=Não se aplica para NF-e
+      // indPres: 1=presencial, 4=entrega em domicílio (delivery). NT2020.006: indIntermed
+      // é obrigatório quando indPres ∈ {2,3,4,9} — 0=sem intermediador, 1=marketplace
+      indPres: payload.indPres || (mod === '65' ? '1' : '0'),
+      ...(['2','3','4','9'].includes(payload.indPres || (mod === '65' ? '1' : '0'))
+        ? { indIntermed: payload.indIntermed ?? '0' }
+        : {}),
       procEmi: '0',      // 0=Aplicativo do contribuinte
       verProc: '1.0.0'
     },
@@ -209,11 +282,7 @@ export async function generateNFCeXml(payload: {
         vUnTrib: fmtVUnCom(it.vUnCom || it.vProd || '0'),
         indTot: '1'
       },
-      imposto: {
-        ICMS: { ICMSSN102: { orig: '0', CSOSN: '102' } },
-        PIS: { PISNT: { CST: '07' } },
-        COFINS: { COFINSNT: { CST: '07' } }
-      }
+      imposto: buildItemImposto(it, Number(it.vProd || 0))
     })),
     total: {
       ICMSTot: {
@@ -260,6 +329,16 @@ export async function generateNFCeXml(payload: {
 
   if (tpAmb === '2') {
     infNFe.infAdic = { infCpl: 'Documento emitido em ambiente de homologacao - sem valor fiscal' }
+  }
+
+  // infRespTec: obrigatório per NT2018.005; identifica o fornecedor do software emissor
+  if (payload.infRespTec?.CNPJ) {
+    infNFe.infRespTec = {
+      CNPJ: payload.infRespTec.CNPJ.replace(/\D/g, '').padStart(14, '0'),
+      xContato: payload.infRespTec.xContato,
+      email: payload.infRespTec.email,
+      fone: payload.infRespTec.fone,
+    }
   }
 
   // Build dest in schema order: CPF|CNPJ|idEstrangeiro → xNome → ... → indIEDest
@@ -317,11 +396,12 @@ export async function generateNFCeXml(payload: {
 
 /** QR Code v2 URLs by UF – homologation & production
  *  Note: qrCode element allows up to 1000 chars (not subject to TUri 85-char limit)
- *  These must match SEFAZ's registered portal URLs exactly (cStat 395 otherwise) */
+ *  These must match SEFAZ's registered portal URLs exactly (cStat 395 otherwise).
+ *  BA uses /qrcode.aspx endpoint (confirmed from authorized NFC-e XML sample). */
 const NFCE_QR_URLS: Record<string, Record<string, string>> = {
   BA: {
-    homologation: 'http://hnfe.sefaz.ba.gov.br/servicos/nfce/modulos/geral/NFCEC_consulta_chave_acesso.aspx',
-    production:   'http://nfe.sefaz.ba.gov.br/servicos/nfce/modulos/geral/NFCEC_consulta_chave_acesso.aspx',
+    homologation: 'http://hnfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx',
+    production:   'http://nfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx',
   },
 }
 

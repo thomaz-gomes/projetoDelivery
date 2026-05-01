@@ -20,11 +20,17 @@ export async function generateAndSignSimpleNFCe(example: {
   cMunFG?: string
   tpEmis?: string
   indPres?: string
+  indIntermed?: string
   enderEmit?: { xLgr?: string; nro?: string; xBairro?: string; cMun?: string; xMun?: string; UF?: string; CEP?: string; cPais?: string; xPais?: string }
   ie?: string
   dest?: { CPF?: string; CNPJ?: string; xNome?: string }
-  itens: Array<{ id: number; prodName: string; vProd: string; vUnCom?: string; qCom?: string; ncm?: string; cfop?: string; unity?: string; cProd?: string }>
+  itens: Array<{
+    id: number; prodName: string; vProd: string; vUnCom?: string; qCom?: string; ncm?: string; cfop?: string; unity?: string; cProd?: string
+    csosn?: string; orig?: string; icmsAliq?: number; modBC?: string
+    cstPis?: string; pPIS?: number; cstCofins?: string; pCOFINS?: number; pIPI?: number
+  }>
   pag?: { tPag?: string; vPag?: string; vTroco?: string }
+  infRespTec?: { CNPJ: string; xContato: string; email: string; fone: string }
   csc?: string
   cscId?: string
 }, options?: { certPath?: string; certBuffer?: Buffer; certPassword?: string; companyId?: string }) {
