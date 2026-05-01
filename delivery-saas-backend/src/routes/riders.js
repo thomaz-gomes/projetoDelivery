@@ -870,8 +870,8 @@ ridersRouter.get('/ranking', async (req, res) => {
   }
 });
 
-// GET /riders/me/shifts — turnos atribuídos ao motoboy logado
-ridersRouter.get('/me/shifts', async (req, res) => {
+// GET /riders/me/assigned-shifts — turnos atribuídos ao motoboy logado (para dropdown de checkin)
+ridersRouter.get('/me/assigned-shifts', async (req, res) => {
   const userId = req.user.id;
   const rider = await prisma.rider.findFirst({ where: { userId } });
   if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
