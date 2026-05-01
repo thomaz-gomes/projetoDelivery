@@ -95,6 +95,7 @@
                 <i class="bi bi-geo-alt-fill" :style="{ color: order.status === 'SAIU_PARA_ENTREGA' ? '#dc3545' : '#fd7e14' }" style="font-size:0.8rem"></i>
                 <div style="min-width:0;flex:1">
                   <div class="small fw-medium">#{{ formatDisplay(order) }} — {{ order.customerName || '' }}</div>
+                  <div v-if="order.deliveryNeighborhood" class="text-muted" style="font-size:0.7rem">{{ order.deliveryNeighborhood }}</div>
                   <span class="badge" :class="order.status === 'SAIU_PARA_ENTREGA' ? 'bg-danger' : 'bg-warning text-dark'" style="font-size:0.6rem">
                     {{ order.status === 'SAIU_PARA_ENTREGA' ? 'Saiu p/ entrega' : 'Em preparo' }}
                   </span>
