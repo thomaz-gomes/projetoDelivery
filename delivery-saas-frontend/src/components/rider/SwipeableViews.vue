@@ -89,7 +89,7 @@ onUnmounted(() => {
   gap: 6px;
   padding: 8px 0 4px;
   position: sticky;
-  top: var(--rider-header-height, 56px);
+  top: var(--rider-header-height, 16px);
   z-index: 10;
 }
 .swipe-dot {
