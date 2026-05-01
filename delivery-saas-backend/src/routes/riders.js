@@ -194,6 +194,13 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
     });
     const checkedIn = !!checkinToday;
 
+    // Active shift (no checkoutAt)
+    const activeCheckin = await prisma.riderCheckin.findFirst({
+      where: { riderId, checkoutAt: null },
+      orderBy: { checkinAt: 'desc' },
+    });
+    const hasActiveShift = !!activeCheckin;
+
     // Active order (not CONCLUIDO)
     const activeOrderRaw = await prisma.order.findFirst({
       where: { riderId, status: { not: 'CONCLUIDO' } },
@@ -211,7 +218,7 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
         }
       : null;
 
-    return res.json({ todayEarnings, todayDeliveries, monthEarnings, monthDeliveries, checkedIn, activeOrder });
+    return res.json({ todayEarnings, todayDeliveries, monthEarnings, monthDeliveries, checkedIn, hasActiveShift, activeOrder });
   } catch (e) {
     console.error('me/daily-stats error:', e);
     return res.status(500).json({ message: 'Erro ao buscar estatísticas diárias' });
@@ -540,6 +547,27 @@ ridersRouter.post('/me/checkin', async (req, res) => {
   } catch (e) { console.warn('[goals] check on checkin failed:', e?.message || e); }
 
   res.status(201).json(checkin);
+});
+
+// POST /riders/me/checkout — motoboy encerra turno ativo manualmente
+ridersRouter.post('/me/checkout', async (req, res) => {
+  const userId = req.user.id;
+  const rider = await prisma.rider.findFirst({ where: { userId, active: true } });
+  if (!rider) return res.status(403).json({ message: 'Você não é um entregador' });
+
+  const active = await prisma.riderCheckin.findFirst({
+    where: { riderId: rider.id, checkoutAt: null },
+    orderBy: { checkinAt: 'desc' },
+  });
+
+  if (!active) return res.status(404).json({ message: 'Nenhum turno ativo encontrado' });
+
+  const updated = await prisma.riderCheckin.update({
+    where: { id: active.id },
+    data: { checkoutAt: new Date() },
+  });
+
+  res.json(updated);
 });
 
 // GET /riders/me/shifts — resumo de turnos para o entregador

@@ -5,8 +5,11 @@ import RiderHeader from '../../components/rider/RiderHeader.vue';
 import MobileBottomNav from '../../components/MobileBottomNav.vue';
 
 const loading = ref(true);
+const checkingOut = ref(false);
 const shifts = ref([]);
 const selected = ref(null);
+
+const activeShift = computed(() => shifts.value.find(s => s.isActive) || null);
 
 function formatMoney(v) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
@@ -46,6 +49,19 @@ function open(shift) {
   selected.value = selected.value?.id === shift.id ? null : shift;
 }
 
+async function encerrarTurno() {
+  checkingOut.value = true;
+  try {
+    await api.post('/riders/me/checkout');
+    await load();
+  } catch (e) {
+    const { default: Swal } = await import('sweetalert2');
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao encerrar turno' });
+  } finally {
+    checkingOut.value = false;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -56,6 +72,24 @@ onMounted(load);
     <div class="shifts-header mb-3">
       <h6 class="shifts-title">Histórico de Turnos</h6>
       <span class="shifts-count">{{ shifts.length }} turno(s)</span>
+    </div>
+
+    <!-- Turno ativo: encerrar -->
+    <div v-if="activeShift && !loading" class="active-shift-banner mb-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+          <span class="active-dot"></span>
+          <div>
+            <div class="active-shift-name">{{ activeShift.shift?.name || 'Turno em andamento' }}</div>
+            <div class="active-shift-since">Desde {{ formatTime(activeShift.checkinAt) }}</div>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-danger" :disabled="checkingOut" @click.stop="encerrarTurno">
+          <span v-if="checkingOut" class="spinner-border spinner-border-sm me-1"></span>
+          <i v-else class="bi bi-stop-circle me-1"></i>
+          {{ checkingOut ? 'Encerrando...' : 'Encerrar turno' }}
+        </button>
+      </div>
     </div>
 
     <!-- Loading -->
@@ -162,6 +196,28 @@ onMounted(load);
   font-size: 0.78rem;
   color: var(--rider-text-secondary, #6c757d);
 }
+
+/* Active shift banner */
+.active-shift-banner {
+  background: var(--rider-card, #fff);
+  border: 1.5px solid #dc3545;
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+.active-dot {
+  width: 10px;
+  height: 10px;
+  background: #198754;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: pulse-dot 1.5s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.5; }
+}
+.active-shift-name { font-size: 0.9rem; font-weight: 600; color: var(--rider-text, #1a1a1a); }
+.active-shift-since { font-size: 0.75rem; color: var(--rider-text-secondary, #6c757d); }
 
 /* Skeleton */
 .shift-skeleton {

@@ -19,12 +19,12 @@
         <div class="nav-label">Check-in</div>
       </button>
 
-      <!-- Ranking -->
-      <button :class="['nav-item', { active: isActive('/rider/ranking') }]" @click.prevent="router.push('/rider/ranking')" aria-label="Ranking">
+      <!-- Início -->
+      <button :class="['nav-item', { active: isActive('/rider') && !isActive('/rider/orders') && !isActive('/rider/checkin') && !isActive('/rider/account') && !isActive('/rider/shifts') }]" @click.prevent="router.push('/rider')" aria-label="Início">
         <span class="nav-icon-wrap">
-          <i :class="['bi', isActive('/rider/ranking') ? 'bi-trophy-fill' : 'bi-trophy', 'nav-icon']" aria-hidden="true"></i>
+          <i :class="['bi', 'bi-house-fill', 'nav-icon']" aria-hidden="true"></i>
         </span>
-        <div class="nav-label">Ranking</div>
+        <div class="nav-label">Início</div>
       </button>
 
       <!-- Meu Extrato -->
