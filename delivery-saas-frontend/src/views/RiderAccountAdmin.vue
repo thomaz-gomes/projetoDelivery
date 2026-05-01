@@ -131,7 +131,7 @@ async function fetchTransactions() {
 function startEdit(tx) {
   if (!isAdmin.value) return;
   editingId.value = tx.id;
-  editAmount.value = String(tx.amount || '');
+  editAmount.value = String(tx.amount ?? '');
   editNote.value = tx.note || '';
 }
 
@@ -145,10 +145,15 @@ async function saveEdit() {
   if (!isAdmin.value || !editingId.value) return;
   savingEdit.value = true;
   try {
-    const payload = { amount: Number(editAmount.value), note: editNote.value };
+    const rawAmount = String(editAmount.value).trim().replace(',', '.');
+    const parsedAmount = Number(rawAmount);
+    if (rawAmount === '' || isNaN(parsedAmount)) {
+      Swal.fire({ icon: 'error', text: 'Informe um valor numérico válido (ex: 3.50 ou 3,50).' });
+      return;
+    }
+    const payload = { amount: parsedAmount, note: editNote.value };
     const { data } = await api.patch(`/riders/${riderId}/transactions/${editingId.value}`, payload);
     Swal.fire({ icon: 'success', text: 'Transação atualizada.' });
-    // refresh list and balances
     await fetchBalance();
     await fetchTransactions();
     cancelEdit();
@@ -294,6 +299,53 @@ async function fetchFinancialAccounts() {
     financialAccounts.value = [];
     financialAccountsLoaded.value = false;
   }
+}
+
+function normalizePhoneForSend(v) {
+  if (!v) return null;
+  let digits = String(v).replace(/\D+/g, '');
+  if (!digits) return null;
+  digits = digits.replace(/^0+/, '');
+  if (!digits.startsWith('55')) digits = '55' + digits;
+  return '+' + digits;
+}
+
+async function sendPdf() {
+  if (!phoneTo.value) return (error.value = 'Informe o telefone destino');
+  sendingPdf.value = true; error.value = '';
+  try {
+    const normalized = normalizePhoneForSend(phoneTo.value);
+    if (!normalized) return (error.value = 'Telefone inválido');
+    phoneTo.value = normalized;
+    const payload = { phone: phoneTo.value, from: filters.value.from || undefined, to: filters.value.to || undefined, type: filters.value.type || undefined };
+    const { data } = await api.post(`/riders/${riderId}/account/send-report`, payload);
+    success.value = data?.url ? `Relatório gerado. URL: ${data.url}` : 'Relatório enviado com sucesso.';
+    setTimeout(() => (success.value = ''), 8000);
+  } catch (e) {
+    console.error('sendPdf failed', e);
+    error.value = e?.response?.data?.message || 'Falha ao enviar relatório';
+  } finally { sendingPdf.value = false; }
+}
+
+async function exportCsv() {
+  exporting.value = true;
+  try {
+    const params = buildParams(true);
+    params.format = 'csv';
+    const resp = await api.get(`/riders/${riderId}/transactions`, { params, responseType: 'blob' });
+    const blob = new Blob([resp.data], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rider-${riderId}-transactions.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('Export failed', e);
+    error.value = e?.response?.data?.message || 'Falha ao exportar CSV';
+  } finally { exporting.value = false; }
 }
 
 onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTransactions(); await fetchFinancialAccounts(); });
