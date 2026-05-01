@@ -360,6 +360,7 @@ storesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       if (body.cscId !== undefined) fiscalFields.cscId = body.cscId || null
       if (body.enderEmit !== undefined) fiscalFields.enderEmit = body.enderEmit || null
       if (body.cnpj !== undefined) fiscalFields.cnpj = body.cnpj || null
+      if (body.infRespTec !== undefined) fiscalFields.infRespTec = body.infRespTec || null
       if (Object.keys(fiscalFields).length) {
         try { await persistStoreSettings(id, fiscalFields) } catch (e) { console.warn('Failed to persist fiscal settings', e) }
       }
