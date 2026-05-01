@@ -1,12 +1,6 @@
 <template>
   <div class="rider-map-wrapper">
-    <!-- HEADER BAR -->
-    <div class="rider-map-header">
-      <div class="d-flex align-items-center gap-2">
-        <i class="bi bi-map fs-5" style="color: var(--primary)"></i>
-      </div>
-    </div>
-
+   
     <div v-if="!trackingEnabled" class="alert alert-warning mb-0 rounded-0 py-2 px-3" style="flex-shrink:0">
       <i class="bi bi-exclamation-triangle me-1"></i>
       Rastreamento em tempo real <strong>desligado</strong>.
@@ -14,7 +8,7 @@
     </div>
 
     <!-- MAIN CONTENT: map + sidebar -->
-    <div class="rider-map-body">
+    <div class="rider-map-body mt-3">
       <!-- MAP -->
       <div class="rider-map-container">
         <div v-if="leafletError" class="d-flex align-items-center justify-content-center h-100 text-danger">
@@ -30,12 +24,7 @@
       <div class="rider-map-sidebar">
         <!-- Controls -->
         <div class="sidebar-section">
-          <span v-if="trackingEnabled" class="badge bg-success w-100 d-block mb-2" style="font-size:0.8rem">
-            <i class="bi bi-broadcast me-1"></i>GPS Ativo
-          </span>
-          <span v-else class="badge bg-secondary w-100 d-block mb-2" style="font-size:0.8rem">
-            <i class="bi bi-broadcast-pin me-1"></i>GPS Desligado
-          </span>
+          
           <select
             v-model="selectedStoreId"
             class="form-select form-select-sm mb-2"
@@ -52,6 +41,12 @@
             <router-link to="/settings/rider-tracking" class="btn btn-outline-primary btn-sm flex-grow-1">
               <i class="bi bi-gear me-1"></i>Config
             </router-link>
+            <span v-if="trackingEnabled" class="btn btn-primary bg-success w-100 d-block mb-2">
+            <i class="bi bi-broadcast me-1"></i>GPS
+          </span>
+          <span v-else class="btn btn-secondary bg-danger w-100 d-block mb-2">
+            <i class="bi bi-broadcast-pin me-1"></i>GPS
+          </span>
           </div>
         </div>
 
@@ -918,7 +913,7 @@ onUnmounted(() => {
   height: calc(100vh - 56px);
   overflow: hidden;
   /* bleed into main-content padding */
-  margin: -1.5rem;
+  margin: -1.5rem auto 0px auto;
 }
 
 .rider-map-header {
