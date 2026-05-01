@@ -68,11 +68,12 @@ function shiftAlreadyChecked(shiftId) {
 function shiftBlocked(shift) {
   // Já fez check-in neste turno
   if (shiftAlreadyChecked(shift.id)) return 'Já registrado';
-  // Há outro turno em andamento
+  // Há outro turno ATIVO em andamento (ignora check-ins já encerrados)
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   for (const c of todayCheckins.value) {
     if (c.shiftId === shift.id) continue;
+    if (c.checkoutAt) continue; // já encerrado, não bloqueia
     const s = c.shift;
     if (!s) continue;
     const [eh, em] = s.endTime.split(':').map(Number);
