@@ -238,14 +238,18 @@ export function determineStatusFromIFoodEvent(payload, orderObj) {
   function isPaymentOnline(o) {
     try {
       if (!o) return false;
-      const pm = o.payment || o.payments || o.paymentMethod || null;
-      if (pm) {
-        if (Array.isArray(pm)) return pm.some(p => String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
-        return String(pm.method || pm.methodCode || '').toUpperCase().includes('ONLINE');
+      // iFood event wraps payments under { order: { payments: { methods: [] } } }
+      const pm = o.order?.payments || o.payment || o.payments || o.paymentMethod
+               || o.payload?.order?.payments || o.payload?.payments || null;
+      if (!pm) return false;
+      if (pm.prepaid === true) return true;
+      if (pm.methods && Array.isArray(pm.methods) && pm.methods.length > 0) {
+        return pm.methods.some(m => m.prepaid === true || String(m.method || m.methodCode || '').toUpperCase().includes('ONLINE'));
       }
-      // try nested payload structures
-      if (o.payload && o.payload.paymentConfirmed) return false;
-      return false;
+      if (Array.isArray(pm)) {
+        return pm.some(p => p.prepaid === true || String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
+      }
+      return String(pm.method || pm.methodCode || '').toUpperCase().includes('ONLINE');
     } catch (e) { return false; }
   }
 
@@ -435,9 +439,11 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
         const pm = existingPayload?.order?.payments || existingPayload?.payments || existingPayload?.payment || null;
         let online = false;
         if (pm) {
-          if (Array.isArray(pm)) {
-            online = pm.some(p => String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
-          } else if (pm.methods && Array.isArray(pm.methods)) {
+          if (pm.prepaid === true) {
+            online = true;
+          } else if (Array.isArray(pm)) {
+            online = pm.some(p => p.prepaid === true || String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
+          } else if (pm.methods && Array.isArray(pm.methods) && pm.methods.length > 0) {
             online = pm.methods.some(p => (p.prepaid === true) || String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
           } else {
             online = String(pm.method || pm.methodCode || '').toUpperCase().includes('ONLINE');
