@@ -4,33 +4,6 @@
     <div class="rider-map-header">
       <div class="d-flex align-items-center gap-2">
         <i class="bi bi-map fs-5" style="color: var(--primary)"></i>
-        <h4 class="mb-0">Mapa de Entregas</h4>
-        <span v-if="trackingEnabled" class="badge bg-success ms-2">
-          <i class="bi bi-broadcast me-1"></i>Ativo
-        </span>
-        <span v-else class="badge bg-secondary ms-2">
-          <i class="bi bi-broadcast-pin me-1"></i>Desligado
-        </span>
-      </div>
-      <div class="d-flex align-items-center gap-2">
-        <!-- Store filter -->
-        <select
-          v-if="storeOptions.length > 1"
-          v-model="selectedStoreId"
-          class="form-select form-select-sm"
-          style="width: auto; min-width: 180px"
-          @change="onStoreFilterChange"
-        >
-          <option value="">Todas as lojas</option>
-          <option v-for="s in storeOptions" :key="s.id" :value="s.id">{{ s.name }}</option>
-        </select>
-        <button class="btn btn-outline-secondary btn-sm" @click="loadPositions" :disabled="loadingPositions">
-          <span v-if="loadingPositions" class="spinner-border spinner-border-sm me-1"></span>
-          <i v-else class="bi bi-arrow-clockwise me-1"></i>Atualizar
-        </button>
-        <router-link to="/settings/rider-tracking" class="btn btn-outline-primary btn-sm">
-          <i class="bi bi-gear me-1"></i>Configurar
-        </router-link>
       </div>
     </div>
 
@@ -55,14 +28,30 @@
 
       <!-- SIDEBAR -->
       <div class="rider-map-sidebar">
-        <!-- Legend -->
+        <!-- Controls -->
         <div class="sidebar-section">
-          <div class="sidebar-section-title">Legenda</div>
-          <div class="d-flex flex-column gap-1">
-            <span class="small"><span class="legend-dot" style="background:var(--primary)"></span>Entregadores</span>
-            <span class="small"><span class="legend-dot" style="background:#fd7e14"></span>Em preparo</span>
-            <span class="small"><span class="legend-dot" style="background:#dc3545"></span>Saiu p/ entrega</span>
-            <span class="small"><span class="legend-dot" style="background:#198754"></span>Loja</span>
+          <span v-if="trackingEnabled" class="badge bg-success w-100 d-block mb-2" style="font-size:0.8rem">
+            <i class="bi bi-broadcast me-1"></i>GPS Ativo
+          </span>
+          <span v-else class="badge bg-secondary w-100 d-block mb-2" style="font-size:0.8rem">
+            <i class="bi bi-broadcast-pin me-1"></i>GPS Desligado
+          </span>
+          <select
+            v-model="selectedStoreId"
+            class="form-select form-select-sm mb-2"
+            @change="onStoreFilterChange"
+          >
+            <option value="">Todas as lojas</option>
+            <option v-for="s in storeOptions" :key="s.id" :value="s.id">{{ s.name }}</option>
+          </select>
+          <div class="d-flex gap-1">
+            <button class="btn btn-outline-secondary btn-sm flex-grow-1" @click="loadPositions" :disabled="loadingPositions">
+              <span v-if="loadingPositions" class="spinner-border spinner-border-sm me-1"></span>
+              <i v-else class="bi bi-arrow-clockwise me-1"></i>Atualizar
+            </button>
+            <router-link to="/settings/rider-tracking" class="btn btn-outline-primary btn-sm flex-grow-1">
+              <i class="bi bi-gear me-1"></i>Config
+            </router-link>
           </div>
         </div>
 
@@ -76,8 +65,8 @@
           <div v-if="filteredPositions.length === 0" class="text-muted small py-1">
             Nenhum entregador ativo.
           </div>
-          <div v-for="pos in filteredPositions" :key="pos.riderId" class="sidebar-item" @click="flyToRider(pos)">
-            <div class="d-flex align-items-center gap-2">
+          <div v-for="pos in filteredPositions" :key="pos.riderId" class="sidebar-item">
+            <div class="d-flex align-items-center gap-2" style="cursor:pointer" @click="flyToRider(pos)">
               <i class="bi bi-person-fill" :style="{ color: getRiderColor(pos.riderId || pos.rider?.id) }"></i>
               <div class="flex-grow-1">
                 <div class="small fw-medium">{{ pos.rider?.name || pos.riderName || 'Entregador' }}</div>
@@ -86,6 +75,31 @@
               <span v-if="riderPendingCount(pos.riderId || pos.rider?.id) > 0" class="badge bg-primary" style="font-size:0.72rem" :title="riderPendingCount(pos.riderId || pos.rider?.id) + ' pedidos pendentes'">
                 {{ riderPendingCount(pos.riderId || pos.rider?.id) }}
               </span>
+              <i
+                v-if="riderOrders(pos.riderId || pos.rider?.id).length > 0"
+                class="bi"
+                :class="collapsedRiders[pos.riderId || pos.rider?.id] ? 'bi-chevron-right' : 'bi-chevron-down'"
+                style="font-size:0.7rem;cursor:pointer"
+                @click.stop="toggleRiderGroup(pos.riderId || pos.rider?.id)"
+              ></i>
+            </div>
+            <!-- Assigned orders for this rider -->
+            <div v-if="!collapsedRiders[pos.riderId || pos.rider?.id]">
+              <div
+                v-for="order in riderOrders(pos.riderId || pos.rider?.id)"
+                :key="order.id"
+                class="d-flex align-items-center gap-2 ps-3 py-1"
+                style="cursor:pointer;border-top:1px solid rgba(0,0,0,0.05)"
+                @click="flyToDelivery(order)"
+              >
+                <i class="bi bi-geo-alt-fill" :style="{ color: order.status === 'SAIU_PARA_ENTREGA' ? '#dc3545' : '#fd7e14' }" style="font-size:0.8rem"></i>
+                <div style="min-width:0;flex:1">
+                  <div class="small fw-medium">#{{ formatDisplay(order) }} — {{ order.customerName || '' }}</div>
+                  <span class="badge" :class="order.status === 'SAIU_PARA_ENTREGA' ? 'bg-danger' : 'bg-warning text-dark'" style="font-size:0.6rem">
+                    {{ order.status === 'SAIU_PARA_ENTREGA' ? 'Saiu p/ entrega' : 'Em preparo' }}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -317,6 +331,20 @@ const assignSelectedRider = ref(null)
 // Dropdown state
 const openDropdownId = ref(null)
 
+// Collapsible rider groups
+const collapsedRiders = ref({})
+
+function toggleRiderGroup(riderId) {
+  collapsedRiders.value = { ...collapsedRiders.value, [riderId]: !collapsedRiders.value[riderId] }
+}
+
+function riderOrders(riderId) {
+  return deliveries.value.filter(d =>
+    d.riderId === riderId &&
+    (!selectedStoreId.value || d.storeId === selectedStoreId.value)
+  )
+}
+
 let map = null
 let markersMap = {}
 let circlesMap = {}
@@ -342,8 +370,11 @@ const storeOptions = computed(() => {
 const filteredPositions = computed(() => positions.value)
 
 const filteredDeliveries = computed(() => {
-  if (!selectedStoreId.value) return deliveries.value
-  return deliveries.value.filter(d => d.storeId === selectedStoreId.value)
+  return deliveries.value.filter(d =>
+    !d.riderId &&
+    d.status === 'EM_PREPARO' &&
+    (!selectedStoreId.value || d.storeId === selectedStoreId.value)
+  )
 })
 
 // Load Leaflet CSS + JS from CDN dynamically
@@ -440,7 +471,7 @@ function updateDeliveryMarker(order) {
   }
   if (!lat || !lng || isNaN(lat) || isNaN(lng)) return
 
-  const display = order.displayId || order.id.slice(0, 6)
+  const display = order.displaySimple ? String(order.displaySimple).padStart(2, '0') : (order.displayId || '')
   const customer = order.customerName || ''
   const addr = order.address || ''
   const statusLabel = order.status === 'SAIU_PARA_ENTREGA' ? 'Saiu p/ entrega' : 'Em preparo'
@@ -733,7 +764,7 @@ function statusLabel(s) { return STATUS_LABEL[s] || s }
 
 function formatDisplay(order) {
   if (order.displaySimple) return String(order.displaySimple).padStart(2, '0')
-  return order.displayId || order.id?.slice(0, 6) || ''
+  return order.displayId || ''
 }
 
 function formatCurrency(v) {
