@@ -1170,7 +1170,14 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       // preserve option quantity/id when provided so frontend displays totals correctly
       options: Array.isArray(it.options) ? it.options.map(o => ({ id: o.id ?? null, name: String(o.name || ''), price: Number(o.price || 0), quantity: Number(o.quantity ?? o.qty ?? 1) })) : null
     }));
-    const subtotal = cleanItems.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+    const subtotal = cleanItems.reduce((s, it) => {
+      const qty = Number(it.quantity || 1);
+      const base = Number(it.price || 0);
+      const optsSum = Array.isArray(it.options)
+        ? it.options.reduce((os, o) => os + (Number(o.price || 0) * (Number(o.quantity || 1))), 0)
+        : 0;
+      return s + (base + optsSum) * qty;
+    }, 0);
 
     // neighborhood delivery fee
     let deliveryFee = 0;
@@ -1223,8 +1230,12 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
     const computedTotal = Math.max(0, subtotal - couponDiscount - discountMerchantAmt) + Number(deliveryFee || 0);
 
     // Prefer payment amount when provided by PDV client as authoritative total.
-    // Use >= 0 (not > 0) so that a 100% discount producing payment.amount = 0 is respected.
-    const total = (payment && payment.amount != null && Number.isFinite(Number(payment.amount)) && Number(payment.amount) >= 0) ? Number(payment.amount) : computedTotal;
+    // Accept 0 only when computedTotal is also 0 (genuine zero-value/bonification order).
+    // If payment.amount = 0 but items have value, fall back to computedTotal so products
+    // with price=0 whose cost is entirely in options don't produce a zero total on
+    // BALCAO/RETIRADA orders (no delivery fee to compensate).
+    const payAmt = (payment && payment.amount != null && Number.isFinite(Number(payment.amount))) ? Number(payment.amount) : null;
+    const total = (payAmt !== null && (payAmt > 0 || computedTotal === 0)) ? payAmt : computedTotal;
 
     // validate payment method if provided
     let paymentPayload = null;
