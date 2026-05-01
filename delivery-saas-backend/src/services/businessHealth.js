@@ -24,20 +24,22 @@ function classifyCmv(pct, defaults) {
 }
 
 async function fetchPeriodMetrics(prisma, { companyId, storeId, from, to }) {
-  // 1. Revenue: sum FinancialTransaction type=RECEIVABLE, status PAID/PARTIALLY, in period
-  //    Cash-basis: paidAmount only (authoritative since we filter by PAID/PARTIALLY status)
+  // 1. Revenue: sum FinancialTransaction type=RECEIVABLE from completed orders.
+  //    Include PAID, PARTIALLY and CONFIRMED — CONCLUIDO orders are real sales regardless
+  //    of payment method. Use netAmount (always set by the bridge; paidAmount is only set
+  //    when manually reconciled in the UI).
   const txWhere = {
     companyId,
     type: 'RECEIVABLE',
-    status: { in: ['PAID', 'PARTIALLY'] },
+    status: { in: ['PAID', 'PARTIALLY', 'CONFIRMED'] },
     issueDate: { gte: from, lte: to },
   };
   if (storeId) txWhere.storeId = storeId;
   const revenueAgg = await prisma.financialTransaction.aggregate({
     where: txWhere,
-    _sum: { paidAmount: true },
+    _sum: { netAmount: true },
   });
-  const revenue = Number(revenueAgg._sum.paidAmount || 0);
+  const revenue = Number(revenueAgg._sum.netAmount || 0);
 
   // 2. CMV (from Phase 1 helper)
   const cmvResult = await calculateCMV(prisma, companyId, from, to, storeId);
