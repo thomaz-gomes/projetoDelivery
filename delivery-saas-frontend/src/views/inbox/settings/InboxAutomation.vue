@@ -163,7 +163,7 @@
         <span class="ms-2"><code>_itálico_</code></span>
         <span class="ms-2"><code>~riscado~</code></span>
         <span class="ms-2"><code>`monoespaçado`</code></span>
-        <span class="ms-2 text-muted">— Deixe em branco para não enviar notificação neste status.</span>
+        <span class="ms-2 text-muted">— Deixe em branco para usar o template padrão.</span>
       </div>
 
       <div v-for="s in STATUSES" :key="s.key" class="card mb-3">
@@ -180,7 +180,7 @@
             :placeholder="DEFAULT_TEMPLATE"
             style="font-size: 0.82rem; resize: vertical; white-space: pre;"
           ></textarea>
-          <div class="form-text">Deixe em branco para não enviar notificação neste status.</div>
+          <div class="form-text">Deixe em branco para usar o template padrão.</div>
         </div>
       </div>
 

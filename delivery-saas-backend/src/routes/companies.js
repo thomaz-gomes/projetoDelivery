@@ -249,7 +249,8 @@ companiesRouter.patch('/notification-templates', requireRole('ADMIN'), async (re
     const body = req.body || {};
     const clean = {};
     for (const key of NOTIFY_STATUS_KEYS) {
-      if (typeof body[key] === 'string') clean[key] = body[key];
+      // Only persist non-empty templates; blank = "use default" (not disabled)
+      if (typeof body[key] === 'string' && body[key].trim()) clean[key] = body[key];
     }
     await prisma.company.update({ where: { id: companyId }, data: { orderNotifyTemplates: clean } });
     res.json(clean);

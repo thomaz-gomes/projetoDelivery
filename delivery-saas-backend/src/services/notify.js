@@ -260,14 +260,12 @@ Fique tranquilo(a) que vou enviar as atualizações do status do seu pedido por 
       ? order.company.orderNotifyTemplates
       : {};
 
-    const raw = Object.prototype.hasOwnProperty.call(templates, newStatus)
-      ? String(templates[newStatus])   // may be empty string (= disabled)
-      : DEFAULT_TEMPLATE;
-
-    if (!raw.trim()) {
-      console.log(`[notifyCustomerStatus] template vazio para status ${newStatus} — notificação suprimida`);
-      return;
-    }
+    // Empty string = use default (not suppress). Backend no longer saves blank
+    // templates, but legacy DB rows may still have empty strings.
+    const stored = Object.prototype.hasOwnProperty.call(templates, newStatus)
+      ? String(templates[newStatus])
+      : null;
+    const raw = (stored && stored.trim()) ? stored : DEFAULT_TEMPLATE;
 
     const text = raw
       .replace(/\{\{nome\}\}/g, customerName)
