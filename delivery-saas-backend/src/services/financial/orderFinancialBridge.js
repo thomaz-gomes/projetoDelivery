@@ -84,6 +84,7 @@ export async function createFinancialEntriesForOrder(order) {
         grossAmount: orderTotal,
         feeAmount,
         netAmount,
+        paidAmount: allImmediate ? netAmount : null,
         dueDate: expectedDate,
         expectedDate,
         paidAt: allImmediate ? now : null,
