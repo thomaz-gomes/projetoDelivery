@@ -90,6 +90,26 @@ router.get('/', async (req, res) => {
       : 0;
     const totalDeliveries = allTimes.length;
 
+    // Absolute count of completed orders with riders (includes orders without timing data)
+    const totalCompletedWithRider = await prisma.order.count({ where: orderWhere });
+    const completedWithCode = await prisma.order.count({
+      where: { ...orderWhere, displaySimple: { not: null } },
+    });
+    const completedWithCodePct = totalCompletedWithRider > 0
+      ? Math.round((completedWithCode / totalCompletedWithRider) * 1000) / 10
+      : 0;
+
+    // Cancelled orders that had a rider and were dispatched (SAIU_PARA_ENTREGA)
+    const cancelledAfterDispatch = await prisma.order.count({
+      where: {
+        companyId,
+        status: 'CANCELADO',
+        riderId: riderId ? riderId : { not: null },
+        createdAt: { gte: from, lte: to },
+        histories: { some: { to: 'SAIU_PARA_ENTREGA' } },
+      },
+    });
+
     // Cost calculation from RiderTransaction
     const costWhere = {
       rider: { companyId },
@@ -132,6 +152,10 @@ router.get('/', async (req, res) => {
       totalDeliveries,
       avgCostPerDelivery,
       avgDeliveryTimeByRider,
+      totalCompletedWithRider,
+      completedWithCode,
+      completedWithCodePct,
+      cancelledAfterDispatch,
     });
   } catch (err) {
     console.error('riders-dashboard error:', err);

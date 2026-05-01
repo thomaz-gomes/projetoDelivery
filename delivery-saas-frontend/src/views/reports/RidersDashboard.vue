@@ -68,6 +68,21 @@
             <div class="stat-value">{{ data.totalDeliveries }}</div>
           </div>
         </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--info"><i class="bi-hash"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Concluídos com código</div>
+            <div class="stat-value">{{ data.completedWithCode }}</div>
+            <div class="small text-muted mt-1">{{ data.completedWithCodePct }}% do total</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--danger"><i class="bi-x-circle"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Cancelados após despacho</div>
+            <div class="stat-value">{{ data.cancelledAfterDispatch }}</div>
+          </div>
+        </div>
       </div>
 
       <!-- Gráfico de barras -->
