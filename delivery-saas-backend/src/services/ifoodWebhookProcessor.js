@@ -9,6 +9,7 @@ import buildAndPersistStockMovementFromOrderItems, { reverseStockMovementForOrde
 import { canTransition } from '../stateMachine.js';
 import printQueue from '../printQueue.js'
 import { matchItemsToLocalProducts } from '../utils/integrationMatcher.js'
+import { nextDisplaySimple } from '../utils/displaySimple.js'
 
 /**
  * Extrai companyId a partir do merchantId do payload
@@ -375,11 +376,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
       return { order: null, created: false, statusChanged: false, from: null, to: null };
     }
 
-    // compute displaySimple for today's orders for this company
-    const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const existingCount = await prisma.order.count({ where: { companyId, createdAt: { gte: startOfDay } } });
-    const displaySimple = existingCount + 1;
+    const displaySimple = await nextDisplaySimple(companyId);
 
     const initialStatus = mapped.status || 'EM_PREPARO';
     const created = await prisma.order.create({

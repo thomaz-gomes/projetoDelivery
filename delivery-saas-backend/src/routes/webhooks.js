@@ -9,6 +9,7 @@ import printQueue from '../printQueue.js'
 import { enrichOrderForAgent } from '../enrichOrderForAgent.js'
 import { determineStatusFromIFoodEvent } from '../services/ifoodWebhookProcessor.js';
 import { canTransition } from '../stateMachine.js';
+import { nextDisplaySimple, startOfDayInTz } from '../utils/displaySimple.js';
 import { matchItemsToLocalProducts } from '../utils/integrationMatcher.js';
 
 // Helper: try to process the print queue for the provided storeIds with a
@@ -262,14 +263,7 @@ webhooksRouter.post("/ifood", async (req, res) => {
     }
 
     // 🛒 Cria ou atualiza o pedido
-    // Compute a per-day sequential number to persist as displaySimple for new orders.
-    // We compute the number based on how many orders already exist today for this company.
-    const nowForCreation = new Date();
-    const startOfDayForCreation = new Date(nowForCreation.getFullYear(), nowForCreation.getMonth(), nowForCreation.getDate());
-    const existingTodayCount = await prisma.order.count({
-      where: { companyId, createdAt: { gte: startOfDayForCreation } },
-    });
-    const displaySimpleForCreate = existingTodayCount + 1;
+    const displaySimpleForCreate = await nextDisplaySimple(companyId);
 
     // Build dynamic create/update objects to allow status transitions when valid
     const codeRaw2 = body && (body.fullCode || body.code || (body.order && (body.order.fullCode || body.order.code)));
@@ -747,7 +741,7 @@ webhooksRouter.get("/generate-test", async (req, res) => {
     const displayId = orderPayload.displayId || `SIMULADO-${new Date().toISOString().slice(11,19).replace(/:/g,'')}`;
 
     // Compute displaySimple for today
-    const displaySimple = (await prisma.order.count({ where: { companyId: company.id, createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) } } })) + 1;
+    const displaySimple = await nextDisplaySimple(company.id, company.timezone);
 
     // Match integration items to local products by integrationCode
     if (orderPayload.items && orderPayload.items.length > 0) {
