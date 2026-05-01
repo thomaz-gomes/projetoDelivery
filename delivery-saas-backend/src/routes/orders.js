@@ -1242,10 +1242,10 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
     if (payment && (payment.methodCode || payment.method)) {
       const code = String(payment.methodCode || payment.method).trim();
       const pm = await prisma.paymentMethod.findFirst({ where: { companyId, isActive: true, OR: [{ code }, { name: code }] } });
-      if (!pm) return res.status(400).json({ message: 'Método de pagamento inválido' });
+      // Se não encontrado no DB (ex: método virtual padrão do menu público), aceita o código informado
       paymentPayload = {
-        method: pm.name,
-        methodCode: pm.name,
+        method: pm ? pm.name : code,
+        methodCode: pm ? pm.name : code,
         amount: Number(payment.amount || total),
         changeFor: payment.changeFor != null ? Number(payment.changeFor) : null,
         raw: payment.raw || null

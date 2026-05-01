@@ -331,6 +331,7 @@
           <button class="btn btn-success" :disabled="!paymentMethodCode" @click="finalize">Concluir pedido</button>
         </div>
         <div v-if="finalizing" class="small mt-2">Salvando...</div>
+        <div v-if="finalizeError" class="alert alert-danger mt-2 py-1 small">{{ finalizeError }}</div>
       </div>
 
       <div v-else-if="step===5" class="text-center py-5">
@@ -413,6 +414,7 @@ const cart = ref([]);
 const paymentMethodCode = ref('');
 const changeFor = ref(null);
 const finalizing = ref(false);
+const finalizeError = ref('');
 const createdOrderDisplay = ref('');
 
 const showOptions = ref(false);
@@ -961,6 +963,7 @@ defineExpose({ applyCouponWithCode, removeCoupon, finalize, finalizing });
 
 async function finalize(){
   finalizing.value = true;
+  finalizeError.value = '';
   try {
     const itemsPayload = cart.value.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes||null, options: it.options||null }));
     // Para pedido balcão sem identificação, usa nome genérico
@@ -998,7 +1001,10 @@ async function finalize(){
     createdOrderDisplay.value = data.displaySimple || data.displayId || data.id?.slice(0,6) || '—';
     step.value = 5;
     emit('created', data);
-  } catch(e){ console.error('Falha ao criar pedido PDV', e); }
+  } catch(e){
+    console.error('Falha ao criar pedido PDV', e);
+    finalizeError.value = e?.response?.data?.message || 'Erro ao criar pedido. Tente novamente.';
+  }
   finally{ finalizing.value=false; }
 }
 function resetWizard(){
