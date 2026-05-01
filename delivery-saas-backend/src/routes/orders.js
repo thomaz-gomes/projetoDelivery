@@ -16,7 +16,7 @@ import riderAccountService from '../services/riderAccount.js';
 import { buildAndPersistStockMovementFromOrderItems, reverseStockMovementForOrder } from '../services/stockFromOrder.js';
 import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
 import { tryEmitIfoodChat } from '../services/ifoodChatEmitter.js';
-import { nextDisplaySimple } from '../utils/displaySimple.js';
+import { nextDisplaySimple, startOfDayForDateInTz } from '../utils/displaySimple.js';
 import { geocodeOrderIfNeeded } from '../utils/geocode.js';
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -59,7 +59,7 @@ ordersRouter.get('/', async (req, res) => {
             return;
           }
           const d = new Date(o.createdAt || o.updatedAt || Date.now());
-          const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+          const startOfDay = startOfDayForDateInTz(d, o.company?.timezone);
           const count = await prisma.order.count({ where: { companyId: o.companyId, createdAt: { gte: startOfDay, lte: d } } });
           o.displaySimple = String(count).padStart(2, '0');
         }));
@@ -1092,7 +1092,7 @@ ordersRouter.get('/:id', async (req, res) => {
         order.displaySimple = String(order.displaySimple).padStart(2, '0');
       } else {
         const createdAt = order.createdAt || new Date();
-        const startOfDay = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+        const startOfDay = startOfDayForDateInTz(createdAt, order.company?.timezone);
         const count = await prisma.order.count({
           where: {
             companyId: order.companyId,
