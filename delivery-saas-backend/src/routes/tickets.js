@@ -4,6 +4,7 @@ import { authMiddleware, requireRole } from '../auth.js';
 import { sha256 } from '../utils.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
 import { emitirPedidoAtualizado } from '../index.js';
+import { tryEmitIfoodChat } from '../services/ifoodChatEmitter.js';
 
 export const ticketsRouter = express.Router();
 
@@ -114,6 +115,7 @@ ticketsRouter.post('/:token/claim', authMiddleware, requireRole('RIDER'), async 
   // notificações assíncronas (não bloqueiam a resposta)
   notifyRiderAssigned(result.id).catch(() => {});
   notifyCustomerStatus(result.id, 'SAIU_PARA_ENTREGA').catch(() => {});
+  tryEmitIfoodChat(result, 'SAIU_PARA_ENTREGA').catch(() => {});
   // If this order belongs to an IFOOD integration, notify iFood that it was dispatched
   (async () => {
     try {
