@@ -96,7 +96,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import Swal from 'sweetalert2';
 import ListCard from '../components/ListCard.vue';
-import SelectInput from '../components/form/input/SelectInput.vue';
+import SelectInput from '../components/form/select/SelectInput.vue';
 
 const checkins = ref([]);
 const riders = ref([]);
