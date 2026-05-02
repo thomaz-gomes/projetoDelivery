@@ -262,7 +262,6 @@ export default {
       }
     },
     chartChannelData() {
-      const CHANNEL_COLORS = { Delivery: '#4f81e0', Retirada: '#4fc97a', 'Balcão': '#f5a623' }
       const byChannel = this.summary?.byChannel || []
       const labels = byChannel.map(c => c.name)
       const data = byChannel.map(c => Number(c.totalRevenue))
@@ -280,7 +279,6 @@ export default {
       }
     },
     chartTicketData() {
-      const CHANNEL_COLORS = { Delivery: '#4f81e0', Retirada: '#4fc97a', 'Balcão': '#f5a623' }
       const byChannel = this.summary?.byChannel || []
       const labels = byChannel.map(c => c.name)
       const data = byChannel.map(c => Number(Number(c.avgTicket).toFixed(2)))

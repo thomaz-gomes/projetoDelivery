@@ -111,6 +111,8 @@
 import BaseChart from '@/components/BaseChart.vue';
 import api from '../../api';
 
+const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -150,14 +152,12 @@ export default {
       );
     },
     chartCountData() {
-      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
       const items = this.topByCount || []
       const labels = items.map(i => i.name)
       const colors = items.map((_, i) => COLORS[i % COLORS.length])
       return { labels, datasets: [{ label: 'Quantidade vendida', data: items.map(i => i.quantity), backgroundColor: colors, borderColor: colors.map(c => c + 'cc'), borderWidth: 1, borderRadius: 4 }] }
     },
     chartCountOptions() {
-      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
       const labels = (this.topByCount || []).map(i => i.name)
       return {
         indexAxis: 'y',
@@ -169,7 +169,6 @@ export default {
       }
     },
     chartRevenueData() {
-      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
       const items = this.topByRevenue || []
       const labels = items.map(i => i.name)
       const colors = items.map((_, i) => COLORS[i % COLORS.length])
@@ -189,7 +188,6 @@ export default {
       }
     },
     chartWeekdayData() {
-      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
       const { labels = [], series = [] } = this.byWeekday || {}
       return {
         labels,
@@ -210,7 +208,6 @@ export default {
       }
     },
     chartHourData() {
-      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
       const { labels = [], series = [] } = this.byHour || {}
       return {
         labels,

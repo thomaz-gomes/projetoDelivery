@@ -42,7 +42,15 @@ async function renderChart() {
   }
   chart = new Chart(canvasRef.value, {
     type: props.type,
-    data: { ...props.data, datasets: props.data.datasets.map(d => ({ ...d })) },
+    data: {
+      ...props.data,
+      datasets: props.data.datasets.map(d => ({
+        ...d,
+        data: d.data ? [...d.data] : [],
+        backgroundColor: Array.isArray(d.backgroundColor) ? [...d.backgroundColor] : d.backgroundColor,
+        borderColor: Array.isArray(d.borderColor) ? [...d.borderColor] : d.borderColor,
+      })),
+    },
     options: mergeOptions(baseOptions, props.options),
   })
 }

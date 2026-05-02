@@ -347,7 +347,7 @@ onMounted(async () => {
     </div>
 
     <!-- TAB 2: Dashboard -->
-    <div v-show="tab === 'dashboard' && !loading">
+    <div v-if="tab === 'dashboard' && !loading">
       <!-- Summary cards -->
       <div class="row g-3 mb-4">
         <div class="col-6 col-lg-3">
