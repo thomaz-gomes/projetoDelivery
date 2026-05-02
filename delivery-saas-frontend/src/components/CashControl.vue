@@ -357,6 +357,7 @@ async function partialSummary() {
     const storedBalance = Number(session.currentBalance ?? session.balance ?? 0);
     const diff = expected != null ? (Number(expected || 0) - storedBalance) : 0;
     const hasDiff = diff && Math.abs(diff) > 0.0001;
+    const openingAmount = Number(summary?.openingAmount ?? session?.openingAmount ?? 0);
 
     const row = (label, value, isNegative = false, sublabel = '') => {
       const amount = Number(value || 0);
@@ -376,10 +377,9 @@ async function partialSummary() {
 
     // Expected cash physically in the drawer = opening + cash sales + reinforcements - withdrawals
     const expectedCash = Number(inRegisterByMethod['Dinheiro'] || 0);
-    const openingAmount = Number(session.openingAmount || 0);
     const cashSales = Number(paymentsByMethod['Dinheiro'] || 0);
     const cashBalanceRow = row('Saldo em caixa (Dinheiro)', expectedCash, false,
-      `Abertura ${formatCurrency(openingAmount)} + vendas ${formatCurrency(cashSales)}${totalReinforcements ? ' + reforços ' + formatCurrency(totalReinforcements) : ''}${totalWithdrawals ? ' − retiradas ' + formatCurrency(totalWithdrawals) : ''}`);
+      `${formatCurrency(openingAmount)} abertura + ${formatCurrency(cashSales)} vendas${totalReinforcements ? ' + ' + formatCurrency(totalReinforcements) + ' reforços' : ''}${totalWithdrawals ? ' − ' + formatCurrency(totalWithdrawals) + ' retiradas' : ''}`);
 
     const diffBanner = hasDiff ? `
       <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
@@ -392,6 +392,12 @@ async function partialSummary() {
 
     const html = `<div style="text-align:left">
       ${diffBanner}
+      <div style="margin-bottom:14px">
+        ${sectionTitle('Abertura de caixa')}
+        <div style="background:#f8f9fa;border-radius:8px;overflow:hidden">
+          ${row('Troco inicial', openingAmount)}
+        </div>
+      </div>
       <div style="margin-bottom:14px">
         ${sectionTitle('Receita por forma de pagamento')}
         <div style="background:#f8f9fa;border-radius:8px;overflow:hidden">

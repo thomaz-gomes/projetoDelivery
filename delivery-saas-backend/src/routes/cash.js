@@ -612,6 +612,7 @@ cashRouter.get('/summary/current', async (req, res) => {
       totalWithdrawals,
       totalReinforcements,
       expectedBalance,
+      openingAmount: opening,
     });
   } catch (e) {
     console.error('summary/current error:', e);
