@@ -38,10 +38,22 @@
             {{ isBlindClose ? 'Informe o valor em dinheiro contado no caixa.' : 'Confira o valor em dinheiro no caixa.' }}
           </p>
 
+          <!-- Opening amount info -->
+          <div class="d-flex gap-2 mb-3">
+            <div class="flex-fill bg-light rounded p-2 text-center">
+              <div class="text-muted small mb-1">Abertura de caixa</div>
+              <strong>{{ formatCurrency(props.session?.openingAmount || 0) }}</strong>
+            </div>
+            <div class="flex-fill bg-light rounded p-2 text-center">
+              <div class="text-muted small mb-1">Vendas em dinheiro</div>
+              <strong>{{ formatCurrency(paymentsByMethod['Dinheiro'] || 0) }}</strong>
+            </div>
+          </div>
+
           <div class="mb-3">
             <CurrencyInput
               v-model="declaredValues['Dinheiro']"
-              label="Valor em Dinheiro (R$)"
+              label="Valor em Dinheiro contado (R$)"
               labelClass="form-label"
               placeholder="0,00"
               inputClass="form-control-lg"
@@ -154,6 +166,18 @@
         <!-- STEP 3: Resumo -->
         <div v-if="currentStep === 3">
           <h6 class="mb-3">Resumo do Fechamento</h6>
+
+          <!-- Opening amount -->
+          <div class="d-flex gap-2 mb-3">
+            <div class="flex-fill bg-light rounded p-2 text-center">
+              <div class="text-muted small mb-1">Abertura de caixa</div>
+              <strong>{{ formatCurrency(props.session?.openingAmount || 0) }}</strong>
+            </div>
+            <div class="flex-fill bg-light rounded p-2 text-center">
+              <div class="text-muted small mb-1">Vendas em dinheiro</div>
+              <strong>{{ formatCurrency(paymentsByMethod['Dinheiro'] || 0) }}</strong>
+            </div>
+          </div>
 
           <!-- Always show expected values (blind close reveal) -->
           <div class="table-responsive">
