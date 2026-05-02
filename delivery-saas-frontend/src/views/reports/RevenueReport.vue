@@ -149,9 +149,7 @@
           <strong>Faturamento por dia</strong>
         </div>
         <div class="card-body">
-          <div style="position: relative; height: 300px;">
-            <canvas ref="chartByDay"></canvas>
-          </div>
+          <BaseChart type="line" :data="chartByDayData" :options="chartByDayOptions" height="300px" />
         </div>
       </div>
 
@@ -164,9 +162,7 @@
               <strong>Participação por canal</strong>
             </div>
             <div class="card-body d-flex align-items-center justify-content-center">
-              <div style="position: relative; height: 260px; width: 260px;">
-                <canvas ref="chartChannel"></canvas>
-              </div>
+              <BaseChart type="doughnut" :data="chartChannelData" :options="chartChannelOptions" height="260px" />
             </div>
           </div>
         </div>
@@ -179,9 +175,7 @@
               <strong>Ticket médio por canal</strong>
             </div>
             <div class="card-body">
-              <div style="position: relative; height: 260px;">
-                <canvas ref="chartTicket"></canvas>
-              </div>
+              <BaseChart type="bar" :data="chartTicketData" :options="chartTicketOptions" height="220px" />
             </div>
           </div>
         </div>
@@ -192,7 +186,7 @@
 </template>
 
 <script>
-import Chart from 'chart.js/auto';
+import BaseChart from '@/components/BaseChart.vue';
 import api from '../../api';
 
 const CHANNEL_COLORS = {
@@ -218,6 +212,8 @@ function fmtCurrency(v) {
 export default {
   name: 'RevenueReport',
 
+  components: { BaseChart },
+
   data() {
     return {
       filters: { from: firstDayOfMonthStr(), to: todayStr() },
@@ -233,12 +229,75 @@ export default {
         byChannel: [],
       },
       byDay: null,
-      charts: {},
     };
   },
 
-  beforeUnmount() {
-    this.destroyCharts();
+  computed: {
+    chartByDayData() {
+      if (!this.byDay) return { labels: [], datasets: [] }
+      const { labels = [], series = {} } = this.byDay
+      const displayLabels = labels.map(d => { const [, m, day] = d.split('-'); return `${day}/${m}` })
+      return {
+        labels: displayLabels,
+        datasets: [
+          { label: 'Total', data: series.Total || [], borderColor: '#4f81e0', backgroundColor: '#4f81e020', fill: true, tension: 0.3, pointRadius: 3, borderWidth: 2 },
+          { label: 'Delivery', data: series.Delivery || [], borderColor: '#e04f4f', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderDash: [5, 3], borderWidth: 1.5 },
+          { label: 'Retirada', data: series.Retirada || [], borderColor: '#4fc97a', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderDash: [5, 3], borderWidth: 1.5 },
+          { label: 'Balcão', data: series['Balcão'] || [], borderColor: '#f5a623', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderDash: [5, 3], borderWidth: 1.5 },
+        ],
+      }
+    },
+    chartByDayOptions() {
+      const fmt = this.fmtCurrency || ((v) => v)
+      return {
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmt(ctx.raw)}` } },
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (v) => fmt(v) }, grid: { color: '#f0f0f0' } },
+          x: { grid: { color: '#f0f0f0' }, ticks: { maxTicksLimit: 15 } },
+        },
+      }
+    },
+    chartChannelData() {
+      const CHANNEL_COLORS = { Delivery: '#4f81e0', Retirada: '#4fc97a', 'Balcão': '#f5a623' }
+      const byChannel = this.summary?.byChannel || []
+      const labels = byChannel.map(c => c.name)
+      const data = byChannel.map(c => Number(c.totalRevenue))
+      const colors = labels.map(l => CHANNEL_COLORS[l] || '#aaa')
+      return { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, hoverOffset: 6 }] }
+    },
+    chartChannelOptions() {
+      const fmt = this.fmtCurrency || ((v) => v)
+      const total = (this.summary?.byChannel || []).reduce((s, c) => s + Number(c.totalRevenue), 0)
+      return {
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${fmt(ctx.raw)} (${total ? ((ctx.raw / total) * 100).toFixed(1) : 0}%)` } },
+        },
+      }
+    },
+    chartTicketData() {
+      const CHANNEL_COLORS = { Delivery: '#4f81e0', Retirada: '#4fc97a', 'Balcão': '#f5a623' }
+      const byChannel = this.summary?.byChannel || []
+      const labels = byChannel.map(c => c.name)
+      const data = byChannel.map(c => Number(Number(c.avgTicket).toFixed(2)))
+      const colors = labels.map(l => CHANNEL_COLORS[l] || '#aaa')
+      return { labels, datasets: [{ label: 'Ticket médio', data, backgroundColor: colors, borderRadius: 6, borderWidth: 0 }] }
+    },
+    chartTicketOptions() {
+      const fmt = this.fmtCurrency || ((v) => v)
+      return {
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => ` ${fmt(ctx.raw)}` } },
+        },
+        scales: { x: { beginAtZero: true, ticks: { callback: (v) => fmt(v) }, grid: { color: '#f0f0f0' } } },
+      }
+    },
   },
 
   methods: {
@@ -253,17 +312,9 @@ export default {
       return (Number(val) / Number(this.summary.totalRevenue)) * 100;
     },
 
-    destroyCharts() {
-      for (const key of Object.keys(this.charts)) {
-        try { this.charts[key]?.destroy(); } catch (_) {}
-      }
-      this.charts = {};
-    },
-
     async load() {
       this.loading = true;
       this.loaded = false;
-      this.destroyCharts();
       const params = { dateFrom: this.filters.from, dateTo: this.filters.to };
       try {
         const [r1, r2] = await Promise.all([
@@ -273,174 +324,12 @@ export default {
         this.summary = r1.data || {};
         this.byDay = r2.data || null;
         this.loaded = true;
-        await this.$nextTick();
-        this.buildCharts();
       } catch (e) {
         console.error('RevenueReport load error:', e);
         alert('Erro ao carregar dados do relatório.');
       } finally {
         this.loading = false;
       }
-    },
-
-    buildCharts() {
-      this.buildByDayChart();
-      this.buildChannelChart();
-      this.buildTicketChart();
-    },
-
-    buildByDayChart() {
-      const canvas = this.$refs.chartByDay;
-      if (!canvas || !this.byDay) return;
-      const { labels, series } = this.byDay;
-      const displayLabels = labels.map(d => {
-        const [, m, day] = d.split('-');
-        return `${day}/${m}`;
-      });
-      this.charts.byDay = new Chart(canvas, {
-        type: 'line',
-        data: {
-          labels: displayLabels,
-          datasets: [
-            {
-              label: 'Total',
-              data: series.Total,
-              borderColor: '#4f81e0',
-              backgroundColor: '#4f81e020',
-              fill: true,
-              tension: 0.3,
-              pointRadius: 3,
-              borderWidth: 2,
-            },
-            {
-              label: 'Delivery',
-              data: series.Delivery,
-              borderColor: '#e04f4f',
-              backgroundColor: 'transparent',
-              tension: 0.3,
-              pointRadius: 2,
-              borderDash: [5, 3],
-              borderWidth: 1.5,
-            },
-            {
-              label: 'Retirada',
-              data: series.Retirada,
-              borderColor: '#4fc97a',
-              backgroundColor: 'transparent',
-              tension: 0.3,
-              pointRadius: 2,
-              borderDash: [5, 3],
-              borderWidth: 1.5,
-            },
-            {
-              label: 'Balcão',
-              data: series['Balcão'],
-              borderColor: '#f5a623',
-              backgroundColor: 'transparent',
-              tension: 0.3,
-              pointRadius: 2,
-              borderDash: [5, 3],
-              borderWidth: 1.5,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { position: 'top' },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => ` ${ctx.dataset.label}: ${fmtCurrency(ctx.raw)}`,
-              },
-            },
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: { callback: (v) => fmtCurrency(v) },
-              grid: { color: '#f0f0f0' },
-            },
-            x: {
-              grid: { color: '#f0f0f0' },
-              ticks: { maxTicksLimit: 15 },
-            },
-          },
-        },
-      });
-    },
-
-    buildChannelChart() {
-      const canvas = this.$refs.chartChannel;
-      if (!canvas || !this.summary.byChannel?.length) return;
-      const active = this.summary.byChannel.filter(c => c.orderCount > 0);
-      if (!active.length) return;
-      const labels = active.map(c => c.name);
-      const data = active.map(c => Number(c.totalRevenue));
-      const colors = labels.map(n => CHANNEL_COLORS[n] || '#607d8b');
-      this.charts.channel = new Chart(canvas, {
-        type: 'doughnut',
-        data: {
-          labels,
-          datasets: [{ data, backgroundColor: colors, borderWidth: 2, hoverOffset: 6 }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'bottom' },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => ` ${ctx.label}: ${fmtCurrency(ctx.raw)} (${this.pct(ctx.raw).toFixed(1)}%)`,
-              },
-            },
-          },
-        },
-      });
-    },
-
-    buildTicketChart() {
-      const canvas = this.$refs.chartTicket;
-      if (!canvas || !this.summary.byChannel?.length) return;
-      const active = this.summary.byChannel.filter(c => c.orderCount > 0);
-      if (!active.length) return;
-      const labels = active.map(c => c.name);
-      const data = active.map(c => Number(Number(c.avgTicket).toFixed(2)));
-      const colors = labels.map(n => CHANNEL_COLORS[n] || '#607d8b');
-      this.charts.ticket = new Chart(canvas, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Ticket médio',
-            data,
-            backgroundColor: colors,
-            borderRadius: 6,
-            borderWidth: 0,
-          }],
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => ` ${fmtCurrency(ctx.raw)}`,
-              },
-            },
-          },
-          scales: {
-            x: {
-              beginAtZero: true,
-              ticks: { callback: (v) => fmtCurrency(v) },
-              grid: { color: '#f0f0f0' },
-            },
-          },
-        },
-      });
     },
   },
 };
