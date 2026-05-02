@@ -543,8 +543,7 @@ cashRouter.get('/sessions/:sessionId/orders-by-method', async (req, res) => {
   const orders = await prisma.order.findMany({
     where: { companyId, cashSessionId: sessionId, status: 'CONCLUIDO' },
     select: {
-      id: true, displayId: true, total: true, payload: true,
-      customer: { select: { name: true } },
+      id: true, displayId: true, total: true, payload: true, customerName: true,
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -554,7 +553,7 @@ cashRouter.get('/sessions/:sessionId/orders-by-method', async (req, res) => {
     try {
       const payload = o.payload || {};
       const payments = extractPayments(payload, o.total);
-      const customerName = o.customer?.name || payload.customer?.name || payload.customerName || '—';
+      const customerName = o.customerName || payload.customer?.name || payload.customerName || '—';
       const displayId = o.displayId || o.id.slice(0, 8);
 
       if (Array.isArray(payments) && payments.length > 0) {
