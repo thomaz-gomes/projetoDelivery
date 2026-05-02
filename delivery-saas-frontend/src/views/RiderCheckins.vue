@@ -37,22 +37,52 @@
           <tr>
             <th>Motoboy</th>
             <th>Turno</th>
-            <th>Horário Check-in</th>
+            <th>Check-in</th>
+            <th>Check-out</th>
             <th>Endereço</th>
             <th>Distância</th>
-            <th>Status</th>
+            <th>Pontualidade</th>
+            <th>Status Turno</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="c in checkins" :key="c.id">
             <td>{{ c.rider?.name || '-' }}</td>
-            <td>{{ c.shift?.label || '-' }}</td>
-            <td>{{ formatDate(c.checkinAt) }}</td>
+            <td>{{ c.shift?.label || c.shift?.name || '-' }}</td>
+            <td class="text-nowrap">{{ formatDate(c.checkinAt) }}</td>
+            <td class="text-nowrap">{{ c.checkoutAt ? formatDate(c.checkoutAt) : '—' }}</td>
             <td class="small">{{ c.address || '-' }}</td>
-            <td>{{ c.distanceMeters != null ? c.distanceMeters + 'm' : '-' }}</td>
+            <td class="text-nowrap">{{ c.distanceMeters != null ? c.distanceMeters + 'm' : '-' }}</td>
             <td>
               <span v-if="isOnTime(c)" class="badge bg-success">No horário</span>
               <span v-else class="badge bg-danger">Atrasado</span>
+            </td>
+            <td>
+              <span v-if="!c.checkoutAt" class="badge bg-warning text-dark d-flex align-items-center gap-1" style="width:fit-content">
+                <span class="pulse-dot"></span>Em andamento
+              </span>
+              <span v-else class="badge bg-secondary">Encerrado</span>
+            </td>
+            <td class="text-end text-nowrap">
+              <button
+                v-if="!c.checkoutAt"
+                class="btn btn-sm btn-outline-danger"
+                :disabled="actionLoading === c.id"
+                @click="closeShift(c)"
+                title="Fechar turno"
+              >
+                <i class="bi bi-stop-circle me-1"></i>Fechar
+              </button>
+              <button
+                v-else
+                class="btn btn-sm btn-outline-secondary"
+                :disabled="actionLoading === c.id"
+                @click="reopenShift(c)"
+                title="Reabrir turno"
+              >
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Reabrir
+              </button>
             </td>
           </tr>
         </tbody>
@@ -64,12 +94,15 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
+import Swal from 'sweetalert2';
 import ListCard from '../components/ListCard.vue';
+import SelectInput from '../components/form/input/SelectInput.vue';
 
 const checkins = ref([]);
 const riders = ref([]);
 const bonusRules = ref([]);
 const loading = ref(false);
+const actionLoading = ref(null);
 
 // Filters — default to current month
 const now = new Date();
@@ -105,6 +138,53 @@ async function load() {
   }
 }
 
+async function closeShift(c) {
+  const confirm = await Swal.fire({
+    title: 'Fechar turno?',
+    text: `Encerrar o turno de ${c.rider?.name || 'entregador'} agora?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Fechar turno',
+    confirmButtonColor: '#dc3545',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!confirm.isConfirmed) return;
+  actionLoading.value = c.id;
+  try {
+    const { data } = await api.post(`/riders/checkins/${c.id}/checkout`);
+    const idx = checkins.value.findIndex(x => x.id === c.id);
+    if (idx >= 0) checkins.value.splice(idx, 1, { ...checkins.value[idx], checkoutAt: data.checkoutAt });
+    Swal.fire({ icon: 'success', title: 'Turno encerrado', timer: 1200, showConfirmButton: false });
+  } catch (e) {
+    Swal.fire('Erro', e.response?.data?.message || 'Falha ao encerrar turno', 'error');
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+async function reopenShift(c) {
+  const confirm = await Swal.fire({
+    title: 'Reabrir turno?',
+    text: `Reabrir o turno de ${c.rider?.name || 'entregador'}?`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Reabrir',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!confirm.isConfirmed) return;
+  actionLoading.value = c.id;
+  try {
+    const { data } = await api.post(`/riders/checkins/${c.id}/reopen`);
+    const idx = checkins.value.findIndex(x => x.id === c.id);
+    if (idx >= 0) checkins.value.splice(idx, 1, { ...checkins.value[idx], checkoutAt: data.checkoutAt });
+    Swal.fire({ icon: 'success', title: 'Turno reaberto', timer: 1200, showConfirmButton: false });
+  } catch (e) {
+    Swal.fire('Erro', e.response?.data?.message || 'Falha ao reabrir turno', 'error');
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
 function isOnTime(checkin) {
   const d = new Date(checkin.checkinAt);
   const mins = d.getHours() * 60 + d.getMinutes();
@@ -122,3 +202,18 @@ function formatDate(iso) {
 
 onMounted(load);
 </script>
+
+<style scoped>
+.pulse-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #dc3545;
+  animation: pulse 1.4s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+</style>

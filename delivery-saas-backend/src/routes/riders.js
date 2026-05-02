@@ -700,6 +700,42 @@ ridersRouter.get('/checkins', async (req, res) => {
   res.json(checkins);
 });
 
+// POST /riders/checkins/:id/checkout — admin encerra manualmente um turno aberto
+ridersRouter.post('/checkins/:id/checkout', async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const checkin = await prisma.riderCheckin.findFirst({ where: { id, companyId } });
+  if (!checkin) return res.status(404).json({ message: 'Check-in não encontrado' });
+  if (checkin.checkoutAt) return res.status(400).json({ message: 'Turno já encerrado' });
+  const updated = await prisma.riderCheckin.update({
+    where: { id },
+    data: { checkoutAt: new Date() },
+    include: {
+      rider: { select: { id: true, name: true } },
+      shift: { select: { name: true, startTime: true, endTime: true } }
+    }
+  });
+  res.json(updated);
+});
+
+// POST /riders/checkins/:id/reopen — admin reabre um turno encerrado
+ridersRouter.post('/checkins/:id/reopen', async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const checkin = await prisma.riderCheckin.findFirst({ where: { id, companyId } });
+  if (!checkin) return res.status(404).json({ message: 'Check-in não encontrado' });
+  if (!checkin.checkoutAt) return res.status(400).json({ message: 'Turno já está em andamento' });
+  const updated = await prisma.riderCheckin.update({
+    where: { id },
+    data: { checkoutAt: null },
+    include: {
+      rider: { select: { id: true, name: true } },
+      shift: { select: { name: true, startTime: true, endTime: true } }
+    }
+  });
+  res.json(updated);
+});
+
 // ==================== BONUS RULES ====================
 
 // GET /riders/bonus-rules
