@@ -17,6 +17,7 @@ const props = defineProps({
 
 const canvasRef = ref(null)
 let chart = null
+let destroyed = false
 
 function mergeOptions(base, override) {
   const result = { ...base }
@@ -32,7 +33,7 @@ function mergeOptions(base, override) {
 
 async function renderChart() {
   await nextTick()
-  if (!canvasRef.value) return
+  if (destroyed || !canvasRef.value) return
   if (chart) { chart.destroy(); chart = null }
   const baseOptions = {
     responsive: true,
@@ -41,12 +42,15 @@ async function renderChart() {
   }
   chart = new Chart(canvasRef.value, {
     type: props.type,
-    data: props.data,
+    data: { ...props.data, datasets: props.data.datasets.map(d => ({ ...d })) },
     options: mergeOptions(baseOptions, props.options),
   })
 }
 
-watch(() => props.data, renderChart, { deep: true, immediate: true })
+watch(() => [props.data, props.type, props.options], renderChart, { deep: true, immediate: true })
 
-onUnmounted(() => { if (chart) chart.destroy() })
+onUnmounted(() => {
+  destroyed = true
+  if (chart) chart.destroy()
+})
 </script>
