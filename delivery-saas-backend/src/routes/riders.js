@@ -198,9 +198,13 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
     });
     const checkedIn = !!checkinToday;
 
-    // Active shift (no checkoutAt)
+    // Active shift: open check-in within last 24h (guards against stale open records)
     const activeCheckin = await prisma.riderCheckin.findFirst({
-      where: { riderId, checkoutAt: null },
+      where: {
+        riderId,
+        checkoutAt: null,
+        checkinAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+      },
       orderBy: { checkinAt: 'desc' },
     });
     const hasActiveShift = !!activeCheckin;
@@ -496,6 +500,7 @@ ridersRouter.post('/me/checkin', async (req, res) => {
   });
   for (const c of todayCheckins) {
     if (!c.shift || c.shift.id === shiftId) continue;
+    if (c.checkoutAt) continue; // turno já encerrado, não bloqueia
     const [endH, endM] = c.shift.endTime.split(':').map(Number);
     const endMinutes = endH * 60 + endM;
     if (nowMinutes < endMinutes) {
