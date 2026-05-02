@@ -20,11 +20,21 @@ function updateClock() {
   currentTime.value = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+function brtTodayStart() {
+  // BRT = UTC-3; BRT midnight = 03:00 UTC. Match the same boundary used by the
+  // check-in endpoint so late-night shifts (after 21:00 BRT = 00:00 UTC) don't
+  // appear as "today's" check-ins the following BRT day.
+  const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+  const nowBRT = new Date(Date.now() - BRT_OFFSET_MS);
+  const brtDate = nowBRT.toISOString().slice(0, 10); // "YYYY-MM-DD" no calendário BRT
+  return new Date(brtDate + 'T03:00:00.000Z').toISOString(); // meia-noite BRT = 03:00 UTC
+}
+
 async function loadData() {
   try {
     const [shiftsRes, checkinsRes] = await Promise.all([
       api.get('/riders/me/assigned-shifts'),
-      api.get('/riders/me/checkins', { params: { from: new Date().toISOString().slice(0, 10) } })
+      api.get('/riders/me/checkins', { params: { from: brtTodayStart() } })
     ]);
     shifts.value = shiftsRes.data;
     todayCheckins.value = checkinsRes.data;
@@ -69,8 +79,9 @@ function shiftBlocked(shift) {
   // Já fez check-in neste turno
   if (shiftAlreadyChecked(shift.id)) return 'Já registrado';
   // Há outro turno ATIVO em andamento (ignora check-ins já encerrados)
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+  const nowBRT = new Date(Date.now() - BRT_OFFSET_MS);
+  const nowMin = nowBRT.getUTCHours() * 60 + nowBRT.getUTCMinutes();
   for (const c of todayCheckins.value) {
     if (c.shiftId === shift.id) continue;
     if (c.checkoutAt) continue; // já encerrado, não bloqueia
