@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import Chart from 'chart.js/auto'
+import { ref, computed, onMounted } from 'vue'
+import BaseChart from '@/components/BaseChart.vue'
 import api from '../api'
 
 const SERVICE_KEYS = [
@@ -31,13 +31,49 @@ const pricingMap = ref({})
 const creditBrlPrice = ref(0)
 const usdToBrl = ref(5.80)
 
-// Charts
-const chartCostRevenue = ref(null)
-const chartByService = ref(null)
-const chartProfit = ref(null)
-let chartCostRevenueInstance = null
-let chartByServiceInstance = null
-let chartProfitInstance = null
+// Chart data
+const svcColors = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1']
+
+const chartCostRevenueData = computed(() => {
+  if (!summary.value?.monthly) return { labels: [], datasets: [] }
+  const months = Object.keys(summary.value.monthly).sort()
+  return {
+    labels: months.map(m => { const [y, mo] = m.split('-'); return `${mo}/${y}` }),
+    datasets: [
+      { label: 'Custo (BRL)', data: months.map(m => summary.value.monthly[m].costBrl), backgroundColor: '#e04f4f' },
+      { label: 'Receita (BRL)', data: months.map(m => summary.value.monthly[m].revenueBrl), backgroundColor: '#4fc97a' },
+    ],
+  }
+})
+
+const chartByServiceData = computed(() => {
+  if (!summary.value?.byService) return { labels: [], datasets: [] }
+  const svcKeys = Object.keys(summary.value.byService)
+  return {
+    labels: svcKeys,
+    datasets: [{ data: svcKeys.map(k => summary.value.byService[k].costBrl), backgroundColor: svcColors.slice(0, svcKeys.length) }],
+  }
+})
+
+const chartProfitData = computed(() => {
+  if (!summary.value?.monthly) return { labels: [], datasets: [] }
+  const months = Object.keys(summary.value.monthly).sort()
+  return {
+    labels: months.map(m => { const [y, mo] = m.split('-'); return `${mo}/${y}` }),
+    datasets: [{
+      label: 'Lucro (BRL)',
+      data: months.map(m => summary.value.monthly[m].revenueBrl - summary.value.monthly[m].costBrl),
+      borderColor: '#4e79a7',
+      backgroundColor: 'rgba(78,121,167,0.1)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 4,
+    }],
+  }
+})
+
+const optionsTopLegend = { plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+const optionsServiceDoughnut = { plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } } }
 
 // Margin simulator
 const desiredMargin = ref(50)
@@ -150,7 +186,6 @@ async function loadDashboard() {
     creditBrlPrice.value = data.creditBrlPrice || creditBrlPrice.value
     usdToBrl.value = data.usdToBrl || usdToBrl.value
     dashboardLoaded.value = true
-    nextTick(() => renderCharts())
   } finally {
     loading.value = false
   }
@@ -161,101 +196,9 @@ function applyFilters() {
   loadLog()
 }
 
-function renderCharts() {
-  // Destroy existing
-  if (chartCostRevenueInstance) chartCostRevenueInstance.destroy()
-  if (chartByServiceInstance) chartByServiceInstance.destroy()
-  if (chartProfitInstance) chartProfitInstance.destroy()
-
-  const months = Object.keys(summary.value.monthly || {}).sort()
-  const labels = months.map(m => { const [y, mo] = m.split('-'); return `${mo}/${y}` })
-
-  // Bar chart: Custo vs Receita
-  if (chartCostRevenue.value) {
-    chartCostRevenueInstance = new Chart(chartCostRevenue.value, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          { label: 'Custo (BRL)', data: months.map(m => summary.value.monthly[m].costBrl), backgroundColor: '#e04f4f' },
-          { label: 'Receita (BRL)', data: months.map(m => summary.value.monthly[m].revenueBrl), backgroundColor: '#4fc97a' },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'top' } },
-        scales: { y: { beginAtZero: true } },
-      },
-    })
-  }
-
-  // Doughnut chart: by service
-  if (chartByService.value) {
-    const svcKeys = Object.keys(summary.value.byService || {})
-    const svcColors = [
-      '#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f',
-      '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac',
-      '#86bcb6', '#8cd17d', '#b6992d', '#499894', '#d37295',
-    ]
-    chartByServiceInstance = new Chart(chartByService.value, {
-      type: 'doughnut',
-      data: {
-        labels: svcKeys,
-        datasets: [{
-          data: svcKeys.map(k => summary.value.byService[k].costBrl),
-          backgroundColor: svcColors.slice(0, svcKeys.length),
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
-        },
-      },
-    })
-  }
-
-  // Line chart: Lucro mensal
-  if (chartProfit.value) {
-    const profitData = months.map(m => {
-      const d = summary.value.monthly[m]
-      return (d.revenueBrl || 0) - (d.costBrl || 0)
-    })
-    chartProfitInstance = new Chart(chartProfit.value, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Lucro (BRL)',
-          data: profitData,
-          borderColor: '#4e79a7',
-          backgroundColor: 'rgba(78,121,167,0.1)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 4,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'top' } },
-        scales: { y: { beginAtZero: true } },
-      },
-    })
-  }
-}
-
 onMounted(async () => {
   await loadConfig()
   await loadLog()
-})
-
-onUnmounted(() => {
-  if (chartCostRevenueInstance) chartCostRevenueInstance.destroy()
-  if (chartByServiceInstance) chartByServiceInstance.destroy()
-  if (chartProfitInstance) chartProfitInstance.destroy()
 })
 </script>
 
@@ -453,9 +396,7 @@ onUnmounted(() => {
           <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
               <h6 class="mb-3">Custo vs Receita por mês</h6>
-              <div style="height: 300px;">
-                <canvas ref="chartCostRevenue"></canvas>
-              </div>
+              <BaseChart type="bar" :data="chartCostRevenueData" :options="optionsTopLegend" height="260px" />
             </div>
           </div>
         </div>
@@ -463,9 +404,7 @@ onUnmounted(() => {
           <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
               <h6 class="mb-3">Distribuição de custo por serviço</h6>
-              <div style="height: 300px;">
-                <canvas ref="chartByService"></canvas>
-              </div>
+              <BaseChart type="doughnut" :data="chartByServiceData" :options="optionsServiceDoughnut" height="260px" />
             </div>
           </div>
         </div>
@@ -476,9 +415,7 @@ onUnmounted(() => {
           <div class="card border-0 shadow-sm">
             <div class="card-body">
               <h6 class="mb-3">Lucro mensal</h6>
-              <div style="height: 250px;">
-                <canvas ref="chartProfit"></canvas>
-              </div>
+              <BaseChart type="line" :data="chartProfitData" :options="optionsTopLegend" height="220px" />
             </div>
           </div>
         </div>
