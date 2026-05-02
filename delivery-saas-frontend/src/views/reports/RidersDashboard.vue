@@ -92,9 +92,14 @@
           <strong>Tempo médio por entregador (min)</strong>
         </div>
         <div class="card-body">
-          <div style="position: relative; height: 320px;">
-            <canvas ref="chartCanvas"></canvas>
-          </div>
+          <BaseChart
+            v-if="data && data.avgDeliveryTimeByRider && data.avgDeliveryTimeByRider.length"
+            type="bar"
+            :data="chartData"
+            :options="chartOptions"
+            height="320px"
+          />
+          <div v-else-if="!loading" class="text-muted text-center py-4">Sem dados para exibir</div>
         </div>
       </div>
 
@@ -132,16 +137,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import Chart from 'chart.js/auto'
+import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../../api'
 import SelectInput from '../../components/form/select/SelectInput.vue'
 import BaseButton from '../../components/BaseButton.vue'
-
-const COLORS = [
-  '#105784', '#89D136', '#f5a623', '#e04f4f', '#9b59b6',
-  '#1abc9c', '#e67e22', '#e91e63', '#00bcd4', '#607d8b',
-]
+import BaseChart from '@/components/BaseChart.vue'
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -165,9 +165,6 @@ const loaded = ref(false)
 const data = ref({})
 const riders = ref([])
 const riderOptions = ref([])
-const chartCanvas = ref(null)
-let chartInstance = null
-
 async function fetchRiders() {
   try {
     const res = await api.get('/riders')
@@ -184,7 +181,6 @@ async function fetchRiders() {
 async function load() {
   loading.value = true
   loaded.value = false
-  destroyChart()
 
   try {
     const params = { from: filters.from, to: filters.to }
@@ -193,9 +189,6 @@ async function load() {
     const res = await api.get('/reports/riders-dashboard', { params })
     data.value = res.data
     loaded.value = true
-
-    await nextTick()
-    buildChart()
   } catch (e) {
     console.error('RidersDashboard load error:', e)
     const { default: Swal } = await import('sweetalert2')
@@ -205,72 +198,50 @@ async function load() {
   }
 }
 
-function destroyChart() {
-  if (chartInstance) {
-    chartInstance.destroy()
-    chartInstance = null
+const chartData = computed(() => {
+  const riders = data.value?.avgDeliveryTimeByRider || []
+  const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
+  const labels = riders.map(r => r.riderName)
+  const values = riders.map(r => r.avgTime)
+  const colors = riders.map((_, i) => COLORS[i % COLORS.length])
+  return {
+    labels,
+    datasets: [{
+      label: 'Tempo médio (min)',
+      data: values,
+      backgroundColor: colors,
+      borderColor: colors.map(c => c + 'cc'),
+      borderWidth: 1,
+      borderRadius: 4,
+    }],
   }
-}
+})
 
-function buildChart() {
-  const canvas = chartCanvas.value
-  if (!canvas || !data.value.avgDeliveryTimeByRider?.length) return
-
-  const items = data.value.avgDeliveryTimeByRider
-  const labels = items.map(r => r.riderName)
-  const values = items.map(r => r.avgTime)
-  const colors = labels.map((_, i) => COLORS[i % COLORS.length])
-
-  chartInstance = new Chart(canvas, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Tempo médio (min)',
-        data: values,
-        backgroundColor: colors,
-        borderColor: colors.map(c => c + 'cc'),
-        borderWidth: 1,
-        borderRadius: 4,
-      }],
+const chartOptions = computed(() => ({
+  indexAxis: 'y',
+  plugins: {
+    legend: { display: false },
+    tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} min` } },
+  },
+  scales: {
+    x: {
+      beginAtZero: true,
+      grid: { color: '#f0f0f0' },
+      title: { display: true, text: 'Minutos' },
     },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => ` ${ctx.raw} min`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          beginAtZero: true,
-          grid: { color: '#f0f0f0' },
-          title: { display: true, text: 'Minutos' },
-        },
-        y: {
-          ticks: {
-            font: { size: 12 },
-            callback: (val, idx) => {
-              const lbl = labels[idx] || ''
-              return lbl.length > 25 ? lbl.slice(0, 23) + '…' : lbl
-            },
-          },
+    y: {
+      ticks: {
+        font: { size: 12 },
+        callback: (val, idx) => {
+          const lbl = (data.value?.avgDeliveryTimeByRider || [])[idx]?.riderName || ''
+          return lbl.length > 25 ? lbl.slice(0, 23) + '…' : lbl
         },
       },
     },
-  })
-}
+  },
+}))
 
 onMounted(() => {
   fetchRiders()
-})
-
-onBeforeUnmount(() => {
-  destroyChart()
 })
 </script>
