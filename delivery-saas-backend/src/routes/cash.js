@@ -6,6 +6,7 @@ import {
   calculateExpectedValues,
   calculateDifferences,
   normalizeMethod,
+  extractPayments,
 } from '../services/cash/paymentAggregator.js';
 import { createFinancialEntriesForCashSession } from '../services/financial/cashSessionBridge.js';
 
@@ -552,18 +553,12 @@ cashRouter.get('/sessions/:sessionId/orders-by-method', async (req, res) => {
   for (const o of orders) {
     try {
       const payload = o.payload || {};
-      let confirmed = null;
-      if (Array.isArray(payload.paymentConfirmed)) confirmed = payload.paymentConfirmed;
-      else if (payload.payment) confirmed = [payload.payment];
-      else if (typeof payload.paymentConfirmed === 'string') {
-        try { confirmed = JSON.parse(payload.paymentConfirmed); } catch { confirmed = null; }
-      }
-
+      const payments = extractPayments(payload, o.total);
       const customerName = o.customer?.name || payload.customer?.name || payload.customerName || '—';
       const displayId = o.displayId || o.id.slice(0, 8);
 
-      if (Array.isArray(confirmed) && confirmed.length > 0) {
-        for (const p of confirmed) {
+      if (Array.isArray(payments) && payments.length > 0) {
+        for (const p of payments) {
           const raw = (p && (p.method || p.methodCode || p.name)) || 'Outros';
           const method = normalizeMethod(raw);
           const amt = p.amount != null ? Number(p.amount) : Number(o.total || 0);
@@ -571,8 +566,8 @@ cashRouter.get('/sessions/:sessionId/orders-by-method', async (req, res) => {
           byMethod[method].push({ displayId, customerName, amount: amt });
         }
       } else {
-        if (!byMethod['Outros']) byMethod['Outros'] = [];
-        byMethod['Outros'].push({ displayId, customerName, amount: Number(o.total || 0) });
+        if (!byMethod['Não identificado']) byMethod['Não identificado'] = [];
+        byMethod['Não identificado'].push({ displayId, customerName, amount: Number(o.total || 0) });
       }
     } catch { /* skip malformed order */ }
   }
