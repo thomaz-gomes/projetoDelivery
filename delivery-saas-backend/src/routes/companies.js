@@ -124,7 +124,7 @@ companiesRouter.patch('/company', requireRole('ADMIN'), async (req, res) => {
         if (req.body[k] !== undefined) toSave[k] = req.body[k]
       }
       // fiscal-related settings that we persist to the settings.json
-      const fiscalKeys = ['cnpj', 'ie', 'nfeSerie', 'nfeEnvironment', 'csc', 'cscId']
+      const fiscalKeys = ['cnpj', 'ie', 'nfeSerie', 'nfeEnvironment', 'csc', 'cscId', 'infRespTec']
       for (const k of fiscalKeys) {
         if (req.body[k] !== undefined) toSave[k] = req.body[k]
       }
