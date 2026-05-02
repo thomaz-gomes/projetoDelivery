@@ -6,9 +6,14 @@ import { prisma } from '../../prisma.js';
 export function normalizeMethod(name) {
   if (!name) return 'Outros';
   const s = String(name).toLowerCase();
-  if (s.includes('din') || s.includes('cash') || s.includes('money') || s.includes('dinheiro')) return 'Dinheiro';
+  if (s.includes('din') || s.includes('cash') || s.includes('money')) return 'Dinheiro';
   if (s.includes('pix')) return 'PIX';
+  if (s.includes('debit') || s === 'debito') return 'Débito';
   if (s.includes('card') || s.includes('cartao') || s.includes('credito') || s.includes('cred')) return 'Cartão';
+  if (s.includes('digital') || s.includes('wallet') || s.includes('carteira')) return 'Pagamento Digital';
+  if (s.includes('voucher') || s.includes('vale') || s.includes('meal') || s.includes('food')) return 'Voucher';
+  if (s === 'other' || s === 'outros' || s === 'outro') return 'Outros';
+  if (s.includes('online')) return 'Pagamento Online';
   return String(name).trim();
 }
 

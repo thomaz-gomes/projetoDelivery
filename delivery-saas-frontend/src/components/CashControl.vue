@@ -348,7 +348,8 @@ async function partialSummary() {
     const { data: session } = await api.get('/cash/current');
     if (!session) { Swal.close(); currentSession.value = null; return Swal.fire('Nenhum caixa aberto', '', 'info'); }
 
-    const summary = await fetchCashSummary();
+    const summary = await fetchCashSummary(true);
+    const paymentsByMethod = (summary && summary.paymentsByMethod) ? summary.paymentsByMethod : {};
     const inRegisterByMethod = (summary && summary.inRegisterByMethod) ? summary.inRegisterByMethod : {};
     const totalWithdrawals = Number((summary && summary.totalWithdrawals) ? summary.totalWithdrawals : 0);
     const totalReinforcements = Number((summary && summary.totalReinforcements) ? summary.totalReinforcements : 0);
@@ -357,19 +358,28 @@ async function partialSummary() {
     const diff = expected != null ? (Number(expected || 0) - storedBalance) : 0;
     const hasDiff = diff && Math.abs(diff) > 0.0001;
 
-    const row = (label, value, isNegative = false) => {
+    const row = (label, value, isNegative = false, sublabel = '') => {
       const amount = Number(value || 0);
       const color = amount === 0 ? '#adb5bd' : (isNegative ? '#dc3545' : '#2d8a4e');
       const weight = amount !== 0 ? '600' : '400';
+      const sub = sublabel ? `<div style="font-size:0.72rem;color:#adb5bd;margin-top:1px">${sublabel}</div>` : '';
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;border-bottom:1px solid #f0f0f0">
-        <span style="color:#495057;font-size:0.875rem">${label}</span>
+        <div><span style="color:#495057;font-size:0.875rem">${label}</span>${sub}</div>
         <span style="color:${color};font-weight:${weight};font-size:0.875rem">${formatCurrency(amount)}</span>
       </div>`;
     };
 
-    const paymentRows = Object.keys(inRegisterByMethod).length > 0
-      ? Object.entries(inRegisterByMethod).map(([m, v]) => row(m, v)).join('')
+    // Sales breakdown: show what was actually collected per method (no opening balance added)
+    const salesRows = Object.keys(paymentsByMethod).length > 0
+      ? Object.entries(paymentsByMethod).map(([m, v]) => row(m, v)).join('')
       : `<div style="color:#adb5bd;padding:10px 12px;font-size:0.875rem">Nenhum valor registrado</div>`;
+
+    // Expected cash physically in the drawer = opening + cash sales + reinforcements - withdrawals
+    const expectedCash = Number(inRegisterByMethod['Dinheiro'] || 0);
+    const openingAmount = Number(session.openingAmount || 0);
+    const cashSales = Number(paymentsByMethod['Dinheiro'] || 0);
+    const cashBalanceRow = row('Saldo em caixa (Dinheiro)', expectedCash, false,
+      `Abertura ${formatCurrency(openingAmount)} + vendas ${formatCurrency(cashSales)}${totalReinforcements ? ' + reforços ' + formatCurrency(totalReinforcements) : ''}${totalWithdrawals ? ' − retiradas ' + formatCurrency(totalWithdrawals) : ''}`);
 
     const diffBanner = hasDiff ? `
       <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
@@ -383,9 +393,15 @@ async function partialSummary() {
     const html = `<div style="text-align:left">
       ${diffBanner}
       <div style="margin-bottom:14px">
-        ${sectionTitle('Valores em caixa por forma de pagamento')}
+        ${sectionTitle('Receita por forma de pagamento')}
         <div style="background:#f8f9fa;border-radius:8px;overflow:hidden">
-          ${paymentRows}
+          ${salesRows}
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        ${sectionTitle('Saldo esperado em caixa')}
+        <div style="background:#f8f9fa;border-radius:8px;overflow:hidden">
+          ${cashBalanceRow}
         </div>
       </div>
       <div>
