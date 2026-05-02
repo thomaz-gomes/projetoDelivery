@@ -113,7 +113,7 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"'`]/g, (s) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;', '`':'&#96;'})[s]);
 }
 
-function showSessionDetails(s) {
+async function showSessionDetails(s) {
   try {
     // prefer summary if available
     const summary = s.summary || {};
@@ -122,12 +122,34 @@ function showSessionDetails(s) {
     const totalWithdrawals = summary.totalWithdrawals || totalWithdrawalsFor(s);
     const totalReinforcements = summary.totalReinforcements || totalReinforcementsFor(s);
 
+    // pre-fetch orders grouped by payment method for the collapsible lists
+    let ordersByMethod = {};
+    try {
+      const { data } = await api.get(`/cash/sessions/${s.id}/orders-by-method`);
+      ordersByMethod = data || {};
+    } catch (e) { console.warn('Could not load orders by method', e); }
+
     // build rows for payment methods
     const methods = Object.keys(inRegisterByMethod).length ? Object.keys(inRegisterByMethod) : (Object.keys(paymentsByMethod).length ? Object.keys(paymentsByMethod) : ['Dinheiro']);
     const rows = methods.map(m => {
       const expectedNum = Number(inRegisterByMethod[m] || paymentsByMethod[m] || 0);
       const inputId = `cf-in-${m.replace(/\s+/g,'_')}`;
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee"><div style="flex:1">${escapeHtml(m)}</div><div style="flex:1;text-align:center">${formatCurrency(expectedNum)}</div><div style="flex:1;text-align:center"><input id="${inputId}" inputmode="decimal" class="swal2-input" value="${(function(v){try{return (typeof v==='number'? (v.toFixed? v.toFixed(2):String(v)) : String(v));}catch(e){return String(v) } })(formatCurrency(expectedNum).replace('R$ ','').replace('.','').replace(',','.'))}" style="width:120px;margin:0 auto"></div></div>`;
+      const orders = ordersByMethod[m] || [];
+      const orderListHtml = orders.length
+        ? `<table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:0.82rem">
+            <thead><tr style="background:#f5f5f5"><th style="text-align:left;padding:3px 6px">Pedido</th><th style="text-align:left;padding:3px 6px">Cliente</th><th style="text-align:right;padding:3px 6px">Valor</th></tr></thead>
+            <tbody>${orders.map(o => `<tr style="border-top:1px solid #eee"><td style="padding:3px 6px">#${escapeHtml(String(o.displayId||''))}</td><td style="padding:3px 6px">${escapeHtml(o.customerName||'—')}</td><td style="text-align:right;padding:3px 6px">${formatCurrency(o.amount)}</td></tr>`).join('')}</tbody>
+          </table>`
+        : `<div style="padding:6px;color:#aaa;font-size:0.82rem">Nenhum pedido encontrado</div>`;
+      return `<details style="border-bottom:1px solid #eee">
+        <summary style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;cursor:pointer;list-style:none;gap:8px">
+          <span style="flex:1;font-size:0.9rem">${escapeHtml(m)}</span>
+          <span style="flex:1;text-align:center;font-size:0.9rem">${formatCurrency(expectedNum)}</span>
+          <span style="flex:1;text-align:center"><input id="${inputId}" inputmode="decimal" class="swal2-input" value="${(function(v){try{return (typeof v==='number'? (v.toFixed? v.toFixed(2):String(v)) : String(v));}catch(e){return String(v) } })(formatCurrency(expectedNum).replace('R$ ','').replace('.','').replace(',','.'))}" style="width:120px;margin:0 auto" onclick="event.stopPropagation()"></span>
+          <span style="color:#aaa;font-size:0.75rem;white-space:nowrap">${orders.length} pedido${orders.length!==1?'s':''} ▶</span>
+        </summary>
+        <div style="padding:4px 8px 10px 8px;background:#fafafa">${orderListHtml}</div>
+      </details>`;
     }).join('\n');
 
     const opening = Number(s.openingAmount||0);
