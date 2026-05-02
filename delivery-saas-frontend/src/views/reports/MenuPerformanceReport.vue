@@ -90,7 +90,7 @@
               <small :class="kpi.changeClass">{{ kpi.changeIcon }} {{ kpi.changePercent }}</small>
             </div>
           </div>
-          <canvas ref="salesChartRef" height="80"></canvas>
+          <BaseChart type="line" :data="salesChartData" :options="salesChartOptions" height="260px" />
         </div>
       </div>
 
@@ -107,7 +107,7 @@
             </div>
             <div class="card-body">
               <p class="mb-2">Melhor horário: <strong>{{ byHourData.bestHour }}</strong> — {{ byHourData.bestHourCount }} vendas</p>
-              <canvas ref="hourChartRef" height="200"></canvas>
+              <BaseChart type="bar" :data="hourChartData" :options="hourChartOptions" height="300px" />
             </div>
           </div>
         </div>
@@ -116,7 +116,7 @@
             <div class="card-header"><strong>Dias com mais vendas</strong></div>
             <div class="card-body">
               <p class="mb-2">Melhor dia: <strong>{{ byWeekdayData.bestDay }}</strong> — {{ byWeekdayData.bestDayCount }} pedidos</p>
-              <canvas ref="weekdayChartRef" height="200"></canvas>
+              <BaseChart type="bar" :data="weekdayChartData" :options="weekdayChartOptions" height="280px" />
             </div>
           </div>
         </div>
@@ -156,9 +156,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../../api.js'
-import Chart from 'chart.js/auto'
+import BaseChart from '@/components/BaseChart.vue'
 
 const loading = ref(false)
 const loaded = ref(false)
@@ -184,13 +184,6 @@ const sales = ref({ current: {}, previous: {} })
 const byHourData = ref({ labels: [], data: [], bestHour: '-', bestHourCount: 0 })
 const byWeekdayData = ref({ labels: [], data: [], bestDay: '-', bestDayCount: 0 })
 const productRanking = ref([])
-
-const salesChartRef = ref(null)
-const hourChartRef = ref(null)
-const weekdayChartRef = ref(null)
-let salesChartInstance = null
-let hourChartInstance = null
-let weekdayChartInstance = null
 
 const comparisonLabel = computed(() => {
   if (filters.value.period === 'today') return 'Comparação com o dia anterior'
@@ -252,6 +245,35 @@ const salesKpis = computed(() => {
   ]
 })
 
+const salesChartData = computed(() => {
+  if (!sales.value) return { labels: [], datasets: [] }
+  const daily = sales.value.current?.daily || {}
+  const prevDaily = sales.value.previous?.daily || {}
+  const labels = Object.keys(daily).sort()
+  const prevLabels = Object.keys(prevDaily).sort()
+  return {
+    labels: labels.map(d => d.slice(5)),
+    datasets: [
+      { label: 'Período atual', data: labels.map(d => daily[d]?.count || 0), borderColor: '#105784', tension: 0.3, fill: false },
+      { label: 'Período anterior', data: prevLabels.map(d => prevDaily[d]?.count || 0), borderColor: '#ccc', borderDash: [5, 5], tension: 0.3, fill: false },
+    ],
+  }
+})
+
+const hourChartData = computed(() => ({
+  labels: byHourData.value?.labels || [],
+  datasets: [{ data: byHourData.value?.data || [], backgroundColor: '#105784' }],
+}))
+
+const weekdayChartData = computed(() => ({
+  labels: byWeekdayData.value?.labels || [],
+  datasets: [{ data: byWeekdayData.value?.data || [], backgroundColor: '#105784' }],
+}))
+
+const salesChartOptions = { plugins: { legend: { position: 'bottom' } } }
+const hourChartOptions = { indexAxis: 'y', plugins: { legend: { display: false } } }
+const weekdayChartOptions = { plugins: { legend: { display: false } } }
+
 async function loadReport() {
   loading.value = true
   const params = { dateFrom: filters.value.dateFrom, dateTo: filters.value.dateTo }
@@ -273,60 +295,10 @@ async function loadReport() {
     productRanking.value = rankingRes.data
 
     loaded.value = true
-    await nextTick()
-    renderCharts()
   } catch (e) {
     console.error('Error loading menu performance report:', e)
   } finally {
     loading.value = false
-  }
-}
-
-function renderCharts() {
-  // Sales line chart
-  if (salesChartInstance) salesChartInstance.destroy()
-  if (salesChartRef.value) {
-    const daily = sales.value.current?.daily || {}
-    const prevDaily = sales.value.previous?.daily || {}
-    const labels = Object.keys(daily).sort()
-    const prevLabels = Object.keys(prevDaily).sort()
-    salesChartInstance = new Chart(salesChartRef.value, {
-      type: 'line',
-      data: {
-        labels: labels.map(d => d.slice(5)),
-        datasets: [
-          { label: 'Período atual', data: labels.map(d => daily[d]?.count || 0), borderColor: '#105784', tension: 0.3, fill: false },
-          { label: 'Período anterior', data: prevLabels.map(d => prevDaily[d]?.count || 0), borderColor: '#ccc', borderDash: [5, 5], tension: 0.3, fill: false },
-        ],
-      },
-      options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
-    })
-  }
-
-  // Hour chart
-  if (hourChartInstance) hourChartInstance.destroy()
-  if (hourChartRef.value) {
-    hourChartInstance = new Chart(hourChartRef.value, {
-      type: 'bar',
-      data: {
-        labels: byHourData.value.labels,
-        datasets: [{ data: byHourData.value.data, backgroundColor: '#105784' }],
-      },
-      options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } } },
-    })
-  }
-
-  // Weekday chart
-  if (weekdayChartInstance) weekdayChartInstance.destroy()
-  if (weekdayChartRef.value) {
-    weekdayChartInstance = new Chart(weekdayChartRef.value, {
-      type: 'bar',
-      data: {
-        labels: byWeekdayData.value.labels,
-        datasets: [{ data: byWeekdayData.value.data, backgroundColor: '#105784' }],
-      },
-      options: { responsive: true, plugins: { legend: { display: false } } },
-    })
   }
 }
 
