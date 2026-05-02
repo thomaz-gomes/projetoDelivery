@@ -93,14 +93,21 @@ function shiftBlocked(shift) {
   return null;
 }
 
+let dataInterval = null;
+function onVisibility() { if (!document.hidden) loadData(); }
+
 onMounted(() => {
   updateClock();
   clockInterval = setInterval(updateClock, 1000);
   loadData();
+  dataInterval = setInterval(loadData, 30000);
+  document.addEventListener('visibilitychange', onVisibility);
 });
 
 onUnmounted(() => {
   if (clockInterval) clearInterval(clockInterval);
+  if (dataInterval) clearInterval(dataInterval);
+  document.removeEventListener('visibilitychange', onVisibility);
 });
 </script>
 

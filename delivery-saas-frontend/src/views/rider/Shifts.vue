@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import api from '../../api';
 import RiderHeader from '../../components/rider/RiderHeader.vue';
 import MobileBottomNav from '../../components/MobileBottomNav.vue';
@@ -62,7 +62,18 @@ async function encerrarTurno() {
   }
 }
 
-onMounted(load);
+let pollInterval = null;
+function onVisibility() { if (!document.hidden) load(); }
+
+onMounted(() => {
+  load();
+  pollInterval = setInterval(load, 30000);
+  document.addEventListener('visibilitychange', onVisibility);
+});
+onUnmounted(() => {
+  clearInterval(pollInterval);
+  document.removeEventListener('visibilitychange', onVisibility);
+});
 </script>
 
 <template>

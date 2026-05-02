@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../../api';
 import RiderHeader from '../../components/rider/RiderHeader.vue';
@@ -37,7 +37,18 @@ async function encerrarTurno() {
 
 function go(path) { router.push(path); }
 
-onMounted(load);
+let pollInterval = null;
+function onVisibility() { if (!document.hidden) load(); }
+
+onMounted(() => {
+  load();
+  pollInterval = setInterval(load, 30000);
+  document.addEventListener('visibilitychange', onVisibility);
+});
+onUnmounted(() => {
+  clearInterval(pollInterval);
+  document.removeEventListener('visibilitychange', onVisibility);
+});
 </script>
 
 <template>
