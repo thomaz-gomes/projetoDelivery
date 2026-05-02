@@ -5,6 +5,7 @@ import {
   aggregatePaymentsByMethod,
   calculateExpectedValues,
   calculateDifferences,
+  normalizeMethod,
 } from '../services/cash/paymentAggregator.js';
 import { createFinancialEntriesForCashSession } from '../services/financial/cashSessionBridge.js';
 
@@ -527,6 +528,56 @@ cashRouter.post('/close', async (req, res) => {
   } catch (e) {}
 
   res.json({ ok: true, session: sessionToJSON(closedSession) });
+});
+
+// ─── GET /cash/sessions/:sessionId/orders-by-method ───────────────────
+
+cashRouter.get('/sessions/:sessionId/orders-by-method', async (req, res) => {
+  const { companyId } = req.user;
+  const { sessionId } = req.params;
+
+  const session = await prisma.cashSession.findFirst({ where: { id: sessionId, companyId } });
+  if (!session) return res.status(404).json({ message: 'Sessão não encontrada' });
+
+  const orders = await prisma.order.findMany({
+    where: { companyId, cashSessionId: sessionId, status: 'CONCLUIDO' },
+    select: {
+      id: true, displayId: true, total: true, payload: true,
+      customer: { select: { name: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const byMethod = {};
+  for (const o of orders) {
+    try {
+      const payload = o.payload || {};
+      let confirmed = null;
+      if (Array.isArray(payload.paymentConfirmed)) confirmed = payload.paymentConfirmed;
+      else if (payload.payment) confirmed = [payload.payment];
+      else if (typeof payload.paymentConfirmed === 'string') {
+        try { confirmed = JSON.parse(payload.paymentConfirmed); } catch { confirmed = null; }
+      }
+
+      const customerName = o.customer?.name || payload.customer?.name || payload.customerName || '—';
+      const displayId = o.displayId || o.id.slice(0, 8);
+
+      if (Array.isArray(confirmed) && confirmed.length > 0) {
+        for (const p of confirmed) {
+          const raw = (p && (p.method || p.methodCode || p.name)) || 'Outros';
+          const method = normalizeMethod(raw);
+          const amt = p.amount != null ? Number(p.amount) : Number(o.total || 0);
+          if (!byMethod[method]) byMethod[method] = [];
+          byMethod[method].push({ displayId, customerName, amount: amt });
+        }
+      } else {
+        if (!byMethod['Outros']) byMethod['Outros'] = [];
+        byMethod['Outros'].push({ displayId, customerName, amount: Number(o.total || 0) });
+      }
+    } catch { /* skip malformed order */ }
+  }
+
+  res.json(byMethod);
 });
 
 // ─── GET /cash/sessions ────────────────────────────────────────────────
