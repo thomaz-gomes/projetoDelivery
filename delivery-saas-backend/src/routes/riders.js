@@ -159,8 +159,14 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
     if (!riderId) return res.status(400).json({ message: 'riderId não encontrado no token' });
 
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    // Limites do dia em BRT (UTC-3): 03:00 UTC = 00:00 BRT
+    const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const nowBRT = new Date(now.getTime() - BRT_OFFSET_MS);
+    const brtMidnight = new Date(nowBRT);
+    brtMidnight.setUTCHours(0, 0, 0, 0);
+    const todayStart = new Date(brtMidnight.getTime() + BRT_OFFSET_MS);
+    const tomorrow = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+    const monthStart = new Date(Date.UTC(nowBRT.getUTCFullYear(), nowBRT.getUTCMonth(), 1) + BRT_OFFSET_MS);
 
     // Today earnings (sum of riderTransaction amounts)
     const todayTxAgg = await prisma.riderTransaction.aggregate({
@@ -186,9 +192,7 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
       where: { riderId, status: 'CONCLUIDO', updatedAt: { gte: monthStart } }
     });
 
-    // Check-in today
-    const tomorrow = new Date(todayStart);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // Check-in hoje (BRT)
     const checkinToday = await prisma.riderCheckin.findFirst({
       where: { riderId, checkinAt: { gte: todayStart, lt: tomorrow } }
     });
@@ -469,20 +473,23 @@ ridersRouter.post('/me/checkin', async (req, res) => {
   });
   if (!assignment) return res.status(403).json({ message: 'Você não está atribuído a este turno' });
 
-  // Evitar check-in duplicado no mesmo turno/dia
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // Limites do dia em BRT (UTC-3): meia-noite BRT = 03:00 UTC
+  const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+  const nowUTC = new Date();
+  const nowBRT = new Date(nowUTC.getTime() - BRT_OFFSET_MS);
+  const brtMidnight = new Date(nowBRT);
+  brtMidnight.setUTCHours(0, 0, 0, 0); // meia-noite no "calendário BRT"
+  const today = new Date(brtMidnight.getTime() + BRT_OFFSET_MS);    // 03:00 UTC = 00:00 BRT
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000); // 03:00 UTC próximo dia
 
+  // Evitar check-in duplicado no mesmo turno/dia (BRT)
   const existing = await prisma.riderCheckin.findFirst({
     where: { riderId: rider.id, shiftId, checkinAt: { gte: today, lt: tomorrow } }
   });
   if (existing) return res.status(409).json({ message: 'Você já fez check-in neste turno hoje', checkin: existing });
 
-  // Bloquear check-in se há um turno em andamento (outro turno cujo endTime ainda não passou)
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  // Bloquear check-in se há um turno em andamento (outro turno cujo endTime ainda não passou) — usa hora BRT
+  const nowMinutes = nowBRT.getUTCHours() * 60 + nowBRT.getUTCMinutes();
   const todayCheckins = await prisma.riderCheckin.findMany({
     where: { riderId: rider.id, checkinAt: { gte: today, lt: tomorrow } },
     include: { shift: true }
