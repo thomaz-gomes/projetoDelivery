@@ -56,9 +56,7 @@
               <span class="badge bg-secondary ms-auto">Top {{ topByCount.length }}</span>
             </div>
             <div class="card-body">
-              <div class="chart-container" style="position:relative; height:360px;">
-                <canvas ref="chartCount"></canvas>
-              </div>
+              <BaseChart type="bar" :data="chartCountData" :options="chartCountOptions" height="400px" />
             </div>
           </div>
         </div>
@@ -72,9 +70,7 @@
               <span class="badge bg-secondary ms-auto">Top {{ topByRevenue.length }}</span>
             </div>
             <div class="card-body">
-              <div class="chart-container" style="position:relative; height:360px;">
-                <canvas ref="chartRevenue"></canvas>
-              </div>
+              <BaseChart type="bar" :data="chartRevenueData" :options="chartRevenueOptions" height="400px" />
             </div>
           </div>
         </div>
@@ -88,9 +84,7 @@
               <span class="badge bg-secondary ms-auto">Top {{ filters.topN }} produtos</span>
             </div>
             <div class="card-body">
-              <div class="chart-container" style="position:relative; height:360px;">
-                <canvas ref="chartWeekday"></canvas>
-              </div>
+              <BaseChart type="bar" :data="chartWeekdayData" :options="chartWeekdayOptions" height="300px" />
             </div>
           </div>
         </div>
@@ -104,9 +98,7 @@
               <span class="badge bg-secondary ms-auto">Top {{ filters.topN }} produtos</span>
             </div>
             <div class="card-body">
-              <div class="chart-container" style="position:relative; height:380px;">
-                <canvas ref="chartHour"></canvas>
-              </div>
+              <BaseChart type="line" :data="chartHourData" :options="chartHourOptions" height="300px" />
             </div>
           </div>
         </div>
@@ -116,13 +108,8 @@
 </template>
 
 <script>
-import Chart from 'chart.js/auto';
+import BaseChart from '@/components/BaseChart.vue';
 import api from '../../api';
-
-const COLORS = [
-  '#4f81e0', '#e04f4f', '#4fc97a', '#f5a623', '#9b59b6',
-  '#1abc9c', '#e67e22', '#e91e63', '#00bcd4', '#607d8b',
-];
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -135,6 +122,8 @@ function firstDayOfMonthStr() {
 
 export default {
   name: 'ProductsReport',
+
+  components: { BaseChart },
 
   data() {
     return {
@@ -150,7 +139,6 @@ export default {
       topByRevenue: [],
       byWeekday: null,
       byHour: null,
-      charts: {},
     };
   },
 
@@ -161,17 +149,95 @@ export default {
         !this.topByRevenue.length
       );
     },
-  },
-
-  beforeUnmount() {
-    this.destroyCharts();
+    chartCountData() {
+      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
+      const items = this.topByCount || []
+      const labels = items.map(i => i.name)
+      const colors = items.map((_, i) => COLORS[i % COLORS.length])
+      return { labels, datasets: [{ label: 'Quantidade vendida', data: items.map(i => i.quantity), backgroundColor: colors, borderColor: colors.map(c => c + 'cc'), borderWidth: 1, borderRadius: 4 }] }
+    },
+    chartCountOptions() {
+      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
+      const labels = (this.topByCount || []).map(i => i.name)
+      return {
+        indexAxis: 'y',
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} unidades` } } },
+        scales: {
+          x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f0f0f0' } },
+          y: { ticks: { font: { size: 12 }, callback: (val, idx) => { const l = labels[idx] || ''; return l.length > 30 ? l.slice(0, 28) + '…' : l } } },
+        },
+      }
+    },
+    chartRevenueData() {
+      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
+      const items = this.topByRevenue || []
+      const labels = items.map(i => i.name)
+      const colors = items.map((_, i) => COLORS[i % COLORS.length])
+      return { labels, datasets: [{ label: 'Faturamento (R$)', data: items.map(i => i.revenue), backgroundColor: colors, borderColor: colors.map(c => c + 'cc'), borderWidth: 1, borderRadius: 4 }] }
+    },
+    chartRevenueOptions() {
+      const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+      const fmtShort = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v)
+      const labels = (this.topByRevenue || []).map(i => i.name)
+      return {
+        indexAxis: 'y',
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` ${fmt(ctx.raw)}` } } },
+        scales: {
+          x: { beginAtZero: true, ticks: { callback: fmtShort }, grid: { color: '#f0f0f0' } },
+          y: { ticks: { font: { size: 12 }, callback: (val, idx) => { const l = labels[idx] || ''; return l.length > 30 ? l.slice(0, 28) + '…' : l } } },
+        },
+      }
+    },
+    chartWeekdayData() {
+      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
+      const { labels = [], series = [] } = this.byWeekday || {}
+      return {
+        labels,
+        datasets: series.map((s, i) => ({
+          label: s.name.length > 25 ? s.name.slice(0, 23) + '…' : s.name,
+          data: s.data,
+          backgroundColor: COLORS[i % COLORS.length] + 'cc',
+          borderColor: COLORS[i % COLORS.length],
+          borderWidth: 1,
+          borderRadius: 3,
+        })),
+      }
+    },
+    chartWeekdayOptions() {
+      return {
+        plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw} un` } } },
+        scales: { x: { grid: { color: '#f0f0f0' } }, y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f0f0f0' } } },
+      }
+    },
+    chartHourData() {
+      const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
+      const { labels = [], series = [] } = this.byHour || {}
+      return {
+        labels,
+        datasets: series.map((s, i) => ({
+          label: s.name.length > 25 ? s.name.slice(0, 23) + '…' : s.name,
+          data: s.data,
+          borderColor: COLORS[i % COLORS.length],
+          backgroundColor: COLORS[i % COLORS.length] + '33',
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: false,
+          tension: 0.3,
+        })),
+      }
+    },
+    chartHourOptions() {
+      return {
+        plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw} un` } } },
+        scales: { x: { grid: { color: '#f0f0f0' } }, y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f0f0f0' } } },
+      }
+    },
   },
 
   methods: {
     async load() {
       this.loading = true;
       this.loaded = false;
-      this.destroyCharts();
 
       const params = {
         dateFrom: this.filters.from,
@@ -193,232 +259,12 @@ export default {
         this.byWeekday = r3.data || null;
         this.byHour = r4.data || null;
         this.loaded = true;
-
-        await this.$nextTick();
-        this.buildCharts();
       } catch (e) {
         console.error('ProductsReport load error:', e);
         alert('Erro ao carregar dados do relatório.');
       } finally {
         this.loading = false;
       }
-    },
-
-    destroyCharts() {
-      for (const key of Object.keys(this.charts)) {
-        try { this.charts[key]?.destroy(); } catch (_) {}
-      }
-      this.charts = {};
-    },
-
-    buildCharts() {
-      this.buildCountChart();
-      this.buildRevenueChart();
-      this.buildWeekdayChart();
-      this.buildHourChart();
-    },
-
-    buildCountChart() {
-      const canvas = this.$refs.chartCount;
-      if (!canvas || !this.topByCount.length) return;
-
-      const labels = this.topByCount.map((p) => p.name);
-      const data = this.topByCount.map((p) => p.quantity);
-      const colors = labels.map((_, i) => COLORS[i % COLORS.length]);
-
-      this.charts.count = new Chart(canvas, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [
-            {
-              label: 'Quantidade vendida',
-              data,
-              backgroundColor: colors,
-              borderColor: colors.map((c) => c + 'cc'),
-              borderWidth: 1,
-              borderRadius: 4,
-            },
-          ],
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => ` ${ctx.raw} unidades`,
-              },
-            },
-          },
-          scales: {
-            x: {
-              beginAtZero: true,
-              ticks: { precision: 0 },
-              grid: { color: '#f0f0f0' },
-            },
-            y: {
-              ticks: {
-                font: { size: 12 },
-                callback: (val, idx) => {
-                  const lbl = labels[idx] || '';
-                  return lbl.length > 30 ? lbl.slice(0, 28) + '…' : lbl;
-                },
-              },
-            },
-          },
-        },
-      });
-    },
-
-    buildRevenueChart() {
-      const canvas = this.$refs.chartRevenue;
-      if (!canvas || !this.topByRevenue.length) return;
-
-      const labels = this.topByRevenue.map((p) => p.name);
-      const data = this.topByRevenue.map((p) => Number(p.revenue.toFixed(2)));
-      const colors = labels.map((_, i) => COLORS[i % COLORS.length]);
-
-      this.charts.revenue = new Chart(canvas, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [
-            {
-              label: 'Faturamento (R$)',
-              data,
-              backgroundColor: colors,
-              borderColor: colors.map((c) => c + 'cc'),
-              borderWidth: 1,
-              borderRadius: 4,
-            },
-          ],
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx) =>
-                  ` ${new Intl.NumberFormat('pt-BR', {
-                    style: 'currency',
-                    currency: 'BRL',
-                  }).format(ctx.raw)}`,
-              },
-            },
-          },
-          scales: {
-            x: {
-              beginAtZero: true,
-              ticks: {
-                callback: (val) =>
-                  new Intl.NumberFormat('pt-BR', {
-                    style: 'currency',
-                    currency: 'BRL',
-                    maximumFractionDigits: 0,
-                  }).format(val),
-              },
-              grid: { color: '#f0f0f0' },
-            },
-            y: {
-              ticks: {
-                font: { size: 12 },
-                callback: (val, idx) => {
-                  const lbl = labels[idx] || '';
-                  return lbl.length > 30 ? lbl.slice(0, 28) + '…' : lbl;
-                },
-              },
-            },
-          },
-        },
-      });
-    },
-
-    buildWeekdayChart() {
-      const canvas = this.$refs.chartWeekday;
-      if (!canvas || !this.byWeekday) return;
-
-      const { labels, series } = this.byWeekday;
-      const datasets = series.map((s, i) => ({
-        label: s.name.length > 25 ? s.name.slice(0, 23) + '…' : s.name,
-        data: s.data,
-        backgroundColor: COLORS[i % COLORS.length] + 'cc',
-        borderColor: COLORS[i % COLORS.length],
-        borderWidth: 1,
-        borderRadius: 3,
-      }));
-
-      this.charts.weekday = new Chart(canvas, {
-        type: 'bar',
-        data: { labels, datasets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'bottom' },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw} un`,
-              },
-            },
-          },
-          scales: {
-            x: { grid: { color: '#f0f0f0' } },
-            y: {
-              beginAtZero: true,
-              ticks: { precision: 0 },
-              grid: { color: '#f0f0f0' },
-            },
-          },
-        },
-      });
-    },
-
-    buildHourChart() {
-      const canvas = this.$refs.chartHour;
-      if (!canvas || !this.byHour) return;
-
-      const { labels, series } = this.byHour;
-      const datasets = series.map((s, i) => ({
-        label: s.name.length > 25 ? s.name.slice(0, 23) + '…' : s.name,
-        data: s.data,
-        borderColor: COLORS[i % COLORS.length],
-        backgroundColor: COLORS[i % COLORS.length] + '33',
-        borderWidth: 2,
-        pointRadius: 3,
-        fill: false,
-        tension: 0.3,
-      }));
-
-      this.charts.hour = new Chart(canvas, {
-        type: 'line',
-        data: { labels, datasets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'bottom' },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw} un`,
-              },
-            },
-          },
-          scales: {
-            x: { grid: { color: '#f0f0f0' } },
-            y: {
-              beginAtZero: true,
-              ticks: { precision: 0 },
-              grid: { color: '#f0f0f0' },
-            },
-          },
-        },
-      });
     },
   },
 };
