@@ -363,10 +363,10 @@ async function partialSummary() {
       const amount = Number(value || 0);
       const color = amount === 0 ? '#adb5bd' : (isNegative ? '#dc3545' : '#2d8a4e');
       const weight = amount !== 0 ? '600' : '400';
-      const sub = sublabel ? `<div style="font-size:0.72rem;color:#adb5bd;margin-top:1px">${sublabel}</div>` : '';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;border-bottom:1px solid #f0f0f0">
-        <div><span style="color:#495057;font-size:0.875rem">${label}</span>${sub}</div>
-        <span style="color:${color};font-weight:${weight};font-size:0.875rem">${formatCurrency(amount)}</span>
+      const sub = sublabel ? `<div style="font-size:0.72rem;color:#adb5bd;margin-top:1px;max-width:260px">${sublabel}</div>` : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid #f0f0f0">
+        <div style="min-width:0"><span style="color:#495057;font-size:0.875rem">${label}</span>${sub}</div>
+        <span style="color:${color};font-weight:${weight};font-size:0.875rem;white-space:nowrap;flex-shrink:0">${formatCurrency(amount)}</span>
       </div>`;
     };
 
@@ -381,10 +381,21 @@ async function partialSummary() {
     const cashBalanceRow = row('Saldo em caixa (Dinheiro)', expectedCash, false,
       `${formatCurrency(openingAmount)} abertura + ${formatCurrency(cashSales)} vendas${totalReinforcements ? ' + ' + formatCurrency(totalReinforcements) + ' reforços' : ''}${totalWithdrawals ? ' − ' + formatCurrency(totalWithdrawals) + ' retiradas' : ''}`);
 
+    // Individual movements list
+    const movements = Array.isArray(summary?.movements) ? summary.movements : [];
+    const movementRows = movements.length > 0
+      ? movements.map(mv => {
+          const isSangria = mv.type === 'WITHDRAWAL';
+          const label = isSangria ? 'Sangria' : 'Reforço';
+          const note = mv.note ? ` — ${mv.note}` : '';
+          return row(`${label}${note}`, mv.amount, isSangria);
+        }).join('')
+      : `<div style="color:#adb5bd;padding:10px 12px;font-size:0.875rem">Nenhum movimento registrado</div>`;
+
     const diffBanner = hasDiff ? `
       <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:0.85rem;font-weight:600;color:#856404">Diferença encontrada</span>
-        <span style="font-weight:700;color:#dc3545">${formatCurrency(diff)}</span>
+        <span style="font-weight:700;color:#dc3545;white-space:nowrap">${formatCurrency(diff)}</span>
       </div>` : '';
 
     const sectionTitle = (label) =>
@@ -411,10 +422,9 @@ async function partialSummary() {
         </div>
       </div>
       <div>
-        ${sectionTitle('Movimentos de caixa')}
+        ${sectionTitle('Sangrias e reforços')}
         <div style="background:#f8f9fa;border-radius:8px;overflow:hidden">
-          ${row('Retiradas', totalWithdrawals, true)}
-          <div style="border-bottom:none">${row('Reforços', totalReinforcements)}</div>
+          ${movementRows}
         </div>
       </div>
     </div>`;

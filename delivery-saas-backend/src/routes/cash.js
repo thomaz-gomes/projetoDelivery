@@ -613,6 +613,12 @@ cashRouter.get('/summary/current', async (req, res) => {
       totalReinforcements,
       expectedBalance,
       openingAmount: opening,
+      movements: session.movements.map(m => ({
+        type: m.type,
+        amount: Number(m.amount || 0),
+        note: m.note || null,
+        createdAt: m.createdAt,
+      })),
     });
   } catch (e) {
     console.error('summary/current error:', e);
