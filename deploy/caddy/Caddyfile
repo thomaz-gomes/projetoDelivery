@@ -4,6 +4,7 @@
     # Retorno 2xx = autorizado; qualquer outro = recusado.
     on_demand_tls {
         ask http://localhost:3000/custom-domains/internal/check-domain
+        # interval e burst removidos no Caddy v2.11 — rate limit feito pelo endpoint ask
     }
 }
 
