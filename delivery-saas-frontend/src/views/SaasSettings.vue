@@ -9,6 +9,7 @@ const settings = ref({
   google_ai_api_key: '',
   usd_to_brl: '',
   custom_domain_server_ip: '',
+  ssl_email: '',
 })
 
 // ── SMTP / Email ──────────────────────────────────────────────────────────
@@ -103,6 +104,7 @@ async function saveCredits() {
       { key: 'credit_brl_price', value: String(settings.value.credit_brl_price).replace(',', '.') },
       { key: 'usd_to_brl', value: String(settings.value.usd_to_brl).replace(',', '.') },
       { key: 'custom_domain_server_ip', value: String(settings.value.custom_domain_server_ip || '').trim() },
+      { key: 'ssl_email', value: settings.value.ssl_email.trim() },
     ])
 
     // Salva os custos de cada serviço
@@ -144,6 +146,8 @@ async function load() {
     if (ipRow && ipRow.isSet) {
       settings.value.custom_domain_server_ip = ipRow.value
     }
+    if (data.find(r => r.key === 'ssl_email')?.isSet)
+      settings.value.ssl_email = data.find(r => r.key === 'ssl_email').value
     // Carrega configurações SMTP
     const smtpHostRow = data.find(r => r.key === 'smtp_host')
     if (smtpHostRow && smtpHostRow.isSet) smtp.value.smtp_host = smtpHostRow.value
@@ -951,6 +955,23 @@ onMounted(async () => {
             />
             <div class="form-text">
               IP do servidor exibido nas instruções de DNS para clientes que configuram domínio próprio.
+            </div>
+          </div>
+
+          <!-- Email para Let's Encrypt (Caddy SSL) -->
+          <div class="mb-4 p-3 rounded-3 bg-light border">
+            <label class="form-label fw-semibold mb-1">
+              <i class="bi bi-shield-lock me-1"></i>Email para Let's Encrypt (Caddy SSL)
+            </label>
+            <input
+              type="email"
+              class="form-control"
+              style="max-width: 320px;"
+              v-model="settings.ssl_email"
+              placeholder="admin@exemplo.com"
+            />
+            <div class="form-text">
+              Receberá notificações de expiração de certificados SSL.
             </div>
           </div>
 
