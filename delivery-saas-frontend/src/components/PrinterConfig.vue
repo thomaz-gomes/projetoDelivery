@@ -93,6 +93,45 @@
 
           </div>
 
+          <!-- ─── Impressora Fiscal (NF-e) ──────────────────────────────────── -->
+          <div class="mt-3 pt-3 border-top">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span class="fw-bold small">Impressora para NF-e / Cupom Fiscal</span>
+              <span class="badge bg-secondary" style="font-size:10px">opcional</span>
+            </div>
+            <p class="small text-muted mb-2">
+              Se não configurada, a NF-e será impressa na mesma impressora dos pedidos.
+            </p>
+            <div class="d-flex gap-2 align-items-end mb-2">
+              <div class="flex-grow-1">
+                <label class="form-label small mb-1">Nome da impressora fiscal</label>
+                <input v-model="fiscalPrinterName" type="text" class="form-control form-control-sm"
+                       placeholder="Ex: Microsoft Print to PDF"
+                       :list="'fiscal-printer-list'" />
+                <datalist id="fiscal-printer-list">
+                  <option v-for="name in printerNames" :key="name" :value="name" />
+                </datalist>
+              </div>
+              <div style="width:160px">
+                <label class="form-label small mb-1">Tipo</label>
+                <select v-model="fiscalPrinterType" class="form-select form-select-sm">
+                  <option value="">-- auto --</option>
+                  <option value="usb">USB / Raw</option>
+                  <option value="network">Rede (TCP)</option>
+                  <option value="windows">Windows (spooler)</option>
+                </select>
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-primary" @click="saveFiscalPrinter" :disabled="savingFiscal">
+                {{ fiscalSaved ? '✅ Salvo' : (savingFiscal ? 'Salvando...' : 'Salvar') }}
+              </button>
+              <button v-if="fiscalPrinterName" class="btn btn-sm btn-outline-danger" @click="clearFiscalPrinter">
+                Limpar
+              </button>
+            </div>
+          </div>
+
           <!-- Footer -->
           <div class="modal-footer">
             <div class="me-auto">
@@ -195,11 +234,21 @@ const pairingLoading  = ref(false);
 let pairingTimer      = null;
 let pairingPollTimer  = null;
 
+// Impressora fiscal
+const fiscalPrinterName = ref('');
+const fiscalPrinterType = ref('');
+const savingFiscal      = ref(false);
+const fiscalSaved       = ref(false);
+
 // ── Computed ──────────────────────────────────────────────────────────────
 const currentServerUrl = computed(() => {
   const base = api.defaults?.baseURL || '';
   return base.replace(/\/api\/?$/, '').replace(/\/$/, '') || window.location.origin;
 });
+
+const printerNames = computed(() =>
+  printers.value.map(p => (typeof p === 'string' ? p : p.name)).filter(Boolean)
+);
 
 const agentDownloadUrl = computed(() =>
   `${currentServerUrl.value}/downloads/delivery-print-agent-setup.exe`
@@ -217,10 +266,44 @@ function formatCountdown(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// ── Impressora Fiscal ─────────────────────────────────────────────────────
+async function loadFiscalPrinter() {
+  try {
+    const { data } = await api.get('/settings/printer-setting')
+    if (data?.setting) {
+      fiscalPrinterName.value = data.setting.fiscalPrinterName || ''
+      fiscalPrinterType.value = data.setting.fiscalPrinterType || ''
+    }
+  } catch (e) { /* silencioso */ }
+}
+
+async function saveFiscalPrinter() {
+  savingFiscal.value = true
+  fiscalSaved.value = false
+  try {
+    await api.post('/settings/printer-setting', {
+      fiscalPrinterName: fiscalPrinterName.value || null,
+      fiscalPrinterType: fiscalPrinterType.value || null,
+    })
+    fiscalSaved.value = true
+    setTimeout(() => { fiscalSaved.value = false }, 2000)
+  } catch (e) {
+    pushLog('Erro ao salvar impressora fiscal: ' + (e?.response?.data?.error || e?.message || String(e)))
+  } finally {
+    savingFiscal.value = false
+  }
+}
+
+async function clearFiscalPrinter() {
+  fiscalPrinterName.value = ''
+  fiscalPrinterType.value = ''
+  await saveFiscalPrinter()
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 onMounted(() => {
   visible.value = props.visible;
-  if (visible.value) discoverPrinters();
+  if (visible.value) { discoverPrinters(); loadFiscalPrinter(); }
 });
 
 onUnmounted(() => {
@@ -230,7 +313,7 @@ onUnmounted(() => {
 
 watch(() => props.visible, (v) => {
   visible.value = v;
-  if (v) discoverPrinters();
+  if (v) { discoverPrinters(); loadFiscalPrinter(); }
 });
 
 // ── Descoberta de impressoras ─────────────────────────────────────────────

@@ -692,6 +692,9 @@ model PrinterSetting {
   receiptTemplate         String? // Custom receipt template with {{placeholders}}. Null = use default.
   copies                  Int       @default(1) // Number of copies to print per order
   printerName             String? // Actual system printer name (e.g., "EPSON TM-T20II Receipt")
+  // Optional separate printer for NF-e/fiscal receipts (falls back to printerName if null)
+  fiscalPrinterName       String?
+  fiscalPrinterType       String?
   // Real-time rider tracking feature toggle (company-wide)
   trackingEnabled         Boolean   @default(false)
   createdAt               DateTime  @default(now())

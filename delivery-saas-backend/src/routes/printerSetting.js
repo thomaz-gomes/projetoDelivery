@@ -34,7 +34,8 @@ router.get('/', async (req, res) => {
 router.post('/', requireRole('ADMIN'), async (req, res) => {
   try {
     let { companyId, storeId, interface: iface, type, width,
-          receiptTemplate, copies, printerName } = req.body || {}
+          receiptTemplate, copies, printerName,
+          fiscalPrinterName, fiscalPrinterType } = req.body || {}
     if (!companyId && storeId) {
       const store = await prisma.store.findUnique({ where: { id: storeId }, select: { companyId: true } })
       if (!store) return res.status(404).json({ ok: false, message: 'store not found' })
@@ -42,18 +43,20 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
     }
     if (!companyId) return res.status(400).json({ ok: false, message: 'companyId or storeId required' })
 
-    // sanitize interface: strip prefix 'printer:' if present
-    const sanitizedInterface = iface ? String(iface).replace(/^\s*printer:\s*/i, '').trim() : null
-
-    const data = { interface: sanitizedInterface || null, type: type || null, width: width ?? null }
+    // Only update fields that were explicitly provided in the request body
+    const body = req.body || {}
+    const data = {}
+    if (body.interface !== undefined) data.interface = iface ? String(iface).replace(/^\s*printer:\s*/i, '').trim() || null : null
+    if (body.type !== undefined) data.type = type || null
+    if (body.width !== undefined) data.width = width ?? null
     if (receiptTemplate !== undefined) data.receiptTemplate = receiptTemplate === null ? null : String(receiptTemplate)
     if (copies !== undefined) data.copies = Math.max(1, Math.min(10, Number(copies) || 1))
     if (printerName !== undefined) data.printerName = printerName === null ? null : String(printerName)
+    if (fiscalPrinterName !== undefined) data.fiscalPrinterName = fiscalPrinterName ? String(fiscalPrinterName) : null
+    if (fiscalPrinterType !== undefined) data.fiscalPrinterType = fiscalPrinterType ? String(fiscalPrinterType) : null
 
     const existing = await prisma.printerSetting.findUnique({ where: { companyId } })
     if (existing) {
-      if (!data.type) data.type = existing.type
-      if (data.width == null) data.width = existing.width
       const updated = await prisma.printerSetting.update({ where: { companyId }, data })
       return res.json({ ok: true, updated })
     }
