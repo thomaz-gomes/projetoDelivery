@@ -53,6 +53,6 @@ export function isScheduleOpenNow(weeklySchedule, timezone) {
  */
 export function isAvailableNow(entity, timezone) {
   if (!entity) return true;
-  if (entity.alwaysAvailable !== false) return true;
+  if (entity.alwaysAvailable === true) return true;
   return isScheduleOpenNow(entity.weeklySchedule, timezone);
 }
