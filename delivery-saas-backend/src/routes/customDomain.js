@@ -118,7 +118,7 @@ router.get('/internal/check-domain', async (req, res) => {
     if (record.paidUntil && new Date(record.paidUntil) < new Date()) return res.status(403).end()
     return res.status(200).end()
   } catch (e) {
-    console.error('[check-domain] error:', e.message)
+    console.error('[check-domain] error:', e?.message || e)
     return res.status(500).end()
   }
 })
