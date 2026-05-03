@@ -1627,6 +1627,12 @@ async function emitirNfeOrder(order) {
       return
     }
     if (data.success) {
+      // Patch order in store so button flips immediately without waiting for socket
+      const nfeInfo = { nProt: data.nProt, cStat: data.cStat, xMotivo: data.xMotivo, authorizedAt: new Date().toISOString() }
+      const patchOrder = (o) => o ? { ...o, payload: { ...(o.payload || {}), nfe: nfeInfo } } : o
+      const idx = store.orders.findIndex(o => o && o.id === order.id)
+      if (idx !== -1) store.orders.splice(idx, 1, patchOrder(store.orders[idx]))
+      if (selectedOrder.value?.id === order.id) selectedOrder.value = patchOrder(selectedOrder.value)
       Swal.fire({ icon: 'success', title: 'NF-e Autorizada', text: `Protocolo: ${data.nProt}`, toast: true, timer: 4000, position: 'top-end', showConfirmButton: false })
     } else {
       Swal.fire({ icon: 'error', title: 'Erro NF-e', text: data.xMotivo || data.error })
@@ -3538,7 +3544,8 @@ function pulseButton() {
                     <button class="btn btn-sm btn-outline-secondary" @click.stop="openDetails(o)" title="Detalhes"><i class="bi bi-list-ul"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" @click="viewReceipt(o)" title="Visualizar comanda"><i class="bi bi-eye"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" @click="printReceipt(o)" title="Imprimir comanda"><i class="bi bi-printer"></i></button>
-                    <button class="btn btn-sm btn-outline-success" @click.stop="emitirNfeOrder(o)" title="Emitir NF-e"><i class="bi bi-receipt"></i></button>
+                    <button v-if="o.payload?.nfe?.nProt" class="btn btn-sm btn-success" @click.stop="printReceipt(o)" title="Imprimir cupom fiscal"><i class="bi bi-printer"></i></button>
+                    <button v-else class="btn btn-sm btn-outline-success" @click.stop="emitirNfeOrder(o)" title="Emitir NF-e"><i class="bi bi-receipt"></i></button>
                     <button v-if="isIfoodOrder(o) && o.status !== 'CONCLUIDO' && o.status !== 'CANCELADO'" class="btn btn-sm btn-outline-danger" @click.stop="sendIfoodChat(o)" title="Enviar mensagem no chat iFood"><i class="bi bi-chat-dots"></i></button>
                     <button v-if="o.status === 'EM_PREPARO' && isTakeoutOrder(o)" class="btn btn-sm btn-info text-white" @click.stop="markReadyForPickup(o)" :disabled="loading" title="Pronto para Retirada">
                       <i class="bi bi-bag-check"></i> Pronto
@@ -3849,7 +3856,10 @@ function pulseButton() {
             <button type="button" class="btn btn-outline-secondary" @click="printReceipt(selectedOrder)" title="Imprimir">
               <i class="bi bi-printer"></i> Imprimir
             </button>
-            <button type="button" class="btn btn-outline-success" @click="emitirNfeOrder(selectedOrder)" title="Emitir NF-e">
+            <button v-if="selectedOrder?.payload?.nfe?.nProt" type="button" class="btn btn-success" @click="printReceipt(selectedOrder)" title="Imprimir cupom fiscal">
+              <i class="bi bi-printer"></i> Imprimir NF-e
+            </button>
+            <button v-else type="button" class="btn btn-outline-success" @click="emitirNfeOrder(selectedOrder)" title="Emitir NF-e">
               <i class="bi bi-receipt"></i> NF-e
             </button>
             <button type="button" class="btn btn-secondary" @click="closeDetails">Fechar</button>
