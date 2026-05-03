@@ -211,36 +211,41 @@ export function buildNfePayload(data) {
     }
   }
 
+  // NFC-e (mod 65): <dest> is optional — omit entirely for anonymous sales (no CPF/CNPJ).
+  // NF-e (mod 55): <dest> is required.
   const destCPF = (dest.CPF || '').replace(/\D/g, '')
   const destCNPJ = (dest.CNPJ || '').replace(/\D/g, '')
-  if (destCPF && destCPF.length === 11) {
-    infNFe.dest.CPF = destCPF
-  } else if (destCNPJ && destCNPJ.length === 14) {
-    infNFe.dest.CNPJ = destCNPJ
-  }
-  // xNome is required for NF-e mod 55
-  const destXNome = dest.xNome || ''
-  if (mod === '55') {
-    infNFe.dest.xNome = tpAmb === '2'
-      ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
-      : (destXNome || 'CONSUMIDOR FINAL')
-    // enderDest is required for NF-e mod 55
-    const ed = dest.enderDest || emit.enderEmit || {}
-    infNFe.dest.enderDest = {
-      xLgr: ed.xLgr || 'NAO INFORMADO',
-      nro: ed.nro || 'S/N',
-      xBairro: ed.xBairro || 'NAO INFORMADO',
-      cMun: sanitizeCMun(ed.cMun || emit.enderEmit?.cMun),
-      xMun: ed.xMun || 'NAO INFORMADO',
-      UF: ed.UF || emit.enderEmit?.UF || '',
-      CEP: sanitizeCEP(ed.CEP || '00000000'),
-      cPais: ed.cPais || '1058',
-      xPais: ed.xPais || 'BRASIL'
+  const hasDestId = destCPF.length === 11 || destCNPJ.length === 14
+  if (mod === '55' || hasDestId) {
+    if (destCPF.length === 11) {
+      infNFe.dest.CPF = destCPF
+    } else if (destCNPJ.length === 14) {
+      infNFe.dest.CNPJ = destCNPJ
     }
-  } else if ((destCPF || destCNPJ) && destXNome) {
-    infNFe.dest.xNome = destXNome
+    const destXNome = dest.xNome || ''
+    if (mod === '55') {
+      infNFe.dest.xNome = tpAmb === '2'
+        ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
+        : (destXNome || 'CONSUMIDOR FINAL')
+      const ed = dest.enderDest || emit.enderEmit || {}
+      infNFe.dest.enderDest = {
+        xLgr: ed.xLgr || 'NAO INFORMADO',
+        nro: ed.nro || 'S/N',
+        xBairro: ed.xBairro || 'NAO INFORMADO',
+        cMun: sanitizeCMun(ed.cMun || emit.enderEmit?.cMun),
+        xMun: ed.xMun || 'NAO INFORMADO',
+        UF: ed.UF || emit.enderEmit?.UF || '',
+        CEP: sanitizeCEP(ed.CEP || '00000000'),
+        cPais: ed.cPais || '1058',
+        xPais: ed.xPais || 'BRASIL'
+      }
+    } else if (hasDestId && destXNome) {
+      infNFe.dest.xNome = destXNome
+    }
+    infNFe.dest.indIEDest = '9'
+  } else {
+    delete infNFe.dest
   }
-  infNFe.dest.indIEDest = '9' // 9=Não Contribuinte
 
   if (tpAmb === '2') {
     infNFe.infAdic = { infCpl: 'Documento emitido em ambiente de homologacao - sem valor fiscal' }
