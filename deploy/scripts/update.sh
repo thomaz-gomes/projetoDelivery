@@ -103,43 +103,18 @@ fi
 rm -rf "$TEMP_BACKUP"
 
 # =========================================
-# 3. Atualizar Nginx (se configurado)
+# 3. Recarregar Caddy (se configurado)
 # =========================================
-echo -e "${YELLOW}[3/7] Atualizando configuração do Nginx...${NC}"
+echo -e "${YELLOW}[3/7] Atualizando configuração do Caddy...${NC}"
 
-if [ -n "$API_DOMAIN" ] && [ -n "$APP_DOMAIN" ] && command -v nginx &> /dev/null; then
-    # Map WebSocket/polling — necessário para $connection_upgrade
-    cp "$DEPLOY_DIR/nginx/websocket.conf" /etc/nginx/conf.d/websocket.conf
-
-    # Reescrever configs com domínios reais (sobrescreve versão anterior incluindo as do Certbot)
-    sed "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" \
-        "$DEPLOY_DIR/nginx/api.conf" > /etc/nginx/sites-available/api.conf
-    sed "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" \
-        "$DEPLOY_DIR/nginx/app.conf" > /etc/nginx/sites-available/app.conf
-
-    # Garantir symlinks
-    ln -sf /etc/nginx/sites-available/api.conf /etc/nginx/sites-enabled/api.conf
-    ln -sf /etc/nginx/sites-available/app.conf /etc/nginx/sites-enabled/app.conf
-
-    # Reaplicar SSL do Certbot (usa cert existente, não emite novo — sem rate limit)
-    if command -v certbot &> /dev/null && [ -d "/etc/letsencrypt/live" ]; then
-        echo -e "${YELLOW}Reaplicando SSL com Certbot...${NC}"
-        certbot --nginx -d "${API_DOMAIN}" -d "${APP_DOMAIN}" \
-            --non-interactive --quiet \
-            --keep-until-expiring 2>/dev/null \
-            || echo -e "${YELLOW}Certbot: usando cert existente sem alterações${NC}"
-    fi
-
-    # Testar e recarregar
-    if nginx -t 2>/dev/null; then
-        systemctl reload nginx
-        echo -e "${GREEN}Nginx atualizado e recarregado!${NC}"
-    else
-        echo -e "${RED}Erro na config do Nginx — verifique: nginx -t${NC}"
-        nginx -t
-    fi
-else
-    echo -e "${YELLOW}Nginx não encontrado ou API_DOMAIN/APP_DOMAIN não definidos — pulando.${NC}"
+# Recarregar Caddy se o Caddyfile mudou
+if command -v caddy &> /dev/null && [ -n "$API_DOMAIN" ] && [ -n "$APP_DOMAIN" ]; then
+    sed -e "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" \
+        -e "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" \
+        -e "s/SSL_EMAIL_PLACEHOLDER/${SSL_EMAIL:-}/g" \
+        "$DEPLOY_DIR/caddy/Caddyfile" > /etc/caddy/Caddyfile
+    caddy validate --config /etc/caddy/Caddyfile && \
+        (systemctl is-active --quiet caddy && systemctl reload caddy || systemctl start caddy)
 fi
 
 # =========================================

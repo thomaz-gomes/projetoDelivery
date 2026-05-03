@@ -117,6 +117,7 @@ rm -f /etc/caddy/Caddyfile
 # Gerar Caddyfile substituindo placeholders pelos domínios reais
 sed -e "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" \
     -e "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" \
+    -e "s/SSL_EMAIL_PLACEHOLDER/${SSL_EMAIL}/g" \
     "$DEPLOY_DIR/caddy/Caddyfile" > /etc/caddy/Caddyfile
 
 caddy validate --config /etc/caddy/Caddyfile
