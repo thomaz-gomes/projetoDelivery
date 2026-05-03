@@ -120,7 +120,9 @@ sed -e "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" \
     "$DEPLOY_DIR/caddy/Caddyfile" > /etc/caddy/Caddyfile
 
 caddy validate --config /etc/caddy/Caddyfile
-systemctl reload caddy
+systemctl is-active --quiet caddy \
+    && systemctl reload caddy \
+    || systemctl start caddy
 echo -e "${GREEN}Caddy configurado!${NC}"
 
 # =========================================
