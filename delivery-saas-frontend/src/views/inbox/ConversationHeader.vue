@@ -21,8 +21,8 @@
 
     <!-- Badges -->
     <div class="d-flex align-items-center gap-2 me-2">
-      <span v-if="conversation?.store?.name" class="badge bg-info-subtle text-info small">
-        {{ conversation.store.name }}
+      <span v-if="conversation?.menu?.name || conversation?.store?.name" class="badge bg-info-subtle text-info small">
+        {{ conversation.menu?.name || conversation.store?.name }}
       </span>
       <span v-if="conversation?.assignedUser?.name" class="badge bg-secondary-subtle text-secondary small">
         <i class="bi bi-person-fill me-1"></i>{{ conversation.assignedUser.name }}

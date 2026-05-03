@@ -90,6 +90,7 @@ router.get('/conversations', async (req, res) => {
         customer: { select: { id: true, fullName: true, whatsapp: true } },
         assignedUser: { select: { id: true, name: true } },
         store: { select: { id: true, name: true } },
+        menu: { select: { id: true, name: true } },
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -115,6 +116,7 @@ router.get('/conversations/:id', async (req, res) => {
         customer: { select: { id: true, fullName: true, whatsapp: true, phone: true, email: true, cpf: true } },
         assignedUser: { select: { id: true, name: true } },
         store: { select: { id: true, name: true } },
+        menu: { select: { id: true, name: true } },
       },
     });
 
@@ -439,6 +441,7 @@ router.patch('/conversations/:id', requireRole('ADMIN', 'ATTENDANT'), async (req
         customer: { select: { id: true, fullName: true, whatsapp: true } },
         assignedUser: { select: { id: true, name: true } },
         store: { select: { id: true, name: true } },
+        menu: { select: { id: true, name: true } },
       },
     });
 
