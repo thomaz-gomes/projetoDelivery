@@ -72,7 +72,7 @@ function formatTime(iso) {
 }
 
 function shiftAlreadyChecked(shiftId) {
-  return todayCheckins.value.some(c => c.shiftId === shiftId);
+  return todayCheckins.value.some(c => c.shiftId === shiftId && !c.checkoutAt);
 }
 
 function shiftBlocked(shift) {

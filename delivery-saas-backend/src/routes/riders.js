@@ -486,11 +486,11 @@ ridersRouter.post('/me/checkin', async (req, res) => {
   const today = new Date(brtMidnight.getTime() + BRT_OFFSET_MS);    // 03:00 UTC = 00:00 BRT
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000); // 03:00 UTC próximo dia
 
-  // Evitar check-in duplicado no mesmo turno/dia (BRT)
+  // Evitar check-in duplicado: bloqueia apenas se já há um turno ABERTO (sem checkoutAt) hoje
   const existing = await prisma.riderCheckin.findFirst({
-    where: { riderId: rider.id, shiftId, checkinAt: { gte: today, lt: tomorrow } }
+    where: { riderId: rider.id, shiftId, checkoutAt: null, checkinAt: { gte: today, lt: tomorrow } }
   });
-  if (existing) return res.status(409).json({ message: 'Você já fez check-in neste turno hoje', checkin: existing });
+  if (existing) return res.status(409).json({ message: 'Você já está em turno neste horário', checkin: existing });
 
   // Bloquear check-in se há um turno em andamento (outro turno cujo endTime ainda não passou) — usa hora BRT
   const nowMinutes = nowBRT.getUTCHours() * 60 + nowBRT.getUTCMinutes();
