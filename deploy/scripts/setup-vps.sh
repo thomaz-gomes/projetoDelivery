@@ -47,13 +47,13 @@ echo ""
 # =========================================
 # 1. Atualizar sistema
 # =========================================
-echo -e "${GREEN}[1/7] Atualizando sistema...${NC}"
+echo -e "${GREEN}[1/6] Atualizando sistema...${NC}"
 apt-get update && apt-get upgrade -y
 
 # =========================================
 # 2. Instalar Docker
 # =========================================
-echo -e "${GREEN}[2/7] Instalando Docker...${NC}"
+echo -e "${GREEN}[2/6] Instalando Docker...${NC}"
 if ! command -v docker &> /dev/null; then
     apt-get install -y ca-certificates curl gnupg
     install -m 0755 -d /etc/apt/keyrings
@@ -71,32 +71,27 @@ else
 fi
 
 # =========================================
-# 3. Instalar Nginx
+# 3. Instalar Caddy
 # =========================================
-echo -e "${GREEN}[3/7] Instalando Nginx...${NC}"
-if ! command -v nginx &> /dev/null; then
-    apt-get install -y nginx
-    systemctl enable nginx
-    echo -e "${GREEN}Nginx instalado!${NC}"
+echo -e "${GREEN}[3/6] Instalando Caddy...${NC}"
+if ! command -v caddy &> /dev/null; then
+    apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
+        gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | \
+        tee /etc/apt/sources.list.d/caddy-stable.list
+    apt-get update
+    apt-get install -y caddy
+    systemctl enable caddy
+    echo -e "${GREEN}Caddy instalado!${NC}"
 else
-    echo "Nginx já instalado, pulando..."
+    echo "Caddy já instalado, pulando..."
 fi
 
 # =========================================
-# 4. Instalar Certbot (Let's Encrypt)
+# 4. Configurar Firewall (UFW)
 # =========================================
-echo -e "${GREEN}[4/7] Instalando Certbot...${NC}"
-if ! command -v certbot &> /dev/null; then
-    apt-get install -y certbot python3-certbot-nginx
-    echo -e "${GREEN}Certbot instalado!${NC}"
-else
-    echo "Certbot já instalado, pulando..."
-fi
-
-# =========================================
-# 5. Configurar Firewall (UFW)
-# =========================================
-echo -e "${GREEN}[5/7] Configurando firewall...${NC}"
+echo -e "${GREEN}[4/6] Configurando firewall...${NC}"
 if command -v ufw &> /dev/null; then
     ufw allow 22/tcp   # SSH
     ufw allow 80/tcp   # HTTP
@@ -112,47 +107,32 @@ else
 fi
 
 # =========================================
-# 6. Configurar Nginx
+# 5. Configurar Caddy
 # =========================================
-echo -e "${GREEN}[6/7] Configurando Nginx...${NC}"
+echo -e "${GREEN}[5/6] Configurando Caddy...${NC}"
 
-# Remover default site
-rm -f /etc/nginx/sites-enabled/default
+# Remove default Caddy welcome page
+rm -f /etc/caddy/Caddyfile
 
-# Map WebSocket/polling — necessário para $connection_upgrade nos configs
-cp "$DEPLOY_DIR/nginx/websocket.conf" /etc/nginx/conf.d/websocket.conf
+# Gerar Caddyfile substituindo placeholders pelos domínios reais
+sed -e "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" \
+    -e "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" \
+    "$DEPLOY_DIR/caddy/Caddyfile" > /etc/caddy/Caddyfile
 
-# Copiar configs substituindo os placeholders pelos domínios reais
-sed "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" "$DEPLOY_DIR/nginx/api.conf" > /etc/nginx/sites-available/api.conf
-sed "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" "$DEPLOY_DIR/nginx/app.conf" > /etc/nginx/sites-available/app.conf
-
-# Ativar sites
-ln -sf /etc/nginx/sites-available/api.conf /etc/nginx/sites-enabled/api.conf
-ln -sf /etc/nginx/sites-available/app.conf /etc/nginx/sites-enabled/app.conf
-
-# Testar config
-nginx -t
-systemctl reload nginx
-echo -e "${GREEN}Nginx configurado!${NC}"
+caddy validate --config /etc/caddy/Caddyfile
+systemctl reload caddy
+echo -e "${GREEN}Caddy configurado!${NC}"
 
 # =========================================
-# 7. Obter Certificados SSL
+# 6. Verificar DNS
 # =========================================
-echo -e "${GREEN}[7/7] Obtendo certificados SSL...${NC}"
-echo -e "${YELLOW}Certifique-se de que os DNS de ${API_DOMAIN} e ${APP_DOMAIN} já apontam para este servidor!${NC}"
-read -p "Os DNS já estão configurados? (s/n): " dns_ok
-
-if [ "$dns_ok" = "s" ] || [ "$dns_ok" = "S" ]; then
-    certbot --nginx -d "${API_DOMAIN}" -d "${APP_DOMAIN}" --email "${SSL_EMAIL}" --agree-tos --non-interactive
-    echo -e "${GREEN}Certificados SSL obtidos!${NC}"
-
-    # Configurar renovação automática
-    systemctl enable certbot.timer
-    echo -e "${GREEN}Renovação automática de SSL habilitada${NC}"
-else
-    echo -e "${YELLOW}Pule este passo agora. Quando os DNS estiverem prontos, execute:${NC}"
-    echo "  sudo certbot --nginx -d ${API_DOMAIN} -d ${APP_DOMAIN} --email ${SSL_EMAIL} --agree-tos"
-fi
+echo -e "${GREEN}[6/6] Verificação de DNS${NC}"
+echo -e "${YELLOW}Certifique-se de que ${API_DOMAIN} e ${APP_DOMAIN} apontam para este servidor.${NC}"
+echo -e "${YELLOW}O Caddy obterá os certificados SSL automaticamente no primeiro acesso.${NC}"
+echo ""
+echo "Verifique com:"
+echo "  dig ${APP_DOMAIN} +short"
+echo "  dig ${API_DOMAIN} +short"
 
 # =========================================
 # Criar diretório de backups
