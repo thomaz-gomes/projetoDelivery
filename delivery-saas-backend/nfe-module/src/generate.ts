@@ -341,42 +341,49 @@ export async function generateNFCeXml(payload: {
     }
   }
 
-  // Build dest in schema order: CPF|CNPJ|idEstrangeiro → xNome → ... → indIEDest
+  // Build dest in schema order: CPF|CNPJ|idEstrangeiro → xNome → enderDest → indIEDest
+  // NFC-e (mod 65): <dest> is optional — omit entirely for anonymous sales (no CPF/CNPJ).
+  // NF-e (mod 55): <dest> is required.
   const destCPF = (payload.dest?.CPF || '').replace(/\D/g, '')
   const destCNPJ = (payload.dest?.CNPJ || '').replace(/\D/g, '')
-  if (destCPF && destCPF.length === 11) {
-    infNFe.dest.CPF = destCPF
-  } else if (destCNPJ && destCNPJ.length === 14) {
-    infNFe.dest.CNPJ = destCNPJ
-  }
-  // xNome is required for NF-e mod 55
-  const destXNome = payload.dest?.xNome || ''
-  if (mod === '55') {
-    infNFe.dest.xNome = tpAmb === '2'
-      ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
-      : (destXNome || 'CONSUMIDOR FINAL')
-    // enderDest is required for NF-e mod 55
-    const ed = payload.dest?.enderDest || payload.enderEmit || {}
-    infNFe.dest.enderDest = {
-      xLgr: ed.xLgr || 'NAO INFORMADO',
-      nro: ed.nro || 'S/N',
-      xBairro: ed.xBairro || 'NAO INFORMADO',
-      cMun: sanitizeCMun(ed.cMun || cMunFG),
-      xMun: ed.xMun || 'NAO INFORMADO',
-      UF: ed.UF || emitUF,
-      CEP: sanitizeCEP(ed.CEP || '00000000'),
-      cPais: ed.cPais || '1058',
-      xPais: ed.xPais || 'BRASIL'
+  const hasDestId = (destCPF.length === 11) || (destCNPJ.length === 14)
+
+  if (mod === '55' || hasDestId) {
+    if (destCPF.length === 11) {
+      infNFe.dest.CPF = destCPF
+    } else if (destCNPJ.length === 14) {
+      infNFe.dest.CNPJ = destCNPJ
     }
-  } else if ((destCPF || destCNPJ) && destXNome) {
-    infNFe.dest.xNome = tpAmb === '2'
-      ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
-      : destXNome
+    const destXNome = payload.dest?.xNome || ''
+    if (mod === '55') {
+      infNFe.dest.xNome = tpAmb === '2'
+        ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
+        : (destXNome || 'CONSUMIDOR FINAL')
+      const ed = payload.dest?.enderDest || payload.enderEmit || {}
+      infNFe.dest.enderDest = {
+        xLgr: ed.xLgr || 'NAO INFORMADO',
+        nro: ed.nro || 'S/N',
+        xBairro: ed.xBairro || 'NAO INFORMADO',
+        cMun: sanitizeCMun(ed.cMun || cMunFG),
+        xMun: ed.xMun || 'NAO INFORMADO',
+        UF: ed.UF || emitUF,
+        CEP: sanitizeCEP(ed.CEP || '00000000'),
+        cPais: ed.cPais || '1058',
+        xPais: ed.xPais || 'BRASIL'
+      }
+    } else if (hasDestId && destXNome) {
+      infNFe.dest.xNome = tpAmb === '2'
+        ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
+        : destXNome
+    }
+    infNFe.dest.indIEDest = '9'
+  } else {
+    // NFC-e anonymous sale: omit <dest> entirely (schema requires id if element present)
+    delete (infNFe as any).dest
   }
-  infNFe.dest.indIEDest = '9' // 9=Não Contribuinte
 
   // Debug: log dest to verify CPF is present
-  console.log('[generate] infNFe.dest:', JSON.stringify(infNFe.dest))
+  console.log('[generate] infNFe.dest:', JSON.stringify((infNFe as any).dest))
 
   const root: any = {
     NFe: {
