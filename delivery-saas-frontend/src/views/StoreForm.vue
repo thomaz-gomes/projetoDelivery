@@ -220,6 +220,14 @@
                   </button>
                   <span class="ms-2 text-muted small">Verifica arquivo, senha, validade e conexão com a SEFAZ</span>
 
+                  <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="nfeDebugMode" v-model="form.nfeDebugMode">
+                    <label class="form-check-label small" for="nfeDebugMode">
+                      <span class="badge bg-warning text-dark me-1">DEBUG</span>
+                      Modo debug: gerar XML sem transmitir ao SEFAZ (baixa o arquivo ao clicar em emitir NF-e)
+                    </label>
+                  </div>
+
                   <!-- Resultado do diagnóstico -->
                   <div v-if="debugResult" class="mt-3">
                     <div class="alert" :class="debugResult.summary?.startsWith('✅') ? 'alert-success' : debugResult.summary?.startsWith('⚠') ? 'alert-warning' : 'alert-danger'">
@@ -395,7 +403,7 @@ const TIMEZONES = [
   'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
   'Asia/Shanghai', 'Australia/Sydney'
 ]
-const form = ref({ name: '', address: '', latitude: null, longitude: null, city: '', state: '', ibgeCode: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', infRespTec: { CNPJ: '', xContato: '', email: '', fone: '' }, enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true })
+const form = ref({ name: '', address: '', latitude: null, longitude: null, city: '', state: '', ibgeCode: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', infRespTec: { CNPJ: '', xContato: '', email: '', fone: '' }, enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true, nfeDebugMode: false })
 
 // IBGE API: states and cities
 const ibgeStates = ref([])
@@ -632,6 +640,7 @@ async function load() {
       form.value.storedCertExists = !!s.certExists
       form.value.storedCertFilename = s.certFilename || null
       form.value.storedCertPasswordStored = !!s.certPasswordStored
+      form.value.nfeDebugMode = !!s.nfeDebugMode
         // isActive and pause/closed flags from merged settings
         form.value.isActive = s.isActive === undefined ? true : !!s.isActive
         try{
@@ -774,6 +783,7 @@ async function save(){
       cscId: form.value.cscId || undefined,
       infRespTec: form.value.infRespTec?.CNPJ ? form.value.infRespTec : undefined,
       enderEmit: form.value.enderEmit || undefined,
+      nfeDebugMode: form.value.nfeDebugMode,
     }
 
     if (form.value.certBase64) payload.certBase64 = form.value.certBase64

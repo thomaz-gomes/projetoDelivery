@@ -680,6 +680,18 @@ export async function emitNfeFromOrder(orderId) {
     cscId: fiscalConfig.cscId,
     infRespTec: fiscalConfig.infRespTec || null,
   })
+
+  // Debug mode: return signed XML without transmitting to SEFAZ
+  if (fiscalConfig.nfeDebugMode) {
+    const displayId = order.displaySimple || order.displayId || orderId.slice(0, 8)
+    return {
+      debugMode: true,
+      xml: signed.signedXml,
+      filename: `nfe-${displayId}.xml`,
+      success: false,
+    }
+  }
+
   const uf = (emitenteConfig.enderEmit?.UF || 'BA').toLowerCase()
   const result = await transmitNfe(signed.signedXml, { ...certConfig, tpAmb }, uf)
 
@@ -780,6 +792,7 @@ export async function getFiscalConfigForOrder(orderId) {
     csc: companyExtra.csc || null,
     cscId: companyExtra.cscId || null,
     infRespTec: companyExtra.infRespTec || null,
+    nfeDebugMode: Boolean(companyExtra.nfeDebugMode),
     certPath: null,
     certExists: false,
     source: 'company',
@@ -802,6 +815,7 @@ export async function getFiscalConfigForOrder(orderId) {
     if (storeExtra.csc) result.csc = storeExtra.csc
     if (storeExtra.cscId) result.cscId = storeExtra.cscId
     if (storeExtra.infRespTec) result.infRespTec = storeExtra.infRespTec
+    if (storeExtra.nfeDebugMode !== undefined) result.nfeDebugMode = Boolean(storeExtra.nfeDebugMode)
 
     // store-specified certificate filename (preferred)
     if (storeExtra.certFilename) {

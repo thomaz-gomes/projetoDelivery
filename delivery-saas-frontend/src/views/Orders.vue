@@ -1613,6 +1613,19 @@ async function emitirNfeOrder(order) {
   if (!r.isConfirmed) return
   try {
     const { data } = await api.post('/nfe/emit-from-order', { orderId: order.id })
+    if (data.debugMode) {
+      const blob = new Blob([data.xml], { type: 'application/xml' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = data.filename || `nfe-${order.displaySimple || order.id}.xml`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      Swal.fire({ icon: 'info', title: 'Modo Debug', text: 'XML gerado e baixado. NF-e NÃO foi transmitida ao SEFAZ.', toast: true, timer: 5000, position: 'top-end', showConfirmButton: false })
+      return
+    }
     if (data.success) {
       Swal.fire({ icon: 'success', title: 'NF-e Autorizada', text: `Protocolo: ${data.nProt}`, toast: true, timer: 4000, position: 'top-end', showConfirmButton: false })
     } else {
