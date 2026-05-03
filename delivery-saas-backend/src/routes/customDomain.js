@@ -49,11 +49,9 @@ router.get('/resolve-public', async (req, res) => {
 
 // ---------- GET /internal/check-domain ----------
 // Chamado pelo Caddy (on-demand TLS) para autorizar emissão de certificado.
-// Só aceita requisições de localhost — o Caddy roda no host, não no container.
+// Sem IP check: Caddy roda no host mas o container vê o IP do bridge Docker (172.17.0.1).
+// Segurança já garantida pelo bind 127.0.0.1:3000:3000 no host.
 router.get('/internal/check-domain', async (req, res) => {
-  const ip = (req.socket?.remoteAddress || '').replace('::ffff:', '')
-  if (ip !== '127.0.0.1' && ip !== '::1') return res.status(403).end()
-
   const domain = String(req.query.domain || '').toLowerCase().trim()
   if (!domain) return res.status(400).end()
 
