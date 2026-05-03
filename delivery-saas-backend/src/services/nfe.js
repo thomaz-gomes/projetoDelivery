@@ -463,10 +463,13 @@ export function getEmitenteConfig(companyId, storeId) {
   } catch { /* ignore */ }
 
   // Override with store-level settings when storeId provided
+  // Merge legacy + centralized paths so a key missing from one is picked up from the other.
   if (storeId) {
     const loadStoreSettings = (p) => { try { if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8') || '{}') } catch {} return null }
-    const storeSettings = loadStoreSettings(path.join(base, 'settings', 'stores', storeId, 'settings.json'))
-      || loadStoreSettings(path.join(base, 'public', 'uploads', 'store', storeId, 'settings.json'))
+    const legacySettings = loadStoreSettings(path.join(base, 'public', 'uploads', 'store', storeId, 'settings.json'))
+    const centralizedSettings = loadStoreSettings(path.join(base, 'settings', 'stores', storeId, 'settings.json'))
+    // Centralized takes priority; legacy fills any keys missing from centralized
+    const storeSettings = (legacySettings || centralizedSettings) ? { ...(legacySettings || {}), ...(centralizedSettings || {}) } : null
     if (storeSettings) {
       if (storeSettings.cnpj) result.cnpj = storeSettings.cnpj
       if (storeSettings.ie) result.ie = storeSettings.ie

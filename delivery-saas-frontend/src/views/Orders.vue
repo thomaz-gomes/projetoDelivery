@@ -1618,16 +1618,33 @@ async function emitirNfeOrder(order) {
   try {
     const { data } = await api.post('/nfe/emit-from-order', { orderId: order.id })
     if (data.debugMode) {
-      const blob = new Blob([data.xml], { type: 'application/xml' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = data.filename || `nfe-${order.displaySimple || order.id}.xml`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      Swal.fire({ icon: 'info', title: 'Modo Debug', text: 'XML gerado e baixado. NF-e NÃO foi transmitida ao SEFAZ.', toast: true, timer: 5000, position: 'top-end', showConfirmButton: false })
+      const debugResult = await Swal.fire({
+        icon: 'info',
+        title: 'Modo Debug — XML Gerado',
+        html: 'NF-e <b>NÃO</b> foi transmitida ao SEFAZ.',
+        showDenyButton: true,
+        confirmButtonText: '🖨️ Imprimir DANFE',
+        denyButtonText: '⬇️ Baixar XML',
+        confirmButtonColor: '#0d6efd',
+        denyButtonColor: '#6c757d',
+      })
+      if (debugResult.isConfirmed) {
+        try {
+          const resp = await api.post('/nfe/danfe-preview', { xml: data.xml, orderId: order.id }, { responseType: 'blob' })
+          const url = URL.createObjectURL(new Blob([resp.data], { type: 'text/html' }))
+          window.open(url, '_blank')
+        } catch (e) {
+          Swal.fire({ icon: 'error', title: 'Erro ao gerar DANFE', text: e.response?.data || e.message })
+        }
+      } else if (debugResult.isDenied) {
+        const blob = new Blob([data.xml], { type: 'application/xml' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = data.filename || `nfe-${order.displaySimple || order.id}.xml`
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
       return
     }
     if (data.success) {
