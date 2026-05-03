@@ -86,7 +86,7 @@ function buildChaveAcesso(cUF: string, dhEmi: string, cnpj: string, mod: string,
   const aamm = dhEmi.slice(2, 4) + dhEmi.slice(5, 7) // from ISO date YYYY-MM-...
   const chave43 = cUF.padStart(2, '0')
     + aamm
-    + cnpj.padStart(14, '0')
+    + cnpj.replace(/\D/g, '').padStart(14, '0')
     + mod.padStart(2, '0')
     + serie.padStart(3, '0')
     + nNF.padStart(9, '0')
