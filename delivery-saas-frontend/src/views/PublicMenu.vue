@@ -1190,7 +1190,17 @@ function effectiveSettings(){
         Object.assign(menuMeta, menusMap[String(menuId.value)])
       }
     }catch(e){}
-    return { ...base, ...menuMeta }
+    const merged = { ...base, ...menuMeta }
+    // Don't let a null/empty weeklySchedule from menu override a valid one from company/store.
+    // The backend already merges schedule priority (menu > store > company), so base.weeklySchedule
+    // is the correct effective schedule. A null menu.weeklySchedule means "use parent's schedule".
+    if (!Array.isArray(merged.weeklySchedule) || !merged.weeklySchedule.length) {
+      const parentSchedule = Array.isArray(base.weeklySchedule) && base.weeklySchedule.length
+        ? base.weeklySchedule
+        : null
+      if (parentSchedule) merged.weeklySchedule = parentSchedule
+    }
+    return merged
   }catch(e){ return company.value || {} }
 }
 
@@ -2054,7 +2064,9 @@ const isOpen = computed(() => {
     return { hh, mm }
   }
 
-  // Prefer weeklySchedule when provided (more precise). weeklySchedule is an array with { day, from, to, enabled }
+  // weeklySchedule always takes priority over alwaysOpen/open24Hours flags.
+  // Company.alwaysOpen defaults to true in the DB, so without this check any store
+  // with a configured schedule would still show as open 24h.
   try{
     if(Array.isArray(c.weeklySchedule) && c.weeklySchedule.length){
       const tz = c.timezone || 'America/Sao_Paulo'

@@ -535,6 +535,12 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
       }
     } catch (e) { console.warn('Failed to load Meta Pixel for public menu', e?.message || e) }
 
+    // If a weeklySchedule is configured, it must take priority over the alwaysOpen flag.
+    // Company.alwaysOpen defaults to true in the DB, which would otherwise bypass schedule checks.
+    if (company && Array.isArray(company.weeklySchedule) && company.weeklySchedule.length) {
+      company.alwaysOpen = false
+    }
+
     res.json({ categories: categoriesToReturn, uncategorized: uncategorizedToReturn || [], company: company || null, menu: menuObj || null, metaPixel })
   } catch (e) {
     console.error('Error loading public menu', e)
