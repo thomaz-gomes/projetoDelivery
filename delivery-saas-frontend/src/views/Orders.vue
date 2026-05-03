@@ -1619,6 +1619,43 @@ async function imprimirDanfe(order) {
   }
 }
 
+async function sendNfeEmail(order) {
+  const { value: email, isConfirmed } = await Swal.fire({
+    title: 'Enviar NF-e por e-mail',
+    input: 'email',
+    inputLabel: 'Endereço de e-mail',
+    inputPlaceholder: 'cliente@exemplo.com',
+    inputValue: order.customerEmail || '',
+    showCancelButton: true,
+    confirmButtonText: 'Enviar',
+    cancelButtonText: 'Cancelar',
+    inputValidator: (v) => !v ? 'Informe um e-mail' : null,
+  })
+  if (!isConfirmed || !email) return
+  try {
+    await api.post('/nfe/enviar-email', { orderId: order.id, email })
+    Swal.fire({ icon: 'success', title: 'E-mail enviado', text: email, timer: 3000, toast: true, position: 'top-end', showConfirmButton: false })
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro ao enviar e-mail', text: e.response?.data?.error || e.message })
+  }
+}
+
+async function downloadNfeXml(order) {
+  try {
+    const resp = await api.get(`/nfe/xml-by-order/${order.id}`, { responseType: 'blob' })
+    const cd = resp.headers['content-disposition'] || ''
+    const match = cd.match(/filename="([^"]+)"/)
+    const filename = match ? match[1] : `nfe-${order.displaySimple || order.id}.xml`
+    const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/xml' }))
+    const a = document.createElement('a')
+    a.href = url; a.download = filename
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro ao baixar XML', text: e.response?.data?.error || e.message })
+  }
+}
+
 async function emitirNfeOrder(order) {
   const r = await Swal.fire({
     title: 'Emitir NF-e?',
@@ -3863,6 +3900,36 @@ function pulseButton() {
             <div v-else class="text-muted">Nenhum entregador atribuído</div>
           </div>
 
+          <!-- NF-e info card (shown only when NF-e has been issued) -->
+          <div v-if="selectedOrder?.payload?.nfe?.nProt" class="od-section" style="border-left:3px solid #198754">
+            <div class="od-section-title" style="color:#198754"><i class="bi bi-receipt-cutoff"></i> Nota Fiscal Eletrônica</div>
+            <div class="od-payment-grid">
+              <div class="od-pay-row">
+                <span class="od-pay-label">Protocolo</span>
+                <span class="od-pay-value font-monospace">{{ selectedOrder.payload.nfe.nProt }}</span>
+              </div>
+              <div class="od-pay-row" v-if="selectedOrder.payload.nfe.cStat">
+                <span class="od-pay-label">Status SEFAZ</span>
+                <span class="od-pay-value">{{ selectedOrder.payload.nfe.cStat }} — {{ selectedOrder.payload.nfe.xMotivo || '' }}</span>
+              </div>
+              <div class="od-pay-row" v-if="selectedOrder.payload.nfe.authorizedAt">
+                <span class="od-pay-label">Autorizado em</span>
+                <span class="od-pay-value">{{ new Date(selectedOrder.payload.nfe.authorizedAt).toLocaleString('pt-BR') }}</span>
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <button type="button" class="btn btn-sm btn-success" @click="imprimirDanfe(selectedOrder)" title="Imprimir DANFE na impressora fiscal">
+                <i class="bi bi-printer-fill"></i> Imprimir DANFE
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary" @click="sendNfeEmail(selectedOrder)" title="Enviar XML por e-mail">
+                <i class="bi bi-envelope"></i> Enviar por e-mail
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" @click="downloadNfeXml(selectedOrder)" title="Baixar XML">
+                <i class="bi bi-download"></i> Baixar XML
+              </button>
+            </div>
+          </div>
+
           <!-- DEBUG: Raw payload -->
           <div class="od-section" style="background:#1e1e1e;color:#d4d4d4;border-left:4px solid #f44336">
             <div class="od-section-title" style="color:#f44336"><i class="bi bi-bug"></i> DEBUG — Payload completo</div>
@@ -3891,10 +3958,7 @@ function pulseButton() {
             <button type="button" class="btn btn-outline-secondary" @click="printReceipt(selectedOrder)" title="Imprimir">
               <i class="bi bi-printer"></i> Imprimir
             </button>
-            <button v-if="selectedOrder?.payload?.nfe?.nProt" type="button" class="btn btn-success" @click="imprimirDanfe(selectedOrder)" title="Imprimir cupom fiscal">
-              <i class="bi bi-printer"></i> Imprimir NF-e
-            </button>
-            <button v-else type="button" class="btn btn-outline-success" @click="emitirNfeOrder(selectedOrder)" title="Emitir NF-e">
+            <button v-if="!selectedOrder?.payload?.nfe?.nProt" type="button" class="btn btn-outline-success" @click="emitirNfeOrder(selectedOrder)" title="Emitir NF-e">
               <i class="bi bi-receipt"></i> NF-e
             </button>
             <button type="button" class="btn btn-secondary" @click="closeDetails">Fechar</button>

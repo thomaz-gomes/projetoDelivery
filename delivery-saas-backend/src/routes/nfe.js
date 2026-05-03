@@ -1,5 +1,6 @@
 import express from 'express'
 import { saveNfeProtocol, getFiscalConfigForOrder, buildNfePayload, signNfeXml, transmitNfe, loadCertConfig, getEmitenteConfig, emitNfeFromOrder } from '../services/nfe.js'
+import { sendNfeXmlEmail } from '../services/email.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { prisma } from '../prisma.js'
 import { decryptText } from '../utils/secretStore.js'
@@ -974,21 +975,56 @@ nfeRouter.post('/cancelar', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'),
   }
 })
 
-// POST /nfe/enviar-email — stub (email service integration: TODO)
+// GET /nfe/xml-by-order/:orderId — download raw XML for the latest protocol of an order
+nfeRouter.get('/xml-by-order/:orderId', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
+  try {
+    const companyId = req.user?.companyId
+    const protocol = await prisma.nfeProtocol.findFirst({
+      where: { orderId: req.params.orderId, companyId },
+      orderBy: { createdAt: 'desc' }
+    })
+    if (!protocol) return res.status(404).json({ error: 'Protocolo não encontrado para este pedido' })
+    if (!protocol.rawXml) return res.status(404).json({ error: 'XML não disponível para este protocolo' })
+
+    const order = await prisma.order.findUnique({ where: { id: req.params.orderId }, select: { displaySimple: true } })
+    const filename = `nfe-${protocol.nProt || order?.displaySimple || protocol.id}.xml`
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    return res.send(protocol.rawXml)
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || String(err) })
+  }
+})
+
+// POST /nfe/enviar-email — send NF-e XML as email attachment (accepts nfeProtocolId or orderId)
 nfeRouter.post('/enviar-email', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
   try {
     const companyId = req.user?.companyId
-    const { nfeProtocolId, email } = req.body
-    if (!nfeProtocolId) return res.status(400).json({ error: 'nfeProtocolId é obrigatório' })
+    const { nfeProtocolId, orderId, email } = req.body
+    if (!nfeProtocolId && !orderId) return res.status(400).json({ error: 'nfeProtocolId ou orderId é obrigatório' })
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return res.status(400).json({ error: 'E-mail inválido' })
 
-    const protocol = await prisma.nfeProtocol.findFirst({ where: { id: nfeProtocolId, companyId } })
+    let protocol
+    if (nfeProtocolId) {
+      protocol = await prisma.nfeProtocol.findFirst({ where: { id: nfeProtocolId, companyId } })
+    } else {
+      protocol = await prisma.nfeProtocol.findFirst({
+        where: { orderId, companyId },
+        orderBy: { createdAt: 'desc' }
+      })
+    }
     if (!protocol) return res.status(404).json({ error: 'Protocolo não encontrado' })
     if (!protocol.rawXml) return res.status(400).json({ error: 'XML não disponível' })
 
-    // TODO: enviar via nodemailer/SMTP configurado na empresa
-    return res.status(501).json({ error: 'Serviço de e-mail não configurado. Integre SMTP nas configurações.' })
+    let orderDisplay = null
+    if (protocol.orderId) {
+      const o = await prisma.order.findUnique({ where: { id: protocol.orderId }, select: { displaySimple: true } })
+      orderDisplay = o?.displaySimple || null
+    }
+
+    await sendNfeXmlEmail(email, { xml: protocol.rawXml, nProt: protocol.nProt, orderDisplay })
+    return res.json({ success: true })
   } catch (err) {
     return res.status(500).json({ error: err?.message || String(err) })
   }
