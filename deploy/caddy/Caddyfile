@@ -33,10 +33,17 @@ API_DOMAIN_PLACEHOLDER {
     tls {
         on_demand
     }
-    reverse_proxy localhost:3000 {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+    # /api/* → backend (strip /api prefix so routes match Express mounts)
+    handle_path /api/* {
+        reverse_proxy localhost:3000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    # Everything else → Vue SPA (frontend detects custom domain and renders menu)
+    handle {
+        reverse_proxy localhost:8080
     }
 }
 

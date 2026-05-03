@@ -17,6 +17,12 @@ export function customDomainResolver() {
         return next()
       }
 
+      // Skip API/JSON requests — only rewrite HTML navigations.
+      // Caddy routes /api/* from custom domains to the backend (stripping /api/);
+      // those requests must reach their actual routes, not be rewritten to the menu.
+      const accept = req.headers.accept || ''
+      if (!accept.includes('text/html')) return next()
+
       // Check cache
       const now = Date.now()
       const cached = cache.get(host)
