@@ -1496,8 +1496,9 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
           couponDiscount: Number(couponDiscount || 0),
           orderType: String(orderType || ''),
           deliveryFee: deliveryFee,
-          // attach resolved storeId when available so downstream consumers can rely on relation
+          // attach resolved storeId and menuId so downstream consumers (e.g. WhatsApp routing) can rely on them
           ...(resolvedStore ? { storeId: resolvedStore.id } : {}),
+          ...(menuId ? { menuId } : {}),
           payload: payloadToPersist,
           items: {
             // persist provided options (if any) into the OrderItem.options JSON column

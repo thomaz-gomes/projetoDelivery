@@ -207,6 +207,9 @@ model Order {
   // optional: associate this order to a specific store (useful for multistore / multi-CNPJ setups)
   storeId              String?
   store                Store?                @relation(fields: [storeId], references: [id])
+  // optional: menu from which this order originated (used for WhatsApp instance routing)
+  menuId               String?
+  menu                 Menu?                 @relation(fields: [menuId], references: [id])
   externalId           String?               @unique
   displayId            String?
   // Per-day sequential visual number (1,2,3...). Persisted as integer.
@@ -641,6 +644,7 @@ model Menu {
   greetingReply      QuickReply?       @relation("MenuGreetingReply", fields: [greetingReplyId], references: [id])
   conversations      Conversation[]
   greetingTimeRules  GreetingTimeRule[]
+  orders             Order[]
 }
 
 model CustomDomain {

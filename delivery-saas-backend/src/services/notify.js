@@ -91,7 +91,26 @@ async function formatDisplayNumber(order) {
   } catch (e) { return String(order.id || '').slice(0,6); }
 }
 
-export async function pickConnectedInstance(companyId) {
+export async function pickConnectedInstance(companyId, { menuId, storeId } = {}) {
+  // 1. Prioridade: instância vinculada ao cardápio
+  if (menuId) {
+    const menu = await prisma.menu.findUnique({
+      where: { id: menuId },
+      select: { whatsappInstance: true },
+    });
+    if (menu?.whatsappInstance?.status === 'CONNECTED') return menu.whatsappInstance;
+  }
+
+  // 2. Fallback: instância vinculada à loja
+  if (storeId) {
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { whatsappInstance: true },
+    });
+    if (store?.whatsappInstance?.status === 'CONNECTED') return store.whatsappInstance;
+  }
+
+  // 3. Fallback: qualquer instância conectada da empresa
   let inst = await prisma.whatsAppInstance.findFirst({
     where: { companyId, status: 'CONNECTED' },
     orderBy: { createdAt: 'desc' },
@@ -134,7 +153,7 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
       return;
     }
 
-    const inst = await pickConnectedInstance(order.companyId);
+    const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
     if (!inst) {
       console.warn('[notifyRiderAssigned] Sem instância CONNECTED para company', order.companyId);
       return;
@@ -227,7 +246,7 @@ export async function notifyCustomerStatus(orderId, newStatus) {
     );
     if (!phone) return;
 
-    const inst = await pickConnectedInstance(order.companyId);
+    const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
     if (!inst) {
       console.warn('[notifyCustomerStatus] Sem instância CONNECTED para company', order.companyId);
       return;
@@ -306,7 +325,7 @@ export async function notifyCustomerOrderSummary(orderId) {
     );
     if (!phone) return;
 
-    const inst = await pickConnectedInstance(order.companyId);
+    const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
     if (!inst) {
       console.warn('[notifyCustomerOrderSummary] Sem instância CONNECTED para company', order.companyId);
       return;

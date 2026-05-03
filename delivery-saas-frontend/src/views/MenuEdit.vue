@@ -53,6 +53,18 @@
             <div class="mb-3">
               <label class="form-label">WhatsApp (opcional)</label>
               <TextInput v-model="form.whatsapp" placeholder="(00) 0 0000-0000" maxlength="16" inputClass="form-control" @input="handleWhatsAppInput" />
+              <div class="form-text">Número exibido no botão "Pedir pelo WhatsApp" deste cardápio.</div>
+            </div>
+
+            <div class="mb-3" v-if="waInstances.length">
+              <label class="form-label">Instância WhatsApp / Bot (opcional)</label>
+              <select class="form-select" v-model="form.whatsappInstanceId">
+                <option :value="null">— Usar padrão da empresa —</option>
+                <option v-for="inst in waInstances" :key="inst.id" :value="inst.id">
+                  {{ inst.instanceName }} <span v-if="inst.status !== 'CONNECTED'">({{ inst.status }})</span>
+                </option>
+              </select>
+              <div class="form-text">Pedidos deste cardápio usarão esta instância para notificações e bot.</div>
             </div>
 
             <div class="mb-3 border rounded p-3">
@@ -310,7 +322,8 @@ const isEdit = Boolean(id)
 const saas = useSaasStore()
 const isCatalogOnly = computed(() => saas.isCardapioSimplesOnly)
 
-const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
+const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', whatsappInstanceId: null, bannerUrl: '', logoUrl: '', open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
+const waInstances = ref([])
 // When catalogMode is enabled, disable delivery and pickup (and vice-versa)
 watch(() => form.value.catalogMode, (val) => {
   if (val && !isCatalogOnly.value) {
@@ -359,12 +372,16 @@ const dnsResult = ref(null)
 
 async function load(){
   try{
-    const st = await api.get('/stores')
-    stores.value = st.data || []
+    const [stRes, instRes] = await Promise.all([
+      api.get('/stores'),
+      api.get('/wa/instances').catch(() => ({ data: [] })),
+    ])
+    stores.value = stRes.data || []
+    waInstances.value = Array.isArray(instRes.data) ? instRes.data : []
     if(isEdit){
       const res = await api.get(`/menu/menus/${id}`)
       const d = res.data || {}
-      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: d.address || '', phone: d.phone || '', whatsapp: d.whatsapp || '', bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null, open24Hours: !!d.open24Hours, timezone: d.timezone || '', allowDelivery: typeof d.allowDelivery !== 'undefined' ? !!d.allowDelivery : true, allowPickup: typeof d.allowPickup !== 'undefined' ? !!d.allowPickup : true, catalogMode: !!d.catalogMode }
+      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: d.address || '', phone: d.phone || '', whatsapp: d.whatsapp || '', whatsappInstanceId: d.whatsappInstanceId || null, bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null, open24Hours: !!d.open24Hours, timezone: d.timezone || '', allowDelivery: typeof d.allowDelivery !== 'undefined' ? !!d.allowDelivery : true, allowPickup: typeof d.allowPickup !== 'undefined' ? !!d.allowPickup : true, catalogMode: !!d.catalogMode }
       // Try to fetch store settings to prefill menu-specific metadata (menus map)
       try {
         if (d.storeId) {
@@ -485,6 +502,7 @@ async function save(){
           if (form.value.address !== undefined) menuPayload.address = form.value.address || null
           if (form.value.phone !== undefined) menuPayload.phone = form.value.phone || null
           if (form.value.whatsapp !== undefined) menuPayload.whatsapp = form.value.whatsapp || null
+          if (form.value.whatsappInstanceId !== undefined) menuPayload.whatsappInstanceId = form.value.whatsappInstanceId || null
           if (form.value.timezone !== undefined) menuPayload.timezone = form.value.timezone || null
           if (form.value.open24Hours !== undefined) menuPayload.open24Hours = !!form.value.open24Hours
           if (form.value.open24Hours) {

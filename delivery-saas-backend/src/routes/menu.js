@@ -122,7 +122,7 @@ router.patch('/menus/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) =
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, description, storeId, logoUrl, bannerUrl, isActive, position, slug = undefined, address, phone, whatsapp, timezone, weeklySchedule, open24Hours, allowDelivery, allowPickup, catalogMode } = req.body || {}
+  const { name, description, storeId, logoUrl, bannerUrl, isActive, position, slug = undefined, address, phone, whatsapp, whatsappInstanceId, timezone, weeklySchedule, open24Hours, allowDelivery, allowPickup, catalogMode } = req.body || {}
   if (storeId) {
     const st = await prisma.store.findUnique({ where: { id: storeId } })
     if (!st || st.companyId !== companyId) return res.status(400).json({ message: 'Loja inválida' })
@@ -152,7 +152,7 @@ router.patch('/menus/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) =
   let finalWeeklySchedule = weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule
   if (finalOpen24Hours) finalWeeklySchedule = null
 
-  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, bannerUrl: bannerUrl ?? existing.bannerUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: finalWeeklySchedule, open24Hours: finalOpen24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
+  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, bannerUrl: bannerUrl ?? existing.bannerUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, whatsappInstanceId: whatsappInstanceId !== undefined ? (whatsappInstanceId || null) : existing.whatsappInstanceId, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: finalWeeklySchedule, open24Hours: finalOpen24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
 
   // Emit real-time socket event so public menus react immediately when a menu is toggled
   try {
