@@ -92,6 +92,37 @@ router.get('/resolve-public', async (req, res) => {
   }
 })
 
+// ---------- GET /internal/check-domain ----------
+// Chamado pelo Caddy (on-demand TLS) para autorizar emissão de certificado.
+// Só aceita requisições de localhost — o Caddy roda no host, não no container.
+router.get('/internal/check-domain', async (req, res) => {
+  const ip = (req.ip || req.socket?.remoteAddress || '').replace('::ffff:', '')
+  if (ip !== '127.0.0.1' && ip !== '::1') return res.status(403).end()
+
+  const domain = String(req.query.domain || '').toLowerCase().trim()
+  if (!domain) return res.status(400).end()
+
+  try {
+    let record = await prisma.customDomain.findUnique({
+      where: { domain },
+      select: { status: true, paidUntil: true },
+    })
+    if (!record) {
+      const alt = domain.startsWith('www.') ? domain.slice(4) : `www.${domain}`
+      record = await prisma.customDomain.findUnique({
+        where: { domain: alt },
+        select: { status: true, paidUntil: true },
+      })
+    }
+    if (!record || record.status !== 'ACTIVE') return res.status(404).end()
+    if (record.paidUntil && new Date(record.paidUntil) < new Date()) return res.status(403).end()
+    return res.status(200).end()
+  } catch (e) {
+    console.error('[check-domain] error:', e.message)
+    return res.status(500).end()
+  }
+})
+
 // All remaining routes require authentication
 router.use(authMiddleware)
 
