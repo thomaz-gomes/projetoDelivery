@@ -171,6 +171,13 @@ async function load() {
     for (const svc of AI_PROVIDER_SERVICES) {
       if (!providerMap.value[svc.key]) providerMap.value[svc.key] = svc.default
     }
+    const respTecRow = data.find(r => r.key === 'nfe_resp_tec')
+    if (respTecRow && respTecRow.isSet && respTecRow.value) {
+      try {
+        const parsed = JSON.parse(respTecRow.value)
+        infRespTec.value = { CNPJ: parsed.CNPJ || '', xContato: parsed.xContato || '', email: parsed.email || '', fone: parsed.fone || '' }
+      } catch { /* ignore */ }
+    }
   } catch (e) {
     error.value = e?.response?.data?.message || 'Erro ao carregar configurações'
   } finally {
@@ -424,6 +431,48 @@ async function deletePricing(id) {
   }
 }
 
+// ── Fornecedor de Software (infRespTec) ───────────────────────────────────
+const infRespTec = ref({ CNPJ: '', xContato: '', email: '', fone: '' })
+const savingFornecedor = ref(false)
+const savedFornecedor = ref(false)
+const errorFornecedor = ref(null)
+
+async function saveFornecedor() {
+  savingFornecedor.value = true
+  savedFornecedor.value = false
+  errorFornecedor.value = null
+  try {
+    const v = infRespTec.value
+    const obj = {
+      CNPJ: v.CNPJ.replace(/\D/g, ''),
+      xContato: v.xContato.trim(),
+      email: v.email.trim(),
+      fone: v.fone.replace(/\D/g, ''),
+    }
+    await api.put('/saas/settings', [{ key: 'nfe_resp_tec', value: JSON.stringify(obj) }])
+    savedFornecedor.value = true
+    setTimeout(() => { savedFornecedor.value = false }, 3000)
+  } catch (e) {
+    errorFornecedor.value = e?.response?.data?.message || 'Erro ao salvar dados do fornecedor'
+  } finally {
+    savingFornecedor.value = false
+  }
+}
+
+async function clearFornecedor() {
+  if (!confirm('Remover os dados do fornecedor de software?')) return
+  savingFornecedor.value = true
+  errorFornecedor.value = null
+  try {
+    await api.put('/saas/settings', [{ key: 'nfe_resp_tec', value: '' }])
+    infRespTec.value = { CNPJ: '', xContato: '', email: '', fone: '' }
+  } catch (e) {
+    errorFornecedor.value = e?.response?.data?.message || 'Erro ao remover dados do fornecedor'
+  } finally {
+    savingFornecedor.value = false
+  }
+}
+
 onMounted(async () => {
   await load()
   await loadCredits()
@@ -461,6 +510,11 @@ onMounted(async () => {
         <li class="nav-item">
           <button class="nav-link" :class="{ active: activeTab === 'email' }" @click="activeTab = 'email'">
             <i class="bi bi-envelope me-2"></i>Email (SMTP)
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" :class="{ active: activeTab === 'fornecedor' }" @click="activeTab = 'fornecedor'">
+            <i class="bi bi-building me-2"></i>Fornecedor de Software
           </button>
         </li>
       </ul>
@@ -958,6 +1012,60 @@ onMounted(async () => {
                 <i v-else class="bi bi-send me-1"></i>Testar
               </button>
             </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ═══════════════════════════════════════════════
+           TAB: FORNECEDOR DE SOFTWARE
+      ════════════════════════════════════════════════ -->
+      <template v-if="activeTab === 'fornecedor'">
+        <div class="card border-0 shadow-sm mb-4">
+          <div class="card-body">
+            <h5 class="card-title mb-1">
+              <i class="bi bi-building me-2 text-primary"></i>Fornecedor de Software
+            </h5>
+            <p class="text-muted small mb-4">
+              Dados do responsável técnico pelo sistema (campo <code>infRespTec</code> na NF-e).
+              Informações obrigatórias na emissão de NFC-e.
+            </p>
+
+            <div v-if="errorFornecedor" class="alert alert-danger py-2 small">{{ errorFornecedor }}</div>
+            <div v-if="savedFornecedor" class="alert alert-success py-2 small">Dados salvos com sucesso.</div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">CNPJ do Fornecedor</label>
+              <input type="text" class="form-control font-monospace" style="max-width: 220px;"
+                v-model="infRespTec.CNPJ" placeholder="00.000.000/0001-00" />
+              <div class="form-text">CNPJ da empresa fornecedora do software (apenas números).</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Nome do Contato</label>
+              <input type="text" class="form-control" style="max-width: 400px;"
+                v-model="infRespTec.xContato" placeholder="Nome do responsável técnico" />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Email</label>
+              <input type="email" class="form-control font-monospace" style="max-width: 400px;"
+                v-model="infRespTec.email" placeholder="contato@fornecedor.com.br" />
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label fw-semibold">Telefone</label>
+              <input type="text" class="form-control font-monospace" style="max-width: 220px;"
+                v-model="infRespTec.fone" placeholder="(00) 00000-0000" />
+              <div class="form-text">Apenas números (DDD + número).</div>
+            </div>
+
+            <button class="btn btn-primary me-2" @click="saveFornecedor" :disabled="savingFornecedor">
+              <span v-if="savingFornecedor" class="spinner-border spinner-border-sm me-2"></span>
+              <i v-else class="bi bi-floppy me-2"></i>Salvar
+            </button>
+            <button class="btn btn-outline-danger btn-sm" @click="clearFornecedor" :disabled="savingFornecedor">
+              <i class="bi bi-trash me-1"></i>Remover
+            </button>
           </div>
         </div>
       </template>
