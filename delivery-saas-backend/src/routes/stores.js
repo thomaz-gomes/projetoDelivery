@@ -114,81 +114,74 @@ storesRouter.get('/:id', async (req, res) => {
     if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa associada' })
     const s = await prisma.store.findFirst({ where: { id, companyId } })
     if (!s) return res.status(404).json({ message: 'Loja não encontrada' })
-    // Attempt to read merged settings from public/uploads/store/<id>/settings.json
+    // Read and merge both settings files so keys missing from the centralized file
+    // (e.g. cnpj written before it existed) are filled from the legacy file.
+    // Centralized takes priority on conflicts.
     try {
       const path = await import('path')
       const fs = await import('fs')
-      // prefer centralized settings path
-      const candidates = [
-        path.join(process.cwd(), 'settings', 'stores', id, 'settings.json'),
-        path.join(process.cwd(), 'public', 'uploads', 'store', id, 'settings.json')
-      ]
-      for (const settingsPath of candidates) {
-        if (fs.existsSync(settingsPath)) {
-          try {
-            const raw = await fs.promises.readFile(settingsPath, 'utf8')
-            const settings = JSON.parse(raw || '{}')
-
-            // Cleanup expired forceOpen flags on read so stale overrides don't persist
-            try {
-              const cleanupExpiredForceFlags = (obj) => {
-                if (!obj || typeof obj !== 'object') return false
-                let mutated = false
-                const now = Date.now()
-                if (obj.forceOpenExpiresAt) {
-                  const t = Date.parse(String(obj.forceOpenExpiresAt))
-                  if (!isNaN(t) && t < now) {
-                    delete obj.forceOpen
-                    delete obj.forceOpenExpiresAt
+      const loadJson = (p) => { try { if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8') || '{}') } catch { } return null }
+      const legacySettings = loadJson(path.join(process.cwd(), 'public', 'uploads', 'store', id, 'settings.json'))
+      const centralizedSettings = loadJson(path.join(process.cwd(), 'settings', 'stores', id, 'settings.json'))
+      const settings = (legacySettings || centralizedSettings)
+        ? { ...(legacySettings || {}), ...(centralizedSettings || {}) }
+        : null
+      if (settings) {
+        // Cleanup expired forceOpen flags on read so stale overrides don't persist
+        try {
+          const cleanupExpiredForceFlags = (obj) => {
+            if (!obj || typeof obj !== 'object') return false
+            let mutated = false
+            const now = Date.now()
+            if (obj.forceOpenExpiresAt) {
+              const t = Date.parse(String(obj.forceOpenExpiresAt))
+              if (!isNaN(t) && t < now) {
+                delete obj.forceOpen
+                delete obj.forceOpenExpiresAt
+                mutated = true
+              }
+            }
+            if (obj.menus && typeof obj.menus === 'object') {
+              for (const k of Object.keys(obj.menus)) {
+                const m = obj.menus[k]
+                if (m && m.forceOpenExpiresAt) {
+                  const tt = Date.parse(String(m.forceOpenExpiresAt))
+                  if (!isNaN(tt) && tt < now) {
+                    delete m.forceOpen
+                    delete m.forceOpenExpiresAt
                     mutated = true
                   }
                 }
-                if (obj.menus && typeof obj.menus === 'object') {
-                  for (const k of Object.keys(obj.menus)) {
-                    const m = obj.menus[k]
-                    if (m && m.forceOpenExpiresAt) {
-                      const tt = Date.parse(String(m.forceOpenExpiresAt))
-                      if (!isNaN(tt) && tt < now) {
-                        delete m.forceOpen
-                        delete m.forceOpenExpiresAt
-                        mutated = true
-                      }
-                    }
-                  }
-                }
-                return mutated
               }
-
-              const mutated = cleanupExpiredForceFlags(settings)
-              if (mutated) {
-                // write back cleaned settings to both centralized and legacy paths (best-effort)
-                try {
-                  const settingsPathNew = path.join(process.cwd(), 'settings', 'stores', id, 'settings.json')
-                  await fs.promises.mkdir(path.dirname(settingsPathNew), { recursive: true })
-                  await fs.promises.writeFile(settingsPathNew, JSON.stringify(settings, null, 2), 'utf8')
-                } catch (e) { /* non-fatal */ }
-                try {
-                  const settingsPathLegacy = path.join(process.cwd(), 'public', 'uploads', 'store', id, 'settings.json')
-                  await fs.promises.mkdir(path.dirname(settingsPathLegacy), { recursive: true })
-                  await fs.promises.writeFile(settingsPathLegacy, JSON.stringify(settings, null, 2), 'utf8')
-                } catch (e) { /* non-fatal */ }
-              }
-            } catch (e) { /* non-fatal cleanup error */ }
-
-            // sanitize: never expose encrypted password blob
-            const safe = { ...settings }
-            if (safe.certPasswordEnc !== undefined) delete safe.certPasswordEnc
-            // attach helpful flags to response so UI can show certificate state
-            const certExists = Boolean(settings.certExists)
-            const certFilename = settings.certFilename || null
-            const certPasswordStored = settings.certPasswordEnc ? true : false
-            const merged = { ...s, ...safe, certExists, certFilename, certPasswordStored }
-            return res.json(merged)
-          } catch (e) {
-            console.warn('Failed to read store settings file', e)
-            // fallthrough to next candidate or returning the store DB object
+            }
+            return mutated
           }
-        }
+
+          const mutated = cleanupExpiredForceFlags(settings)
+          if (mutated) {
+            // write back cleaned settings to both paths (best-effort)
+            try {
+              const settingsPathNew = path.join(process.cwd(), 'settings', 'stores', id, 'settings.json')
+              await fs.promises.mkdir(path.dirname(settingsPathNew), { recursive: true })
+              await fs.promises.writeFile(settingsPathNew, JSON.stringify(settings, null, 2), 'utf8')
+            } catch (e) { /* non-fatal */ }
+            try {
+              const settingsPathLegacy = path.join(process.cwd(), 'public', 'uploads', 'store', id, 'settings.json')
+              await fs.promises.mkdir(path.dirname(settingsPathLegacy), { recursive: true })
+              await fs.promises.writeFile(settingsPathLegacy, JSON.stringify(settings, null, 2), 'utf8')
+            } catch (e) { /* non-fatal */ }
+          }
+        } catch (e) { /* non-fatal cleanup error */ }
+
+        // sanitize: never expose encrypted password blob
+        const safe = { ...settings }
+        if (safe.certPasswordEnc !== undefined) delete safe.certPasswordEnc
+        // attach helpful flags to response so UI can show certificate state
+        const certExists = Boolean(settings.certExists)
+        const certFilename = settings.certFilename || null
+        const certPasswordStored = settings.certPasswordEnc ? true : false
+        const merged = { ...s, ...safe, certExists, certFilename, certPasswordStored }
+        return res.json(merged)
       }
     } catch (e) {
       console.warn('Failed to load store settings path', e)
