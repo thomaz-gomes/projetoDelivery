@@ -85,9 +85,6 @@ services:
       - backend_uploads:/app/public/uploads
       - backend_certs:/app/secure/certs
       - backend_settings:/app/settings
-      # Custom domain SSL: write nginx configs + trigger files, host cron does certbot
-      - /etc/nginx/sites-enabled:/etc/nginx/sites-enabled
-      - /var/www/certbot:/var/www/certbot
     depends_on:
       migrate:
         condition: service_completed_successfully

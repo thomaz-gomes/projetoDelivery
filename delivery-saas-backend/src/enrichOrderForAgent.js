@@ -246,6 +246,8 @@ export async function enrichOrderForAgent(order) {
       order.receiptTemplate = ps.receiptTemplate || null
       order.copies = ps.copies || 1
       order.printerName = ps.printerName || null
+      order.fiscalPrinterName = ps.fiscalPrinterName || null
+      order.fiscalPrinterType = ps.fiscalPrinterType || null
       order.headerName = ps.headerName || null
       order.headerCity = ps.headerCity || null
       order.printerInterface = ps.interface || null

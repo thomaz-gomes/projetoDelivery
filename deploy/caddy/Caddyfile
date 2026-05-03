@@ -1,0 +1,47 @@
+{
+    email SSL_EMAIL_PLACEHOLDER
+    # Caddy chama este endpoint antes de emitir cert para qualquer domínio desconhecido.
+    # Retorno 2xx = autorizado; qualquer outro = recusado.
+    on_demand_tls {
+        ask http://localhost:3000/custom-domains/internal/check-domain
+        interval 2m
+        burst 1
+    }
+}
+
+# Domínio principal do frontend (SaaS admin panel)
+APP_DOMAIN_PLACEHOLDER {
+    encode zstd gzip
+    reverse_proxy localhost:8080
+}
+
+# Domínio principal da API
+API_DOMAIN_PLACEHOLDER {
+    # WebSocket (Socket.IO) — Caddy faz upgrade automaticamente
+    reverse_proxy localhost:3000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        transport http {
+            response_header_timeout 60s
+            read_timeout 90s
+        }
+    }
+}
+
+# Catch-all HTTPS para custom domains dos clientes — on-demand TLS
+:443 {
+    tls {
+        on_demand
+    }
+    reverse_proxy localhost:3000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# Redireciona HTTP → HTTPS para custom domains
+:80 {
+    redir https://{host}{uri} 301
+}

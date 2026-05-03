@@ -1601,8 +1601,22 @@ async function bulkPrint() {
   clearSelection();
 }
 
-function imprimirDanfe(order) {
-  window.open(`${API_URL}/nfe/danfe/${order.id}`, '_blank')
+async function imprimirDanfe(order) {
+  try {
+    const { data } = await api.post('/agent-print', {
+      id: order.id,
+      storeId: order.storeId,
+      fiscal: true,
+    })
+    if (data.ok) {
+      Swal.fire({ icon: 'success', title: 'DANFE enviada para impressão', timer: 1500, showConfirmButton: false })
+    } else {
+      throw new Error(data.error || 'Falha ao enviar para impressão')
+    }
+  } catch (e) {
+    const msg = (e.response && e.response.data && e.response.data.error) || e.message || 'Erro desconhecido'
+    Swal.fire({ icon: 'error', title: 'Erro ao imprimir DANFE', text: msg })
+  }
 }
 
 async function emitirNfeOrder(order) {

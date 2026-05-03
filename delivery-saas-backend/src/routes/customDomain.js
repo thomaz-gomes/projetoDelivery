@@ -1,54 +1,9 @@
 import express from 'express'
 import dns from 'dns'
-import fs from 'fs'
-import path from 'path'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { getSetting } from '../services/systemSettings.js'
-
-// Directory where SSL provisioning requests are placed (bind-mounted with host)
-const SSL_PENDING_DIR = '/var/www/certbot/pending'
-
-// Poll for host-side SSL provisioning result (max 5 min)
-function pollSslStatus(domainId, domainName) {
-  const statusFile = path.join(SSL_PENDING_DIR, `${domainId}.status`)
-  let attempts = 0
-  const maxAttempts = 60 // 5 min (every 5s)
-
-  const interval = setInterval(async () => {
-    attempts++
-    try {
-      if (fs.existsSync(statusFile)) {
-        const result = fs.readFileSync(statusFile, 'utf8').trim()
-        clearInterval(interval)
-        fs.unlinkSync(statusFile) // cleanup
-
-        if (result === 'done') {
-          console.log(`[SSL] Host provisioned SSL for ${domainName}`)
-          await prisma.customDomain.update({
-            where: { id: domainId },
-            data: { status: 'ACTIVE', sslStatus: 'SSL_ACTIVE' }
-          })
-        } else {
-          console.error(`[SSL] Host provisioning FAILED for ${domainName}`)
-          await prisma.customDomain.update({
-            where: { id: domainId },
-            data: { sslStatus: 'FAILED' }
-          })
-        }
-      } else if (attempts >= maxAttempts) {
-        clearInterval(interval)
-        console.error(`[SSL] Timeout waiting for host to provision ${domainName}`)
-        await prisma.customDomain.update({
-          where: { id: domainId },
-          data: { sslStatus: 'FAILED' }
-        })
-      }
-    } catch (e) {
-      console.error(`[SSL] Poll error for ${domainName}:`, e.message)
-    }
-  }, 5000)
-}
+import { clearDomainCache } from '../middleware/customDomainResolver.js'
 
 const router = express.Router()
 
@@ -89,6 +44,37 @@ router.get('/resolve-public', async (req, res) => {
   } catch (e) {
     console.error('GET /custom-domains/resolve-public error:', e?.message || e)
     res.status(500).json({ message: 'Erro ao resolver domínio' })
+  }
+})
+
+// ---------- GET /internal/check-domain ----------
+// Chamado pelo Caddy (on-demand TLS) para autorizar emissão de certificado.
+// Só aceita requisições de localhost — o Caddy roda no host, não no container.
+router.get('/internal/check-domain', async (req, res) => {
+  const ip = (req.socket?.remoteAddress || '').replace('::ffff:', '')
+  if (ip !== '127.0.0.1' && ip !== '::1') return res.status(403).end()
+
+  const domain = String(req.query.domain || '').toLowerCase().trim()
+  if (!domain) return res.status(400).end()
+
+  try {
+    let record = await prisma.customDomain.findUnique({
+      where: { domain },
+      select: { status: true, paidUntil: true },
+    })
+    if (!record) {
+      const alt = domain.startsWith('www.') ? domain.slice(4) : `www.${domain}`
+      record = await prisma.customDomain.findUnique({
+        where: { domain: alt },
+        select: { status: true, paidUntil: true },
+      })
+    }
+    if (!record || record.status !== 'ACTIVE') return res.status(404).end()
+    if (record.paidUntil && new Date(record.paidUntil) < new Date()) return res.status(403).end()
+    return res.status(200).end()
+  } catch (e) {
+    console.error('[check-domain] error:', e?.message || e)
+    return res.status(500).end()
   }
 })
 
@@ -318,14 +304,10 @@ router.post('/:id/verify', requireRole('ADMIN'), async (req, res) => {
     const serverIp = await getSetting('custom_domain_server_ip', 'CUSTOM_DOMAIN_SERVER_IP')
     if (!serverIp) return res.status(500).json({ message: 'IP do servidor não configurado. Configure em Configurações SaaS.' })
 
-    // Resolve DNS
     let addresses
     try {
       addresses = await new Promise((resolve, reject) => {
-        dns.resolve4(record.domain, (err, addrs) => {
-          if (err) return reject(err)
-          resolve(addrs)
-        })
+        dns.resolve4(record.domain, (err, addrs) => (err ? reject(err) : resolve(addrs)))
       })
     } catch (dnsErr) {
       return res.status(400).json({
@@ -343,54 +325,17 @@ router.post('/:id/verify', requireRole('ADMIN'), async (req, res) => {
       })
     }
 
-    // DNS verified — update status and trigger SSL provisioning placeholder
+    // DNS ok — ativa o domínio. Caddy emite o cert automaticamente no primeiro request.
     const updated = await prisma.customDomain.update({
       where: { id },
       data: {
-        status: 'VERIFYING',
-        sslStatus: 'PROVISIONING',
+        status: 'ACTIVE',
+        sslStatus: 'SSL_ACTIVE',
         verifiedAt: new Date(),
       },
     })
 
-    // Write HTTP-only nginx config (via bind mount to host)
-    const nginxConf = `/etc/nginx/sites-enabled/${record.domain}.conf`
-    const backendPort = process.env.PORT || '3000'
-    const httpConfig = `server {
-    listen 80;
-    server_name ${record.domain};
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:${backendPort};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-`
-    try {
-      fs.writeFileSync(nginxConf, httpConfig)
-      console.log(`[SSL] Wrote HTTP nginx config for ${record.domain}`)
-    } catch (e) {
-      console.error(`[SSL] Failed to write nginx config: ${e.message}`)
-    }
-
-    // Create trigger file for host-side cron to process
-    try {
-      fs.mkdirSync(SSL_PENDING_DIR, { recursive: true })
-      fs.writeFileSync(path.join(SSL_PENDING_DIR, `${record.id}.domain`), record.domain)
-      console.log(`[SSL] Trigger file created for ${record.domain} — waiting for host cron`)
-    } catch (e) {
-      console.error(`[SSL] Failed to create trigger file: ${e.message}`)
-    }
-
-    // Start polling for host-side result (cron writes .status file)
-    pollSslStatus(record.id, record.domain)
+    clearDomainCache(record.domain)
 
     res.json({ verified: true, status: updated.status, sslStatus: updated.sslStatus })
   } catch (e) {

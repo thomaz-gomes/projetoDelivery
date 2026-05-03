@@ -375,11 +375,12 @@ export async function syncMde(storeId, companyId) {
   if (!store) throw new Error('Loja nao encontrada');
   if (store.companyId !== companyId) throw new Error('Loja nao pertence a esta empresa');
 
-  // Get CNPJ — try store first, then emitente config
+  // Get CNPJ — try store DB first, fall back to settings files (handles DB null or invalid length)
   let cnpj = store.cnpj ? store.cnpj.replace(/\D/g, '') : null;
-  if (!cnpj) {
+  if (!cnpj || cnpj.length !== 14) {
     const emitenteConfig = getEmitenteConfig(companyId, storeId);
-    cnpj = emitenteConfig.cnpj ? emitenteConfig.cnpj.replace(/\D/g, '') : null;
+    const fromConfig = emitenteConfig.cnpj ? emitenteConfig.cnpj.replace(/\D/g, '') : null;
+    if (fromConfig && fromConfig.length === 14) cnpj = fromConfig;
   }
   if (!cnpj || cnpj.length !== 14) {
     throw new Error('CNPJ nao configurado para esta loja. Configure o CNPJ nas configuracoes da loja.');
@@ -647,9 +648,10 @@ export async function fetchFullNFe(importId, companyId) {
   if (!store) throw new Error('Loja nao encontrada');
 
   let cnpj = store.cnpj ? store.cnpj.replace(/\D/g, '') : null;
-  if (!cnpj) {
+  if (!cnpj || cnpj.length !== 14) {
     const emitenteConfig = getEmitenteConfig(companyId, storeId);
-    cnpj = emitenteConfig.cnpj ? emitenteConfig.cnpj.replace(/\D/g, '') : null;
+    const fromConfig = emitenteConfig.cnpj ? emitenteConfig.cnpj.replace(/\D/g, '') : null;
+    if (fromConfig && fromConfig.length === 14) cnpj = fromConfig;
   }
   if (!cnpj || cnpj.length !== 14) {
     throw new Error('CNPJ nao configurado para esta loja');
@@ -862,9 +864,10 @@ export async function activateMde(storeId, companyId) {
   if (store.companyId !== companyId) throw new Error('Loja nao pertence a esta empresa');
 
   let cnpj = store.cnpj ? store.cnpj.replace(/\D/g, '') : null;
-  if (!cnpj) {
+  if (!cnpj || cnpj.length !== 14) {
     const emitenteConfig = getEmitenteConfig(companyId, storeId);
-    cnpj = emitenteConfig.cnpj ? emitenteConfig.cnpj.replace(/\D/g, '') : null;
+    const fromConfig = emitenteConfig.cnpj ? emitenteConfig.cnpj.replace(/\D/g, '') : null;
+    if (fromConfig && fromConfig.length === 14) cnpj = fromConfig;
   }
   if (!cnpj || cnpj.length !== 14) {
     throw new Error('CNPJ nao configurado para esta loja. Configure o CNPJ nas configuracoes da loja.');
