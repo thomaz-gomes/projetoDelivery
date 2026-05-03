@@ -3,6 +3,7 @@ import dns from 'dns'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
 import { getSetting } from '../services/systemSettings.js'
+import { clearDomainCache } from '../middleware/customDomainResolver.js'
 
 const router = express.Router()
 
@@ -50,7 +51,7 @@ router.get('/resolve-public', async (req, res) => {
 // Chamado pelo Caddy (on-demand TLS) para autorizar emissão de certificado.
 // Só aceita requisições de localhost — o Caddy roda no host, não no container.
 router.get('/internal/check-domain', async (req, res) => {
-  const ip = (req.ip || req.socket?.remoteAddress || '').replace('::ffff:', '')
+  const ip = (req.socket?.remoteAddress || '').replace('::ffff:', '')
   if (ip !== '127.0.0.1' && ip !== '::1') return res.status(403).end()
 
   const domain = String(req.query.domain || '').toLowerCase().trim()
@@ -333,6 +334,8 @@ router.post('/:id/verify', requireRole('ADMIN'), async (req, res) => {
         verifiedAt: new Date(),
       },
     })
+
+    clearDomainCache(record.domain)
 
     res.json({ verified: true, status: updated.status, sslStatus: updated.sslStatus })
   } catch (e) {
