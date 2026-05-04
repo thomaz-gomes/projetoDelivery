@@ -1,276 +1,306 @@
 <template>
-  <div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <button class="btn btn-link ps-0" @click="$router.back()">← Voltar</button>
-      <button v-if="order && !order.payload?.nfe?.nProt" class="btn btn-outline-success btn-sm" @click="emitirNfe" :disabled="emitindoNfe">
-        <span v-if="emitindoNfe" class="spinner-border spinner-border-sm me-1"></span>
-        <i v-else class="bi bi-receipt"></i> Emitir NF-e
-      </button>
+  <div class="container-fluid px-4 py-4">
+
+    <!-- Page Header -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div class="d-flex align-items-center gap-3">
+        <BaseButton variant="ghost" @click="$router.back()">
+          <i class="bi bi-arrow-left me-1"></i>Voltar
+        </BaseButton>
+        <div v-if="order">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h4 class="mb-0 fw-bold">Pedido #{{ formatOrderNumber(order) }}</h4>
+            <span class="badge rounded-pill" :class="getStatusClass(order.status)">{{ getStatusLabel(order.status) }}</span>
+          </div>
+          <small class="text-muted">{{ formatDateTime(order.createdAt) }}</small>
+        </div>
+        <h4 v-else class="mb-0 fw-bold">Detalhes do Pedido</h4>
+      </div>
+      <div v-if="order && !order.payload?.nfe?.nProt">
+        <BaseButton variant="outline" :loading="emitindoNfe" @click="emitirNfe">
+          <i class="bi bi-receipt me-1"></i>Emitir NF-e
+        </BaseButton>
+      </div>
     </div>
-    <h2 class="mb-4">Detalhes do Pedido</h2>
 
-    <div v-if="!order" class="alert alert-secondary">Carregando pedido...</div>
+    <!-- Loading -->
+    <div v-if="!order" class="text-center py-5">
+      <div class="spinner-border" style="color: var(--primary)" role="status"></div>
+      <p class="text-muted mt-3 mb-0">Carregando pedido...</p>
+    </div>
 
-    <div v-else>
-      <!-- Informações Principais -->
-      <div class="card mb-3">
-        <div class="card-body">
-          <h5 class="card-title fw-semibold mb-3">Pedido nº {{ formatOrderNumber(order) }}</h5>
-          <div class="row mb-2">
-            <div class="col-md-6">
-              <div class="mb-3">
-                <span class="text-muted small d-block">Status</span>
-                <span class="badge" :class="getStatusClass(order.status)">{{ getStatusLabel(order.status) }}</span>
-              </div>
-              <div class="mb-3">
-                <span class="text-muted small d-block">Tipo</span>
-                <strong>{{ getOrderType(order) }}</strong>
-              </div>
-              <div class="mb-3">
-                <span class="text-muted small d-block">Origem</span>
-                <strong>{{ order.customerSource || 'PUBLIC' }}</strong>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="mb-3">
-                <span class="text-muted small d-block">Data / Hora</span>
-                <strong>{{ formatDateTime(order.createdAt) }}</strong>
-              </div>
-              <div v-if="order.storeId" class="mb-3">
-                <span class="text-muted small d-block">Loja</span>
-                <strong>{{ order.store?.name || order.storeId }}</strong>
-              </div>
-              <div v-if="order.deliveryNeighborhood" class="mb-3">
-                <span class="text-muted small d-block">Bairro</span>
-                <strong>{{ order.deliveryNeighborhood }}</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div v-else class="row g-4">
 
-      <!-- Informações do Cliente -->
-      <div class="card mb-3">
-        <div class="card-body">
-          <h6 class="fw-semibold mb-3">Cliente</h6>
-          <div class="row">
-            <div class="col-md-6">
-              <div class="mb-3">
-                <span class="text-muted small d-block">Nome</span>
-                <strong>{{ order.customerName || order.customer?.fullName || order.customer?.name || '-' }}</strong>
-              </div>
-              <div class="mb-3" v-if="order.customerPhone">
-                <span class="text-muted small d-block">Telefone</span>
-                <strong>{{ order.customerPhone }}</strong>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div v-if="order.customerId" class="mb-3">
-                <span class="text-muted small d-block">ID do Cliente</span>
-                <strong class="font-monospace small">{{ order.customerId }}</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- LEFT: itens + financeiro -->
+      <div class="col-12 col-lg-8">
 
-      <!-- Endereço de Entrega -->
-      <div v-if="(order.orderType === 'DELIVERY' || order.address) && hasAddress(order)" class="card mb-3">
-        <div class="card-body">
-          <h6 class="fw-semibold mb-3">Endereço de Entrega</h6>
-          <div class="mb-0">
-            <div class="mb-2">{{ getMainAddress(order) }}</div>
-            <div v-if="getAddressDetails(order).neighborhood" class="text-muted small">
-              <strong>Bairro:</strong> {{ getAddressDetails(order).neighborhood }}
+        <!-- Itens do Pedido -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <div class="section-header">
+              <i class="bi bi-bag-check"></i>
+              <span>Itens do Pedido</span>
             </div>
-            <div v-if="getAddressDetails(order).complement" class="text-muted small">
-              <strong>Complemento:</strong> {{ getAddressDetails(order).complement }}
-            </div>
-            <div v-if="getAddressDetails(order).reference" class="text-muted small">
-              <strong>Referência:</strong> {{ getAddressDetails(order).reference }}
-            </div>
-            <div v-if="getAddressDetails(order).observation" class="text-muted small">
-              <strong>Observação:</strong> {{ getAddressDetails(order).observation }}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Itens do Pedido -->
-      <div class="card mb-3">
-        <div class="card-body">
-          <h6 class="fw-semibold mb-3">Itens do Pedido</h6>
-          <div class="table-responsive">
-            <table class="table table-sm">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th class="text-center">Qtd</th>
-                  <th class="text-end">Preço Unit.</th>
-                  <th class="text-end">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template v-for="(it, idx) in order.items || []" :key="idx">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead>
                   <tr>
-                    <td>
-                      <div class="fw-semibold">{{ it.name }}</div>
-                      <div v-if="it.options && it.options.length" class="text-muted small mt-1">
-                        <div v-for="(opt, optIdx) in it.options" :key="optIdx" class="ms-2">
-                          + {{ opt.name }} <span v-if="opt.quantity > 1">({{ opt.quantity }}x)</span>
-                          <span v-if="opt.price && Number(opt.price) > 0">· {{ formatCurrency(opt.price) }}</span>
-                        </div>
-                      </div>
-                      <div v-if="it.notes" class="text-muted small mt-1"><strong>Obs:</strong> {{ it.notes }}</div>
-                    </td>
-                    <td class="text-center align-top">{{ it.quantity }}</td>
-                    <td class="text-end align-top">{{ formatCurrency(it.price) }}</td>
-                    <td class="text-end align-top">{{ formatCurrency(Number(it.price || 0) * Number(it.quantity || 1)) }}</td>
+                    <th>Item</th>
+                    <th class="text-center" style="width:60px">Qtd</th>
+                    <th class="text-end" style="width:110px">Preço Unit.</th>
+                    <th class="text-end" style="width:110px">Subtotal</th>
                   </tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
-          <div class="border-top pt-3 mt-3">
-            <div class="d-flex justify-content-between mb-2">
-              <span class="text-muted">Subtotal:</span>
-              <strong>{{ formatCurrency(calculateSubtotal()) }}</strong>
+                </thead>
+                <tbody>
+                  <template v-for="(it, idx) in order.items || []" :key="idx">
+                    <tr>
+                      <td>
+                        <div class="fw-semibold small">{{ it.name }}</div>
+                        <div v-if="it.options && it.options.length" class="mt-1">
+                          <div v-for="(opt, optIdx) in it.options" :key="optIdx" class="option-line">
+                            <i class="bi bi-plus"></i>
+                            {{ opt.name }}<span v-if="opt.quantity > 1"> ({{ opt.quantity }}x)</span><span v-if="opt.price && Number(opt.price) > 0"> · {{ formatCurrency(opt.price) }}</span>
+                          </div>
+                        </div>
+                        <div v-if="it.notes" class="option-line mt-1">
+                          <i class="bi bi-chat-left-text me-1"></i>{{ it.notes }}
+                        </div>
+                      </td>
+                      <td class="text-center small">{{ it.quantity }}</td>
+                      <td class="text-end small">{{ formatCurrency(it.price) }}</td>
+                      <td class="text-end small fw-semibold">{{ formatCurrency(Number(it.price || 0) * Number(it.quantity || 1)) }}</td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
             </div>
-            <div v-if="vouchers.storeDiscount > 0" class="d-flex justify-content-between mb-2">
-              <span class="text-muted">Desconto Loja:</span>
-              <strong class="text-danger">- {{ formatCurrency(vouchers.storeDiscount) }}</strong>
-            </div>
-            <div v-if="order.orderType === 'DELIVERY'" class="d-flex justify-content-between mb-2">
-              <span class="text-muted">Taxa de entrega:</span>
-              <strong>{{ Number(order.deliveryFee || 0) > 0 ? formatCurrency(order.deliveryFee) : 'Grátis' }}</strong>
-            </div>
-            <div v-if="Number(order.additionalFees || 0) > 0" class="d-flex justify-content-between mb-2">
-              <span class="text-muted">Taxa de serviço (iFood):</span>
-              <strong>{{ formatCurrency(order.additionalFees) }}</strong>
-            </div>
-            <div class="d-flex justify-content-between pt-2 border-top">
-              <span class="fw-semibold">Total faturado:</span>
-              <strong class="fs-5">{{ formatCurrency(storeRevenue(order)) }}</strong>
-            </div>
-            <div v-if="vouchers.discountIfood > 0" class="d-flex justify-content-between text-muted small">
-              <span>Cliente pagou: {{ formatCurrency(order.total) }}</span>
-              <span>iFood repassa: {{ formatCurrency(vouchers.discountIfood) }}</span>
+
+            <!-- Totais -->
+            <div class="mt-3 pt-3 border-top">
+              <div class="d-flex justify-content-between mb-2">
+                <span class="text-muted small">Subtotal</span>
+                <span class="small">{{ formatCurrency(calculateSubtotal()) }}</span>
+              </div>
+              <div v-if="vouchers.storeDiscount > 0" class="d-flex justify-content-between mb-2">
+                <span class="text-muted small">Desconto Loja</span>
+                <span class="small text-danger">− {{ formatCurrency(vouchers.storeDiscount) }}</span>
+              </div>
+              <div v-if="order.orderType === 'DELIVERY'" class="d-flex justify-content-between mb-2">
+                <span class="text-muted small">Taxa de entrega</span>
+                <span class="small">{{ Number(order.deliveryFee || 0) > 0 ? formatCurrency(order.deliveryFee) : 'Grátis' }}</span>
+              </div>
+              <div v-if="Number(order.additionalFees || 0) > 0" class="d-flex justify-content-between mb-2">
+                <span class="text-muted small">Taxa de serviço (iFood)</span>
+                <span class="small">{{ formatCurrency(order.additionalFees) }}</span>
+              </div>
+              <div class="d-flex justify-content-between pt-2 border-top mt-1">
+                <span class="fw-semibold">Total faturado</span>
+                <span class="fw-bold" style="font-size:1.05rem; color:var(--primary)">{{ formatCurrency(storeRevenue(order)) }}</span>
+              </div>
+              <div v-if="vouchers.discountIfood > 0" class="d-flex justify-content-between mt-2">
+                <span class="text-muted" style="font-size:0.78rem">Cliente pagou: {{ formatCurrency(order.total) }}</span>
+                <span class="text-muted" style="font-size:0.78rem">iFood repassa: {{ formatCurrency(vouchers.discountIfood) }}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Pagamento -->
-      <div class="card mb-3">
-        <div class="card-body">
-          <h6 class="fw-semibold mb-3">Pagamento</h6>
-          <div class="row">
-            <div class="col-md-6">
-              <div class="mb-3">
-                <span class="text-muted small d-block">Método</span>
-                <strong>{{ getPaymentMethod(order) }}</strong>
+        <!-- Pagamento -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <div class="section-header">
+              <i class="bi bi-wallet2"></i>
+              <span>Pagamento</span>
+            </div>
+            <div class="row g-3">
+              <div class="col-6">
+                <span class="detail-label">Método</span>
+                <span class="detail-value">{{ getPaymentMethod(order) }}</span>
               </div>
-              <div v-if="getPaymentAmount(order)" class="mb-3">
-                <span class="text-muted small d-block">Valor pago</span>
-                <strong>{{ formatCurrency(getPaymentAmount(order)) }}</strong>
+              <div v-if="getPaymentAmount(order)" class="col-6">
+                <span class="detail-label">Valor pago</span>
+                <span class="detail-value">{{ formatCurrency(getPaymentAmount(order)) }}</span>
+              </div>
+              <div v-if="getChangeFor(order)" class="col-6">
+                <span class="detail-label">Troco para</span>
+                <span class="detail-value">{{ formatCurrency(getChangeFor(order)) }}</span>
+              </div>
+              <div v-if="getChangeFor(order) && getPaymentAmount(order)" class="col-6">
+                <span class="detail-label">Troco</span>
+                <span class="detail-value">{{ formatCurrency(Number(getChangeFor(order)) - Number(getPaymentAmount(order))) }}</span>
               </div>
             </div>
-            <div class="col-md-6">
-              <div v-if="getChangeFor(order)" class="mb-3">
-                <span class="text-muted small d-block">Troco para</span>
-                <strong>{{ formatCurrency(getChangeFor(order)) }}</strong>
+            <div v-if="vouchers.voucherPayments.length > 0" class="border-top pt-3 mt-3">
+              <div v-for="(vp, i) in vouchers.voucherPayments" :key="i" class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-muted small"><i class="bi bi-ticket-perforated me-1"></i>{{ vp.label }}</span>
+                <span class="fw-semibold small" style="color:var(--success)">{{ formatCurrency(vp.value) }}</span>
               </div>
-              <div v-if="getChangeFor(order) && getPaymentAmount(order)" class="mb-3">
-                <span class="text-muted small d-block">Troco</span>
-                <strong>{{ formatCurrency(Number(getChangeFor(order)) - Number(getPaymentAmount(order))) }}</strong>
-              </div>
-            </div>
-          </div>
-          <div v-if="vouchers.voucherPayments.length > 0" class="border-top pt-3 mt-2">
-            <div v-for="(vp, i) in vouchers.voucherPayments" :key="i" class="d-flex justify-content-between align-items-center mb-1">
-              <span class="text-muted">
-                <i class="bi bi-ticket-perforated me-1"></i>
-                {{ vp.label }}
-              </span>
-              <strong class="text-success">{{ formatCurrency(vp.value) }}</strong>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Entregador -->
-      <div v-if="order.rider || order.riderId" class="card mb-3">
-        <div class="card-body">
-          <h6 class="fw-semibold mb-3">Entregador</h6>
-          <div>
-            <span class="text-muted small d-block">Nome</span>
-            <strong>{{ order.rider?.name || order.riderId }}</strong>
+        <!-- Cupom (condicional) -->
+        <div v-if="order.couponCode" class="card mb-4">
+          <div class="card-body">
+            <div class="section-header">
+              <i class="bi bi-tag"></i>
+              <span>Cupom Utilizado</span>
+            </div>
+            <div class="row g-3">
+              <div class="col-6">
+                <span class="detail-label">Código</span>
+                <span class="detail-value font-monospace">{{ order.couponCode }}</span>
+              </div>
+              <div class="col-6">
+                <span class="detail-label">Desconto</span>
+                <span class="detail-value" style="color:var(--success)">{{ formatCurrency(order.couponDiscount) }}</span>
+              </div>
+            </div>
           </div>
         </div>
+
+        <!-- NF-e (condicional) -->
+        <div v-if="order.payload?.nfe" class="card mb-4">
+          <div class="card-body">
+            <div class="section-header" style="color:var(--success)">
+              <i class="bi bi-check-circle-fill" style="color:var(--success)"></i>
+              <span>NF-e Emitida</span>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <span class="detail-label">Protocolo</span>
+                <span class="detail-value font-monospace small">{{ order.payload.nfe.nProt || '—' }}</span>
+              </div>
+              <div class="col-md-4">
+                <span class="detail-label">cStat</span>
+                <span class="detail-value">{{ order.payload.nfe.cStat || '—' }}</span>
+              </div>
+              <div class="col-md-4">
+                <span class="detail-label">Autorização</span>
+                <span class="detail-value">{{ order.payload.nfe.authorizedAt ? formatDateTime(order.payload.nfe.authorizedAt) : '—' }}</span>
+              </div>
+              <div v-if="order.payload.nfe.xMotivo" class="col-12">
+                <span class="detail-label">Motivo</span>
+                <span class="detail-value">{{ order.payload.nfe.xMotivo }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      <!-- Histórico de Status -->
-      <div v-if="order.histories && order.histories.length > 0" class="card mb-3">
-        <div class="card-body">
-          <h6 class="fw-semibold mb-3">Histórico de Status</h6>
-          <div class="timeline">
-            <div v-for="(h, idx) in order.histories" :key="h.id" class="timeline-item mb-3">
-              <div class="d-flex justify-content-between">
-                <div>
-                  <span class="badge bg-secondary">{{ h.from || 'Criado' }}</span>
-                  <span class="mx-2">→</span>
+      <!-- RIGHT: informações + cliente + endereço + entregador + histórico -->
+      <div class="col-12 col-lg-4">
+
+        <!-- Informações do Pedido -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <div class="section-header">
+              <i class="bi bi-info-circle"></i>
+              <span>Informações</span>
+            </div>
+            <div class="detail-list">
+              <div class="detail-row">
+                <span class="detail-label">Status</span>
+                <span class="badge rounded-pill" :class="getStatusClass(order.status)">{{ getStatusLabel(order.status) }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Tipo</span>
+                <span class="detail-value">{{ getOrderType(order) }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Origem</span>
+                <span class="detail-value">{{ order.customerSource || 'PUBLIC' }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Data</span>
+                <span class="detail-value">{{ formatDateTime(order.createdAt) }}</span>
+              </div>
+              <div v-if="order.storeId" class="detail-row">
+                <span class="detail-label">Loja</span>
+                <span class="detail-value">{{ order.store?.name || order.storeId }}</span>
+              </div>
+              <div v-if="order.deliveryNeighborhood" class="detail-row">
+                <span class="detail-label">Bairro</span>
+                <span class="detail-value">{{ order.deliveryNeighborhood }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cliente -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <div class="section-header">
+              <i class="bi bi-person"></i>
+              <span>Cliente</span>
+            </div>
+            <div class="detail-list">
+              <div class="detail-row">
+                <span class="detail-label">Nome</span>
+                <span class="detail-value">{{ order.customerName || order.customer?.fullName || order.customer?.name || '—' }}</span>
+              </div>
+              <div v-if="order.customerPhone" class="detail-row">
+                <span class="detail-label">Telefone</span>
+                <span class="detail-value">{{ order.customerPhone }}</span>
+              </div>
+              <div v-if="order.customerId" class="detail-row">
+                <span class="detail-label">ID</span>
+                <span class="detail-value font-monospace" style="font-size:0.75rem;color:var(--text-muted)">{{ order.customerId.slice(0, 8) }}…</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Endereço de Entrega (condicional) -->
+        <div v-if="(order.orderType === 'DELIVERY' || order.address) && hasAddress(order)" class="card mb-4">
+          <div class="card-body">
+            <div class="section-header">
+              <i class="bi bi-geo-alt"></i>
+              <span>Endereço de Entrega</span>
+            </div>
+            <p class="mb-2 fw-semibold small">{{ getMainAddress(order) }}</p>
+            <div class="text-muted" style="font-size:0.8rem;line-height:1.7">
+              <div v-if="getAddressDetails(order).neighborhood"><strong>Bairro:</strong> {{ getAddressDetails(order).neighborhood }}</div>
+              <div v-if="getAddressDetails(order).complement"><strong>Compl.:</strong> {{ getAddressDetails(order).complement }}</div>
+              <div v-if="getAddressDetails(order).reference"><strong>Ref.:</strong> {{ getAddressDetails(order).reference }}</div>
+              <div v-if="getAddressDetails(order).observation"><strong>Obs.:</strong> {{ getAddressDetails(order).observation }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Entregador (condicional) -->
+        <div v-if="order.rider || order.riderId" class="card mb-4">
+          <div class="card-body">
+            <div class="section-header">
+              <i class="bi bi-bicycle"></i>
+              <span>Entregador</span>
+            </div>
+            <span class="detail-label">Nome</span>
+            <span class="detail-value d-block mt-1">{{ order.rider?.name || order.riderId }}</span>
+          </div>
+        </div>
+
+        <!-- Histórico de Status (condicional) -->
+        <div v-if="order.histories && order.histories.length > 0" class="card mb-4">
+          <div class="card-body">
+            <div class="section-header">
+              <i class="bi bi-clock-history"></i>
+              <span>Histórico</span>
+            </div>
+            <div class="history-list">
+              <div v-for="h in order.histories" :key="h.id" class="history-item">
+                <div class="d-flex align-items-center gap-1 flex-wrap">
+                  <span class="badge bg-light text-dark border">{{ h.from || 'Início' }}</span>
+                  <i class="bi bi-arrow-right" style="font-size:0.6rem;color:var(--text-muted)"></i>
                   <span class="badge bg-primary">{{ h.to }}</span>
                 </div>
-                <span class="text-muted small">{{ formatDateTime(h.createdAt) }}</span>
+                <span class="history-time">{{ formatDateTime(h.createdAt) }}</span>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Cupom -->
-      <div v-if="order.couponCode" class="card mb-3">
-        <div class="card-body">
-          <h6 class="fw-semibold mb-3">Cupom Utilizado</h6>
-          <div class="row">
-            <div class="col-md-6">
-              <div class="mb-2">
-                <span class="text-muted small d-block">Código</span>
-                <strong>{{ order.couponCode }}</strong>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="mb-2">
-                <span class="text-muted small d-block">Desconto</span>
-                <strong class="text-success">{{ formatCurrency(order.couponDiscount) }}</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- NF-e Protocolo -->
-      <div v-if="order.payload?.nfe" class="card mb-3 border-success">
-        <div class="card-body">
-          <h6 class="fw-semibold mb-3 text-success"><i class="bi bi-check-circle"></i> NF-e Emitida</h6>
-          <div class="row">
-            <div class="col-md-4">
-              <span class="text-muted small d-block">Protocolo</span>
-              <strong>{{ order.payload.nfe.nProt || '-' }}</strong>
-            </div>
-            <div class="col-md-4">
-              <span class="text-muted small d-block">Status (cStat)</span>
-              <strong>{{ order.payload.nfe.cStat || '-' }}</strong>
-            </div>
-            <div class="col-md-4">
-              <span class="text-muted small d-block">Data Autorização</span>
-              <strong>{{ order.payload.nfe.authorizedAt ? formatDateTime(order.payload.nfe.authorizedAt) : '-' }}</strong>
-            </div>
-          </div>
-          <div v-if="order.payload.nfe.xMotivo" class="mt-2">
-            <span class="text-muted small d-block">Motivo</span>
-            <strong>{{ order.payload.nfe.xMotivo }}</strong>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -289,7 +319,6 @@ const id = route.params.id;
 const order = ref(null);
 const vouchers = ref({ discountIfood: 0, discountMerchant: 0, voucherPayments: [], storeDiscount: 0 });
 
-// use shared formatDateTime from utils/dates.js
 function padNumber(n){ if (n == null || n === '') return null; return String(n).toString().padStart(2, '0'); }
 function formatOrderNumber(o){
   if(!o) return '';
@@ -334,14 +363,20 @@ function calculateSubtotal() {
 function getStatusLabel(status) {
   const labels = {
     'PENDING': 'Pendente',
+    'PENDENTE_ACEITE': 'Pendente',
     'EM_PREPARO': 'Em preparo',
     'CONFIRMED': 'Confirmado',
     'PREPARING': 'Preparando',
+    'PRONTO': 'Pronto',
     'READY': 'Pronto',
+    'SAIU_PARA_ENTREGA': 'Saiu para entrega',
     'DELIVERING': 'Saiu para entrega',
+    'CONCLUIDO': 'Concluído',
     'DELIVERED': 'Entregue',
+    'CANCELADO': 'Cancelado',
     'CANCELLED': 'Cancelado',
-    'FINISHED': 'Finalizado'
+    'FINISHED': 'Finalizado',
+    'CONFIRMACAO_PAGAMENTO': 'Confirm. Pagamento',
   };
   return labels[status] || status || 'Pendente';
 }
@@ -349,14 +384,20 @@ function getStatusLabel(status) {
 function getStatusClass(status) {
   const classes = {
     'PENDING': 'bg-warning text-dark',
-    'EM_PREPARO': 'bg-info',
-    'CONFIRMED': 'bg-info',
-    'PREPARING': 'bg-info',
+    'PENDENTE_ACEITE': 'bg-warning text-dark',
+    'EM_PREPARO': 'bg-primary',
+    'CONFIRMED': 'bg-primary',
+    'PREPARING': 'bg-primary',
+    'PRONTO': 'bg-primary',
     'READY': 'bg-primary',
+    'SAIU_PARA_ENTREGA': 'bg-primary',
     'DELIVERING': 'bg-primary',
+    'CONCLUIDO': 'bg-success',
     'DELIVERED': 'bg-success',
+    'FINISHED': 'bg-success',
+    'CONFIRMACAO_PAGAMENTO': 'bg-warning text-dark',
+    'CANCELADO': 'bg-danger',
     'CANCELLED': 'bg-danger',
-    'FINISHED': 'bg-success'
   };
   return classes[status] || 'bg-secondary';
 }
@@ -365,7 +406,9 @@ function getOrderType(order) {
   const types = {
     'DELIVERY': 'Entrega',
     'PICKUP': 'Retirada',
-    'INDOOR': 'Mesa'
+    'INDOOR': 'Mesa',
+    'BALCAO': 'Balcão',
+    'TAKEOUT': 'Retirada',
   };
   return types[order.orderType] || order.orderType || 'Entrega';
 }
@@ -379,17 +422,13 @@ function getMainAddress(o) {
   if (!o) return '-';
   const a = o.address || o.deliveryAddress || o.customerAddress || o.payload?.delivery?.deliveryAddress || o.payload?.rawPayload?.address;
   if (!a) return o.addressText || '-';
-  
   if (typeof a === 'string') return a;
-  
   const street = a.street || a.streetName || a.formatted || a.formattedAddress || '';
   const number = a.number || a.streetNumber || '';
-  
   if (street && number) return `${street}, ${number}`;
   if (street) return street;
   if (a.formatted) return a.formatted;
   if (a.formattedAddress) return a.formattedAddress;
-  
   return '-';
 }
 
@@ -397,7 +436,6 @@ function getAddressDetails(o) {
   if (!o) return {};
   const a = o.address || o.deliveryAddress || o.customerAddress || o.payload?.delivery?.deliveryAddress || o.payload?.rawPayload?.address;
   if (!a || typeof a === 'string') return {};
-  
   return {
     neighborhood: a.neighborhood,
     complement: a.complement,
@@ -408,32 +446,27 @@ function getAddressDetails(o) {
 
 function getPaymentMethod(o) {
   if (!o) return '-';
-  
-  // Tenta pegar de várias fontes possíveis
-  const method = o.paymentMethod || 
-                 o.payment?.method || 
-                 o.payment?.methodCode || 
-                 o.payload?.payment?.method || 
+  const method = o.paymentMethod ||
+                 o.payment?.method ||
+                 o.payment?.methodCode ||
+                 o.payload?.payment?.method ||
                  o.payload?.rawPayload?.payment?.method;
-  
   return method || '-';
 }
 
 function getPaymentAmount(o) {
   if (!o) return null;
-  
-  return o.payment?.amount || 
-         o.payload?.payment?.amount || 
-         o.payload?.rawPayload?.payment?.amount || 
+  return o.payment?.amount ||
+         o.payload?.payment?.amount ||
+         o.payload?.rawPayload?.payment?.amount ||
          null;
 }
 
 function getChangeFor(o) {
   if (!o) return null;
-  
-  return o.payment?.changeFor || 
-         o.payload?.payment?.changeFor || 
-         o.payload?.rawPayload?.payment?.changeFor || 
+  return o.payment?.changeFor ||
+         o.payload?.payment?.changeFor ||
+         o.payload?.rawPayload?.payment?.changeFor ||
          null;
 }
 
@@ -461,7 +494,6 @@ async function emitirNfe() {
   } catch (e) {
     const errData = e.response?.data;
     let errorText = errData?.error || e.message;
-    // Show extra detail in dev
     if (errData?.detail) {
       const d = errData.detail;
       if (d.httpStatus) errorText += `\nHTTP ${d.httpStatus}`;
@@ -486,43 +518,91 @@ onMounted(()=>{ load(); });
 </script>
 
 <style scoped>
-.timeline-item {
-  position: relative;
-  padding-left: 0;
-}
-
-.table thead th {
-  background-color: #f8f9fa;
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  border-bottom: 2px solid #dee2e6;
-}
-
-.table tbody td {
-  vertical-align: top;
-  padding: 0.75rem;
-}
-
-.card-title {
-  color: #2c3e50;
-}
-
-h6.fw-semibold {
-  color: #495057;
-  font-size: 1rem;
+  color: var(--text-primary);
+  padding-bottom: 0.75rem;
   margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.text-muted.small {
+.section-header i {
+  color: var(--primary);
+  font-size: 0.9rem;
+}
+
+.detail-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.2rem;
+}
+
+.detail-value {
   font-size: 0.875rem;
-  margin-bottom: 0.25rem;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
-.badge {
-  font-size: 0.875rem;
-  padding: 0.5rem 1rem;
+.detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
-.align-top {
-  vertical-align: top !important;
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.detail-row .detail-label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.detail-row .detail-value {
+  text-align: right;
+}
+
+.option-line {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color-soft);
+}
+
+.history-item:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.history-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-top: 0.2rem;
+  flex-shrink: 0;
 }
 </style>
