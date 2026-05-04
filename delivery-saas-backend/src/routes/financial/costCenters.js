@@ -59,7 +59,7 @@ router.put('/:id', async (req, res) => {
     });
     if (!existing) return res.status(404).json({ message: 'Centro de custo não encontrado' });
 
-    const { code, name, parentId, dreGroup, isActive } = req.body;
+    const { code, name, parentId, dreGroup, isActive, natureza } = req.body;
     const updated = await prisma.costCenter.update({
       where: { id: req.params.id },
       data: {
@@ -68,6 +68,7 @@ router.put('/:id', async (req, res) => {
         ...(parentId !== undefined && { parentId }),
         ...(dreGroup !== undefined && { dreGroup }),
         ...(isActive !== undefined && { isActive }),
+        ...(natureza !== undefined && { natureza: natureza || null }),
       },
     });
     res.json(updated);
@@ -107,32 +108,32 @@ router.post('/seed-default', async (req, res) => {
     if (count > 0) return res.status(400).json({ message: 'Já existem centros de custo cadastrados' });
 
     const defaults = [
-      { code: '1', name: 'Receitas', dreGroup: 'REVENUE' },
-      { code: '1.01', name: 'Receita de Vendas (Balcão)', dreGroup: 'REVENUE', parent: '1' },
-      { code: '1.02', name: 'Receita de Vendas (Delivery)', dreGroup: 'REVENUE', parent: '1' },
-      { code: '1.03', name: 'Receita de Vendas (Marketplace)', dreGroup: 'REVENUE', parent: '1' },
-      { code: '2', name: 'Deduções de Receita', dreGroup: 'DEDUCTIONS' },
-      { code: '2.01', name: 'Taxas de Marketplace', dreGroup: 'DEDUCTIONS', parent: '2' },
-      { code: '2.02', name: 'Taxas de Adquirentes', dreGroup: 'DEDUCTIONS', parent: '2' },
-      { code: '2.03', name: 'Descontos e Cupons', dreGroup: 'DEDUCTIONS', parent: '2' },
-      { code: '2.04', name: 'Impostos sobre Vendas', dreGroup: 'DEDUCTIONS', parent: '2' },
-      { code: '2.05', name: 'Cancelamentos / Estornos', dreGroup: 'DEDUCTIONS', parent: '2' },
-      { code: '3', name: 'CMV (Custo de Mercadoria Vendida)', dreGroup: 'COGS' },
-      { code: '3.01', name: 'Insumos e Matéria-Prima', dreGroup: 'COGS', parent: '3' },
-      { code: '3.02', name: 'Embalagens', dreGroup: 'COGS', parent: '3' },
-      { code: '4', name: 'Despesas Operacionais', dreGroup: 'OPEX' },
-      { code: '4.01', name: 'Folha de Pagamento', dreGroup: 'OPEX', parent: '4' },
-      { code: '4.02', name: 'Aluguel', dreGroup: 'OPEX', parent: '4' },
-      { code: '4.03', name: 'Utilities (Água, Luz, Gás)', dreGroup: 'OPEX', parent: '4' },
-      { code: '4.04', name: 'Marketing e Publicidade', dreGroup: 'OPEX', parent: '4' },
-      { code: '4.05', name: 'Motoboys / Entregadores', dreGroup: 'OPEX', parent: '4' },
-      { code: '4.06', name: 'Comissões de Afiliados', dreGroup: 'OPEX', parent: '4' },
-      { code: '4.07', name: 'Manutenção e Reparos', dreGroup: 'OPEX', parent: '4' },
-      { code: '4.08', name: 'Software e Tecnologia', dreGroup: 'OPEX', parent: '4' },
-      { code: '4.09', name: 'Outras Despesas Operacionais', dreGroup: 'OPEX', parent: '4' },
-      { code: '5', name: 'Resultado Financeiro', dreGroup: 'FINANCIAL' },
-      { code: '5.01', name: 'Receitas Financeiras (Juros, Rendimentos)', dreGroup: 'FINANCIAL', parent: '5' },
-      { code: '5.02', name: 'Despesas Financeiras (Juros, Tarifas)', dreGroup: 'FINANCIAL', parent: '5' },
+      { code: '1',    name: 'Receitas',                        dreGroup: 'REVENUE',     natureza: null },
+      { code: '1.01', name: 'Receita de Vendas (Balcão)',       dreGroup: 'REVENUE',     natureza: null, parent: '1' },
+      { code: '1.02', name: 'Receita de Vendas (Delivery)',     dreGroup: 'REVENUE',     natureza: null, parent: '1' },
+      { code: '1.03', name: 'Receita de Vendas (Marketplace)',  dreGroup: 'REVENUE',     natureza: null, parent: '1' },
+      { code: '2',    name: 'Deduções de Receita',              dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL' },
+      { code: '2.01', name: 'Taxas Marketplace',                dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2' },
+      { code: '2.02', name: 'Taxas Adquirentes',                dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2' },
+      { code: '2.03', name: 'Descontos e Cupons',               dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2' },
+      { code: '2.04', name: 'Impostos sobre Vendas',            dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2' },
+      { code: '2.05', name: 'Cancelamentos e Estornos',         dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2' },
+      { code: '3',    name: 'CMV - Custo das Mercadorias',      dreGroup: 'COGS',        natureza: 'VARIAVEL' },
+      { code: '3.01', name: 'Insumos e Matéria-Prima',          dreGroup: 'COGS',        natureza: 'VARIAVEL', parent: '3' },
+      { code: '3.02', name: 'Embalagens',                       dreGroup: 'COGS',        natureza: 'VARIAVEL', parent: '3' },
+      { code: '4',    name: 'Despesas Operacionais',            dreGroup: 'OPEX',        natureza: null },
+      { code: '4.01', name: 'Folha de Pagamento',               dreGroup: 'OPEX',        natureza: 'FIXA',     parent: '4' },
+      { code: '4.02', name: 'Aluguel',                          dreGroup: 'OPEX',        natureza: 'FIXA',     parent: '4' },
+      { code: '4.03', name: 'Energia, Água e Gás',              dreGroup: 'OPEX',        natureza: 'FIXA',     parent: '4' },
+      { code: '4.04', name: 'Marketing e Publicidade',          dreGroup: 'OPEX',        natureza: 'FIXA',     parent: '4' },
+      { code: '4.05', name: 'Motoboys e Entregadores',          dreGroup: 'OPEX',        natureza: 'VARIAVEL', parent: '4' },
+      { code: '4.06', name: 'Comissões de Afiliados',           dreGroup: 'OPEX',        natureza: 'VARIAVEL', parent: '4' },
+      { code: '4.07', name: 'Manutenção e Reparos',             dreGroup: 'OPEX',        natureza: 'FIXA',     parent: '4' },
+      { code: '4.08', name: 'Software e Licenças',              dreGroup: 'OPEX',        natureza: 'FIXA',     parent: '4' },
+      { code: '4.09', name: 'Outras Despesas Operacionais',     dreGroup: 'OPEX',        natureza: null,       parent: '4' },
+      { code: '5',    name: 'Resultado Financeiro',             dreGroup: 'FINANCIAL',   natureza: null },
+      { code: '5.01', name: 'Receitas Financeiras',             dreGroup: 'FINANCIAL',   natureza: null, parent: '5' },
+      { code: '5.02', name: 'Despesas Financeiras',             dreGroup: 'FINANCIAL',   natureza: null, parent: '5' },
     ];
 
     // Criar raízes primeiro, depois filhos
@@ -140,7 +141,7 @@ router.post('/seed-default', async (req, res) => {
     for (const item of defaults) {
       if (!item.parent) {
         const created = await prisma.costCenter.create({
-          data: { companyId, code: item.code, name: item.name, dreGroup: item.dreGroup },
+          data: { companyId, code: item.code, name: item.name, dreGroup: item.dreGroup, natureza: item.natureza || null },
         });
         idMap[item.code] = created.id;
       }
@@ -149,7 +150,7 @@ router.post('/seed-default', async (req, res) => {
       if (item.parent) {
         const parentId = idMap[item.parent];
         const created = await prisma.costCenter.create({
-          data: { companyId, code: item.code, name: item.name, dreGroup: item.dreGroup, parentId },
+          data: { companyId, code: item.code, name: item.name, dreGroup: item.dreGroup, natureza: item.natureza || null, parentId },
         });
         idMap[item.code] = created.id;
       }
