@@ -163,7 +163,8 @@ function _doConnect(cfg) {
       order = { ...order.order };
       // Preservar campos do wrapper que podem não estar no registro do DB
       const preserve = ['printerInterface', 'printerType', 'paperWidth', 'receiptTemplate',
-                        'copies', 'printerName', 'headerName', 'headerCity', 'qrText', 'frontendUrl'];
+                        'copies', 'printerName', 'headerName', 'headerCity', 'qrText', 'frontendUrl',
+                        'fiscal', 'fiscalPrinterName', 'fiscalPrinterType'];
       for (const f of preserve) {
         if (wrapper[f] != null && !order[f]) order[f] = wrapper[f];
       }

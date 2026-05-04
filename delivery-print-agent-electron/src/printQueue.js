@@ -127,10 +127,16 @@ async function _handleJob(item) {
     if (!printer.enabled) continue;
 
     try {
+      // Jobs fiscais: usar o receiptTemplate enviado pelo backend (DANFE gerado em agentPrint.js)
+      // em vez do template padrão da impressora.
+      const isFiscal = order.fiscal === true || order.fiscal === 'true';
+      const fiscalTemplate = isFiscal && (order.receiptTemplate || (order.order && order.order.receiptTemplate));
       // Injetar template local (aba Comanda) se a impressora não tiver template próprio
-      const p = printer.template
-        ? printer
-        : { ...printer, template: cfg.receiptTemplate || printer.template };
+      const p = fiscalTemplate
+        ? { ...printer, template: fiscalTemplate }
+        : printer.template
+          ? printer
+          : { ...printer, template: cfg.receiptTemplate || printer.template };
 
       // Injetar cabeçalho local se o pedido não trouxe do backend
       const o = { ...order };
