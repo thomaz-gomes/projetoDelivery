@@ -35,7 +35,13 @@
 
               <!-- Estado: CONECTADO -->
               <div v-if="agentConnected" class="agent-connected-box mb-3">
-                <div class="fw-bold mb-2">✅ Agente conectado</div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="fw-bold">✅ Agente conectado</div>
+                  <button class="btn btn-sm btn-outline-danger" @click="disconnectAgent" :disabled="disconnecting">
+                    <span v-if="disconnecting" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    {{ disconnecting ? 'Desconectando...' : '⏏ Desconectar' }}
+                  </button>
+                </div>
                 <div class="small text-muted mb-2">Impressoras detectadas:</div>
                 <div class="d-flex flex-wrap gap-2">
                   <span v-for="p in printers" :key="typeof p === 'string' ? p : p.name" class="printer-chip">
@@ -227,6 +233,9 @@ const agentConnected  = ref(false);
 const showAgentModal  = ref(false);
 const logs            = ref([]);
 
+// Desconectar agente
+const disconnecting   = ref(false);
+
 // Pareamento
 const pairingCode     = ref('');
 const pairingCountdown = ref(0);
@@ -315,6 +324,24 @@ watch(() => props.visible, (v) => {
   visible.value = v;
   if (v) { discoverPrinters(); loadFiscalPrinter(); }
 });
+
+// ── Desconectar agente ────────────────────────────────────────────────────
+async function disconnectAgent() {
+  if (!confirm('Desconectar o agente de impressão? Será necessário parear novamente.')) return;
+  disconnecting.value = true;
+  try {
+    await api.post('/agent-setup/disconnect');
+    agentConnected.value = false;
+    printers.value = [];
+    pairingCode.value = '';
+    stopPairingPoll();
+    pushLog('Agente desconectado pelo administrador');
+  } catch (e) {
+    pushLog('Erro ao desconectar: ' + (e?.response?.data?.message || e?.message || String(e)));
+  } finally {
+    disconnecting.value = false;
+  }
+}
 
 // ── Descoberta de impressoras ─────────────────────────────────────────────
 async function discoverPrinters() {
