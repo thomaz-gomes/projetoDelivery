@@ -98,6 +98,7 @@ model Company {
   financialTransactions FinancialTransaction[]
   cashFlowEntries       CashFlowEntry[]
   ofxImports            OfxImport[]
+  recurringExpenses     RecurringExpense[]
 
   payablePaymentMethods PayablePaymentMethod[]
   financialBridgeLogs   FinancialBridgeLog[]
@@ -1765,6 +1766,7 @@ model Supplier {
 
   purchaseImports       PurchaseImport[]
   financialTransactions FinancialTransaction[]
+  recurringExpenses     RecurringExpense[]
 
   @@unique([companyId, cnpj])
   @@index([companyId])
@@ -1859,6 +1861,7 @@ model FinancialAccount {
   ofxImports            OfxImport[]
   cashMovements         CashMovement[]
   payablePaymentMethods PayablePaymentMethod[]
+  recurringExpenses     RecurringExpense[]
 
   @@unique([companyId, name], name: "company_fin_account_name")
   @@index([companyId], name: "idx_fin_account_company")
@@ -1876,14 +1879,42 @@ model CostCenter {
   children  CostCenter[] @relation("CostCenterParent")
   // DRE classification: REVENUE, COGS, OPEX, TAX, OTHER
   dreGroup  String? // Grupo no DRE (receita bruta, deduções, CMV, despesas operacionais, etc.)
+  natureza  String?
   isActive  Boolean      @default(true)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  transactions FinancialTransaction[]
+  transactions      FinancialTransaction[]
+  recurringExpenses RecurringExpense[]
 
   @@unique([companyId, code], name: "company_costcenter_code")
   @@index([companyId], name: "idx_costcenter_company")
+}
+
+// ---- Despesas Recorrentes (contas fixas, mensalidades, etc.) ----
+model RecurringExpense {
+  id              String            @id @default(uuid())
+  companyId       String
+  company         Company           @relation(fields: [companyId], references: [id])
+  description     String
+  grossAmount     Decimal           @db.Decimal(10, 2)
+  accountId       String?
+  account         FinancialAccount? @relation(fields: [accountId], references: [id])
+  costCenterId    String?
+  costCenter      CostCenter?       @relation(fields: [costCenterId], references: [id])
+  supplierId      String?
+  supplier        Supplier?         @relation(fields: [supplierId], references: [id])
+  recurrence      String
+  dayOfMonth      Int?
+  notes           String?
+  isActive        Boolean           @default(true)
+  lastGeneratedAt DateTime?
+  nextDueDate     DateTime
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([companyId, isActive], name: "idx_recurring_company_active")
+  @@index([nextDueDate], name: "idx_recurring_next_due")
 }
 
 // ---- Configurações de Taxas de Gateways / Operadoras / Marketplaces ----
