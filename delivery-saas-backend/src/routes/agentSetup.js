@@ -200,6 +200,36 @@ agentSetupRouter.post('/token', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+// POST /agent-setup/disconnect - force-disconnect agent sockets and clear token (ADMIN only)
+agentSetupRouter.post('/disconnect', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user && req.user.companyId
+    if (!companyId) return res.status(400).json({ message: 'companyId ausente no token' })
+
+    const io = req.app && req.app.locals && req.app.locals.io
+    let disconnected = 0
+    if (io) {
+      for (const s of io.sockets.sockets.values()) {
+        if (s.agent && s.agent.companyId === companyId) {
+          s.disconnect(true)
+          disconnected++
+        }
+      }
+    }
+
+    await prisma.printerSetting.updateMany({
+      where: { companyId },
+      data: { agentTokenHash: null, agentTokenCreatedAt: null },
+    })
+
+    console.log(`[agent-setup/disconnect] ${disconnected} socket(s) desconectado(s) para company ${companyId}`)
+    return res.json({ ok: true, disconnected })
+  } catch (e) {
+    console.error('POST /agent-setup/disconnect failed', e)
+    res.status(500).json({ message: 'Falha ao desconectar agente', error: e?.message || String(e) })
+  }
+})
+
 // POST /agent-setup/generate-code - generate a short-lived pairing code (ADMIN only)
 agentSetupRouter.post('/generate-code', requireRole('ADMIN'), async (req, res) => {
   try {
