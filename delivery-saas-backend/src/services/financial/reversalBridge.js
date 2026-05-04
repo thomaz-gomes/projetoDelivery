@@ -45,7 +45,7 @@ export async function reverseFinancialEntriesForOrder(order) {
 
       const reversal = await tx.financialTransaction.create({
         data: {
-          companyId,
+          company: { connect: { id: companyId } },
           type: 'PAYABLE',
           status: 'PAID',
           description: `Estorno - Venda #${order.displayId || order.id} (cancelamento)`,
@@ -124,7 +124,7 @@ export async function reverseFinancialEntriesForOrder(order) {
 
         await tx.financialTransaction.create({
           data: {
-            companyId,
+            company: { connect: { id: companyId } },
             type: depTx.type === 'PAYABLE' ? 'RECEIVABLE' : 'PAYABLE',
             status: 'PAID',
             description: `Estorno - ${depTx.description} (cancelamento pedido)`,

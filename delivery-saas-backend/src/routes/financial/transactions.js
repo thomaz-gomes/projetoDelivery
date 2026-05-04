@@ -10,7 +10,7 @@ router.get('/', async (req, res) => {
   try {
     const companyId = req.user.companyId;
     const {
-      type, status, accountId, costCenterId, sourceType,
+      type, status, accountId, costCenterId, sourceType, search,
       dueDateFrom, dueDateTo, issueDateFrom, issueDateTo,
       page = 1, limit = 50,
     } = req.query;
@@ -26,6 +26,7 @@ router.get('/', async (req, res) => {
     if (accountId) where.accountId = accountId;
     if (costCenterId) where.costCenterId = costCenterId;
     if (sourceType) where.sourceType = sourceType;
+    if (search) where.description = { contains: search, mode: 'insensitive' };
     if (dueDateFrom || dueDateTo) {
       where.dueDate = {};
       if (dueDateFrom) where.dueDate.gte = new Date(dueDateFrom);
@@ -144,7 +145,7 @@ router.post('/', async (req, res) => {
         // Create parent transaction (confirmed, represents the full amount)
         const parent = await tx.financialTransaction.create({
           data: {
-            companyId,
+            company: { connect: { id: companyId } },
             type,
             description,
             accountId: accountId || null,
@@ -184,7 +185,7 @@ router.post('/', async (req, res) => {
           const suffix = `(${inst.number}/${installments.length})`;
           const child = await tx.financialTransaction.create({
             data: {
-              companyId,
+              company: { connect: { id: companyId } },
               type,
               description: `${description} ${suffix}`,
               accountId: accountId || null,
@@ -235,7 +236,7 @@ router.post('/', async (req, res) => {
 
     const tx = await prisma.financialTransaction.create({
       data: {
-        companyId,
+        company: { connect: { id: companyId } },
         type,
         description,
         accountId: accountId || null,

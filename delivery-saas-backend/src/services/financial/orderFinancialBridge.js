@@ -73,7 +73,7 @@ export async function createFinancialEntriesForOrder(order) {
 
     await prisma.financialTransaction.create({
       data: {
-        companyId: order.companyId,
+        company: { connect: { id: order.companyId } },
         type: 'RECEIVABLE',
         status: txStatus,
         description: `Venda #${order.displayId || order.displaySimple || order.id.slice(0, 8)}`,
@@ -107,7 +107,7 @@ export async function createFinancialEntriesForOrder(order) {
       // iFood repassa à loja → registrar como receita a receber
       await prisma.financialTransaction.create({
         data: {
-          companyId: order.companyId,
+          company: { connect: { id: order.companyId } },
           type: 'RECEIVABLE',
           status: 'PENDING',
           description: `Voucher iFood (marketplace) ${order.couponCode || ''} - ${pedidoLabel}`,
@@ -130,7 +130,7 @@ export async function createFinancialEntriesForOrder(order) {
       });
       await prisma.financialTransaction.create({
         data: {
-          companyId: order.companyId,
+          company: { connect: { id: order.companyId } },
           type: 'PAYABLE',
           status: 'PAID',
           description: `Desconto loja ${order.couponCode || ''} - ${pedidoLabel}`,
@@ -154,7 +154,7 @@ export async function createFinancialEntriesForOrder(order) {
       });
       await prisma.financialTransaction.create({
         data: {
-          companyId: order.companyId,
+          company: { connect: { id: order.companyId } },
           type: 'PAYABLE',
           status: 'PAID',
           description: `Desconto cupom ${order.couponCode || ''} - ${pedidoLabel}`,
@@ -180,7 +180,7 @@ export async function createFinancialEntriesForOrder(order) {
       });
       await prisma.financialTransaction.create({
         data: {
-          companyId: order.companyId,
+          company: { connect: { id: order.companyId } },
           type: 'PAYABLE',
           status: 'PAID',
           description: `Taxa de serviço iFood - ${pedidoLabel}`,
@@ -216,8 +216,9 @@ export async function createFinancialEntriesForOrder(order) {
 /**
  * Cria transação financeira para pagamento de motoboy.
  * Chamado quando um RiderTransaction é criado.
+ * paidNow=true: cria como PAID + CashFlowEntry + atualiza saldo da conta (usado no endpoint de pagamento).
  */
-export async function createFinancialEntryForRider(riderTransaction, companyId, accountId) {
+export async function createFinancialEntryForRider(riderTransaction, companyId, accountId, { paidNow = false } = {}) {
   try {
     const existing = await prisma.financialTransaction.findFirst({
       where: { companyId, sourceType: 'RIDER', sourceId: riderTransaction.id },
@@ -236,23 +237,67 @@ export async function createFinancialEntryForRider(riderTransaction, companyId, 
       where: { companyId, dreGroup: 'OPEX', code: { contains: '4.05' } },
     });
 
-    await prisma.financialTransaction.create({
-      data: {
-        companyId,
-        type: 'PAYABLE',
-        status: 'CONFIRMED',
-        description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
-        accountId: resolvedAccountId,
-        costCenterId: opexCC?.id || null,
-        grossAmount: Math.abs(Number(riderTransaction.amount)),
-        feeAmount: 0,
-        netAmount: Math.abs(Number(riderTransaction.amount)),
-        dueDate: new Date(riderTransaction.date),
-        issueDate: new Date(riderTransaction.date),
-        sourceType: 'RIDER',
-        sourceId: riderTransaction.id,
-      },
-    });
+    const amount = Math.abs(Number(riderTransaction.amount));
+    const now = new Date();
+
+    if (paidNow && resolvedAccountId) {
+      await prisma.$transaction(async (tx) => {
+        const ft = await tx.financialTransaction.create({
+          data: {
+            company: { connect: { id: companyId } },
+            type: 'PAYABLE',
+            status: 'PAID',
+            description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
+            accountId: resolvedAccountId,
+            costCenterId: opexCC?.id || null,
+            grossAmount: amount,
+            feeAmount: 0,
+            netAmount: amount,
+            paidAmount: amount,
+            paidAt: now,
+            dueDate: new Date(riderTransaction.date),
+            issueDate: new Date(riderTransaction.date),
+            sourceType: 'RIDER',
+            sourceId: riderTransaction.id,
+          },
+        });
+
+        const account = await tx.financialAccount.update({
+          where: { id: resolvedAccountId },
+          data: { currentBalance: { decrement: amount } },
+        });
+
+        await tx.cashFlowEntry.create({
+          data: {
+            companyId,
+            accountId: resolvedAccountId,
+            transactionId: ft.id,
+            type: 'OUTFLOW',
+            amount,
+            balanceAfter: account.currentBalance,
+            description: `Pagamento motoboy: ${riderTransaction.note || ''}`,
+          },
+        });
+      });
+    } else {
+      await prisma.financialTransaction.create({
+        data: {
+          company: { connect: { id: companyId } },
+          type: 'PAYABLE',
+          status: 'CONFIRMED',
+          description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
+          accountId: resolvedAccountId,
+          costCenterId: opexCC?.id || null,
+          grossAmount: amount,
+          feeAmount: 0,
+          netAmount: amount,
+          dueDate: new Date(riderTransaction.date),
+          issueDate: new Date(riderTransaction.date),
+          sourceType: 'RIDER',
+          sourceId: riderTransaction.id,
+        },
+      });
+    }
   } catch (e) {
     console.error('createFinancialEntryForRider error:', e);
   }
@@ -283,7 +328,7 @@ export async function createFinancialEntryForAffiliate(affiliatePayment, company
 
     await prisma.financialTransaction.create({
       data: {
-        companyId,
+        company: { connect: { id: companyId } },
         type: 'PAYABLE',
         status: 'PAID',
         description: `Comissão afiliado - ${affiliatePayment.method || 'N/A'}`,
