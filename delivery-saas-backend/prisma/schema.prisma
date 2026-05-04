@@ -1879,7 +1879,7 @@ model CostCenter {
   children  CostCenter[] @relation("CostCenterParent")
   // DRE classification: REVENUE, COGS, OPEX, TAX, OTHER
   dreGroup  String? // Grupo no DRE (receita bruta, deduções, CMV, despesas operacionais, etc.)
-  natureza  String?
+  natureza    String?   // "FIXA" | "VARIAVEL" | null
   isActive  Boolean      @default(true)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -1904,7 +1904,7 @@ model RecurringExpense {
   costCenter      CostCenter?       @relation(fields: [costCenterId], references: [id])
   supplierId      String?
   supplier        Supplier?         @relation(fields: [supplierId], references: [id])
-  recurrence      String
+  recurrence      String           // "MONTHLY" | "BIWEEKLY" | "WEEKLY" | "QUARTERLY" | "ANNUAL"
   dayOfMonth      Int?
   notes           String?
   isActive        Boolean           @default(true)
@@ -1914,7 +1914,7 @@ model RecurringExpense {
   updatedAt       DateTime          @updatedAt
 
   @@index([companyId, isActive], name: "idx_recurring_company_active")
-  @@index([nextDueDate], name: "idx_recurring_next_due")
+  @@index([companyId, nextDueDate], name: "idx_recurring_company_due")
 }
 
 // ---- Configurações de Taxas de Gateways / Operadoras / Marketplaces ----
