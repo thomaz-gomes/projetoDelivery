@@ -18,6 +18,7 @@
               <th>Código</th>
               <th>Nome</th>
               <th>Grupo DRE</th>
+              <th>Natureza</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -28,6 +29,15 @@
               <td :style="cc.parentId ? 'padding-left: 2rem' : ''">{{ cc.name }}</td>
               <td><span class="badge bg-light text-dark">{{ cc.dreGroup || '-' }}</span></td>
               <td>
+                <select class="form-select form-select-sm" style="width:130px"
+                  :value="cc.natureza || ''"
+                  @change="updateNatureza(cc, $event.target.value)">
+                  <option value="">— Não classificado</option>
+                  <option value="FIXA">FIXA</option>
+                  <option value="VARIAVEL">VARIÁVEL</option>
+                </select>
+              </td>
+              <td>
                 <span :class="cc.isActive ? 'badge bg-success' : 'badge bg-danger'">
                   {{ cc.isActive ? 'Ativo' : 'Inativo' }}
                 </span>
@@ -37,7 +47,7 @@
               </td>
             </tr>
             <tr v-if="centers.length === 0">
-              <td colspan="5" class="text-center py-4 text-muted">
+              <td colspan="6" class="text-center py-4 text-muted">
                 Nenhum centro de custo. Clique em "Gerar Estrutura Padrão" para criar a estrutura DRE.
               </td>
             </tr>
@@ -68,6 +78,12 @@
               <SelectInput v-model="form.dreGroup" :options="dreGroupOptions" placeholder="Selecionar" />
             </div>
             <div class="mb-3">
+              <label class="form-label">Natureza</label>
+              <SelectInput v-model="form.natureza"
+                :options="[{value:'FIXA',label:'Fixa'},{value:'VARIAVEL',label:'Variável'}]"
+                placeholder="Não classificado" />
+            </div>
+            <div class="mb-3">
               <label class="form-label">Centro de Custo Pai</label>
               <SelectInput v-model="form.parentId" :options="parentOptions" optionValueKey="id" optionLabelKey="label" placeholder="Nenhum (raiz)" />
             </div>
@@ -96,7 +112,7 @@ export default {
       showForm: false,
       editing: null,
       saving: false,
-      form: { code: '', name: '', dreGroup: '', parentId: '' },
+      form: { code: '', name: '', dreGroup: '', parentId: '', natureza: '' },
       dreGroupOptions: [
         { value: 'REVENUE', label: 'Receita' },
         { value: 'DEDUCTIONS', label: 'Deduções' },
@@ -125,13 +141,13 @@ export default {
     },
     editCenter(cc) {
       this.editing = cc.id;
-      this.form = { code: cc.code, name: cc.name, dreGroup: cc.dreGroup || '', parentId: cc.parentId || '' };
+      this.form = { code: cc.code, name: cc.name, dreGroup: cc.dreGroup || '', parentId: cc.parentId || '', natureza: cc.natureza || '' };
       this.showForm = true;
     },
     closeForm() {
       this.showForm = false;
       this.editing = null;
-      this.form = { code: '', name: '', dreGroup: '', parentId: '' };
+      this.form = { code: '', name: '', dreGroup: '', parentId: '', natureza: '' };
     },
     async save() {
       this.saving = true;
@@ -139,6 +155,7 @@ export default {
         const payload = { ...this.form };
         if (!payload.parentId) payload.parentId = null;
         if (!payload.dreGroup) payload.dreGroup = null;
+        if (!payload.natureza) payload.natureza = null;
         if (this.editing) {
           await api.put(`/financial/cost-centers/${this.editing}`, payload);
         } else {
@@ -150,6 +167,16 @@ export default {
         alert(e.response?.data?.message || 'Erro ao salvar');
       } finally {
         this.saving = false;
+      }
+    },
+    async updateNatureza(cc, value) {
+      try {
+        await api.put(`/financial/cost-centers/${cc.id}`, {
+          natureza: value || null,
+        });
+        cc.natureza = value || null;
+      } catch (e) {
+        alert(e.response?.data?.message || 'Erro ao atualizar natureza');
       }
     },
     async seedDefault() {
