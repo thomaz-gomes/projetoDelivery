@@ -420,7 +420,7 @@ function goToRiderQr(){
         </div>
 
         <!-- Conteúdo -->
-        <main class="flex-grow-1 min-vh-100 main-content" :class="{ 'main-content--flush': isInboxRoute }" :style="{ maxHeight: 'calc(100vh - 64px)', overflowY: isInboxRoute ? 'hidden' : 'auto' }">
+        <main class="flex-grow-1 vh-100 main-content" :class="{ 'main-content--flush': isInboxRoute }" :style="{ maxHeight: 'calc(100vh - 64px)', overflowY: isInboxRoute ? 'hidden' : 'auto' }">
           <router-view />
         </main>
       </div>

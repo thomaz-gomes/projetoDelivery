@@ -310,7 +310,10 @@
                   <div class="d-flex gap-2">
                     <img v-if="it.image" :src="assetUrl(thumbUrl(it.image))" class="cart-sidebar-item-img" alt="" @error="onThumbError($event, it.image)" />
                     <div class="flex-fill" style="min-width:0">
-                      <div class="cart-sidebar-item-name">{{ it.name }}</div>
+                      <div class="d-flex justify-content-between align-items-start gap-1">
+                        <div class="cart-sidebar-item-name">{{ it.name }}</div>
+                        <button class="btn-edit-item" @click="editCartItem(i)" title="Editar item"><i class="bi bi-pencil"></i></button>
+                      </div>
                       <div v-if="optionsSummaryNoPrice(it)" class="cart-sidebar-item-opts">{{ optionsSummaryNoPrice(it) }}</div>
                       <div v-if="it.observation" class="cart-sidebar-item-obs"><i class="bi bi-chat-left-text me-1"></i>{{ it.observation }}</div>
                     </div>
@@ -371,7 +374,7 @@
         </div>
         
         <!-- Product options modal -->
-        <div v-if="modalOpen" class="product-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:11000">
+        <div v-if="modalOpen" class="product-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:12000">
           <div class="modal-content bg-white rounded shadow p-0">
             <!-- Close button floating over hero -->
             <button class="modal-close-floating" @click="closeModal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
@@ -491,8 +494,8 @@
                   <button class="btn-qty" @pointerdown.prevent="startModalAutoChange(1, $event)" @pointerup.prevent="stopModalAutoChange($event)" @pointerleave.prevent="stopModalAutoChange($event)">+</button>
                 </div>
                 <div class="w-100">
-                  <button class="add-btn w-100" @click="confirmAddFromModal" aria-label="Adicionar ao carrinho">
-                    <span class="add-label">Adicionar</span>
+                  <button class="add-btn w-100" @click="confirmAddFromModal" :aria-label="editingCartIndex >= 0 ? 'Salvar alterações' : 'Adicionar ao carrinho'">
+                    <span class="add-label">{{ editingCartIndex >= 0 ? 'Salvar alterações' : 'Adicionar' }}</span>
                     <span class="add-price">{{ formatCurrency(modalTotal) }}</span>
                   </button>
                 </div>
@@ -554,6 +557,10 @@
 
                 <!-- LOGIN tab -->
                 <div v-if="customerTab === 'login'">
+                  <div class="mb-3">
+                    <label class="form-label">Seu nome</label>
+                    <input v-model="customer.name" class="form-control" type="text" placeholder="Como devemos te chamar?" autocomplete="name" />
+                  </div>
                   <div class="mb-3">
                     <label class="form-label">WhatsApp / Telefone</label>
                     <input :value="loginForm.phone" @input="onLoginPhoneInput" class="form-control" type="text" placeholder="(00) 9 0000-0000" maxlength="16" />
@@ -944,6 +951,7 @@
                   <div class="drawer-item-name">{{ it.name }}</div>
                   <div v-if="it.options && it.options.length" class="drawer-item-opts">{{ optionsSummaryNoPrice(it) }}</div>
                   <div v-if="it.observation" class="drawer-item-obs"><i class="bi bi-chat-left-text me-1"></i>{{ it.observation }}</div>
+                  <button class="btn-edit-item mt-1" @click="editCartItem(i)" title="Editar item"><i class="bi bi-pencil me-1"></i>Editar</button>
                   <div class="drawer-item-stepper">
                     <button class="stepper-btn" @click="it.quantity <= 1 ? removeItem(i) : decrementCartItem(i)" :aria-label="it.quantity <= 1 ? 'Remover' : 'Diminuir'">
                       <i :class="it.quantity <= 1 ? 'bi bi-trash3' : 'bi bi-dash'"></i>
@@ -2308,6 +2316,8 @@ const requiredWarnings = reactive({})
 const requiredMessages = reactive({})
 // auto-change timers for press-and-hold
 const _autoTimers = {}
+// index of the cart item being edited (-1 = not editing)
+const editingCartIndex = ref(-1)
 
 function showTip(key, msg, ms = 1400){
   try{
@@ -2897,6 +2907,29 @@ function confirmAddFromModal(){
       return
     }
     // no required warnings -> proceed
+    if(editingCartIndex.value >= 0){
+      // edit mode: update the existing cart item in place
+      const existingItem = cart.value[editingCartIndex.value]
+      if(existingItem){
+        let optionsTotal = 0
+        const selectedOptions = []
+        if(p.optionGroups && p.optionGroups.length){
+          for(const g of p.optionGroups){
+            const sel = selectionsForCart[g.id] || []
+            for(const oid of sel){
+              const opt = (g.options||[]).find(o=>o.id===oid)
+              if(opt){ optionsTotal += Number(opt.price||0); selectedOptions.push({ id: opt.id, name: opt.name, price: Number(opt.price||0) }) }
+            }
+          }
+        }
+        const unitPrice = Number(p.price||0) + optionsTotal
+        const obs = (modalObservation.value || '').trim() || null
+        cart.value[editingCartIndex.value] = { ...existingItem, price: unitPrice, quantity: modalQty.value, options: selectedOptions, observation: obs }
+      }
+      editingCartIndex.value = -1
+      modalOpen.value = false
+      return
+    }
     addToCartWithOptions(p, selectionsForCart, modalQty.value, modalObservation.value)
     modalOpen.value = false
 }
@@ -2910,7 +2943,7 @@ function groupSelectedCount(g){
   return s
 }
 
-function closeModal(){ modalOpen.value = false; modalError.value = ''; modalObservation.value = '' }
+function closeModal(){ modalOpen.value = false; modalError.value = ''; modalObservation.value = ''; editingCartIndex.value = -1 }
 
 function shareStub(){
   // placeholder for native share / copy link — no-op for now
@@ -3118,6 +3151,7 @@ function editCartItem(i){
       }
     }
     optionSelections.value = map
+    editingCartIndex.value = i
     modalOpen.value = true
   }catch(e){ console.error('editCartItem', e) }
 }
@@ -3434,14 +3468,14 @@ async function doRegisterInCheckout() {
 }
 
 function continueWithWhatsappFromLogin() {
-  // Skip auth — use phone from login form, prompt for name, proceed
   customerFormMsg.value = ''
+  const name = (customer.value.name || '').trim()
+  if (!name) { customerFormMsg.value = 'Informe seu nome antes de continuar'; customerFormMsgType.value = 'alert-danger'; return }
   const phone = loginForm.value.phone || ''
   const digits = removePhoneMask(phone)
-  if (!digits || String(digits).length < 10) { customerFormMsg.value = 'Informe o WhatsApp primeiro'; customerFormMsgType.value = 'alert-danger'; return }
-  // set customer contact from login form phone
+  if (!digits || String(digits).length < 10) { customerFormMsg.value = 'Informe o WhatsApp / telefone com DDD'; customerFormMsgType.value = 'alert-danger'; return }
+  customer.value.name = name
   customer.value.contact = phone
-  if (!customer.value.name) { customer.value.name = 'Cliente' }
   saveCustomerToLocal()
   checkoutStep.value = 'delivery'
 }
@@ -6366,5 +6400,9 @@ body { padding-bottom: 110px; }
 /* ===== Info modal tabs ===== */
 .modal-content .nav-tabs .nav-link { border: none; padding: 8px 12px; color: var(--pm-text-muted); background: transparent; border-radius: 10px; }
 .modal-content .nav-tabs .nav-link.active { background: var(--pm-surface-alt); color: var(--brand-dark); font-weight: 700; border: 1px solid var(--pm-border); }
+
+/* ===== Edit cart item button ===== */
+.btn-edit-item { display: inline-flex; align-items: center; gap: 2px; background: none; border: none; padding: 2px 4px; font-size: 11px; color: var(--pm-text-muted); cursor: pointer; border-radius: 6px; line-height: 1; flex-shrink: 0; }
+.btn-edit-item:hover { color: var(--brand, #105784); background: rgba(0,0,0,0.04); }
 
 </style>
