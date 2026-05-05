@@ -11,6 +11,7 @@ import { determineStatusFromIFoodEvent } from '../services/ifoodWebhookProcessor
 import { canTransition } from '../stateMachine.js';
 import { nextDisplaySimple, startOfDayInTz } from '../utils/displaySimple.js';
 import { matchItemsToLocalProducts } from '../utils/integrationMatcher.js';
+import { isTakeoutOrderType } from '../utils/orderType.js';
 
 // Helper: try to process the print queue for the provided storeIds with a
 // small retry/backoff strategy. Returns the final result from processForStores.
@@ -377,10 +378,11 @@ webhooksRouter.post("/ifood", async (req, res) => {
     }
 
     // 🔊 Generate QR (data URL) for delivery orders so agents can print QR on comanda
+    // Pedidos de retirada (TAKEOUT/PICKUP/BALCAO) NÃO devem ter QR — não são despachados por motoboy.
     try {
       const resolvedOrderType = String(saved.orderType || saved.order_type || (saved.payload && (saved.payload.orderType || saved.payload.order_type)) || '').toUpperCase();
       const hasDeliveryPayload = !!(saved.payload && (saved.payload.delivery || saved.payload.deliveryAddress || saved.payload.orderType === 'DELIVERY'));
-      if (resolvedOrderType === 'DELIVERY' || hasDeliveryPayload) {
+      if (!isTakeoutOrderType(resolvedOrderType) && (resolvedOrderType === 'DELIVERY' || hasDeliveryPayload)) {
         try {
           const QRLib = await import('qrcode');
           const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');

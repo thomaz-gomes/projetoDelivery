@@ -6,6 +6,7 @@
 // Tests can inject a mock io via setIo() directly.
 
 import printQueue from './printQueue.js';
+import { isTakeoutOrderType } from './utils/orderType.js';
 
 let io = null;
 
@@ -129,9 +130,10 @@ export function emitirNovoPedido(pedido) {
               await enrich(orderCopy);
             } catch (e) { console.warn('🖨️ Auto-print: enrichment failed:', e && e.message); }
             // Safety net: ensure qrText is set for DELIVERY orders even if enrichment missed it
+            // Pedidos de retirada NÃO devem ter QR — não são despachados por motoboy.
             if (!orderCopy.qrText && orderCopy.id) {
               const ot = String(orderCopy.orderType || (orderCopy.payload && (orderCopy.payload.orderType || orderCopy.payload.order_type)) || '').toUpperCase();
-              if (ot === 'DELIVERY' || (orderCopy.payload && (orderCopy.payload.delivery || orderCopy.payload.deliveryAddress))) {
+              if (!isTakeoutOrderType(ot) && (ot === 'DELIVERY' || (orderCopy.payload && (orderCopy.payload.delivery || orderCopy.payload.deliveryAddress)))) {
                 const fe = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
                 orderCopy.qrText = `${fe}/orders/${orderCopy.id}`;
                 console.log(`🖨️ Auto-print: qrText safety net generated: ${orderCopy.qrText}`);

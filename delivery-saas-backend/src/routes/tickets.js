@@ -5,6 +5,7 @@ import { sha256 } from '../utils.js';
 import { notifyRiderAssigned, notifyCustomerStatus } from '../services/notify.js';
 import { emitirPedidoAtualizado } from '../index.js';
 import { tryEmitIfoodChat } from '../services/ifoodChatEmitter.js';
+import { isTakeoutOrderType } from '../utils/orderType.js';
 
 export const ticketsRouter = express.Router();
 
@@ -79,6 +80,14 @@ ticketsRouter.post('/:token/claim', authMiddleware, requireRole('RIDER'), async 
 
       if (ticketFinal.order.companyId !== rider.companyId) {
         throw new Error('Empresa não corresponde');
+      }
+
+      // Pedidos de retirada não devem ser despachados por motoboy
+      const orderTypeRaw = ticketFinal.order.orderType
+        || (ticketFinal.order.payload && (ticketFinal.order.payload.orderType || ticketFinal.order.payload.order_type))
+        || null;
+      if (isTakeoutOrderType(orderTypeRaw)) {
+        throw new Error('Pedidos de retirada não podem ser despachados por motoboy');
       }
 
       const updatedOrder = await tx.order.update({
