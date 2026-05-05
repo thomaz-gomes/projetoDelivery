@@ -330,7 +330,7 @@ router.post('/items/:id/create-and-match', async (req, res) => {
     const result = await prisma.$transaction(async (tx) => {
       const transaction = await tx.financialTransaction.create({
         data: {
-          company: { connect: { id: companyId } },
+          companyId,
           type,
           status: 'PAID',
           description,

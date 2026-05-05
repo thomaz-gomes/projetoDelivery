@@ -114,7 +114,7 @@ export async function createFinancialEntriesForPurchase(purchaseImportId, paymen
       const suffix = totalInstallments > 1 ? ` (${inst.number}/${totalInstallments})` : '';
       const txn = await tx.financialTransaction.create({
         data: {
-          company: { connect: { id: companyId } },
+          companyId,
           type: 'PAYABLE',
           status: 'PENDING',
           description: `${nfeLabel} - ${supplierLabel}${suffix}`,

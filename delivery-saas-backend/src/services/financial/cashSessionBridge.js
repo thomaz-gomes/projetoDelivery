@@ -46,7 +46,7 @@ export async function createFinancialEntriesForCashSession(session) {
 
       await prisma.financialTransaction.create({
         data: {
-          company: { connect: { id: session.companyId } },
+          companyId: session.companyId,
           type: isBreak ? 'PAYABLE' : 'RECEIVABLE',
           status: 'PAID',
           description: `${isBreak ? 'Quebra' : 'Sobra'} de caixa - ${method} - Sessão ${session.id.slice(0, 8)}`,

@@ -145,7 +145,7 @@ router.post('/', async (req, res) => {
         // Create parent transaction (confirmed, represents the full amount)
         const parent = await tx.financialTransaction.create({
           data: {
-            company: { connect: { id: companyId } },
+            companyId,
             type,
             description,
             accountId: accountId || null,
@@ -185,7 +185,7 @@ router.post('/', async (req, res) => {
           const suffix = `(${inst.number}/${installments.length})`;
           const child = await tx.financialTransaction.create({
             data: {
-              company: { connect: { id: companyId } },
+              companyId,
               type,
               description: `${description} ${suffix}`,
               accountId: accountId || null,
@@ -236,7 +236,7 @@ router.post('/', async (req, res) => {
 
     const tx = await prisma.financialTransaction.create({
       data: {
-        company: { connect: { id: companyId } },
+        companyId,
         type,
         description,
         accountId: accountId || null,
