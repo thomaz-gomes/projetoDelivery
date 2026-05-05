@@ -2,17 +2,17 @@ import { prisma } from '../prisma.js';
 
 function calcNextDueDate(current, recurrence, dayOfMonth) {
   const d = new Date(current);
-  switch (recurrence) {
-    case 'WEEKLY':    d.setDate(d.getDate() + 7);        break;
-    case 'BIWEEKLY':  d.setDate(d.getDate() + 14);       break;
-    case 'MONTHLY':   d.setMonth(d.getMonth() + 1);      break;
-    case 'QUARTERLY': d.setMonth(d.getMonth() + 3);      break;
-    case 'ANNUAL':    d.setFullYear(d.getFullYear() + 1); break;
-    default:          d.setMonth(d.getMonth() + 1);      break;
-  }
-  if (dayOfMonth && ['MONTHLY', 'QUARTERLY', 'ANNUAL'].includes(recurrence)) {
+  if (['MONTHLY', 'QUARTERLY', 'ANNUAL'].includes(recurrence)) {
+    const targetDay = dayOfMonth || d.getDate();
+    d.setDate(1); // prevent month overflow (e.g. Jan 31 + 1 month → Feb 28, not Mar 3)
+    if (recurrence === 'MONTHLY') d.setMonth(d.getMonth() + 1);
+    else if (recurrence === 'QUARTERLY') d.setMonth(d.getMonth() + 3);
+    else d.setFullYear(d.getFullYear() + 1);
     const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-    d.setDate(Math.min(dayOfMonth, lastDay));
+    d.setDate(Math.min(targetDay, lastDay));
+  } else {
+    if (recurrence === 'WEEKLY') d.setDate(d.getDate() + 7);
+    else d.setDate(d.getDate() + 14); // BIWEEKLY default
   }
   return d;
 }
