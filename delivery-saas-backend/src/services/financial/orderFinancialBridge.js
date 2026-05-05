@@ -73,7 +73,7 @@ export async function createFinancialEntriesForOrder(order) {
 
     await prisma.financialTransaction.create({
       data: {
-        company: { connect: { id: order.companyId } },
+        companyId: order.companyId,
         type: 'RECEIVABLE',
         status: txStatus,
         description: `Venda #${order.displayId || order.displaySimple || order.id.slice(0, 8)}`,
@@ -84,7 +84,7 @@ export async function createFinancialEntriesForOrder(order) {
         grossAmount: orderTotal,
         feeAmount,
         netAmount,
-        paidAmount: allImmediate ? netAmount : null,
+        paidAmount: allImmediate ? netAmount : 0,
         dueDate: expectedDate,
         expectedDate,
         paidAt: allImmediate ? now : null,
@@ -107,7 +107,7 @@ export async function createFinancialEntriesForOrder(order) {
       // iFood repassa à loja → registrar como receita a receber
       await prisma.financialTransaction.create({
         data: {
-          company: { connect: { id: order.companyId } },
+          companyId: order.companyId,
           type: 'RECEIVABLE',
           status: 'PENDING',
           description: `Voucher iFood (marketplace) ${order.couponCode || ''} - ${pedidoLabel}`,
@@ -130,7 +130,7 @@ export async function createFinancialEntriesForOrder(order) {
       });
       await prisma.financialTransaction.create({
         data: {
-          company: { connect: { id: order.companyId } },
+          companyId: order.companyId,
           type: 'PAYABLE',
           status: 'PAID',
           description: `Desconto loja ${order.couponCode || ''} - ${pedidoLabel}`,
@@ -154,7 +154,7 @@ export async function createFinancialEntriesForOrder(order) {
       });
       await prisma.financialTransaction.create({
         data: {
-          company: { connect: { id: order.companyId } },
+          companyId: order.companyId,
           type: 'PAYABLE',
           status: 'PAID',
           description: `Desconto cupom ${order.couponCode || ''} - ${pedidoLabel}`,
@@ -180,7 +180,7 @@ export async function createFinancialEntriesForOrder(order) {
       });
       await prisma.financialTransaction.create({
         data: {
-          company: { connect: { id: order.companyId } },
+          companyId: order.companyId,
           type: 'PAYABLE',
           status: 'PAID',
           description: `Taxa de serviço iFood - ${pedidoLabel}`,
@@ -244,7 +244,7 @@ export async function createFinancialEntryForRider(riderTransaction, companyId, 
       await prisma.$transaction(async (tx) => {
         const ft = await tx.financialTransaction.create({
           data: {
-            company: { connect: { id: companyId } },
+            companyId,
             type: 'PAYABLE',
             status: 'PAID',
             description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
@@ -282,7 +282,7 @@ export async function createFinancialEntryForRider(riderTransaction, companyId, 
     } else {
       await prisma.financialTransaction.create({
         data: {
-          company: { connect: { id: companyId } },
+          companyId,
           type: 'PAYABLE',
           status: 'CONFIRMED',
           description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
@@ -328,7 +328,7 @@ export async function createFinancialEntryForAffiliate(affiliatePayment, company
 
     await prisma.financialTransaction.create({
       data: {
-        company: { connect: { id: companyId } },
+        companyId,
         type: 'PAYABLE',
         status: 'PAID',
         description: `Comissão afiliado - ${affiliatePayment.method || 'N/A'}`,
