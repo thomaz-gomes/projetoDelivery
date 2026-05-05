@@ -166,21 +166,39 @@
         <span class="ms-2 text-muted">— Deixe em branco para usar o template padrão.</span>
       </div>
 
-      <div v-for="s in STATUSES" :key="s.key" class="card mb-3">
+      <div v-for="s in STATUSES" :key="s.key" class="card mb-3" :class="{ 'border-warning': s.forRider }">
         <div class="card-body">
-          <div class="d-flex align-items-center gap-2 mb-1">
-            <i :class="`bi ${s.icon} text-secondary`"></i>
-            <h6 class="mb-0">{{ s.label }}</h6>
+          <div class="d-flex align-items-center justify-content-between mb-1">
+            <div class="d-flex align-items-center gap-2">
+              <i :class="`bi ${s.icon} text-secondary`"></i>
+              <h6 class="mb-0">{{ s.label }}</h6>
+              <span v-if="s.forRider" class="badge bg-warning text-dark">Motoboy</span>
+            </div>
+            <div class="form-check form-switch m-0">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                role="switch"
+                :id="`enable-${s.key}`"
+                :checked="!isDisabled(s.key)"
+                @change="toggleDisabled(s.key, $event.target.checked)"
+              />
+              <label class="form-check-label small" :for="`enable-${s.key}`">
+                {{ isDisabled(s.key) ? 'Desativada' : 'Ativada' }}
+              </label>
+            </div>
           </div>
           <p class="small text-muted mb-2">{{ s.description }}</p>
           <textarea
+            v-if="!s.noTemplate"
             v-model="templates[s.key]"
             class="form-control font-monospace"
             :rows="6"
-            :placeholder="DEFAULT_TEMPLATE"
+            :placeholder="s.forRider ? RIDER_DEFAULT_TEMPLATE : DEFAULT_TEMPLATE"
+            :disabled="isDisabled(s.key)"
             style="font-size: 0.82rem; resize: vertical; white-space: pre;"
           ></textarea>
-          <div class="form-text">Deixe em branco para usar o template padrão.</div>
+          <div v-if="!s.noTemplate" class="form-text">Deixe em branco para usar o template padrão.</div>
         </div>
       </div>
 
@@ -204,13 +222,26 @@ import BaseButton from '@/components/BaseButton.vue';
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const STATUSES = [
+  { key: 'ORDER_SUMMARY',          label: 'Mensagem Inicial (Resumo)', icon: 'bi-receipt',     description: 'Enviada logo após o pedido ser criado, com o resumo dos itens. (Apenas o switch de ativar/desativar — o conteúdo é gerado automaticamente.)', noTemplate: true },
   { key: 'EM_PREPARO',             label: 'Em Preparo',               icon: 'bi-fire',        description: 'Disparada quando o pedido começa a ser preparado.' },
   { key: 'SAIU_PARA_ENTREGA',      label: 'Saiu para Entrega',        icon: 'bi-bicycle',     description: 'Disparada quando o entregador sai com o pedido.' },
   { key: 'CONFIRMACAO_PAGAMENTO',  label: 'Confirmação de Pagamento', icon: 'bi-credit-card', description: 'Disparada quando o pagamento está sendo confirmado.' },
   { key: 'CONCLUIDO',              label: 'Concluído',                icon: 'bi-check-circle',description: 'Disparada quando o pedido é finalizado com sucesso.' },
   { key: 'CANCELADO',              label: 'Cancelado',                icon: 'bi-x-circle',    description: 'Disparada quando o pedido é cancelado.' },
   { key: 'CASHBACK_CREDIT',        label: 'Cashback recebido',        icon: 'bi-piggy-bank',  description: 'Enviada ao cliente quando seu saldo de cashback aumenta. Variáveis extras: {{ganhou}} e {{saldo}}.' },
+  { key: 'RIDER_ASSIGNED',         label: 'Notificação ao Motoboy',   icon: 'bi-bicycle',     description: 'Enviada ao entregador quando uma entrega é atribuída a ele. Variáveis: {{pedido}}, {{cliente}}, {{endereco}}, {{mapa}}, {{localizador}}, {{pagamento}}, {{contato}}.', forRider: true },
 ];
+
+const RIDER_DEFAULT_TEMPLATE =
+`*🚨 Nova entrega atribuída* 🚀
+
+*Pedido:* {{pedido}}
+*Cliente:* {{cliente}}
+*Endereço:* {{endereco}}
+*Mapa:* {{mapa}}
+*Localizador:* {{localizador}}
+*Pagamento:* {{pagamento}}
+*Contato:* {{contato}}`;
 
 const DEFAULT_TEMPLATE =
 `Olá {{nome}}, aqui é o atendente virtual do *{{loja}}* 👋
@@ -362,14 +393,31 @@ async function deleteRule(rule) {
 // ── Notificações de pedido ────────────────────────────────────────────────
 
 const templates = ref(Object.fromEntries(STATUSES.map(s => [s.key, ''])));
+const disabledKeys = ref(new Set());
 const savingTemplates = ref(false);
+
+function isDisabled(key) {
+  return disabledKeys.value.has(key);
+}
+
+function toggleDisabled(key, enabled) {
+  if (enabled) disabledKeys.value.delete(key);
+  else disabledKeys.value.add(key);
+  // Force reactivity (Set isn't deeply reactive in Vue 3 by default for .has())
+  disabledKeys.value = new Set(disabledKeys.value);
+}
 
 async function loadTemplates() {
   try {
     const { data } = await api.get('/settings/notification-templates');
+    // New shape: { templates: {...}, disabled: [...] }
+    // Fallback to old shape (flat object of templates) for backwards compat.
+    const tpl = (data && typeof data.templates === 'object') ? data.templates : (data || {});
+    const dis = Array.isArray(data?.disabled) ? data.disabled : [];
     for (const s of STATUSES) {
-      templates.value[s.key] = typeof data[s.key] === 'string' ? data[s.key] : '';
+      templates.value[s.key] = typeof tpl[s.key] === 'string' ? tpl[s.key] : '';
     }
+    disabledKeys.value = new Set(dis);
   } catch (e) {
     console.warn('Falha ao carregar templates de notificação', e);
   }
@@ -378,7 +426,10 @@ async function loadTemplates() {
 async function saveTemplates() {
   savingTemplates.value = true;
   try {
-    await api.patch('/settings/notification-templates', templates.value);
+    await api.patch('/settings/notification-templates', {
+      templates: templates.value,
+      disabled: Array.from(disabledKeys.value),
+    });
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Templates salvos!', showConfirmButton: false, timer: 1800 });
   } catch (e) {
     Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar templates', 'error');

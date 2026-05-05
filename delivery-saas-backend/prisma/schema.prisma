@@ -157,8 +157,12 @@ model Company {
   // ---- Order notification templates ----
   // JSON map of OrderStatus -> WhatsApp message template string.
   // Variables: {{nome}}, {{loja}}, {{status}}, {{pedido}}.
-  // Absent key = use built-in default. Empty string = do not send for that status.
+  // Absent key = use built-in default.
+  // Includes RIDER_ASSIGNED key for the rider notification template.
   orderNotifyTemplates Json?
+  // JSON array of notification keys that should NOT be sent.
+  // Example: ["EM_PREPARO", "RIDER_ASSIGNED"]
+  orderNotifyDisabled  Json?
 }
 
 model User {
