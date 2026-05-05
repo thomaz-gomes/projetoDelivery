@@ -22,55 +22,194 @@
             </select>
           </div>
           <div class="col-md-3">
-            <button class="btn btn-primary" @click="load">Gerar DRE</button>
+            <button class="btn btn-primary" @click="load" :disabled="loading">
+              <span v-if="loading" class="spinner-border spinner-border-sm me-1"></span>
+              Gerar DRE
+            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- DRE -->
-    <div class="card" v-if="dre">
-      <div class="card-header d-flex justify-content-between">
-        <strong>DRE — {{ formatDate(dre.period?.from) }} a {{ formatDate(dre.period?.to) }}</strong>
+    <!-- DRE Result -->
+    <div v-if="dre">
+
+      <!-- Warning: centros não classificados -->
+      <div v-if="dre.hasUnclassified" class="alert alert-warning d-flex align-items-start gap-2 mb-3">
+        <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
         <div>
-          <span class="badge bg-primary me-2">Margem Bruta: {{ dre.margins?.grossMargin }}</span>
-          <span class="badge bg-info me-2">Margem Operacional: {{ dre.margins?.operatingMargin }}</span>
-          <span class="badge bg-success">Margem Líquida: {{ dre.margins?.netMargin }}</span>
+          <strong>Centros de custo não classificados:</strong>
+          {{ dre.unclassifiedCenters.join(', ') }}.
+          <router-link to="/financial/cost-centers" class="alert-link ms-1">Classificar agora →</router-link>
         </div>
       </div>
-      <div class="table-responsive">
-        <table class="table table-sm mb-0">
-          <tbody>
-            <tr v-for="(line, key) in dre.lines" :key="key"
-                :class="{'table-primary fw-bold': isResult(key), 'border-top border-2': isResult(key)}">
-              <td class="ps-3" :style="isResult(key) ? '' : 'padding-left: 2rem !important'">
-                {{ line.label }}
-                <button v-if="line.details && line.details.items && line.details.items.length"
-                        class="btn btn-sm btn-link p-0 ms-2" @click="toggleDetails(key)">
-                  {{ expandedDetails[key] ? 'ocultar' : 'detalhar' }}
-                </button>
-              </td>
-              <td class="text-end pe-3" :class="Number(line.value) < 0 ? 'text-danger' : 'text-success'">
-                {{ formatCurrency(line.value) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
 
-      <!-- Detalhes expandidos -->
-      <div v-for="(line, key) in dre.lines" :key="'detail-'+key">
-        <div v-if="expandedDetails[key] && line.details && line.details.items" class="px-4 py-2 bg-light border-top">
-          <small class="fw-bold text-muted">Detalhamento: {{ line.label }}</small>
-          <table class="table table-sm table-borderless mt-1 mb-0">
-            <tr v-for="item in line.details.items" :key="item.costCenterId">
-              <td class="ps-4">{{ item.code }} - {{ item.name }}</td>
-              <td class="text-end" :class="item.total < 0 ? 'text-danger' : 'text-success'">{{ formatCurrency(item.total) }}</td>
-            </tr>
+      <!-- Cabeçalho + badges de margem -->
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <strong>DRE — {{ formatDate(dre.period?.from) }} a {{ formatDate(dre.period?.to) }}</strong>
+          <div class="d-flex gap-2 flex-wrap">
+            <span class="badge bg-primary">Margem Bruta: {{ dre.margins?.grossMargin }}</span>
+            <span class="badge bg-info text-dark">Margem Operacional: {{ dre.margins?.operatingMargin }}</span>
+            <span class="badge" :class="dre.resultadoLiquido >= 0 ? 'bg-success' : 'bg-danger'">
+              Margem Líquida: {{ dre.margins?.netMargin }}
+            </span>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="table-light">
+              <tr>
+                <th class="ps-3">Descrição</th>
+                <th class="text-end pe-3" style="width:160px">Valor</th>
+                <th class="text-end pe-3" style="width:80px">%RB</th>
+              </tr>
+            </thead>
+            <tbody>
+
+              <!-- RECEITA BRUTA -->
+              <tr class="fw-bold">
+                <td class="ps-3 text-success">(+) Receita Bruta</td>
+                <td class="text-end pe-3 text-success">{{ fmt(dre.receitaBruta) }}</td>
+                <td class="text-end pe-3 text-muted">100%</td>
+              </tr>
+              <tr v-for="item in dre.groups?.REVENUE?.items" :key="item.costCenterId" class="text-muted small">
+                <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
+                <td class="text-end pe-3">{{ fmt(item.total) }}</td>
+                <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>
+              </tr>
+
+              <!-- DEDUÇÕES -->
+              <tr class="fw-bold">
+                <td class="ps-3 text-danger">(-) Deduções de Receita</td>
+                <td class="text-end pe-3 text-danger">{{ fmt(dre.deducoes) }}</td>
+                <td class="text-end pe-3 text-muted">{{ pct(dre.deducoes, dre.receitaBruta) }}</td>
+              </tr>
+              <tr v-for="item in dre.groups?.DEDUCTIONS?.items" :key="item.costCenterId" class="text-muted small">
+                <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
+                <td class="text-end pe-3">{{ fmt(item.total) }}</td>
+                <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>
+              </tr>
+
+              <!-- RECEITA LÍQUIDA -->
+              <tr class="table-secondary fw-bold border-top border-2">
+                <td class="ps-3">(=) Receita Líquida</td>
+                <td class="text-end pe-3" :class="dre.receitaLiquida >= 0 ? 'text-success' : 'text-danger'">
+                  {{ fmt(dre.receitaLiquida) }}
+                </td>
+                <td class="text-end pe-3 text-muted">{{ pct(dre.receitaLiquida, dre.receitaBruta) }}</td>
+              </tr>
+
+              <!-- CUSTOS VARIÁVEIS -->
+              <tr class="fw-bold">
+                <td class="ps-3 text-danger">(-) Custos e Despesas Variáveis</td>
+                <td class="text-end pe-3 text-danger">{{ fmt(dre.custosVariaveis) }}</td>
+                <td class="text-end pe-3 text-muted">{{ pct(dre.custosVariaveis, dre.receitaBruta) }}</td>
+              </tr>
+              <tr v-for="item in dre.groups?.VARIAVEL?.items" :key="item.costCenterId" class="text-muted small">
+                <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
+                <td class="text-end pe-3">{{ fmt(item.total) }}</td>
+                <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>
+              </tr>
+
+              <!-- MARGEM DE CONTRIBUIÇÃO -->
+              <tr class="table-primary fw-bold fs-6 border-top border-2">
+                <td class="ps-3">&#9733; (=) Margem de Contribuição</td>
+                <td class="text-end pe-3" :class="dre.margemContribuicao >= 0 ? 'text-success' : 'text-danger'">
+                  {{ fmt(dre.margemContribuicao) }}
+                </td>
+                <td class="text-end pe-3 fw-semibold">
+                  {{ dre.margemContribuicaoPct != null ? dre.margemContribuicaoPct.toFixed(1) + '%' : '-' }}
+                </td>
+              </tr>
+
+              <!-- DESPESAS FIXAS -->
+              <tr class="fw-bold">
+                <td class="ps-3 text-danger">(-) Despesas Fixas</td>
+                <td class="text-end pe-3 text-danger">{{ fmt(dre.despesasFixas) }}</td>
+                <td class="text-end pe-3 text-muted">{{ pct(dre.despesasFixas, dre.receitaBruta) }}</td>
+              </tr>
+              <tr v-for="item in dre.groups?.FIXA?.items" :key="item.costCenterId" class="text-muted small">
+                <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
+                <td class="text-end pe-3">{{ fmt(item.total) }}</td>
+                <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>
+              </tr>
+
+              <!-- RESULTADO OPERACIONAL -->
+              <tr class="table-secondary fw-bold border-top border-2">
+                <td class="ps-3">(=) Resultado Operacional (EBITDA)</td>
+                <td class="text-end pe-3" :class="dre.resultadoOperacional >= 0 ? 'text-success' : 'text-danger'">
+                  {{ fmt(dre.resultadoOperacional) }}
+                </td>
+                <td class="text-end pe-3 text-muted">{{ pct(dre.resultadoOperacional, dre.receitaBruta) }}</td>
+              </tr>
+
+              <!-- RESULTADO FINANCEIRO -->
+              <tr class="fw-bold">
+                <td class="ps-3">(+/-) Resultado Financeiro</td>
+                <td class="text-end pe-3" :class="dre.resultadoFinanceiro >= 0 ? 'text-success' : 'text-danger'">
+                  {{ fmt(dre.resultadoFinanceiro) }}
+                </td>
+                <td class="text-end pe-3 text-muted">{{ pct(dre.resultadoFinanceiro, dre.receitaBruta) }}</td>
+              </tr>
+              <tr v-for="item in dre.groups?.FINANCIAL?.items" :key="item.costCenterId" class="text-muted small">
+                <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
+                <td class="text-end pe-3">{{ fmt(item.total) }}</td>
+                <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>
+              </tr>
+
+              <!-- RESULTADO LÍQUIDO -->
+              <tr class="table-dark fw-bold fs-5 border-top border-3">
+                <td class="ps-3">(=) Resultado Líquido</td>
+                <td class="text-end pe-3" :class="dre.resultadoLiquido >= 0 ? 'text-success' : 'text-danger'">
+                  {{ fmt(dre.resultadoLiquido) }}
+                </td>
+                <td class="text-end pe-3" :class="dre.resultadoLiquido >= 0 ? 'text-success' : 'text-danger'">
+                  {{ pct(dre.resultadoLiquido, dre.receitaBruta) }}
+                </td>
+              </tr>
+
+            </tbody>
           </table>
         </div>
       </div>
-    </div>
+
+      <!-- Ponto de Equilíbrio -->
+      <div v-if="dre.pontoEquilibrio" class="row g-3 mb-3">
+        <div class="col-md-4">
+          <div class="card text-center h-100">
+            <div class="card-body">
+              <div class="text-muted small mb-1">Margem de Contribuição</div>
+              <div class="fw-bold fs-4" :class="dre.margemContribuicaoPct >= 0 ? 'text-success' : 'text-danger'">
+                {{ dre.margemContribuicaoPct != null ? dre.margemContribuicaoPct.toFixed(1) + '%' : '-' }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card text-center h-100 border-primary">
+            <div class="card-body">
+              <div class="text-muted small mb-1">&#9733; Ponto de Equilíbrio</div>
+              <div class="fw-bold fs-4 text-primary">{{ fmt(dre.pontoEquilibrio) }}</div>
+              <div class="text-muted" style="font-size:0.75rem">faturamento mínimo para cobrir fixos</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card text-center h-100">
+            <div class="card-body">
+              <div class="text-muted small mb-1">Margem Líquida</div>
+              <div class="fw-bold fs-4"
+                   :class="dre.resultadoLiquido >= 0 ? 'text-success' : 'text-danger'">
+                {{ pct(dre.resultadoLiquido, dre.receitaBruta) }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /v-if="dre" -->
 
     <div v-if="!dre && !loading" class="text-center py-5 text-muted">
       Selecione o período e clique em "Gerar DRE".
@@ -90,7 +229,6 @@ export default {
       dateTo: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0],
       dre: null,
       loading: false,
-      expandedDetails: {},
       stores: [],
       selectedStoreId: '',
     };
@@ -109,21 +247,18 @@ export default {
         if (this.selectedStoreId) params.storeId = this.selectedStoreId;
         const { data } = await api.get('/financial/reports/dre', { params });
         this.dre = data;
-        this.expandedDetails = {};
       } catch (e) {
         alert(e.response?.data?.message || 'Erro ao gerar DRE');
       } finally {
         this.loading = false;
       }
     },
-    toggleDetails(key) {
-      this.expandedDetails = { ...this.expandedDetails, [key]: !this.expandedDetails[key] };
-    },
-    isResult(key) {
-      return ['receitaLiquida', 'lucroBruto', 'resultadoOperacional', 'resultadoLiquido'].includes(key);
-    },
-    formatCurrency(value) {
+    fmt(value) {
       return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+    },
+    pct(value, total) {
+      if (!total || total === 0) return '-';
+      return ((value / total) * 100).toFixed(1) + '%';
     },
     formatDate(d) {
       if (!d) return '';

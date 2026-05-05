@@ -293,6 +293,7 @@ const router = createRouter({
     { path: '/financial/gateways', component: FinancialGateways, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     { path: '/financial/ofx', component: FinancialOFX, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     { path: '/financial/cost-centers', component: FinancialCostCenters, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
+    { path: '/financial/recurring', name: 'FinancialRecurring', component: () => import('@/views/financial/FinancialRecurring.vue'), meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     { path: '/financial/payment-methods', component: PayablePaymentMethods, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FINANCIAL' } },
     // ---- Loja de Complementos ----
     { path: '/store', component: AddOnStore, meta: { requiresAuth: true, role: 'ADMIN' } },
@@ -500,6 +501,7 @@ const PAGE_TITLES = [
   ['/financial/dre', 'DRE'],
   ['/financial/ofx', 'Conciliação Bancária'],
   ['/financial/cost-centers', 'Centros de Custo'],
+  ['/financial/recurring', 'Despesas Fixas'],
   ['/financial/payment-methods', 'Formas de Pagamento'],
   ['/financial', 'Financeiro'],
   ['/relatorios/nfe-emissoes', 'Notas Fiscais'],
