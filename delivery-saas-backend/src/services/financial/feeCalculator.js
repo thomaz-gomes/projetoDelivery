@@ -39,10 +39,12 @@ export async function calculateFees(gatewayConfigId, grossAmount, transactionDat
 
   const percent = Number(config.feePercent || 0);
   const fixed = Number(config.feeFixed || 0);
+  // feePercent is stored as a percentage value (e.g. 12 for 12%), so divide by 100 before multiplying.
+  const percentFraction = percent / 100;
 
   switch (config.feeType) {
     case 'PERCENTAGE':
-      feeAmount = grossAmount * percent;
+      feeAmount = grossAmount * percentFraction;
       breakdown.percentageFee = percent;
       breakdown.percentageAmount = feeAmount;
       break;
@@ -51,14 +53,14 @@ export async function calculateFees(gatewayConfigId, grossAmount, transactionDat
       breakdown.fixedFee = fixed;
       break;
     case 'MIXED':
-      const percentPart = grossAmount * percent;
+      const percentPart = grossAmount * percentFraction;
       feeAmount = percentPart + fixed;
       breakdown.percentageFee = percent;
       breakdown.percentageAmount = percentPart;
       breakdown.fixedFee = fixed;
       break;
     default:
-      feeAmount = grossAmount * percent;
+      feeAmount = grossAmount * percentFraction;
   }
 
   // Arredondar para 2 casas decimais
