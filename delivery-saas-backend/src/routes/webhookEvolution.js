@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { evoSendText, evoSendMediaUrl } from '../wa.js';
+import { renderQuickReplyVariables } from '../utils/quickReplyVars.js';
 
 function isStoreOpen(store) {
   if (!store) return true;
@@ -43,6 +44,11 @@ async function sendAutoReply(conversation, instanceName, quickReply) {
   const hasMedia = !!quickReply.mediaUrl;
   if (!hasBody && !hasMedia) return;
 
+  // Resolve {{nome}} / {{cashback}} / {{endereco}} for the conversation's customer
+  const resolvedBody = hasBody
+    ? await renderQuickReplyVariables(quickReply.body.trim(), { conversation, companyId: conversation.companyId })
+    : '';
+
   try {
     if (hasMedia) {
       const baseUrl = process.env.BACKEND_URL || process.env.BASE_URL || '';
@@ -52,17 +58,17 @@ async function sendAutoReply(conversation, instanceName, quickReply) {
         mediaUrl: `${baseUrl}${quickReply.mediaUrl}`,
         filename: quickReply.mediaFileName || 'arquivo',
         mimeType: quickReply.mediaMimeType,
-        caption: hasBody ? quickReply.body.trim() : '',
+        caption: resolvedBody,
       });
     } else {
-      await evoSendText({ instanceName, to: conversation.channelContactId, text: quickReply.body.trim() });
+      await evoSendText({ instanceName, to: conversation.channelContactId, text: resolvedBody });
     }
     await prisma.message.create({
       data: {
         conversationId: conversation.id,
         direction: 'OUTBOUND',
         type: hasMedia ? detectMessageTypeFromMime(quickReply.mediaMimeType) : 'TEXT',
-        body: hasBody ? quickReply.body.trim() : null,
+        body: hasBody ? resolvedBody : null,
         mediaUrl: quickReply.mediaUrl || null,
         mediaMimeType: quickReply.mediaMimeType || null,
         mediaFileName: quickReply.mediaFileName || null,
