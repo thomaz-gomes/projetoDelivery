@@ -3572,8 +3572,11 @@ function pulseButton() {
                   </label>
                   <span class="oc-title">#{{ formatDisplay(o) }} - <span class="oc-customer-name">{{ o.customerName || 'Cliente' }}</span>
                     <span v-if="getCustomerStats(o)" class="ms-2">
-                  
+
                       <span class="badge tier-badge" :style="{ background: tierBgColors[getCustomerStats(o).tier], color: tierColors[getCustomerStats(o).tier] }">{{ getCustomerStats(o).label }}</span>
+                    </span>
+                    <span v-if="o.payload?.nfe?.nProt" class="badge bg-info text-dark ms-2" title="NF-e autorizada">
+                      <i class="bi bi-receipt-cutoff"></i> NFC-e
                     </span>
                   </span>
                   <span class="oc-channel">{{ normalizeOrder(o).storeName ? (normalizeOrder(o).storeName + (normalizeOrder(o).channelLabel ? ' | ' + normalizeOrder(o).channelLabel : '')) : (normalizeOrder(o).channelLabel || '—') }}</span>
