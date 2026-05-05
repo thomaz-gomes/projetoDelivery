@@ -3165,7 +3165,6 @@ const statusFilters = [
   { value: 'CONFIRMACAO_PAGAMENTO', label: 'Confirmação de pagamento', color: 'info' },
   { value: 'CONCLUIDO', label: 'Concluído', color: 'success' },
   { value: 'CANCELADO', label: 'Cancelado', color: 'danger' },
-  { value: 'INVOICE_AUTHORIZED', label: 'NFC-e aut.', color: 'info' },
 ];
 
 // predefined WhatsApp messages for riders (placeholders — will be replaced later)
