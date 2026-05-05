@@ -69,9 +69,18 @@ router.get('/wallet', async (req, res) => {
     let clientId = req.query.clientId || req.query.customerId || null
     if(!companyId) return res.status(400).json({ message: 'Usuário sem empresa' })
 
-    // Only allow access to the wallet if the requester is the owner or an ADMIN
+    // Allow staff roles (ADMIN/ATTENDANT/STORE) to look up any wallet by clientId
+    // (used by POS to show customer cashback balance during order creation).
+    // Other authenticated requesters may only see their own wallet.
     const requesterRole = req.user && req.user.role ? String(req.user.role) : null
     const requesterId = req.user && (req.user.id || req.user.userId) ? String(req.user.id || req.user.userId) : null
+
+    const STAFF_ROLES = ['ADMIN', 'ATTENDANT', 'STORE', 'SUPER_ADMIN']
+    if(STAFF_ROLES.includes(requesterRole)) {
+      if(!clientId) return res.status(400).json({ message: 'clientId é obrigatório' })
+      const w = await cashbackSvc.getWalletWithTransactions(companyId, clientId)
+      return res.json(w)
+    }
 
     if(requesterRole !== 'ADMIN'){
       // non-admins may only request their own wallet; if clientId provided, it must match requester
