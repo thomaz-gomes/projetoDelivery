@@ -101,7 +101,7 @@
                       style="font-size: 0.72rem;"
                       :title="v.label"
                       @click="insertVariable(v.token)">
-                      {{ '{{' + v.token + '}}' }}
+                      {{ v.display }}
                     </button>
                   </div>
                 </div>
@@ -166,11 +166,13 @@ const selectedFile = ref(null);
 const assetBase = API_URL;
 const bodyTextarea = ref(null);
 
-// Variables that the backend resolves before sending (see utils/quickReplyVars.js)
+// Variables that the backend resolves before sending (see utils/quickReplyVars.js).
+// `display` is precomputed in JS to avoid Vue's template parser closing the
+// outer interpolation when it sees the inner '}}' inside the string literal.
 const VARIABLES = [
-  { token: 'nome',     label: 'Nome do cliente' },
-  { token: 'cashback', label: 'Saldo de cashback' },
-  { token: 'endereco', label: 'Endereço padrão' },
+  { token: 'nome',     label: 'Nome do cliente',   display: '{{nome}}' },
+  { token: 'cashback', label: 'Saldo de cashback', display: '{{cashback}}' },
+  { token: 'endereco', label: 'Endereço padrão',   display: '{{endereco}}' },
 ];
 
 function insertVariable(token) {
