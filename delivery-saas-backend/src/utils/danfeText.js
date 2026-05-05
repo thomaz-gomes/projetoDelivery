@@ -110,11 +110,14 @@ export function buildDanfeText(data) {
   lines.push(sep)
 
   // ── Divisão IV: Totais ──────────────────────────────────────────────
-  const vNF = Number(order.total || subtotal)
   const desconto = Number(order.couponDiscount || 0) + Number(order.discountMerchant || 0)
   const acrescimo = Number(order.deliveryFee || 0)
   const payRaw = (order.payload && order.payload.payment) || {}
-  const troco = Number(payRaw.change || 0)
+  // changeFor = valor entregue pelo cliente (ex: R$ 50 para um pedido de R$ 40).
+  // Troco devido = changeFor - total. Math.max evita negativos por arredondamento.
+  const changeFor = Number(payRaw.changeFor || payRaw.change || 0)
+  const vNF = Number(order.total != null ? order.total : subtotal)
+  const troco = changeFor > 0 ? Math.max(0, changeFor - vNF) : 0
 
   const totalLine = (label, amount, prefix = '') => {
     const left = label
@@ -130,7 +133,17 @@ export function buildDanfeText(data) {
 
   // Pagamento
   const TPAG_MAP = { '01': 'Dinheiro', '03': 'Cartao Credito', '04': 'Cartao Debito', '17': 'PIX', '99': 'Outros' }
-  const PAYKEY_MAP = { CASH: '01', MONEY: '01', CREDIT_CARD: '03', DEBIT_CARD: '04', PIX: '17', VOUCHER: '05', ONLINE: '99' }
+  // Mapeia tanto codes em INGLES (CASH, CREDIT_CARD…) quanto labels em
+  // PORTUGUES (Dinheiro, Crédito, Débito) — alinhado com PAYMENT_MAP em
+  // services/nfe.js para garantir tPag consistente entre cupom e XML.
+  const PAYKEY_MAP = {
+    CASH: '01', MONEY: '01', Dinheiro: '01',
+    CREDIT_CARD: '03', 'Crédito': '03',
+    DEBIT_CARD: '04', 'Débito': '04',
+    PIX: '17',
+    VOUCHER: '05',
+    ONLINE: '99',
+  }
   const payMethod = payRaw.methodCode || payRaw.method || payRaw.type || ''
   const tPagCode = PAYKEY_MAP[payMethod] || '99'
   const payDesc = TPAG_MAP[tPagCode] || payMethod || 'Outros'

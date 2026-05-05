@@ -105,12 +105,21 @@ test('DANFE — linha "Acrescimo" aparece quando deliveryFee > 0', () => {
   assert.match(out, /\+\s*R\$ 5,00/)
 })
 
-test('DANFE — linha "Troco" aparece quando troco > 0', () => {
+test('DANFE — linha "Troco" aparece quando changeFor > total', () => {
+  // total=56,00, cliente entregou R$ 64,00 → troco = R$ 8,00
   const out = buildDanfeText(makeFixture({
-    order: { payload: { payment: { method: 'CASH', change: 8.0 } } },
+    order: { payload: { payment: { method: 'CASH', changeFor: 64.0 } } },
   }))
   assert.match(out, /Troco:/)
   assert.match(out, /R\$ 8,00/)
+})
+
+test('DANFE — linha "Troco" omitida quando changeFor === total (sem troco)', () => {
+  // total=56,00, cliente entregou R$ 56,00 → sem troco
+  const out = buildDanfeText(makeFixture({
+    order: { payload: { payment: { method: 'CASH', changeFor: 56.0 } } },
+  }))
+  assert.doesNotMatch(out, /Troco:/)
 })
 
 test('DANFE — usa vírgula decimal (pt-BR)', () => {
@@ -136,6 +145,18 @@ test('DANFE — bloco do consumidor com CPF formatado', () => {
   }))
   assert.match(out, /CONSUMIDOR CPF: 123\.456\.789-01/)
   assert.match(out, /Joao da Silva/)
+})
+
+test('DANFE — Pagamento: aceita label em portugues "Dinheiro" / "Crédito"', () => {
+  const dinheiro = buildDanfeText(makeFixture({
+    order: { payload: { payment: { method: 'Dinheiro' } } },
+  }))
+  assert.match(dinheiro, /Pagamento:.*Dinheiro/)
+
+  const credito = buildDanfeText(makeFixture({
+    order: { payload: { payment: { method: 'Crédito' } } },
+  }))
+  assert.match(credito, /Pagamento:.*Cartao Credito/)
 })
 
 test('DANFE — homologação imprime aviso obrigatório', () => {
