@@ -379,7 +379,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import ListGroup from './form/list-group/ListGroup.vue';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
@@ -1201,6 +1201,9 @@ const cartState = computed(() => ({
   paymentMethodCode: paymentMethodCode.value,
 }));
 watch(cartState, (val) => { emit('cart-update', val); }, { deep: true, immediate: true });
+
+// Always load cashback program settings on mount (works for both modal and embedded modes).
+onMounted(() => { loadCashbackSettings(); });
 
 // Embedded mode: skip customer/address steps and go directly to products
 let embeddedInitialized = false;
