@@ -74,7 +74,7 @@
                 <td class="text-end pe-3 text-success">{{ fmt(dre.receitaBruta) }}</td>
                 <td class="text-end pe-3 text-muted">100%</td>
               </tr>
-              <tr v-for="item in dre.groups?.REVENUE?.items" :key="item.costCenterId" class="text-muted small">
+              <tr v-for="item in (dre.groups?.REVENUE?.items || [])" :key="item.costCenterId" class="text-muted small">
                 <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
                 <td class="text-end pe-3">{{ fmt(item.total) }}</td>
                 <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>
@@ -86,7 +86,7 @@
                 <td class="text-end pe-3 text-danger">{{ fmt(dre.deducoes) }}</td>
                 <td class="text-end pe-3 text-muted">{{ pct(dre.deducoes, dre.receitaBruta) }}</td>
               </tr>
-              <tr v-for="item in dre.groups?.DEDUCTIONS?.items" :key="item.costCenterId" class="text-muted small">
+              <tr v-for="item in (dre.groups?.DEDUCTIONS?.items || [])" :key="item.costCenterId" class="text-muted small">
                 <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
                 <td class="text-end pe-3">{{ fmt(item.total) }}</td>
                 <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>
@@ -107,7 +107,7 @@
                 <td class="text-end pe-3 text-danger">{{ fmt(dre.custosVariaveis) }}</td>
                 <td class="text-end pe-3 text-muted">{{ pct(dre.custosVariaveis, dre.receitaBruta) }}</td>
               </tr>
-              <tr v-for="item in dre.groups?.VARIAVEL?.items" :key="item.costCenterId" class="text-muted small">
+              <tr v-for="item in (dre.groups?.VARIAVEL?.items || [])" :key="item.costCenterId" class="text-muted small">
                 <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
                 <td class="text-end pe-3">{{ fmt(item.total) }}</td>
                 <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>
@@ -130,7 +130,7 @@
                 <td class="text-end pe-3 text-danger">{{ fmt(dre.despesasFixas) }}</td>
                 <td class="text-end pe-3 text-muted">{{ pct(dre.despesasFixas, dre.receitaBruta) }}</td>
               </tr>
-              <tr v-for="item in dre.groups?.FIXA?.items" :key="item.costCenterId" class="text-muted small">
+              <tr v-for="item in (dre.groups?.FIXA?.items || [])" :key="item.costCenterId" class="text-muted small">
                 <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
                 <td class="text-end pe-3">{{ fmt(item.total) }}</td>
                 <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>
@@ -153,7 +153,7 @@
                 </td>
                 <td class="text-end pe-3 text-muted">{{ pct(dre.resultadoFinanceiro, dre.receitaBruta) }}</td>
               </tr>
-              <tr v-for="item in dre.groups?.FINANCIAL?.items" :key="item.costCenterId" class="text-muted small">
+              <tr v-for="item in (dre.groups?.FINANCIAL?.items || [])" :key="item.costCenterId" class="text-muted small">
                 <td class="ps-5">{{ item.code }} – {{ item.name }}</td>
                 <td class="text-end pe-3">{{ fmt(item.total) }}</td>
                 <td class="text-end pe-3">{{ pct(item.total, dre.receitaBruta) }}</td>

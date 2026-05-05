@@ -342,8 +342,8 @@ export default {
       if (!value) return 'badge bg-secondary';
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const due = new Date(value);
-      due.setHours(0, 0, 0, 0);
+      const [y, m, d] = String(value).slice(0, 10).split('-').map(Number);
+      const due = new Date(y, m - 1, d); // parse as local date to avoid UTC offset off-by-one
       const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
       if (diffDays < 0) return 'badge bg-danger';
       if (diffDays <= 7) return 'badge bg-warning text-dark';
