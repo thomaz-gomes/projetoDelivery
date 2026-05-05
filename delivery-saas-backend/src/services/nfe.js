@@ -46,8 +46,8 @@ export async function saveNfeProtocol({ companyId, orderId, nProt, cStat, xMotiv
         const oldPayload = order.payload || {}
         const nfeInfo = { nProt: nProt || null, cStat: cStat || null, xMotivo: xMotivo || null, authorizedAt: new Date() }
   const newPayload = { ...oldPayload, nfe: nfeInfo }
-  // update order payload and set status to INVOICE_AUTHORIZED
-  await prisma.order.update({ where: { id: orderId }, data: { payload: newPayload, status: 'INVOICE_AUTHORIZED' } })
+  // NF-e autorizada vira flag paralelo via payload.nfe — não sobrescrever status
+  await prisma.order.update({ where: { id: orderId }, data: { payload: newPayload } })
 
         // emit app-level event so socket layer can notify frontend
         const payload = { id: order.id, companyId: order.companyId, displayId: order.displayId, status: order.status, nfe: nfeInfo }
