@@ -23,6 +23,10 @@
           <option value="">Todas as lojas</option>
           <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
         </select>
+        <button class="btn btn-sm btn-outline-warning" :disabled="reconciling" @click="runReconciliation">
+          <i class="bi bi-arrow-repeat me-1"></i>
+          {{ reconciling ? 'Reconciliando...' : 'Reconciliar' }}
+        </button>
       </div>
     </div>
 
@@ -245,6 +249,53 @@ const storeId = ref('');
 const stores = ref([]);
 const data = ref(null);
 const loading = ref(false);
+const reconciling = ref(false);
+
+async function runReconciliation() {
+  const confirm = await Swal.fire({
+    icon: 'question',
+    title: 'Reconciliar pedidos?',
+    html: 'Vai varrer pedidos <strong>CONCLUIDO</strong> sem lançamento financeiro correspondente e criar as receivables/fees faltantes. Pode demorar alguns segundos.',
+    showCancelButton: true,
+    confirmButtonText: 'Reconciliar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#ffc107',
+  });
+  if (!confirm.isConfirmed) return;
+
+  reconciling.value = true;
+  try {
+    const { data: res } = await api.post('/financial/reconciliation/run');
+    const orphansFound = Number(res?.orphansFound || 0);
+    const orphansFixed = Number(res?.orphansFixed || 0);
+    const retriesAttempted = Number(res?.retriesAttempted || 0);
+    const retriesFixed = Number(res?.retriesFixed || 0);
+    const totalCreated = orphansFixed + retriesFixed;
+    const hadFailures = (orphansFound - orphansFixed + retriesAttempted - retriesFixed) > 0;
+    Swal.fire({
+      icon: totalCreated > 0 ? 'success' : 'info',
+      title: 'Reconciliação concluída',
+      html: `
+        <div class="text-start small">
+          Pedidos órfãos encontrados: <strong>${orphansFound}</strong><br>
+          Lançamentos criados: <strong>${orphansFixed}</strong><br>
+          Bridges falhos retentados: <strong>${retriesAttempted}</strong> (${retriesFixed} resolvidos)
+          ${hadFailures ? '<br><br><em>Alguns itens não puderam ser corrigidos — verifique os logs do backend.</em>' : ''}
+        </div>
+        <div class="small text-muted mt-2">Pedidos atualizados nos últimos 5 minutos não são processados (buffer anti-race).</div>
+      `,
+    });
+    await load();
+  } catch (e) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Erro na reconciliação',
+      text: e.response?.data?.message || e.message || 'Erro desconhecido',
+    });
+  } finally {
+    reconciling.value = false;
+  }
+}
 
 const showDataAvailabilityBanner = computed(() => {
   if (!data.value?.dataStartDate || !data.value?.period?.from) return false;
