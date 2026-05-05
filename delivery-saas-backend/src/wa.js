@@ -35,6 +35,12 @@ function normalizePhone(n) {
   return d.startsWith('55') ? d : '55' + d;
 }
 
+// True for Brazilian non-WhatsApp numbers (toll-free, premium, donations, paid services).
+// Expects the result of normalizePhone (i.e. starts with '55').
+function isBrServiceNumber(phone) {
+  return /^55(0800|0300|0500|0900|4003|4004|3003|3004)/.test(String(phone || ''));
+}
+
 // ─── Webhook Registration ────────────────────────────────────────────────────
 // Build the webhook config object used both in instance creation and explicit set
 export function buildWebhookConfig() {
@@ -166,7 +172,7 @@ export async function evoSendText({ instanceName, to, text, quoted }) {
   throw last || new Error('Falha ao enviar mensagem (Evolution)');
 }
 
-export { normalizePhone };
+export { normalizePhone, isBrServiceNumber };
 
 /**
  * Envia localização (pin). Tenta endpoints conhecidos da Evolution.

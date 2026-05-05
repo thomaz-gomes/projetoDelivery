@@ -1,5 +1,5 @@
 import { prisma } from '../prisma.js';
-import { evoSendText, evoSendLocation, normalizePhone } from '../wa.js';
+import { evoSendText, evoSendLocation, normalizePhone, isBrServiceNumber } from '../wa.js';
 import { evoGetStatus } from '../wa.js';
 
 // Previously we gated customer notifications behind ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS.
@@ -245,6 +245,10 @@ export async function notifyCustomerStatus(orderId, newStatus) {
       order?.payload?.customer?.phone?.number || ''
     );
     if (!phone) return;
+    if (isBrServiceNumber(phone)) {
+      console.log('[notifyCustomerStatus] skipping non-WhatsApp service number', phone);
+      return;
+    }
 
     const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
     if (!inst) {
@@ -324,6 +328,10 @@ export async function notifyCustomerOrderSummary(orderId) {
       order?.payload?.customer?.phone?.number || ''
     );
     if (!phone) return;
+    if (isBrServiceNumber(phone)) {
+      console.log('[notifyCustomerOrderSummary] skipping non-WhatsApp service number', phone);
+      return;
+    }
 
     const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
     if (!inst) {
@@ -401,6 +409,10 @@ export async function notifyCashbackCredit(clientId, companyId, amount, newBalan
     if (!company?.evolutionEnabled) return;
     const phone = normalizePhone(customer?.whatsapp || '');
     if (!phone) return;
+    if (isBrServiceNumber(phone)) {
+      console.log('[notifyCashbackCredit] skipping non-WhatsApp service number', phone);
+      return;
+    }
     const inst = await pickConnectedInstance(companyId);
     if (!inst) return;
 
