@@ -503,6 +503,7 @@ const PAGE_TITLES = [
   ['/financial/cost-centers', 'Centros de Custo'],
   ['/financial/recurring', 'Despesas Fixas'],
   ['/financial/payment-methods', 'Formas de Pagamento'],
+  ['/financial/gateways', 'Taxas e Operadoras'],
   ['/financial', 'Financeiro'],
   ['/relatorios/nfe-emissoes', 'Notas Fiscais'],
   ['/nfe/emissao', 'Emissão de NF-e'],

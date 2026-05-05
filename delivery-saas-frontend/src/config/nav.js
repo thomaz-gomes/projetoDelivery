@@ -59,6 +59,7 @@ export const nav = [
     { name: 'Centros de Custo', to: '/financial/cost-centers', icon: 'bi bi-diagram-3' },
     { name: 'Despesas Fixas', to: '/financial/recurring', icon: 'bi bi-arrow-repeat' },
     { name: 'Formas de Pagamento', to: '/financial/payment-methods', icon: 'bi bi-credit-card' },
+    { name: 'Taxas e Operadoras', to: '/financial/gateways', icon: 'bi bi-percent' },
   ] },
   { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', role: 'ADMIN', children: [
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt', moduleKey: 'cardapio_completo', lockable: true },
