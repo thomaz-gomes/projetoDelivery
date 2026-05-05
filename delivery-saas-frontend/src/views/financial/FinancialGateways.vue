@@ -2,7 +2,12 @@
   <div class="container py-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h3>Taxas e Operadoras</h3>
-      <button class="btn btn-primary" @click="showForm = true">Nova Configuração</button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-warning" @click="checkRepair" :disabled="repairing">
+          <i class="bi bi-wrench me-1"></i>Corrigir Taxas Antigas
+        </button>
+        <button class="btn btn-primary" @click="showForm = true">Nova Configuração</button>
+      </div>
     </div>
 
     <div class="card">
@@ -137,6 +142,7 @@ export default {
       showForm: false,
       editing: null,
       saving: false,
+      repairing: false,
       form: this.emptyForm(),
       showSimulation: false,
       simulationGateway: null,
@@ -202,6 +208,30 @@ export default {
       this.simResult = null;
       this.simAmount = 100;
       this.showSimulation = true;
+    },
+    async checkRepair() {
+      this.repairing = true;
+      try {
+        const { data: dry } = await api.post('/financial/gateways/repair-fee-percent', { dryRun: true });
+        if (dry.gatewaysFixed === 0) {
+          alert('Nenhuma operadora precisa de correção. Todas as taxas já estão no formato correto.');
+          return;
+        }
+        const lines = dry.gateways
+          .map((g) => `• ${g.provider}${g.label ? ` (${g.label})` : ''}: ${g.currentPercent} → ${g.fixedPercent} (${g.transactionCount} transação(ões))`)
+          .join('\n');
+        const ok = window.confirm(
+          `Encontradas ${dry.gatewaysFixed} operadora(s) com taxa em formato incorreto:\n\n${lines}\n\nIsso recalculará ${dry.transactionsRecalculated} transação(ões) já lançadas. Confirma?`,
+        );
+        if (!ok) return;
+        const { data: applied } = await api.post('/financial/gateways/repair-fee-percent', { dryRun: false });
+        alert(`Corrigido com sucesso!\n${applied.gatewaysFixed} operadora(s) ajustada(s).\n${applied.transactionsRecalculated} transação(ões) recalculada(s).`);
+        await this.load();
+      } catch (e) {
+        alert(e.response?.data?.message || 'Erro ao corrigir taxas');
+      } finally {
+        this.repairing = false;
+      }
     },
     async runSimulation() {
       try {
