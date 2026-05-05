@@ -111,7 +111,7 @@ export function buildDanfeText(data) {
 
   // ── Divisão IV: Totais ──────────────────────────────────────────────
   const vNF = Number(order.total || subtotal)
-  const desconto = Number(order.discount || 0)
+  const desconto = Number(order.couponDiscount || 0) + Number(order.discountMerchant || 0)
   const acrescimo = Number(order.deliveryFee || 0)
   const payRaw = (order.payload && order.payload.payment) || {}
   const troco = Number(payRaw.change || 0)

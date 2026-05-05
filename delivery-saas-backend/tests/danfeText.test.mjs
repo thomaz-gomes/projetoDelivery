@@ -72,15 +72,29 @@ test('DANFE — bloco de totais tem "Subtotal" e "TOTAL"', () => {
   assert.match(out, /R\$ 56,00/)
 })
 
-test('DANFE — linha "Desconto" só aparece quando discount > 0', () => {
+test('DANFE — linha "Desconto" agrega couponDiscount + discountMerchant', () => {
   const semDesc = buildDanfeText(makeFixture())
   assert.doesNotMatch(semDesc, /Desconto:/)
 
-  const comDesc = buildDanfeText(makeFixture({
-    order: { discount: 6.0, total: 50.0 },
+  // Apenas couponDiscount
+  const comCupom = buildDanfeText(makeFixture({
+    order: { couponDiscount: 6.0, total: 50.0 },
   }))
-  assert.match(comDesc, /Desconto:/)
-  assert.match(comDesc, /-\s*R\$ 6,00/)
+  assert.match(comCupom, /Desconto:/)
+  assert.match(comCupom, /-\s*R\$ 6,00/)
+
+  // Apenas discountMerchant
+  const comMerchant = buildDanfeText(makeFixture({
+    order: { discountMerchant: 4.0, total: 52.0 },
+  }))
+  assert.match(comMerchant, /Desconto:/)
+  assert.match(comMerchant, /-\s*R\$ 4,00/)
+
+  // Ambos somados
+  const comAmbos = buildDanfeText(makeFixture({
+    order: { couponDiscount: 6.0, discountMerchant: 4.0, total: 46.0 },
+  }))
+  assert.match(comAmbos, /-\s*R\$ 10,00/)
 })
 
 test('DANFE — linha "Acrescimo" aparece quando deliveryFee > 0', () => {
