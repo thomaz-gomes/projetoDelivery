@@ -138,7 +138,10 @@ test('DANFE — em produção (tpAmb=1) NÃO imprime aviso de homologação', ()
 
 test('DANFE — chave de acesso em grupos de 4 dígitos', () => {
   const out = buildDanfeText(makeFixture())
-  assert.match(out, /2926 0400 0000 0000 0000 0000 0000 0000 0000 0000 0123/)
+  // A chave (44 dígitos) é formatada em grupos de 4 e pode quebrar em mais de
+  // uma linha se exceder 48 cols. Verificamos os grupos do início + final.
+  assert.match(out, /2926 0400 0000 0000/)
+  assert.match(out, /0000 0123/)
 })
 
 test('DANFE — protocolo + NFC-e nº + série + emissão', () => {
