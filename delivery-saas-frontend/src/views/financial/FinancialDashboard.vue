@@ -260,6 +260,7 @@
 
 <script>
 import api from '../../api';
+import Swal from 'sweetalert2';
 
 export default {
   name: 'FinancialDashboard',
@@ -391,25 +392,38 @@ export default {
       }
     },
     async payInvoice(inv) {
-      if (!confirm(`Pagar fatura ${inv.card.name} de ${this.formatCurrency(inv.total)} (${inv.parcelasCount} parcelas)?`)) return;
+      const confirmed = await Swal.fire({
+        icon: 'question',
+        title: 'Pagar fatura?',
+        html: `${inv.card.name} — <strong>${this.formatCurrency(inv.total)}</strong><br><small class="text-muted">${inv.parcelasCount} parcela(s)</small>`,
+        showCancelButton: true,
+        confirmButtonText: 'Pagar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#198754',
+      });
+      if (!confirmed.isConfirmed) return;
       try {
         await api.post('/financial/invoices/pay', {
           payablePaymentMethodId: inv.card.id,
           month: inv.month,
           accountId: inv.card.accountId,
         });
-        alert('Fatura paga com sucesso!');
+        await Swal.fire({ icon: 'success', title: 'Fatura paga', timer: 1500, showConfirmButton: false });
         await this.loadInvoices();
         if (this.loadAll) await this.loadAll();
       } catch (e) {
-        alert(e.response?.data?.message || 'Erro ao pagar fatura');
+        Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.message || 'Erro ao pagar fatura' });
       }
     },
     showInvoiceDetail(inv) {
-      const lines = inv.parcelas.map(p =>
-        `${p.description} — ${this.formatCurrency(p.grossAmount)} — ${this.formatDate(p.dueDate)}`
-      ).join('\n');
-      alert(`Fatura ${inv.card.name} - ${inv.month}\n\n${lines}\n\nTotal: ${this.formatCurrency(inv.total)}`);
+      const rows = inv.parcelas.map(p =>
+        `<tr><td class="small">${p.description}</td><td class="text-end small">${this.formatCurrency(p.grossAmount)}</td><td class="text-end small text-muted">${this.formatDate(p.dueDate)}</td></tr>`
+      ).join('');
+      Swal.fire({
+        title: `Fatura ${inv.card.name} - ${inv.month}`,
+        html: `<div class="table-responsive"><table class="table table-sm mb-0"><tbody>${rows}</tbody><tfoot><tr><td><strong>Total</strong></td><td class="text-end fw-bold">${this.formatCurrency(inv.total)}</td><td></td></tr></tfoot></table></div>`,
+        width: 600,
+      });
     },
     formatCurrency(value) {
       return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);

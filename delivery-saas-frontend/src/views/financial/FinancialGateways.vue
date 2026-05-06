@@ -196,6 +196,7 @@
 
 <script>
 import api from '../../api';
+import Swal from 'sweetalert2';
 import TextInput from '../../components/form/input/TextInput.vue';
 import SelectInput from '../../components/form/select/SelectInput.vue';
 
@@ -287,16 +288,39 @@ export default {
       this.showForm = true;
     },
     async recreate(gw) {
-      const ok = window.confirm(
-        `Recriar lançamentos de todas as vendas ${gw.provider}?\n\nVai apagar e regenerar as receivables (e taxas) das vendas CONCLUIDO usando a configuração atual. Vendas já conciliadas (PAID com paidAt) são ignoradas.`
-      );
-      if (!ok) return;
+      const confirmed = await Swal.fire({
+        icon: 'question',
+        title: `Recriar lançamentos de ${gw.provider}?`,
+        html: `Vai apagar e regenerar as receivables e taxas das vendas <strong>CONCLUIDO</strong> usando a configuração atual.<br><br>Vendas já conciliadas (PAID com paidAt) são ignoradas.`,
+        showCancelButton: true,
+        confirmButtonText: 'Recriar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ffc107',
+      });
+      if (!confirmed.isConfirmed) return;
       this.recreating = true;
       try {
         const { data } = await api.post('/financial/settlements/recreate', { provider: gw.provider });
-        alert(`Recriação concluída.\nPedidos verificados: ${data.totalOrders}\nRecriados: ${data.recreated}\nIgnorados: ${data.skipped}\nLançamentos apagados: ${data.deletedTransactions}`);
+        if (data.totalOrders === 0) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Nenhum pedido encontrado',
+            html: `O sistema não identificou pedidos do ${gw.provider}.<br><br><small class="text-muted">Verifique se a integração está vinculada à empresa e se há pedidos com status CONCLUIDO.</small>`,
+          });
+        } else {
+          await Swal.fire({
+            icon: 'success',
+            title: 'Recriação concluída',
+            html: `<div class="text-start small">
+              Pedidos verificados: <strong>${data.totalOrders}</strong><br>
+              Recriados: <strong>${data.recreated}</strong><br>
+              Ignorados (já conciliados): <strong>${data.skipped}</strong><br>
+              Lançamentos apagados: <strong>${data.deletedTransactions}</strong>
+            </div>`,
+          });
+        }
       } catch (e) {
-        alert(e.response?.data?.message || 'Erro ao recriar lançamentos');
+        Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.message || 'Erro ao recriar lançamentos' });
       } finally {
         this.recreating = false;
       }
@@ -331,7 +355,7 @@ export default {
         this.closeForm();
         await this.load();
       } catch (e) {
-        alert(e.response?.data?.message || 'Erro ao salvar');
+        Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.message || 'Erro ao salvar' });
       } finally {
         this.saving = false;
       }
@@ -347,21 +371,31 @@ export default {
       try {
         const { data: dry } = await api.post('/financial/gateways/repair-fee-percent', { dryRun: true });
         if (dry.gatewaysFixed === 0) {
-          alert('Nenhuma operadora precisa de correção. Todas as taxas já estão no formato correto.');
+          await Swal.fire({ icon: 'info', title: 'Tudo certo', text: 'Nenhuma operadora precisa de correção.' });
           return;
         }
-        const lines = dry.gateways
-          .map((g) => `• ${g.provider}${g.label ? ` (${g.label})` : ''}: ${g.currentPercent} → ${g.fixedPercent} (${g.transactionCount} transação(ões))`)
-          .join('\n');
-        const ok = window.confirm(
-          `Encontradas ${dry.gatewaysFixed} operadora(s) com taxa em formato incorreto:\n\n${lines}\n\nIsso recalculará ${dry.transactionsRecalculated} transação(ões) já lançadas. Confirma?`,
-        );
-        if (!ok) return;
+        const linesHtml = dry.gateways
+          .map((g) => `<li>${g.provider}${g.label ? ` (${g.label})` : ''}: <code>${g.currentPercent}</code> → <code>${g.fixedPercent}</code> (${g.transactionCount} transação(ões))</li>`)
+          .join('');
+        const confirmed = await Swal.fire({
+          icon: 'warning',
+          title: 'Corrigir taxas antigas?',
+          html: `<div class="text-start small">Encontradas <strong>${dry.gatewaysFixed}</strong> operadora(s) com taxa em formato incorreto:<ul>${linesHtml}</ul>Isso recalculará <strong>${dry.transactionsRecalculated}</strong> transação(ões).</div>`,
+          showCancelButton: true,
+          confirmButtonText: 'Corrigir',
+          cancelButtonText: 'Cancelar',
+          confirmButtonColor: '#ffc107',
+        });
+        if (!confirmed.isConfirmed) return;
         const { data: applied } = await api.post('/financial/gateways/repair-fee-percent', { dryRun: false });
-        alert(`Corrigido com sucesso!\n${applied.gatewaysFixed} operadora(s) ajustada(s).\n${applied.transactionsRecalculated} transação(ões) recalculada(s).`);
+        await Swal.fire({
+          icon: 'success',
+          title: 'Corrigido com sucesso',
+          html: `<div class="text-start small"><strong>${applied.gatewaysFixed}</strong> operadora(s) ajustada(s).<br><strong>${applied.transactionsRecalculated}</strong> transação(ões) recalculada(s).</div>`,
+        });
         await this.load();
       } catch (e) {
-        alert(e.response?.data?.message || 'Erro ao corrigir taxas');
+        Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.message || 'Erro ao corrigir taxas' });
       } finally {
         this.repairing = false;
       }
@@ -374,7 +408,7 @@ export default {
         });
         this.simResult = data;
       } catch (e) {
-        alert(e.response?.data?.message || 'Erro na simulação');
+        Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.message || 'Erro na simulação' });
       }
     },
     formatCurrency(value) {

@@ -114,6 +114,7 @@
 
 <script>
 import api from '../../api';
+import Swal from 'sweetalert2';
 
 export default {
   name: 'FinancialSettlements',
@@ -171,7 +172,7 @@ export default {
         const { data } = await api.get('/financial/settlements/pending', { params });
         this.groups = data;
       } catch (e) {
-        alert(e.response?.data?.message || 'Erro ao carregar repasses');
+        Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.message || 'Erro ao carregar repasses' });
       } finally {
         this.loading = false;
       }
@@ -196,13 +197,16 @@ export default {
           paidAt: this.recForm.paidAt,
         };
         const { data } = await api.post('/financial/settlements/reconcile', body);
-        let msg = `${data.receivablesSettled} venda(s) marcada(s) como pagas.`;
-        if (data.difference) msg += `\nAjuste de ${this.fmt(Math.abs(data.difference))} criado.`;
-        alert(msg);
+        let html = `<div class="text-start small">
+          <strong>${data.receivablesSettled}</strong> venda(s) marcada(s) como pagas.<br>
+          ${data.anticipationsSettled ? `<strong>${data.anticipationsSettled}</strong> antecipação(ões) liquidada(s).<br>` : ''}
+          ${data.difference ? `Ajuste de <strong>${this.fmt(Math.abs(data.difference))}</strong> criado.` : ''}
+        </div>`;
+        await Swal.fire({ icon: 'success', title: 'Repasse conciliado', html, timer: 3000 });
         this.reconciling = null;
         await this.load();
       } catch (e) {
-        alert(e.response?.data?.message || 'Erro ao conciliar repasse');
+        Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.message || 'Erro ao conciliar repasse' });
       } finally {
         this.submitting = false;
       }

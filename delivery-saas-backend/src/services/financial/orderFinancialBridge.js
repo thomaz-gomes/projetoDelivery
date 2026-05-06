@@ -43,10 +43,17 @@ export async function createFinancialEntriesForOrder(order) {
     const orderTotal = Number(order.total || 0);
     const now = new Date();
 
-    // Determinar se veio de marketplace (iFood, etc.)
-    const source = order.customerSource;
+    // Determinar se veio de marketplace (iFood, etc.).
+    // Detecção robusta: pedidos do processador moderno do iFood podem ter
+    // customerSource null (legacy só era setado pelo webhooks.js antigo) mas
+    // têm externalId + payload.merchantId/order — então olhamos múltiplos sinais.
+    const isIfood = order.customerSource === 'IFOOD'
+      || /ifood/i.test(String(order.payload?.source || order.payload?.integration || ''))
+      || Boolean(order.payload?.ifood)
+      || Boolean(order.payload?.merchantId && order.payload?.order)
+      || (Boolean(order.externalId) && Boolean(order.payload?.merchantId));
     let gatewayConfig = null;
-    if (source === 'IFOOD') {
+    if (isIfood) {
       gatewayConfig = await prisma.paymentGatewayConfig.findFirst({
         where: { companyId: order.companyId, provider: 'IFOOD', isActive: true },
       });
@@ -482,12 +489,28 @@ export async function recreateFinancialEntriesForOrder(orderId) {
  */
 export async function recreateFinancialEntriesForProvider({ companyId, provider, from, to }) {
   const where = { companyId, status: 'CONCLUIDO' };
-  if (provider === 'IFOOD') where.customerSource = 'IFOOD';
+  if (provider === 'IFOOD') {
+    // Robust detection: orders may have customerSource null when created via
+    // the modern ifoodWebhookProcessor. Match on any iFood signal.
+    where.OR = [
+      { customerSource: 'IFOOD' },
+      { externalId: { not: null } },
+    ];
+  }
   if (from || to) {
     where.createdAt = {};
     if (from) where.createdAt.gte = new Date(from);
     if (to) where.createdAt.lte = new Date(to);
   }
+  // Backfill customerSource on legacy iFood orders that lack it (so future
+  // queries can use the simple customerSource filter).
+  if (provider === 'IFOOD') {
+    await prisma.order.updateMany({
+      where: { companyId, externalId: { not: null }, customerSource: null },
+      data: { customerSource: 'IFOOD' },
+    }).catch(() => {});
+  }
+
   const orders = await prisma.order.findMany({ where, select: { id: true } });
   let recreated = 0, skipped = 0, deleted = 0;
   for (const o of orders) {
