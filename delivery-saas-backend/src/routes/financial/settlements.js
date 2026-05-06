@@ -334,8 +334,10 @@ router.post('/recreate', async (req, res) => {
     const result = await recreateFinancialEntriesForProvider({ companyId, provider, from, to });
     res.json(result);
   } catch (e) {
-    console.error('POST /financial/settlements/recreate error:', e);
-    res.status(500).json({ message: 'Erro ao recriar lançamentos', error: e?.message });
+    console.error('POST /financial/settlements/recreate error:', e?.stack || e);
+    // Surface the real Prisma message — generic '500 Erro' was hiding actual causes
+    const msg = e?.message || String(e);
+    res.status(500).json({ message: `Falha ao recriar lançamentos: ${msg}`, code: e?.code });
   }
 });
 

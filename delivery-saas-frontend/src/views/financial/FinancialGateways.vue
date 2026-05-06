@@ -308,19 +308,32 @@ export default {
             html: `O sistema não identificou pedidos do ${gw.provider}.<br><br><small class="text-muted">Verifique se a integração está vinculada à empresa e se há pedidos com status CONCLUIDO.</small>`,
           });
         } else {
+          const failed = Number(data.failed || 0);
+          const errorsHtml = failed > 0 && Array.isArray(data.errors)
+            ? `<hr><div class="text-start small text-danger"><strong>Primeiras falhas:</strong><ul>${data.errors.map(e => `<li><code>${e.orderId.slice(0, 8)}</code>: ${e.error}</li>`).join('')}</ul></div>`
+            : '';
           await Swal.fire({
-            icon: 'success',
-            title: 'Recriação concluída',
+            icon: failed > 0 ? 'warning' : 'success',
+            title: failed > 0 ? 'Recriação parcial' : 'Recriação concluída',
             html: `<div class="text-start small">
               Pedidos verificados: <strong>${data.totalOrders}</strong><br>
-              Recriados: <strong>${data.recreated}</strong><br>
-              Ignorados (já conciliados): <strong>${data.skipped}</strong><br>
+              Recriados: <strong class="text-success">${data.recreated}</strong><br>
+              Ignorados (já conciliados): <strong class="text-muted">${data.skipped}</strong><br>
+              ${failed > 0 ? `Falharam: <strong class="text-danger">${failed}</strong><br>` : ''}
               Lançamentos apagados: <strong>${data.deletedTransactions}</strong>
-            </div>`,
+            </div>${errorsHtml}`,
+            width: failed > 0 ? 600 : undefined,
           });
         }
       } catch (e) {
-        Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.message || 'Erro ao recriar lançamentos' });
+        const detail = e.response?.data?.message || e.response?.data?.error || e.message || 'Erro desconhecido';
+        const code = e.response?.data?.code ? `<br><small class="text-muted">Código: <code>${e.response.data.code}</code></small>` : '';
+        Swal.fire({
+          icon: 'error',
+          title: 'Erro ao recriar lançamentos',
+          html: `<div class="text-start small">${detail}${code}</div>`,
+          width: 600,
+        });
       } finally {
         this.recreating = false;
       }

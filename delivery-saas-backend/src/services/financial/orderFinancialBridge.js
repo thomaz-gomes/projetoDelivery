@@ -470,12 +470,34 @@ export async function recreateFinancialEntriesForOrder(orderId) {
   });
   if (settled) return { deleted: 0, recreated: false, skipped: 'already_settled' };
 
-  const del = await prisma.financialTransaction.deleteMany({
+  // Look up all transactions about to be deleted so we can null out the FK
+  // on CashFlowEntry first (the relation has no onDelete cascade and Postgres
+  // refuses the delete otherwise).
+  const txs = await prisma.financialTransaction.findMany({
     where: {
       companyId: order.companyId,
       sourceId: order.id,
       sourceType: { in: linkedTypes },
     },
+    select: { id: true },
+  });
+  const txIds = txs.map((t) => t.id);
+
+  let del = { count: 0 };
+  await prisma.$transaction(async (tx) => {
+    if (txIds.length > 0) {
+      await tx.cashFlowEntry.updateMany({
+        where: { transactionId: { in: txIds } },
+        data: { transactionId: null },
+      });
+    }
+    del = await tx.financialTransaction.deleteMany({
+      where: {
+        companyId: order.companyId,
+        sourceId: order.id,
+        sourceType: { in: linkedTypes },
+      },
+    });
   });
 
   await createFinancialEntriesForOrder(order);
@@ -512,11 +534,19 @@ export async function recreateFinancialEntriesForProvider({ companyId, provider,
   }
 
   const orders = await prisma.order.findMany({ where, select: { id: true } });
-  let recreated = 0, skipped = 0, deleted = 0;
+  let recreated = 0, skipped = 0, deleted = 0, failed = 0;
+  const errors = [];
   for (const o of orders) {
-    const r = await recreateFinancialEntriesForOrder(o.id);
-    if (r.recreated) { recreated++; deleted += r.deleted; }
-    else skipped++;
+    try {
+      const r = await recreateFinancialEntriesForOrder(o.id);
+      if (r.recreated) { recreated++; deleted += r.deleted; }
+      else skipped++;
+    } catch (e) {
+      failed++;
+      const msg = e?.message || String(e);
+      console.error(`[recreateFinancialEntries] order ${o.id} failed:`, msg);
+      if (errors.length < 5) errors.push({ orderId: o.id, error: msg });
+    }
   }
-  return { totalOrders: orders.length, recreated, skipped, deletedTransactions: deleted };
+  return { totalOrders: orders.length, recreated, skipped, failed, deletedTransactions: deleted, errors };
 }
