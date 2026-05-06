@@ -199,6 +199,7 @@ import api from '../../api';
 import Swal from 'sweetalert2';
 import TextInput from '../../components/form/input/TextInput.vue';
 import SelectInput from '../../components/form/select/SelectInput.vue';
+import { useSettlementProgressStore } from '../../stores/settlementProgress';
 
 export default {
   name: 'FinancialGateways',
@@ -291,7 +292,7 @@ export default {
       const confirmed = await Swal.fire({
         icon: 'question',
         title: `Recriar lançamentos de ${gw.provider}?`,
-        html: `Vai apagar e regenerar as receivables e taxas das vendas <strong>CONCLUIDO</strong> usando a configuração atual.<br><br>Vendas já conciliadas (PAID com paidAt) são ignoradas.`,
+        html: `Vai apagar e regenerar as receivables e taxas das vendas <strong>CONCLUIDO</strong> usando a configuração atual.<br><br>Vendas já conciliadas (PAID com paidAt) são ignoradas.<br><br><small class="text-muted">A operação roda em segundo plano — você pode continuar usando o sistema enquanto a barra de progresso na base da tela acompanha.</small>`,
         showCancelButton: true,
         confirmButtonText: 'Recriar',
         cancelButtonText: 'Cancelar',
@@ -300,44 +301,26 @@ export default {
       if (!confirmed.isConfirmed) return;
       this.recreating = true;
       try {
-        // Esta operação itera por todos os pedidos do provider — pode levar
-        // vários segundos por centena de pedidos. Override do timeout default
-        // (15s) para 5min específico deste call.
-        const { data } = await api.post(
-          '/financial/settlements/recreate',
-          { provider: gw.provider },
-          { timeout: 5 * 60 * 1000 },
-        );
-        if (data.totalOrders === 0) {
+        // O backend responde imediatamente com { jobId, total } e processa
+        // em background. A SettlementProgressBar (montada em App.vue) faz
+        // polling de /recreate/:jobId/status até concluir.
+        const { data } = await api.post('/financial/settlements/recreate', { provider: gw.provider });
+        if (data.total === 0) {
           await Swal.fire({
             icon: 'warning',
             title: 'Nenhum pedido encontrado',
             html: `O sistema não identificou pedidos do ${gw.provider}.<br><br><small class="text-muted">Verifique se a integração está vinculada à empresa e se há pedidos com status CONCLUIDO.</small>`,
           });
         } else {
-          const failed = Number(data.failed || 0);
-          const errorsHtml = failed > 0 && Array.isArray(data.errors)
-            ? `<hr><div class="text-start small text-danger"><strong>Primeiras falhas:</strong><ul>${data.errors.map(e => `<li><code>${e.orderId.slice(0, 8)}</code>: ${e.error}</li>`).join('')}</ul></div>`
-            : '';
-          await Swal.fire({
-            icon: failed > 0 ? 'warning' : 'success',
-            title: failed > 0 ? 'Recriação parcial' : 'Recriação concluída',
-            html: `<div class="text-start small">
-              Pedidos verificados: <strong>${data.totalOrders}</strong><br>
-              Recriados: <strong class="text-success">${data.recreated}</strong><br>
-              Ignorados (já conciliados): <strong class="text-muted">${data.skipped}</strong><br>
-              ${failed > 0 ? `Falharam: <strong class="text-danger">${failed}</strong><br>` : ''}
-              Lançamentos apagados: <strong>${data.deletedTransactions}</strong>
-            </div>${errorsHtml}`,
-            width: failed > 0 ? 600 : undefined,
-          });
+          const sp = useSettlementProgressStore();
+          sp.start(data.jobId, data.total, gw.provider + (gw.label ? ` (${gw.label})` : ''));
         }
       } catch (e) {
         const detail = e.response?.data?.message || e.response?.data?.error || e.message || 'Erro desconhecido';
         const code = e.response?.data?.code ? `<br><small class="text-muted">Código: <code>${e.response.data.code}</code></small>` : '';
         Swal.fire({
           icon: 'error',
-          title: 'Erro ao recriar lançamentos',
+          title: 'Erro ao iniciar recriação',
           html: `<div class="text-start small">${detail}${code}</div>`,
           width: 600,
         });

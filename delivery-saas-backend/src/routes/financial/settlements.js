@@ -1,8 +1,17 @@
 import express from 'express';
+import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma.js';
 import { recreateFinancialEntriesForProvider } from '../../services/financial/orderFinancialBridge.js';
 
 const router = express.Router();
+
+// In-memory job tracking for background "recreate marketplace settlements".
+// Mirror of the customers/import job pattern — frontend polls /:jobId/status.
+// Auto-cleanup after 10 minutes.
+const recreateJobs = new Map();
+function cleanupRecreateJob(jobId) {
+  setTimeout(() => recreateJobs.delete(jobId), 10 * 60 * 1000);
+}
 
 /**
  * GET /financial/settlements/pending?gatewayConfigId=xxx&from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -331,14 +340,66 @@ router.post('/recreate', async (req, res) => {
     const companyId = req.user.companyId;
     const { provider, from, to } = req.body || {};
     if (!provider) return res.status(400).json({ message: 'provider é obrigatório' });
-    const result = await recreateFinancialEntriesForProvider({ companyId, provider, from, to });
-    res.json(result);
+
+    // Quick scan to know how many orders we'll iterate over (used by the
+    // progress bar and to short-circuit when there's nothing to do).
+    const where = { companyId, status: 'CONCLUIDO' };
+    if (provider === 'IFOOD') where.OR = [{ customerSource: 'IFOOD' }, { externalId: { not: null } }];
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from);
+      if (to) where.createdAt.lte = new Date(to);
+    }
+    const total = await prisma.order.count({ where });
+
+    const jobId = randomUUID();
+    recreateJobs.set(jobId, {
+      provider, total,
+      processed: 0, recreated: 0, skipped: 0, failed: 0,
+      deletedTransactions: 0, errors: [],
+      done: total === 0, error: null, startedAt: Date.now(),
+    });
+
+    if (total === 0) {
+      cleanupRecreateJob(jobId);
+      return res.json({ ok: true, jobId, total, message: 'Nenhum pedido encontrado' });
+    }
+
+    res.json({ ok: true, jobId, total });
+
+    // Run in background; report progress via the job map
+    recreateFinancialEntriesForProvider({
+      companyId, provider, from, to,
+      onProgress: (snap) => {
+        const job = recreateJobs.get(jobId);
+        if (!job) return;
+        Object.assign(job, snap);
+      },
+    })
+      .then((result) => {
+        const job = recreateJobs.get(jobId);
+        if (!job) return;
+        Object.assign(job, result, { processed: result.totalOrders, done: true });
+        cleanupRecreateJob(jobId);
+      })
+      .catch((e) => {
+        const job = recreateJobs.get(jobId);
+        if (job) { job.done = true; job.error = e?.message || String(e); }
+        console.error('[recreate background] fatal:', e?.stack || e);
+        cleanupRecreateJob(jobId);
+      });
   } catch (e) {
     console.error('POST /financial/settlements/recreate error:', e?.stack || e);
-    // Surface the real Prisma message — generic '500 Erro' was hiding actual causes
     const msg = e?.message || String(e);
-    res.status(500).json({ message: `Falha ao recriar lançamentos: ${msg}`, code: e?.code });
+    res.status(500).json({ message: `Falha ao iniciar recriação: ${msg}`, code: e?.code });
   }
+});
+
+// GET /financial/settlements/recreate/:jobId/status — polled by the progress bar
+router.get('/recreate/:jobId/status', (req, res) => {
+  const job = recreateJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ message: 'Job não encontrado ou expirado' });
+  res.json(job);
 });
 
 export default router;

@@ -509,7 +509,7 @@ export async function recreateFinancialEntriesForOrder(orderId) {
  * provider in a date range. Used by the "Recriar lançamentos iFood" button
  * after the merchant changes the gateway configuration.
  */
-export async function recreateFinancialEntriesForProvider({ companyId, provider, from, to }) {
+export async function recreateFinancialEntriesForProvider({ companyId, provider, from, to, onProgress }) {
   const where = { companyId, status: 'CONCLUIDO' };
   if (provider === 'IFOOD') {
     // Robust detection: orders may have customerSource null when created via
@@ -549,6 +549,10 @@ export async function recreateFinancialEntriesForProvider({ companyId, provider,
       const msg = e?.message || String(e);
       console.error(`[recreateFinancialEntries] order ${o.id} failed:`, msg);
       if (errors.length < 5) errors.push({ orderId: o.id, error: msg });
+    }
+    if (typeof onProgress === 'function') {
+      try { onProgress({ processed: i + 1, recreated, skipped, failed, deletedTransactions: deleted, errors }); }
+      catch (_) { /* ignore */ }
     }
     if ((i + 1) % 50 === 0) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
