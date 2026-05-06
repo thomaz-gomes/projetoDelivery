@@ -300,7 +300,14 @@ export default {
       if (!confirmed.isConfirmed) return;
       this.recreating = true;
       try {
-        const { data } = await api.post('/financial/settlements/recreate', { provider: gw.provider });
+        // Esta operação itera por todos os pedidos do provider — pode levar
+        // vários segundos por centena de pedidos. Override do timeout default
+        // (15s) para 5min específico deste call.
+        const { data } = await api.post(
+          '/financial/settlements/recreate',
+          { provider: gw.provider },
+          { timeout: 5 * 60 * 1000 },
+        );
         if (data.totalOrders === 0) {
           await Swal.fire({
             icon: 'warning',
@@ -400,7 +407,12 @@ export default {
           confirmButtonColor: '#ffc107',
         });
         if (!confirmed.isConfirmed) return;
-        const { data: applied } = await api.post('/financial/gateways/repair-fee-percent', { dryRun: false });
+        // Recalcula todas as transações dos gateways — também pode demorar
+        const { data: applied } = await api.post(
+          '/financial/gateways/repair-fee-percent',
+          { dryRun: false },
+          { timeout: 5 * 60 * 1000 },
+        );
         await Swal.fire({
           icon: 'success',
           title: 'Corrigido com sucesso',

@@ -375,7 +375,7 @@ export default {
     async runReconciliation() {
       this.reconciling = true;
       try {
-        await api.post('/financial/reconciliation/run');
+        await api.post('/financial/reconciliation/run', null, { timeout: 5 * 60 * 1000 });
         await this.loadHealth();
       } catch (e) {
         console.error('Reconciliation failed:', e);

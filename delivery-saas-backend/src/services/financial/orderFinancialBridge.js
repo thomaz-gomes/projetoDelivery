@@ -534,9 +534,12 @@ export async function recreateFinancialEntriesForProvider({ companyId, provider,
   }
 
   const orders = await prisma.order.findMany({ where, select: { id: true } });
+  console.log(`[recreateFinancialEntries] starting batch for provider=${provider}, ${orders.length} order(s)`);
   let recreated = 0, skipped = 0, deleted = 0, failed = 0;
   const errors = [];
-  for (const o of orders) {
+  const startTime = Date.now();
+  for (let i = 0; i < orders.length; i++) {
+    const o = orders[i];
     try {
       const r = await recreateFinancialEntriesForOrder(o.id);
       if (r.recreated) { recreated++; deleted += r.deleted; }
@@ -547,6 +550,12 @@ export async function recreateFinancialEntriesForProvider({ companyId, provider,
       console.error(`[recreateFinancialEntries] order ${o.id} failed:`, msg);
       if (errors.length < 5) errors.push({ orderId: o.id, error: msg });
     }
+    if ((i + 1) % 50 === 0) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[recreateFinancialEntries] progress ${i + 1}/${orders.length} (${elapsed}s) — ok:${recreated} skip:${skipped} fail:${failed}`);
+    }
   }
+  const total = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[recreateFinancialEntries] done in ${total}s — recreated:${recreated} skipped:${skipped} failed:${failed}`);
   return { totalOrders: orders.length, recreated, skipped, failed, deletedTransactions: deleted, errors };
 }

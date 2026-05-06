@@ -265,7 +265,8 @@ async function runReconciliation() {
 
   reconciling.value = true;
   try {
-    const { data: res } = await api.post('/financial/reconciliation/run');
+    // Pode varrer todos os pedidos da empresa — override do timeout default
+    const { data: res } = await api.post('/financial/reconciliation/run', null, { timeout: 5 * 60 * 1000 });
     const orphansFound = Number(res?.orphansFound || 0);
     const orphansFixed = Number(res?.orphansFixed || 0);
     const retriesAttempted = Number(res?.retriesAttempted || 0);
