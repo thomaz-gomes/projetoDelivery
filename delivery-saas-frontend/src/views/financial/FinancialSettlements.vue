@@ -72,12 +72,42 @@
             <button type="button" class="btn-close" @click="reconciling = null"></button>
           </div>
           <div class="modal-body">
-            <div class="alert alert-light small">
-              <div><strong>Operadora:</strong> {{ reconciling.gatewayProvider }}{{ reconciling.gatewayLabel ? ` (${reconciling.gatewayLabel})` : '' }}</div>
-              <div><strong>Vendas:</strong> {{ reconciling.receivableCount }}</div>
-              <div><strong>A receber (bruto):</strong> {{ fmt(reconciling.totalReceivable) }}</div>
-              <div v-if="reconciling.totalAnticipation > 0"><strong>Antecipação:</strong> -{{ fmt(reconciling.totalAnticipation) }}</div>
-              <div class="fw-bold"><strong>Líquido esperado:</strong> {{ fmt(reconciling.expectedNet) }}</div>
+            <div class="border rounded p-2 mb-3 small bg-light">
+              <div class="mb-2">
+                <strong>Operadora:</strong> {{ reconciling.gatewayProvider }}{{ reconciling.gatewayLabel ? ` (${reconciling.gatewayLabel})` : '' }}
+                · <strong>{{ reconciling.receivableCount }}</strong> venda(s)
+              </div>
+              <table class="table table-sm mb-0">
+                <tbody>
+                  <tr>
+                    <td>Bruto das vendas</td>
+                    <td class="text-end">{{ fmt(reconciling.totalGross) }}</td>
+                  </tr>
+                  <tr v-if="reconciling.totalMarketplaceFee > 0" class="text-danger">
+                    <td>(-) Comissão marketplace <span class="text-muted">(deduzida na origem)</span></td>
+                    <td class="text-end">-{{ fmt(reconciling.totalMarketplaceFee) }}</td>
+                  </tr>
+                  <tr class="border-top">
+                    <td><strong>A receber do {{ reconciling.gatewayProvider }}</strong></td>
+                    <td class="text-end fw-bold">{{ fmt(reconciling.totalReceivable) }}</td>
+                  </tr>
+                  <tr v-if="reconciling.totalAnticipation > 0" class="text-danger">
+                    <td>(-) Taxa de antecipação</td>
+                    <td class="text-end">-{{ fmt(reconciling.totalAnticipation) }}</td>
+                  </tr>
+                  <tr class="table-success">
+                    <td><strong>Líquido esperado no banco</strong></td>
+                    <td class="text-end fw-bold">{{ fmt(reconciling.expectedNet) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-if="reconciling.totalMarketplaceFee === 0 && reconciling.totalGross > 0" class="alert alert-warning small py-2">
+              <i class="bi bi-exclamation-triangle me-1"></i>
+              Sem comissão marketplace deduzida. Verifique se o gateway tem
+              <strong>Taxa %</strong> configurada e clique em
+              <strong>"Recriar lançamentos"</strong> em Taxas e Operadoras.
             </div>
 
             <div class="mb-2">

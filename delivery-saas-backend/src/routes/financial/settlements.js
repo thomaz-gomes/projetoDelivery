@@ -43,7 +43,11 @@ router.get('/pending', async (req, res) => {
     const [receivables, anticipations] = await Promise.all([
       prisma.financialTransaction.findMany({
         where: { ...baseWhere, type: 'RECEIVABLE', sourceType: 'ORDER' },
-        select: { id: true, expectedDate: true, gatewayConfigId: true, netAmount: true, gatewayConfig: { select: { provider: true, label: true } } },
+        select: {
+          id: true, expectedDate: true, gatewayConfigId: true,
+          grossAmount: true, feeAmount: true, netAmount: true,
+          gatewayConfig: { select: { provider: true, label: true } },
+        },
       }),
       prisma.financialTransaction.findMany({
         where: { ...baseWhere, type: 'PAYABLE', sourceType: 'ANTICIPATION_FEE', dueDate: dateRange.gte || dateRange.lte ? dateRange : undefined },
@@ -61,13 +65,17 @@ router.get('/pending', async (req, res) => {
         gatewayConfigId: r.gatewayConfigId,
         gatewayProvider: r.gatewayConfig?.provider || null,
         gatewayLabel: r.gatewayConfig?.label || null,
-        totalReceivable: 0,
+        totalGross: 0,            // soma do bruto (orderTotal)
+        totalMarketplaceFee: 0,   // soma das comissões já deduzidas na origem
+        totalReceivable: 0,       // soma do netAmount (= o que cai no banco)
         totalAnticipation: 0,
         expectedNet: 0,
         receivableCount: 0,
         receivableIds: [],
         anticipationIds: [],
       };
+      g.totalGross += Number(r.grossAmount);
+      g.totalMarketplaceFee += Number(r.feeAmount);
       g.totalReceivable += Number(r.netAmount);
       g.receivableCount += 1;
       g.receivableIds.push(r.id);
@@ -82,6 +90,8 @@ router.get('/pending', async (req, res) => {
     }
     for (const g of groups.values()) {
       g.expectedNet = Math.round((g.totalReceivable - g.totalAnticipation) * 100) / 100;
+      g.totalGross = Math.round(g.totalGross * 100) / 100;
+      g.totalMarketplaceFee = Math.round(g.totalMarketplaceFee * 100) / 100;
       g.totalReceivable = Math.round(g.totalReceivable * 100) / 100;
       g.totalAnticipation = Math.round(g.totalAnticipation * 100) / 100;
     }
