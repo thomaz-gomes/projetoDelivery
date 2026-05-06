@@ -216,6 +216,99 @@ router.post('/reconcile', async (req, res) => {
 });
 
 /**
+ * GET /financial/settlements/history?provider=IFOOD&from=YYYY-MM-DD&to=YYYY-MM-DD
+ *
+ * Lists past settlements (already reconciled). Groups paid receivables by
+ * (gatewayConfigId, paidAt date) so the dashboard can show "previous repasses
+ * with date and amount" alongside the upcoming one.
+ */
+router.get('/history', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { provider, gatewayConfigId, from, to } = req.query;
+
+    const dateRange = {};
+    if (from) dateRange.gte = new Date(from);
+    if (to) {
+      // include the entire 'to' day
+      const toEnd = new Date(to);
+      toEnd.setHours(23, 59, 59, 999);
+      dateRange.lte = toEnd;
+    }
+
+    const where = {
+      companyId,
+      type: 'RECEIVABLE',
+      sourceType: 'ORDER',
+      status: 'PAID',
+      paidAt: { not: null, ...dateRange },
+      gatewayConfigId: { not: null },
+    };
+    if (gatewayConfigId) where.gatewayConfigId = String(gatewayConfigId);
+
+    const receivables = await prisma.financialTransaction.findMany({
+      where,
+      select: {
+        id: true, paidAt: true, netAmount: true, gatewayConfigId: true,
+        gatewayConfig: { select: { provider: true, label: true } },
+      },
+      orderBy: { paidAt: 'desc' },
+    });
+
+    const filtered = provider
+      ? receivables.filter((r) => r.gatewayConfig?.provider === String(provider).toUpperCase())
+      : receivables;
+
+    const groups = new Map();
+    const keyOf = (configId, date) => `${configId}|${new Date(date).toISOString().slice(0, 10)}`;
+    for (const r of filtered) {
+      const k = keyOf(r.gatewayConfigId, r.paidAt);
+      const g = groups.get(k) || {
+        paidAt: new Date(r.paidAt).toISOString().slice(0, 10),
+        gatewayConfigId: r.gatewayConfigId,
+        gatewayProvider: r.gatewayConfig?.provider || null,
+        gatewayLabel: r.gatewayConfig?.label || null,
+        totalReceivable: 0,
+        receivableCount: 0,
+      };
+      g.totalReceivable += Number(r.netAmount);
+      g.receivableCount += 1;
+      groups.set(k, g);
+    }
+
+    // Pull anticipation fees actually paid on those same days/configs to compute the net
+    const antecipations = await prisma.financialTransaction.findMany({
+      where: {
+        companyId, type: 'PAYABLE', sourceType: 'ANTICIPATION_FEE',
+        status: 'PAID', paidAt: { not: null, ...dateRange },
+        gatewayConfigId: provider || gatewayConfigId
+          ? (gatewayConfigId ? String(gatewayConfigId) : undefined)
+          : { not: null },
+      },
+      select: { paidAt: true, gatewayConfigId: true, netAmount: true, gatewayConfig: { select: { provider: true } } },
+    });
+    for (const a of antecipations) {
+      if (provider && a.gatewayConfig?.provider !== String(provider).toUpperCase()) continue;
+      const k = keyOf(a.gatewayConfigId, a.paidAt);
+      const g = groups.get(k);
+      if (!g) continue;
+      g.totalAnticipation = (g.totalAnticipation || 0) + Number(a.netAmount);
+    }
+    for (const g of groups.values()) {
+      g.totalAnticipation = Math.round((g.totalAnticipation || 0) * 100) / 100;
+      g.totalReceivable = Math.round(g.totalReceivable * 100) / 100;
+      g.actualNet = Math.round((g.totalReceivable - g.totalAnticipation) * 100) / 100;
+    }
+
+    const out = Array.from(groups.values()).sort((a, b) => b.paidAt.localeCompare(a.paidAt));
+    res.json(out);
+  } catch (e) {
+    console.error('GET /financial/settlements/history error:', e);
+    res.status(500).json({ message: 'Erro ao listar histórico de repasses', error: e?.message });
+  }
+});
+
+/**
  * POST /financial/settlements/recreate
  * Body: { provider: "IFOOD", from?: ISO, to?: ISO }
  *

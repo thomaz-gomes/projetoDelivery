@@ -81,6 +81,91 @@
           <div class="stat-sub">todas as contas</div>
         </div>
       </div>
+      <div class="stat-card stat-card--clickable" v-if="nextSettlement" @click="openSettlementHistory">
+        <div class="stat-icon stat-icon--info"><i class="bi bi-bank"></i></div>
+        <div class="stat-body">
+          <div class="stat-label">Próximo Repasse {{ nextSettlement.gatewayProvider || 'iFood' }}</div>
+          <div class="stat-value text-info">{{ formatCurrency(nextSettlement.expectedNet) }}</div>
+          <div class="stat-sub">
+            {{ formatDate(nextSettlement.expectedDate) }} · {{ nextSettlement.receivableCount }} venda(s)
+            <span class="text-primary ms-1"><i class="bi bi-clock-history"></i> ver histórico</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: histórico de repasses -->
+    <div v-if="showHistoryModal" class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5)" @click.self="showHistoryModal = false">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="bi bi-bank me-1"></i>Histórico de Repasses {{ historyFilter.provider || 'iFood' }}
+            </h5>
+            <button type="button" class="btn-close" @click="showHistoryModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-2 mb-3">
+              <div class="col-md-4">
+                <label class="form-label small">De</label>
+                <input type="date" class="form-control form-control-sm" v-model="historyFilter.from" @change="loadSettlementHistory" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small">Até</label>
+                <input type="date" class="form-control form-control-sm" v-model="historyFilter.to" @change="loadSettlementHistory" />
+              </div>
+              <div class="col-md-4 d-flex align-items-end gap-1">
+                <button class="btn btn-sm btn-outline-secondary" @click="setHistoryRange(30)">Últimos 30d</button>
+                <button class="btn btn-sm btn-outline-secondary" @click="setHistoryRange(90)">90d</button>
+              </div>
+            </div>
+
+            <div v-if="loadingHistory" class="text-center py-4">
+              <div class="spinner-border spinner-border-sm"></div>
+            </div>
+            <div v-else-if="!settlementHistory.length" class="text-center text-muted py-4">
+              Nenhum repasse no período selecionado.
+            </div>
+            <div v-else>
+              <div class="d-flex justify-content-between align-items-center mb-2 small text-muted">
+                <span>{{ settlementHistory.length }} repasse(s)</span>
+                <span>Total recebido: <strong class="text-success">{{ formatCurrency(historyTotal) }}</strong></span>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Data do crédito</th>
+                      <th class="text-center">Vendas</th>
+                      <th class="text-end">A receber</th>
+                      <th class="text-end">Antecipação</th>
+                      <th class="text-end">Líquido recebido</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="g in settlementHistory" :key="g.gatewayConfigId + '|' + g.paidAt">
+                      <td>{{ formatDate(g.paidAt) }}</td>
+                      <td class="text-center">{{ g.receivableCount }}</td>
+                      <td class="text-end text-success">{{ formatCurrency(g.totalReceivable) }}</td>
+                      <td class="text-end text-danger">
+                        <span v-if="g.totalAnticipation > 0">-{{ formatCurrency(g.totalAnticipation) }}</span>
+                        <span v-else class="text-muted">—</span>
+                      </td>
+                      <td class="text-end fw-bold">{{ formatCurrency(g.actualNet) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <router-link to="/financial/settlements" class="btn btn-sm btn-outline-primary me-auto">
+              <i class="bi bi-bank me-1"></i>Ver repasses pendentes
+            </router-link>
+            <button class="btn btn-secondary" @click="showHistoryModal = false">Fechar</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Faturas de Cartão -->
@@ -187,7 +272,23 @@ export default {
       loading: false,
       reconciling: false,
       invoiceSummaries: [],
+      // Marketplace settlements (next + history)
+      pendingSettlements: [],
+      showHistoryModal: false,
+      loadingHistory: false,
+      settlementHistory: [],
+      historyFilter: { provider: 'IFOOD', from: '', to: '' },
     };
+  },
+  computed: {
+    nextSettlement() {
+      // First upcoming pending iFood settlement (sorted by date)
+      const ifood = this.pendingSettlements.filter(g => g.gatewayProvider === 'IFOOD');
+      return ifood[0] || this.pendingSettlements[0] || null;
+    },
+    historyTotal() {
+      return this.settlementHistory.reduce((sum, g) => sum + Number(g.actualNet || 0), 0);
+    },
   },
   async mounted() {
     await this.loadStores();
@@ -203,7 +304,51 @@ export default {
       }
     },
     async loadAll() {
-      await Promise.all([this.loadSummary(), this.loadHealth(), this.loadInvoices()]);
+      await Promise.all([this.loadSummary(), this.loadHealth(), this.loadInvoices(), this.loadPendingSettlements()]);
+    },
+    async loadPendingSettlements() {
+      try {
+        const today = new Date();
+        const future = new Date(); future.setDate(future.getDate() + 90);
+        const params = {
+          from: today.toISOString().slice(0, 10),
+          to: future.toISOString().slice(0, 10),
+        };
+        const { data } = await api.get('/financial/settlements/pending', { params });
+        this.pendingSettlements = data || [];
+      } catch (e) {
+        console.warn('Failed to load pending settlements:', e);
+        this.pendingSettlements = [];
+      }
+    },
+    openSettlementHistory() {
+      this.setHistoryRange(30);
+      this.showHistoryModal = true;
+      this.loadSettlementHistory();
+    },
+    setHistoryRange(days) {
+      const to = new Date();
+      const from = new Date(); from.setDate(from.getDate() - days);
+      this.historyFilter.from = from.toISOString().slice(0, 10);
+      this.historyFilter.to = to.toISOString().slice(0, 10);
+      if (this.showHistoryModal) this.loadSettlementHistory();
+    },
+    async loadSettlementHistory() {
+      this.loadingHistory = true;
+      try {
+        const params = {
+          provider: this.historyFilter.provider || undefined,
+          from: this.historyFilter.from || undefined,
+          to: this.historyFilter.to || undefined,
+        };
+        const { data } = await api.get('/financial/settlements/history', { params });
+        this.settlementHistory = data || [];
+      } catch (e) {
+        console.error('Failed to load settlement history:', e);
+        this.settlementHistory = [];
+      } finally {
+        this.loadingHistory = false;
+      }
     },
     async loadSummary() {
       this.loading = true;
@@ -271,8 +416,29 @@ export default {
     },
     formatDate(dateStr) {
       if (!dateStr) return 'N/A';
+      // YYYY-MM-DD → DD/MM/YYYY (avoids timezone shift); else uses full locale string
+      const s = String(dateStr);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const [y, m, d] = s.split('-');
+        return `${d}/${m}/${y}`;
+      }
       return new Date(dateStr).toLocaleString('pt-BR');
     },
   },
 };
 </script>
+
+<style scoped>
+:deep(.stat-card--clickable) {
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+:deep(.stat-card--clickable:hover) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.15);
+}
+:deep(.stat-icon--info) {
+  background: rgba(13, 202, 240, 0.12);
+  color: #0dcaf0;
+}
+</style>
