@@ -42,6 +42,10 @@ export async function createFinancialEntriesForOrder(order) {
 
     const orderTotal = Number(order.total || 0);
     const now = new Date();
+    // Date to use for "when this sale happened" — drives settlement schedule
+    // grouping. Without this, recreate-bulk would compute every order's
+    // expectedDate from `now`, lumping everything into one repasse.
+    const orderDate = order.createdAt ? new Date(order.createdAt) : now;
 
     // Determinar se veio de marketplace (iFood, etc.).
     // Detecção robusta: pedidos do processador moderno do iFood podem ter
@@ -72,13 +76,15 @@ export async function createFinancialEntriesForOrder(order) {
       // (a) the receivable's netAmount matches what actually hits the bank and
       // (b) the bridge still creates a separate PAYABLE for DRE traceability
       // without double-counting the cash flow.
-      const fees = await calculateFees(gatewayConfig.id, orderTotal, now);
+      const fees = await calculateFees(gatewayConfig.id, orderTotal, orderDate);
       marketplaceFee = Number(fees.feeAmount || 0);
       feeAmount = marketplaceFee;
       netAmount = orderTotal - marketplaceFee;
 
       // Settlement date follows the gateway's schedule (DAILY/WEEKLY/MONTHLY).
-      const settlement = calcSettlementDate(now, gatewayConfig);
+      // MUST use the order's actual placement date — using `now` would group
+      // every order recreated today into the same upcoming settlement.
+      const settlement = calcSettlementDate(orderDate, gatewayConfig);
       expectedDate = settlement.expectedDate;
       isAnticipated = settlement.isAnticipated;
 
@@ -113,8 +119,8 @@ export async function createFinancialEntriesForOrder(order) {
         paidAmount: allImmediate ? netAmount : 0,
         dueDate: expectedDate,
         expectedDate,
-        paidAt: allImmediate ? now : null,
-        issueDate: now,
+        paidAt: allImmediate ? orderDate : null,
+        issueDate: orderDate,
         sourceType: 'ORDER',
         sourceId: order.id,
       },
@@ -143,9 +149,9 @@ export async function createFinancialEntriesForOrder(order) {
           feeAmount: 0,
           netAmount: marketplaceFee,
           paidAmount: marketplaceFee,
-          dueDate: now,
-          paidAt: now,
-          issueDate: now,
+          dueDate: orderDate,
+          paidAt: orderDate,
+          issueDate: orderDate,
           sourceType: 'MARKETPLACE_FEE',
           sourceId: order.id,
         },
@@ -174,7 +180,7 @@ export async function createFinancialEntriesForOrder(order) {
           netAmount: anticipationFee,
           paidAmount: 0,
           dueDate: expectedDate,
-          issueDate: now,
+          issueDate: orderDate,
           sourceType: 'ANTICIPATION_FEE',
           sourceId: order.id,
         },
@@ -456,7 +462,12 @@ export async function recreateFinancialEntriesForOrder(orderId) {
     include: { items: true },
   });
   if (!order) return { deleted: 0, recreated: false, skipped: 'order_not_found' };
-  if (order.status !== 'CONCLUIDO') return { deleted: 0, recreated: false, skipped: 'not_concluido' };
+  // CONCLUIDO → recreate normalmente.
+  // CANCELADO  → apenas apaga os lançamentos sem recriar (aborta fluxo abaixo).
+  // outros     → ignora.
+  if (order.status !== 'CONCLUIDO' && order.status !== 'CANCELADO') {
+    return { deleted: 0, recreated: false, skipped: 'invalid_status' };
+  }
 
   const linkedTypes = ['ORDER', 'MARKETPLACE_FEE', 'ANTICIPATION_FEE', 'ORDER_FEE', 'COUPON'];
   const settled = await prisma.financialTransaction.findFirst({
@@ -500,6 +511,12 @@ export async function recreateFinancialEntriesForOrder(orderId) {
     });
   });
 
+  // CANCELADO: só limpa, não recria. Assim a tela de repasses não inclui
+  // pedidos cancelados nas somas pendentes.
+  if (order.status === 'CANCELADO') {
+    return { deleted: del.count, recreated: false, skipped: 'canceled' };
+  }
+
   await createFinancialEntriesForOrder(order);
   return { deleted: del.count, recreated: true };
 }
@@ -510,7 +527,10 @@ export async function recreateFinancialEntriesForOrder(orderId) {
  * after the merchant changes the gateway configuration.
  */
 export async function recreateFinancialEntriesForProvider({ companyId, provider, from, to, onProgress }) {
-  const where = { companyId, status: 'CONCLUIDO' };
+  // Inclui CANCELADO no batch para que pedidos antes-CONCLUIDO-agora-cancelados
+  // tenham as receivables removidas (recreateFinancialEntriesForOrder pula a
+  // criação quando status=CANCELADO mas executa o delete).
+  const where = { companyId, status: { in: ['CONCLUIDO', 'CANCELADO'] } };
   if (provider === 'IFOOD') {
     // Robust detection: orders may have customerSource null when created via
     // the modern ifoodWebhookProcessor. Match on any iFood signal.

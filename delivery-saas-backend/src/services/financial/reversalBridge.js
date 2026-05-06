@@ -105,12 +105,15 @@ export async function reverseFinancialEntriesForOrder(order) {
       }
     });
 
-    // 5. Reverse dependent transactions (rider, affiliate, coupon)
+    // 5. Reverse dependent transactions (rider, affiliate, coupon, marketplace
+    //    commission, anticipation fee). Without this, the marketplace fee
+    //    PAYABLE created by the bridge would remain in the books even after
+    //    the sale is canceled, distorting the DRE.
     const dependentTxs = await prisma.financialTransaction.findMany({
       where: {
         companyId,
         sourceId: order.id,
-        sourceType: { in: ['RIDER', 'AFFILIATE', 'COUPON'] },
+        sourceType: { in: ['RIDER', 'AFFILIATE', 'COUPON', 'MARKETPLACE_FEE', 'ANTICIPATION_FEE', 'ORDER_FEE'] },
         status: { not: 'REVERSED' },
       },
     });
