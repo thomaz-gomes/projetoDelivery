@@ -60,6 +60,7 @@ export const nav = [
     { name: 'Despesas Fixas', to: '/financial/recurring', icon: 'bi bi-arrow-repeat' },
     { name: 'Formas de Pagamento', to: '/financial/payment-methods', icon: 'bi bi-credit-card' },
     { name: 'Taxas e Operadoras', to: '/financial/gateways', icon: 'bi bi-percent' },
+    { name: 'Repasses Marketplace', to: '/financial/settlements', icon: 'bi bi-bank' },
   ] },
   { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', role: 'ADMIN', children: [
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt', moduleKey: 'cardapio_completo', lockable: true },

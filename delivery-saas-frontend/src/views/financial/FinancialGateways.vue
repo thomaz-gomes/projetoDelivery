@@ -41,6 +41,9 @@
               <td class="text-end">
                 <button class="btn btn-sm btn-outline-primary me-1" @click="editGateway(gw)">Editar</button>
                 <button class="btn btn-sm btn-outline-info me-1" @click="simulate(gw)">Simular</button>
+                <button class="btn btn-sm btn-outline-warning" :disabled="recreating" @click="recreate(gw)" title="Recriar lançamentos das vendas (apaga e regenera as receivables não pagas usando a config atual)">
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
               </td>
             </tr>
             <tr v-if="gateways.length === 0">
@@ -82,15 +85,71 @@
                 <input type="number" class="form-control" v-model.number="form.feeFixed" step="0.01" min="0">
               </div>
             </div>
-            <div class="row g-2 mb-3">
+            <hr class="my-2"/>
+            <h6 class="text-muted mb-2">Cronograma de Repasse</h6>
+            <div class="mb-2">
+              <label class="form-label">Tipo de cronograma</label>
+              <select class="form-select" v-model="form.settlementType">
+                <option value="DAILY">Diário (D+N dias úteis) — cartão / PIX</option>
+                <option value="WEEKLY">Semanal (fecha em dia X, paga em dia Y)</option>
+                <option value="MONTHLY">Mensal (N dias após venda + dia Y)</option>
+              </select>
+            </div>
+            <div v-if="form.settlementType === 'DAILY'" class="mb-3">
+              <label class="form-label">Prazo (dias úteis)</label>
+              <input type="number" class="form-control" v-model.number="form.settlementDays" min="0">
+              <small class="text-muted">Ex: 1 = D+1 (próximo dia útil), 30 = D+30</small>
+            </div>
+            <div v-if="form.settlementType === 'WEEKLY'" class="row g-2 mb-3">
               <div class="col-6">
-                <label class="form-label">Prazo (dias úteis)</label>
-                <input type="number" class="form-control" v-model.number="form.settlementDays" min="0">
+                <label class="form-label">Início da semana</label>
+                <select class="form-select" v-model.number="form.periodStartDayOfWeek">
+                  <option v-for="d in DAYS_OF_WEEK" :key="d.value" :value="d.value">{{ d.label }}</option>
+                </select>
               </div>
               <div class="col-6">
-                <label class="form-label">Taxa Antecipação % (opcional)</label>
+                <label class="form-label">Dia do repasse</label>
+                <select class="form-select" v-model.number="form.settlementDayOfWeek">
+                  <option v-for="d in DAYS_OF_WEEK" :key="d.value" :value="d.value">{{ d.label }}</option>
+                </select>
+              </div>
+              <small class="text-muted">Ex: iFood semanal — início Segunda, repasse Quarta</small>
+            </div>
+            <div v-if="form.settlementType === 'MONTHLY'" class="row g-2 mb-3">
+              <div class="col-6">
+                <label class="form-label">Atraso (dias)</label>
+                <input type="number" class="form-control" v-model.number="form.settlementMonthlyDelay" min="1">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Dia do repasse</label>
+                <select class="form-select" v-model.number="form.settlementDayOfWeek">
+                  <option v-for="d in DAYS_OF_WEEK" :key="d.value" :value="d.value">{{ d.label }}</option>
+                </select>
+              </div>
+              <small class="text-muted">Ex: iFood mensal — 30 dias + próxima Quarta</small>
+            </div>
+            <hr class="my-2"/>
+            <h6 class="text-muted mb-2">Antecipação Automática</h6>
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="anticipEnabled" v-model="form.anticipationEnabled">
+              <label class="form-check-label" for="anticipEnabled">Antecipar automaticamente (cobra taxa adicional)</label>
+            </div>
+            <div v-if="form.anticipationEnabled" class="row g-2 mb-3">
+              <div class="col-6">
+                <label class="form-label">Taxa antecipação % (ex: 0.02 = 2%)</label>
                 <input type="number" class="form-control" v-model.number="form.anticipationFeePercent" step="0.001" min="0" max="1">
               </div>
+              <div class="col-6">
+                <label class="form-label">Prazo antecipado (dias úteis)</label>
+                <input type="number" class="form-control" v-model.number="form.anticipationDays" min="1">
+                <small class="text-muted">Ex: 1 = D+1</small>
+              </div>
+            </div>
+
+            <div v-if="editing" class="alert alert-warning small mb-0">
+              <i class="bi bi-info-circle me-1"></i>
+              Após mudar o cronograma, use o botão <strong>"Recriar lançamentos"</strong> na lista
+              para refazer as receivables das vendas existentes (apenas as ainda não pagas).
             </div>
           </div>
           <div class="modal-footer">
@@ -143,6 +202,12 @@ export default {
       editing: null,
       saving: false,
       repairing: false,
+      recreating: false,
+      DAYS_OF_WEEK: [
+        { value: 0, label: 'Domingo' }, { value: 1, label: 'Segunda' }, { value: 2, label: 'Terça' },
+        { value: 3, label: 'Quarta' },  { value: 4, label: 'Quinta' },  { value: 5, label: 'Sexta' },
+        { value: 6, label: 'Sábado' },
+      ],
       form: this.emptyForm(),
       showSimulation: false,
       simulationGateway: null,
@@ -167,7 +232,18 @@ export default {
   },
   methods: {
     emptyForm() {
-      return { provider: 'IFOOD', label: '', feeType: 'PERCENTAGE', feePercent: 0, feeFixed: 0, settlementDays: 0, anticipationFeePercent: null };
+      return {
+        provider: 'IFOOD', label: '', feeType: 'PERCENTAGE',
+        feePercent: 0, feeFixed: 0,
+        settlementDays: 0,
+        settlementType: 'DAILY',
+        settlementDayOfWeek: 3,        // quarta-feira
+        periodStartDayOfWeek: 1,       // segunda-feira
+        settlementMonthlyDelay: 30,
+        anticipationEnabled: false,
+        anticipationFeePercent: null,
+        anticipationDays: 1,
+      };
     },
     async load() {
       try {
@@ -179,8 +255,37 @@ export default {
     },
     editGateway(gw) {
       this.editing = gw.id;
-      this.form = { provider: gw.provider, label: gw.label || '', feeType: gw.feeType, feePercent: Number(gw.feePercent), feeFixed: Number(gw.feeFixed), settlementDays: gw.settlementDays, anticipationFeePercent: gw.anticipationFeePercent };
+      this.form = {
+        provider: gw.provider,
+        label: gw.label || '',
+        feeType: gw.feeType,
+        feePercent: Number(gw.feePercent),
+        feeFixed: Number(gw.feeFixed),
+        settlementDays: gw.settlementDays || 0,
+        settlementType: gw.settlementType || 'DAILY',
+        settlementDayOfWeek: gw.settlementDayOfWeek != null ? Number(gw.settlementDayOfWeek) : 3,
+        periodStartDayOfWeek: gw.periodStartDayOfWeek != null ? Number(gw.periodStartDayOfWeek) : 1,
+        settlementMonthlyDelay: gw.settlementMonthlyDelay != null ? Number(gw.settlementMonthlyDelay) : 30,
+        anticipationEnabled: Boolean(gw.anticipationEnabled),
+        anticipationFeePercent: gw.anticipationFeePercent != null ? Number(gw.anticipationFeePercent) : null,
+        anticipationDays: gw.anticipationDays != null ? Number(gw.anticipationDays) : 1,
+      };
       this.showForm = true;
+    },
+    async recreate(gw) {
+      const ok = window.confirm(
+        `Recriar lançamentos de todas as vendas ${gw.provider}?\n\nVai apagar e regenerar as receivables (e taxas) das vendas CONCLUIDO usando a configuração atual. Vendas já conciliadas (PAID com paidAt) são ignoradas.`
+      );
+      if (!ok) return;
+      this.recreating = true;
+      try {
+        const { data } = await api.post('/financial/settlements/recreate', { provider: gw.provider });
+        alert(`Recriação concluída.\nPedidos verificados: ${data.totalOrders}\nRecriados: ${data.recreated}\nIgnorados: ${data.skipped}\nLançamentos apagados: ${data.deletedTransactions}`);
+      } catch (e) {
+        alert(e.response?.data?.message || 'Erro ao recriar lançamentos');
+      } finally {
+        this.recreating = false;
+      }
     },
     closeForm() {
       this.showForm = false;

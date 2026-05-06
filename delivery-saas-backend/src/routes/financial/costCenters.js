@@ -26,12 +26,54 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Auto-generates the next sibling code under a parent by reading existing
+// children. For parent code "2.01" with children "2.01.1" and "2.01.2",
+// returns "2.01.3". Returns null when there are no children yet
+// (caller falls back to "<parentCode>.1").
+async function nextChildCode(companyId, parentCode) {
+  if (!parentCode) return null;
+  const children = await prisma.costCenter.findMany({
+    where: { companyId, code: { startsWith: `${parentCode}.` } },
+    select: { code: true },
+  });
+  // Only direct children: code must equal parentCode + ".N" (no further dots)
+  const directChildren = children.filter((c) => {
+    const tail = c.code.slice(parentCode.length + 1);
+    return tail.length > 0 && !tail.includes('.');
+  });
+  if (directChildren.length === 0) return `${parentCode}.1`;
+  let max = 0;
+  for (const c of directChildren) {
+    const n = parseInt(c.code.slice(parentCode.length + 1), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `${parentCode}.${max + 1}`;
+}
+
 // POST /financial/cost-centers
+// `code` may be omitted when `parentId` is provided — backend computes the
+// next available child code (e.g. parent "2.01" with children .1 and .2
+// → suggested code "2.01.3"). The dreGroup also inherits from the parent
+// when not supplied.
 router.post('/', async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { code, name, parentId, dreGroup } = req.body;
-    if (!code || !name) return res.status(400).json({ message: 'code e name são obrigatórios' });
+    let { code, name, parentId, dreGroup, natureza } = req.body;
+    if (!name) return res.status(400).json({ message: 'name é obrigatório' });
+
+    let parent = null;
+    if (parentId) {
+      parent = await prisma.costCenter.findFirst({
+        where: { id: parentId, companyId },
+        select: { id: true, code: true, dreGroup: true, natureza: true },
+      });
+      if (!parent) return res.status(400).json({ message: 'Centro de custo pai não encontrado' });
+    }
+
+    if (!code) {
+      if (!parent) return res.status(400).json({ message: 'code é obrigatório quando não há centro pai' });
+      code = await nextChildCode(companyId, parent.code);
+    }
 
     const center = await prisma.costCenter.create({
       data: {
@@ -39,7 +81,8 @@ router.post('/', async (req, res) => {
         code,
         name,
         parentId: parentId || null,
-        dreGroup: dreGroup || null,
+        dreGroup: dreGroup || parent?.dreGroup || null,
+        natureza: natureza || parent?.natureza || null,
       },
     });
     res.status(201).json(center);
@@ -47,6 +90,25 @@ router.post('/', async (req, res) => {
     if (e?.code === 'P2002') return res.status(409).json({ message: 'Código já existe para esta empresa' });
     console.error('POST /financial/cost-centers error:', e);
     res.status(500).json({ message: 'Erro ao criar centro de custo', error: e?.message });
+  }
+});
+
+// GET /financial/cost-centers/next-code?parentId=xxx
+// Returns { code: "2.01.3" } — the next child code under the given parent.
+router.get('/next-code', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { parentId } = req.query;
+    if (!parentId) return res.status(400).json({ message: 'parentId é obrigatório' });
+    const parent = await prisma.costCenter.findFirst({
+      where: { id: String(parentId), companyId },
+      select: { code: true },
+    });
+    if (!parent) return res.status(404).json({ message: 'Centro pai não encontrado' });
+    const code = await nextChildCode(companyId, parent.code);
+    res.json({ code });
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao calcular próximo código', error: e?.message });
   }
 });
 
@@ -114,6 +176,8 @@ router.post('/seed-default', async (req, res) => {
       { code: '1.03', name: 'Receita de Vendas (Marketplace)',  dreGroup: 'REVENUE',     natureza: null, parent: '1' },
       { code: '2',    name: 'Deduções de Receita',              dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL' },
       { code: '2.01', name: 'Taxas Marketplace',                dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2' },
+      { code: '2.01.1', name: 'Comissão Marketplace',           dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2.01' },
+      { code: '2.01.2', name: 'Taxa de Antecipação',            dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2.01' },
       { code: '2.02', name: 'Taxas Adquirentes',                dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2' },
       { code: '2.03', name: 'Descontos e Cupons',               dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2' },
       { code: '2.04', name: 'Impostos sobre Vendas',            dreGroup: 'DEDUCTIONS',  natureza: 'VARIAVEL', parent: '2' },
@@ -136,24 +200,15 @@ router.post('/seed-default', async (req, res) => {
       { code: '5.02', name: 'Despesas Financeiras',             dreGroup: 'FINANCIAL',   natureza: null, parent: '5' },
     ];
 
-    // Criar raízes primeiro, depois filhos
+    // Single pass: array is sorted so parents always come before their children.
+    // Supports arbitrary depth (e.g. 2 → 2.01 → 2.01.1).
     const idMap = {};
     for (const item of defaults) {
-      if (!item.parent) {
-        const created = await prisma.costCenter.create({
-          data: { companyId, code: item.code, name: item.name, dreGroup: item.dreGroup, natureza: item.natureza || null },
-        });
-        idMap[item.code] = created.id;
-      }
-    }
-    for (const item of defaults) {
-      if (item.parent) {
-        const parentId = idMap[item.parent];
-        const created = await prisma.costCenter.create({
-          data: { companyId, code: item.code, name: item.name, dreGroup: item.dreGroup, natureza: item.natureza || null, parentId },
-        });
-        idMap[item.code] = created.id;
-      }
+      const parentId = item.parent ? (idMap[item.parent] || null) : null;
+      const created = await prisma.costCenter.create({
+        data: { companyId, code: item.code, name: item.name, dreGroup: item.dreGroup, natureza: item.natureza || null, parentId },
+      });
+      idMap[item.code] = created.id;
     }
 
     const all = await prisma.costCenter.findMany({ where: { companyId }, orderBy: { code: 'asc' } });

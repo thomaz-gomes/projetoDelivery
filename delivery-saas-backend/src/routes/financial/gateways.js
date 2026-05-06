@@ -29,7 +29,9 @@ router.post('/', async (req, res) => {
     const companyId = req.user.companyId;
     const {
       provider, label, feeType, feePercent, feeFixed,
-      settlementDays, anticipationFeePercent, rules,
+      settlementDays, settlementType, settlementDayOfWeek, periodStartDayOfWeek,
+      settlementMonthlyDelay, anticipationEnabled, anticipationFeePercent,
+      anticipationDays, rules,
     } = req.body;
 
     if (!provider) return res.status(400).json({ message: 'provider é obrigatório' });
@@ -43,7 +45,13 @@ router.post('/', async (req, res) => {
         feePercent: Number(feePercent || 0),
         feeFixed: Number(feeFixed || 0),
         settlementDays: Number(settlementDays || 0),
+        settlementType: settlementType || null,
+        settlementDayOfWeek: settlementDayOfWeek != null ? Number(settlementDayOfWeek) : null,
+        periodStartDayOfWeek: periodStartDayOfWeek != null ? Number(periodStartDayOfWeek) : null,
+        settlementMonthlyDelay: settlementMonthlyDelay != null ? Number(settlementMonthlyDelay) : null,
+        anticipationEnabled: Boolean(anticipationEnabled),
         anticipationFeePercent: anticipationFeePercent != null ? Number(anticipationFeePercent) : null,
+        anticipationDays: anticipationDays != null ? Number(anticipationDays) : null,
         rules: rules || null,
       },
     });
@@ -66,7 +74,9 @@ router.put('/:id', async (req, res) => {
 
     const {
       label, feeType, feePercent, feeFixed,
-      settlementDays, anticipationFeePercent, rules, isActive,
+      settlementDays, settlementType, settlementDayOfWeek, periodStartDayOfWeek,
+      settlementMonthlyDelay, anticipationEnabled, anticipationFeePercent,
+      anticipationDays, rules, isActive,
     } = req.body;
 
     const updated = await prisma.paymentGatewayConfig.update({
@@ -77,7 +87,13 @@ router.put('/:id', async (req, res) => {
         ...(feePercent !== undefined && { feePercent: Number(feePercent) }),
         ...(feeFixed !== undefined && { feeFixed: Number(feeFixed) }),
         ...(settlementDays !== undefined && { settlementDays: Number(settlementDays) }),
+        ...(settlementType !== undefined && { settlementType: settlementType || null }),
+        ...(settlementDayOfWeek !== undefined && { settlementDayOfWeek: settlementDayOfWeek != null ? Number(settlementDayOfWeek) : null }),
+        ...(periodStartDayOfWeek !== undefined && { periodStartDayOfWeek: periodStartDayOfWeek != null ? Number(periodStartDayOfWeek) : null }),
+        ...(settlementMonthlyDelay !== undefined && { settlementMonthlyDelay: settlementMonthlyDelay != null ? Number(settlementMonthlyDelay) : null }),
+        ...(anticipationEnabled !== undefined && { anticipationEnabled: Boolean(anticipationEnabled) }),
         ...(anticipationFeePercent !== undefined && { anticipationFeePercent: anticipationFeePercent != null ? Number(anticipationFeePercent) : null }),
+        ...(anticipationDays !== undefined && { anticipationDays: anticipationDays != null ? Number(anticipationDays) : null }),
         ...(rules !== undefined && { rules }),
         ...(isActive !== undefined && { isActive }),
       },

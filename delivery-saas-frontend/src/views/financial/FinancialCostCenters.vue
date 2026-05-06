@@ -66,8 +66,11 @@
           </div>
           <div class="modal-body">
             <div class="mb-3">
-              <label class="form-label">Código</label>
-              <TextInput v-model="form.code" placeholder="Ex: 4.01" />
+              <label class="form-label">
+                Código
+                <span v-if="!form.code && form.parentId" class="text-muted small">(deixe em branco para gerar automático)</span>
+              </label>
+              <TextInput v-model="form.code" :placeholder="suggestedCodePlaceholder" />
             </div>
             <div class="mb-3">
               <label class="form-label">Nome</label>
@@ -113,6 +116,7 @@ export default {
       editing: null,
       saving: false,
       form: { code: '', name: '', dreGroup: '', parentId: '', natureza: '' },
+      suggestedNextCode: '',
       dreGroupOptions: [
         { value: 'REVENUE', label: 'Receita' },
         { value: 'DEDUCTIONS', label: 'Deduções' },
@@ -124,11 +128,25 @@ export default {
   },
   computed: {
     parentOptions() {
-      return this.centers.filter(c => !c.parentId).map(c => ({ id: c.id, label: `${c.code} - ${c.name}` }));
+      // Allow any non-leaf center as parent (so 2.01 can have 2.01.1, 2.01.2 etc.)
+      return this.centers.map(c => ({ id: c.id, label: `${c.code} - ${c.name}` }));
+    },
+    suggestedCodePlaceholder() {
+      if (!this.form.parentId) return 'Ex: 4.01';
+      return this.suggestedNextCode || 'Ex: 4.01.1';
     },
   },
   async mounted() {
     await this.load();
+  },
+  watch: {
+    'form.parentId'(newId) {
+      this.suggestedNextCode = '';
+      if (!newId || this.editing) return;
+      api.get('/financial/cost-centers/next-code', { params: { parentId: newId } })
+        .then(({ data }) => { this.suggestedNextCode = data?.code || ''; })
+        .catch(() => {});
+    },
   },
   methods: {
     async load() {
@@ -156,6 +174,8 @@ export default {
         if (!payload.parentId) payload.parentId = null;
         if (!payload.dreGroup) payload.dreGroup = null;
         if (!payload.natureza) payload.natureza = null;
+        // Empty code with a parent → backend auto-generates the next sibling code
+        if (!payload.code && payload.parentId) delete payload.code;
         if (this.editing) {
           await api.put(`/financial/cost-centers/${this.editing}`, payload);
         } else {

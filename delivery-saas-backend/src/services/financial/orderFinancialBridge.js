@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma.js';
 import { calculateFees } from './feeCalculator.js';
+import { calcSettlementDate } from './settlementCalc.js';
 
 /**
  * Bridge entre o módulo de Pedidos e o módulo Financeiro.
@@ -55,12 +56,30 @@ export async function createFinancialEntriesForOrder(order) {
     let feeAmount = 0;
     let netAmount = orderTotal;
     let expectedDate = now;
+    let marketplaceFee = 0;
+    let anticipationFee = 0;
+    let isAnticipated = false;
 
     if (gatewayConfig) {
+      // Marketplace fee — deducted at sale time. Embedded in the receivable so
+      // (a) the receivable's netAmount matches what actually hits the bank and
+      // (b) the bridge still creates a separate PAYABLE for DRE traceability
+      // without double-counting the cash flow.
       const fees = await calculateFees(gatewayConfig.id, orderTotal, now);
-      feeAmount = fees.feeAmount;
-      netAmount = fees.netAmount;
-      expectedDate = fees.expectedDate;
+      marketplaceFee = Number(fees.feeAmount || 0);
+      feeAmount = marketplaceFee;
+      netAmount = orderTotal - marketplaceFee;
+
+      // Settlement date follows the gateway's schedule (DAILY/WEEKLY/MONTHLY).
+      const settlement = calcSettlementDate(now, gatewayConfig);
+      expectedDate = settlement.expectedDate;
+      isAnticipated = settlement.isAnticipated;
+
+      // Anticipation fee — only if the gateway has it enabled. Charged on top
+      // of the marketplace commission and deducted on the (earlier) settlement.
+      if (gatewayConfig.anticipationEnabled && Number(gatewayConfig.anticipationFeePercent || 0) > 0) {
+        anticipationFee = Math.round(orderTotal * Number(gatewayConfig.anticipationFeePercent) * 100) / 100;
+      }
     }
 
     // Detectar se pagamento já foi recebido (dinheiro, PIX = recebimento imediato)
@@ -93,6 +112,67 @@ export async function createFinancialEntriesForOrder(order) {
         sourceId: order.id,
       },
     });
+
+    // 1b. PAYABLE — Comissão Marketplace (DRE / auditoria; sem CashFlowEntry)
+    //     Já está embutida em feeAmount/netAmount da receivable acima — esta
+    //     PAYABLE existe só para o DRE conseguir somar Deduções por categoria.
+    if (gatewayConfig && marketplaceFee > 0) {
+      const mktCC = await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, code: '2.01.1' },
+      }) || await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, code: '2.01' },
+      });
+      await prisma.financialTransaction.create({
+        data: {
+          companyId: order.companyId,
+          type: 'PAYABLE',
+          status: 'PAID',
+          description: `Comissão ${gatewayConfig.provider} - Pedido #${order.displayId || order.id.slice(0, 8)}`,
+          accountId: null,                  // sem movimento bancário (deduzido na origem)
+          costCenterId: mktCC?.id || null,
+          gatewayConfigId: gatewayConfig.id,
+          storeId: order.storeId || null,
+          grossAmount: marketplaceFee,
+          feeAmount: 0,
+          netAmount: marketplaceFee,
+          paidAmount: marketplaceFee,
+          dueDate: now,
+          paidAt: now,
+          issueDate: now,
+          sourceType: 'MARKETPLACE_FEE',
+          sourceId: order.id,
+        },
+      });
+    }
+
+    // 1c. PAYABLE — Taxa de Antecipação (paga no dia do repasse antecipado)
+    if (gatewayConfig && anticipationFee > 0) {
+      const antecipCC = await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, code: '2.01.2' },
+      }) || await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, code: '2.01' },
+      });
+      await prisma.financialTransaction.create({
+        data: {
+          companyId: order.companyId,
+          type: 'PAYABLE',
+          status: 'CONFIRMED',
+          description: `Taxa antecipação ${gatewayConfig.provider} - Pedido #${order.displayId || order.id.slice(0, 8)}`,
+          accountId: defaultAccount?.id || null,
+          costCenterId: antecipCC?.id || null,
+          gatewayConfigId: gatewayConfig.id,
+          storeId: order.storeId || null,
+          grossAmount: anticipationFee,
+          feeAmount: 0,
+          netAmount: anticipationFee,
+          paidAmount: 0,
+          dueDate: expectedDate,
+          issueDate: now,
+          sourceType: 'ANTICIPATION_FEE',
+          sourceId: order.id,
+        },
+      });
+    }
 
     // 2. Descontos — separar por sponsor
     // discountIfood: iFood paga à loja → RECEIVABLE (entra no caixa)
@@ -347,4 +427,73 @@ export async function createFinancialEntryForAffiliate(affiliatePayment, company
   } catch (e) {
     console.error('createFinancialEntryForAffiliate error:', e);
   }
+}
+
+/**
+ * Recreates the marketplace transactions for a single order.
+ *
+ * Deletes any FinancialTransaction with sourceType in
+ * (ORDER, MARKETPLACE_FEE, ANTICIPATION_FEE, ORDER_FEE, COUPON) tied to the
+ * order, then runs the bridge again so the entries follow the current model
+ * (gross receivable + separate marketplace + anticipation PAYABLEs, with the
+ * gateway's settlement schedule).
+ *
+ * Skips orders whose receivable is already settled (status PAID with a
+ * paidAt timestamp) — those represent real cash that already moved.
+ *
+ * Returns { deleted, recreated:boolean, skipped?:string }.
+ */
+export async function recreateFinancialEntriesForOrder(orderId) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
+  if (!order) return { deleted: 0, recreated: false, skipped: 'order_not_found' };
+  if (order.status !== 'CONCLUIDO') return { deleted: 0, recreated: false, skipped: 'not_concluido' };
+
+  const linkedTypes = ['ORDER', 'MARKETPLACE_FEE', 'ANTICIPATION_FEE', 'ORDER_FEE', 'COUPON'];
+  const settled = await prisma.financialTransaction.findFirst({
+    where: {
+      companyId: order.companyId,
+      sourceType: 'ORDER',
+      sourceId: order.id,
+      status: 'PAID',
+      paidAt: { not: null },
+    },
+  });
+  if (settled) return { deleted: 0, recreated: false, skipped: 'already_settled' };
+
+  const del = await prisma.financialTransaction.deleteMany({
+    where: {
+      companyId: order.companyId,
+      sourceId: order.id,
+      sourceType: { in: linkedTypes },
+    },
+  });
+
+  await createFinancialEntriesForOrder(order);
+  return { deleted: del.count, recreated: true };
+}
+
+/**
+ * Bulk version: recreates entries for every CONCLUIDO order of a gateway
+ * provider in a date range. Used by the "Recriar lançamentos iFood" button
+ * after the merchant changes the gateway configuration.
+ */
+export async function recreateFinancialEntriesForProvider({ companyId, provider, from, to }) {
+  const where = { companyId, status: 'CONCLUIDO' };
+  if (provider === 'IFOOD') where.customerSource = 'IFOOD';
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = new Date(from);
+    if (to) where.createdAt.lte = new Date(to);
+  }
+  const orders = await prisma.order.findMany({ where, select: { id: true } });
+  let recreated = 0, skipped = 0, deleted = 0;
+  for (const o of orders) {
+    const r = await recreateFinancialEntriesForOrder(o.id);
+    if (r.recreated) { recreated++; deleted += r.deleted; }
+    else skipped++;
+  }
+  return { totalOrders: orders.length, recreated, skipped, deletedTransactions: deleted };
 }
