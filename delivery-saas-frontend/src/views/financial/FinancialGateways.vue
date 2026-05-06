@@ -77,8 +77,11 @@
             </div>
             <div class="row g-2 mb-3">
               <div class="col-6">
-                <label class="form-label">Taxa % (ex: 0.12 = 12%)</label>
-                <input type="number" class="form-control" v-model.number="form.feePercent" step="0.001" min="0" max="1">
+                <label class="form-label">Taxa % <span class="text-muted small">(ex: digite 12 para 12%)</span></label>
+                <div class="input-group">
+                  <input type="number" class="form-control" v-model.number="form.feePercentDisplay" step="0.01" min="0" max="100">
+                  <span class="input-group-text">%</span>
+                </div>
               </div>
               <div class="col-6">
                 <label class="form-label">Taxa Fixa (R$)</label>
@@ -136,8 +139,12 @@
             </div>
             <div v-if="form.anticipationEnabled" class="row g-2 mb-3">
               <div class="col-6">
-                <label class="form-label">Taxa antecipação % (ex: 0.02 = 2%)</label>
-                <input type="number" class="form-control" v-model.number="form.anticipationFeePercent" step="0.001" min="0" max="1">
+                <label class="form-label">Taxa antecipação % <span class="text-muted small">(ex: digite 1.5 para 1,5%)</span></label>
+                <div class="input-group">
+                  <input type="number" class="form-control" v-model.number="form.anticipationFeePercentDisplay" step="0.01" min="0" max="100">
+                  <span class="input-group-text">%</span>
+                </div>
+                <small class="text-muted">Cobrada por venda no dia do repasse antecipado.</small>
               </div>
               <div class="col-6">
                 <label class="form-label">Prazo antecipado (dias úteis)</label>
@@ -234,14 +241,17 @@ export default {
     emptyForm() {
       return {
         provider: 'IFOOD', label: '', feeType: 'PERCENTAGE',
-        feePercent: 0, feeFixed: 0,
+        feePercent: 0,                   // stored as fraction (0.12)
+        feePercentDisplay: 0,            // shown as percentage (12)
+        feeFixed: 0,
         settlementDays: 0,
         settlementType: 'DAILY',
         settlementDayOfWeek: 3,        // quarta-feira
         periodStartDayOfWeek: 1,       // segunda-feira
         settlementMonthlyDelay: 30,
         anticipationEnabled: false,
-        anticipationFeePercent: null,
+        anticipationFeePercent: null,         // fraction (0.015)
+        anticipationFeePercentDisplay: null,  // percentage (1.5)
         anticipationDays: 1,
       };
     },
@@ -255,11 +265,14 @@ export default {
     },
     editGateway(gw) {
       this.editing = gw.id;
+      const feePct = Number(gw.feePercent || 0);
+      const antPct = gw.anticipationFeePercent != null ? Number(gw.anticipationFeePercent) : null;
       this.form = {
         provider: gw.provider,
         label: gw.label || '',
         feeType: gw.feeType,
-        feePercent: Number(gw.feePercent),
+        feePercent: feePct,
+        feePercentDisplay: Math.round(feePct * 10000) / 100,        // 0.12 → 12.00
         feeFixed: Number(gw.feeFixed),
         settlementDays: gw.settlementDays || 0,
         settlementType: gw.settlementType || 'DAILY',
@@ -267,7 +280,8 @@ export default {
         periodStartDayOfWeek: gw.periodStartDayOfWeek != null ? Number(gw.periodStartDayOfWeek) : 1,
         settlementMonthlyDelay: gw.settlementMonthlyDelay != null ? Number(gw.settlementMonthlyDelay) : 30,
         anticipationEnabled: Boolean(gw.anticipationEnabled),
-        anticipationFeePercent: gw.anticipationFeePercent != null ? Number(gw.anticipationFeePercent) : null,
+        anticipationFeePercent: antPct,
+        anticipationFeePercentDisplay: antPct != null ? Math.round(antPct * 10000) / 100 : null,  // 0.015 → 1.50
         anticipationDays: gw.anticipationDays != null ? Number(gw.anticipationDays) : 1,
       };
       this.showForm = true;
@@ -295,10 +309,24 @@ export default {
     async save() {
       this.saving = true;
       try {
-        if (this.editing) {
-          await api.put(`/financial/gateways/${this.editing}`, this.form);
+        // Convert percentage display values back to the fraction format the
+        // backend stores (e.g. user types 12 → save 0.12; types 1.5 → save 0.015).
+        const payload = { ...this.form };
+        const fp = Number(payload.feePercentDisplay);
+        payload.feePercent = Number.isFinite(fp) ? Math.round(fp * 100) / 10000 : 0;
+        if (payload.anticipationEnabled) {
+          const ap = Number(payload.anticipationFeePercentDisplay);
+          payload.anticipationFeePercent = Number.isFinite(ap) ? Math.round(ap * 100) / 10000 : null;
         } else {
-          await api.post('/financial/gateways', this.form);
+          payload.anticipationFeePercent = null;
+        }
+        delete payload.feePercentDisplay;
+        delete payload.anticipationFeePercentDisplay;
+
+        if (this.editing) {
+          await api.put(`/financial/gateways/${this.editing}`, payload);
+        } else {
+          await api.post('/financial/gateways', payload);
         }
         this.closeForm();
         await this.load();
