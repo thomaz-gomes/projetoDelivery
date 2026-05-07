@@ -11,6 +11,7 @@ import { startIFoodPollingWorker } from './jobs/ifoodPollWorker.js';
 import { startScheduler as startMdeScheduler } from './services/mdeQueue.js';
 import { initEncryptionKey } from './services/encryption.js';
 import { startReconciliationJob } from './jobs/financialReconciliation.js';
+import { logError } from './utils/errorLogger.js';
 
 // Ensure CERT_STORE_KEY is available for certificate password encryption.
 // In development, auto-generate a key and persist it to .env so it survives restarts.
@@ -33,6 +34,19 @@ if (!process.env.CERT_STORE_KEY) {
     }
   }
 }
+
+// Capture process-level errors for the SaaS error logs feature.
+// logError is fire-and-forget and never throws.
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException:', err);
+  logError({ err });
+});
+
+process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  console.error('unhandledRejection:', err);
+  logError({ err });
+});
 
 function pickFirstExisting(dir, candidates) {
   for (const c of candidates) {
