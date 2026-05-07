@@ -103,7 +103,10 @@ function formatRelative(iso) {
 
 onMounted(() => {
   load()
-  pollHandle = setInterval(load, 30000)
+  pollHandle = setInterval(() => {
+    if (Swal.isVisible()) return
+    load()
+  }, 30000)
 })
 onBeforeUnmount(() => { if (pollHandle) clearInterval(pollHandle) })
 </script>
