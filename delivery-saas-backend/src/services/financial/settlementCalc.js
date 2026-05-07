@@ -14,16 +14,16 @@
  *   WEEKLY     Closes the calendar week ending on
  *              ((periodStartDayOfWeek + 6) % 7), then the *next*
  *              settlementDayOfWeek strictly after that close date.
- *              Default mirror of iFood: Mon→Sun close, Wed credit.
+ *              Default mirror of iFood antecipated: Mon→Sun close, Wed credit.
  *
  *   MONTHLY    Adds settlementMonthlyDelay days to orderDate, then the *next*
  *              settlementDayOfWeek on or after that target date.
- *              Default mirror of iFood monthly: 30d delay, Wed credit.
+ *              Default mirror of iFood non-antecipated: 30d delay, Wed credit.
  *
- * If `anticipationEnabled` is true on the gateway, the receivable's expected
- * date instead becomes orderDate + anticipationDays (business days, defaults
- * to 1). The anticipation fee is created as a separate PAYABLE due on that
- * same earlier date.
+ * `anticipationEnabled` only controls whether the per-sale anticipation FEE is
+ * charged (the WEEKLY schedule already represents the antecipated payout for
+ * iFood; switch the schedule type to MONTHLY for the non-antecipated D+30
+ * cycle). It does NOT change the settlement date.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -71,13 +71,7 @@ function nextDayOfWeek(from, targetDayOfWeek, inclusive = false) {
  */
 export function calcSettlementDate(orderDate, gateway) {
   const od = startOfDay(orderDate);
-
-  // Anticipation overrides the regular schedule (the merchant chose to be
-  // paid earlier in exchange for an extra fee).
-  if (gateway?.anticipationEnabled) {
-    const days = Number(gateway.anticipationDays || 1);
-    return { expectedDate: addBusinessDays(od, days), isAnticipated: true };
-  }
+  const isAnticipated = Boolean(gateway?.anticipationEnabled);
 
   const type = String(gateway?.settlementType || 'DAILY').toUpperCase();
 
@@ -94,7 +88,7 @@ export function calcSettlementDate(orderDate, gateway) {
     const periodEnd = nextDayOfWeek(od, periodEndDow, true);
     // Settlement = next settlementDayOfWeek strictly after periodEnd.
     const expected = nextDayOfWeek(periodEnd, settlementDow, false);
-    return { expectedDate: expected, isAnticipated: false };
+    return { expectedDate: expected, isAnticipated };
   }
 
   if (type === 'MONTHLY') {
@@ -104,12 +98,12 @@ export function calcSettlementDate(orderDate, gateway) {
       : 3;
     const target = new Date(od.getTime() + delay * DAY_MS);
     const expected = nextDayOfWeek(target, settlementDow, true);
-    return { expectedDate: expected, isAnticipated: false };
+    return { expectedDate: expected, isAnticipated };
   }
 
   // DAILY (default)
   const days = Number(gateway?.settlementDays || 0);
-  return { expectedDate: addBusinessDays(od, days), isAnticipated: false };
+  return { expectedDate: addBusinessDays(od, days), isAnticipated };
 }
 
 /**

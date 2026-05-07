@@ -1518,7 +1518,22 @@ ridersRouter.get('/me/orders', async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: userId }, include: { rider: true } });
     if (!user || !user.rider) return res.status(404).json({ message: 'Rider profile not found for this user' });
     const riderId = user.rider.id;
-    const orders = await prisma.order.findMany({ where: { riderId, companyId: req.user.companyId }, orderBy: { createdAt: 'desc' }, take: 200 });
+    // Only orders the rider can still act on. CONFIRMACAO_PAGAMENTO, CONCLUIDO
+    // and CANCELADO are past the rider's responsibility — leaving them in the
+    // list made the "Entregue" button look broken because the order would
+    // reappear on the next reload (visibility change, manual refresh).
+    // RIDER_DELIVERED history covers iFood prepaid orders, where the bridge
+    // does not change the status but records that the rider already delivered.
+    const orders = await prisma.order.findMany({
+      where: {
+        riderId,
+        companyId: req.user.companyId,
+        status: { notIn: ['CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO'] },
+        histories: { none: { to: 'RIDER_DELIVERED' } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
     return res.json({ items: orders });
   } catch (e) {
     console.error('GET /riders/me/orders error', e);
