@@ -11,6 +11,7 @@ import { startIFoodPollingWorker } from './jobs/ifoodPollWorker.js';
 import { startScheduler as startMdeScheduler } from './services/mdeQueue.js';
 import { initEncryptionKey } from './services/encryption.js';
 import { startReconciliationJob } from './jobs/financialReconciliation.js';
+import { logError } from './utils/errorLogger.js';
 
 // Ensure CERT_STORE_KEY is available for certificate password encryption.
 // In development, auto-generate a key and persist it to .env so it survives restarts.
@@ -31,6 +32,33 @@ if (!process.env.CERT_STORE_KEY) {
       console.log('🔑 CERT_STORE_KEY auto-gerada (não foi possível salvar no .env:', e?.message, ')');
       console.log(`   Adicione manualmente: CERT_STORE_KEY=${autoKey}`);
     }
+  }
+}
+
+// Capture process-level errors for the SaaS error logs feature.
+// logError is fire-and-forget and never throws.
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException:', err);
+  logError({ err, req: { method: 'PROCESS', originalUrl: '/uncaughtException' } });
+});
+
+process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  console.error('unhandledRejection:', err);
+  logError({ err, req: { method: 'PROCESS', originalUrl: '/unhandledRejection' } });
+});
+
+// Daily auto-purge of resolved error logs older than 90 days.
+// Fire-and-forget with internal try/catch so purge failures never crash the server.
+async function purgeOldResolvedErrorLogs() {
+  try {
+    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const { count } = await prisma.errorLog.deleteMany({
+      where: { resolved: true, resolvedAt: { lt: cutoff } },
+    });
+    if (count > 0) console.log(`[errorLogs] purged ${count} old resolved logs`);
+  } catch (e) {
+    console.error('purgeOldResolvedErrorLogs failed:', e?.message);
   }
 }
 
@@ -221,6 +249,10 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
       } catch (e) {
         console.error('Failed to start financial reconciliation job:', e && e.message);
       }
+      // Schedule daily purge of resolved error logs older than 90 days.
+      // Run once at startup (after a 1-min grace) and then every 24h.
+      setTimeout(purgeOldResolvedErrorLogs, 60 * 1000);
+      setInterval(purgeOldResolvedErrorLogs, 24 * 60 * 60 * 1000);
     } catch (e) {
       console.error('❌ Falha ao anexar Socket.IO:', e.message || e);
     }

@@ -4,7 +4,8 @@ import { ref, onMounted, onUnmounted } from 'vue';
 const emit = defineEmits(['refresh']);
 const props = defineProps({
   loading: { type: Boolean, default: false },
-  threshold: { type: Number, default: 80 },
+  threshold: { type: Number, default: 120 },
+  deadzone: { type: Number, default: 25 },
 });
 
 const pullDistance = ref(0);
@@ -14,18 +15,19 @@ let startY = 0;
 let isDragging = false;
 
 function onTouchStart(e) {
-  // Only enable pull if scrolled to top
   const el = container.value;
-  if (!el || el.scrollTop > 5) return;
+  if (!el || el.scrollTop > 0) return;
   startY = e.touches[0].clientY;
   isDragging = true;
 }
 
 function onTouchMove(e) {
   if (!isDragging || props.loading) return;
-  const diff = e.touches[0].clientY - startY;
-  if (diff < 0) { pullDistance.value = 0; return; }
-  // Resist pull (diminishing returns)
+  const el = container.value;
+  if (el && el.scrollTop > 0) { isDragging = false; pullDistance.value = 0; pulling.value = false; return; }
+  const rawDiff = e.touches[0].clientY - startY;
+  if (rawDiff <= props.deadzone) { pullDistance.value = 0; pulling.value = false; return; }
+  const diff = rawDiff - props.deadzone;
   pullDistance.value = Math.min(diff * 0.4, 120);
   if (pullDistance.value > 10) pulling.value = true;
 }
