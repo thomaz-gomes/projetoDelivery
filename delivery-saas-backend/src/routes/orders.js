@@ -350,35 +350,15 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
       return false;
     })();
 
-    // iFood prepaid: rider confirms delivery but does NOT change order status.
-    // Only record a RIDER_DELIVERED history entry for delivery time calculation.
-    // The actual CONCLUIDO transition happens when iFood sends CONCLUDED webhook
-    // or when the rider enters the delivery code.
-    if (isIfood && isPrepaid) {
-      await prisma.orderStatusHistory.create({
-        data: {
-          orderId: id,
-          from: existing.status,
-          to: 'RIDER_DELIVERED',
-          byRiderId: riderId,
-          reason: 'Entregue pelo motoboy (pagamento online — aguardando conclusão pelo iFood)',
-        },
-      });
-
-      // Emit socket so frontend knows rider delivered
-      try {
-        const idx = await import('../index.js');
-        const order = await prisma.order.findUnique({ where: { id }, include: { rider: true, items: true, histories: true } });
-        idx.emitirPedidoAtualizado(order);
-      } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e); }
-
-      return res.json({ ok: true, riderDelivered: true, message: 'Entrega registrada. Pedido será concluído quando confirmado pelo iFood.' });
-    }
-
-    // Non-iFood prepaid: skip CONFIRMACAO_PAGAMENTO, go straight to CONCLUIDO
-    // Non-prepaid: go to CONFIRMACAO_PAGAMENTO as usual
-    const targetStatus = (!isIfood && isPrepaid) ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
-    const historyReason = (!isIfood && isPrepaid)
+    // Prepaid (iFood pré-pago, pagamento online, etc.) → CONCLUIDO direto
+    // (não há cobrança em dinheiro pra o caixa confirmar). Anteriormente
+    // iFood prepaid esperava o webhook CONCLUDED do iFood, mas quando o
+    // webhook atrasava ou não chegava o pedido ficava preso em
+    // SAIU_PARA_ENTREGA indefinidamente — a "Entregue" do motoboy agora
+    // é autoritativa pra qualquer prepaid.
+    // Non-prepaid → CONFIRMACAO_PAGAMENTO (caixa registra o dinheiro depois).
+    const targetStatus = isPrepaid ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
+    const historyReason = isPrepaid
       ? 'Entregue pelo motoboy (pagamento online — concluído automaticamente)'
       : 'Entregue pelo motoboy (aguardando confirmação de pagamento)';
 
@@ -395,26 +375,28 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
     notifyCustomerStatus(updated.id, targetStatus).catch(() => {});
     try { const idx = await import('../index.js'); idx.emitirPedidoAtualizado(updated); } catch (e) { console.warn('Emitir pedido atualizado falhou:', e?.message || e) }
 
-    // If this order belongs to an IFOOD integration, notify iFood
-    if (!isPrepaid) {
-      (async () => {
+    // Notificar iFood que a entrega foi concluída (independente de prepaid;
+    // a entrega física aconteceu e o iFood pode parar de esperar o ciclo dele).
+    (async () => {
+      try {
+        const integ = await prisma.apiIntegration.findFirst({ where: { companyId: updated.companyId, provider: 'IFOOD', enabled: true } });
+        if (!integ) return;
+        const orderExternalId = updated.externalId || (updated.payload && (updated.payload.orderId || (updated.payload.order && updated.payload.order.id)));
+        if (!orderExternalId) return;
+        const { updateIFoodOrderStatus } = await import('../integrations/ifood/orders.js');
         try {
-          const integ = await prisma.apiIntegration.findFirst({ where: { companyId: updated.companyId, provider: 'IFOOD', enabled: true } });
-          if (!integ) return;
-          const orderExternalId = updated.externalId || (updated.payload && (updated.payload.orderId || (updated.payload.order && updated.payload.order.id)));
-          if (!orderExternalId) return;
-          const { updateIFoodOrderStatus } = await import('../integrations/ifood/orders.js');
-          try {
-            await updateIFoodOrderStatus(updated.companyId, orderExternalId, 'CONCLUDED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'CONCLUDED' });
-          } catch (e) {
-            console.warn('[orders.complete] failed to notify iFood', { orderExternalId, message: e?.message });
-          }
-        } catch (e) {}
-      })();
-    }
+          await updateIFoodOrderStatus(updated.companyId, orderExternalId, 'CONCLUDED', { merchantId: integ.merchantUuid || integ.merchantId, fullCode: 'CONCLUDED' });
+        } catch (e) {
+          console.warn('[orders.complete] failed to notify iFood', { orderExternalId, message: e?.message });
+        }
+      } catch (e) {}
+    })();
 
-    // Non-iFood prepaid: went straight to CONCLUIDO — run completion triggers
-    if (!isIfood && isPrepaid) {
+    // Prepaid: pedido foi pra CONCLUIDO — rodar gatilhos de finalização
+    // (crédito do entregador, lançamentos financeiros, sessão de caixa,
+    // afiliado, cashback). Para non-prepaid, esses gatilhos rodam quando
+    // o caixa confirma o pagamento via PATCH /:id/status.
+    if (isPrepaid) {
       try {
         if (updated.riderId) {
           await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId: updated.companyId, riderId: updated.riderId, orderId: updated.id, orderDate: updated.updatedAt || new Date() });
