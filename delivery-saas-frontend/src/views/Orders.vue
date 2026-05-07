@@ -3481,7 +3481,7 @@ function pulseButton() {
             <span v-if="normalizeOrder(o).channelLabel" class="ms-2 badge bg-light text-dark">{{ normalizeOrder(o).channelLabel }}</span>
           </div>
           <div class="small text-muted">
-            {{ normalizeOrder(o).items?.length || 0 }} item(ns) · {{ formatCurrency(storeRevenue(o)) }}
+            {{ normalizeOrder(o).items?.length || 0 }} item(ns) · {{ formatCurrency(Number(o.total || 0)) }}
           </div>
         </div>
         <div class="pending-card-actions">
@@ -3511,7 +3511,7 @@ function pulseButton() {
           </div>
         </div>
         <div class="no-cash-card-total fw-bold">
-          {{ formatCurrency(storeRevenue(o)) }}
+          {{ formatCurrency(Number(o.total || 0)) }}
         </div>
       </div>
     </div>
@@ -3565,10 +3565,7 @@ function pulseButton() {
                  <div class="d-flex justify-content-between">
                   <span class="oc-time">{{ getCreatedDurationDisplay(o) }}</span>
                   <span class="text-end">
-                    <span class="oc-total">{{ formatCurrency(storeRevenue(o)) }}</span>
-                    <div v-if="!normalizeOrder(o).isPrepaid && (Number(normalizeOrder(o).couponDiscount || 0) > 0 || Number(o.discountMerchant || 0) > 0)" class="small" style="color: var(--success-dark); font-size: 0.7rem; font-weight: 600;">
-                      Cobrar: {{ formatCurrency(Number(o.total || 0)) }}
-                    </div>
+                    <span class="oc-total">{{ formatCurrency(Number(o.total || 0)) }}</span>
                   </span></div>
                 <div class="oc-footer">
                   <span v-if="isIfoodOrder(o)" title="Pedido iFood">
