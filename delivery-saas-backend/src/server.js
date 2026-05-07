@@ -48,6 +48,20 @@ process.on('unhandledRejection', (reason) => {
   logError({ err, req: { method: 'PROCESS', originalUrl: '/unhandledRejection' } });
 });
 
+// Daily auto-purge of resolved error logs older than 90 days.
+// Fire-and-forget with internal try/catch so purge failures never crash the server.
+async function purgeOldResolvedErrorLogs() {
+  try {
+    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const { count } = await prisma.errorLog.deleteMany({
+      where: { resolved: true, resolvedAt: { lt: cutoff } },
+    });
+    if (count > 0) console.log(`[errorLogs] purged ${count} old resolved logs`);
+  } catch (e) {
+    console.error('purgeOldResolvedErrorLogs failed:', e?.message);
+  }
+}
+
 function pickFirstExisting(dir, candidates) {
   for (const c of candidates) {
     const p = path.join(dir, c);
@@ -235,6 +249,10 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
       } catch (e) {
         console.error('Failed to start financial reconciliation job:', e && e.message);
       }
+      // Schedule daily purge of resolved error logs older than 90 days.
+      // Run once at startup (after a 1-min grace) and then every 24h.
+      setTimeout(purgeOldResolvedErrorLogs, 60 * 1000);
+      setInterval(purgeOldResolvedErrorLogs, 24 * 60 * 60 * 1000);
     } catch (e) {
       console.error('❌ Falha ao anexar Socket.IO:', e.message || e);
     }
