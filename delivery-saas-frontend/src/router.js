@@ -94,6 +94,7 @@ import SaasModules from './views/SaasModules.vue';
 import SaasAdmin from './views/SaasAdmin.vue';
 import SaasSettings from './views/SaasSettings.vue';
 import SaasAiUsage from './views/SaasAiUsage.vue';
+import SaasErrorLogs from './views/SaasErrorLogs.vue';
 const SaasGatewayConfig = () => import('./views/SaasGatewayConfig.vue')
 const SaasSuperAdmins = () => import('./views/SaasSuperAdmins.vue')
 const AdminBilling = () => import('./views/AdminBilling.vue')
@@ -278,6 +279,7 @@ const router = createRouter({
   ,{ path: '/saas/ai-usage', component: SaasAiUsage, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/gateway', component: SaasGatewayConfig, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/super-admins', component: SaasSuperAdmins, meta: { requiresAuth: true, role: 'MASTER' } }
+  ,{ path: '/saas/error-logs', component: SaasErrorLogs, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
     { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CASHBACK' } },
     { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },
@@ -512,6 +514,7 @@ const PAGE_TITLES = [
   ['/saas/settings', 'Configurações SaaS'],
   ['/saas/ai-usage', 'Uso de IA'],
   ['/saas/super-admins', 'Super Admins'],
+  ['/saas/error-logs', 'Logs de erro'],
   ['/saas', 'SaaS Admin'],
   ['/store', 'Loja de Complementos'],
   ['/affiliate', 'Painel de Afiliado'],
