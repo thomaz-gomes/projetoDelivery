@@ -149,6 +149,9 @@ model Company {
   quickReplies      QuickReply[]
   greetingTimeRules GreetingTimeRule[]
 
+  // ---- Error monitoring ----
+  errorLogs ErrorLog[]
+
   // ---- Free Delivery ----
   freeDeliveryEnabled  Boolean  @default(false)
   freeDeliveryMinOrder Decimal?
@@ -2578,4 +2581,26 @@ model StorePricingDefaults {
   cmvHealthyMax         Decimal  @default(35)
   cmvCriticalAbove      Decimal  @default(40)
   updatedAt             DateTime @updatedAt
+}
+
+model ErrorLog {
+  id           Int       @id @default(autoincrement())
+  fingerprint  String    @unique
+  message      String    @db.Text
+  stack        String?   @db.Text
+  route        String?
+  method       String?
+  statusCode   Int?
+  companyId    String?
+  userId       String?
+  occurrences  Int       @default(1)
+  firstSeen    DateTime  @default(now())
+  lastSeen     DateTime  @default(now())
+  resolved     Boolean   @default(false)
+  resolvedAt   DateTime?
+  resolvedBy   String?
+  company      Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([resolved, lastSeen])
+  @@index([companyId])
 }
