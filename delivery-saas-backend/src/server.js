@@ -39,13 +39,13 @@ if (!process.env.CERT_STORE_KEY) {
 // logError is fire-and-forget and never throws.
 process.on('uncaughtException', (err) => {
   console.error('uncaughtException:', err);
-  logError({ err });
+  logError({ err, req: { method: 'PROCESS', originalUrl: '/uncaughtException' } });
 });
 
 process.on('unhandledRejection', (reason) => {
   const err = reason instanceof Error ? reason : new Error(String(reason));
   console.error('unhandledRejection:', err);
-  logError({ err });
+  logError({ err, req: { method: 'PROCESS', originalUrl: '/unhandledRejection' } });
 });
 
 function pickFirstExisting(dir, candidates) {
