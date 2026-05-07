@@ -59,6 +59,7 @@ import events from './utils/events.js'
 import printQueue, { registerAgentSocket } from './printQueue.js'
 import { prisma } from './prisma.js'
 import { sha256 } from './utils.js'
+import { logError } from './utils/errorLogger.js';
 import { rotateAgentToken } from './agentTokenManager.js'
 import path from 'path';
 import startReportsCleanup from './cleanupReports.js';
@@ -455,6 +456,7 @@ app.use((err, req, res, _next) => {
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   }
   console.error('Unhandled route error:', err);
+  logError({ err, req });
   res.status(err.status || 500).json({ message: err.message || 'Internal Server Error' });
 });
 
