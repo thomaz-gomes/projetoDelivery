@@ -16,6 +16,7 @@ import PrinterWatcher from "./components/PrinterWatcher.vue";
 import MobileBottomNav from './components/MobileBottomNav.vue';
 import MediaLibraryModal from './components/MediaLibrary/MediaLibraryModal.vue';
 import ImportProgressBar from './components/ImportProgressBar.vue';
+import SettlementProgressBar from './components/SettlementProgressBar.vue';
 import AiStudioModal from './components/AiStudio/AiStudioModal.vue';
 import OnboardingWizard from './components/OnboardingWizard.vue';
 import PurchaseImportModal from './components/PurchaseImportModal.vue';
@@ -441,6 +442,7 @@ function goToRiderQr(){
     <MediaLibraryModal />
     <AiStudioModal />
     <ImportProgressBar />
+    <SettlementProgressBar />
     <!-- Barcode scanner → Purchase Import modal -->
     <PurchaseImportModal
       v-if="scannerImportOpen"

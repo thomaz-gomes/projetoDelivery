@@ -308,6 +308,37 @@
 
       <div v-else-if="step===4">
         <h6 class="fw-semibold mb-3">Pagamento</h6>
+
+        <!-- Cashback (when enabled and customer found) -->
+        <div v-if="cashbackEnabled && foundCustomer" class="mb-3 p-2 border rounded" :class="{ 'border-success bg-light-success': useCashback }">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="small text-muted">Saldo de cashback do cliente</div>
+              <div class="fw-bold">{{ formatCurrency(cashbackBalance) }}</div>
+              <div v-if="!cashbackCanRedeem && cashbackLoaded" class="small text-muted">
+                <span v-if="cashbackBalance <= 0">Cliente sem saldo disponível</span>
+                <span v-else>Mínimo para resgate: {{ formatCurrency(cashbackMinRedeem) }}</span>
+              </div>
+            </div>
+            <div class="form-check form-switch m-0">
+              <input class="form-check-input" type="checkbox" role="switch" id="pos-use-cashback"
+                :checked="useCashback" :disabled="!cashbackCanRedeem"
+                @change="useCashback = $event.target.checked" />
+              <label class="form-check-label small" for="pos-use-cashback">Usar cashback</label>
+            </div>
+          </div>
+          <div v-if="useCashback" class="d-flex gap-2 mt-2 align-items-end">
+            <div class="flex-grow-1">
+              <label class="form-label small mb-0">Valor a usar</label>
+              <CurrencyInput v-model="useCashbackAmount" :min="0" :max="Math.min(Number(cashbackBalance||0), Number(totalBeforeCashback||0))" inputClass="form-control form-control-sm" />
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm"
+              @click="useCashbackAmount = Math.min(Number(cashbackBalance||0), Number(totalBeforeCashback||0))">
+              Máx
+            </button>
+          </div>
+        </div>
+
         <div class="mb-2">
           <label class="form-label small">Forma</label>
           <ListGroup :items="paymentMethods" itemKey="code" :selectedId="paymentMethodCode" :showActions="false" @select="paymentMethodCode = $event">
@@ -321,6 +352,9 @@
           <CurrencyInput label="Troco para (opcional)" labelClass="form-label small" v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />
         </div>
         <div class="alert alert-light small">
+          <div v-if="appliedCashback > 0" class="d-flex justify-content-between text-success">
+            <span>Cashback aplicado</span><span>-{{ formatCurrency(appliedCashback) }}</span>
+          </div>
           Total: <strong>{{ formatCurrency(totalWithDelivery) }}</strong>
           <span v-if="orderType === 'DELIVERY'">
             (Entrega: <span v-if="isFreeDeliveryActive" class="text-success fw-semibold">Grátis</span><span v-else>{{ formatCurrency(deliveryFee) }}</span>)
@@ -345,7 +379,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import ListGroup from './form/list-group/ListGroup.vue';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
@@ -814,11 +848,78 @@ const couponError = ref('');
 const manualDiscount = ref(0);
 const surcharge = ref(0);
 
-const totalWithDelivery = computed(()=> {
-  try{
+// Cashback (mirrors PublicMenu): customer-bound credit applied before payment.
+const cashbackEnabled = ref(false);
+const cashbackMinRedeem = ref(0);
+const cashbackBalance = ref(0);
+const cashbackLoaded = ref(false);
+const useCashback = ref(false);
+const useCashbackAmount = ref(0);
+
+const cashbackCanRedeem = computed(() => {
+  if (!cashbackEnabled.value || !foundCustomer.value) return false;
+  const min = Number(cashbackMinRedeem.value || 0);
+  return cashbackBalance.value > 0 && (min === 0 || cashbackBalance.value >= min);
+});
+
+const totalBeforeCashback = computed(() => {
+  try {
     const base = Math.max(0, subtotal.value - Number(couponDiscount.value || 0) - Number(manualDiscount.value || 0) + Number(surcharge.value || 0));
     return base + Number(deliveryFee.value || 0);
-  }catch(e){ return subtotal.value + deliveryFee.value }
+  } catch (e) { return subtotal.value + deliveryFee.value; }
+});
+
+const appliedCashback = computed(() => {
+  if (!useCashback.value) return 0;
+  const max = Math.min(Number(cashbackBalance.value || 0), Number(totalBeforeCashback.value || 0));
+  const requested = Number(useCashbackAmount.value || 0);
+  return Math.max(0, Math.min(requested, max));
+});
+
+const totalWithDelivery = computed(() => {
+  return Math.max(0, totalBeforeCashback.value - appliedCashback.value);
+});
+
+watch(useCashback, (v) => {
+  if (v) {
+    // default to max usable when toggled on
+    useCashbackAmount.value = Math.min(Number(cashbackBalance.value || 0), Number(totalBeforeCashback.value || 0));
+  } else {
+    useCashbackAmount.value = 0;
+  }
+});
+
+async function loadCashbackSettings() {
+  try {
+    const companyId = await resolveCompanyId();
+    const { data } = await api.get(`/public/${companyId}/cashback-settings`);
+    cashbackEnabled.value = Boolean(data?.enabled);
+    cashbackMinRedeem.value = Number(data?.minRedeemValue || 0);
+  } catch (e) {
+    cashbackEnabled.value = false;
+  }
+}
+
+async function loadCustomerCashbackWallet() {
+  cashbackLoaded.value = false;
+  cashbackBalance.value = 0;
+  if (!foundCustomer.value || !cashbackEnabled.value) return;
+  try {
+    const { data } = await api.get('/cashback/wallet', { params: { clientId: foundCustomer.value.id } });
+    cashbackBalance.value = Number(data?.balance || 0);
+    cashbackLoaded.value = true;
+  } catch (e) {
+    console.warn('PDV: falha ao carregar carteira de cashback', e?.response?.data || e?.message);
+    cashbackBalance.value = 0;
+    cashbackLoaded.value = true;
+  }
+}
+
+watch(foundCustomer, () => {
+  // Reset cashback choice when customer changes
+  useCashback.value = false;
+  useCashbackAmount.value = 0;
+  loadCustomerCashbackWallet();
 });
 
 const isCashPayment = computed(()=> {
@@ -968,7 +1069,8 @@ async function finalize(){
     const itemsPayload = cart.value.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes||null, options: it.options||null }));
     // Para pedido balcão sem identificação, usa nome genérico
     const customerNameFinal = newCustomerName.value.trim() || (orderType.value === 'BALCAO' ? 'Cliente Balcão' : '');
-    const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value, discountMerchant: manualDiscount.value > 0 ? manualDiscount.value : undefined, additionalFees: surcharge.value > 0 ? surcharge.value : undefined };
+    const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value, discountMerchant: manualDiscount.value > 0 ? manualDiscount.value : undefined, additionalFees: surcharge.value > 0 ? surcharge.value : undefined, appliedCashback: appliedCashback.value > 0 ? appliedCashback.value : undefined };
+    if (appliedCashback.value > 0 && foundCustomer.value) body.customerId = foundCustomer.value.id;
     // If customer was found and we're using a new address (not selecting existing), persist address to customer first
     try{
       if(orderType.value === 'DELIVERY' && !selectedAddressId.value && foundCustomer.value){
@@ -1020,6 +1122,10 @@ function resetWizard(){
   phoneInput.value = '';
   manualDiscount.value = 0;
   surcharge.value = 0;
+  useCashback.value = false;
+  useCashbackAmount.value = 0;
+  cashbackBalance.value = 0;
+  cashbackLoaded.value = false;
   // clear addresses and address form state to avoid reusing previous customer's data
   savedAddresses.value = [];
   selectedAddressId.value = null;
@@ -1027,9 +1133,11 @@ function resetWizard(){
   addr.value = { street:'', number:'', neighborhood:'', complement:'', formatted:'', reference:'', observation:'', city: companyDefaults.value.city || '', state: companyDefaults.value.state || '' };
 }
 
-watch(()=>props.visible, async (v)=>{ 
-  if(v){ 
+watch(()=>props.visible, async (v)=>{
+  if(v){
     resetWizard();
+    // Load cashback program settings (best-effort; ignored if disabled)
+    loadCashbackSettings();
     // Carrega bairros ao abrir o modal para garantir que estejam disponíveis
     if(neighborhoods.value.length===0) {
       console.log('Carregando bairros ao abrir wizard...');
@@ -1093,6 +1201,9 @@ const cartState = computed(() => ({
   paymentMethodCode: paymentMethodCode.value,
 }));
 watch(cartState, (val) => { emit('cart-update', val); }, { deep: true, immediate: true });
+
+// Always load cashback program settings on mount (works for both modal and embedded modes).
+onMounted(() => { loadCashbackSettings(); });
 
 // Embedded mode: skip customer/address steps and go directly to products
 let embeddedInitialized = false;

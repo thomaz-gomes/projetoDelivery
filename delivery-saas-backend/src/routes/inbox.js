@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, requireRole } from '../auth.js';
 import { prisma } from '../prisma.js';
 import { evoSendText, evoSendMediaUrl, evoSendLocation } from '../wa.js';
+import { renderQuickReplyVariables } from '../utils/quickReplyVars.js';
 import { transcribeAudio } from '../services/aiProvider.js';
 
 const router = Router();
@@ -366,6 +367,9 @@ router.post('/conversations/:id/send-quick-reply', async (req, res) => {
     const instanceName = conversation.instanceName;
     const to = conversation.channelContactId;
 
+    // Resolve {{nome}} / {{cashback}} / {{endereco}} against this conversation's customer
+    const resolvedBody = await renderQuickReplyVariables(reply.body || '', { conversation, companyId });
+
     // Send via Evolution (media + caption, or text-only)
     if (reply.mediaUrl) {
       const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
@@ -375,10 +379,10 @@ router.post('/conversations/:id/send-quick-reply', async (req, res) => {
         mediaUrl: `${baseUrl}${reply.mediaUrl}`,
         filename: reply.mediaFileName || 'arquivo',
         mimeType: reply.mediaMimeType,
-        caption: reply.body || '',
+        caption: resolvedBody || '',
       });
     } else {
-      await evoSendText({ instanceName, to, text: reply.body });
+      await evoSendText({ instanceName, to, text: resolvedBody });
     }
 
     // Persist Message
@@ -387,7 +391,7 @@ router.post('/conversations/:id/send-quick-reply', async (req, res) => {
         conversationId: conversation.id,
         direction: 'OUTBOUND',
         type: reply.mediaUrl ? detectMessageType(reply.mediaMimeType) : 'TEXT',
-        body: reply.body || null,
+        body: resolvedBody || null,
         mediaUrl: reply.mediaUrl || null,
         mediaMimeType: reply.mediaMimeType || null,
         mediaFileName: reply.mediaFileName || null,

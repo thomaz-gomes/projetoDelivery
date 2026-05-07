@@ -9,6 +9,10 @@
     <div class="card mb-3">
       <div class="card-body">
         <div class="row g-2 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label">Buscar descrição</label>
+            <input type="text" class="form-control" v-model="filters.search" placeholder="Ex: Motoboy, pedido..." @keydown.enter="search">
+          </div>
           <div class="col-md-2">
             <label class="form-label">Tipo</label>
             <SelectInput v-model="filters.type" :options="typeOptions" placeholder="Todos" />
@@ -18,6 +22,14 @@
             <SelectInput v-model="filters.status" :options="statusOptions" placeholder="Todos" />
           </div>
           <div class="col-md-2">
+            <label class="form-label">Origem</label>
+            <SelectInput v-model="filters.sourceType" :options="sourceTypeOptions" placeholder="Todas" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Conta</label>
+            <SelectInput v-model="filters.accountId" :options="accountOptions" optionValueKey="id" optionLabelKey="name" placeholder="Todas as contas" />
+          </div>
+          <div class="col-md-2">
             <label class="form-label">Vencimento de</label>
             <input type="date" class="form-control" v-model="filters.dueDateFrom">
           </div>
@@ -25,12 +37,8 @@
             <label class="form-label">Vencimento até</label>
             <input type="date" class="form-control" v-model="filters.dueDateTo">
           </div>
-          <div class="col-md-2">
-            <label class="form-label">Origem</label>
-            <SelectInput v-model="filters.sourceType" :options="sourceTypeOptions" placeholder="Todas" />
-          </div>
           <div class="col-md-2 text-end">
-            <button class="btn btn-primary me-1" @click="load">Buscar</button>
+            <button class="btn btn-primary me-1" @click="search">Buscar</button>
             <button class="btn btn-outline-secondary" @click="resetFilters">Limpar</button>
           </div>
         </div>
@@ -90,16 +98,26 @@
         </table>
       </div>
       <!-- Paginação -->
-      <div v-if="totalPages > 1" class="d-flex justify-content-between align-items-center p-3 border-top">
-        <span class="text-muted">{{ total }} transações</span>
-        <nav>
+      <div class="d-flex justify-content-between align-items-center p-3 border-top">
+        <span class="text-muted small">
+          {{ pageFirstItem }}–{{ pageLastItem }} de {{ total }} transações
+        </span>
+        <nav v-if="totalPages > 1">
           <ul class="pagination mb-0 pagination-sm">
             <li class="page-item" :class="{disabled: page <= 1}">
-              <button class="page-link" @click="page--; load()">Anterior</button>
+              <button class="page-link" @click="goToPage(1)" title="Primeira">«</button>
             </li>
-            <li class="page-item active"><span class="page-link">{{ page }}</span></li>
+            <li class="page-item" :class="{disabled: page <= 1}">
+              <button class="page-link" @click="goToPage(page - 1)">Anterior</button>
+            </li>
+            <li class="page-item active">
+              <span class="page-link">{{ page }} / {{ totalPages }}</span>
+            </li>
             <li class="page-item" :class="{disabled: page >= totalPages}">
-              <button class="page-link" @click="page++; load()">Próxima</button>
+              <button class="page-link" @click="goToPage(page + 1)">Próxima</button>
+            </li>
+            <li class="page-item" :class="{disabled: page >= totalPages}">
+              <button class="page-link" @click="goToPage(totalPages)" title="Última">»</button>
             </li>
           </ul>
         </nav>
@@ -272,7 +290,7 @@ export default {
       showPayModal: false,
       payingSaving: false,
       payForm: { id: '', type: '', description: '', grossAmount: 0, dueDate: '', accountId: '', payAmount: 0, paidDate: '', notes: '' },
-      filters: { type: '', status: '', dueDateFrom: '', dueDateTo: '', sourceType: '' },
+      filters: { type: '', status: '', dueDateFrom: '', dueDateTo: '', sourceType: '', accountId: '', search: '' },
       form: { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d', supplierId: '' },
       installmentPreview: [],
       installmentOptions: Array.from({ length: 24 }, (_, i) => ({ value: i + 1, label: `${i + 1}x` })),
@@ -301,7 +319,9 @@ export default {
     };
   },
   computed: {
-    totalPages() { return Math.ceil(this.total / this.limit); },
+    totalPages() { return Math.max(1, Math.ceil(this.total / this.limit)); },
+    pageFirstItem() { return this.total === 0 ? 0 : (this.page - 1) * this.limit + 1; },
+    pageLastItem() { return Math.min(this.page * this.limit, this.total); },
     accountOptions() { return this.accounts.filter(a => a.isActive); },
     costCenterOptions() { return this.costCenters.map(c => ({ id: c.id, label: `${c.code} - ${c.name}` })); },
     gatewayOptions() { return this.gateways.map(g => ({ id: g.id, label: `${g.provider} ${g.label || ''}`.trim() })); },
@@ -322,6 +342,14 @@ export default {
     await Promise.all([this.load(), this.loadLookups()]);
   },
   methods: {
+    search() {
+      this.page = 1;
+      this.load();
+    },
+    goToPage(p) {
+      this.page = Math.max(1, Math.min(p, this.totalPages));
+      this.load();
+    },
     async load() {
       try {
         const params = { page: this.page, limit: this.limit };
@@ -330,6 +358,8 @@ export default {
         if (this.filters.dueDateFrom) params.dueDateFrom = this.filters.dueDateFrom;
         if (this.filters.dueDateTo) params.dueDateTo = this.filters.dueDateTo;
         if (this.filters.sourceType) params.sourceType = this.filters.sourceType;
+        if (this.filters.accountId) params.accountId = this.filters.accountId;
+        if (this.filters.search) params.search = this.filters.search;
         const { data } = await api.get('/financial/transactions', { params });
         this.transactions = data.data;
         this.total = data.total;
@@ -356,7 +386,7 @@ export default {
       }
     },
     resetFilters() {
-      this.filters = { type: '', status: '', dueDateFrom: '', dueDateTo: '', sourceType: '' };
+      this.filters = { type: '', status: '', dueDateFrom: '', dueDateTo: '', sourceType: '', accountId: '', search: '' };
       this.page = 1;
       this.load();
     },

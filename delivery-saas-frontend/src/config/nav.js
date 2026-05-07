@@ -57,7 +57,10 @@ export const nav = [
     { name: 'Contas Bancárias', to: '/financial/accounts', icon: 'bi bi-bank' },
     { name: 'Conciliação Bancária', to: '/financial/ofx', icon: 'bi bi-file-earmark-arrow-up' },
     { name: 'Centros de Custo', to: '/financial/cost-centers', icon: 'bi bi-diagram-3' },
+    { name: 'Despesas Fixas', to: '/financial/recurring', icon: 'bi bi-arrow-repeat' },
     { name: 'Formas de Pagamento', to: '/financial/payment-methods', icon: 'bi bi-credit-card' },
+    { name: 'Taxas e Operadoras', to: '/financial/gateways', icon: 'bi bi-percent' },
+    { name: 'Repasses Marketplace', to: '/financial/settlements', icon: 'bi bi-bank' },
   ] },
   { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', role: 'ADMIN', children: [
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt', moduleKey: 'cardapio_completo', lockable: true },

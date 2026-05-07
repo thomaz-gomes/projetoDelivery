@@ -503,6 +503,10 @@ input[type=checkbox].toggle { width: 36px; height: 20px; cursor: pointer; accent
     </div>
 
     <div class="toggle-row">
+      <input type="checkbox" id="pm-fiscal" class="toggle" />
+      <label for="pm-fiscal">Impressora Fiscal (NF-e / DANFE)</label>
+    </div>
+    <div class="toggle-row">
       <input type="checkbox" id="pm-enabled" class="toggle" checked />
       <label for="pm-enabled">Impressora ativa</label>
     </div>
@@ -629,6 +633,7 @@ function renderPrinterList() {
         <div class="pi-meta">
           <span class="pi-badge ${ifBadge}">${ifLabel}</span>
           <span class="pi-badge ${p.enabled ? 'on' : 'off'}">${p.enabled ? 'Ativa' : 'Inativa'}</span>
+          ${p.fiscal ? '<span class="pi-badge" style="background:#2a1a00;color:#ffaa33">Fiscal</span>' : ''}
           ${esc(p.interface === 'network' ? `${p.host}:${p.port || 9100}` : p.interface === 'usb' ? (p.windowsPrinterName || '') : (p.comPort || ''))}
           &nbsp;|&nbsp;${p.width || 80}mm &nbsp;|&nbsp; Cats: ${(p.categories || []).join(', ')}
         </div>
@@ -695,6 +700,7 @@ function resetPrinterForm() {
   document.getElementById('pm-categories').value      = 'all';
   document.getElementById('pm-itemNameSize').value    = '1x2';
   document.getElementById('pm-itemOptionSize').value  = '1x2';
+  document.getElementById('pm-fiscal').checked        = false;
   document.getElementById('pm-enabled').checked       = true;
 }
 
@@ -715,6 +721,7 @@ function fillPrinterForm(p) {
   document.getElementById('pm-categories').value      = (p.categories || ['all']).join(', ');
   document.getElementById('pm-itemNameSize').value    = p.itemNameSize || '1x2';
   document.getElementById('pm-itemOptionSize').value  = p.itemOptionSize || '1x2';
+  document.getElementById('pm-fiscal').checked        = p.fiscal === true;
   document.getElementById('pm-enabled').checked       = p.enabled !== false;
 }
 
@@ -747,6 +754,7 @@ function collectPrinterForm() {
     categories:          categories.length ? categories : ['all'],
     itemNameSize:        document.getElementById('pm-itemNameSize').value || '1x2',
     itemOptionSize:      document.getElementById('pm-itemOptionSize').value || '1x2',
+    fiscal:              document.getElementById('pm-fiscal').checked,
     enabled:             document.getElementById('pm-enabled').checked,
   };
 }

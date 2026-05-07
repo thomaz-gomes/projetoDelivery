@@ -1,5 +1,5 @@
 import { prisma } from '../prisma.js';
-import { evoSendText, evoSendLocation, normalizePhone } from '../wa.js';
+import { evoSendText, evoSendLocation, normalizePhone, isBrServiceNumber } from '../wa.js';
 import { evoGetStatus } from '../wa.js';
 
 // Previously we gated customer notifications behind ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS.
@@ -10,6 +10,13 @@ import { evoGetStatus } from '../wa.js';
 
 function fmtCurrency(v) {
   return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+// True when the company has explicitly disabled a given notification key
+// (one of EM_PREPARO, SAIU_PARA_ENTREGA, ..., RIDER_ASSIGNED, CASHBACK_CREDIT).
+function isNotifyDisabled(company, key) {
+  const list = company?.orderNotifyDisabled;
+  return Array.isArray(list) && list.includes(key);
 }
 
 // extrai coordenadas do payload do iFood (ou do model) e valida
@@ -153,6 +160,11 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
       return;
     }
 
+    if (isNotifyDisabled(order.company, 'RIDER_ASSIGNED')) {
+      console.log('[notifyRiderAssigned] notification disabled');
+      return;
+    }
+
     const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
     if (!inst) {
       console.warn('[notifyRiderAssigned] Sem instância CONNECTED para company', order.companyId);
@@ -189,17 +201,39 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
     if (custWhatsapp) parts.push(custWhatsapp);
     const contactToShow = parts.length ? parts.join(' - ') : '-';
 
-      const orderLabel = (await formatDisplayNumber(order)) || (order.displayId || order.id.slice(0,6));
-      const text =
-  `*🚨 Nova entrega atribuída* 🚀
+    const orderLabel = (await formatDisplayNumber(order)) || (order.displayId || order.id.slice(0, 6));
+    const customerName = order.customerName || order.customerFullName || '-';
+    const shopName = (order.company && order.company.name) || (order.store && order.store.name) || 'sua loja';
 
-  *Pedido:* ${orderLabel}
-  *Cliente:* ${order.customerName || order.customerFullName || '-'}
-  *Endereço:* ${addressText}
-  *Mapa:* ${mapsLink}
-  *Localizador:* ${locator || '-'}
-  *Pagamento:* ${paymentMethod || '-'}
-  *Contato:* ${contactToShow}`;
+    const DEFAULT_RIDER_TEMPLATE =
+`*🚨 Nova entrega atribuída* 🚀
+
+*Pedido:* {{pedido}}
+*Cliente:* {{cliente}}
+*Endereço:* {{endereco}}
+*Mapa:* {{mapa}}
+*Localizador:* {{localizador}}
+*Pagamento:* {{pagamento}}
+*Contato:* {{contato}}`;
+
+    const templates = (order.company?.orderNotifyTemplates && typeof order.company.orderNotifyTemplates === 'object')
+      ? order.company.orderNotifyTemplates
+      : {};
+    const stored = Object.prototype.hasOwnProperty.call(templates, 'RIDER_ASSIGNED')
+      ? String(templates.RIDER_ASSIGNED)
+      : null;
+    const raw = (stored && stored.trim()) ? stored : DEFAULT_RIDER_TEMPLATE;
+
+    const text = raw
+      .replace(/\{\{pedido\}\}/g, orderLabel)
+      .replace(/\{\{cliente\}\}/g, customerName)
+      .replace(/\{\{nome\}\}/g, customerName)
+      .replace(/\{\{loja\}\}/g, shopName)
+      .replace(/\{\{endereco\}\}/g, addressText)
+      .replace(/\{\{mapa\}\}/g, mapsLink)
+      .replace(/\{\{localizador\}\}/g, locator || '-')
+      .replace(/\{\{pagamento\}\}/g, paymentMethod || '-')
+      .replace(/\{\{contato\}\}/g, contactToShow);
 
     console.log('[notifyRiderAssigned] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0,120) });
     await evoSendText({ instanceName: inst.instanceName, to: phone, text }).then(r => {
@@ -240,11 +274,20 @@ export async function notifyCustomerStatus(orderId, newStatus) {
       return;
     }
 
+    if (isNotifyDisabled(order.company, newStatus)) {
+      console.log('[notifyCustomerStatus] notification disabled for status', newStatus);
+      return;
+    }
+
     const phone = normalizePhone(
       order.customerPhone ||
       order?.payload?.customer?.phone?.number || ''
     );
     if (!phone) return;
+    if (isBrServiceNumber(phone)) {
+      console.log('[notifyCustomerStatus] skipping non-WhatsApp service number', phone);
+      return;
+    }
 
     const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
     if (!inst) {
@@ -319,11 +362,20 @@ export async function notifyCustomerOrderSummary(orderId) {
       return;
     }
 
+    if (isNotifyDisabled(order.company, 'ORDER_SUMMARY')) {
+      console.log('[notifyCustomerOrderSummary] notification disabled');
+      return;
+    }
+
     const phone = normalizePhone(
       order.customerPhone ||
       order?.payload?.customer?.phone?.number || ''
     );
     if (!phone) return;
+    if (isBrServiceNumber(phone)) {
+      console.log('[notifyCustomerOrderSummary] skipping non-WhatsApp service number', phone);
+      return;
+    }
 
     const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
     if (!inst) {
@@ -396,11 +448,19 @@ export async function notifyCashbackCredit(clientId, companyId, amount, newBalan
   try {
     const [customer, company] = await Promise.all([
       prisma.customer.findUnique({ where: { id: clientId }, select: { fullName: true, whatsapp: true } }),
-      prisma.company.findUnique({ where: { id: companyId }, select: { name: true, evolutionEnabled: true, orderNotifyTemplates: true } }),
+      prisma.company.findUnique({ where: { id: companyId }, select: { name: true, evolutionEnabled: true, orderNotifyTemplates: true, orderNotifyDisabled: true } }),
     ]);
     if (!company?.evolutionEnabled) return;
+    if (isNotifyDisabled(company, 'CASHBACK_CREDIT')) {
+      console.log('[notifyCashbackCredit] notification disabled');
+      return;
+    }
     const phone = normalizePhone(customer?.whatsapp || '');
     if (!phone) return;
+    if (isBrServiceNumber(phone)) {
+      console.log('[notifyCashbackCredit] skipping non-WhatsApp service number', phone);
+      return;
+    }
     const inst = await pickConnectedInstance(companyId);
     if (!inst) return;
 

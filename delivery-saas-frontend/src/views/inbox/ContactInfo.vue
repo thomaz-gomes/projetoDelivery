@@ -37,6 +37,12 @@
         <div><strong>Desde:</strong> {{ formatDate(customer.createdAt) }}</div>
         <div><strong>Gasto:</strong> R$ {{ Number(customer.stats?.totalSpent || 0).toFixed(2).replace('.', ',') }}</div>
         <div><strong>Pedidos:</strong> {{ customer.stats?.totalOrders || 0 }}</div>
+        <div v-if="cashbackEnabled" class="d-flex align-items-center gap-1" :class="cashbackBalance > 0 ? 'text-success' : ''">
+          <i class="bi bi-piggy-bank"></i>
+          <strong>Cashback:</strong>
+          <span v-if="cashbackLoading" class="spinner-border spinner-border-sm" style="width:0.7rem;height:0.7rem"></span>
+          <span v-else>R$ {{ Number(cashbackBalance).toFixed(2).replace('.', ',') }}</span>
+        </div>
 
         <span  style="font-size: 14px;" v-if="customer.stats?.favoriteItem" class="d-block mt-1">
           <i class="bi bi-heart-fill text-danger" style="font-size: 0.6rem;"></i> <strong>Item favorito:</strong> {{ customer.stats.favoriteItem }}
@@ -94,6 +100,35 @@ const creating = ref(false);
 let saveTimer = null;
 
 const newCustomer = ref({ fullName: '', cpf: '' });
+
+// Cashback wallet (loaded once per customer)
+const cashbackEnabled = ref(false);
+const cashbackBalance = ref(0);
+const cashbackLoading = ref(false);
+
+async function loadCashbackForCustomer(customerId) {
+  cashbackBalance.value = 0;
+  if (!customerId) return;
+  cashbackLoading.value = true;
+  try {
+    // Settings (best-effort): use any company id from public route — auth is required
+    // for /cashback/wallet, so we hit it directly; if the company doesn't have the
+    // CASHBACK module enabled it will return 403 and we silently disable the section.
+    const { data } = await api.get('/cashback/wallet', { params: { clientId: customerId } });
+    cashbackBalance.value = Number(data?.balance || 0);
+    cashbackEnabled.value = true;
+  } catch (e) {
+    cashbackEnabled.value = false;
+    cashbackBalance.value = 0;
+  } finally {
+    cashbackLoading.value = false;
+  }
+}
+
+watch(() => props.customerId, (id) => {
+  if (id) loadCashbackForCustomer(id);
+  else { cashbackEnabled.value = false; cashbackBalance.value = 0; }
+}, { immediate: true });
 
 const customer = computed(() => {
   if (!props.customerId) return null;

@@ -10,22 +10,32 @@ router.get('/', async (req, res) => {
   try {
     const companyId = req.user.companyId;
     const {
-      type, status, accountId, costCenterId, sourceType,
+      type, status, accountId, costCenterId, sourceType, search,
       dueDateFrom, dueDateTo, issueDateFrom, issueDateTo,
       page = 1, limit = 50,
     } = req.query;
 
     // Exclude parent/grouping transactions: they have totalInstallments > 1 but no installmentNumber.
     // Only show actual installment children and non-installment (single) transactions.
+    //
+    // We need an explicit OR instead of `NOT { totalInstallments: {gt:1}, installmentNumber: null }`
+    // because Prisma translates that to `NOT (col > 1 AND col2 IS NULL)`, and rows where
+    // totalInstallments IS NULL evaluate the comparison as UNKNOWN, so the WHERE drops them.
+    // That hid every receivable created from an order (which has both fields NULL).
     const where = {
       companyId,
-      NOT: { totalInstallments: { gt: 1 }, installmentNumber: null },
+      OR: [
+        { totalInstallments: null },              // single transaction (no installments)
+        { totalInstallments: { lte: 1 } },        // single transaction (explicit 1)
+        { installmentNumber: { not: null } },     // installment child row
+      ],
     };
     if (type) where.type = type;
     if (status) where.status = status;
     if (accountId) where.accountId = accountId;
     if (costCenterId) where.costCenterId = costCenterId;
     if (sourceType) where.sourceType = sourceType;
+    if (search) where.description = { contains: search, mode: 'insensitive' };
     if (dueDateFrom || dueDateTo) {
       where.dueDate = {};
       if (dueDateFrom) where.dueDate.gte = new Date(dueDateFrom);

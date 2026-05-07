@@ -44,75 +44,110 @@ router.get('/dre', async (req, res) => {
       },
     });
 
-    // Montar estrutura DRE
-    const dreGroups = {};
-    for (const cc of costCenters) {
-      if (!cc.dreGroup) continue;
-      if (!dreGroups[cc.dreGroup]) {
-        dreGroups[cc.dreGroup] = { group: cc.dreGroup, items: [], total: 0 };
-      }
-    }
-
-    // Calcular totais por centro de custo
+    // Mapear totais por costCenterId
     const ccTotals = {};
     for (const tx of transactions) {
       const ccId = tx.costCenterId;
       if (!ccTotals[ccId]) ccTotals[ccId] = 0;
-      // Receitas somam positivo, despesas somam negativo
       const value = tx.type === 'RECEIVABLE'
         ? Number(tx.paidAmount || tx.netAmount)
         : -Number(tx.paidAmount || tx.netAmount);
       ccTotals[ccId] += value;
     }
 
-    // Montar itens do DRE
-    for (const cc of costCenters) {
-      if (!cc.dreGroup || !dreGroups[cc.dreGroup]) continue;
-      const total = ccTotals[cc.id] || 0;
-      dreGroups[cc.dreGroup].items.push({
-        costCenterId: cc.id,
-        code: cc.code,
-        name: cc.name,
-        total,
-      });
-      dreGroups[cc.dreGroup].total += total;
-    }
-
-    // Calcular CMV
-    const cmv = await calculateCMV(prisma, companyId, from, to, storeId);
-
-    // Montar DRE final
-    const revenue = dreGroups['REVENUE']?.total || 0;
-    const deductions = dreGroups['DEDUCTIONS']?.total || 0;
-    const netRevenue = revenue + deductions; // deductions é negativo
-    const cogs = dreGroups['COGS']?.total || cmv.total || 0;
-    const grossProfit = netRevenue + cogs; // cogs é negativo
-    const opex = dreGroups['OPEX']?.total || 0;
-    const operatingProfit = grossProfit + opex; // opex é negativo
-    const financial = dreGroups['FINANCIAL']?.total || 0;
-    const netProfit = operatingProfit + financial;
-
-    const dre = {
-      period: { from, to },
-      lines: {
-        receitaBruta: { label: '(+) Receita Bruta', value: revenue, details: dreGroups['REVENUE'] },
-        deducoes: { label: '(-) Deduções de Receita', value: deductions, details: dreGroups['DEDUCTIONS'] },
-        receitaLiquida: { label: '(=) Receita Líquida', value: netRevenue },
-        cmv: { label: '(-) CMV', value: cogs, details: { ...dreGroups['COGS'], cmvDetails: cmv } },
-        lucroBruto: { label: '(=) Lucro Bruto', value: grossProfit },
-        despesasOperacionais: { label: '(-) Despesas Operacionais', value: opex, details: dreGroups['OPEX'] },
-        resultadoOperacional: { label: '(=) Resultado Operacional', value: operatingProfit },
-        resultadoFinanceiro: { label: '(+/-) Resultado Financeiro', value: financial, details: dreGroups['FINANCIAL'] },
-        resultadoLiquido: { label: '(=) Resultado Líquido', value: netProfit },
-      },
-      margins: {
-        grossMargin: revenue ? ((grossProfit / revenue) * 100).toFixed(2) + '%' : '0%',
-        operatingMargin: revenue ? ((operatingProfit / revenue) * 100).toFixed(2) + '%' : '0%',
-        netMargin: revenue ? ((netProfit / revenue) * 100).toFixed(2) + '%' : '0%',
-      },
+    // Classificar cada centro de custo nos grupos do novo DRE
+    const groups = {
+      REVENUE:    { items: [], total: 0 },
+      DEDUCTIONS: { items: [], total: 0 },
+      VARIAVEL:   { items: [], total: 0 },
+      FIXA:       { items: [], total: 0 },
+      FINANCIAL:  { items: [], total: 0 },
     };
 
-    res.json(dre);
+    const unclassifiedCenters = [];
+
+    for (const cc of costCenters) {
+      if (!cc.dreGroup) continue;
+      const total = ccTotals[cc.id] || 0;
+      const item = { costCenterId: cc.id, code: cc.code, name: cc.name, total, natureza: cc.natureza };
+
+      if (cc.dreGroup === 'REVENUE') {
+        groups.REVENUE.items.push(item);
+        groups.REVENUE.total += total;
+      } else if (cc.dreGroup === 'DEDUCTIONS') {
+        groups.DEDUCTIONS.items.push(item);
+        groups.DEDUCTIONS.total += total;
+      } else if (cc.dreGroup === 'COGS') {
+        groups.VARIAVEL.items.push(item);
+        groups.VARIAVEL.total += total;
+      } else if (cc.dreGroup === 'OPEX') {
+        if (cc.natureza === 'VARIAVEL') {
+          groups.VARIAVEL.items.push(item);
+          groups.VARIAVEL.total += total;
+        } else {
+          if (!cc.natureza && total !== 0) unclassifiedCenters.push(cc.name);
+          groups.FIXA.items.push(item);
+          groups.FIXA.total += total;
+        }
+      } else if (cc.dreGroup === 'FINANCIAL') {
+        groups.FINANCIAL.items.push(item);
+        groups.FINANCIAL.total += total;
+      }
+    }
+
+    // CMV via stock movements (já existia — preserve the existing calculateCMV call)
+    const cmv = await calculateCMV(prisma, companyId, from, to, storeId);
+    if (cmv && cmv.total) {
+      const hasCogsTx = groups.VARIAVEL.items.some(i => {
+        const cc = costCenters.find(c => c.id === i.costCenterId);
+        return cc?.dreGroup === 'COGS';
+      });
+      if (!hasCogsTx && cmv.total !== 0) {
+        groups.VARIAVEL.total += cmv.total;
+        groups.VARIAVEL.items.push({ costCenterId: null, code: '3.x', name: 'CMV (Estoque)', total: cmv.total });
+      }
+    }
+
+    // Calcular métricas do DRE Gerencial
+    const receitaBruta      = groups.REVENUE.total;
+    const deducoes          = groups.DEDUCTIONS.total;
+    const receitaLiquida    = receitaBruta + deducoes;
+    const custosVariaveis   = groups.VARIAVEL.total;
+    const margemContribuicao = receitaLiquida + custosVariaveis;
+    const margemContribuicaoPct = receitaBruta !== 0
+      ? (margemContribuicao / receitaBruta) * 100
+      : 0;
+    const despesasFixas        = groups.FIXA.total;
+    const resultadoOperacional = margemContribuicao + despesasFixas;
+    const resultadoFinanceiro  = groups.FINANCIAL.total;
+    const resultadoLiquido     = resultadoOperacional + resultadoFinanceiro;
+
+    const pontoEquilibrio = margemContribuicaoPct > 0
+      ? Math.abs(despesasFixas) / (margemContribuicaoPct / 100)
+      : null;
+
+    res.json({
+      period: { from, to },
+      receitaBruta,
+      deducoes,
+      receitaLiquida,
+      custosVariaveis,
+      margemContribuicao,
+      margemContribuicaoPct: Number(margemContribuicaoPct.toFixed(2)),
+      despesasFixas,
+      resultadoOperacional,
+      resultadoFinanceiro,
+      resultadoLiquido,
+      pontoEquilibrio: pontoEquilibrio ? Number(pontoEquilibrio.toFixed(2)) : null,
+      hasUnclassified: unclassifiedCenters.length > 0,
+      unclassifiedCenters,
+      groups,
+      margins: {
+        grossMargin: receitaBruta ? ((margemContribuicao / receitaBruta) * 100).toFixed(2) + '%' : '0%',
+        operatingMargin: receitaBruta ? ((resultadoOperacional / receitaBruta) * 100).toFixed(2) + '%' : '0%',
+        netMargin: receitaBruta ? ((resultadoLiquido / receitaBruta) * 100).toFixed(2) + '%' : '0%',
+      },
+    });
   } catch (e) {
     console.error('GET /financial/reports/dre error:', e);
     res.status(500).json({ message: 'Erro ao gerar DRE', error: e?.message });

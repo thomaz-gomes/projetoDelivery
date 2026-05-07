@@ -231,13 +231,22 @@ companiesRouter.patch('/company', requireRole('ADMIN'), async (req, res) => {
 
 // ─── Order notification templates ────────────────────────────────────────────
 
-const NOTIFY_STATUS_KEYS = ['EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO', 'CASHBACK_CREDIT'];
+const NOTIFY_STATUS_KEYS = [
+  'ORDER_SUMMARY', 'EM_PREPARO', 'SAIU_PARA_ENTREGA', 'CONFIRMACAO_PAGAMENTO',
+  'CONCLUIDO', 'CANCELADO', 'CASHBACK_CREDIT', 'RIDER_ASSIGNED',
+];
 
 companiesRouter.get('/notification-templates', async (req, res) => {
   const companyId = req.user.companyId;
   try {
-    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { orderNotifyTemplates: true } });
-    res.json((c?.orderNotifyTemplates && typeof c.orderNotifyTemplates === 'object') ? c.orderNotifyTemplates : {});
+    const c = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { orderNotifyTemplates: true, orderNotifyDisabled: true },
+    });
+    res.json({
+      templates: (c?.orderNotifyTemplates && typeof c.orderNotifyTemplates === 'object') ? c.orderNotifyTemplates : {},
+      disabled: Array.isArray(c?.orderNotifyDisabled) ? c.orderNotifyDisabled : [],
+    });
   } catch (e) {
     res.status(500).json({ message: 'Erro ao carregar templates', error: e.message });
   }
@@ -247,13 +256,22 @@ companiesRouter.patch('/notification-templates', requireRole('ADMIN'), async (re
   const companyId = req.user.companyId;
   try {
     const body = req.body || {};
-    const clean = {};
+    // Backward-compat: legacy callers send the templates map flat at the body root.
+    const templatesIn = (body.templates && typeof body.templates === 'object') ? body.templates : body;
+    const disabledIn = Array.isArray(body.disabled) ? body.disabled : null;
+
+    const cleanTemplates = {};
     for (const key of NOTIFY_STATUS_KEYS) {
-      // Only persist non-empty templates; blank = "use default" (not disabled)
-      if (typeof body[key] === 'string' && body[key].trim()) clean[key] = body[key];
+      if (typeof templatesIn[key] === 'string' && templatesIn[key].trim()) cleanTemplates[key] = templatesIn[key];
     }
-    await prisma.company.update({ where: { id: companyId }, data: { orderNotifyTemplates: clean } });
-    res.json(clean);
+
+    const data = { orderNotifyTemplates: cleanTemplates };
+    if (disabledIn) {
+      data.orderNotifyDisabled = disabledIn.filter((k) => NOTIFY_STATUS_KEYS.includes(k));
+    }
+
+    await prisma.company.update({ where: { id: companyId }, data });
+    res.json({ templates: cleanTemplates, disabled: data.orderNotifyDisabled || [] });
   } catch (e) {
     res.status(500).json({ message: 'Erro ao salvar templates', error: e.message });
   }

@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma.js';
 import { calculateFees } from './feeCalculator.js';
+import { calcSettlementDate } from './settlementCalc.js';
 
 /**
  * Bridge entre o módulo de Pedidos e o módulo Financeiro.
@@ -41,11 +42,22 @@ export async function createFinancialEntriesForOrder(order) {
 
     const orderTotal = Number(order.total || 0);
     const now = new Date();
+    // Date to use for "when this sale happened" — drives settlement schedule
+    // grouping. Without this, recreate-bulk would compute every order's
+    // expectedDate from `now`, lumping everything into one repasse.
+    const orderDate = order.createdAt ? new Date(order.createdAt) : now;
 
-    // Determinar se veio de marketplace (iFood, etc.)
-    const source = order.customerSource;
+    // Determinar se veio de marketplace (iFood, etc.).
+    // Detecção robusta: pedidos do processador moderno do iFood podem ter
+    // customerSource null (legacy só era setado pelo webhooks.js antigo) mas
+    // têm externalId + payload.merchantId/order — então olhamos múltiplos sinais.
+    const isIfood = order.customerSource === 'IFOOD'
+      || /ifood/i.test(String(order.payload?.source || order.payload?.integration || ''))
+      || Boolean(order.payload?.ifood)
+      || Boolean(order.payload?.merchantId && order.payload?.order)
+      || (Boolean(order.externalId) && Boolean(order.payload?.merchantId));
     let gatewayConfig = null;
-    if (source === 'IFOOD') {
+    if (isIfood) {
       gatewayConfig = await prisma.paymentGatewayConfig.findFirst({
         where: { companyId: order.companyId, provider: 'IFOOD', isActive: true },
       });
@@ -55,12 +67,32 @@ export async function createFinancialEntriesForOrder(order) {
     let feeAmount = 0;
     let netAmount = orderTotal;
     let expectedDate = now;
+    let marketplaceFee = 0;
+    let anticipationFee = 0;
+    let isAnticipated = false;
 
     if (gatewayConfig) {
-      const fees = await calculateFees(gatewayConfig.id, orderTotal, now);
-      feeAmount = fees.feeAmount;
-      netAmount = fees.netAmount;
-      expectedDate = fees.expectedDate;
+      // Marketplace fee — deducted at sale time. Embedded in the receivable so
+      // (a) the receivable's netAmount matches what actually hits the bank and
+      // (b) the bridge still creates a separate PAYABLE for DRE traceability
+      // without double-counting the cash flow.
+      const fees = await calculateFees(gatewayConfig.id, orderTotal, orderDate);
+      marketplaceFee = Number(fees.feeAmount || 0);
+      feeAmount = marketplaceFee;
+      netAmount = orderTotal - marketplaceFee;
+
+      // Settlement date follows the gateway's schedule (DAILY/WEEKLY/MONTHLY).
+      // MUST use the order's actual placement date — using `now` would group
+      // every order recreated today into the same upcoming settlement.
+      const settlement = calcSettlementDate(orderDate, gatewayConfig);
+      expectedDate = settlement.expectedDate;
+      isAnticipated = settlement.isAnticipated;
+
+      // Anticipation fee — only if the gateway has it enabled. Charged on top
+      // of the marketplace commission and deducted on the (earlier) settlement.
+      if (gatewayConfig.anticipationEnabled && Number(gatewayConfig.anticipationFeePercent || 0) > 0) {
+        anticipationFee = Math.round(orderTotal * Number(gatewayConfig.anticipationFeePercent) * 100) / 100;
+      }
     }
 
     // Detectar se pagamento já foi recebido (dinheiro, PIX = recebimento imediato)
@@ -84,15 +116,76 @@ export async function createFinancialEntriesForOrder(order) {
         grossAmount: orderTotal,
         feeAmount,
         netAmount,
-        paidAmount: allImmediate ? netAmount : null,
+        paidAmount: allImmediate ? netAmount : 0,
         dueDate: expectedDate,
         expectedDate,
-        paidAt: allImmediate ? now : null,
-        issueDate: now,
+        paidAt: allImmediate ? orderDate : null,
+        issueDate: orderDate,
         sourceType: 'ORDER',
         sourceId: order.id,
       },
     });
+
+    // 1b. PAYABLE — Comissão Marketplace (DRE / auditoria; sem CashFlowEntry)
+    //     Já está embutida em feeAmount/netAmount da receivable acima — esta
+    //     PAYABLE existe só para o DRE conseguir somar Deduções por categoria.
+    if (gatewayConfig && marketplaceFee > 0) {
+      const mktCC = await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, code: '2.01.1' },
+      }) || await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, code: '2.01' },
+      });
+      await prisma.financialTransaction.create({
+        data: {
+          companyId: order.companyId,
+          type: 'PAYABLE',
+          status: 'PAID',
+          description: `Comissão ${gatewayConfig.provider} - Pedido #${order.displayId || order.id.slice(0, 8)}`,
+          accountId: null,                  // sem movimento bancário (deduzido na origem)
+          costCenterId: mktCC?.id || null,
+          gatewayConfigId: gatewayConfig.id,
+          storeId: order.storeId || null,
+          grossAmount: marketplaceFee,
+          feeAmount: 0,
+          netAmount: marketplaceFee,
+          paidAmount: marketplaceFee,
+          dueDate: orderDate,
+          paidAt: orderDate,
+          issueDate: orderDate,
+          sourceType: 'MARKETPLACE_FEE',
+          sourceId: order.id,
+        },
+      });
+    }
+
+    // 1c. PAYABLE — Taxa de Antecipação (paga no dia do repasse antecipado)
+    if (gatewayConfig && anticipationFee > 0) {
+      const antecipCC = await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, code: '2.01.2' },
+      }) || await prisma.costCenter.findFirst({
+        where: { companyId: order.companyId, code: '2.01' },
+      });
+      await prisma.financialTransaction.create({
+        data: {
+          companyId: order.companyId,
+          type: 'PAYABLE',
+          status: 'CONFIRMED',
+          description: `Taxa antecipação ${gatewayConfig.provider} - Pedido #${order.displayId || order.id.slice(0, 8)}`,
+          accountId: defaultAccount?.id || null,
+          costCenterId: antecipCC?.id || null,
+          gatewayConfigId: gatewayConfig.id,
+          storeId: order.storeId || null,
+          grossAmount: anticipationFee,
+          feeAmount: 0,
+          netAmount: anticipationFee,
+          paidAmount: 0,
+          dueDate: expectedDate,
+          issueDate: orderDate,
+          sourceType: 'ANTICIPATION_FEE',
+          sourceId: order.id,
+        },
+      });
+    }
 
     // 2. Descontos — separar por sponsor
     // discountIfood: iFood paga à loja → RECEIVABLE (entra no caixa)
@@ -216,8 +309,9 @@ export async function createFinancialEntriesForOrder(order) {
 /**
  * Cria transação financeira para pagamento de motoboy.
  * Chamado quando um RiderTransaction é criado.
+ * paidNow=true: cria como PAID + CashFlowEntry + atualiza saldo da conta (usado no endpoint de pagamento).
  */
-export async function createFinancialEntryForRider(riderTransaction, companyId, accountId) {
+export async function createFinancialEntryForRider(riderTransaction, companyId, accountId, { paidNow = false } = {}) {
   try {
     const existing = await prisma.financialTransaction.findFirst({
       where: { companyId, sourceType: 'RIDER', sourceId: riderTransaction.id },
@@ -236,23 +330,67 @@ export async function createFinancialEntryForRider(riderTransaction, companyId, 
       where: { companyId, dreGroup: 'OPEX', code: { contains: '4.05' } },
     });
 
-    await prisma.financialTransaction.create({
-      data: {
-        companyId,
-        type: 'PAYABLE',
-        status: 'CONFIRMED',
-        description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
-        accountId: resolvedAccountId,
-        costCenterId: opexCC?.id || null,
-        grossAmount: Math.abs(Number(riderTransaction.amount)),
-        feeAmount: 0,
-        netAmount: Math.abs(Number(riderTransaction.amount)),
-        dueDate: new Date(riderTransaction.date),
-        issueDate: new Date(riderTransaction.date),
-        sourceType: 'RIDER',
-        sourceId: riderTransaction.id,
-      },
-    });
+    const amount = Math.abs(Number(riderTransaction.amount));
+    const now = new Date();
+
+    if (paidNow && resolvedAccountId) {
+      await prisma.$transaction(async (tx) => {
+        const ft = await tx.financialTransaction.create({
+          data: {
+            companyId,
+            type: 'PAYABLE',
+            status: 'PAID',
+            description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
+            accountId: resolvedAccountId,
+            costCenterId: opexCC?.id || null,
+            grossAmount: amount,
+            feeAmount: 0,
+            netAmount: amount,
+            paidAmount: amount,
+            paidAt: now,
+            dueDate: new Date(riderTransaction.date),
+            issueDate: new Date(riderTransaction.date),
+            sourceType: 'RIDER',
+            sourceId: riderTransaction.id,
+          },
+        });
+
+        const account = await tx.financialAccount.update({
+          where: { id: resolvedAccountId },
+          data: { currentBalance: { decrement: amount } },
+        });
+
+        await tx.cashFlowEntry.create({
+          data: {
+            companyId,
+            accountId: resolvedAccountId,
+            transactionId: ft.id,
+            type: 'OUTFLOW',
+            amount,
+            balanceAfter: account.currentBalance,
+            description: `Pagamento motoboy: ${riderTransaction.note || ''}`,
+          },
+        });
+      });
+    } else {
+      await prisma.financialTransaction.create({
+        data: {
+          companyId,
+          type: 'PAYABLE',
+          status: 'CONFIRMED',
+          description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
+          accountId: resolvedAccountId,
+          costCenterId: opexCC?.id || null,
+          grossAmount: amount,
+          feeAmount: 0,
+          netAmount: amount,
+          dueDate: new Date(riderTransaction.date),
+          issueDate: new Date(riderTransaction.date),
+          sourceType: 'RIDER',
+          sourceId: riderTransaction.id,
+        },
+      });
+    }
   } catch (e) {
     console.error('createFinancialEntryForRider error:', e);
   }
@@ -302,4 +440,146 @@ export async function createFinancialEntryForAffiliate(affiliatePayment, company
   } catch (e) {
     console.error('createFinancialEntryForAffiliate error:', e);
   }
+}
+
+/**
+ * Recreates the marketplace transactions for a single order.
+ *
+ * Deletes any FinancialTransaction with sourceType in
+ * (ORDER, MARKETPLACE_FEE, ANTICIPATION_FEE, ORDER_FEE, COUPON) tied to the
+ * order, then runs the bridge again so the entries follow the current model
+ * (gross receivable + separate marketplace + anticipation PAYABLEs, with the
+ * gateway's settlement schedule).
+ *
+ * Skips orders whose receivable is already settled (status PAID with a
+ * paidAt timestamp) — those represent real cash that already moved.
+ *
+ * Returns { deleted, recreated:boolean, skipped?:string }.
+ */
+export async function recreateFinancialEntriesForOrder(orderId) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
+  if (!order) return { deleted: 0, recreated: false, skipped: 'order_not_found' };
+  // CONCLUIDO → recreate normalmente.
+  // CANCELADO  → apenas apaga os lançamentos sem recriar (aborta fluxo abaixo).
+  // outros     → ignora.
+  if (order.status !== 'CONCLUIDO' && order.status !== 'CANCELADO') {
+    return { deleted: 0, recreated: false, skipped: 'invalid_status' };
+  }
+
+  const linkedTypes = ['ORDER', 'MARKETPLACE_FEE', 'ANTICIPATION_FEE', 'ORDER_FEE', 'COUPON'];
+  const settled = await prisma.financialTransaction.findFirst({
+    where: {
+      companyId: order.companyId,
+      sourceType: 'ORDER',
+      sourceId: order.id,
+      status: 'PAID',
+      paidAt: { not: null },
+    },
+  });
+  if (settled) return { deleted: 0, recreated: false, skipped: 'already_settled' };
+
+  // Look up all transactions about to be deleted so we can null out the FK
+  // on CashFlowEntry first (the relation has no onDelete cascade and Postgres
+  // refuses the delete otherwise).
+  const txs = await prisma.financialTransaction.findMany({
+    where: {
+      companyId: order.companyId,
+      sourceId: order.id,
+      sourceType: { in: linkedTypes },
+    },
+    select: { id: true },
+  });
+  const txIds = txs.map((t) => t.id);
+
+  let del = { count: 0 };
+  await prisma.$transaction(async (tx) => {
+    if (txIds.length > 0) {
+      await tx.cashFlowEntry.updateMany({
+        where: { transactionId: { in: txIds } },
+        data: { transactionId: null },
+      });
+    }
+    del = await tx.financialTransaction.deleteMany({
+      where: {
+        companyId: order.companyId,
+        sourceId: order.id,
+        sourceType: { in: linkedTypes },
+      },
+    });
+  });
+
+  // CANCELADO: só limpa, não recria. Assim a tela de repasses não inclui
+  // pedidos cancelados nas somas pendentes.
+  if (order.status === 'CANCELADO') {
+    return { deleted: del.count, recreated: false, skipped: 'canceled' };
+  }
+
+  await createFinancialEntriesForOrder(order);
+  return { deleted: del.count, recreated: true };
+}
+
+/**
+ * Bulk version: recreates entries for every CONCLUIDO order of a gateway
+ * provider in a date range. Used by the "Recriar lançamentos iFood" button
+ * after the merchant changes the gateway configuration.
+ */
+export async function recreateFinancialEntriesForProvider({ companyId, provider, from, to, onProgress }) {
+  // Inclui CANCELADO no batch para que pedidos antes-CONCLUIDO-agora-cancelados
+  // tenham as receivables removidas (recreateFinancialEntriesForOrder pula a
+  // criação quando status=CANCELADO mas executa o delete).
+  const where = { companyId, status: { in: ['CONCLUIDO', 'CANCELADO'] } };
+  if (provider === 'IFOOD') {
+    // Robust detection: orders may have customerSource null when created via
+    // the modern ifoodWebhookProcessor. Match on any iFood signal.
+    where.OR = [
+      { customerSource: 'IFOOD' },
+      { externalId: { not: null } },
+    ];
+  }
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = new Date(from);
+    if (to) where.createdAt.lte = new Date(to);
+  }
+  // Backfill customerSource on legacy iFood orders that lack it (so future
+  // queries can use the simple customerSource filter).
+  if (provider === 'IFOOD') {
+    await prisma.order.updateMany({
+      where: { companyId, externalId: { not: null }, customerSource: null },
+      data: { customerSource: 'IFOOD' },
+    }).catch(() => {});
+  }
+
+  const orders = await prisma.order.findMany({ where, select: { id: true } });
+  console.log(`[recreateFinancialEntries] starting batch for provider=${provider}, ${orders.length} order(s)`);
+  let recreated = 0, skipped = 0, deleted = 0, failed = 0;
+  const errors = [];
+  const startTime = Date.now();
+  for (let i = 0; i < orders.length; i++) {
+    const o = orders[i];
+    try {
+      const r = await recreateFinancialEntriesForOrder(o.id);
+      if (r.recreated) { recreated++; deleted += r.deleted; }
+      else skipped++;
+    } catch (e) {
+      failed++;
+      const msg = e?.message || String(e);
+      console.error(`[recreateFinancialEntries] order ${o.id} failed:`, msg);
+      if (errors.length < 5) errors.push({ orderId: o.id, error: msg });
+    }
+    if (typeof onProgress === 'function') {
+      try { onProgress({ processed: i + 1, recreated, skipped, failed, deletedTransactions: deleted, errors }); }
+      catch (_) { /* ignore */ }
+    }
+    if ((i + 1) % 50 === 0) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[recreateFinancialEntries] progress ${i + 1}/${orders.length} (${elapsed}s) — ok:${recreated} skip:${skipped} fail:${failed}`);
+    }
+  }
+  const total = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[recreateFinancialEntries] done in ${total}s — recreated:${recreated} skipped:${skipped} failed:${failed}`);
+  return { totalOrders: orders.length, recreated, skipped, failed, deletedTransactions: deleted, errors };
 }

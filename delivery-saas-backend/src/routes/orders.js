@@ -1144,7 +1144,8 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const companyId = req.user.companyId;
   try {
     // Aceitar tanto `type` (legado) quanto `orderType` (frontend atual)
-    const { items = [], address: _rawAddress = {}, coupon, payment, type: _type, orderType: _orderType, customerPhone, customerName, requestedStoreId, discountMerchant: _discountMerchant, additionalFees: _additionalFees } = req.body || {};
+    const { items = [], address: _rawAddress = {}, coupon, payment, type: _type, orderType: _orderType, customerPhone, customerName, requestedStoreId, discountMerchant: _discountMerchant, additionalFees: _additionalFees, appliedCashback: _appliedCashback } = req.body || {};
+    const appliedCashbackAmt = Math.max(0, Number(_appliedCashback || 0));
     const type = _type || _orderType;
     // address pode chegar como objeto {street,number,...} ou como string formatada (finalize envia string quando persiste no cliente)
     const address = typeof _rawAddress === 'string'
@@ -1227,7 +1228,7 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
     }
 
     const discountMerchantAmt = Number(_discountMerchant || 0);
-    const computedTotal = Math.max(0, subtotal - couponDiscount - discountMerchantAmt) + Number(deliveryFee || 0);
+    const computedTotal = Math.max(0, subtotal - couponDiscount - discountMerchantAmt - appliedCashbackAmt) + Number(deliveryFee || 0);
 
     // Prefer payment amount when provided by PDV client as authoritative total.
     // Accept 0 only when computedTotal is also 0 (genuine zero-value/bonification order).
@@ -1323,7 +1324,8 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
           delivery: normalizedDelivery ? { deliveryAddress: normalizedDelivery } : (address && Object.keys(address).length ? { deliveryAddress: normalizeDeliveryAddressFromPayload({ delivery: { deliveryAddress: address } }) } : undefined),
           // persist computed and chosen totals for clarity
           computedTotal: computedTotal,
-          total: total
+          total: total,
+          appliedCashback: appliedCashbackAmt > 0 ? appliedCashbackAmt : 0,
         },
         items: {
           create: cleanItems.map(it => ({ ...(it.productId ? { productId: it.productId } : {}), name: it.name, quantity: it.quantity, price: it.price, notes: it.notes, options: it.options || null }))
@@ -1332,6 +1334,32 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       },
       include: { items: true, histories: true }
     });
+
+    // If the PDV order included applied cashback, debit the customer wallet.
+    // Best-effort: failures are logged but do not block order creation.
+    if (appliedCashbackAmt > 0) {
+      try {
+        const clientId = persistedCustomer ? persistedCustomer.id : null;
+        if (clientId) {
+          const cbSettings = await cashbackSvc.getSettings(companyId);
+          const minRedeem = Number(cbSettings?.minRedeemValue || 0);
+          const wallet = await cashbackSvc.getOrCreateWallet(companyId, clientId);
+          const balance = Number(wallet.balance || 0);
+          if (minRedeem > 0 && balance < minRedeem) {
+            console.warn('[orders.create] cashback debit skipped: balance', balance, '< minRedeemValue', minRedeem, 'for order', created.id);
+          } else if (balance < appliedCashbackAmt) {
+            console.warn('[orders.create] cashback debit skipped: balance', balance, '< applied', appliedCashbackAmt, 'for order', created.id);
+          } else {
+            await cashbackSvc.debitWallet(companyId, clientId, appliedCashbackAmt, created.id, 'Uso de cashback no PDV');
+            console.log('[orders.create] cashback debited', { orderId: created.id, clientId, amount: appliedCashbackAmt });
+          }
+        } else {
+          console.log('[orders.create] no clientId — skipping cashback debit for order', created.id);
+        }
+      } catch (e) {
+        console.warn('[orders.create] cashback debit failed for order', created.id, e?.message || e);
+      }
+    }
 
     // Check if there's an open cash session — mark outOfSession if not
     try {

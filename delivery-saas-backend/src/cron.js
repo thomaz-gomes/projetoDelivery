@@ -9,6 +9,7 @@ import { resetAllDueCredits } from './services/aiCreditManager.js'
 import { prisma } from './prisma.js'
 import { runRecurringBilling } from './jobs/recurringBilling.js'
 import { aggregateMenuEvents } from './jobs/aggregateMenuEvents.js'
+import { generateRecurringExpenses } from './jobs/generateRecurringExpenses.js'
 
 /**
  * Reset mensal de créditos de IA: toda empresa tem seus créditos restaurados
@@ -126,4 +127,20 @@ cron.schedule('*/30 * * * *', async () => {
   }
 });
 
-console.log('[Cron] Tarefas agendadas registradas (reset de créditos IA: dia 1 de cada mês; domínios vencidos: diário às 01:00; cobrança recorrente: diário às 06:00 UTC; agregação eventos menu: diário às 02:30; auto-checkout entregadores: a cada 30 min)')
+/**
+ * Despesas recorrentes: gera lançamentos financeiros para templates com
+ * vencimento nos próximos 3 dias. Executa no startup e diariamente às 09:00 UTC (06:00 BRT).
+ */
+generateRecurringExpenses().catch(console.error);
+
+cron.schedule('0 9 * * *', async () => {
+  console.log('[Cron] Gerando lançamentos de despesas recorrentes...')
+  try {
+    const n = await generateRecurringExpenses()
+    console.log(`[Cron] Despesas recorrentes: ${n} lançamento(s) gerado(s)`)
+  } catch (err) {
+    console.error('[Cron] Erro ao gerar despesas recorrentes:', err)
+  }
+})
+
+console.log('[Cron] Tarefas agendadas registradas (reset de créditos IA: dia 1 de cada mês; domínios vencidos: diário às 01:00; cobrança recorrente: diário às 06:00 UTC; agregação eventos menu: diário às 02:30; auto-checkout entregadores: a cada 30 min; despesas recorrentes: startup + diário às 09:00 UTC)')

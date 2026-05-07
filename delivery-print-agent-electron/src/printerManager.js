@@ -22,6 +22,8 @@ function init(printers) {
 /**
  * Retorna as impressoras que devem receber o pedido.
  * Regras:
+ *  - fiscal: true → rota exclusivamente para impressoras com fiscal:true;
+ *                   se nenhuma configurada, cai no fluxo normal
  *  - "all"  → recebe qualquer pedido
  *  - categorias do item → impressora recebe se tiver ao menos 1 categoria em comum
  *
@@ -29,6 +31,15 @@ function init(printers) {
  * @returns {PrinterConfig[]}
  */
 function getTargetPrinters(order) {
+  if (order.fiscal === true || order.fiscal === 'true') {
+    const fiscalPrinters = _printers.filter(p => p.enabled && p.fiscal === true);
+    if (fiscalPrinters.length > 0) return fiscalPrinters;
+    // Fallback: impressoras com categoria "all" quando nenhuma fiscal configurada
+    const allPrinters = _printers.filter(p => p.enabled && p.categories && p.categories.includes('all'));
+    if (allPrinters.length > 0) return allPrinters;
+    return _printers.filter(p => p.enabled);
+  }
+
   const orderCategories = _extractCategories(order);
 
   return _printers.filter((p) => {

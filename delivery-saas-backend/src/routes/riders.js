@@ -1673,8 +1673,8 @@ ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => 
   const note = `Pagamento do período ${from || '-'} → ${to || '-'}`;
   const paymentTx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: -Math.abs(sum), type: 'MANUAL_ADJUSTMENT', date: new Date(), note });
 
-  // Bridge: registrar no módulo financeiro
-  try { await createFinancialEntryForRider(paymentTx, companyId, accountId || null); } catch (e) { console.warn('Financial bridge rider payment error:', e?.message); }
+  // Bridge: registrar no módulo financeiro como PAGO (com CashFlowEntry e atualização de saldo)
+  try { await createFinancialEntryForRider(paymentTx, companyId, accountId || null, { paidNow: true }); } catch (e) { console.warn('Financial bridge rider payment error:', e?.message); }
 
   return res.json({ ok: true, message: 'Pagamento registrado', total: sum, tx: paymentTx });
 });

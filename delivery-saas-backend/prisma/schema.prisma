@@ -98,6 +98,7 @@ model Company {
   financialTransactions FinancialTransaction[]
   cashFlowEntries       CashFlowEntry[]
   ofxImports            OfxImport[]
+  recurringExpenses     RecurringExpense[]
 
   payablePaymentMethods PayablePaymentMethod[]
   financialBridgeLogs   FinancialBridgeLog[]
@@ -159,8 +160,12 @@ model Company {
   // ---- Order notification templates ----
   // JSON map of OrderStatus -> WhatsApp message template string.
   // Variables: {{nome}}, {{loja}}, {{status}}, {{pedido}}.
-  // Absent key = use built-in default. Empty string = do not send for that status.
+  // Absent key = use built-in default.
+  // Includes RIDER_ASSIGNED key for the rider notification template.
   orderNotifyTemplates Json?
+  // JSON array of notification keys that should NOT be sent.
+  // Example: ["EM_PREPARO", "RIDER_ASSIGNED"]
+  orderNotifyDisabled  Json?
 }
 
 model User {
@@ -1768,6 +1773,7 @@ model Supplier {
 
   purchaseImports       PurchaseImport[]
   financialTransactions FinancialTransaction[]
+  recurringExpenses     RecurringExpense[]
 
   @@unique([companyId, cnpj])
   @@index([companyId])
@@ -1862,6 +1868,7 @@ model FinancialAccount {
   ofxImports            OfxImport[]
   cashMovements         CashMovement[]
   payablePaymentMethods PayablePaymentMethod[]
+  recurringExpenses     RecurringExpense[]
 
   @@unique([companyId, name], name: "company_fin_account_name")
   @@index([companyId], name: "idx_fin_account_company")
@@ -1879,14 +1886,42 @@ model CostCenter {
   children  CostCenter[] @relation("CostCenterParent")
   // DRE classification: REVENUE, COGS, OPEX, TAX, OTHER
   dreGroup  String? // Grupo no DRE (receita bruta, deduções, CMV, despesas operacionais, etc.)
+  natureza    String?   // "FIXA" | "VARIAVEL" | null
   isActive  Boolean      @default(true)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  transactions FinancialTransaction[]
+  transactions      FinancialTransaction[]
+  recurringExpenses RecurringExpense[]
 
   @@unique([companyId, code], name: "company_costcenter_code")
   @@index([companyId], name: "idx_costcenter_company")
+}
+
+// ---- Despesas Recorrentes (contas fixas, mensalidades, etc.) ----
+model RecurringExpense {
+  id              String            @id @default(uuid())
+  companyId       String
+  company         Company           @relation(fields: [companyId], references: [id])
+  description     String
+  grossAmount     Decimal           @db.Decimal(10, 2)
+  accountId       String?
+  account         FinancialAccount? @relation(fields: [accountId], references: [id])
+  costCenterId    String?
+  costCenter      CostCenter?       @relation(fields: [costCenterId], references: [id])
+  supplierId      String?
+  supplier        Supplier?         @relation(fields: [supplierId], references: [id])
+  recurrence      String           // "MONTHLY" | "BIWEEKLY" | "WEEKLY" | "QUARTERLY" | "ANNUAL"
+  dayOfMonth      Int?
+  notes           String?
+  isActive        Boolean           @default(true)
+  lastGeneratedAt DateTime?
+  nextDueDate     DateTime
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([companyId, isActive], name: "idx_recurring_company_active")
+  @@index([companyId, nextDueDate], name: "idx_recurring_company_due")
 }
 
 // ---- Configurações de Taxas de Gateways / Operadoras / Marketplaces ----
@@ -1903,10 +1938,29 @@ model PaymentGatewayConfig {
   feePercent             Decimal  @default(0)
   // Taxa fixa por transação (em R$)
   feeFixed               Decimal  @default(0)
-  // Prazo de recebimento em dias (D+N)
-  settlementDays         Int      @default(0) // Ex: 30 para iFood, 1 para PIX
-  // Antecipação automática (se habilitada, recalcular taxa)
-  anticipationFeePercent Decimal? // taxa adicional se antecipar
+  // Prazo de recebimento em dias (D+N) — usado quando settlementType='DAILY'
+  settlementDays         Int      @default(0) // Ex: 1 para PIX, 30 para card legacy
+  // Tipo de cronograma de repasse:
+  //   "DAILY"   = orderDate + settlementDays dias úteis (cartão padrão)
+  //   "WEEKLY"  = ao fim da semana (definida por periodStartDayOfWeek + 6 dias),
+  //               crédito no próximo settlementDayOfWeek
+  //   "MONTHLY" = orderDate + settlementMonthlyDelay dias, depois próximo
+  //               settlementDayOfWeek
+  settlementType         String?  // DAILY | WEEKLY | MONTHLY
+  // 0=domingo, 1=seg, 2=ter, 3=qua, 4=qui, 5=sex, 6=sab — usado em WEEKLY/MONTHLY
+  settlementDayOfWeek    Int?
+  // Início do período semanal (default 1 = segunda) — usado em WEEKLY
+  periodStartDayOfWeek   Int?
+  // Atraso em dias antes de procurar o settlementDayOfWeek — usado em MONTHLY (típico 30)
+  settlementMonthlyDelay Int?
+  // Antecipação automática: quando true, todo lançamento gera uma PAYABLE adicional
+  // de "Taxa Antecipação" (anticipationFeePercent sobre o bruto) e o expectedDate
+  // da receivable usa anticipationDays no lugar da regra normal.
+  anticipationEnabled    Boolean  @default(false)
+  // Taxa adicional de antecipação (decimal: 0.02 = 2% sobre o bruto)
+  anticipationFeePercent Decimal?
+  // Dias após a venda quando o repasse antecipado entra (típico 1 = D+1 útil)
+  anticipationDays       Int?
   // Regras adicionais em JSON (faixas de volume, taxa mínima, etc.)
   rules                  Json?
   isActive               Boolean  @default(true)

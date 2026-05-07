@@ -306,6 +306,7 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     externalId: mapped.externalId,
     displayId: mapped.displayId,
     status: mapped.status,
+    customerSource: 'IFOOD',                  // marca como pedido vindo do iFood (p/ bridge financeiro / DRE)
     customerName: mapped.customerName,
     customerId: mapped.customerId || null,
     customerPhone: mapped.customerPhone,

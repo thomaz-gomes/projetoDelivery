@@ -90,8 +90,20 @@
                   <input v-model="form.title" type="text" class="form-control" placeholder="ex: Saudação" required />
                 </div>
                 <div>
-                  <label class="form-label">Mensagem <span class="text-muted small">(opcional se tiver anexo)</span></label>
-                  <textarea v-model="form.body" class="form-control" rows="4" placeholder="Texto da resposta..."></textarea>
+                  <label class="form-label d-flex align-items-center justify-content-between">
+                    <span>Mensagem <span class="text-muted small">(opcional se tiver anexo)</span></span>
+                  </label>
+                  <textarea ref="bodyTextarea" v-model="form.body" class="form-control" rows="4" placeholder="Texto da resposta..."></textarea>
+                  <div class="d-flex flex-wrap gap-1 mt-1">
+                    <small class="text-muted me-1 align-self-center">Inserir variável:</small>
+                    <button v-for="v in VARIABLES" :key="v.token" type="button"
+                      class="btn btn-sm btn-outline-secondary py-0 px-2"
+                      style="font-size: 0.72rem;"
+                      :title="v.label"
+                      @click="insertVariable(v.token)">
+                      {{ v.display }}
+                    </button>
+                  </div>
                 </div>
 
                 <!-- Attachment -->
@@ -140,7 +152,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import { API_URL } from '@/config';
 import Swal from 'sweetalert2';
@@ -152,6 +164,34 @@ const saving = ref(false);
 const editingId = ref(null);
 const selectedFile = ref(null);
 const assetBase = API_URL;
+const bodyTextarea = ref(null);
+
+// Variables that the backend resolves before sending (see utils/quickReplyVars.js).
+// `display` is precomputed in JS to avoid Vue's template parser closing the
+// outer interpolation when it sees the inner '}}' inside the string literal.
+const VARIABLES = [
+  { token: 'nome',     label: 'Nome do cliente',   display: '{{nome}}' },
+  { token: 'cashback', label: 'Saldo de cashback', display: '{{cashback}}' },
+  { token: 'endereco', label: 'Endereço padrão',   display: '{{endereco}}' },
+];
+
+function insertVariable(token) {
+  const placeholder = `{{${token}}}`;
+  const ta = bodyTextarea.value;
+  const current = form.value.body || '';
+  if (ta && typeof ta.selectionStart === 'number') {
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    form.value.body = current.slice(0, start) + placeholder + current.slice(end);
+    nextTick(() => {
+      ta.focus();
+      const pos = start + placeholder.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  } else {
+    form.value.body = current + placeholder;
+  }
+}
 
 const form = ref({
   useShortcut: false,

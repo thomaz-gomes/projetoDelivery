@@ -1,0 +1,405 @@
+import express from 'express';
+import { randomUUID } from 'crypto';
+import { prisma } from '../../prisma.js';
+import { recreateFinancialEntriesForProvider } from '../../services/financial/orderFinancialBridge.js';
+
+const router = express.Router();
+
+// In-memory job tracking for background "recreate marketplace settlements".
+// Mirror of the customers/import job pattern — frontend polls /:jobId/status.
+// Auto-cleanup after 10 minutes.
+const recreateJobs = new Map();
+function cleanupRecreateJob(jobId) {
+  setTimeout(() => recreateJobs.delete(jobId), 10 * 60 * 1000);
+}
+
+/**
+ * GET /financial/settlements/pending?gatewayConfigId=xxx&from=YYYY-MM-DD&to=YYYY-MM-DD
+ *
+ * Lists pending marketplace repasses, grouped by (gatewayConfigId, expectedDate).
+ * Each group bundles all RECEIVABLE rows of the same provider that fall on the
+ * same settlement day, plus the matching ANTICIPATION_FEE PAYABLEs.
+ *
+ * Response shape:
+ *   [
+ *     {
+ *       expectedDate: "2026-05-13",
+ *       gatewayConfigId, gatewayProvider, gatewayLabel,
+ *       totalReceivable: 5280.00,
+ *       totalAnticipation: 0,
+ *       expectedNet: 5280.00,           // = receivable - anticipation
+ *       receivableCount: 12,
+ *       receivableIds: [...], anticipationIds: [...],
+ *     }
+ *   ]
+ */
+router.get('/pending', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { gatewayConfigId, from, to } = req.query;
+
+    const dateRange = {};
+    if (from) dateRange.gte = new Date(from);
+    if (to) dateRange.lte = new Date(to);
+
+    const baseWhere = {
+      companyId,
+      status: { in: ['CONFIRMED', 'PENDING'] },
+      ...(gatewayConfigId ? { gatewayConfigId: String(gatewayConfigId) } : { gatewayConfigId: { not: null } }),
+      ...(Object.keys(dateRange).length ? { expectedDate: dateRange } : {}),
+    };
+
+    const [receivables, anticipations] = await Promise.all([
+      prisma.financialTransaction.findMany({
+        where: { ...baseWhere, type: 'RECEIVABLE', sourceType: 'ORDER' },
+        select: {
+          id: true, expectedDate: true, gatewayConfigId: true,
+          grossAmount: true, feeAmount: true, netAmount: true,
+          gatewayConfig: { select: { provider: true, label: true } },
+        },
+      }),
+      prisma.financialTransaction.findMany({
+        where: { ...baseWhere, type: 'PAYABLE', sourceType: 'ANTICIPATION_FEE', dueDate: dateRange.gte || dateRange.lte ? dateRange : undefined },
+        select: { id: true, dueDate: true, gatewayConfigId: true, netAmount: true },
+      }),
+    ]);
+
+    const groups = new Map();
+    const keyOf = (configId, date) => `${configId}|${new Date(date).toISOString().slice(0, 10)}`;
+
+    for (const r of receivables) {
+      const key = keyOf(r.gatewayConfigId, r.expectedDate);
+      const g = groups.get(key) || {
+        expectedDate: new Date(r.expectedDate).toISOString().slice(0, 10),
+        gatewayConfigId: r.gatewayConfigId,
+        gatewayProvider: r.gatewayConfig?.provider || null,
+        gatewayLabel: r.gatewayConfig?.label || null,
+        totalGross: 0,            // soma do bruto (orderTotal)
+        totalMarketplaceFee: 0,   // soma das comissões já deduzidas na origem
+        totalReceivable: 0,       // soma do netAmount (= o que cai no banco)
+        totalAnticipation: 0,
+        expectedNet: 0,
+        receivableCount: 0,
+        receivableIds: [],
+        anticipationIds: [],
+      };
+      g.totalGross += Number(r.grossAmount);
+      g.totalMarketplaceFee += Number(r.feeAmount);
+      g.totalReceivable += Number(r.netAmount);
+      g.receivableCount += 1;
+      g.receivableIds.push(r.id);
+      groups.set(key, g);
+    }
+    for (const a of anticipations) {
+      const key = keyOf(a.gatewayConfigId, a.dueDate);
+      const g = groups.get(key);
+      if (!g) continue; // antecipação sem receivable correspondente — ignora
+      g.totalAnticipation += Number(a.netAmount);
+      g.anticipationIds.push(a.id);
+    }
+    for (const g of groups.values()) {
+      g.expectedNet = Math.round((g.totalReceivable - g.totalAnticipation) * 100) / 100;
+      g.totalGross = Math.round(g.totalGross * 100) / 100;
+      g.totalMarketplaceFee = Math.round(g.totalMarketplaceFee * 100) / 100;
+      g.totalReceivable = Math.round(g.totalReceivable * 100) / 100;
+      g.totalAnticipation = Math.round(g.totalAnticipation * 100) / 100;
+    }
+
+    const out = Array.from(groups.values()).sort((a, b) => a.expectedDate.localeCompare(b.expectedDate));
+    res.json(out);
+  } catch (e) {
+    console.error('GET /financial/settlements/pending error:', e);
+    res.status(500).json({ message: 'Erro ao listar repasses', error: e?.message });
+  }
+});
+
+/**
+ * POST /financial/settlements/reconcile
+ * Body: {
+ *   expectedDate: "2026-05-13",
+ *   gatewayConfigId: "...",
+ *   actualAmount: 5278.50,    // what actually hit the bank
+ *   accountId: "...",         // bank account that received
+ *   paidAt?: "2026-05-13"     // optional override
+ * }
+ *
+ * Atomically:
+ *  1. Marks every RECEIVABLE in the group as PAID (paidAt, paidAmount).
+ *  2. Marks every ANTICIPATION_FEE PAYABLE in the group as PAID.
+ *  3. Updates the bank account balance by `actualAmount`.
+ *  4. Creates a single CashFlowEntry of `actualAmount`.
+ *  5. If actualAmount differs from expectedNet, creates an adjustment
+ *     transaction so the books reconcile.
+ */
+router.post('/reconcile', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { expectedDate, gatewayConfigId, actualAmount, accountId, paidAt } = req.body || {};
+    if (!expectedDate || !gatewayConfigId || actualAmount == null || !accountId) {
+      return res.status(400).json({ message: 'expectedDate, gatewayConfigId, actualAmount e accountId são obrigatórios' });
+    }
+    const settledAt = paidAt ? new Date(paidAt) : new Date(expectedDate);
+    const dayStart = new Date(`${expectedDate}T00:00:00.000Z`);
+    const dayEnd = new Date(`${expectedDate}T23:59:59.999Z`);
+    const amount = Number(actualAmount);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const receivables = await tx.financialTransaction.findMany({
+        where: {
+          companyId, gatewayConfigId, type: 'RECEIVABLE', sourceType: 'ORDER',
+          status: { in: ['CONFIRMED', 'PENDING'] },
+          expectedDate: { gte: dayStart, lte: dayEnd },
+        },
+      });
+      const anticipations = await tx.financialTransaction.findMany({
+        where: {
+          companyId, gatewayConfigId, type: 'PAYABLE', sourceType: 'ANTICIPATION_FEE',
+          status: { in: ['CONFIRMED', 'PENDING'] },
+          dueDate: { gte: dayStart, lte: dayEnd },
+        },
+      });
+      if (receivables.length === 0) throw new Error('Nenhuma receivable pendente neste repasse');
+
+      const totalReceivable = receivables.reduce((s, r) => s + Number(r.netAmount), 0);
+      const totalAnticipation = anticipations.reduce((s, a) => s + Number(a.netAmount), 0);
+      const expectedNet = Math.round((totalReceivable - totalAnticipation) * 100) / 100;
+
+      for (const r of receivables) {
+        await tx.financialTransaction.update({
+          where: { id: r.id },
+          data: { status: 'PAID', paidAt: settledAt, paidAmount: Number(r.netAmount), accountId },
+        });
+      }
+      for (const a of anticipations) {
+        await tx.financialTransaction.update({
+          where: { id: a.id },
+          data: { status: 'PAID', paidAt: settledAt, paidAmount: Number(a.netAmount), accountId },
+        });
+      }
+
+      // Update bank balance and create one consolidated CashFlowEntry
+      const account = await tx.financialAccount.update({
+        where: { id: accountId },
+        data: { currentBalance: { increment: amount } },
+      });
+      await tx.cashFlowEntry.create({
+        data: {
+          companyId,
+          accountId,
+          type: 'INFLOW',
+          amount,
+          balanceAfter: account.currentBalance,
+          description: `Repasse marketplace ${expectedDate} (${receivables.length} venda(s))`,
+        },
+      });
+
+      const diff = Math.round((amount - expectedNet) * 100) / 100;
+      let adjustmentId = null;
+      if (Math.abs(diff) >= 0.01) {
+        const adj = await tx.financialTransaction.create({
+          data: {
+            companyId,
+            type: diff > 0 ? 'RECEIVABLE' : 'PAYABLE',
+            status: 'PAID',
+            description: `Diferença de repasse marketplace ${expectedDate}`,
+            accountId,
+            grossAmount: Math.abs(diff),
+            feeAmount: 0,
+            netAmount: Math.abs(diff),
+            paidAmount: Math.abs(diff),
+            dueDate: settledAt,
+            paidAt: settledAt,
+            issueDate: settledAt,
+            sourceType: 'SETTLEMENT_ADJUSTMENT',
+            sourceId: gatewayConfigId,
+          },
+        });
+        adjustmentId = adj.id;
+      }
+
+      return {
+        receivablesSettled: receivables.length,
+        anticipationsSettled: anticipations.length,
+        expectedNet,
+        actualAmount: amount,
+        difference: diff,
+        adjustmentId,
+      };
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error('POST /financial/settlements/reconcile error:', e);
+    res.status(500).json({ message: 'Erro ao conciliar repasse', error: e?.message });
+  }
+});
+
+/**
+ * GET /financial/settlements/history?provider=IFOOD&from=YYYY-MM-DD&to=YYYY-MM-DD
+ *
+ * Lists past settlements (already reconciled). Groups paid receivables by
+ * (gatewayConfigId, paidAt date) so the dashboard can show "previous repasses
+ * with date and amount" alongside the upcoming one.
+ */
+router.get('/history', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { provider, gatewayConfigId, from, to } = req.query;
+
+    const dateRange = {};
+    if (from) dateRange.gte = new Date(from);
+    if (to) {
+      // include the entire 'to' day
+      const toEnd = new Date(to);
+      toEnd.setHours(23, 59, 59, 999);
+      dateRange.lte = toEnd;
+    }
+
+    const where = {
+      companyId,
+      type: 'RECEIVABLE',
+      sourceType: 'ORDER',
+      status: 'PAID',
+      paidAt: { not: null, ...dateRange },
+      gatewayConfigId: { not: null },
+    };
+    if (gatewayConfigId) where.gatewayConfigId = String(gatewayConfigId);
+
+    const receivables = await prisma.financialTransaction.findMany({
+      where,
+      select: {
+        id: true, paidAt: true, netAmount: true, gatewayConfigId: true,
+        gatewayConfig: { select: { provider: true, label: true } },
+      },
+      orderBy: { paidAt: 'desc' },
+    });
+
+    const filtered = provider
+      ? receivables.filter((r) => r.gatewayConfig?.provider === String(provider).toUpperCase())
+      : receivables;
+
+    const groups = new Map();
+    const keyOf = (configId, date) => `${configId}|${new Date(date).toISOString().slice(0, 10)}`;
+    for (const r of filtered) {
+      const k = keyOf(r.gatewayConfigId, r.paidAt);
+      const g = groups.get(k) || {
+        paidAt: new Date(r.paidAt).toISOString().slice(0, 10),
+        gatewayConfigId: r.gatewayConfigId,
+        gatewayProvider: r.gatewayConfig?.provider || null,
+        gatewayLabel: r.gatewayConfig?.label || null,
+        totalReceivable: 0,
+        receivableCount: 0,
+      };
+      g.totalReceivable += Number(r.netAmount);
+      g.receivableCount += 1;
+      groups.set(k, g);
+    }
+
+    // Pull anticipation fees actually paid on those same days/configs to compute the net
+    const antecipations = await prisma.financialTransaction.findMany({
+      where: {
+        companyId, type: 'PAYABLE', sourceType: 'ANTICIPATION_FEE',
+        status: 'PAID', paidAt: { not: null, ...dateRange },
+        gatewayConfigId: provider || gatewayConfigId
+          ? (gatewayConfigId ? String(gatewayConfigId) : undefined)
+          : { not: null },
+      },
+      select: { paidAt: true, gatewayConfigId: true, netAmount: true, gatewayConfig: { select: { provider: true } } },
+    });
+    for (const a of antecipations) {
+      if (provider && a.gatewayConfig?.provider !== String(provider).toUpperCase()) continue;
+      const k = keyOf(a.gatewayConfigId, a.paidAt);
+      const g = groups.get(k);
+      if (!g) continue;
+      g.totalAnticipation = (g.totalAnticipation || 0) + Number(a.netAmount);
+    }
+    for (const g of groups.values()) {
+      g.totalAnticipation = Math.round((g.totalAnticipation || 0) * 100) / 100;
+      g.totalReceivable = Math.round(g.totalReceivable * 100) / 100;
+      g.actualNet = Math.round((g.totalReceivable - g.totalAnticipation) * 100) / 100;
+    }
+
+    const out = Array.from(groups.values()).sort((a, b) => b.paidAt.localeCompare(a.paidAt));
+    res.json(out);
+  } catch (e) {
+    console.error('GET /financial/settlements/history error:', e);
+    res.status(500).json({ message: 'Erro ao listar histórico de repasses', error: e?.message });
+  }
+});
+
+/**
+ * POST /financial/settlements/recreate
+ * Body: { provider: "IFOOD", from?: ISO, to?: ISO }
+ *
+ * Apaga e recria os lançamentos financeiros das vendas do provider no período,
+ * usando o modelo atual (receivable bruto + PAYABLEs separadas + datas de
+ * settlement do gateway). Pula vendas cujo recebimento já foi conciliado.
+ */
+router.post('/recreate', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { provider, from, to } = req.body || {};
+    if (!provider) return res.status(400).json({ message: 'provider é obrigatório' });
+
+    // Quick scan to know how many orders we'll iterate over (used by the
+    // progress bar and to short-circuit when there's nothing to do).
+    const where = { companyId, status: 'CONCLUIDO' };
+    if (provider === 'IFOOD') where.OR = [{ customerSource: 'IFOOD' }, { externalId: { not: null } }];
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from);
+      if (to) where.createdAt.lte = new Date(to);
+    }
+    const total = await prisma.order.count({ where });
+
+    const jobId = randomUUID();
+    recreateJobs.set(jobId, {
+      provider, total,
+      processed: 0, recreated: 0, skipped: 0, failed: 0,
+      deletedTransactions: 0, errors: [],
+      done: total === 0, error: null, startedAt: Date.now(),
+    });
+
+    if (total === 0) {
+      cleanupRecreateJob(jobId);
+      return res.json({ ok: true, jobId, total, message: 'Nenhum pedido encontrado' });
+    }
+
+    res.json({ ok: true, jobId, total });
+
+    // Run in background; report progress via the job map
+    recreateFinancialEntriesForProvider({
+      companyId, provider, from, to,
+      onProgress: (snap) => {
+        const job = recreateJobs.get(jobId);
+        if (!job) return;
+        Object.assign(job, snap);
+      },
+    })
+      .then((result) => {
+        const job = recreateJobs.get(jobId);
+        if (!job) return;
+        Object.assign(job, result, { processed: result.totalOrders, done: true });
+        cleanupRecreateJob(jobId);
+      })
+      .catch((e) => {
+        const job = recreateJobs.get(jobId);
+        if (job) { job.done = true; job.error = e?.message || String(e); }
+        console.error('[recreate background] fatal:', e?.stack || e);
+        cleanupRecreateJob(jobId);
+      });
+  } catch (e) {
+    console.error('POST /financial/settlements/recreate error:', e?.stack || e);
+    const msg = e?.message || String(e);
+    res.status(500).json({ message: `Falha ao iniciar recriação: ${msg}`, code: e?.code });
+  }
+});
+
+// GET /financial/settlements/recreate/:jobId/status — polled by the progress bar
+router.get('/recreate/:jobId/status', (req, res) => {
+  const job = recreateJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ message: 'Job não encontrado ou expirado' });
+  res.json(job);
+});
+
+export default router;

@@ -184,6 +184,17 @@
                 <span class="detail-value">{{ order.payload.nfe.xMotivo }}</span>
               </div>
             </div>
+            <div class="d-flex gap-2 flex-wrap mt-3 pt-3 border-top">
+              <button class="btn btn-sm btn-success" @click="imprimirDanfe" title="Imprimir DANFE na impressora fiscal">
+                <i class="bi bi-printer-fill me-1"></i>Imprimir DANFE
+              </button>
+              <button class="btn btn-sm btn-outline-primary" @click="sendNfeEmail" title="Enviar XML por e-mail">
+                <i class="bi bi-envelope me-1"></i>Enviar por e-mail
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" @click="downloadNfeXml" title="Baixar XML">
+                <i class="bi bi-download me-1"></i>Baixar XML
+              </button>
+            </div>
           </div>
         </div>
 
@@ -238,11 +249,21 @@
             <div class="detail-list">
               <div class="detail-row">
                 <span class="detail-label">Nome</span>
-                <span class="detail-value">{{ order.customerName || order.customer?.fullName || order.customer?.name || '—' }}</span>
+                <span class="detail-value">
+                  <router-link v-if="order.customerId" :to="`/customers/${order.customerId}`" class="text-decoration-none">
+                    {{ order.customerName || order.customer?.fullName || order.customer?.name || '—' }}
+                    <i class="bi bi-box-arrow-up-right ms-1" style="font-size:0.7rem;color:var(--text-muted)"></i>
+                  </router-link>
+                  <span v-else>{{ order.customerName || order.customer?.fullName || order.customer?.name || '—' }}</span>
+                </span>
               </div>
               <div v-if="order.customerPhone" class="detail-row">
                 <span class="detail-label">Telefone</span>
                 <span class="detail-value">{{ order.customerPhone }}</span>
+              </div>
+              <div v-if="order.customer?.email" class="detail-row">
+                <span class="detail-label">E-mail</span>
+                <span class="detail-value small">{{ order.customer.email }}</span>
               </div>
               <div v-if="order.customerId" class="detail-row">
                 <span class="detail-label">ID</span>
@@ -302,6 +323,7 @@
         </div>
 
       </div>
+
     </div>
   </div>
 </template>
@@ -318,6 +340,7 @@ const route = useRoute();
 const id = route.params.id;
 const order = ref(null);
 const vouchers = ref({ discountIfood: 0, discountMerchant: 0, voucherPayments: [], storeDiscount: 0 });
+const emitindoNfe = ref(false);
 
 function padNumber(n){ if (n == null || n === '') return null; return String(n).toString().padStart(2, '0'); }
 function formatOrderNumber(o){
@@ -326,20 +349,6 @@ function formatOrderNumber(o){
   if(o.displayId !== undefined && o.displayId !== null){ const p = padNumber(o.displayId); return p ? p : String(o.displayId); }
   if(o.number !== undefined && o.number !== null) return String(o.number);
   return o.id ? String(o.id).slice(0,6) : '';
-}
-
-function formatAddress(o){
-  if(!o) return '-';
-  const a = o.address || o.deliveryAddress || o.customerAddress || o.payload?.delivery?.deliveryAddress;
-  if(!a) return o.addressText || '-';
-  const main = a.formatted || a.formattedAddress || [a.street || a.streetName, a.number || a.streetNumber].filter(Boolean).join(', ');
-  const tail = []
-  if(a.neighborhood) tail.push(a.neighborhood)
-  if(a.complement) tail.push('Comp: ' + a.complement)
-  if(a.reference) tail.push('Ref: ' + a.reference)
-  if(a.observation) tail.push('Obs: ' + a.observation)
-  if(a.city && !tail.includes(a.city)) tail.push(a.city)
-  return [main, tail.filter(Boolean).join(' — ')].filter(Boolean).join(' | ')
 }
 
 function formatCurrency(value) {
@@ -351,7 +360,7 @@ function calculateSubtotal() {
   if (!order.value?.items) return order.value?.subtotal || 0;
   return order.value.items.reduce((sum, item) => {
     let itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
-    if (item.options && item.options.length) {
+    if (item.options?.length) {
       for (const opt of item.options) {
         itemTotal += Number(opt.price || 0) * Number(opt.quantity || 1) * Number(item.quantity || 1);
       }
@@ -470,17 +479,8 @@ function getChangeFor(o) {
          null;
 }
 
-const emitindoNfe = ref(false);
-
 async function emitirNfe() {
-  const r = await Swal.fire({
-    title: 'Emitir NF-e?',
-    text: `Pedido #${formatOrderNumber(order.value)}`,
-    icon: 'question',
-    showCancelButton: true,
-    confirmButtonText: 'Emitir',
-    cancelButtonText: 'Cancelar'
-  });
+  const r = await Swal.fire({ title: 'Emitir NF-e?', text: `Pedido #${formatOrderNumber(order.value)}`, icon: 'question', showCancelButton: true, confirmButtonText: 'Emitir', cancelButtonText: 'Cancelar' });
   if (!r.isConfirmed) return;
   emitindoNfe.value = true;
   try {
@@ -497,7 +497,6 @@ async function emitirNfe() {
     if (errData?.detail) {
       const d = errData.detail;
       if (d.httpStatus) errorText += `\nHTTP ${d.httpStatus}`;
-      if (d.url) errorText += `\nURL: ${d.url}`;
       if (d.httpData) errorText += `\nResposta: ${d.httpData.substring(0, 300)}`;
     }
     Swal.fire({ icon: 'error', title: 'Erro ao emitir NF-e', text: errorText });
@@ -506,15 +505,65 @@ async function emitirNfe() {
   }
 }
 
-async function load(){
-  try{
+async function imprimirDanfe() {
+  try {
+    const { data } = await api.post('/agent-print', { id: order.value.id, storeId: order.value.storeId, fiscal: true });
+    if (data.ok) {
+      Swal.fire({ icon: 'success', title: 'DANFE enviada para impressão', timer: 1500, showConfirmButton: false });
+    } else {
+      throw new Error(data.error || 'Falha ao enviar para impressão');
+    }
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro ao imprimir DANFE', text: e.response?.data?.error || e.message });
+  }
+}
+
+async function sendNfeEmail() {
+  const { value: email, isConfirmed } = await Swal.fire({
+    title: 'Enviar NF-e por e-mail',
+    input: 'email',
+    inputLabel: 'Endereço de e-mail',
+    inputPlaceholder: 'cliente@exemplo.com',
+    inputValue: order.value?.customer?.email || '',
+    showCancelButton: true,
+    confirmButtonText: 'Enviar',
+    cancelButtonText: 'Cancelar',
+    inputValidator: (v) => !v ? 'Informe um e-mail' : null,
+  });
+  if (!isConfirmed || !email) return;
+  try {
+    await api.post('/nfe/enviar-email', { orderId: id, email });
+    Swal.fire({ icon: 'success', title: 'E-mail enviado', text: email, timer: 3000, toast: true, position: 'top-end', showConfirmButton: false });
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro ao enviar e-mail', text: e.response?.data?.error || e.message });
+  }
+}
+
+async function downloadNfeXml() {
+  try {
+    const resp = await api.get(`/nfe/xml-by-order/${id}`, { responseType: 'blob' });
+    const cd = resp.headers['content-disposition'] || '';
+    const match = cd.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : `nfe-${order.value?.displaySimple || id}.xml`;
+    const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/xml' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro ao baixar XML', text: e.response?.data?.error || e.message });
+  }
+}
+
+async function load() {
+  try {
     const { data } = await api.get(`/orders/${id}`);
     order.value = data?.order || data;
     vouchers.value = splitVoucherDiscounts(order.value);
-  }catch(e){ console.error('load order failed', e); }
+  } catch (e) { console.error('load order failed', e); }
 }
 
-onMounted(()=>{ load(); });
+onMounted(() => { load(); });
 </script>
 
 <style scoped>

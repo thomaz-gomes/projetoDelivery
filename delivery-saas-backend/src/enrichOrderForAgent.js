@@ -11,6 +11,7 @@
  * webhooks, emitirNovoPedido).
  */
 import { prisma } from './prisma.js'
+import { isTakeoutOrderType } from './utils/orderType.js'
 
 export async function enrichOrderForAgent(order) {
   if (!order) return order
@@ -164,10 +165,12 @@ export async function enrichOrderForAgent(order) {
     } catch (e) { /* ignore */ }
 
     // 3b. Fallback: gerar qrText se ainda vazio e pedido for DELIVERY
+    // Pedidos de retirada (TAKEOUT/PICKUP/BALCAO) NÃO devem ter QR — não são despachados por motoboy.
     if (!order.qrText && order.id) {
       const orderType = String(order.orderType || (order.payload && (order.payload.orderType || order.payload.order_type)) || '').toUpperCase()
-      console.log('enrichOrderForAgent: qrText fallback check — orderType:', orderType, 'hasDelivery:', !!(order.payload && (order.payload.delivery || order.payload.deliveryAddress)))
-      if (orderType === 'DELIVERY' || (order.payload && (order.payload.delivery || order.payload.deliveryAddress))) {
+      const isTakeout = isTakeoutOrderType(orderType)
+      console.log('enrichOrderForAgent: qrText fallback check — orderType:', orderType, 'isTakeout:', isTakeout, 'hasDelivery:', !!(order.payload && (order.payload.delivery || order.payload.deliveryAddress)))
+      if (!isTakeout && (orderType === 'DELIVERY' || (order.payload && (order.payload.delivery || order.payload.deliveryAddress)))) {
         const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')
         order.qrText = `${frontend}/orders/${order.id}`
         console.log('enrichOrderForAgent: qrText generated as fallback:', order.qrText)
