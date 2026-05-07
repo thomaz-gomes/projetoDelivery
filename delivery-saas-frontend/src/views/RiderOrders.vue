@@ -8,7 +8,6 @@
       </div>
     </div>
 
-    <PullToRefresh :loading="loading" @refresh="load">
     <div v-if="loading" class="d-grid gap-3">
       <SkeletonCard v-for="n in 3" :key="n" />
     </div>
@@ -110,7 +109,6 @@
         </div>
   </transition-group>
     </div>
-    </PullToRefresh>
 
     <!-- QR Scanner Modal -->
     <div v-if="scanning" class="scanner-overlay">
@@ -170,7 +168,6 @@
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import RiderHeader from '../components/rider/RiderHeader.vue'
 import BottomSheet from '../components/rider/BottomSheet.vue'
-import PullToRefresh from '../components/rider/PullToRefresh.vue'
 import SkeletonCard from '../components/rider/SkeletonCard.vue'
 import MiniMap from '../components/rider/MiniMap.vue'
 import api from '../api'
