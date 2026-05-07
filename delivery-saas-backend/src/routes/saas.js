@@ -1723,6 +1723,9 @@ saasRouter.get('/error-logs', requireRole('SUPER_ADMIN'), async (req, res) => {
 saasRouter.patch('/error-logs/:id/resolve', requireRole('SUPER_ADMIN'), async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'ID inválido' });
+    }
     const current = await prisma.errorLog.findUnique({ where: { id } });
     if (!current) return res.status(404).json({ message: 'Log não encontrado' });
     const nextResolved = !current.resolved;
@@ -1744,6 +1747,9 @@ saasRouter.patch('/error-logs/:id/resolve', requireRole('SUPER_ADMIN'), async (r
 saasRouter.delete('/error-logs/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'ID inválido' });
+    }
     await prisma.errorLog.delete({ where: { id } });
     res.json({ ok: true });
   } catch (e) {
