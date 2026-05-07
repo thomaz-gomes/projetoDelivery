@@ -8,21 +8,24 @@ const companies = ref([])
 const plans = ref([])
 const modules = ref([])
 const invoices = ref([])
+const errorLogsOpen = ref(0)
 const loading = ref(true)
 
 async function load(){
   loading.value = true
   try {
-    const [cRes, pRes, mRes, iRes] = await Promise.all([
+    const [cRes, pRes, mRes, iRes, eRes] = await Promise.all([
       api.get('/saas/companies'),
       api.get('/saas/plans'),
       api.get('/saas/modules'),
-      api.get('/saas/invoices').catch(() => ({ data: { rows: [] } }))
+      api.get('/saas/invoices').catch(() => ({ data: { rows: [] } })),
+      api.get('/saas/error-logs', { params: { status: 'open', page: 1 } }).catch(() => ({ data: { openCount: 0 } })),
     ])
     companies.value = cRes.data || []
     plans.value = pRes.data || []
     modules.value = mRes.data || []
     invoices.value = iRes.data?.rows || iRes.data || []
+    errorLogsOpen.value = eRes.data?.openCount || 0
   } finally { loading.value = false }
 }
 
@@ -37,6 +40,10 @@ const stats = computed(() => [
   { label: 'Planos', value: plans.value.length, icon: 'bi-list-check', color: 'success', to: '/saas/plans' },
   { label: 'Módulos', value: `${activeModules.value}/${modules.value.length}`, icon: 'bi-box-seam', color: 'warning', to: '/saas/modules', sub: 'ativos' },
   { label: 'Faturas pendentes', value: pendingInvoices.value, icon: 'bi-receipt', color: overdueInvoices.value > 0 ? 'danger' : 'info', to: '/saas/billing' },
+  { label: 'Logs de erro', value: errorLogsOpen.value,
+    icon: 'bi-exclamation-triangle',
+    color: errorLogsOpen.value > 0 ? 'danger' : 'success',
+    to: '/saas/error-logs', sub: 'em aberto' },
 ])
 
 const recentInvoices = computed(() => invoices.value.slice(0, 8))
