@@ -1683,4 +1683,84 @@ saasRouter.get('/companies/:id/ai-credits', requireRole('MASTER'), async (req, r
   }
 })
 
+// -------- Error Logs (SUPER_ADMIN) --------
+saasRouter.get('/error-logs', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const status = req.query.status || 'open'; // 'open' | 'resolved' | 'all'
+    const q = (req.query.q || '').trim();
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = 50;
+
+    const where = {};
+    if (status === 'open') where.resolved = false;
+    else if (status === 'resolved') where.resolved = true;
+    if (q) {
+      where.OR = [
+        { message: { contains: q, mode: 'insensitive' } },
+        { route: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [rows, total, openCount] = await Promise.all([
+      prisma.errorLog.findMany({
+        where,
+        orderBy: { lastSeen: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: { company: { select: { id: true, name: true } } },
+      }),
+      prisma.errorLog.count({ where }),
+      prisma.errorLog.count({ where: { resolved: false } }),
+    ]);
+
+    res.json({ rows, total, page, pageSize, openCount });
+  } catch (e) {
+    console.error('GET /saas/error-logs error:', e);
+    res.status(500).json({ message: 'Erro ao listar logs' });
+  }
+});
+
+saasRouter.patch('/error-logs/:id/resolve', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const current = await prisma.errorLog.findUnique({ where: { id } });
+    if (!current) return res.status(404).json({ message: 'Log não encontrado' });
+    const nextResolved = !current.resolved;
+    const updated = await prisma.errorLog.update({
+      where: { id },
+      data: {
+        resolved: nextResolved,
+        resolvedAt: nextResolved ? new Date() : null,
+        resolvedBy: nextResolved ? req.user?.id || null : null,
+      },
+    });
+    res.json(updated);
+  } catch (e) {
+    console.error('PATCH /saas/error-logs/:id/resolve error:', e);
+    res.status(500).json({ message: 'Erro ao atualizar log' });
+  }
+});
+
+saasRouter.delete('/error-logs/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    await prisma.errorLog.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e?.code === 'P2025') return res.status(404).json({ message: 'Log não encontrado' });
+    console.error('DELETE /saas/error-logs/:id error:', e);
+    res.status(500).json({ message: 'Erro ao apagar log' });
+  }
+});
+
+saasRouter.post('/error-logs/purge-resolved', requireRole('SUPER_ADMIN'), async (_req, res) => {
+  try {
+    const { count } = await prisma.errorLog.deleteMany({ where: { resolved: true } });
+    res.json({ count });
+  } catch (e) {
+    console.error('POST /saas/error-logs/purge-resolved error:', e);
+    res.status(500).json({ message: 'Erro ao limpar logs solucionados' });
+  }
+});
+
 export default saasRouter
