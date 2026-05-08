@@ -264,15 +264,34 @@ const activeAddress = computed(() => {
 // Draft
 const draft = computed(() => inboxStore.getOrderDraft(props.conversationId));
 
+// The local `orderType` ref tracks the dropdown selection and is the source
+// of truth — `draft.orderType` is just the persisted snapshot. Reading the
+// draft first caused the wizard to keep DELIVERY (the initial draft value)
+// even after the operator switched to "Balcão (retirada)" mid-flow, which
+// triggered the address-required validation on submit.
 const wizardPreset = computed(() => ({
   customerId: customerId.value,
   customerName: customerName.value,
   address: activeAddress.value,
-  orderType: draft.value?.orderType || orderType.value,
+  orderType: orderType.value,
   skipCustomer: true,
   skipAddress: true,
   items: draft.value?.items || null,
 }));
+
+// Hydrate the local dropdown from a previously-saved draft (e.g. operator
+// reloaded the inbox mid-order) and persist subsequent changes back into the
+// draft so the selection survives navigation.
+watch(
+  () => draft.value?.orderType,
+  (v) => { if (v && v !== orderType.value) orderType.value = v; },
+  { immediate: true },
+);
+watch(orderType, (v) => {
+  if (!draft.value?.active) return;
+  if (draft.value.orderType === v) return;
+  inboxStore.setOrderDraft(props.conversationId, { ...draft.value, orderType: v });
+});
 
 // Cart state (synced from POSOrderWizard via @cart-update)
 const emptyCart = () => ({
