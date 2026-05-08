@@ -15,6 +15,7 @@ const InboxAutomation = () => import('./views/inbox/settings/InboxAutomation.vue
 import Riders from './views/Riders.vue';
 import RiderForm from './views/RiderForm.vue';
 import Neighborhoods from './views/Neighborhoods.vue';
+import GeneralSettings from './views/GeneralSettings.vue';
 import IngredientGroups from './views/stock/IngredientGroups.vue';
 import Ingredients from './views/stock/Ingredients.vue';
 import IngredientGroupForm from './views/stock/IngredientGroupForm.vue';
@@ -165,6 +166,7 @@ const router = createRouter({
   { path: '/riders/:id', component: RiderForm, meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } },
   { path: '/riders/:id/account', component: RiderAccountAdmin, meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } },
   { path: '/rider-adjustments', component: RiderAdjustments, meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'RIDERS' } },
+  { path: '/settings/general', component: GeneralSettings, meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/neighborhoods', component: Neighborhoods, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/settings/dados-fiscais', component: DadosFiscaisSettings, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },
   { path: '/settings/dados-fiscais/new', component: DadosFiscaisForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },
