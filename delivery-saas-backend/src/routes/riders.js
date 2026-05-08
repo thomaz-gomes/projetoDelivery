@@ -1327,6 +1327,7 @@ ridersRouter.post('/:id/account/send-report', requireRole('ADMIN'), async (req, 
   const companyId = req.user.companyId;
   const rider = await prisma.rider.findFirst({ where: { id, companyId } });
   if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+  const company = await prisma.company.findUnique({ where: { id: companyId }, select: { name: true } });
 
   const body = req.body || {};
   const toPhone = body.phone;
@@ -1386,10 +1387,10 @@ ridersRouter.post('/:id/account/send-report', requireRole('ADMIN'), async (req, 
     if (txs.length > 0) console.log('send-report sample txs:', txs.slice(0, 3));
   } catch (__e) {}
 
-    // create PDF
+    // create PDF — clean, branded layout
   try {
     const PDFDocument = (await import('pdfkit')).default;
-    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const doc = new PDFDocument({ size: 'A4', margins: { top: 110, bottom: 60, left: 40, right: 40 } });
     const chunks = [];
     doc.on('data', c => chunks.push(c));
     const finishPromise = new Promise((resolve, reject) => {
@@ -1397,129 +1398,246 @@ ridersRouter.post('/:id/account/send-report', requireRole('ADMIN'), async (req, 
       doc.on('error', reject);
     });
 
-    // Prepare table layout that fits A4 and supports pagination
-  const pageWidth = doc.page.width;
-  const pageHeight = doc.page.height;
-  const margins = doc.page.margins || { top: 40, bottom: 40, left: 40, right: 40 };
+    // Brand palette (mirrors the front-end design tokens).
+    const COLOR = {
+      primary:    '#105784',
+      primaryDk:  '#0B3D5E',
+      success:    '#6DAE1E',
+      warning:    '#D97706',
+      danger:     '#DC2626',
+      text:       '#212529',
+      muted:      '#6C757D',
+      border:     '#E6E6E6',
+      borderSoft: '#F1F3F5',
+      zebra:      '#FAFAFA',
+      headerBg:   '#F0F4F7',
+      bandBg:     '#105784',
+    };
+
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
+    const margins = doc.page.margins;
     const leftX = margins.left;
     const rightX = pageWidth - margins.right;
     const usableWidth = rightX - leftX;
-    const topY = margins.top;
     const bottomY = pageHeight - margins.bottom;
 
-    const colDateW = 120;
-    const colOrderW = 100;
+    // Column layout
+    const colDateW = 95;
+    const colTypeW = 110;
+    const colOrderW = 70;
     const colValueW = 80;
-    // note column gets the remaining width
-    const colNoteW = Math.max(60, usableWidth - (colDateW + colOrderW + colValueW));
+    const colNoteW = Math.max(60, usableWidth - (colDateW + colTypeW + colOrderW + colValueW));
 
-    const rowHeight = 18; // approximate row height
-    const headerHeight = 20;
+    const rowHeight = 22;
+    const headerRowHeight = 22;
 
-    // formatting helpers
     const moneyFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-    let cursorY = doc.y;
+    // Pre-compute KPIs so the cover summary always reflects what the user is
+    // about to read in the rows below.
+    const totalAmountAll = txs.reduce((s, t) => s + Number(t.amount || 0), 0);
+    const deliveryCount = txs.filter(t => t.type === 'DELIVERY_FEE').length;
+    const dailyRateCount = txs.filter(t => t.type === 'DAILY_RATE').length;
+    const bonusTotal = txs
+      .filter(t => t.type === 'EARLY_CHECKIN_BONUS' || t.type === 'GOAL_REWARD')
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
+    const avgPerDelivery = deliveryCount > 0
+      ? txs.filter(t => t.type === 'DELIVERY_FEE').reduce((s, t) => s + Number(t.amount || 0), 0) / deliveryCount
+      : 0;
+
+    function typeLabelPdf(type) {
+      switch (type) {
+        case 'DELIVERY_FEE': return 'Taxa de entrega';
+        case 'DAILY_RATE': return 'Diária';
+        case 'EARLY_CHECKIN_BONUS': return 'Bônus checkin';
+        case 'MANUAL_ADJUSTMENT': return 'Ajuste manual';
+        case 'GOAL_REWARD': return 'Recompensa meta';
+        default: return type || '—';
+      }
+    }
+    function typeColorPdf(type) {
+      switch (type) {
+        case 'DELIVERY_FEE': return COLOR.primary;
+        case 'DAILY_RATE': return COLOR.muted;
+        case 'EARLY_CHECKIN_BONUS': return COLOR.success;
+        case 'GOAL_REWARD': return COLOR.success;
+        case 'MANUAL_ADJUSTMENT': return COLOR.warning;
+        default: return COLOR.muted;
+      }
+    }
+
+    let cursorY = 0;
     let pageIndex = 1;
 
-    function renderHeader() {
-      doc.fontSize(16).font('Helvetica-Bold').text(`Relatório de transações - entregador: ${rider.name}`, leftX, topY);
-      doc.fontSize(10).font('Helvetica').text(`Período: ${dateFrom || '-'} até ${dateTo || '-'}`, leftX, topY + 22);
-      doc.fontSize(10).text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, leftX + usableWidth - 200, topY + 22, { width: 200, align: 'right' });
+    function drawTopBand() {
+      // Solid colored band across the top with the company name + report title.
+      doc.save();
+      doc.rect(0, 0, pageWidth, 70).fill(COLOR.bandBg);
+      doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(16)
+        .text(company?.name || 'Relatório do Entregador', leftX, 18, { width: usableWidth });
+      doc.font('Helvetica').fontSize(11).fillColor('#D8E5EE')
+        .text('Relatório de transações do entregador', leftX, 42, { width: usableWidth });
+      doc.restore();
+    }
 
-      // table header
-      cursorY = topY + 50;
-      doc.moveTo(leftX, cursorY).lineTo(rightX, cursorY).stroke();
-      doc.fontSize(11).font('Helvetica-Bold');
-  doc.text('Data / Hora', leftX + 4, cursorY + 4, { width: colDateW - 8 });
-  doc.text('Pedido', leftX + colDateW + 4, cursorY + 4, { width: colOrderW - 8 });
-  doc.text('Observação', leftX + colDateW + colOrderW + 4, cursorY + 4, { width: colNoteW - 8 });
-  doc.text('Valor', leftX + colDateW + colOrderW + colNoteW + 4, cursorY + 4, { width: colValueW - 8, align: 'right' });
-  cursorY += headerHeight;
-      doc.moveTo(leftX, cursorY).lineTo(rightX, cursorY).stroke();
-      // vertical separators
-  let sepX = leftX + colDateW;
-  doc.moveTo(sepX, topY + 50).lineTo(sepX, bottomY).stroke();
-  sepX += colOrderW;
-  doc.moveTo(sepX, topY + 50).lineTo(sepX, bottomY).stroke();
-  sepX += colNoteW;
-  doc.moveTo(sepX, topY + 50).lineTo(sepX, bottomY).stroke();
+    function drawRiderHeader() {
+      // Below the band: rider name + period + generated-at, in two columns.
+      const startY = 84;
+      doc.fillColor(COLOR.text).font('Helvetica-Bold').fontSize(13)
+        .text(rider.name, leftX, startY, { width: usableWidth });
+      doc.fillColor(COLOR.muted).font('Helvetica').fontSize(10)
+        .text(`Período: ${dateFrom ? dateFrom.split('-').reverse().join('/') : '—'} a ${dateTo ? dateTo.split('-').reverse().join('/') : '—'}`, leftX, startY + 18, { width: usableWidth - 200 });
+      doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, leftX + usableWidth - 200, startY + 18, { width: 200, align: 'right' });
+      doc.fillColor(COLOR.text);
+    }
 
-      doc.font('Helvetica');
-      // set the document y to our cursor so subsequent text() without y will continue correctly
-      doc.y = cursorY;
+    function drawTableHeader(y) {
+      // Header strip with subtle background.
+      doc.save();
+      doc.rect(leftX, y, usableWidth, headerRowHeight).fill(COLOR.headerBg);
+      doc.fillColor(COLOR.muted).font('Helvetica-Bold').fontSize(9);
+      const ty = y + 7;
+      doc.text('DATA / HORA', leftX + 8, ty, { width: colDateW - 10 });
+      doc.text('TIPO', leftX + colDateW + 8, ty, { width: colTypeW - 10 });
+      doc.text('PEDIDO', leftX + colDateW + colTypeW + 8, ty, { width: colOrderW - 10 });
+      doc.text('OBSERVAÇÃO', leftX + colDateW + colTypeW + colOrderW + 8, ty, { width: colNoteW - 10 });
+      doc.text('VALOR', leftX + colDateW + colTypeW + colOrderW + colNoteW + 8, ty, { width: colValueW - 16, align: 'right' });
+      doc.restore();
+      doc.font('Helvetica').fillColor(COLOR.text);
     }
 
     function renderFooter() {
-      const footerY = pageHeight - margins.bottom + 10;
-      doc.fontSize(9).fillColor('gray').text(`Página ${pageIndex}`, leftX, footerY, { align: 'center', width: usableWidth });
-      doc.fillColor('black');
+      const footerY = pageHeight - margins.bottom + 24;
+      doc.save();
+      doc.fillColor(COLOR.muted).font('Helvetica').fontSize(8)
+        .text(`${company?.name || ''}  ·  Página ${pageIndex}`, leftX, footerY, { width: usableWidth, align: 'center' });
+      doc.restore();
     }
 
     function newPage() {
-      // use `margins` option (plural) when adding a page
       doc.addPage({ size: 'A4', margins });
       pageIndex += 1;
-      renderHeader();
+      drawTopBand();
+      drawRiderHeader();
+      cursorY = margins.top + 4;
+      drawTableHeader(cursorY);
+      cursorY += headerRowHeight;
     }
 
-    // initial header
-    renderHeader();
+    // ─── Page 1: branded header + KPI strip + table header ──────────────────
+    drawTopBand();
+    drawRiderHeader();
 
-    // draw rows with pagination
-    let totalAmount = 0;
-    doc.lineWidth(0.5).strokeColor('#444');
+    // KPI strip (cover) — 4 cards across the top of the table area.
+    const kpiY = margins.top - 28; // sits right below the rider header
+    const kpiCardW = (usableWidth - 24) / 4; // 8px gap between 4 cards => 24px gaps total
+    const kpiCardH = 56;
+    const kpis = [
+      { label: 'Total a pagar',     value: moneyFmt.format(totalAmountAll),  color: totalAmountAll > 0 ? COLOR.success : COLOR.text },
+      { label: 'Entregas',          value: String(deliveryCount),            color: COLOR.primary },
+      { label: 'Média / entrega',   value: moneyFmt.format(avgPerDelivery),  color: COLOR.text },
+      { label: 'Diárias / Bônus',   value: `${dailyRateCount} / ${moneyFmt.format(bonusTotal)}`, color: COLOR.warning },
+    ];
+    let kx = leftX;
+    for (const k of kpis) {
+      doc.save();
+      doc.roundedRect(kx, kpiY, kpiCardW, kpiCardH, 6).lineWidth(0.5).strokeColor(COLOR.border).stroke();
+      doc.fillColor(COLOR.muted).font('Helvetica').fontSize(8)
+        .text(k.label.toUpperCase(), kx + 10, kpiY + 9, { width: kpiCardW - 20, characterSpacing: 0.5 });
+      doc.fillColor(k.color).font('Helvetica-Bold').fontSize(13)
+        .text(k.value, kx + 10, kpiY + 25, { width: kpiCardW - 20 });
+      doc.restore();
+      kx += kpiCardW + 8;
+    }
+
+    cursorY = kpiY + kpiCardH + 16;
+    drawTableHeader(cursorY);
+    cursorY += headerRowHeight;
+    doc.font('Helvetica').fillColor(COLOR.text);
+
+    // ─── Rows ───────────────────────────────────────────────────────────────
+    let zebra = false;
+    doc.lineWidth(0.5).strokeColor(COLOR.borderSoft);
     for (const t of txs) {
+      // page break (leave room for total + footer)
+      if (cursorY + rowHeight > bottomY - 60) {
+        renderFooter();
+        newPage();
+        zebra = false;
+      }
+
+      // Zebra background
+      if (zebra) {
+        doc.save();
+        doc.rect(leftX, cursorY, usableWidth, rowHeight).fill(COLOR.zebra);
+        doc.restore();
+      }
+
+      // Bottom border for the row
+      doc.save();
+      doc.moveTo(leftX, cursorY + rowHeight).lineTo(rightX, cursorY + rowHeight)
+        .strokeColor(COLOR.borderSoft).lineWidth(0.5).stroke();
+      doc.restore();
+
       const dt = new Date(t.date);
       const dateStr = dt.toLocaleDateString('pt-BR');
       const timeStr = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      const dateTime = `${dateStr} ${timeStr}`;
-  const valueStr = moneyFmt.format(Number(t.amount || 0));
-  // use orders.displaySimple (número do pedido) preferentially for the report's "Pedido" column
-  const orderStr = (t.order && t.order.displaySimple != null)
-    ? String(t.order.displaySimple).padStart(2, '0')
-    : (t.order?.displayId ?? t.orderId ?? '-');
-  const noteStr = String(t.note || '-');
+      const orderStr = (t.order && t.order.displaySimple != null)
+        ? `#${String(t.order.displaySimple).padStart(2, '0')}`
+        : (t.order?.displayId ? `#${t.order.displayId}` : '—');
+      const noteStr = (t.note || '').trim() || '—';
+      const amtNum = Number(t.amount || 0);
+      const valueStr = moneyFmt.format(amtNum);
 
-      // check space
-      if (cursorY + rowHeight > bottomY - 30) {
-        renderFooter();
-        newPage();
-        cursorY = doc.y; // reset after header
-      }
-
-      // draw horizontal line for row top
-      doc.moveTo(leftX, cursorY).lineTo(rightX, cursorY).stroke();
-
-  // write cells in order: Date, Order, Note, Value
-  doc.fontSize(10).text(dateTime, leftX + 4, cursorY + 4, { width: colDateW - 8 });
-  doc.text(orderStr, leftX + colDateW + 4, cursorY + 4, { width: colOrderW - 8 });
-  doc.text(noteStr, leftX + colDateW + colOrderW + 4, cursorY + 4, { width: colNoteW - 8 });
-  // color negative amounts in red
-  const amtNum = Number(t.amount || 0);
-  if (amtNum < 0) doc.fillColor('red');
-  else doc.fillColor('black');
-  doc.text(valueStr, leftX + colDateW + colOrderW + colNoteW + 4, cursorY + 4, { width: colValueW - 8, align: 'right' });
-  // restore color
-  doc.fillColor('black');
+      const rowY = cursorY + 6;
+      // Date
+      doc.fillColor(COLOR.text).font('Helvetica').fontSize(9.5)
+        .text(`${dateStr}  ${timeStr}`, leftX + 8, rowY, { width: colDateW - 10 });
+      // Type as colored chip-style label
+      doc.fillColor(typeColorPdf(t.type)).font('Helvetica-Bold').fontSize(9.5)
+        .text(typeLabelPdf(t.type), leftX + colDateW + 8, rowY, { width: colTypeW - 10 });
+      // Order
+      doc.fillColor(COLOR.muted).font('Helvetica').fontSize(9.5)
+        .text(orderStr, leftX + colDateW + colTypeW + 8, rowY, { width: colOrderW - 10 });
+      // Note (truncate visually via width)
+      doc.fillColor(COLOR.text).font('Helvetica').fontSize(9.5)
+        .text(noteStr, leftX + colDateW + colTypeW + colOrderW + 8, rowY, { width: colNoteW - 10, ellipsis: true });
+      // Value (red if negative)
+      doc.fillColor(amtNum < 0 ? COLOR.danger : COLOR.text).font('Helvetica-Bold').fontSize(10)
+        .text(valueStr, leftX + colDateW + colTypeW + colOrderW + colNoteW + 8, rowY, {
+          width: colValueW - 16, align: 'right',
+        });
 
       cursorY += rowHeight;
-
-      totalAmount += Number(t.amount || 0);
+      zebra = !zebra;
     }
 
-    // total row
-    if (cursorY + rowHeight > bottomY - 30) {
+    // Total row — emphasized
+    if (cursorY + rowHeight + 8 > bottomY - 60) {
       renderFooter();
       newPage();
-      cursorY = doc.y;
     }
-    doc.moveTo(leftX, cursorY).lineTo(rightX, cursorY).stroke();
-  doc.font('Helvetica-Bold').fontSize(11).text('Total', leftX + 4, cursorY + 6, { width: colDateW + colOrderW + colNoteW - 8 });
-  doc.text(moneyFmt.format(totalAmount), leftX + colDateW + colOrderW + colNoteW + 4, cursorY + 6, { width: colValueW - 8, align: 'right' });
-    cursorY += rowHeight;
+    cursorY += 8;
+    doc.save();
+    doc.rect(leftX, cursorY, usableWidth, rowHeight + 6).fill(COLOR.headerBg);
+    doc.fillColor(COLOR.text).font('Helvetica-Bold').fontSize(11)
+      .text('Total do período', leftX + 8, cursorY + 8, { width: usableWidth - colValueW - 16 });
+    doc.fillColor(totalAmountAll < 0 ? COLOR.danger : COLOR.success).fontSize(13)
+      .text(moneyFmt.format(totalAmountAll), leftX + usableWidth - colValueW - 8, cursorY + 6, {
+        width: colValueW, align: 'right',
+      });
+    doc.restore();
+    cursorY += rowHeight + 12;
 
-    // final footer
+    // Empty-state text when no transactions in the filter
+    if (txs.length === 0) {
+      doc.fillColor(COLOR.muted).font('Helvetica-Oblique').fontSize(11)
+        .text('Nenhuma transação encontrada no período selecionado.', leftX, cursorY + 8, {
+          width: usableWidth, align: 'center',
+        });
+    }
+
     renderFooter();
 
     doc.end();
