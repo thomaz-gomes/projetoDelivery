@@ -10,6 +10,7 @@ import Swal from 'sweetalert2';
 import DateInput from '../components/form/date/DateInput.vue';
 import SelectInput from '../components/form/select/SelectInput.vue';
 import TextInput from '../components/form/input/TextInput.vue';
+import BaseChart from '../components/BaseChart.vue';
 
 const route = useRoute();
 const riderId = route.params.id;
@@ -67,6 +68,18 @@ const periodBonusTotal = ref(0);
 const periodDailyRatesCount = ref(0);
 const periodDailyRatesTotal = ref(0);
 
+// Metrics card (KPIs + by-day chart) — fetched from /riders/:id/metrics
+// alongside /transactions whenever the date/type filters change.
+const metrics = ref({
+  totalDeliveries: 0,
+  avgDeliveryTimeMin: null,
+  avgCostPerDelivery: 0,
+  revenueGenerated: 0,
+  earnings: 0,
+  byDay: [],
+});
+const loadingMetrics = ref(false);
+
 function typeLabel(type) {
   switch (type) {
     case 'DELIVERY_FEE': return 'Taxa de entrega';
@@ -123,9 +136,85 @@ async function fetchTransactions() {
     const { data } = await api.get(`/riders/${riderId}/transactions`, { params: buildParams(false) });
     transactions.value = data.items || [];
     total.value = data.total || 0; page.value = data.page || 1; pageSize.value = data.pageSize || pageSize.value; totalPages.value = data.totalPages || 1;
-    await fetchPeriodFees();
+    await Promise.all([fetchPeriodFees(), fetchMetrics()]);
   } catch (e) { console.error(e); error.value = e?.response?.data?.message || 'Falha ao carregar transações'; }
   finally { loadingTx.value = false; }
+}
+
+async function fetchMetrics() {
+  loadingMetrics.value = true;
+  try {
+    const params = {};
+    if (filters.value.from) { const p = parseDateInput(filters.value.from); if (p) params.from = p; }
+    if (filters.value.to) { const p = parseDateInput(filters.value.to); if (p) params.to = p; }
+    const { data } = await api.get(`/riders/${riderId}/metrics`, { params });
+    metrics.value = {
+      totalDeliveries: data.totalDeliveries || 0,
+      avgDeliveryTimeMin: data.avgDeliveryTimeMin,
+      avgCostPerDelivery: data.avgCostPerDelivery || 0,
+      revenueGenerated: data.revenueGenerated || 0,
+      earnings: data.earnings || 0,
+      byDay: Array.isArray(data.byDay) ? data.byDay : [],
+    };
+  } catch (e) {
+    console.warn('Failed to load rider metrics', e?.response?.data || e?.message);
+  } finally { loadingMetrics.value = false; }
+}
+
+// Chart.js dataset for the "Entregas por dia" bar chart. Uses a short
+// dd/MM label so 31 days fit comfortably; tooltip shows the full ISO date
+// with the count + revenue.
+const deliveriesChartData = computed(() => {
+  const labels = metrics.value.byDay.map((d) => {
+    const [, m, dd] = d.day.split('-');
+    return `${dd}/${m}`;
+  });
+  return {
+    labels,
+    datasets: [
+      {
+        label: 'Entregas',
+        data: metrics.value.byDay.map((d) => d.deliveries || 0),
+        backgroundColor: 'rgba(13, 110, 253, 0.6)',
+        borderColor: 'rgba(13, 110, 253, 1)',
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+    ],
+  };
+});
+
+const deliveriesChartOptions = computed(() => ({
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        title: (items) => {
+          const idx = items?.[0]?.dataIndex;
+          const day = metrics.value.byDay?.[idx]?.day;
+          return day || '';
+        },
+        afterLabel: (item) => {
+          const idx = item?.dataIndex;
+          const b = metrics.value.byDay?.[idx];
+          if (!b) return '';
+          return `Receita: ${formatCurrency(b.revenue || 0)}`;
+        },
+      },
+    },
+  },
+  scales: {
+    y: { beginAtZero: true, ticks: { precision: 0 } },
+  },
+}));
+
+function formatMinutes(min) {
+  if (min == null) return '—';
+  const m = Math.round(min);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r === 0 ? `${h}h` : `${h}h ${r}min`;
 }
 
 // Pagination helpers — back-end already paginates the transactions list;
@@ -525,6 +614,55 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             <button class="btn btn-sm btn-success" @click="sendPdf" :disabled="sendingPdf || !datesAreValid">
               {{ sendingPdf ? 'Enviando...' : 'Enviar PDF (WhatsApp)' }}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Métricas operacionais do período (KPIs + entregas por dia) -->
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0"><i class="bi bi-graph-up me-1"></i>Métricas do período</h6>
+            <small v-if="loadingMetrics" class="text-muted">Atualizando...</small>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Entregas</div>
+                <div class="h4 mb-0">{{ metrics.totalDeliveries }}</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Tempo médio</div>
+                <div class="h4 mb-0" :title="metrics.avgDeliveryTimeMin != null ? `${metrics.avgDeliveryTimeMin} min de SAIU para CONFIRMAÇÃO` : 'Nenhuma entrega com horários completos'">
+                  {{ formatMinutes(metrics.avgDeliveryTimeMin) }}
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Custo médio / entrega</div>
+                <div class="h4 mb-0 text-warning">{{ formatCurrency(metrics.avgCostPerDelivery) }}</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-3 text-center">
+                <div class="small text-muted">Receita gerada</div>
+                <div class="h4 mb-0 text-success" :title="'Soma do total dos pedidos entregues por este motoboy'">
+                  {{ formatCurrency(metrics.revenueGenerated) }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="metrics.byDay && metrics.byDay.length > 0">
+            <div class="small text-muted mb-2">Entregas por dia</div>
+            <BaseChart type="bar" :data="deliveriesChartData" :options="deliveriesChartOptions" height="220px" />
+          </div>
+          <div v-else-if="!loadingMetrics" class="text-center text-muted small py-3">
+            Sem entregas no período selecionado.
           </div>
         </div>
       </div>
