@@ -1,9 +1,29 @@
 import { prisma } from '../prisma.js';
+import {
+  startOfDayInTz, dayKeyInTz, weekdayInTz, hourInTz, timeStrInTz,
+} from '../utils/dateTz.js';
+
+const DEFAULT_TZ = 'America/Sao_Paulo';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+async function getCompanyTimezone(companyId) {
+  if (!companyId) return DEFAULT_TZ;
+  try {
+    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { timezone: true } });
+    return c?.timezone || DEFAULT_TZ;
+  } catch (e) {
+    return DEFAULT_TZ;
+  }
+}
 
 // ---------------------------------------------------------------------------
-// 1. getCurrentCycle(goal, referenceDate)
+// 1. getCurrentCycle(goal, referenceDate, tz)
 // ---------------------------------------------------------------------------
-export function getCurrentCycle(goal, referenceDate = new Date()) {
+// Returns the active goal cycle (start/end) in the company's timezone. Without
+// the timezone the WEEKLY/MONTHLY cycles would snap to the container's UTC
+// midnight — for a Brazilian merchant the cycle would shift 3h, with the last
+// 3 hours of Sunday counting toward the next week's stats.
+export function getCurrentCycle(goal, referenceDate = new Date(), tz = DEFAULT_TZ) {
   const ref = new Date(referenceDate);
 
   if (goal.periodType === 'FIXED') {
@@ -14,23 +34,25 @@ export function getCurrentCycle(goal, referenceDate = new Date()) {
   }
 
   if (goal.periodType === 'WEEKLY') {
-    // Week starts on Monday (ISO)
-    const day = ref.getDay(); // 0=Sun … 6=Sat
-    const diffToMonday = day === 0 ? -6 : 1 - day;
-    const start = new Date(ref);
-    start.setDate(start.getDate() + diffToMonday);
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-
+    // ISO week — Monday through Sunday — anchored on the company's timezone.
+    const todayKey = dayKeyInTz(ref, tz);
+    const dow = weekdayInTz(ref, tz); // 0=Sun … 6=Sat
+    const diffToMonday = dow === 0 ? -6 : 1 - dow;
+    const todayStart = startOfDayInTz(todayKey, tz);
+    const start = new Date(todayStart.getTime() + diffToMonday * DAY_MS);
+    const end = new Date(start.getTime() + 7 * DAY_MS - 1);
     return { start, end };
   }
 
   if (goal.periodType === 'MONTHLY') {
-    const start = new Date(ref.getFullYear(), ref.getMonth(), 1, 0, 0, 0, 0);
-    const end = new Date(ref.getFullYear(), ref.getMonth() + 1, 0, 23, 59, 59, 999);
+    const todayKey = dayKeyInTz(ref, tz);
+    const yearMonth = todayKey.slice(0, 7); // "YYYY-MM"
+    const [y, m] = yearMonth.split('-').map(Number);
+    const start = startOfDayInTz(`${yearMonth}-01`, tz);
+    const nextM = m === 12 ? 1 : m + 1;
+    const nextY = m === 12 ? y + 1 : y;
+    const nextFirst = `${String(nextY).padStart(4, '0')}-${String(nextM).padStart(2, '0')}-01`;
+    const end = new Date(startOfDayInTz(nextFirst, tz).getTime() - 1);
     return { start, end };
   }
 
@@ -39,10 +61,11 @@ export function getCurrentCycle(goal, referenceDate = new Date()) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. calculateProgress(goal, riderId, companyId)
+// 2. calculateProgress(goal, riderId, companyId, tz)
 // ---------------------------------------------------------------------------
-export async function calculateProgress(goal, riderId, companyId) {
-  const { start: cycleStart, end: cycleEnd } = getCurrentCycle(goal);
+export async function calculateProgress(goal, riderId, companyId, tz) {
+  const effectiveTz = tz || await getCompanyTimezone(companyId);
+  const { start: cycleStart, end: cycleEnd } = getCurrentCycle(goal, new Date(), effectiveTz);
 
   const dateFilter = {};
   if (cycleStart) dateFilter.gte = cycleStart;
@@ -142,27 +165,26 @@ export async function calculateProgress(goal, riderId, companyId) {
 
       if (checkins.length === 0) break;
 
-      // Group check-ins by date, only counting those before the deadline
+      // Group check-ins by date (in the company's tz), only counting those
+      // before the deadline. Without tz-aware time/day computation, a 22h-BRT
+      // check-in would be classified as 01h next-day-UTC and miss the deadline
+      // window or land in the wrong calendar day.
       const checkinDays = new Set();
       for (const c of checkins) {
         const dt = new Date(c.checkinAt);
-        const timeStr = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+        const timeStr = timeStrInTz(dt, effectiveTz);
 
         // Find matching bonus rule (by shiftId or any rule)
         const matchingRule = bonusRules.find(r => !r.shiftId || r.shiftId === c.shiftId)
           || bonusRules[0];
 
         if (!matchingRule || timeStr <= matchingRule.deadlineTime) {
-          const dayKey = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`;
-          checkinDays.add(dayKey);
+          checkinDays.add(dayKeyInTz(dt, effectiveTz));
         }
       }
 
-      // Calculate max consecutive days
-      const sortedDays = [...checkinDays].map(k => {
-        const [y, m, d] = k.split('-').map(Number);
-        return new Date(y, m, d);
-      }).sort((a, b) => a - b);
+      // Calculate max consecutive days using the tz day boundaries.
+      const sortedDays = [...checkinDays].sort().map(k => startOfDayInTz(k, effectiveTz));
 
       let maxConsecutive = 0;
       let consecutive = 0;
@@ -170,8 +192,9 @@ export async function calculateProgress(goal, riderId, companyId) {
         if (i === 0) {
           consecutive = 1;
         } else {
-          const diff = (sortedDays[i] - sortedDays[i - 1]) / (1000 * 60 * 60 * 24);
-          consecutive = diff === 1 ? consecutive + 1 : 1;
+          const diff = (sortedDays[i] - sortedDays[i - 1]) / DAY_MS;
+          // Tolerate DST transitions (~23h or ~25h) when the host tz observes DST.
+          consecutive = (diff >= 0.9 && diff <= 1.1) ? consecutive + 1 : 1;
         }
         maxConsecutive = Math.max(maxConsecutive, consecutive);
       }
@@ -210,12 +233,13 @@ export async function calculateProgress(goal, riderId, companyId) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. calculateDifficulty(goal, companyId)
+// 3. calculateDifficulty(goal, companyId, tz)
 // ---------------------------------------------------------------------------
-export async function calculateDifficulty(goal, companyId) {
-  const threeMonthsAgo = new Date();
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-  threeMonthsAgo.setHours(0, 0, 0, 0);
+export async function calculateDifficulty(goal, companyId, tz) {
+  const effectiveTz = tz || await getCompanyTimezone(companyId);
+  const todayKey = dayKeyInTz(new Date(), effectiveTz);
+  // 90 days back, anchored on the company's tz midnight (close enough to "3 months").
+  const threeMonthsAgo = new Date(startOfDayInTz(todayKey, effectiveTz).getTime() - 90 * DAY_MS);
 
   const target = Number(goal.ruleValue);
 
@@ -300,6 +324,7 @@ export async function calculateDifficulty(goal, companyId) {
 // 4. getGoalsForRider(riderId, companyId)
 // ---------------------------------------------------------------------------
 export async function getGoalsForRider(riderId, companyId) {
+  const tz = await getCompanyTimezone(companyId);
   const goals = await prisma.riderGoal.findMany({
     where: {
       companyId,
@@ -320,8 +345,8 @@ export async function getGoalsForRider(riderId, companyId) {
   const results = await Promise.all(
     goals.map(async (goal) => {
       const [progress, difficulty] = await Promise.all([
-        calculateProgress(goal, riderId, companyId),
-        calculateDifficulty(goal, companyId),
+        calculateProgress(goal, riderId, companyId, tz),
+        calculateDifficulty(goal, companyId, tz),
       ]);
 
       return {
@@ -359,6 +384,8 @@ export async function checkGoalsOnEvent(eventType, riderId, companyId) {
   const relevantRuleTypes = EVENT_TO_RULE_TYPES[eventType];
   if (!relevantRuleTypes || relevantRuleTypes.length === 0) return;
 
+  const tz = await getCompanyTimezone(companyId);
+
   const goals = await prisma.riderGoal.findMany({
     where: {
       companyId,
@@ -375,7 +402,7 @@ export async function checkGoalsOnEvent(eventType, riderId, companyId) {
   });
 
   for (const goal of goals) {
-    const progress = await calculateProgress(goal, riderId, companyId);
+    const progress = await calculateProgress(goal, riderId, companyId, tz);
     if (!progress.achieved) continue;
 
     // Check if achievement already exists for this cycle

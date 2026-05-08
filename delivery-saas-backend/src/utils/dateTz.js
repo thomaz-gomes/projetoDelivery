@@ -116,6 +116,17 @@ export function weekdayInTz(date, tz = DEFAULT_TZ) {
 }
 
 /**
+ * Time of day formatted as "HH:MM" (24h) for `date` in the given timezone.
+ * Useful to compare against deadline strings like "09:00".
+ */
+export function timeStrInTz(date, tz = DEFAULT_TZ) {
+  const d = date instanceof Date ? date : new Date(date);
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(d);
+}
+
+/**
  * Resolve a `{ from, to }` date range from a query object with optional
  * `dateFrom`/`dateTo` (or `from`/`to`) string filters. Defaults: first day of
  * the current month through "now" — both relative to the given timezone.
