@@ -98,6 +98,68 @@
           </div>
         </div>
 
+        <!-- Registered customer greeting + remind-last-order button -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title">
+              <i class="bi bi-person-check me-1"></i>Saudação para clientes cadastrados
+            </h6>
+            <p class="small text-muted mb-3">
+              Substitui a saudação automática quando o cliente já tem pelo menos um pedido concluído. Disparada na primeira mensagem após 6h de inatividade.
+            </p>
+
+            <div class="mb-3">
+              <label class="form-label">Resposta rápida</label>
+              <SelectInput
+                v-model="form.registeredGreetingReplyId"
+                :options="quickReplyOptions"
+                optionValueKey="value"
+                optionLabelKey="label"
+                placeholder="— Desabilitado —"
+              />
+              <div v-if="registeredGreetingPreview" class="small bg-light rounded p-2 mt-2">
+                <strong class="d-block mb-1">Preview:</strong>
+                <span style="white-space: pre-wrap;">{{ registeredGreetingPreview }}</span>
+              </div>
+            </div>
+
+            <div class="form-check form-switch mb-3" :class="{ 'opacity-50': !form.registeredGreetingReplyId }">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                role="switch"
+                id="remindLastOrderEnabled"
+                v-model="form.remindLastOrderEnabled"
+                :disabled="!form.registeredGreetingReplyId"
+              />
+              <label class="form-check-label" for="remindLastOrderEnabled">
+                Lembrar do último pedido com botão "Repetir pedido"
+              </label>
+              <div class="small text-muted">
+                Após a saudação, envia uma mensagem com botão interativo. Ao tocar, o cliente recebe um link mágico e abre o cardápio com os itens já no carrinho para revisar e confirmar.
+              </div>
+            </div>
+
+            <div v-if="form.remindLastOrderEnabled" class="mb-3">
+              <label class="form-label">Template do lembrete</label>
+              <textarea
+                v-model="form.remindLastOrderTemplate"
+                class="form-control font-monospace"
+                rows="6"
+                :placeholder="DEFAULT_REMIND_TEMPLATE"
+                style="font-size: 0.82rem; resize: vertical; white-space: pre;"
+              ></textarea>
+              <div class="form-text">
+                Variáveis: <code>{{nome}}</code>, <code>{{itens}}</code>, <code>{{total}}</code>, <code>{{data}}</code>. Em branco = template padrão.
+              </div>
+            </div>
+
+            <BaseButton variant="primary" size="sm" :loading="savingRegistered" @click="saveRegisteredGreeting">
+              Salvar
+            </BaseButton>
+          </div>
+        </div>
+
         <!-- Rule modal -->
         <div v-if="showRuleForm" class="modal d-block" style="background:rgba(0,0,0,0.5);" @click.self="showRuleForm=false">
           <div class="modal-dialog">
@@ -277,7 +339,22 @@ const quickReplyOptionsRequired = computed(() =>
   quickReplies.value.map(r => ({ value: r.id, label: r.title || r.shortcut }))
 );
 
-const form = ref({ outOfHoursReplyId: null });
+const form = ref({
+  outOfHoursReplyId: null,
+  registeredGreetingReplyId: null,
+  remindLastOrderEnabled: false,
+  remindLastOrderTemplate: '',
+});
+const savingRegistered = ref(false);
+
+const DEFAULT_REMIND_TEMPLATE =
+`Olá {{nome}}! 👋
+
+Quer repetir seu último pedido?
+
+{{itens}}
+
+Total: {{total}}`;
 
 const greetingRules = ref([]);
 const showRuleForm = ref(false);
@@ -290,6 +367,11 @@ const outOfHoursPreview = computed(() => {
   return r?.body || '';
 });
 
+const registeredGreetingPreview = computed(() => {
+  const r = quickReplies.value.find(q => q.id === form.value.registeredGreetingReplyId);
+  return r?.body || '';
+});
+
 async function loadMenu(val) {
   selectedMenuId.value = val || null;
   if (!selectedMenuId.value) { currentMenu.value = null; greetingRules.value = []; return; }
@@ -297,6 +379,9 @@ async function loadMenu(val) {
     const { data } = await api.get(`/menu/menus/${selectedMenuId.value}`);
     currentMenu.value = data;
     form.value.outOfHoursReplyId = data.outOfHoursReplyId || null;
+    form.value.registeredGreetingReplyId = data.registeredGreetingReplyId || null;
+    form.value.remindLastOrderEnabled = !!data.remindLastOrderEnabled;
+    form.value.remindLastOrderTemplate = data.remindLastOrderTemplate || '';
     await loadGreetingRules(selectedMenuId.value);
   } catch (e) {
     Swal.fire('Erro', 'Falha ao carregar cardápio', 'error');
@@ -311,6 +396,20 @@ async function saveOutOfHours() {
   } catch (e) {
     Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar', 'error');
   } finally { saving.value = false; }
+}
+
+async function saveRegisteredGreeting() {
+  savingRegistered.value = true;
+  try {
+    await api.patch(`/menu/menus/${selectedMenuId.value}/inbox-automation`, {
+      registeredGreetingReplyId: form.value.registeredGreetingReplyId || null,
+      remindLastOrderEnabled: !!form.value.remindLastOrderEnabled,
+      remindLastOrderTemplate: form.value.remindLastOrderTemplate || null,
+    });
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Salvo!', showConfirmButton: false, timer: 1500 });
+  } catch (e) {
+    Swal.fire('Erro', e.response?.data?.message || 'Falha ao salvar', 'error');
+  } finally { savingRegistered.value = false; }
 }
 
 // ── Greeting time rules ───────────────────────────────────────────────────

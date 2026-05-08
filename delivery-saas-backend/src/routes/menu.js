@@ -997,7 +997,13 @@ router.patch('/menus/:id/inbox-automation', requireRole('ADMIN'), async (req, re
     });
     if (!menu) return res.status(404).json({ message: 'Cardápio não encontrado' });
 
-    const { outOfHoursReplyId, greetingReplyId } = req.body || {};
+    const {
+      outOfHoursReplyId,
+      greetingReplyId,
+      registeredGreetingReplyId,
+      remindLastOrderEnabled,
+      remindLastOrderTemplate,
+    } = req.body || {};
     const data = {};
     if (outOfHoursReplyId !== undefined) {
       if (outOfHoursReplyId) {
@@ -1013,11 +1019,32 @@ router.patch('/menus/:id/inbox-automation', requireRole('ADMIN'), async (req, re
       }
       data.greetingReplyId = greetingReplyId || null;
     }
+    if (registeredGreetingReplyId !== undefined) {
+      if (registeredGreetingReplyId) {
+        const exists = await prisma.quickReply.findFirst({ where: { id: registeredGreetingReplyId, companyId }, select: { id: true } });
+        if (!exists) return res.status(400).json({ message: 'registeredGreetingReplyId inválido' });
+      }
+      data.registeredGreetingReplyId = registeredGreetingReplyId || null;
+    }
+    if (remindLastOrderEnabled !== undefined) {
+      data.remindLastOrderEnabled = !!remindLastOrderEnabled;
+    }
+    if (remindLastOrderTemplate !== undefined) {
+      const t = remindLastOrderTemplate == null ? null : String(remindLastOrderTemplate);
+      data.remindLastOrderTemplate = t && t.trim() ? t : null;
+    }
 
     const updated = await prisma.menu.update({
       where: { id: menu.id },
       data,
-      select: { id: true, outOfHoursReplyId: true, greetingReplyId: true },
+      select: {
+        id: true,
+        outOfHoursReplyId: true,
+        greetingReplyId: true,
+        registeredGreetingReplyId: true,
+        remindLastOrderEnabled: true,
+        remindLastOrderTemplate: true,
+      },
     });
     res.json(updated);
   } catch (e) {

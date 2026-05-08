@@ -650,6 +650,16 @@ model Menu {
   outOfHoursReply    QuickReply?       @relation("MenuOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
   greetingReplyId    String?
   greetingReply      QuickReply?       @relation("MenuGreetingReply", fields: [greetingReplyId], references: [id])
+  // Saudação dedicada para clientes já cadastrados (com pelo menos um pedido
+  // concluído). Quando definida, substitui a saudação genérica para esses
+  // clientes na primeira mensagem da janela de 6h.
+  registeredGreetingReplyId String?
+  registeredGreetingReply   QuickReply? @relation("MenuRegisteredGreetingReply", fields: [registeredGreetingReplyId], references: [id])
+  // Toggle e template do "lembrete do último pedido" enviado logo após a
+  // saudação para clientes cadastrados, com botão WhatsApp interativo.
+  // Placeholders: {{nome}}, {{itens}}, {{total}}, {{data}}.
+  remindLastOrderEnabled  Boolean @default(false)
+  remindLastOrderTemplate String?
   conversations      Conversation[]
   greetingTimeRules  GreetingTimeRule[]
   orders             Order[]
@@ -2595,6 +2605,7 @@ model QuickReply {
   storesGreeting    Store[]            @relation("StoreGreetingReply")
   menusOutOfHours   Menu[]             @relation("MenuOutOfHoursReply")
   menusGreeting     Menu[]             @relation("MenuGreetingReply")
+  menusRegisteredGreeting Menu[]       @relation("MenuRegisteredGreetingReply")
   greetingTimeRules GreetingTimeRule[]
 
   @@unique([companyId, shortcut])
