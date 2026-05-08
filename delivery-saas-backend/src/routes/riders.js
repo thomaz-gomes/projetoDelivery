@@ -10,6 +10,7 @@ import { createFinancialEntryForRider } from '../services/financial/orderFinanci
 import { emitirPosicaoEntregador, emitirEntregadorOffline } from '../index.js';
 import { getGoalsForRider } from '../services/riderGoals.js';
 import goalsRouter from './goals.js';
+import { startOfDayInTz, endOfDayInTz, dayKeyInTz, listDayKeysInTz } from '../utils/dateTz.js';
 
 export const ridersRouter = express.Router();
 ridersRouter.use(authMiddleware);
@@ -1134,6 +1135,114 @@ ridersRouter.get('/:id/transactions', async (req, res) => {
   const items = await prisma.riderTransaction.findMany({ where, orderBy: { date: sort }, skip, take: pageSize, include: { order: { select: { id: true, displaySimple: true, displayId: true } } } });
 
   res.json({ items, total, page, pageSize, totalPages });
+});
+
+// GET metrics — aggregated KPIs + by-day series for the rider account view.
+// Powers the metrics card above the transactions table:
+//   - totalDeliveries
+//   - avgDeliveryTimeMin (departedAt -> completedAt)
+//   - avgCostPerDelivery (sum of rider transactions / deliveries)
+//   - earnings (sum of all rider transactions in the period)
+//   - revenueGenerated (sum of order.total of orders this rider delivered)
+//   - byDay[]: { day: "YYYY-MM-DD", deliveries, revenue, earnings }
+//
+// Day boundaries respect Company.timezone (defaults to America/Sao_Paulo).
+ridersRouter.get('/:id/metrics', async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  try {
+    const rider = await prisma.rider.findFirst({ where: { id, companyId } });
+    if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+    const company = await prisma.company.findUnique({ where: { id: companyId }, select: { timezone: true } });
+    const tz = company?.timezone || 'America/Sao_Paulo';
+    const todayKey = dayKeyInTz(new Date(), tz);
+    const fromKey = String(req.query.from || `${todayKey.slice(0, 7)}-01`);
+    const toKey = String(req.query.to || todayKey);
+    const from = startOfDayInTz(fromKey, tz);
+    const to = endOfDayInTz(toKey, tz);
+
+    // Orders this rider delivered in the period. Includes CONFIRMACAO_PAGAMENTO
+    // because the rider's job is done at that point — the cashier still has to
+    // confirm payment but the delivery itself counts.
+    const orders = await prisma.order.findMany({
+      where: {
+        riderId: id,
+        companyId,
+        status: { in: ['CONCLUIDO', 'CONFIRMACAO_PAGAMENTO'] },
+        createdAt: { gte: from, lte: to },
+      },
+      select: { id: true, total: true, departedAt: true, completedAt: true, createdAt: true },
+    });
+
+    // Earnings for the period: every rider transaction (delivery fee, daily
+    // rate, bonuses, manual adjustments). Mirrors what the existing
+    // /transactions endpoint already aggregates.
+    const txs = await prisma.riderTransaction.findMany({
+      where: {
+        riderId: id,
+        date: { gte: from, lte: to },
+      },
+      select: { amount: true, type: true, date: true },
+    });
+
+    const totalDeliveries = orders.length;
+
+    // Avg delivery time — only orders with both timestamps, dropping bogus
+    // negative or > 24h diffs (likely manual edits / bad clocks).
+    const validTimedOrders = orders.filter(o => {
+      if (!o.departedAt || !o.completedAt) return false;
+      const min = (new Date(o.completedAt) - new Date(o.departedAt)) / 60000;
+      return min > 0 && min <= 1440;
+    });
+    let avgDeliveryTimeMin = null;
+    if (validTimedOrders.length > 0) {
+      const sumMin = validTimedOrders.reduce((s, o) => s + (new Date(o.completedAt) - new Date(o.departedAt)) / 60000, 0);
+      avgDeliveryTimeMin = Math.round((sumMin / validTimedOrders.length) * 10) / 10;
+    }
+
+    const earnings = txs.reduce((s, t) => s + Number(t.amount || 0), 0);
+    const avgCostPerDelivery = totalDeliveries > 0 ? Math.round((earnings / totalDeliveries) * 100) / 100 : 0;
+    const revenueGenerated = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+
+    // By-day series — bucket on the order's createdAt (deliveries+revenue) and
+    // on the transaction's date (earnings). Empty days are filled with zeros so
+    // the chart shows a continuous timeline.
+    const byDayMap = new Map();
+    function ensureBucket(key) {
+      if (!byDayMap.has(key)) byDayMap.set(key, { day: key, deliveries: 0, revenue: 0, earnings: 0 });
+      return byDayMap.get(key);
+    }
+    for (const o of orders) {
+      const k = dayKeyInTz(o.createdAt, tz);
+      const b = ensureBucket(k);
+      b.deliveries += 1;
+      b.revenue += Number(o.total || 0);
+    }
+    for (const t of txs) {
+      const k = dayKeyInTz(t.date, tz);
+      ensureBucket(k).earnings += Number(t.amount || 0);
+    }
+    const labels = listDayKeysInTz(fromKey, toKey, tz);
+    const byDay = labels.map(d => {
+      const b = byDayMap.get(d) || { day: d, deliveries: 0, revenue: 0, earnings: 0 };
+      // Round to 2 decimals for client display
+      return { ...b, revenue: Math.round(b.revenue * 100) / 100, earnings: Math.round(b.earnings * 100) / 100 };
+    });
+
+    res.json({
+      period: { from: fromKey, to: toKey, timezone: tz },
+      totalDeliveries,
+      avgDeliveryTimeMin,
+      avgCostPerDelivery,
+      earnings: Math.round(earnings * 100) / 100,
+      revenueGenerated: Math.round(revenueGenerated * 100) / 100,
+      byDay,
+    });
+  } catch (e) {
+    console.error('GET /riders/:id/metrics error:', e);
+    res.status(500).json({ message: 'Erro ao calcular métricas', error: e?.message });
+  }
 });
 
 // Adjust rider account (credit/debit) - ADMIN only
