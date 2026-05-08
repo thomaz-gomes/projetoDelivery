@@ -1,4 +1,13 @@
 import { prisma } from '../prisma.js'
+import { dayKeyInTz, startOfDayInTz, endOfDayInTz } from '../utils/dateTz.js'
+
+// Cron trigger runs in BRT (see cron.js), so "yesterday" must be the BRT
+// calendar day. With container UTC, plain Date math placed events from
+// 21:00–23:59 BRT into the next-day bucket and missed the last 3h of the
+// real BRT day. The job stays system-wide (one run for all companies);
+// per-company timezones could be added later if a non-Brazilian merchant
+// onboards.
+const JOB_TZ = 'America/Sao_Paulo'
 
 /**
  * Aggregates yesterday's MenuEvent rows into MenuEventDailySummary
@@ -7,11 +16,11 @@ import { prisma } from '../prisma.js'
 export async function aggregateMenuEvents() {
   const now = new Date()
 
-  // Yesterday range (00:00:00 to 23:59:59)
-  const yesterday = new Date(now)
-  yesterday.setDate(yesterday.getDate() - 1)
-  const dayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0)
-  const dayEnd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999)
+  // Yesterday in JOB_TZ — 00:00 to 23:59:59.999 of the BRT calendar day.
+  const todayKey = dayKeyInTz(now, JOB_TZ)
+  const yesterdayKey = dayKeyInTz(new Date(startOfDayInTz(todayKey, JOB_TZ).getTime() - 1), JOB_TZ)
+  const dayStart = startOfDayInTz(yesterdayKey, JOB_TZ)
+  const dayEnd = endOfDayInTz(yesterdayKey, JOB_TZ)
 
   // Fetch yesterday's events grouped by company + menu
   const events = await prisma.menuEvent.findMany({
@@ -27,7 +36,7 @@ export async function aggregateMenuEvents() {
   })
 
   if (events.length === 0) {
-    console.log('[AggregateMenuEvents] No events to aggregate for', dayStart.toISOString().slice(0, 10))
+    console.log('[AggregateMenuEvents] No events to aggregate for', yesterdayKey)
     return
   }
 
@@ -103,7 +112,7 @@ export async function aggregateMenuEvents() {
     })
   }
 
-  console.log(`[AggregateMenuEvents] Aggregated ${events.length} events into ${Object.keys(groups).length} summaries for ${dayStart.toISOString().slice(0, 10)}`)
+  console.log(`[AggregateMenuEvents] Aggregated ${events.length} events into ${Object.keys(groups).length} summaries for ${yesterdayKey}`)
 
   // Delete events older than 90 days
   const cutoff = new Date(now)
