@@ -4030,6 +4030,9 @@ onMounted(async ()=>{
     try{ scheduleEvaluateDiscounts() }catch(e){}
     // fetch cashback settings and wallet when menu/company loaded
     try{ fetchCashbackSettingsAndWallet() }catch(e){}
+    // Consume "?reorder=..." magic-link from a WhatsApp button click. Pre-fills
+    // the cart with the customer's previous order items and opens checkout.
+    try{ await tryConsumeReorderQuery() }catch(e){ console.warn('[PublicMenu] reorder consume failed', e) }
   }catch(e){
     if(!cacheApplied){
       // No cached data available — show the error page
@@ -4043,6 +4046,69 @@ onMounted(async ()=>{
     }
   }
 });
+
+// Magic-link reorder handler invoked at the tail of onMounted.
+async function tryConsumeReorderQuery() {
+  const orderId = String(route.query.reorder || '').trim();
+  const token = String(route.query.t || '').trim();
+  if (!orderId || !token) return;
+  try {
+    const { data } = await api.get(`/public/${companyId}/reorder/${encodeURIComponent(orderId)}/preview`, {
+      params: { t: token },
+    });
+    const items = Array.isArray(data?.items) ? data.items : [];
+    if (!items.length) {
+      try { await Swal.fire({ icon: 'info', title: 'Pedido vazio', text: 'Não há itens para repetir neste pedido.' }) } catch(_) {}
+      return;
+    }
+
+    // Replace the cart with the preview items. Each line gets a fresh lineId
+    // so duplicate products land on separate rows the user can edit.
+    cart.value = items.map((it) => ({
+      lineId: _makeLineId(),
+      productId: it.productId || null,
+      name: it.name || '',
+      price: Number(it.price || 0),
+      quantity: Number(it.quantity || 1) || 1,
+      options: [],
+      observation: it.notes || null,
+      image: null,
+      categoryId: null,
+    }));
+
+    // If the original order was takeout/pickup, hint the same orderType.
+    if (data?.orderType) {
+      try { orderType.value = String(data.orderType).toUpperCase() === 'PICKUP' ? 'PICKUP' : 'DELIVERY' } catch(_) {}
+    }
+
+    try {
+      await Swal.fire({
+        toast: true, position: 'top-end', icon: 'success',
+        title: 'Itens adicionados! Revise e confirme.',
+        showConfirmButton: false, timer: 2200,
+      });
+    } catch(_) {}
+
+    // Strip the reorder/t params from the URL so a refresh doesn't re-trigger.
+    try {
+      const cleaned = { ...route.query };
+      delete cleaned.reorder; delete cleaned.t;
+      router.replace({ path: route.path, query: cleaned });
+    } catch(_) {}
+
+    // Open checkout so the customer reviews + confirms (per the requested flow).
+    try { openCheckout() } catch(_) {}
+  } catch (e) {
+    const msg = e?.response?.data?.message || 'Link expirado ou inválido. Peça um novo pelo WhatsApp.';
+    try { await Swal.fire({ icon: 'warning', title: 'Não foi possível repetir', text: msg }) } catch(_) {}
+    // Strip the params so the user can keep using the menu without errors.
+    try {
+      const cleaned = { ...route.query };
+      delete cleaned.reorder; delete cleaned.t;
+      router.replace({ path: route.path, query: cleaned });
+    } catch(_) {}
+  }
+}
 
 function selectCategory(id){
   // scroll to a category section (or to products-start when id is null)

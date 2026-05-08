@@ -6,8 +6,9 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { evoSendText, evoSendMediaUrl } from '../wa.js';
+import { evoSendText, evoSendMediaUrl, evoSendButtons } from '../wa.js';
 import { renderQuickReplyVariables } from '../utils/quickReplyVars.js';
+import jwt from 'jsonwebtoken';
 
 function isStoreOpen(store) {
   if (!store) return true;
@@ -80,6 +81,181 @@ async function sendAutoReply(conversation, instanceName, quickReply) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Registered-customer greeting + remind-last-order button
+// ---------------------------------------------------------------------------
+
+function fmtCurrencyBR(value) {
+  try { return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+  catch (_) { return `R$ ${Number(value || 0).toFixed(2)}`; }
+}
+
+function summarizeOrderItems(order) {
+  const items = order?.items || [];
+  if (!items.length) return '';
+  return items
+    .slice(0, 5)
+    .map(it => `• ${it.quantity || 1}x ${it.name}`)
+    .concat(items.length > 5 ? [`...e mais ${items.length - 5} item(ns)`] : [])
+    .join('\n');
+}
+
+function renderRemindLastOrderTemplate(template, { customer, order }) {
+  const fallback = 'Olá {{nome}}! 👋\n\nQuer repetir seu último pedido?\n\n{{itens}}\n\nTotal: {{total}}';
+  const raw = (template && String(template).trim()) || fallback;
+  const data = new Date(order?.createdAt || Date.now());
+  const dataStr = data.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  return String(raw)
+    .replace(/\{\{nome\}\}/g, customer?.fullName || customer?.name || '')
+    .replace(/\{\{itens\}\}/g, summarizeOrderItems(order))
+    .replace(/\{\{total\}\}/g, fmtCurrencyBR(order?.total || 0))
+    .replace(/\{\{data\}\}/g, dataStr);
+}
+
+// Builds the magic-link URL the customer taps after pressing "Repetir pedido".
+// The token is a short-lived JWT bound to (orderId, customerId, companyId) so
+// the public reorder endpoint can validate it without an auth session.
+function buildReorderMagicLink({ companyId, orderId, customerId }) {
+  const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/+$/, '');
+  if (!frontend) return null;
+  const secret = process.env.JWT_SECRET || 'dev-jwt-secret';
+  const token = jwt.sign(
+    { orderId, customerId, companyId, kind: 'reorder' },
+    secret,
+    { expiresIn: '24h' },
+  );
+  return `${frontend}/public/${companyId}?reorder=${encodeURIComponent(orderId)}&t=${encodeURIComponent(token)}`;
+}
+
+// Returns true when a registered-customer greeting + (optionally) the
+// remind-last-order button were sent. Returns false when the conversation is
+// not associated with a registered customer or the menu has no registered
+// greeting configured — caller falls back to the regular greeting.
+async function maybeSendRegisteredGreeting({ conversation, menu, instanceName }) {
+  if (!menu?.registeredGreetingReply) return false;
+  if (!conversation?.customerId) return false;
+  const customer = await prisma.customer.findUnique({
+    where: { id: conversation.customerId },
+    select: { id: true, fullName: true, name: true },
+  });
+  if (!customer) return false;
+  const lastOrder = await prisma.order.findFirst({
+    where: { customerId: customer.id, companyId: conversation.companyId, status: 'CONCLUIDO' },
+    orderBy: { createdAt: 'desc' },
+    include: { items: true },
+  });
+  if (!lastOrder) return false;
+
+  // 1. Send the registered greeting (resolves {{nome}} etc the same way the
+  // default greeting does).
+  await sendAutoReply(conversation, instanceName, menu.registeredGreetingReply);
+
+  // 2. If remind-last-order is enabled, follow with an interactive button that
+  // points at the magic-link reorder flow. Persist the message so the inbox
+  // shows it alongside the greeting.
+  if (menu.remindLastOrderEnabled) {
+    const text = renderRemindLastOrderTemplate(menu.remindLastOrderTemplate, { customer, order: lastOrder });
+    try {
+      await evoSendButtons({
+        instanceName,
+        to: conversation.channelContactId,
+        description: text,
+        buttons: [{ id: `reorder:${lastOrder.id}`, displayText: 'Repetir pedido' }],
+      });
+      await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: 'OUTBOUND',
+          type: 'TEXT',
+          body: text,
+          status: 'SENT',
+        },
+      });
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: new Date() },
+      });
+    } catch (e) {
+      console.warn('[automations] remind-last-order button send failed:', e?.message || e);
+    }
+  }
+  return true;
+}
+
+// Detects an inbound interactive-button reply across the Evolution payload
+// shapes seen in the wild. Returns { buttonId, displayText } or null.
+function extractButtonReplyInfo(messageContent) {
+  if (!messageContent || typeof messageContent !== 'object') return null;
+  const br = messageContent.buttonsResponseMessage
+    || messageContent.templateButtonReplyMessage
+    || messageContent.interactiveResponseMessage
+    || null;
+  if (!br) return null;
+  const buttonId =
+    br.selectedButtonId ||
+    br.selectedId ||
+    br.body?.text ||
+    br.nativeFlowResponseMessage?.paramsJson ||
+    null;
+  const displayText =
+    br.selectedDisplayText ||
+    br.selectedText ||
+    null;
+  if (!buttonId && !displayText) return null;
+  return { buttonId: String(buttonId || ''), displayText: displayText ? String(displayText) : null };
+}
+
+// Handles a "Repetir pedido" button click: validates the order belongs to
+// the conversation's customer/company, then sends a follow-up text message
+// with the magic-link URL. Persists the outbound message so the attendant
+// sees it in the inbox alongside the customer's tap.
+async function handleReorderButtonReply({ conversation, instanceName, buttonReply }) {
+  if (!buttonReply?.buttonId?.startsWith('reorder:')) return false;
+  const orderId = buttonReply.buttonId.slice('reorder:'.length).trim();
+  if (!orderId) return false;
+
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, companyId: conversation.companyId },
+    select: { id: true, customerId: true, companyId: true },
+  });
+  if (!order) return false;
+  // Defense: require the conversation's customer to match the order's customer.
+  if (conversation.customerId && order.customerId && conversation.customerId !== order.customerId) {
+    return false;
+  }
+
+  const link = buildReorderMagicLink({
+    companyId: order.companyId,
+    orderId: order.id,
+    customerId: order.customerId,
+  });
+  if (!link) {
+    console.warn('[reorder] magic link not built — PUBLIC_FRONTEND_URL not set');
+    return false;
+  }
+
+  const text = `Pronto! Toque no link abaixo para revisar e confirmar seu pedido:\n\n${link}\n\nO link é válido por 24h.`;
+  try {
+    await evoSendText({ instanceName, to: conversation.channelContactId, text });
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: 'OUTBOUND',
+        type: 'TEXT',
+        body: text,
+        status: 'SENT',
+      },
+    });
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: new Date() },
+    });
+  } catch (e) {
+    console.warn('[reorder] failed to send magic link:', e?.message || e);
+  }
+  return true;
+}
+
 function timeInRange(current, start, end) {
   // current, start, end are "HH:MM" strings
   if (start <= end) {
@@ -122,6 +298,9 @@ async function runAutomations(conversation, incomingMessage, menuId, instanceNam
       timezone: true,
       outOfHoursReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
       greetingReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
+      registeredGreetingReply: { select: { body: true, mediaUrl: true, mediaMimeType: true, mediaFileName: true } },
+      remindLastOrderEnabled: true,
+      remindLastOrderTemplate: true,
       greetingTimeRules: {
         select: {
           startTime: true,
@@ -153,6 +332,9 @@ async function runAutomations(conversation, incomingMessage, menuId, instanceNam
       select: { id: true },
     });
     if (!recentInbound) {
+      // Registered customer greeting takes precedence when configured.
+      const registeredHandled = await maybeSendRegisteredGreeting({ conversation, menu, instanceName });
+      if (registeredHandled) return;
       await sendAutoReply(conversation, instanceName, activeGreeting);
       return; // greeting covers first contact — skip out-of-hours for this message
     }
@@ -537,9 +719,24 @@ async function processSingleMessage(req, msg, instanceName) {
   // Run automations pipeline (best-effort, non-blocking).
   const effectiveMenuId = updatedConversation.menuId || menuId;
   if (direction === 'INBOUND' && effectiveMenuId) {
-    runAutomations(updatedConversation, message, effectiveMenuId, instanceName).catch(e =>
-      console.error('[automations] failed:', e)
-    );
+    // Detect an interactive-button reply (e.g. "Repetir pedido"). When a
+    // recognised reorder button is tapped we send the follow-up magic link
+    // and skip the regular greeting/keyword automation pipeline so the
+    // customer is not greeted twice in the same minute.
+    const buttonReply = extractButtonReplyInfo(messageContent);
+    if (buttonReply) {
+      handleReorderButtonReply({ conversation: updatedConversation, instanceName, buttonReply })
+        .then((handled) => {
+          if (!handled) {
+            return runAutomations(updatedConversation, message, effectiveMenuId, instanceName);
+          }
+        })
+        .catch(e => console.error('[reorder] error:', e));
+    } else {
+      runAutomations(updatedConversation, message, effectiveMenuId, instanceName).catch(e =>
+        console.error('[automations] failed:', e)
+      );
+    }
   }
 }
 

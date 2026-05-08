@@ -934,6 +934,56 @@ publicMenuRouter.post('/:companyId/coupons/validate', async (req, res) => {
   }
 })
 
+// GET /public/:companyId/reorder/:orderId/preview?t=<jwt>
+//
+// Returns the items of the customer's previous order so the public menu can
+// pre-fill the cart when the customer taps the "Repetir pedido" magic link
+// sent via WhatsApp. The token is a short-lived JWT signed by webhookEvolution
+// when the button is built; without a valid token the endpoint refuses.
+publicMenuRouter.get('/:companyId/reorder/:orderId/preview', async (req, res) => {
+  const { companyId, orderId } = req.params;
+  const token = String(req.query.t || '');
+  if (!token) return res.status(401).json({ message: 'Token ausente' });
+
+  try {
+    const secret = process.env.JWT_SECRET || 'dev-jwt-secret';
+    const payload = jwt.verify(token, secret);
+    if (!payload || payload.kind !== 'reorder') return res.status(401).json({ message: 'Token inválido' });
+    if (String(payload.companyId) !== String(companyId)) return res.status(401).json({ message: 'Token inválido' });
+    if (String(payload.orderId) !== String(orderId)) return res.status(401).json({ message: 'Token inválido' });
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, companyId },
+      include: { items: true },
+    });
+    if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+    if (payload.customerId && order.customerId && String(payload.customerId) !== String(order.customerId)) {
+      return res.status(401).json({ message: 'Token inválido' });
+    }
+
+    // Shape items the way PublicMenu's cart expects (mirrors the order payload).
+    const items = (order.items || []).map((it) => ({
+      productId: it.productId || null,
+      name: it.name,
+      quantity: Number(it.quantity || 1),
+      price: Number(it.price || 0),
+      notes: it.notes || null,
+    }));
+
+    return res.json({
+      orderId: order.id,
+      customerId: order.customerId || null,
+      orderType: order.orderType || null,
+      items,
+    });
+  } catch (e) {
+    if (e?.name === 'TokenExpiredError') return res.status(401).json({ message: 'Token expirado — peça um novo link' });
+    if (e?.name === 'JsonWebTokenError') return res.status(401).json({ message: 'Token inválido' });
+    console.error('GET /public/:companyId/reorder error:', e);
+    return res.status(500).json({ message: 'Erro ao carregar pedido' });
+  }
+});
+
 // POST /public/:companyId/orders
 // body: { customerName, customerPhone, address: { street, number, neighborhood, city, formatted }, items: [{ productId?, name, quantity, price, notes }], payment: { methodCode, raw } }
 publicMenuRouter.post('/:companyId/orders', async (req, res) => {

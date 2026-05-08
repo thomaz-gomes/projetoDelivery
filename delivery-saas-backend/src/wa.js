@@ -229,6 +229,59 @@ export async function evoSendDocument({ instanceName, to, base64, filename = 'fi
   throw last || new Error('Falha ao enviar documento (Evolution)');
 }
 
+/**
+ * Sends an interactive WhatsApp message with reply buttons.
+ * `buttons` is an array of `{ id, displayText }` (max 3 reply buttons per
+ * WhatsApp spec). When the customer taps one, the webhook receives a
+ * `buttonsResponseMessage` (or equivalent) with that button id back.
+ *
+ * Evolution API ships several payload shapes across versions; we try the
+ * common ones until one returns 2xx, mirroring evoSendText's retry pattern.
+ */
+export async function evoSendButtons({ instanceName, to, title = '', description, footer = '', buttons }) {
+  const number = normalizePhone(to);
+  if (!number) throw new Error('Telefone inválido');
+  if (!Array.isArray(buttons) || buttons.length === 0) throw new Error('buttons obrigatório');
+
+  // Two payload shapes seen in the wild:
+  //   v1.x:   { buttonsMessage: { title, description, footer, buttons: [{ buttonId, buttonText: { displayText }, type: 1 }] } }
+  //   recent: { title, description, footer, buttons: [{ buttonId, buttonText: { displayText }, type: 1 }] }
+  const buttonsPayload = buttons.map((b) => ({
+    buttonId: String(b.id || b.buttonId || ''),
+    buttonText: { displayText: String(b.displayText || b.text || '') },
+    type: 1,
+  }));
+
+  const attempts = [
+    {
+      url: `/message/sendButtons/${encodeURIComponent(instanceName)}`,
+      body: { number, title, description, footer, buttons: buttonsPayload },
+    },
+    {
+      url: `/message/sendButtons`,
+      body: { instanceName, to: number, title, description, footer, buttons: buttonsPayload },
+    },
+    {
+      url: `/message/sendButtons/${encodeURIComponent(instanceName)}`,
+      body: { number, buttonsMessage: { title, description, footer, buttons: buttonsPayload } },
+    },
+  ];
+
+  let last;
+  for (const a of attempts) {
+    try {
+      console.log(`evoSendButtons -> trying ${a.url} instance=${instanceName} to=${number} buttons=${buttonsPayload.length}`);
+      const { data } = await http.post(a.url, a.body);
+      console.log(`evoSendButtons -> success ${a.url} instance=${instanceName} to=${number}`);
+      return data;
+    } catch (e) {
+      last = e;
+      console.warn(`evoSendButtons -> attempt failed ${a.url} status=${e.response?.status || 'no-status'} error=${e.response?.data ? JSON.stringify(e.response.data).slice(0, 500) : e.message}`);
+    }
+  }
+  throw last || new Error('Falha ao enviar botões (Evolution)');
+}
+
 // send media by public URL (preferred for larger files). Tries known endpoints.
 export async function evoSendMediaUrl({ instanceName, to, mediaUrl, filename = 'file.pdf', mimeType = 'application/pdf', caption = '' }) {
   const number = normalizePhone(to);
