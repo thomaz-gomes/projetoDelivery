@@ -91,3 +91,60 @@ export function listDayKeysInTz(fromKey, toKey, tz = DEFAULT_TZ) {
   }
   return out;
 }
+
+/**
+ * Hour of the day (0..23) for `date` in the given timezone.
+ * `Date.prototype.getHours()` uses the server's local clock — which is UTC
+ * inside the container — so a sale at 22:00 BRT would report as 01:00.
+ */
+export function hourInTz(date, tz = DEFAULT_TZ) {
+  const d = date instanceof Date ? date : new Date(date);
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: '2-digit', hourCycle: 'h23',
+  });
+  return Number(fmt.format(d));
+}
+
+/**
+ * Weekday (0=Sunday..6=Saturday) for `date` in the given timezone.
+ */
+export function weekdayInTz(date, tz = DEFAULT_TZ) {
+  const d = date instanceof Date ? date : new Date(date);
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' });
+  const map = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return map[fmt.format(d)];
+}
+
+/**
+ * Resolve a `{ from, to }` date range from a query object with optional
+ * `dateFrom`/`dateTo` (or `from`/`to`) string filters. Defaults: first day of
+ * the current month through "now" — both relative to the given timezone.
+ */
+export function parseDateRangeFromQuery(query = {}, tz = DEFAULT_TZ, opts = {}) {
+  const fromKey = opts.fromKeyName || 'dateFrom';
+  const toKey = opts.toKeyName || 'dateTo';
+  const fromAlt = opts.fromKeyAlt || 'from';
+  const toAlt = opts.toKeyAlt || 'to';
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const defaultFrom = opts.defaultFromKey || `${todayKey.slice(0, 7)}-01`;
+  const defaultTo = opts.defaultToKey || todayKey;
+  const fromStr = String(query[fromKey] || query[fromAlt] || defaultFrom);
+  const toStr = String(query[toKey] || query[toAlt] || defaultTo);
+  return {
+    from: startOfDayInTz(fromStr, tz),
+    to: endOfDayInTz(toStr, tz),
+    fromKey: fromStr,
+    toKey: toStr,
+  };
+}
+
+/**
+ * Get the previous period of equal length immediately before `[from, to]`,
+ * useful for week-over-week / month-over-month comparisons.
+ */
+export function previousPeriod(from, to) {
+  const span = to.getTime() - from.getTime();
+  const prevTo = new Date(from.getTime() - 1);
+  const prevFrom = new Date(prevTo.getTime() - span);
+  return { from: prevFrom, to: prevTo };
+}

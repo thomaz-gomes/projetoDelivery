@@ -1,24 +1,36 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware } from '../../auth.js';
+import { startOfDayInTz, endOfDayInTz, dayKeyInTz } from '../../utils/dateTz.js';
 
 const router = express.Router();
 router.use(authMiddleware);
 
-function parseDateRange(query) {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  const from = query.from ? new Date(query.from) : firstDay;
-  const to = query.to ? new Date(query.to) : new Date();
-  to.setHours(23, 59, 59, 999);
-  return { from, to };
+const DEFAULT_TZ = 'America/Sao_Paulo';
+
+async function getCompanyTimezone(companyId) {
+  try {
+    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { timezone: true } });
+    return c?.timezone || DEFAULT_TZ;
+  } catch (e) {
+    return DEFAULT_TZ;
+  }
+}
+
+function parseDateRange(query, tz) {
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const defaultFromKey = `${todayKey.slice(0, 7)}-01`;
+  const fromStr = String(query.from || defaultFromKey);
+  const toStr = String(query.to || todayKey);
+  return { from: startOfDayInTz(fromStr, tz), to: endOfDayInTz(toStr, tz) };
 }
 
 // GET /reports/riders-dashboard
 router.get('/', async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { from, to } = parseDateRange(req.query);
+    const tz = await getCompanyTimezone(companyId);
+    const { from, to } = parseDateRange(req.query, tz);
     const riderId = req.query.riderId || null;
 
     // Find all completed orders in the period that had a rider assigned
