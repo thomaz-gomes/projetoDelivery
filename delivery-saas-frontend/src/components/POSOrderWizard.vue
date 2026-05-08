@@ -1207,9 +1207,33 @@ onMounted(() => { loadCashbackSettings(); });
 
 // Embedded mode: skip customer/address steps and go directly to products
 let embeddedInitialized = false;
+
+// Map any takeout-equivalent label coming from the parent ('TAKEOUT', 'PICKUP',
+// 'TAKE-OUT', 'PICK-UP', 'RETIRADA', 'BALCAO', 'BALCÃO', 'INDOOR') to BALCAO so
+// the rest of this wizard — which only branches on 'DELIVERY' vs everything
+// else — never falls into the delivery code path for a takeout order.
+function normalizeOrderType(raw) {
+  if (!raw) return null;
+  const ot = String(raw).toUpperCase();
+  const TAKEOUT_LIKE = ['RETIRADA', 'TAKEOUT', 'TAKE-OUT', 'PICKUP', 'PICK-UP', 'BALCAO', 'BALCÃO', 'INDOOR'];
+  if (TAKEOUT_LIKE.includes(ot)) return 'BALCAO';
+  return ot;
+}
+
 watch(() => props.preset, async (val) => {
   if (!props.embedded || !val?.skipCustomer) return;
   try {
+    // Keep orderType in sync with the parent's selection on every preset
+    // change (the customer can flip Entrega ↔ Balcão mid-flow). Locking it
+    // behind embeddedInitialized — as the original code did — caused the
+    // wizard to ship the order with address: addr.value while orderType was
+    // already BALCAO in the parent, triggering the backend's address-required
+    // validation only for late switches.
+    if (val.orderType) {
+      const next = normalizeOrderType(val.orderType);
+      if (next && next !== orderType.value) orderType.value = next;
+    }
+
     // Initialize customer/address/menu only once per wizard instance
     if (!embeddedInitialized) {
       // Set customer from preset
@@ -1222,12 +1246,6 @@ watch(() => props.preset, async (val) => {
         } catch (e) { console.warn('Failed to load preset customer:', e); }
       } else if (val.customerName) {
         newCustomerName.value = val.customerName;
-      }
-      // Set order type
-      if (val.orderType) {
-        const ot = String(val.orderType).toUpperCase();
-        if (ot === 'RETIRADA' || ot === 'BALCAO' || ot === 'BALCÃO') orderType.value = 'BALCAO';
-        else orderType.value = ot;
       }
       // Set address from preset
       if (val.address) {
