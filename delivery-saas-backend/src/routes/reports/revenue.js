@@ -1,17 +1,40 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware } from '../../auth.js';
+import { startOfDayInTz, endOfDayInTz, dayKeyInTz, listDayKeysInTz } from '../../utils/dateTz.js';
 
 const router = express.Router();
 router.use(authMiddleware);
 
-function parseDateRange(query) {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  const from = query.dateFrom ? new Date(query.dateFrom) : firstDay;
-  const to = query.dateTo ? new Date(query.dateTo) : new Date();
-  to.setHours(23, 59, 59, 999);
-  return { from, to };
+const DEFAULT_TZ = 'America/Sao_Paulo';
+
+async function getCompanyTimezone(companyId) {
+  try {
+    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { timezone: true } });
+    return c?.timezone || DEFAULT_TZ;
+  } catch (e) {
+    return DEFAULT_TZ;
+  }
+}
+
+/**
+ * Resolves the date-range filter from frontend `<input type="date">` strings
+ * (YYYY-MM-DD) into UTC Date instants honoring the company's timezone.
+ * Without this, the container's UTC clock would shift the window by 3h for
+ * Brazilian merchants — orders from 21:00–23:59 BRT would slip into the next
+ * day's totals.
+ */
+function parseDateRange(query, tz) {
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const firstDayKey = `${todayKey.slice(0, 7)}-01`;
+  const fromKey = String(query.dateFrom || firstDayKey);
+  const toKey = String(query.dateTo || todayKey);
+  return {
+    from: startOfDayInTz(fromKey, tz),
+    to: endOfDayInTz(toKey, tz),
+    fromKey,
+    toKey,
+  };
 }
 
 function channelLabel(orderType) {
@@ -25,7 +48,8 @@ function channelLabel(orderType) {
 router.get('/summary', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { from, to } = parseDateRange(req.query);
+    const tz = await getCompanyTimezone(companyId);
+    const { from, to } = parseDateRange(req.query, tz);
 
     const orderWhere = {
       companyId,
@@ -72,6 +96,7 @@ router.get('/summary', async (req, res) => {
       avgPickup: channels['Retirada'].count > 0 ? channels['Retirada'].total / channels['Retirada'].count : 0,
       avgBalcao: channels['Balcão'].count > 0 ? channels['Balcão'].total / channels['Balcão'].count : 0,
       byChannel,
+      timezone: tz,
     });
   } catch (e) {
     console.error('GET /reports/revenue/summary error:', e);
@@ -83,7 +108,8 @@ router.get('/summary', async (req, res) => {
 router.get('/by-day', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { from, to } = parseDateRange(req.query);
+    const tz = await getCompanyTimezone(companyId);
+    const { from, to, fromKey, toKey } = parseDateRange(req.query, tz);
 
     const orderWhere = {
       companyId,
@@ -99,7 +125,7 @@ router.get('/by-day', async (req, res) => {
 
     const byDate = {};
     for (const o of orders) {
-      const dateKey = o.createdAt.toISOString().slice(0, 10);
+      const dateKey = dayKeyInTz(o.createdAt, tz);
       const ch = channelLabel(o.orderType);
       if (!byDate[dateKey]) byDate[dateKey] = { Delivery: 0, Retirada: 0, 'Balcão': 0, Total: 0 };
       const t = Number(o.total || 0);
@@ -107,12 +133,7 @@ router.get('/by-day', async (req, res) => {
       byDate[dateKey].Total += t;
     }
 
-    const labels = [];
-    const d = new Date(from);
-    while (d <= to) {
-      labels.push(d.toISOString().slice(0, 10));
-      d.setDate(d.getDate() + 1);
-    }
+    const labels = listDayKeysInTz(fromKey, toKey, tz);
 
     const series = {
       Total: labels.map(dt => byDate[dt]?.Total || 0),
@@ -121,7 +142,7 @@ router.get('/by-day', async (req, res) => {
       'Balcão': labels.map(dt => byDate[dt]?.['Balcão'] || 0),
     };
 
-    res.json({ labels, series });
+    res.json({ labels, series, timezone: tz });
   } catch (e) {
     console.error('GET /reports/revenue/by-day error:', e);
     res.status(500).json({ message: 'Erro ao buscar faturamento por dia', error: e?.message });

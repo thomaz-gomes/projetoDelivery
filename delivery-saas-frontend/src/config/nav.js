@@ -62,7 +62,8 @@ export const nav = [
     { name: 'Taxas e Operadoras', to: '/financial/gateways', icon: 'bi bi-percent' },
     { name: 'Repasses Marketplace', to: '/financial/settlements', icon: 'bi bi-bank' },
   ] },
-  { name: 'Configurações', to: '/settings/neighborhoods', icon: 'bi bi-gear', role: 'ADMIN', children: [
+  { name: 'Configurações', to: '/settings/general', icon: 'bi bi-gear', role: 'ADMIN', children: [
+    { name: 'Geral', to: '/settings/general', icon: 'bi bi-globe' },
     { name: 'Bairros', to: '/settings/neighborhoods', icon: 'bi bi-geo-alt', moduleKey: 'cardapio_completo', lockable: true },
     { name: 'Dados Fiscais', to: '/settings/dados-fiscais', icon: 'bi bi-receipt', moduleKey: 'fiscal', lockable: true },
     { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug', moduleKey: 'cardapio_completo', lockable: true },
