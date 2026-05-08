@@ -538,72 +538,110 @@
               </div>
             </div>
 
-            <div v-if="checkoutStep === 'customer'">
+            <!-- Step 1: WhatsApp only -->
+            <div v-if="checkoutStep === 'phone'">
               <div class="checkout-section-card mb-3">
                 <div class="checkout-section-header mb-3">
-                  <div class="summary-icon"><i class="bi bi-person"></i></div>
+                  <div class="summary-icon"><i class="bi bi-whatsapp"></i></div>
                   <div>
-                    <div class="fw-bold">Seus dados</div>
+                    <div class="fw-bold">Qual o seu WhatsApp?</div>
+                    <div class="small text-muted">Usamos para confirmar o pedido com você.</div>
                   </div>
-                </div>
-
-                <!-- Login / Register tabs -->
-                <div class="checkout-tabs mb-3">
-                  <button :class="['checkout-tab', { active: customerTab === 'login' }]" @click="customerTab = 'login'">Entrar</button>
-                  <button :class="['checkout-tab', { active: customerTab === 'register' }]" @click="customerTab = 'register'">Criar Conta</button>
                 </div>
 
                 <div v-if="customerFormMsg" class="alert mb-3" :class="customerFormMsgType" style="border-radius:10px;font-size:13px;padding:10px 14px">{{ customerFormMsg }}</div>
 
-                <!-- LOGIN tab -->
-                <div v-if="customerTab === 'login'">
-                  <div class="mb-3">
-                    <label class="form-label">Seu nome</label>
-                    <input v-model="customer.name" class="form-control" type="text" placeholder="Como devemos te chamar?" autocomplete="name" />
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">WhatsApp / Telefone</label>
-                    <input :value="loginForm.phone" @input="onLoginPhoneInput" class="form-control" type="text" placeholder="(00) 9 0000-0000" maxlength="16" />
-                    <div class="small text-muted mt-1">Formato: (DD) 9 0000-0000 — inclua o DDD</div>
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">Senha</label>
-                    <input v-model="loginForm.password" class="form-control" type="password" autocomplete="current-password" />
-                  </div>
-                  <div class="d-flex align-items-center gap-3 flex-wrap">
-                    <button class="btn btn-primary btn-next" @click="doLoginInCheckout" :disabled="customerFormLoading" style="min-width:100px">
-                      <span v-if="customerFormLoading" class="spinner-border spinner-border-sm me-1"></span>
-                      Entrar
-                    </button>
-                    <a href="#" class="btn btn-noCad checkout-link d-flex align-items-center gap-1" @click.prevent="continueWithWhatsappFromLogin">
-                      <i class="bi bi-whatsapp"></i> Pedir sem se cadastrar
-                    </a>
-                  </div>
+                <div class="mb-3">
+                  <label class="form-label">WhatsApp / Telefone</label>
+                  <input :value="phoneInput" @input="onPhoneStepInput" class="form-control" type="tel" placeholder="(00) 9 0000-0000" maxlength="16" autocomplete="tel" inputmode="tel" />
+                  <div class="small text-muted mt-1">Formato: (DD) 9 0000-0000 — inclua o DDD</div>
                 </div>
 
-                <!-- REGISTER tab -->
-                <div v-if="customerTab === 'register'">
-                  <div class="mb-3">
-                    <label class="form-label">Nome</label>
-                    <input v-model="regForm.name" class="form-control" type="text" />
+                <div class="d-flex justify-content-end">
+                  <button class="btn btn-primary btn-next" @click="proceedFromPhone" style="min-width:120px">
+                    Continuar <i class="bi bi-chevron-right ms-1"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 2: name + identity choice -->
+            <div v-if="checkoutStep === 'identity'">
+              <div class="checkout-section-card mb-3">
+                <div class="identity-phone-banner d-flex align-items-center justify-content-between mb-3 p-2 px-3" style="background:var(--bg-input);border-radius:10px;border:1px solid var(--border-color);">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-whatsapp" style="color:var(--success);"></i>
+                    <div>
+                      <div class="small text-muted" style="font-size:0.72rem;">WhatsApp</div>
+                      <div class="fw-semibold" style="font-size:0.875rem;">{{ phoneInput || customer.contact }}</div>
+                    </div>
+                  </div>
+                  <button class="btn btn-link btn-sm p-0" @click="checkoutStep = 'phone'; identityMode = null" style="text-decoration:none;font-size:0.78rem;">
+                    <i class="bi bi-pencil me-1"></i>Editar
+                  </button>
+                </div>
+
+                <div v-if="customerFormMsg" class="alert mb-3" :class="customerFormMsgType" style="border-radius:10px;font-size:13px;padding:10px 14px">{{ customerFormMsg }}</div>
+
+                <div class="mb-3">
+                  <label class="form-label">Como devemos te chamar?</label>
+                  <input v-model="customer.name" class="form-control" type="text" placeholder="Seu nome" autocomplete="name" />
+                </div>
+
+                <!-- Default state: 3 action buttons -->
+                <div v-if="identityMode === null" class="d-grid gap-2">
+                  <button class="btn btn-secondary btn-next" @click="continueWithoutAccount">
+                    <i class="bi bi-person-dash me-1"></i> Continuar sem cadastro
+                  </button>
+                  <button class="btn btn-primary btn-next position-relative" @click="enterRegisterMode">
+                    <i class="bi bi-person-plus me-1"></i> Criar conta
+                    <span v-if="cashbackEnabled && cashbackDefaultPercentDisplay > 0" class="d-block small fw-normal mt-1" style="opacity:0.95;font-size:0.75rem;">
+                      <i class="bi bi-cash-stack me-1"></i> Ganhe {{ cashbackDefaultPercentDisplay }}% de cashback em cada pedido
+                    </span>
+                  </button>
+                  <button class="btn btn-outline-secondary btn-next" @click="enterLoginMode">
+                    <i class="bi bi-box-arrow-in-right me-1"></i> Já tenho conta
+                  </button>
+                </div>
+
+                <!-- Register sub-form -->
+                <div v-else-if="identityMode === 'register'">
+                  <div v-if="cashbackEnabled && cashbackDefaultPercentDisplay > 0" class="alert alert-light mb-3 p-2 px-3 small" style="border-radius:10px;border-left:3px solid var(--success);">
+                    <i class="bi bi-cash-stack me-1" style="color:var(--success);"></i>
+                    Ao criar a conta, você ganha <strong>{{ cashbackDefaultPercentDisplay }}% de cashback</strong> em todos os pedidos.
                   </div>
                   <div class="mb-3">
-                    <label class="form-label">WhatsApp</label>
-                    <input :value="regForm.whatsapp" @input="onRegWhatsappInput" class="form-control" type="text" placeholder="(00) 9 0000-0000" maxlength="16" />
-                    <div class="small text-muted mt-1">Utilize DDD, exemplo: (11) 9 9123-4567</div>
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">E-mail</label>
-                    <input v-model="regForm.email" class="form-control" type="email" />
+                    <label class="form-label">E-mail <span class="text-muted small">(opcional)</span></label>
+                    <input v-model="regForm.email" class="form-control" type="email" autocomplete="email" />
                   </div>
                   <div class="mb-3">
                     <label class="form-label">Senha</label>
                     <input v-model="regForm.password" class="form-control" type="password" autocomplete="new-password" />
                   </div>
-                  <div class="d-flex justify-content-end">
-                    <button class="btn btn-primary btn-next" @click="doRegisterInCheckout" :disabled="customerFormLoading" style="min-width:120px">
+                  <div class="d-flex justify-content-between align-items-center gap-2">
+                    <a href="#" @click.prevent="identityMode = null" class="small" style="text-decoration:none;color:var(--text-secondary);">
+                      <i class="bi bi-chevron-left me-1"></i>Voltar
+                    </a>
+                    <button class="btn btn-primary btn-next" @click="doRegisterInCheckout" :disabled="customerFormLoading" style="min-width:140px">
                       <span v-if="customerFormLoading" class="spinner-border spinner-border-sm me-1"></span>
-                      Criar Conta
+                      Criar conta
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Login sub-form -->
+                <div v-else-if="identityMode === 'login'">
+                  <div class="mb-3">
+                    <label class="form-label">Senha</label>
+                    <input v-model="loginForm.password" class="form-control" type="password" autocomplete="current-password" />
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center gap-2">
+                    <a href="#" @click.prevent="identityMode = null" class="small" style="text-decoration:none;color:var(--text-secondary);">
+                      <i class="bi bi-chevron-left me-1"></i>Voltar
+                    </a>
+                    <button class="btn btn-primary btn-next" @click="doLoginInCheckout" :disabled="customerFormLoading" style="min-width:120px">
+                      <span v-if="customerFormLoading" class="spinner-border spinner-border-sm me-1"></span>
+                      Entrar
                     </button>
                   </div>
                 </div>
@@ -830,7 +868,7 @@
                       <div class="small text-muted">{{ customer.contact || '' }}</div>
                     </div>
                   </div>
-                  <button class="btn btn-link btn-summary" @click="checkoutStep = 'customer'" aria-label="Editar cliente"><i class="bi bi-pencil"></i></button>
+                  <button class="btn btn-link btn-summary" @click="checkoutStep = 'identity'" aria-label="Editar cliente"><i class="bi bi-pencil"></i></button>
                 </div>
 
                 <div class="d-flex justify-content-between align-items-start">
@@ -918,8 +956,8 @@
           </div>
     </div>
 
-    <!-- Mobile fixed footer for checkout actions (visible only on small screens, not on customer step which has inline buttons) -->
-    <div v-if="checkoutStep !== 'customer'" class="checkout-footer d-flex d-lg-none justify-content-between align-items-center">
+    <!-- Mobile fixed footer for checkout actions (visible only on small screens; the phone/identity steps have inline CTAs of their own) -->
+    <div v-if="checkoutStep !== 'phone' && checkoutStep !== 'identity'" class="checkout-footer d-flex d-lg-none justify-content-between align-items-center">
       <button v-if="checkoutStep === 'review'" class="btn btn-success flex-fill btn-next" @click="performOrderFromModal">Confirmar pedido</button>
       <button v-else-if="checkoutStep === 'delivery'" class="btn btn-primary flex-fill btn-next" @click="nextFromDelivery">Próximo</button>
       <button v-else-if="checkoutStep === 'payment'" class="btn btn-primary flex-fill btn-next" @click="goToReview">Próximo</button>
@@ -1376,12 +1414,18 @@ function toggleOrderType(){
 }
 // checkout modal state (multi-step)
 const checkoutModalOpen = ref(false)
-const checkoutStep = ref('customer') // 'customer' | 'delivery' | 'payment' | 'review'
-// Stepper configuration for checkout modal
-const stepOrder = ['customer','delivery','payment','review']
-const stepLabels = { customer: 'Cliente', delivery: 'Entrega', payment: 'Pagamento', review: 'Resumo' }
-const stepIcons = { customer: 'bi-person', delivery: 'bi-geo-alt', payment: 'bi-credit-card', review: 'bi-list-check' }
+// Steps: phone -> identity -> delivery -> payment -> review.
+// "phone" collects only the WhatsApp; "identity" asks for the name and lets
+// the customer pick: continue without registration / create account / log in.
+// Both auth steps are skipped when a public token is already present.
+const checkoutStep = ref('phone')
+const stepOrder = ['phone','identity','delivery','payment','review']
+const stepLabels = { phone: 'WhatsApp', identity: 'Identificação', delivery: 'Entrega', payment: 'Pagamento', review: 'Resumo' }
+const stepIcons = { phone: 'bi-whatsapp', identity: 'bi-person', delivery: 'bi-geo-alt', payment: 'bi-credit-card', review: 'bi-list-check' }
 const stepIndex = computed(() => Math.max(0, stepOrder.indexOf(checkoutStep.value)))
+// On the identity step the customer picks one of three actions; null means
+// "show the three buttons", otherwise the chosen sub-form is revealed.
+const identityMode = ref(null) // null | 'login' | 'register'
 // simple info modal state (opened by 'Mais informações')
 // simple info modal state (opened by 'Mais informações')
 const infoModalOpen = ref(false)
@@ -1462,14 +1506,30 @@ async function openCheckout(){
       return
     }
   }catch(e){ /* ignore parse errors */ }
-  checkoutStep.value = 'customer'
+  // Not logged in — start by collecting the WhatsApp. Pre-fill from any
+  // previously-typed phone (cached in customer state) so the user does not
+  // retype on a return visit.
+  identityMode.value = null
+  if (!phoneInput.value) {
+    phoneInput.value = customer.value.contact || ''
+  }
+  checkoutStep.value = 'phone'
 }
 function closeCheckout(){ checkoutModalOpen.value = false }
 
 function goBackFromStep(){
+  // From identity, going back closes the sub-form first, then returns to phone.
+  if(checkoutStep.value === 'identity' && identityMode.value){
+    identityMode.value = null
+    return
+  }
   const idx = stepOrder.indexOf(checkoutStep.value)
-  if(idx > 0){ checkoutStep.value = stepOrder[idx - 1] }
-  else { closeCheckout() }
+  if(idx > 0){
+    checkoutStep.value = stepOrder[idx - 1]
+    if(checkoutStep.value === 'identity') identityMode.value = null
+  } else {
+    closeCheckout()
+  }
 }
 
 function openRegister(){
@@ -1721,13 +1781,25 @@ const accountHasPassword = ref(false)
 const customerPassword = ref('')
 const accountCheckLoading = ref(false)
 const lastCheckedPhone = ref('')
-// Checkout customer tab: 'login' or 'register'
+// Phone collected on the first checkout step. Single source of truth shared
+// across the identity step's three sub-modes (continue/login/register).
+const phoneInput = ref('')
+// Checkout customer tab (legacy state — kept for backward compat with any
+// inline references; no longer used by the redesigned identity step).
 const customerTab = ref('login')
 const regForm = ref({ name: '', whatsapp: '', email: '', password: '' })
 const loginForm = ref({ phone: '', password: '' })
 const customerFormMsg = ref('')
 const customerFormMsgType = ref('')
 const customerFormLoading = ref(false)
+// Display percentage (e.g. 5 for 5%) for the cashback CTA on "Criar conta".
+// `cashbackSettings.defaultPercent` is already stored in percent units
+// elsewhere in this file (see estimatedCashbackTotal which divides by 100).
+const cashbackDefaultPercentDisplay = computed(() => {
+  if (!cashbackEnabled.value) return 0
+  const raw = Number(cashbackSettings.value?.defaultPercent || 0)
+  return Math.round(raw * 10) / 10
+})
 // load persisted customer if any (after customer is defined)
 const savedCustomerRaw = localStorage.getItem(LOCAL_CUSTOMER_KEY) || localStorage.getItem(`public_customer_${companyId}`) || null
 const savedCustomer = JSON.parse(savedCustomerRaw || 'null')
@@ -1880,7 +1952,9 @@ function logoutPublicCustomer(){
   customer.value = { name: '', contact: '', address: { formattedAddress: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', latitude: null, longitude: null, fullDisplay: '' } }
   addresses.value = []
   selectedAddressId.value = null
-  checkoutStep.value = 'customer'
+  phoneInput.value = ''
+  identityMode.value = null
+  checkoutStep.value = 'phone'
 }
 
 function switchAccount(){
@@ -3393,9 +3467,72 @@ function onRegWhatsappInput(e) {
   try { regForm.value.whatsapp = applyPhoneMask(e && e.target ? e.target.value : String(e || '')) } catch(e) {}
 }
 
+// Step 1 (phone) — single-input WhatsApp collector. Mask is applied as the
+// user types; advancing validates DDD + minimum length and seeds the legacy
+// loginForm/regForm.phone fields so the step 2 sub-forms can submit without
+// asking the user to retype.
+function onPhoneStepInput(e) {
+  try { phoneInput.value = applyPhoneMask(e && e.target ? e.target.value : String(e || '')) } catch(_) {}
+}
+
+function proceedFromPhone() {
+  customerFormMsg.value = ''
+  const raw = phoneInput.value || ''
+  const digits = removePhoneMask(raw)
+  if (!digits || String(digits).length < 10) {
+    customerFormMsg.value = 'Informe um WhatsApp válido (DDD + número)'
+    customerFormMsgType.value = 'alert-danger'
+    return
+  }
+  // Persist phone on the shared state. loginForm/regForm keep their own
+  // copies so the existing submit handlers below need no parameter changes.
+  customer.value.contact = raw
+  loginForm.value.phone = raw
+  regForm.value.whatsapp = raw
+  identityMode.value = null
+  checkoutStep.value = 'identity'
+}
+
+function continueWithoutAccount() {
+  customerFormMsg.value = ''
+  const name = (customer.value.name || '').trim()
+  if (!name) {
+    customerFormMsg.value = 'Informe seu nome antes de continuar'
+    customerFormMsgType.value = 'alert-danger'
+    return
+  }
+  const digits = removePhoneMask(phoneInput.value || customer.value.contact || '')
+  if (!digits || String(digits).length < 10) {
+    customerFormMsg.value = 'WhatsApp inválido — volte e corrija'
+    customerFormMsgType.value = 'alert-danger'
+    return
+  }
+  customer.value.name = name
+  customer.value.contact = phoneInput.value || customer.value.contact
+  saveCustomerToLocal()
+  checkoutStep.value = 'delivery'
+  try { refreshDeliveryFee() } catch(_) {}
+}
+
+function enterLoginMode() {
+  customerFormMsg.value = ''
+  identityMode.value = 'login'
+  // password starts empty so the user types fresh
+  loginForm.value.password = ''
+}
+
+function enterRegisterMode() {
+  customerFormMsg.value = ''
+  identityMode.value = 'register'
+  // Pre-fill name on the legacy regForm so doRegisterInCheckout can read it.
+  regForm.value.name = (customer.value.name || '').trim()
+  regForm.value.password = ''
+  regForm.value.email = regForm.value.email || ''
+}
+
 async function doLoginInCheckout() {
   customerFormMsg.value = ''
-  const raw = loginForm.value.phone || ''
+  const raw = loginForm.value.phone || phoneInput.value || ''
   const password = loginForm.value.password || ''
   if (!raw || !password) { customerFormMsg.value = 'Informe WhatsApp e senha'; customerFormMsgType.value = 'alert-danger'; return }
   const digits = removePhoneMask(raw)
@@ -3421,6 +3558,7 @@ async function doLoginInCheckout() {
       try { await fetchProfileAndAddresses() } catch(e) {}
       try { window.dispatchEvent(new CustomEvent('app:user-logged-in')) } catch(e) {}
       saveCustomerToLocal()
+      identityMode.value = null
       checkoutStep.value = 'delivery'
     }
   } catch(err) {
@@ -3433,12 +3571,16 @@ async function doLoginInCheckout() {
 
 async function doRegisterInCheckout() {
   customerFormMsg.value = ''
-  if (!regForm.value.whatsapp || !regForm.value.password) { customerFormMsg.value = 'WhatsApp e senha são obrigatórios'; customerFormMsgType.value = 'alert-danger'; return }
-  const digits = removePhoneMask(regForm.value.whatsapp || '')
+  // Name comes from the identity step's input (customer.value.name); phone from step 1.
+  const name = (customer.value.name || regForm.value.name || '').trim()
+  const whatsapp = regForm.value.whatsapp || phoneInput.value || ''
+  if (!whatsapp || !regForm.value.password) { customerFormMsg.value = 'WhatsApp e senha são obrigatórios'; customerFormMsgType.value = 'alert-danger'; return }
+  if (!name) { customerFormMsg.value = 'Informe seu nome para criar a conta'; customerFormMsgType.value = 'alert-danger'; return }
+  const digits = removePhoneMask(whatsapp)
   if (!digits || String(digits).length < 10) { customerFormMsg.value = 'Informe um WhatsApp válido (DDD + número)'; customerFormMsgType.value = 'alert-danger'; return }
   customerFormLoading.value = true
   try {
-    const payload = { name: regForm.value.name, whatsapp: digits, email: regForm.value.email || null, password: regForm.value.password }
+    const payload = { name, whatsapp: digits, email: regForm.value.email || null, password: regForm.value.password }
     const res = await api.post(`/public/${companyId}/register`, payload)
     if (res && res.data && res.data.token) {
       try { localStorage.setItem(PUBLIC_TOKEN_KEY, res.data.token) } catch(e) {}
@@ -3457,6 +3599,7 @@ async function doRegisterInCheckout() {
       try { await fetchProfileAndAddresses() } catch(e) {}
       try { window.dispatchEvent(new CustomEvent('app:user-logged-in')) } catch(e) {}
       saveCustomerToLocal()
+      identityMode.value = null
       checkoutStep.value = 'delivery'
     }
   } catch(err) {
@@ -3467,17 +3610,10 @@ async function doRegisterInCheckout() {
   } finally { customerFormLoading.value = false }
 }
 
+// Legacy shim — kept in case any external code/template still references it.
 function continueWithWhatsappFromLogin() {
-  customerFormMsg.value = ''
-  const name = (customer.value.name || '').trim()
-  if (!name) { customerFormMsg.value = 'Informe seu nome antes de continuar'; customerFormMsgType.value = 'alert-danger'; return }
-  const phone = loginForm.value.phone || ''
-  const digits = removePhoneMask(phone)
-  if (!digits || String(digits).length < 10) { customerFormMsg.value = 'Informe o WhatsApp / telefone com DDD'; customerFormMsgType.value = 'alert-danger'; return }
-  customer.value.name = name
-  customer.value.contact = phone
-  saveCustomerToLocal()
-  checkoutStep.value = 'delivery'
+  loginForm.value.phone = loginForm.value.phone || phoneInput.value
+  continueWithoutAccount()
 }
 
 function addNewAddress(){
@@ -3661,7 +3797,7 @@ function nextFromDelivery(){
   checkoutStep.value = (orderType.value === 'DELIVERY' ? 'payment' : 'review')
 }
 
-function goToCustomer(){ checkoutStep.value = 'customer' }
+function goToCustomer(){ checkoutStep.value = 'identity' }
 function goToDelivery(){ checkoutStep.value = 'delivery' }
 function goToReview(){
   // Meta Pixel: track payment info added
