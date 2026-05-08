@@ -242,6 +242,21 @@ export function emitirMetaAtingida(companyId, payload) {
   }
 }
 
+// ---- emit: inbox:new-message (mirror of webhookEvolution.js pattern) ----
+// Used after persisting an OUTBOUND WhatsApp message from notify.js so the
+// attendant's inbox UI updates in real time alongside customer-driven traffic.
+export function emitirInboxNewMessage({ companyId, conversation, message }) {
+  if (!io) return;
+  if (!companyId) return;
+  try {
+    const payload = { conversationId: conversation?.id, conversation, message, companyId };
+    io.to(companyRoom(companyId)).emit('inbox:new-message', payload);
+    io.emit('inbox:new-message:broadcast', payload);
+  } catch (e) {
+    console.warn('Falha ao emitir inbox:new-message:', e?.message || e);
+  }
+}
+
 // ---- emit: ifood:chat (to extension sockets only, scoped by company) ----
 export function emitirIfoodChat({ orderNumber, message, storeId, companyId }) {
   if (!io) {
