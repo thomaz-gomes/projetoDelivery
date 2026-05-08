@@ -593,15 +593,20 @@
                   <button class="btn btn-secondary btn-next" @click="continueWithoutAccount">
                     <i class="bi bi-person-dash me-1"></i> Continuar sem cadastro
                   </button>
-                  <button class="btn btn-primary btn-next position-relative" @click="enterRegisterMode">
-                    <i class="bi bi-person-plus me-1"></i> Criar conta
+                  <hr/>
+                  <div>
+                  <button class="btn btn-outline-primary w-100 btn-outline p-2" @click="enterLoginMode">
+                    <i class="bi bi-box-arrow-in-right me-1"></i> Já tenho conta
+                  </button>
+                  </div>
+                  <div>
+                  <button class="btn btn-primary btn-next d-flex flex-column align-items-center gap-0" @click="enterRegisterMode">
+                    <div><i class="bi bi-person-plus me-1"></i> Criar conta</div>
                     <span v-if="cashbackEnabled && cashbackDefaultPercentDisplay > 0" class="d-block small fw-normal mt-1" style="opacity:0.95;font-size:0.75rem;">
                       <i class="bi bi-cash-stack me-1"></i> Ganhe {{ cashbackDefaultPercentDisplay }}% de cashback em cada pedido
                     </span>
                   </button>
-                  <button class="btn btn-outline-secondary btn-next" @click="enterLoginMode">
-                    <i class="bi bi-box-arrow-in-right me-1"></i> Já tenho conta
-                  </button>
+                  </div>
                 </div>
 
                 <!-- Register sub-form -->
