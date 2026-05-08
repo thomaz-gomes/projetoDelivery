@@ -1,5 +1,6 @@
 import { prisma } from '../prisma.js';
 import { evoSendText, evoSendLocation, normalizePhone, isBrServiceNumber } from '../wa.js';
+import { emitirInboxNewMessage } from '../socketEmitters.js';
 import { evoGetStatus } from '../wa.js';
 
 // Previously we gated customer notifications behind ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS.
@@ -96,6 +97,104 @@ async function formatDisplayNumber(order) {
     if (order.id) return `#${String(order.id).slice(0,6)}`;
     return '';
   } catch (e) { return String(order.id || '').slice(0,6); }
+}
+
+// ---------------------------------------------------------------------------
+// Outbound message persistence
+// ---------------------------------------------------------------------------
+// All notify functions below send WhatsApp text via evoSendText but used to
+// stop there — the attendant's inbox never saw the system messages. We now
+// persist each outbound text into the same Conversation/Message tables the
+// inbox UI reads from, mirroring the webhook (inbound) and inbox.js (manual
+// send) patterns.
+
+// Build the variants of a normalized BR phone that we should look up before
+// creating a fresh conversation, so a single customer is not split across
+// multiple rows when the stored number is missing the DDI or the 9th digit.
+function buildPhoneVariants(normalized) {
+  const variants = new Set();
+  if (!normalized) return [];
+  variants.add(normalized);
+  if (normalized.startsWith('55')) {
+    const rest = normalized.slice(2);
+    variants.add(rest); // without DDI
+    if (rest.length === 11 && rest[2] === '9') {
+      const ddd = rest.slice(0, 2);
+      variants.add(`55${ddd}${rest.slice(3)}`); // with DDI, no 9th digit
+      variants.add(`${ddd}${rest.slice(3)}`);   // without DDI and 9th digit
+    } else if (rest.length === 10) {
+      const ddd = rest.slice(0, 2);
+      variants.add(`55${ddd}9${rest.slice(2)}`); // add 9th digit
+      variants.add(`${ddd}9${rest.slice(2)}`);
+    }
+  }
+  return [...variants];
+}
+
+async function persistOutboundWhatsappMessage({ companyId, instanceName, phone, text, customerId = null, contactName = null, menuId = null, storeId = null }) {
+  if (!companyId || !phone || !text) return null;
+  const normalized = String(phone).startsWith('55') ? String(phone) : normalizePhone(phone);
+  if (!normalized) return null;
+  const variants = buildPhoneVariants(normalized);
+
+  try {
+    let conversation = await prisma.conversation.findFirst({
+      where: { companyId, channel: 'WHATSAPP', channelContactId: { in: variants } },
+    });
+
+    if (!conversation) {
+      try {
+        conversation = await prisma.conversation.create({
+          data: {
+            companyId,
+            storeId,
+            menuId,
+            channel: 'WHATSAPP',
+            channelContactId: normalized,
+            instanceName,
+            customerId,
+            contactName,
+            status: 'OPEN',
+            lastMessageAt: new Date(),
+            unreadCount: 0, // outbound — does not count as unread for the attendant
+          },
+        });
+      } catch (e) {
+        if (e?.code === 'P2002') {
+          // Race: another concurrent notify created the conversation; re-fetch.
+          conversation = await prisma.conversation.findFirst({
+            where: { companyId, channel: 'WHATSAPP', channelContactId: { in: variants } },
+          });
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    if (!conversation) return null;
+
+    const message = await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: 'OUTBOUND',
+        type: 'TEXT',
+        body: text,
+        status: 'SENT',
+      },
+    });
+
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: new Date() },
+    });
+
+    try { emitirInboxNewMessage({ companyId, conversation, message }); } catch (_) { /* socket optional */ }
+
+    return { conversation, message };
+  } catch (e) {
+    console.warn('[notify.persistOutboundWhatsappMessage] failed:', e?.message || e);
+    return null;
+  }
 }
 
 export async function pickConnectedInstance(companyId, { menuId, storeId } = {}) {
@@ -236,11 +335,22 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
       .replace(/\{\{contato\}\}/g, contactToShow);
 
     console.log('[notifyRiderAssigned] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0,120) });
-    await evoSendText({ instanceName: inst.instanceName, to: phone, text }).then(r => {
+    try {
+      const r = await evoSendText({ instanceName: inst.instanceName, to: phone, text });
       console.log('[notifyRiderAssigned] evoSendText result', { instance: inst.instanceName, to: phone, result: (r && typeof r === 'object') ? JSON.stringify(r).slice(0,500) : String(r) });
-    }).catch(e => {
+      await persistOutboundWhatsappMessage({
+        companyId: order.companyId,
+        instanceName: inst.instanceName,
+        phone,
+        text,
+        customerId: order.customerId || null,
+        contactName: order.customerName || null,
+        menuId: order.menuId || null,
+        storeId: order.storeId || null,
+      });
+    } catch (e) {
       console.error('[notifyRiderAssigned] sendText erro:', e.response?.data || e.message || String(e));
-    });
+    }
 
     // Tenta enviar um PIN de localização (se coords válidas)
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -336,11 +446,22 @@ Fique tranquilo(a) que vou enviar as atualizações do status do seu pedido por 
       .replace(/\{\{pedido\}\}/g, shortId);
 
     console.log('[notifyCustomerStatus] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0,120) });
-    await evoSendText({ instanceName: inst.instanceName, to: phone, text }).then(r => {
+    try {
+      const r = await evoSendText({ instanceName: inst.instanceName, to: phone, text });
       console.log('[notifyCustomerStatus] evoSendText result', { instance: inst.instanceName, to: phone, result: (r && typeof r === 'object') ? JSON.stringify(r).slice(0,500) : String(r) });
-    }).catch(e => {
+      await persistOutboundWhatsappMessage({
+        companyId: order.companyId,
+        instanceName: inst.instanceName,
+        phone,
+        text,
+        customerId: order.customerId || null,
+        contactName: order.customerName || null,
+        menuId: order.menuId || null,
+        storeId: order.storeId || null,
+      });
+    } catch (e) {
       console.error('[notifyCustomerStatus] sendText erro:', e.response?.data || e.message || String(e));
-    });
+    }
 
     // Not sending location PIN to customers by design — only riders receive PINs.
   } catch (e) {
@@ -434,11 +555,22 @@ export async function notifyCustomerOrderSummary(orderId) {
     const text = lines.join('\n');
 
     console.log('[notifyCustomerOrderSummary] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0,140) });
-    await evoSendText({ instanceName: inst.instanceName, to: phone, text }).then(r => {
+    try {
+      const r = await evoSendText({ instanceName: inst.instanceName, to: phone, text });
       console.log('[notifyCustomerOrderSummary] evoSendText result', { instance: inst.instanceName, to: phone, result: (r && typeof r === 'object') ? JSON.stringify(r).slice(0,500) : String(r) });
-    }).catch(e => {
+      await persistOutboundWhatsappMessage({
+        companyId: order.companyId,
+        instanceName: inst.instanceName,
+        phone,
+        text,
+        customerId: order.customerId || null,
+        contactName: order.customerName || null,
+        menuId: order.menuId || null,
+        storeId: order.storeId || null,
+      });
+    } catch (e) {
       console.error('[notifyCustomerOrderSummary] sendText erro:', e.response?.data || e.message || String(e));
-    });
+    }
   } catch (e) {
     console.error('[notifyCustomerOrderSummary] erro:', e.response?.data || e.message || e);
   }
@@ -490,9 +622,19 @@ Use seu cashback no próximo pedido. 😊`;
       .replace(/\{\{saldo\}\}/g, fmtCurrency(newBalance));
 
     console.log('[notifyCashbackCredit] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0, 120) });
-    await evoSendText({ instanceName: inst.instanceName, to: phone, text }).catch(e => {
+    try {
+      await evoSendText({ instanceName: inst.instanceName, to: phone, text });
+      await persistOutboundWhatsappMessage({
+        companyId,
+        instanceName: inst.instanceName,
+        phone,
+        text,
+        customerId: customer?.id || null,
+        contactName: customer?.fullName || null,
+      });
+    } catch (e) {
       console.error('[notifyCashbackCredit] sendText erro:', e.response?.data || e.message || String(e));
-    });
+    }
   } catch (e) {
     console.error('[notifyCashbackCredit] erro:', e.response?.data || e.message || e);
   }
