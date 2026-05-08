@@ -1101,6 +1101,12 @@ model Product {
   stockIngredientId   String?
   stockIngredient     Ingredient?          @relation("ProductStockIngredient", fields: [stockIngredientId], references: [id])
   price               Decimal              @default(0)
+  // Optional alternative price applied for takeout/balcão orders. When null,
+  // takeout orders use the normal `price`. The boolean toggle on the form is
+  // not persisted separately — the field is treated as "enabled" iff
+  // specialTakeoutPrice is non-null. Storing as Decimal? keeps existing rows
+  // untouched after migration.
+  specialTakeoutPrice Decimal?
   isActive            Boolean              @default(true)
   position            Int                  @default(0)
   cashbackPercent     Decimal?

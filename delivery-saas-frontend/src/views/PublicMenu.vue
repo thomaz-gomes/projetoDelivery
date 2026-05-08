@@ -206,7 +206,7 @@
             <div class="featured-card-body">
               <div class="featured-card-name">{{ p.name }}</div>
               <div class="featured-card-footer">
-                <strong class="featured-card-price">{{ formatCurrency(p.price) }}</strong>
+                <strong class="featured-card-price">{{ formatCurrency(effectiveProductPrice(p)) }}</strong>
                 <button v-if="!isCatalogMode" class="featured-card-add" @click.stop="openProductModal(p)" aria-label="Adicionar">
                   <i class="bi bi-plus"></i>
                 </button>
@@ -260,11 +260,11 @@
                       <div class="mt-2 d-flex flex-column align-items-start gap-2">
                         <div v-if="getProductCashbackPercent(p) > 0" class="cashback-pill">
                           <span class="cashback-coin">$</span>
-                          <span>{{ getProductCashbackPercent(p) }}% cashback · {{ formatCurrency(Number(p.price || 0) * getProductCashbackPercent(p) / 100) }}</span>
+                          <span>{{ getProductCashbackPercent(p) }}% cashback · {{ formatCurrency(effectiveProductPrice(p) * getProductCashbackPercent(p) / 100) }}</span>
                         </div>
                         <strong class="product-price">
-                          <span v-if="getStartingPrice(p) > Number(p.price || 0)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
-                          <span v-else>{{ formatCurrency(p.price) }}</span>
+                          <span v-if="getStartingPrice(p) > effectiveProductPrice(p)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
+                          <span v-else>{{ formatCurrency(effectiveProductPrice(p)) }}</span>
                         </strong>
                       </div>
                     </div>
@@ -389,10 +389,10 @@
                 <h5 class="modal-product-name">{{ selectedProduct?.name }}</h5>
                 <div class="modal-product-desc">{{ selectedProduct?.description }}</div>
                 <div class="d-flex align-items-center gap-3 mt-2">
-                  <strong class="modal-product-price">{{ formatCurrency(selectedProduct?.price) }}</strong>
+                  <strong class="modal-product-price">{{ formatCurrency(effectiveProductPrice(selectedProduct)) }}</strong>
                   <div v-if="getProductCashbackPercent(selectedProduct) > 0" class="cashback-pill">
                     <span class="cashback-coin">$</span>
-                    <span>{{ getProductCashbackPercent(selectedProduct) }}% cashback · {{ formatCurrency(Number(selectedProduct?.price || 0) * getProductCashbackPercent(selectedProduct) / 100) }}</span>
+                    <span>{{ getProductCashbackPercent(selectedProduct) }}% cashback · {{ formatCurrency(effectiveProductPrice(selectedProduct) * getProductCashbackPercent(selectedProduct) / 100) }}</span>
                   </div>
                 </div>
               </div>
@@ -1182,8 +1182,9 @@ function openCatalogWhatsapp(product = null) {
   let msg = 'Olá! Gostaria de fazer um pedido.'
   if (product) {
     msg = `Olá! Gostaria de pedir: *${product.name}*`
-    if (product.price && Number(product.price) > 0) {
-      msg += ` (${formatCurrency(product.price)})`
+    const effPrice = effectiveProductPrice(product)
+    if (effPrice > 0) {
+      msg += ` (${formatCurrency(effPrice)})`
     }
   }
   window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank')
@@ -2574,7 +2575,12 @@ watch(() => (customer.value && customer.value.address && customer.value.address.
 // Note: automatic opening of the cart when items are added was removed.
 
 // re-evaluate discounts when order type changes (PICKUP/DELIVERY)
-watch(orderType, (v) => { try{ scheduleEvaluateDiscounts() }catch(e){} })
+watch(orderType, (v) => {
+  // Re-price cart lines when the operator/customer flips DELIVERY ↔ PICKUP so
+  // products with a "preço especial para o balcão" use the right value.
+  try{ recalcCartPricesForOrderType() }catch(e){}
+  try{ scheduleEvaluateDiscounts() }catch(e){}
+})
 
 const formatCurrency = (v) => {
   try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)); }catch(e){ return v; }
@@ -2684,7 +2690,7 @@ function validatePersistedCart(){
         }
       }
 
-      const unit = Number(p.price || 0) + optionsTotal
+      const unit = effectiveProductPrice(p) + optionsTotal
       const qty = Math.max(1, Number(it.quantity || 1))
       newCart.push({ lineId: it.lineId || _makeLineId(), productId: p.id, name: p.name, price: unit, quantity: qty, options: validatedOptions, observation: it.observation || null, image: it.image || p.image || null, categoryId: p.categoryId || null })
       if(optionDropped) removedItems.push(`${it.name} (opções removidas)`)
@@ -2697,12 +2703,57 @@ function validatePersistedCart(){
   }catch(e){ console.warn('validatePersistedCart error', e) }
 }
 
+// Returns the effective unit price for a product given the current orderType.
+// When the menu's orderType is takeout-equivalent (PICKUP / TAKEOUT / etc.)
+// and the product has a configured `specialTakeoutPrice`, it wins over the
+// default `price`. Otherwise the regular price is used. Options/extras are
+// added on top by the caller — they are not affected by this special price.
+function isTakeoutOrderTypeUI(t) {
+  const v = String(t || '').toUpperCase()
+  return v === 'PICKUP' || v === 'TAKEOUT' || v === 'TAKE-OUT' || v === 'PICK-UP' || v === 'BALCAO' || v === 'BALCÃO' || v === 'INDOOR' || v === 'RETIRADA'
+}
+function effectiveProductPrice(p) {
+  if (!p) return 0
+  if (isTakeoutOrderTypeUI(orderType.value) && p.specialTakeoutPrice != null && p.specialTakeoutPrice !== '') {
+    const sto = Number(p.specialTakeoutPrice)
+    if (Number.isFinite(sto)) return sto
+  }
+  return Number(p.price || 0)
+}
+// Locate a product by id across all loaded categories so we can recompute
+// cart-line prices when the customer flips DELIVERY ↔ PICKUP after items
+// were already added.
+function findLoadedProductById(id) {
+  if (!id) return null
+  try {
+    for (const cat of (categories.value || [])) {
+      const found = (cat.products || []).find(p => p.id === id)
+      if (found) return found
+    }
+    for (const p of (uncategorized.value || [])) {
+      if (p.id === id) return p
+    }
+  } catch (_) {}
+  return null
+}
+function recalcCartPricesForOrderType() {
+  try {
+    for (const item of (cart.value || [])) {
+      const p = findLoadedProductById(item.productId)
+      if (!p) continue
+      const base = effectiveProductPrice(p)
+      const optsTotal = (item.options || []).reduce((s, o) => s + Number(o.price || 0) * Number(o.quantity || 1), 0)
+      item.price = base + optsTotal
+    }
+  } catch (e) { console.warn('recalcCartPricesForOrderType failed', e) }
+}
+
 function addToCart(p, options = [], observation = ''){
   // add/merge considering selected options and observation
   const idx = findCartIndex(p.id, options, observation)
   if(idx >= 0){ cart.value[idx].quantity += 1 }
   else {
-    cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: Number(p.price), quantity: 1, options: options || [], observation: observation || null, image: p.image || null, categoryId: p.categoryId || null })
+    cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: effectiveProductPrice(p), quantity: 1, options: options || [], observation: observation || null, image: p.image || null, categoryId: p.categoryId || null })
   }
 }
 
@@ -2720,14 +2771,14 @@ function addToCartWithOptions(p, selections, qty=1, observation=''){
       }
     }
   }
-  const unitPrice = Number(p.price||0) + optionsTotal
+  const unitPrice = effectiveProductPrice(p) + optionsTotal
   const obs = (observation || '').trim() || null
   // try to merge with existing line that has same productId+options+observation
   const idx = findCartIndex(p.id, selectedOptions, obs || '')
   if(idx >= 0){ cart.value[idx].quantity += qty }
   else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, observation: obs, image: p.image || null, categoryId: p.categoryId || null }) }
   // Meta Pixel: track add to cart
-  try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: p.price, options: selectedOptions }, qty) }catch(e){}
+  try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: effectiveProductPrice(p), options: selectedOptions }, qty) }catch(e){}
   try{ trackMenuEvent(companyId, menuId.value, 'ADD_TO_CART', { productId: p.id }) }catch(e){}
 }
 
@@ -3240,7 +3291,7 @@ function editCartItem(i){
     function getStartingPrice(p){
       try{
         if(!p) return 0
-        const base = Number(p.price || 0)
+        const base = effectiveProductPrice(p)
         let extra = 0
         if(p.optionGroups && p.optionGroups.length){
           for(const g of p.optionGroups){
@@ -3254,7 +3305,7 @@ function editCartItem(i){
           }
         }
         return base + extra
-      }catch(e){ return Number(p.price || 0) }
+      }catch(e){ return effectiveProductPrice(p) }
     }
 
 const modalTotal = computed(() => {
@@ -3282,7 +3333,7 @@ const modalTotal = computed(() => {
         }
       }
     }
-    const unit = Number(p.price || 0) + optionsTotalPerUnit
+    const unit = effectiveProductPrice(p) + optionsTotalPerUnit
     const qty = Math.max(1, Number.isFinite(Number(modalQty.value)) ? Math.floor(Number(modalQty.value)) : 1)
     return unit * qty
   }catch(e){ return 0 }
