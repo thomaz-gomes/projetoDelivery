@@ -1,17 +1,30 @@
 import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware } from '../../auth.js';
+import {
+  startOfDayInTz, endOfDayInTz, dayKeyInTz, hourInTz, weekdayInTz,
+} from '../../utils/dateTz.js';
 
 const router = express.Router();
 router.use(authMiddleware);
 
-function parseDateRange(query) {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  const from = query.dateFrom ? new Date(query.dateFrom) : firstDay;
-  const to = query.dateTo ? new Date(query.dateTo) : new Date();
-  to.setHours(23, 59, 59, 999);
-  return { from, to };
+const DEFAULT_TZ = 'America/Sao_Paulo';
+
+async function getCompanyTimezone(companyId) {
+  try {
+    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { timezone: true } });
+    return c?.timezone || DEFAULT_TZ;
+  } catch (e) {
+    return DEFAULT_TZ;
+  }
+}
+
+function parseDateRange(query, tz) {
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const defaultFromKey = `${todayKey.slice(0, 7)}-01`;
+  const fromStr = String(query.dateFrom || defaultFromKey);
+  const toStr = String(query.dateTo || todayKey);
+  return { from: startOfDayInTz(fromStr, tz), to: endOfDayInTz(toStr, tz) };
 }
 
 // Abordagem em dois passos: busca ordens -> busca itens
@@ -51,7 +64,8 @@ async function fetchItems(companyId, from, to, storeId) {
 router.get('/debug', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { from, to } = parseDateRange(req.query);
+    const tz = await getCompanyTimezone(companyId);
+    const { from, to } = parseDateRange(req.query, tz);
 
     const [totalOrders, completedOrders, anyItems] = await Promise.all([
       prisma.order.count({ where: { companyId } }),
@@ -89,7 +103,8 @@ router.get('/debug', async (req, res) => {
 router.get('/top-by-count', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { from, to } = parseDateRange(req.query);
+    const tz = await getCompanyTimezone(companyId);
+    const { from, to } = parseDateRange(req.query, tz);
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
 
     const items = await fetchItems(companyId, from, to, req.query.storeId);
@@ -116,7 +131,8 @@ router.get('/top-by-count', async (req, res) => {
 router.get('/top-by-revenue', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { from, to } = parseDateRange(req.query);
+    const tz = await getCompanyTimezone(companyId);
+    const { from, to } = parseDateRange(req.query, tz);
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
 
     const items = await fetchItems(companyId, from, to, req.query.storeId);
@@ -144,7 +160,8 @@ router.get('/top-by-revenue', async (req, res) => {
 router.get('/by-weekday', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { from, to } = parseDateRange(req.query);
+    const tz = await getCompanyTimezone(companyId);
+    const { from, to } = parseDateRange(req.query, tz);
     const topN = Math.min(parseInt(req.query.topN) || 5, 10);
 
     const items = await fetchItems(companyId, from, to, req.query.storeId);
@@ -153,7 +170,7 @@ router.get('/by-weekday', async (req, res) => {
     const productTotals = {};
 
     for (const item of items) {
-      const dow = item.order.createdAt.getDay(); // 0=Domingo
+      const dow = weekdayInTz(item.order.createdAt, tz); // 0=Domingo
       const name = item.name;
       const qty = Number(item.quantity);
 
@@ -184,7 +201,8 @@ router.get('/by-weekday', async (req, res) => {
 router.get('/by-hour', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { from, to } = parseDateRange(req.query);
+    const tz = await getCompanyTimezone(companyId);
+    const { from, to } = parseDateRange(req.query, tz);
     const topN = Math.min(parseInt(req.query.topN) || 5, 10);
 
     const items = await fetchItems(companyId, from, to, req.query.storeId);
@@ -193,7 +211,7 @@ router.get('/by-hour', async (req, res) => {
     const productTotals = {};
 
     for (const item of items) {
-      const hour = item.order.createdAt.getHours();
+      const hour = hourInTz(item.order.createdAt, tz);
       const name = item.name;
       const qty = Number(item.quantity);
 

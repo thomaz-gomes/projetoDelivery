@@ -1,19 +1,32 @@
 import express from 'express'
 import { prisma } from '../../prisma.js'
 import { authMiddleware } from '../../auth.js'
+import {
+  startOfDayInTz, endOfDayInTz, dayKeyInTz, hourInTz, weekdayInTz, previousPeriod,
+} from '../../utils/dateTz.js'
 
 const router = express.Router()
 router.use(authMiddleware)
 
-function parseDateRange(query) {
-  const now = new Date()
-  const sevenDaysAgo = new Date(now)
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-  const from = query.dateFrom ? new Date(query.dateFrom) : sevenDaysAgo
-  const to = query.dateTo ? new Date(query.dateTo) : new Date()
-  to.setHours(23, 59, 59, 999)
-  from.setHours(0, 0, 0, 0)
-  return { from, to }
+const DEFAULT_TZ = 'America/Sao_Paulo'
+
+async function getCompanyTimezone(companyId) {
+  try {
+    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { timezone: true } })
+    return c?.timezone || DEFAULT_TZ
+  } catch (e) {
+    return DEFAULT_TZ
+  }
+}
+
+function parseDateRange(query, tz) {
+  const todayKey = dayKeyInTz(new Date(), tz)
+  // Default: last 7 days through today (in the company's tz)
+  const sevenDaysAgo = new Date(startOfDayInTz(todayKey, tz).getTime() - 7 * 24 * 60 * 60 * 1000)
+  const defaultFromKey = dayKeyInTz(sevenDaysAgo, tz)
+  const fromStr = String(query.dateFrom || defaultFromKey)
+  const toStr = String(query.dateTo || todayKey)
+  return { from: startOfDayInTz(fromStr, tz), to: endOfDayInTz(toStr, tz) }
 }
 
 async function resolveStoreId(menuId) {
@@ -23,12 +36,7 @@ async function resolveStoreId(menuId) {
 }
 
 function getPreviousPeriod(from, to) {
-  const diff = to.getTime() - from.getTime()
-  const prevTo = new Date(from.getTime() - 1)
-  prevTo.setHours(23, 59, 59, 999)
-  const prevFrom = new Date(prevTo.getTime() - diff)
-  prevFrom.setHours(0, 0, 0, 0)
-  return { from: prevFrom, to: prevTo }
+  return previousPeriod(from, to)
 }
 
 // GET /reports/menu-performance/funnel
@@ -36,7 +44,8 @@ router.get('/funnel', async (req, res) => {
   try {
     const { companyId } = req.user
     const { menuId } = req.query
-    const { from, to } = parseDateRange(req.query)
+    const tz = await getCompanyTimezone(companyId)
+    const { from, to } = parseDateRange(req.query, tz)
     const prev = getPreviousPeriod(from, to)
 
     const where = { companyId, createdAt: { gte: from, lte: to } }
@@ -77,7 +86,8 @@ router.get('/sales', async (req, res) => {
   try {
     const { companyId } = req.user
     const { menuId } = req.query
-    const { from, to } = parseDateRange(req.query)
+    const tz = await getCompanyTimezone(companyId)
+    const { from, to } = parseDateRange(req.query, tz)
     const prev = getPreviousPeriod(from, to)
 
     const storeId = await resolveStoreId(menuId)
@@ -134,10 +144,10 @@ router.get('/sales', async (req, res) => {
     const prevAvgTicket = prevTotalSales > 0 ? prevTotalRevenue / prevTotalSales : 0
     const prevCustomerIds = [...new Set(prevOrders.filter(o => o.customerId).map(o => o.customerId))]
 
-    // Daily series for line chart
+    // Daily series for line chart (grouped by company timezone calendar day)
     const dailyMap = {}
     for (const o of orders) {
-      const day = o.createdAt.toISOString().slice(0, 10)
+      const day = dayKeyInTz(o.createdAt, tz)
       if (!dailyMap[day]) dailyMap[day] = { count: 0, revenue: 0 }
       dailyMap[day].count++
       dailyMap[day].revenue += Number(o.total)
@@ -145,7 +155,7 @@ router.get('/sales', async (req, res) => {
 
     const prevDailyMap = {}
     for (const o of prevOrders) {
-      const day = o.createdAt.toISOString().slice(0, 10)
+      const day = dayKeyInTz(o.createdAt, tz)
       if (!prevDailyMap[day]) prevDailyMap[day] = { count: 0, revenue: 0 }
       prevDailyMap[day].count++
       prevDailyMap[day].revenue += Number(o.total)
@@ -166,7 +176,8 @@ router.get('/by-hour', async (req, res) => {
   try {
     const { companyId } = req.user
     const { menuId } = req.query
-    const { from, to } = parseDateRange(req.query)
+    const tz = await getCompanyTimezone(companyId)
+    const { from, to } = parseDateRange(req.query, tz)
     const storeId = await resolveStoreId(menuId)
 
     const where = { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } }
@@ -184,7 +195,7 @@ router.get('/by-hour', async (req, res) => {
     }
 
     for (const o of orders) {
-      const h = o.createdAt.getHours()
+      const h = hourInTz(o.createdAt, tz)
       byHour[Math.floor(h / 2)]++
     }
 
@@ -202,7 +213,8 @@ router.get('/by-weekday', async (req, res) => {
   try {
     const { companyId } = req.user
     const { menuId } = req.query
-    const { from, to } = parseDateRange(req.query)
+    const tz = await getCompanyTimezone(companyId)
+    const { from, to } = parseDateRange(req.query, tz)
     const storeId = await resolveStoreId(menuId)
 
     const where = { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } }
@@ -217,7 +229,7 @@ router.get('/by-weekday', async (req, res) => {
     const data = Array(7).fill(0)
 
     for (const o of orders) {
-      const dow = o.createdAt.getDay()
+      const dow = weekdayInTz(o.createdAt, tz)
       const idx = dow === 0 ? 6 : dow - 1
       data[idx]++
     }
@@ -236,7 +248,8 @@ router.get('/product-ranking', async (req, res) => {
   try {
     const { companyId } = req.user
     const { menuId } = req.query
-    const { from, to } = parseDateRange(req.query)
+    const tz = await getCompanyTimezone(companyId)
+    const { from, to } = parseDateRange(req.query, tz)
     const storeId = await resolveStoreId(menuId)
 
     const where = { companyId, status: { not: 'CANCELADO' }, createdAt: { gte: from, lte: to } }
