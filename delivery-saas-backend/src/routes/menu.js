@@ -502,7 +502,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-  const { name, description, price = 0, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, stockIngredientId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, featured = false, alwaysAvailable = true, weeklySchedule = null } = body
+  const { name, description, price = 0, specialTakeoutPrice = undefined, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, stockIngredientId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, featured = false, alwaysAvailable = true, weeklySchedule = null } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -530,7 +530,8 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       if (!ing) return res.status(400).json({ message: 'Ingrediente de estoque inválido' })
     }
     const integrationCode = await generateProductCode(companyId)
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
+    const stoNum = (specialTakeoutPrice === undefined || specialTakeoutPrice === null || specialTakeoutPrice === '') ? null : Number(specialTakeoutPrice)
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: (stoNum !== null && Number.isFinite(stoNum)) ? stoNum : null, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -596,7 +597,7 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, description, price, categoryId, position, isActive, image, menuId, technicalSheetId, stockIngredientId, cashbackPercent, dadosFiscaisId, highlightOnSlip, featured, alwaysAvailable, weeklySchedule } = req.body || {}
+  const { name, description, price, specialTakeoutPrice, categoryId, position, isActive, image, menuId, technicalSheetId, stockIngredientId, cashbackPercent, dadosFiscaisId, highlightOnSlip, featured, alwaysAvailable, weeklySchedule } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -672,6 +673,13 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
     name: name ?? existing.name,
     description: description ?? existing.description,
     price: price !== undefined ? Number(price) : existing.price,
+    // null/empty/undefined explicitly clears the special price (toggle off);
+    // a non-numeric string is ignored to keep the previous value.
+    specialTakeoutPrice: specialTakeoutPrice === undefined
+      ? existing.specialTakeoutPrice
+      : (specialTakeoutPrice === null || specialTakeoutPrice === '' || !Number.isFinite(Number(specialTakeoutPrice)))
+        ? null
+        : Number(specialTakeoutPrice),
     categoryId: categoryId !== undefined ? categoryId : existing.categoryId,
     position: position !== undefined ? Number(position) : existing.position,
     isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
@@ -804,6 +812,7 @@ router.post('/products/:id/duplicate', requireRole('ADMIN'), async (req, res) =>
           name: newName,
           description: source.description,
           price: source.price,
+          specialTakeoutPrice: source.specialTakeoutPrice,
           cashbackPercent: source.cashbackPercent,
           categoryId: source.categoryId,
           menuId: source.menuId,

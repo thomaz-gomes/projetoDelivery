@@ -40,6 +40,30 @@
           <div class="col-md-4">
             <CurrencyInput label="Preço" labelClass="form-label" v-model="form.price" inputClass="form-control" placeholder="0,00" />
           </div>
+          <div class="col-md-4">
+            <label class="form-label d-block">Preço especial para o balcão</label>
+            <div class="form-check form-switch mb-2">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="prodSpecialTakeoutEnabled"
+                v-model="form.specialTakeoutPriceEnabled"
+                role="switch"
+              />
+              <label class="form-check-label small" for="prodSpecialTakeoutEnabled">
+                {{ form.specialTakeoutPriceEnabled ? 'Ativado' : 'Desativado' }}
+              </label>
+            </div>
+            <CurrencyInput
+              v-if="form.specialTakeoutPriceEnabled"
+              v-model="form.specialTakeoutPrice"
+              inputClass="form-control"
+              placeholder="0,00"
+            />
+            <div v-if="form.specialTakeoutPriceEnabled" class="small text-muted mt-1">
+              Aplicado em pedidos do tipo <strong>balcão / retirada</strong>.
+            </div>
+          </div>
           <div v-if="cashbackEnabled" class="col-md-4">
             <label class="form-label">Cashback (%)</label>
             <input type="number" step="0.01" class="form-control" v-model.number="form.cashbackPercent" placeholder="Ex: 3.5" />
@@ -209,7 +233,7 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [] })
+const form = ref({ id: null, name: '', description: '', price: 0, specialTakeoutPriceEnabled: false, specialTakeoutPrice: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [] })
 const activeTab = ref('general')
 const cashbackEnabled = ref(false)
 const groups = ref([])
@@ -267,7 +291,22 @@ async function load(){
       const res = await api.get('/menu/products')
       const all = res.data || []
       const p = all.find(x=>x.id===id)
-      if(p){ form.value = { ...p, optionGroupIds: [], categoryId: p.categoryId || (p.category && p.category.id) || null, cashbackPercent: (p.cashbackPercent !== undefined ? p.cashbackPercent : (p.cashback || null)), dadosFiscaisId: p.dadosFiscaisId || null, alwaysAvailable: p.alwaysAvailable !== false, weeklySchedule: Array.isArray(p.weeklySchedule) ? p.weeklySchedule : [] } }
+      if(p){
+        const stp = p.specialTakeoutPrice !== undefined && p.specialTakeoutPrice !== null ? Number(p.specialTakeoutPrice) : null
+        form.value = {
+          ...p,
+          optionGroupIds: [],
+          categoryId: p.categoryId || (p.category && p.category.id) || null,
+          cashbackPercent: (p.cashbackPercent !== undefined ? p.cashbackPercent : (p.cashback || null)),
+          dadosFiscaisId: p.dadosFiscaisId || null,
+          alwaysAvailable: p.alwaysAvailable !== false,
+          weeklySchedule: Array.isArray(p.weeklySchedule) ? p.weeklySchedule : [],
+          // The toggle is a derived UI flag — "enabled" iff a non-null special
+          // price is persisted. Toggling off in the UI sends specialTakeoutPrice=null.
+          specialTakeoutPriceEnabled: stp !== null,
+          specialTakeoutPrice: stp !== null ? stp : 0,
+        }
+      }
       // load attached groups
       try{ const att = await api.get(`/menu/products/${id}/option-groups`); form.value.optionGroupIds = att.data.attachedIds || [] }catch(e){}
     }
@@ -315,6 +354,8 @@ async function save(){
       if(form.value.marketplace) payload.marketplace = form.value.marketplace
       // include cashbackPercent when cashback module is enabled (allow null to clear)
       if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
+      // Switch off ⇒ explicit null clears the special price; switch on ⇒ send the value.
+      payload.specialTakeoutPrice = form.value.specialTakeoutPriceEnabled ? Number(form.value.specialTakeoutPrice || 0) : null
       await api.patch(`/menu/products/${id}`, payload)
       // sync groups
       try{ await api.post(`/menu/products/${id}/option-groups`, { groupIds: form.value.optionGroupIds || [] }) }catch(e){ console.warn('Failed to sync groups', e) }
@@ -334,6 +375,7 @@ async function save(){
   const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
   if(form.value.marketplace) payload.marketplace = form.value.marketplace
   if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
+  if(form.value.specialTakeoutPriceEnabled) payload.specialTakeoutPrice = Number(form.value.specialTakeoutPrice || 0)
       const res = await api.post('/menu/products', payload)
       const newId = res.data.id
       // attach groups

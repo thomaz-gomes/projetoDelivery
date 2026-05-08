@@ -149,7 +149,7 @@
                 <button v-for="p in cat.products" :key="p.id" class="btn btn-light text-start product-btn" @click="selectProduct(p)">
                   <div class="d-flex justify-content-between align-items-center">
                     <span>{{ p.name }}</span>
-                    <span class="small text-muted ms-2 flex-shrink-0">{{ formatCurrency(p.price) }}</span>
+                    <span class="small text-muted ms-2 flex-shrink-0">{{ formatCurrency(effectiveProductPrice(p)) }}</span>
                   </div>
                 </button>
               </div>
@@ -697,8 +697,23 @@ function isOptionSelected(opt){
   const keyId = opt.id != null ? String(opt.id) : null;
   return chosenOptions.value.some(co => (keyId && co.id != null) ? String(co.id) === keyId : String(co.name) === String(opt.name));
 }
+// Price used by the wizard — falls back to the product's special takeout
+// price when the order being created is a takeout/balcão one. Mirrors the
+// PublicMenu helper of the same name.
+function isTakeoutOrderTypePos(t) {
+  const v = String(t || '').toUpperCase()
+  return v === 'PICKUP' || v === 'TAKEOUT' || v === 'TAKE-OUT' || v === 'PICK-UP' || v === 'BALCAO' || v === 'BALCÃO' || v === 'INDOOR' || v === 'RETIRADA'
+}
+function effectiveProductPrice(p) {
+  if (!p) return 0
+  if (isTakeoutOrderTypePos(orderType.value) && p.specialTakeoutPrice != null && p.specialTakeoutPrice !== '') {
+    const sto = Number(p.specialTakeoutPrice)
+    if (Number.isFinite(sto)) return sto
+  }
+  return Number(p.price || 0)
+}
 const optionModalTotal = computed(()=> {
-  const unitPrice = Number(activeProduct.value?.price||0) || 0;
+  const unitPrice = effectiveProductPrice(activeProduct.value);
   const optsPerUnit = chosenOptions.value.reduce((s,o)=> s + (Number(o.price||0) * (Number(o.quantity||1) || 1)),0);
   return (unitPrice + optsPerUnit) * (Number(optionQty.value) || 1);
 });
@@ -708,7 +723,7 @@ function confirmOptionsAdd(){
   if(!activeProduct.value) return;
   // validate required groups before adding
   if(!validateOptionGroups()) return;
-  const payload = { name: activeProduct.value.name, quantity: optionQty.value, price: Number(activeProduct.value.price||0), productId: activeProduct.value?.id || null, notes: optionNote.value || null, options: chosenOptions.value.map(o=>({ id: o.id, name: o.name, price: Number(o.price||0), quantity: Number(o.quantity||1) })) };
+  const payload = { name: activeProduct.value.name, quantity: optionQty.value, price: effectiveProductPrice(activeProduct.value), productId: activeProduct.value?.id || null, notes: optionNote.value || null, options: chosenOptions.value.map(o=>({ id: o.id, name: o.name, price: Number(o.price||0), quantity: Number(o.quantity||1) })) };
   if(editingIndex.value !== null && typeof editingIndex.value !== 'undefined'){
     // update existing item
     cart.value.splice(editingIndex.value, 1, payload);
