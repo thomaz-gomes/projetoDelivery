@@ -128,6 +128,33 @@ async function fetchTransactions() {
   finally { loadingTx.value = false; }
 }
 
+// Pagination helpers — back-end already paginates the transactions list;
+// these just drive the navigation buttons and the page-size selector below
+// the table.
+const paginationStart = computed(() => total.value === 0 ? 0 : (page.value - 1) * pageSize.value + 1);
+const paginationEnd = computed(() => Math.min(page.value * pageSize.value, total.value));
+
+function goToPage(n) {
+  const target = Math.max(1, Math.min(Number(n) || 1, totalPages.value));
+  if (target === page.value) return;
+  page.value = target;
+  fetchTransactions();
+}
+
+function changePageSize() {
+  // Reset to page 1 whenever the page size changes so the user does not land
+  // on a now-empty tail page.
+  page.value = 1;
+  fetchTransactions();
+}
+
+// "Buscar" applies the date/type filters — also reset to page 1 so the
+// user does not land on a stale tail page when the filtered total shrinks.
+function searchTransactions() {
+  page.value = 1;
+  fetchTransactions();
+}
+
 function startEdit(tx) {
   if (!isAdmin.value) return;
   editingId.value = tx.id;
@@ -387,7 +414,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             </SelectInput>
           </div>
           <div class="col-md-3 d-flex align-items-end">
-            <button class="btn btn-primary w-100" @click="fetchTransactions" :disabled="loadingTx || !datesAreValid">
+            <button class="btn btn-primary w-100" @click="searchTransactions" :disabled="loadingTx || !datesAreValid">
               {{ loadingTx ? 'Buscando...' : 'Buscar' }}
             </button>
           </div>
@@ -515,6 +542,9 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
               </tr>
             </thead>
             <tbody>
+              <tr v-if="!loadingTx && transactions.length === 0">
+                <td colspan="5" class="text-center text-muted py-4">Nenhuma transação no período.</td>
+              </tr>
               <tr v-for="t in transactions" :key="t.id">
                 <td>{{ formatDateWithOptionalTime(t.date) }}</td>
                 <td>{{ typeLabel(t.type) }}</td>
@@ -536,6 +566,35 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Pagination footer (always visible when there is data — backend already
+             paginates, just exposing controls and a page-size selector). -->
+        <div v-if="total > 0" class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-2 border-top">
+          <small class="text-muted">
+            Mostrando {{ paginationStart }}–{{ paginationEnd }} de {{ total }}
+          </small>
+          <div class="d-flex align-items-center gap-1">
+            <button class="btn btn-sm btn-outline-secondary" :disabled="page <= 1 || loadingTx" @click="goToPage(1)" title="Primeira">
+              <i class="bi bi-chevron-double-left"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" :disabled="page <= 1 || loadingTx" @click="goToPage(page - 1)" title="Anterior">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <span class="small px-2">Página {{ page }} de {{ totalPages }}</span>
+            <button class="btn btn-sm btn-outline-secondary" :disabled="page >= totalPages || loadingTx" @click="goToPage(page + 1)" title="Próxima">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" :disabled="page >= totalPages || loadingTx" @click="goToPage(totalPages)" title="Última">
+              <i class="bi bi-chevron-double-right"></i>
+            </button>
+            <select class="form-select form-select-sm ms-2" style="width:auto" v-model.number="pageSize" @change="changePageSize" :disabled="loadingTx">
+              <option :value="25">25 / pág.</option>
+              <option :value="50">50 / pág.</option>
+              <option :value="100">100 / pág.</option>
+              <option :value="200">200 / pág.</option>
+            </select>
+          </div>
         </div>
       </div>
     </main>
