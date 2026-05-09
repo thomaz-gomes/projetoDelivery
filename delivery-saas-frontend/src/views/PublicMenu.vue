@@ -583,7 +583,11 @@
 
                 <div v-if="customerFormMsg" class="alert mb-3" :class="customerFormMsgType" style="border-radius:10px;font-size:13px;padding:10px 14px">{{ customerFormMsg }}</div>
 
-                <div class="mb-3">
+                <!-- Name field is irrelevant on the login sub-form: existing
+                     customers already supplied their name at registration and
+                     doLoginInCheckout doesn't read it — auth uses phone +
+                     password and the server returns the saved profile. -->
+                <div v-if="identityMode !== 'login'" class="mb-3">
                   <label class="form-label">Como devemos te chamar?</label>
                   <input v-model="customer.name" class="form-control" type="text" placeholder="Seu nome" autocomplete="name" />
                 </div>
