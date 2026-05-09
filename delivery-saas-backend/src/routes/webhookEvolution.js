@@ -97,7 +97,7 @@ async function maybeSendRegisteredGreeting({ conversation, menu, instanceName })
   if (!conversation?.customerId) return false;
   const customer = await prisma.customer.findUnique({
     where: { id: conversation.customerId },
-    select: { id: true, fullName: true, name: true },
+    select: { id: true, fullName: true },
   });
   if (!customer) return false;
 
