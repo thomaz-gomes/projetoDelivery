@@ -22,6 +22,15 @@ const periodDailyRatesTotal = ref(0);
 
 const filters = ref({ from: '', to: '' });
 
+function riderStatusBadge(status) {
+  switch (status) {
+    case 'PAID': return { label: 'Pago', cls: 'bg-success' };
+    case 'CANCELLED': return { label: 'Cancelado', cls: 'bg-secondary' };
+    case 'PENDING':
+    default: return { label: 'Pendente', cls: 'bg-warning text-dark' };
+  }
+}
+
 function translateNote(note) {
   if (!note) return '';
   // Traduzir mensagens antigas em inglês
@@ -144,12 +153,15 @@ onMounted(() => { fetchSummary(); });
 
       <div class="small text-muted">Últimas transações</div>
       <ul class="list-group list-group-flush mt-2">
-        <li v-for="t in transactions" :key="t.id" class="list-group-item py-2 d-flex justify-content-between align-items-center">
+        <li v-for="t in transactions" :key="t.id" class="list-group-item py-2 d-flex justify-content-between align-items-center" :class="{ 'opacity-50': t.status === 'CANCELLED' }">
           <div>
-            <div class="small text-muted">{{ formatDateWithOptionalTime(t.date) }}</div>
-            <div>{{ t.order?.displaySimple ? `#${t.order.displaySimple}` : (t.order?.displayId || '—') }} — {{ translateNote(t.note) }}</div>
+            <div class="small text-muted d-flex align-items-center gap-2">
+              <span>{{ formatDateWithOptionalTime(t.date) }}</span>
+              <span class="badge" :class="riderStatusBadge(t.status).cls" style="font-size:0.65rem">{{ riderStatusBadge(t.status).label }}</span>
+            </div>
+            <div :class="{ 'text-decoration-line-through': t.status === 'CANCELLED' }">{{ t.order?.displaySimple ? `#${t.order.displaySimple}` : (t.order?.displayId || '—') }} — {{ translateNote(t.note) }}</div>
           </div>
-          <div class="fw-bold">{{ formatCurrency(Number(t.amount || 0)) }}</div>
+          <div class="fw-bold" :class="{ 'text-decoration-line-through': t.status === 'CANCELLED' }">{{ formatCurrency(Number(t.amount || 0)) }}</div>
         </li>
         <li v-if="transactions.length === 0" class="list-group-item text-center text-muted py-3">Nenhuma transação recente</li>
       </ul>

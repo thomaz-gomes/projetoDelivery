@@ -36,8 +36,17 @@ export async function findNeighborhoodForName(companyId, candidateName) {
   return null;
 }
 
-export async function addRiderTransaction({ companyId, riderId, orderId = null, amount = 0, type = 'DELIVERY_FEE', date = new Date(), note = null }) {
+export async function addRiderTransaction({ companyId, riderId, orderId = null, amount = 0, type = 'DELIVERY_FEE', date = new Date(), note = null, status = null }) {
   if (!riderId) return null;
+
+  // Status default: payment offsets (negative MANUAL_ADJUSTMENT created by
+  // /account/pay) land already PAID — they are themselves the "paid" record.
+  // Everything else (delivery fees, daily rates, bonuses, manual credits)
+  // starts PENDING. Callers can override explicitly when needed.
+  let resolvedStatus = status;
+  if (!resolvedStatus) {
+    resolvedStatus = (type === 'MANUAL_ADJUSTMENT' && Number(amount) < 0) ? 'PAID' : 'PENDING';
+  }
 
   const t = await prisma.riderTransaction.create({
     data: {
@@ -47,6 +56,8 @@ export async function addRiderTransaction({ companyId, riderId, orderId = null, 
       amount,
       date,
       note,
+      status: resolvedStatus,
+      paidAt: resolvedStatus === 'PAID' ? new Date() : null,
     },
   });
 

@@ -91,6 +91,15 @@ function typeLabel(type) {
   }
 }
 
+function statusBadge(status) {
+  switch (status) {
+    case 'PAID': return { label: 'Pago', cls: 'bg-success' };
+    case 'CANCELLED': return { label: 'Cancelado', cls: 'bg-secondary' };
+    case 'PENDING':
+    default: return { label: 'Pendente', cls: 'bg-warning text-dark' };
+  }
+}
+
 function parseDateInput(s) {
   if (!s) return null;
   const str = String(s).trim();
@@ -255,6 +264,37 @@ function cancelEdit() {
   editingId.value = null;
   editAmount.value = '';
   editNote.value = '';
+}
+
+async function cancelTransaction(tx) {
+  if (!isAdmin.value || !tx?.id) return;
+  if (tx.status === 'PAID') {
+    Swal.fire({ icon: 'warning', text: 'Esta transação já foi paga. Estorne o pagamento antes de cancelá-la.' });
+    return;
+  }
+  if (tx.status === 'CANCELLED') return;
+  const confirmation = await Swal.fire({
+    title: 'Cancelar transação?',
+    text: `Esta ação reverte o valor de ${formatCurrency(Number(tx.amount || 0))} no saldo do entregador.`,
+    icon: 'warning',
+    input: 'text',
+    inputLabel: 'Motivo (opcional)',
+    inputPlaceholder: 'Ex: cobrança duplicada, pedido cancelado...',
+    showCancelButton: true,
+    confirmButtonText: 'Cancelar transação',
+    cancelButtonText: 'Voltar',
+    confirmButtonColor: '#dc3545',
+  });
+  if (!confirmation.isConfirmed) return;
+  try {
+    await api.post(`/riders/${riderId}/transactions/${tx.id}/cancel`, { reason: confirmation.value || null });
+    Swal.fire({ icon: 'success', toast: true, position: 'top-end', timer: 1800, showConfirmButton: false, text: 'Transação cancelada.' });
+    await fetchBalance();
+    await fetchTransactions();
+  } catch (e) {
+    console.error('cancelTransaction failed', e);
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao cancelar transação' });
+  }
 }
 
 async function saveEdit() {
@@ -675,15 +715,17 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
                 <th>Data</th>
                 <th>Tipo</th>
                 <th>Valor</th>
+                <th>Status</th>
                 <th>Pedido</th>
                 <th>Observação</th>
+                <th v-if="isAdmin" class="text-end">Ações</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!loadingTx && transactions.length === 0">
-                <td colspan="5" class="text-center text-muted py-4">Nenhuma transação no período.</td>
+                <td :colspan="isAdmin ? 7 : 6" class="text-center text-muted py-4">Nenhuma transação no período.</td>
               </tr>
-              <tr v-for="t in transactions" :key="t.id">
+              <tr v-for="t in transactions" :key="t.id" :class="{ 'text-muted': t.status === 'CANCELLED' }">
                 <td>{{ formatDateWithOptionalTime(t.date) }}</td>
                 <td>{{ typeLabel(t.type) }}</td>
                 <td>
@@ -696,11 +738,30 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
                     </div>
                   </div>
                   <div v-else>
-                    <span :class="{ 'text-primary': isAdmin }" @click="isAdmin ? startEdit(t) : null" style="cursor: pointer">{{ formatCurrency(Number(t.amount || 0)) }}</span>
+                    <span
+                      :class="{ 'text-primary': isAdmin && t.status !== 'CANCELLED', 'text-decoration-line-through': t.status === 'CANCELLED' }"
+                      @click="isAdmin && t.status !== 'CANCELLED' ? startEdit(t) : null"
+                      :style="{ cursor: isAdmin && t.status !== 'CANCELLED' ? 'pointer' : 'default' }"
+                    >{{ formatCurrency(Number(t.amount || 0)) }}</span>
                   </div>
+                </td>
+                <td>
+                  <span class="badge" :class="statusBadge(t.status).cls" :title="t.status === 'PAID' && t.paidAt ? `Pago em ${formatDateWithOptionalTime(t.paidAt)}` : (t.status === 'CANCELLED' && t.cancelReason ? t.cancelReason : null)">
+                    {{ statusBadge(t.status).label }}
+                  </span>
                 </td>
                 <td>{{ t.order?.displaySimple ? `#${t.order.displaySimple}` : (t.order?.displayId || '—') }}</td>
                 <td>{{ t.note || '—' }}</td>
+                <td v-if="isAdmin" class="text-end">
+                  <button
+                    v-if="t.status === 'PENDING'"
+                    class="btn btn-sm btn-outline-danger"
+                    @click="cancelTransaction(t)"
+                    title="Cancelar transação (reverte saldo)"
+                  >
+                    <i class="bi bi-x-circle"></i>
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
