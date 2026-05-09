@@ -86,8 +86,39 @@ function getCustomerStats(o) {
 // iFood Widget
 const ifoodMerchantIds = ref([]);
 
+// One-time listener that swallows the "No plugins has been initialized"
+// (and similar buildFeatureEvent / minified `JSWq.l.*`) exceptions thrown
+// from the iFood widget's own bundle (vendor.<hash>.esm.js, etc.). These
+// fire async during widget bootstrap and bypass the script.onload
+// try/catch — without this, every Orders page load logs a confusing red
+// stack trace operators can't act on.
+let ifoodErrorListenerInstalled = false;
+function installIfoodErrorSwallower() {
+  if (ifoodErrorListenerInstalled || typeof window === 'undefined') return;
+  ifoodErrorListenerInstalled = true;
+  window.addEventListener('error', (ev) => {
+    const src = ev?.filename || ev?.target?.src || '';
+    const msg = String(ev?.message || ev?.error?.message || '');
+    const fromIfood = /widgets?\.ifood\.com\.br|\b(vendor|main|runtime)\.[a-f0-9]{12,20}\.esm\.js\b/.test(src);
+    const matchesKnownMsg = /No plugins has been initialized|buildFeatureEvent/i.test(msg);
+    if (fromIfood || (matchesKnownMsg && /esm\.js/.test(src))) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation?.();
+      console.warn('[ifood-widget] swallowed runtime error from widget bundle:', msg || ev);
+    }
+  }, true);
+  window.addEventListener('unhandledrejection', (ev) => {
+    const msg = String(ev?.reason?.message || ev?.reason || '');
+    if (/No plugins has been initialized|buildFeatureEvent/i.test(msg)) {
+      ev.preventDefault();
+      console.warn('[ifood-widget] swallowed unhandled rejection from widget bundle:', msg);
+    }
+  });
+}
+
 function initIfoodWidget(merchantIds) {
   if (!merchantIds.length) return;
+  installIfoodErrorSwallower();
   // remove any previous widget script
   const prev = document.getElementById('ifood-widget-script');
   if (prev) prev.remove();
@@ -95,12 +126,25 @@ function initIfoodWidget(merchantIds) {
   script.id = 'ifood-widget-script';
   script.async = true;
   script.src = 'https://widgets.ifood.com.br/widget.js';
+  // The widget bundle is webpack-built (vendor.<hash>.esm.js, etc.) and
+  // throws "No plugins has been initialized" from buildFeatureEvent when
+  // the merchantId is invalid or iFood's auth refused the embed. The error
+  // bubbles up as an unhandled exception at page load and pollutes the
+  // console. Swallow it locally — the widget either renders or it doesn't,
+  // and our app's main flow (orders, riders, inbox) doesn't depend on it.
+  script.onerror = (e) => {
+    console.warn('[ifood-widget] script failed to load', e);
+  };
   script.onload = () => {
-    if (window.iFoodWidget) {
-      window.iFoodWidget.init({
-        widgetId: '4314164a-666f-4032-b02a-9681ac7034d4',
-        merchantIds,
-      });
+    try {
+      if (window.iFoodWidget && typeof window.iFoodWidget.init === 'function') {
+        window.iFoodWidget.init({
+          widgetId: '4314164a-666f-4032-b02a-9681ac7034d4',
+          merchantIds,
+        });
+      }
+    } catch (e) {
+      console.warn('[ifood-widget] init failed', e);
     }
   };
   document.head.appendChild(script);
@@ -308,8 +352,14 @@ onMounted(async () => {
           }
         } catch (e) { /* ignore per-integration errors */ }
       }
-      // init iFood Widget with merchant UUIDs from loaded integrations
-      const ids = integs.map(i => i.merchantUuid || i.merchantId).filter(Boolean);
+      // init iFood Widget with merchant UUIDs from loaded integrations.
+      // Skip integrations that aren't enabled — the widget logs noisy
+      // "No plugins has been initialized" errors when the merchant lookup
+      // fails (e.g., disabled integration with stale merchant id).
+      const ids = integs
+        .filter(i => i.enabled !== false)
+        .map(i => i.merchantUuid || i.merchantId)
+        .filter(Boolean);
       ifoodMerchantIds.value = ids;
       initIfoodWidget(ids);
     } catch (e) { /* ignore */ }
