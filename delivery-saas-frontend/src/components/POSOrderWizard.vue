@@ -1087,7 +1087,11 @@ async function finalize(){
     // Para pedido balcão sem identificação, usa nome genérico
     const customerNameFinal = newCustomerName.value.trim() || (orderType.value === 'BALCAO' ? 'Cliente Balcão' : '');
     const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value, discountMerchant: manualDiscount.value > 0 ? manualDiscount.value : undefined, additionalFees: surcharge.value > 0 ? surcharge.value : undefined, appliedCashback: appliedCashback.value > 0 ? appliedCashback.value : undefined };
-    if (appliedCashback.value > 0 && foundCustomer.value) body.customerId = foundCustomer.value.id;
+    // Always send customerId when we already know who the customer is. The
+    // backend's findOrCreateCustomer would otherwise fall back to matching
+    // by name when phone is blank — and pick a different customer with the
+    // same first name, sending the order notification to a stranger.
+    if (foundCustomer.value?.id) body.customerId = foundCustomer.value.id;
     // If customer was found and we're using a new address (not selecting existing), persist address to customer first
     try{
       if(orderType.value === 'DELIVERY' && !selectedAddressId.value && foundCustomer.value){
@@ -1260,6 +1264,14 @@ watch(() => props.preset, async (val) => {
           foundCustomer.value = data;
           savedAddresses.value = data.addresses || [];
           if (val.customerName) newCustomerName.value = val.customerName;
+          // Hydrate the phone input from the loaded customer so phoneDigits
+          // (computed from phoneInput) is populated. Without this the order
+          // body submits customerPhone: null and the backend's
+          // findOrCreateCustomer falls back to matching by name — which can
+          // pick a different customer with the same first name and route
+          // the notification to the wrong WhatsApp number.
+          const ph = data?.whatsapp || data?.phone || '';
+          if (ph) phoneInput.value = String(ph);
         } catch (e) { console.warn('Failed to load preset customer:', e); }
       } else if (val.customerName) {
         newCustomerName.value = val.customerName;
