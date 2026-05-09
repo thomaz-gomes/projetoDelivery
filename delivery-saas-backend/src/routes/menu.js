@@ -530,8 +530,12 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       if (!ing) return res.status(400).json({ message: 'Ingrediente de estoque inválido' })
     }
     const integrationCode = await generateProductCode(companyId)
+    // Persist specialTakeoutPrice only when it's a positive number. Zero or
+    // missing values are stored as null (toggle off) to prevent balcão
+    // receipts from being printed with total 0 when the field was left blank.
     const stoNum = (specialTakeoutPrice === undefined || specialTakeoutPrice === null || specialTakeoutPrice === '') ? null : Number(specialTakeoutPrice)
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: (stoNum !== null && Number.isFinite(stoNum)) ? stoNum : null, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
+    const stoFinal = (stoNum !== null && Number.isFinite(stoNum) && stoNum > 0) ? stoNum : null
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -673,11 +677,12 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
     name: name ?? existing.name,
     description: description ?? existing.description,
     price: price !== undefined ? Number(price) : existing.price,
-    // null/empty/undefined explicitly clears the special price (toggle off);
-    // a non-numeric string is ignored to keep the previous value.
+    // Toggle off (null/empty/undefined) and zero are equivalent here — a 0
+    // special price would zero-out balcão receipts, so we treat it as "no
+    // special price" and clear the column. Only positive numbers persist.
     specialTakeoutPrice: specialTakeoutPrice === undefined
       ? existing.specialTakeoutPrice
-      : (specialTakeoutPrice === null || specialTakeoutPrice === '' || !Number.isFinite(Number(specialTakeoutPrice)))
+      : (specialTakeoutPrice === null || specialTakeoutPrice === '' || !Number.isFinite(Number(specialTakeoutPrice)) || Number(specialTakeoutPrice) <= 0)
         ? null
         : Number(specialTakeoutPrice),
     categoryId: categoryId !== undefined ? categoryId : existing.categoryId,

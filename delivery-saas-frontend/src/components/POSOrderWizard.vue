@@ -708,7 +708,9 @@ function effectiveProductPrice(p) {
   if (!p) return 0
   if (isTakeoutOrderTypePos(orderType.value) && p.specialTakeoutPrice != null && p.specialTakeoutPrice !== '') {
     const sto = Number(p.specialTakeoutPrice)
-    if (Number.isFinite(sto)) return sto
+    // Zero is treated as "no special price" so a product accidentally saved
+    // with 0 (toggle on, blank field) does not zero-out balcão receipts.
+    if (Number.isFinite(sto) && sto > 0) return sto
   }
   return Number(p.price || 0)
 }
