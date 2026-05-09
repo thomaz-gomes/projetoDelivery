@@ -466,7 +466,7 @@ router.post('/conversations/:id/send-reorder-suggestion', async (req, res) => {
     });
     if (!lastOrder || !lastOrder.items?.length) return res.status(404).json({ message: 'Cliente não tem pedido anterior com itens' });
 
-    const body = buildReorderSuggestionBody({
+    const body = await buildReorderSuggestionBody({
       template: conversation.menu?.remindLastOrderTemplate || null,
       customer,
       order: lastOrder,

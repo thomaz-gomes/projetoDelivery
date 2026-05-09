@@ -8,7 +8,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { evoSendText, evoSendMediaUrl, evoSendButtons } from '../wa.js';
 import { renderQuickReplyVariables } from '../utils/quickReplyVars.js';
-import { renderRemindLastOrderTemplate, buildReorderMagicLink } from '../services/reorderHelpers.js';
+import { renderRemindLastOrderTemplate, createShortReorderLink } from '../services/reorderHelpers.js';
 
 function isStoreOpen(store) {
   if (!store) return true;
@@ -195,13 +195,13 @@ async function handleReorderButtonReply({ conversation, instanceName, buttonRepl
     return false;
   }
 
-  const link = buildReorderMagicLink({
+  const link = await createShortReorderLink({
     companyId: order.companyId,
     orderId: order.id,
     customerId: order.customerId,
   });
   if (!link) {
-    console.warn('[reorder] magic link not built — PUBLIC_FRONTEND_URL not set');
+    console.warn('[reorder] short link not built — PUBLIC_FRONTEND_URL not set or invalid');
     return false;
   }
 

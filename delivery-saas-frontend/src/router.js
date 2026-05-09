@@ -307,6 +307,7 @@ const router = createRouter({
     { path: '/trial/activate', component: TrialActivationWizard, meta: { requiresAuth: true, noSidebar: true } },
     { path: '/store/:moduleKey', component: AddOnDetail, meta: { requiresAuth: true, role: 'ADMIN' } },
     { path: '/billing', component: AdminBilling, meta: { requiresAuth: true, role: 'ADMIN' } },
+    { path: '/r/:code', component: () => import('./views/ShortLinkRedirect.vue') },
     { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('./views/NotFound.vue') },
   ]
 });
