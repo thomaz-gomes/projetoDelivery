@@ -8,6 +8,7 @@ import { prisma } from '../prisma.js';
 import { evoSendText, evoSendMediaUrl, evoSendLocation } from '../wa.js';
 import { renderQuickReplyVariables } from '../utils/quickReplyVars.js';
 import { transcribeAudio } from '../services/aiProvider.js';
+import { buildReorderSuggestionBody } from '../services/reorderHelpers.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -415,6 +416,85 @@ router.post('/conversations/:id/send-quick-reply', async (req, res) => {
   } catch (err) {
     console.error('[inbox] POST /conversations/:id/send-quick-reply error:', err);
     return res.status(500).json({ message: 'Erro ao enviar resposta rápida', error: err.message });
+  }
+});
+
+// ─── 4d. POST /conversations/:id/send-reorder-suggestion ───────────────────
+//
+// Sends a "Quer repetir seu último pedido?" message containing the same
+// templated body and the same magic-link the WhatsApp registered-greeting
+// button uses, so the customer lands on the public menu with the cart
+// pre-filled when they tap. Used by the inbox "Perguntar" action; replaces
+// the older plain-text question that just listed the items.
+//
+// Requirements:
+//   - Conversation must belong to the caller's company and have a
+//     channel = WHATSAPP.
+//   - Conversation must be linked to a customer.
+//   - Customer must have at least one CONCLUIDO order with items.
+
+router.post('/conversations/:id/send-reorder-suggestion', async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: req.params.id, companyId },
+      include: { menu: { select: { id: true, remindLastOrderTemplate: true } } },
+    });
+    if (!conversation) return res.status(404).json({ message: 'Conversa não encontrada' });
+    if (conversation.channel !== 'WHATSAPP') return res.status(400).json({ message: 'Canal não suportado' });
+    if (!conversation.customerId) return res.status(400).json({ message: 'Conversa sem cliente vinculado' });
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: conversation.customerId },
+      select: { id: true, fullName: true, name: true },
+    });
+    if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+
+    const lastOrder = await prisma.order.findFirst({
+      where: { customerId: customer.id, companyId, status: 'CONCLUIDO' },
+      orderBy: { createdAt: 'desc' },
+      include: { items: true },
+    });
+    if (!lastOrder) return res.status(404).json({ message: 'Cliente não tem pedido concluído anterior' });
+
+    const body = buildReorderSuggestionBody({
+      template: conversation.menu?.remindLastOrderTemplate || null,
+      customer,
+      order: lastOrder,
+      companyId,
+    });
+
+    const instanceName = conversation.instanceName;
+    if (!instanceName) return res.status(400).json({ message: 'Conversa sem instância de WhatsApp' });
+
+    await evoSendText({ instanceName, to: conversation.channelContactId, text: body });
+
+    const message = await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: 'OUTBOUND',
+        type: 'TEXT',
+        body,
+        status: 'SENT',
+      },
+    });
+
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: new Date() },
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      const payload = { conversationId: conversation.id, message, companyId };
+      io.to(`company_${companyId}`).emit('inbox:new-message', payload);
+      io.emit('inbox:new-message:broadcast', payload);
+    }
+
+    return res.status(201).json(message);
+  } catch (err) {
+    console.error('[inbox] POST /conversations/:id/send-reorder-suggestion error:', err);
+    return res.status(500).json({ message: 'Erro ao enviar sugestão de pedido', error: err.message });
   }
 });
 

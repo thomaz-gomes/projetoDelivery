@@ -8,7 +8,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { evoSendText, evoSendMediaUrl, evoSendButtons } from '../wa.js';
 import { renderQuickReplyVariables } from '../utils/quickReplyVars.js';
-import jwt from 'jsonwebtoken';
+import { renderRemindLastOrderTemplate, buildReorderMagicLink } from '../services/reorderHelpers.js';
 
 function isStoreOpen(store) {
   if (!store) return true;
@@ -84,48 +84,9 @@ async function sendAutoReply(conversation, instanceName, quickReply) {
 // ---------------------------------------------------------------------------
 // Registered-customer greeting + remind-last-order button
 // ---------------------------------------------------------------------------
-
-function fmtCurrencyBR(value) {
-  try { return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
-  catch (_) { return `R$ ${Number(value || 0).toFixed(2)}`; }
-}
-
-function summarizeOrderItems(order) {
-  const items = order?.items || [];
-  if (!items.length) return '';
-  return items
-    .slice(0, 5)
-    .map(it => `• ${it.quantity || 1}x ${it.name}`)
-    .concat(items.length > 5 ? [`...e mais ${items.length - 5} item(ns)`] : [])
-    .join('\n');
-}
-
-function renderRemindLastOrderTemplate(template, { customer, order }) {
-  const fallback = 'Olá {{nome}}! 👋\n\nQuer repetir seu último pedido?\n\n{{itens}}\n\nTotal: {{total}}';
-  const raw = (template && String(template).trim()) || fallback;
-  const data = new Date(order?.createdAt || Date.now());
-  const dataStr = data.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-  return String(raw)
-    .replace(/\{\{nome\}\}/g, customer?.fullName || customer?.name || '')
-    .replace(/\{\{itens\}\}/g, summarizeOrderItems(order))
-    .replace(/\{\{total\}\}/g, fmtCurrencyBR(order?.total || 0))
-    .replace(/\{\{data\}\}/g, dataStr);
-}
-
-// Builds the magic-link URL the customer taps after pressing "Repetir pedido".
-// The token is a short-lived JWT bound to (orderId, customerId, companyId) so
-// the public reorder endpoint can validate it without an auth session.
-function buildReorderMagicLink({ companyId, orderId, customerId }) {
-  const frontend = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/+$/, '');
-  if (!frontend) return null;
-  const secret = process.env.JWT_SECRET || 'dev-jwt-secret';
-  const token = jwt.sign(
-    { orderId, customerId, companyId, kind: 'reorder' },
-    secret,
-    { expiresIn: '24h' },
-  );
-  return `${frontend}/public/${companyId}?reorder=${encodeURIComponent(orderId)}&t=${encodeURIComponent(token)}`;
-}
+// Template + magic-link helpers live in services/reorderHelpers.js so the
+// inbox "Perguntar ao cliente" action and this webhook produce the same
+// body and the same JWT.
 
 // Returns true when a registered-customer greeting + (optionally) the
 // remind-last-order button were sent. Returns false when the conversation is
