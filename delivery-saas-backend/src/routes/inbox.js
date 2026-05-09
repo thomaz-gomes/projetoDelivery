@@ -446,7 +446,7 @@ router.post('/conversations/:id/send-reorder-suggestion', async (req, res) => {
 
     const customer = await prisma.customer.findUnique({
       where: { id: conversation.customerId },
-      select: { id: true, fullName: true, name: true },
+      select: { id: true, fullName: true },
     });
     if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
 
