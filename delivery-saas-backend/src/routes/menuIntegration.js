@@ -1,9 +1,60 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
 import { authMiddleware, requireRole } from '../auth.js'
+import { generateProductCode, generateOptionCode } from '../utils/integrationCode.js'
 
 const router = express.Router()
 router.use(authMiddleware)
+
+// POST /menu/integration/generate-missing
+// Backfill: gera integrationCode em Products e Options que estão NULL.
+// Cobre os registros antigos (criados antes da Prisma extension auto-gerar
+// códigos em todo create). Para registros novos não é necessário — a extension
+// garante isso na origem.
+router.post('/generate-missing', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  try {
+    const products = await prisma.product.findMany({
+      where: { companyId, integrationCode: null },
+      select: { id: true },
+    })
+    let productsFixed = 0
+    for (const p of products) {
+      try {
+        const code = await generateProductCode(companyId)
+        await prisma.product.update({ where: { id: p.id }, data: { integrationCode: code } })
+        productsFixed++
+      } catch (e) {
+        console.warn('[generate-missing] product failed', p.id, e?.message)
+      }
+    }
+
+    const options = await prisma.option.findMany({
+      where: { integrationCode: null, group: { companyId } },
+      select: { id: true, groupId: true },
+    })
+    let optionsFixed = 0
+    for (const o of options) {
+      try {
+        const code = await generateOptionCode(o.groupId)
+        await prisma.option.update({ where: { id: o.id }, data: { integrationCode: code } })
+        optionsFixed++
+      } catch (e) {
+        console.warn('[generate-missing] option failed', o.id, e?.message)
+      }
+    }
+
+    res.json({
+      productsScanned: products.length,
+      productsFixed,
+      optionsScanned: options.length,
+      optionsFixed,
+    })
+  } catch (e) {
+    console.error('POST /menu/integration/generate-missing error', e)
+    res.status(500).json({ message: 'Erro ao gerar códigos faltantes', error: e?.message })
+  }
+})
 
 // GET /menu/integration/items?menuId=&search=
 router.get('/items', requireRole('ADMIN'), async (req, res) => {

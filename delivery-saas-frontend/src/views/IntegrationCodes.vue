@@ -2,9 +2,16 @@
   <div>
     <ListCard title="Códigos de Integração" icon="bi bi-upc-scan" :subtitle="subtitleText">
       <template #actions>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
           <span class="small text-muted">Itens: <span class="badge bg-primary">{{ items.length }}</span></span>
           <span class="small text-muted">Opcionais: <span class="badge bg-secondary">{{ optionals.length }}</span></span>
+          <button v-if="missingCount > 0"
+                  class="btn btn-sm btn-outline-warning"
+                  :disabled="generating"
+                  @click="generateMissing">
+            <i class="bi bi-magic me-1"></i>
+            {{ generating ? 'Gerando...' : `Gerar códigos faltantes (${missingCount})` }}
+          </button>
         </div>
       </template>
 
@@ -142,10 +149,16 @@ const error = ref('')
 const tab = ref('items')
 const search = ref('')
 const menuFilter = ref('')
+const generating = ref(false)
 
 const menus = ref([])
 const items = ref([])
 const optionals = ref([])
+
+const missingCount = computed(() =>
+  items.value.filter(i => !i.integrationCode).length +
+  optionals.value.filter(o => !o.integrationCode).length
+)
 
 const menuOptions = computed(() => {
   return [
@@ -230,6 +243,33 @@ function resetFilters() {
   search.value = ''
   menuFilter.value = ''
   loadData()
+}
+
+async function generateMissing() {
+  const confirm = await Swal.fire({
+    icon: 'question',
+    title: 'Gerar códigos faltantes?',
+    html: `Vai gerar <code>P-XXXX</code> / <code>O-XXXX</code> para todos os itens e opcionais sem código (${missingCount.value} registro(s)).<br><br><small class="text-muted">A partir de agora, qualquer produto/opcional novo já recebe código automaticamente — independente da origem.</small>`,
+    showCancelButton: true,
+    confirmButtonText: 'Gerar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#ffc107',
+  })
+  if (!confirm.isConfirmed) return
+  generating.value = true
+  try {
+    const { data } = await api.post('/menu/integration/generate-missing', {}, { timeout: 5 * 60 * 1000 })
+    await Swal.fire({
+      icon: 'success',
+      title: 'Códigos gerados',
+      html: `<div class="text-start small">Itens corrigidos: <strong>${data.productsFixed}</strong> / ${data.productsScanned}<br>Opcionais corrigidos: <strong>${data.optionsFixed}</strong> / ${data.optionsScanned}</div>`,
+    })
+    await loadData()
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro', text: e.response?.data?.message || 'Falha ao gerar códigos' })
+  } finally {
+    generating.value = false
+  }
 }
 
 onMounted(() => {
