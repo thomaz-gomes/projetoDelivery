@@ -450,12 +450,21 @@ router.post('/conversations/:id/send-reorder-suggestion', async (req, res) => {
     });
     if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
 
+    // Match the frontend definition of "último pedido": the most recent
+    // order regardless of status. The inbox panel shows the same order
+    // (cached on customer.orders[0]) and the operator already chose to ask
+    // about it — we only require it to have items so the reorder preview
+    // is meaningful.
     const lastOrder = await prisma.order.findFirst({
-      where: { customerId: customer.id, companyId, status: 'CONCLUIDO' },
+      where: {
+        customerId: customer.id,
+        companyId,
+        items: { some: {} },
+      },
       orderBy: { createdAt: 'desc' },
       include: { items: true },
     });
-    if (!lastOrder) return res.status(404).json({ message: 'Cliente não tem pedido concluído anterior' });
+    if (!lastOrder || !lastOrder.items?.length) return res.status(404).json({ message: 'Cliente não tem pedido anterior com itens' });
 
     const body = buildReorderSuggestionBody({
       template: conversation.menu?.remindLastOrderTemplate || null,
