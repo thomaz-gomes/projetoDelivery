@@ -1475,21 +1475,27 @@ ridersRouter.post('/:id/account/send-report', requireRole('ADMIN'), async (req, 
       doc.save();
       doc.rect(0, 0, pageWidth, 70).fill(COLOR.bandBg);
       doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(16)
-        .text(company?.name || 'Relatório do Entregador', leftX, 18, { width: usableWidth });
+        .text(company?.name || 'Relatório do Entregador', leftX, 18, { width: usableWidth, lineBreak: false });
       doc.font('Helvetica').fontSize(11).fillColor('#D8E5EE')
-        .text('Relatório de transações do entregador', leftX, 42, { width: usableWidth });
+        .text('Relatório de transações do entregador', leftX, 42, { width: usableWidth, lineBreak: false });
       doc.restore();
     }
 
-    function drawRiderHeader() {
-      // Below the band: rider name + period + generated-at, in two columns.
-      const startY = 84;
+    // Draws the rider header starting at y `top` and returns the y position
+    // immediately AFTER the block (used to decide where the KPI strip / table
+    // begin). Period and "gerado em" go on their own lines so they cannot
+    // overlap with the rider name or with each other.
+    function drawRiderHeader(top) {
+      const periodStr = `Período: ${dateFrom ? dateFrom.split('-').reverse().join('/') : '—'} a ${dateTo ? dateTo.split('-').reverse().join('/') : '—'}`;
+      const gerStr = `Gerado em ${new Date().toLocaleString('pt-BR')}`;
       doc.fillColor(COLOR.text).font('Helvetica-Bold').fontSize(13)
-        .text(rider.name, leftX, startY, { width: usableWidth });
+        .text(rider.name, leftX, top, { width: usableWidth, lineBreak: false });
       doc.fillColor(COLOR.muted).font('Helvetica').fontSize(10)
-        .text(`Período: ${dateFrom ? dateFrom.split('-').reverse().join('/') : '—'} a ${dateTo ? dateTo.split('-').reverse().join('/') : '—'}`, leftX, startY + 18, { width: usableWidth - 200 });
-      doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, leftX + usableWidth - 200, startY + 18, { width: 200, align: 'right' });
+        .text(periodStr, leftX, top + 20, { width: usableWidth, lineBreak: false });
+      doc.fillColor(COLOR.muted).font('Helvetica').fontSize(10)
+        .text(gerStr, leftX, top + 36, { width: usableWidth, lineBreak: false });
       doc.fillColor(COLOR.text);
+      return top + 56;
     }
 
     function drawTableHeader(y) {
@@ -1498,40 +1504,32 @@ ridersRouter.post('/:id/account/send-report', requireRole('ADMIN'), async (req, 
       doc.rect(leftX, y, usableWidth, headerRowHeight).fill(COLOR.headerBg);
       doc.fillColor(COLOR.muted).font('Helvetica-Bold').fontSize(9);
       const ty = y + 7;
-      doc.text('DATA / HORA', leftX + 8, ty, { width: colDateW - 10 });
-      doc.text('TIPO', leftX + colDateW + 8, ty, { width: colTypeW - 10 });
-      doc.text('PEDIDO', leftX + colDateW + colTypeW + 8, ty, { width: colOrderW - 10 });
-      doc.text('OBSERVAÇÃO', leftX + colDateW + colTypeW + colOrderW + 8, ty, { width: colNoteW - 10 });
-      doc.text('VALOR', leftX + colDateW + colTypeW + colOrderW + colNoteW + 8, ty, { width: colValueW - 16, align: 'right' });
+      doc.text('DATA / HORA', leftX + 8, ty, { width: colDateW - 10, lineBreak: false });
+      doc.text('TIPO', leftX + colDateW + 8, ty, { width: colTypeW - 10, lineBreak: false });
+      doc.text('PEDIDO', leftX + colDateW + colTypeW + 8, ty, { width: colOrderW - 10, lineBreak: false });
+      doc.text('OBSERVAÇÃO', leftX + colDateW + colTypeW + colOrderW + 8, ty, { width: colNoteW - 10, lineBreak: false });
+      doc.text('VALOR', leftX + colDateW + colTypeW + colOrderW + colNoteW + 8, ty, { width: colValueW - 16, align: 'right', lineBreak: false });
       doc.restore();
       doc.font('Helvetica').fillColor(COLOR.text);
-    }
-
-    function renderFooter() {
-      const footerY = pageHeight - margins.bottom + 24;
-      doc.save();
-      doc.fillColor(COLOR.muted).font('Helvetica').fontSize(8)
-        .text(`${company?.name || ''}  ·  Página ${pageIndex}`, leftX, footerY, { width: usableWidth, align: 'center' });
-      doc.restore();
     }
 
     function newPage() {
       doc.addPage({ size: 'A4', margins });
       pageIndex += 1;
       drawTopBand();
-      drawRiderHeader();
-      cursorY = margins.top + 4;
+      const afterHeader = drawRiderHeader(84);
+      cursorY = afterHeader + 12;
       drawTableHeader(cursorY);
       cursorY += headerRowHeight;
     }
 
-    // ─── Page 1: branded header + KPI strip + table header ──────────────────
+    // ─── Page 1: band → rider header (3 lines) → KPI strip → table header ──
     drawTopBand();
-    drawRiderHeader();
+    const afterHeaderY = drawRiderHeader(84);
 
-    // KPI strip (cover) — 4 cards across the top of the table area.
-    const kpiY = margins.top - 28; // sits right below the rider header
-    const kpiCardW = (usableWidth - 24) / 4; // 8px gap between 4 cards => 24px gaps total
+    // KPI strip — 4 cards. Sits BELOW the rider header so nothing overlaps.
+    const kpiY = afterHeaderY + 12;
+    const kpiCardW = (usableWidth - 24) / 4;
     const kpiCardH = 56;
     const kpis = [
       { label: 'Total a pagar',     value: moneyFmt.format(totalAmountAll),  color: totalAmountAll > 0 ? COLOR.success : COLOR.text },
@@ -1544,9 +1542,9 @@ ridersRouter.post('/:id/account/send-report', requireRole('ADMIN'), async (req, 
       doc.save();
       doc.roundedRect(kx, kpiY, kpiCardW, kpiCardH, 6).lineWidth(0.5).strokeColor(COLOR.border).stroke();
       doc.fillColor(COLOR.muted).font('Helvetica').fontSize(8)
-        .text(k.label.toUpperCase(), kx + 10, kpiY + 9, { width: kpiCardW - 20, characterSpacing: 0.5 });
+        .text(k.label.toUpperCase(), kx + 10, kpiY + 9, { width: kpiCardW - 20, characterSpacing: 0.5, lineBreak: false });
       doc.fillColor(k.color).font('Helvetica-Bold').fontSize(13)
-        .text(k.value, kx + 10, kpiY + 25, { width: kpiCardW - 20 });
+        .text(k.value, kx + 10, kpiY + 25, { width: kpiCardW - 20, lineBreak: false });
       doc.restore();
       kx += kpiCardW + 8;
     }
@@ -1560,9 +1558,9 @@ ridersRouter.post('/:id/account/send-report', requireRole('ADMIN'), async (req, 
     let zebra = false;
     doc.lineWidth(0.5).strokeColor(COLOR.borderSoft);
     for (const t of txs) {
-      // page break (leave room for total + footer)
-      if (cursorY + rowHeight > bottomY - 60) {
-        renderFooter();
+      // page break — leave a small bottom margin so the row doesn't touch
+      // the page edge.
+      if (cursorY + rowHeight > bottomY - 12) {
         newPage();
         zebra = false;
       }
@@ -1613,19 +1611,18 @@ ridersRouter.post('/:id/account/send-report', requireRole('ADMIN'), async (req, 
       zebra = !zebra;
     }
 
-    // Total row — emphasized
-    if (cursorY + rowHeight + 8 > bottomY - 60) {
-      renderFooter();
+    // Total row — emphasized. Need ~rowHeight+18 of clearance.
+    if (cursorY + rowHeight + 18 > bottomY - 12) {
       newPage();
     }
     cursorY += 8;
     doc.save();
     doc.rect(leftX, cursorY, usableWidth, rowHeight + 6).fill(COLOR.headerBg);
     doc.fillColor(COLOR.text).font('Helvetica-Bold').fontSize(11)
-      .text('Total do período', leftX + 8, cursorY + 8, { width: usableWidth - colValueW - 16 });
+      .text('Total do período', leftX + 8, cursorY + 8, { width: usableWidth - colValueW - 16, lineBreak: false });
     doc.fillColor(totalAmountAll < 0 ? COLOR.danger : COLOR.success).fontSize(13)
       .text(moneyFmt.format(totalAmountAll), leftX + usableWidth - colValueW - 8, cursorY + 6, {
-        width: colValueW, align: 'right',
+        width: colValueW, align: 'right', lineBreak: false,
       });
     doc.restore();
     cursorY += rowHeight + 12;
@@ -1634,11 +1631,9 @@ ridersRouter.post('/:id/account/send-report', requireRole('ADMIN'), async (req, 
     if (txs.length === 0) {
       doc.fillColor(COLOR.muted).font('Helvetica-Oblique').fontSize(11)
         .text('Nenhuma transação encontrada no período selecionado.', leftX, cursorY + 8, {
-          width: usableWidth, align: 'center',
+          width: usableWidth, align: 'center', lineBreak: false,
         });
     }
-
-    renderFooter();
 
     doc.end();
     const pdfBuffer = await finishPromise;
