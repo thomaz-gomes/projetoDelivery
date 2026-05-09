@@ -78,7 +78,10 @@ export function buildReorderMagicLink({ companyId, orderId, customerId }) {
     secret,
     { expiresIn: '24h' },
   );
-  return `${frontend}/public/${companyId}?reorder=${encodeURIComponent(orderId)}&t=${encodeURIComponent(token)}`;
+  // Path includes /menu — the SPA's PublicMenu route is /public/:companyId/menu;
+  // /public/:companyId alone hits PublicSlugResolver which tries to match the
+  // UUID as a friendly slug, fails, and shows "Página pública não encontrada".
+  return `${frontend}/public/${companyId}/menu?reorder=${encodeURIComponent(orderId)}&t=${encodeURIComponent(token)}`;
 }
 
 // 8 url-safe chars (~280 trillion combinations) — collision risk negligible

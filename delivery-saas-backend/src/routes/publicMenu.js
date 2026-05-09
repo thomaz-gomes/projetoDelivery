@@ -969,8 +969,9 @@ publicMenuRouter.get('/short/:code', async (req, res) => {
       customerId,
       token,
       // Pre-built relative path so the SPA can router.replace() without
-      // re-encoding the same params on the client side.
-      redirectPath: `/public/${companyId}?reorder=${encodeURIComponent(orderId)}&t=${encodeURIComponent(token)}`,
+      // re-encoding the same params on the client side. /menu is required —
+      // /public/:companyId alone hits the slug resolver and 404s.
+      redirectPath: `/public/${companyId}/menu?reorder=${encodeURIComponent(orderId)}&t=${encodeURIComponent(token)}`,
     });
   } catch (e) {
     console.error('GET /public/short/:code error:', e);
