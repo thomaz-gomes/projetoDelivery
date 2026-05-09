@@ -934,6 +934,50 @@ publicMenuRouter.post('/:companyId/coupons/validate', async (req, res) => {
   }
 })
 
+// GET /public/short/:code
+//
+// Resolves a short-link code (created by reorderHelpers.createShortReorderLink)
+// into the canonical reorder URL. The frontend route /r/:code calls this and
+// then router.replace()s into the public menu so WhatsApp can render a compact
+// preview while preserving the JWT-validated reorder flow underneath.
+publicMenuRouter.get('/short/:code', async (req, res) => {
+  const { code } = req.params;
+  if (!code) return res.status(400).json({ message: 'Código ausente' });
+  try {
+    const link = await prisma.shortLink.findUnique({ where: { code } });
+    if (!link) return res.status(404).json({ message: 'Link não encontrado' });
+    if (link.expiresAt && link.expiresAt.getTime() < Date.now()) {
+      return res.status(410).json({ message: 'Link expirado — peça um novo pelo WhatsApp' });
+    }
+    if (link.kind !== 'reorder') return res.status(400).json({ message: 'Tipo de link não suportado' });
+    const payload = link.payload || {};
+    const orderId = payload.orderId;
+    const customerId = payload.customerId || null;
+    const companyId = link.companyId;
+    if (!orderId || !companyId) return res.status(400).json({ message: 'Link inválido' });
+
+    // Mint a fresh JWT bound to (orderId, customerId, companyId) so the
+    // existing /reorder/:orderId/preview endpoint validates it the same way
+    // as the long-form magic link. Short link expiry is tracked on the row;
+    // the JWT mirrors that with its own 24h ceiling as a defense layer.
+    const secret = process.env.JWT_SECRET || 'dev-jwt-secret';
+    const token = jwt.sign({ orderId, customerId, companyId, kind: 'reorder' }, secret, { expiresIn: '24h' });
+
+    return res.json({
+      companyId,
+      orderId,
+      customerId,
+      token,
+      // Pre-built relative path so the SPA can router.replace() without
+      // re-encoding the same params on the client side.
+      redirectPath: `/public/${companyId}?reorder=${encodeURIComponent(orderId)}&t=${encodeURIComponent(token)}`,
+    });
+  } catch (e) {
+    console.error('GET /public/short/:code error:', e);
+    return res.status(500).json({ message: 'Erro ao resolver link' });
+  }
+});
+
 // GET /public/:companyId/reorder/:orderId/preview?t=<jwt>
 //
 // Returns the items of the customer's previous order so the public menu can

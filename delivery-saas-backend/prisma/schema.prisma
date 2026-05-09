@@ -2675,3 +2675,21 @@ model ErrorLog {
   @@index([resolved, lastSeen])
   @@index([companyId])
 }
+
+// Short-lived URL alias used to send compact reorder links over WhatsApp.
+// The original /public/<co>?reorder=<id>&t=<jwt> URL exceeds 300 chars
+// (uuids + 24h JWT); this lets WhatsApp render a tappable preview without
+// truncation. The frontend route /r/:code resolves the code via a public
+// API call and redirects to the canonical URL.
+model ShortLink {
+  code      String    @id
+  kind      String    // "reorder" today; reserved for future flows
+  companyId String
+  payload   Json      // { orderId, customerId } for reorder kind
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([companyId])
+  @@index([expiresAt])
+}
