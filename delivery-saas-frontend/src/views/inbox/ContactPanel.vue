@@ -205,6 +205,8 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import { formatCurrency } from '@/utils/formatters.js';
+import api from '@/api';
+import Swal from 'sweetalert2';
 import ContactInfo from './ContactInfo.vue';
 import ContactAddress from './ContactAddress.vue';
 import POSOrderWizard from '@/components/POSOrderWizard.vue';
@@ -423,14 +425,16 @@ async function askRepeat() {
   if (!lastOrder.value?.items?.length || asking.value) return;
   asking.value = true;
   try {
-    const itemsText = lastOrder.value.items.map(it => `• ${it.quantity}x ${it.name}`).join('\n');
-    const total = Number(lastOrder.value.total || 0).toFixed(2).replace('.', ',');
-    const body = `Olá! 👋\n\nSeu último pedido foi:\n${itemsText}\n\nTotal: *R$ ${total}*\n\nDeseja repetir o pedido? 😊`;
-    await inboxStore.sendMessage(props.conversationId, { type: 'TEXT', body });
+    // Server-side endpoint renders the same template + magic link the
+    // registered-greeting WhatsApp button uses, persists the message, and
+    // emits inbox:new-message — so we don't have to build the body here.
+    await api.post(`/inbox/conversations/${props.conversationId}/send-reorder-suggestion`);
     askedSuccessfully.value = true;
     setTimeout(() => { askedSuccessfully.value = false; }, 3000);
   } catch (e) {
     console.error('Erro ao enviar pergunta', e);
+    const msg = e?.response?.data?.message || 'Falha ao enviar a sugestão';
+    try { Swal.fire({ icon: 'error', title: 'Erro', text: msg, toast: true, position: 'top-end', timer: 3500, showConfirmButton: false }); } catch (_) {}
   } finally {
     asking.value = false;
   }
