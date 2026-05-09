@@ -139,21 +139,31 @@ async function maybeSendRegisteredGreeting({ conversation, menu, instanceName })
     select: { id: true, fullName: true, name: true },
   });
   if (!customer) return false;
-  const lastOrder = await prisma.order.findFirst({
-    where: { customerId: customer.id, companyId: conversation.companyId, status: 'CONCLUIDO' },
-    orderBy: { createdAt: 'desc' },
-    include: { items: true },
+
+  // Trigger: customer has at least ONE order in the base, regardless of
+  // status (CONCLUIDO, EM_PREPARO, CANCELADO, etc.). The customer record
+  // alone is not enough — a customer auto-created on the first inbound
+  // message would otherwise also receive the registered greeting.
+  const orderCount = await prisma.order.count({
+    where: { customerId: customer.id, companyId: conversation.companyId },
   });
-  if (!lastOrder) return false;
+  if (orderCount === 0) return false;
 
   // 1. Send the registered greeting (resolves {{nome}} etc the same way the
   // default greeting does).
   await sendAutoReply(conversation, instanceName, menu.registeredGreetingReply);
 
-  // 2. If remind-last-order is enabled, follow with an interactive button that
-  // points at the magic-link reorder flow. Persist the message so the inbox
-  // shows it alongside the greeting.
+  // 2. If remind-last-order is enabled, follow with an interactive button
+  // that points at the magic-link reorder flow. The "last order" used here
+  // is the most recent CONCLUIDO — repeating a cancelled or in-progress
+  // order has no use for the customer.
   if (menu.remindLastOrderEnabled) {
+    const lastOrder = await prisma.order.findFirst({
+      where: { customerId: customer.id, companyId: conversation.companyId, status: 'CONCLUIDO' },
+      orderBy: { createdAt: 'desc' },
+      include: { items: true },
+    });
+    if (!lastOrder) return true; // greeting sent, no completed order to repeat
     const text = renderRemindLastOrderTemplate(menu.remindLastOrderTemplate, { customer, order: lastOrder });
     try {
       await evoSendButtons({
