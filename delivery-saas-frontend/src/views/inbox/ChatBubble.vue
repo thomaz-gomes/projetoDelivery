@@ -19,7 +19,7 @@
   >
     <div class="rounded-3 px-3 py-2 position-relative bubble"
       :class="isOutbound ? 'bg-success-subtle' : 'bg-white'"
-      style="max-width: 75%; min-width: 80px; word-wrap: break-word;"
+      style="max-width: 75%; min-width: 80px; word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word;"
     >
       <!-- Quote preview -->
       <div v-if="quotedMessage" class="border-start border-3 border-secondary ps-2 mb-1 small text-muted" style="opacity: 0.85;">
