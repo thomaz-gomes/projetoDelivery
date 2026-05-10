@@ -939,11 +939,25 @@ function validateDiscountRule(body) {
     const v = Number(body.discountFixed)
     if (!Number.isFinite(v) || v <= 0) return 'Valor fixo deve ser positivo'
   }
-  if (body.allowedOrderTypes != null && !Array.isArray(body.allowedOrderTypes)) {
-    return 'allowedOrderTypes deve ser um array'
+  if (body.allowedOrderTypes != null) {
+    if (!Array.isArray(body.allowedOrderTypes)) return 'allowedOrderTypes deve ser um array'
+    const ALLOWED_OT = ['DELIVERY', 'BALCAO', 'TAKEOUT']
+    for (const t of body.allowedOrderTypes) {
+      if (typeof t !== 'string' || !ALLOWED_OT.includes(String(t).toUpperCase())) {
+        return 'allowedOrderTypes contém valor inválido (use DELIVERY, BALCAO ou TAKEOUT)'
+      }
+    }
   }
-  if (body.schedule != null && !Array.isArray(body.schedule)) {
-    return 'schedule deve ser um array'
+  if (body.schedule != null) {
+    if (!Array.isArray(body.schedule)) return 'schedule deve ser um array'
+    for (const s of body.schedule) {
+      if (!s || typeof s !== 'object') return 'schedule contém entrada inválida'
+      const d = Number(s.day)
+      if (!Number.isInteger(d) || d < 0 || d > 6) return 'schedule.day deve ser 0..6'
+      if (s.enabled !== undefined && typeof s.enabled !== 'boolean') return 'schedule.enabled deve ser boolean'
+      if (s.from != null && s.from !== '' && !/^\d{1,2}:\d{2}$/.test(String(s.from))) return 'schedule.from inválido (HH:mm)'
+      if (s.to != null && s.to !== '' && !/^\d{1,2}:\d{2}$/.test(String(s.to))) return 'schedule.to inválido (HH:mm)'
+    }
   }
   return null
 }
