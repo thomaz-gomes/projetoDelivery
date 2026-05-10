@@ -416,6 +416,40 @@ async function pagarPeriodo() {
   }
 }
 
+async function backfillStatus() {
+  if (!isAdmin.value) return;
+  const confirmation = await Swal.fire({
+    title: 'Reconciliar histórico?',
+    html: 'Isso vai casar pagamentos antigos (linhas <code>MANUAL_ADJUSTMENT</code> negativas) com as taxas/bônus pendentes mais antigos e marcá-los como <b>Pago</b>.<br><br>Operação <b>idempotente</b>: rodar de novo só completa o que faltou.<br><br>Não afeta saldo (não cria novas linhas).',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Reconciliar',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!confirmation.isConfirmed) return;
+  try {
+    const { data } = await api.post(`/riders/${riderId}/account/backfill-status`);
+    await Swal.fire({
+      icon: 'success',
+      title: 'Reconciliação concluída',
+      html: `
+        <div style="text-align:left">
+          <b>${data.txMarkedPaid || 0}</b> linha(s) marcada(s) como Pago<br>
+          <b>${data.settlementsMarkedPaid || 0}</b> pagamento(s) histórico(s) flipado(s) pra Pago<br>
+          Total casado: <b>${formatCurrency(data.totalSettled || 0)}</b><br>
+          Pendentes restantes: <b>${data.pendingPositivesRemaining || 0}</b>
+        </div>
+      `,
+    });
+    await fetchBalance();
+    await fetchTransactions();
+    await fetchPeriodFees();
+  } catch (e) {
+    console.error('backfillStatus failed', e);
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao reconciliar' });
+  }
+}
+
 async function dedupDailyRates() {
   const from = filters.value.from || null;
   const to = filters.value.to || null;
@@ -644,6 +678,9 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
               <button class="btn btn-sm btn-outline-secondary" @click="fetchBalance" :disabled="loading">Atualizar</button>
               <button class="btn btn-sm btn-outline-warning" @click="dedupDailyRates" :disabled="!isAdmin" title="Remove diárias duplicadas no mesmo dia">
                 Corrigir diárias
+              </button>
+              <button class="btn btn-sm btn-outline-primary" @click="backfillStatus" :disabled="!isAdmin" title="Marca como Pago as taxas que já foram quitadas por pagamentos antigos">
+                Reconciliar histórico
               </button>
             </div>
           </div>

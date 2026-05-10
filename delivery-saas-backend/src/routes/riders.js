@@ -1732,6 +1732,90 @@ ridersRouter.patch('/:id/transactions/:txId', requireRole('ADMIN'), async (req, 
   res.json({ ok: true, tx: updated });
 });
 
+// POST /riders/:id/account/backfill-status — one-shot historical
+// reconciliation. Pre-status rows all default to PENDING after the
+// migration even though many were already settled by the legacy
+// "Pagar período" flow (which created an offsetting MANUAL_ADJUSTMENT
+// negative instead of marking source rows). This walks each negative
+// MANUAL_ADJUSTMENT (oldest first) and consumes the oldest PENDING
+// positives summing up to its absolute value, flipping them to PAID
+// with paidByTxId pointing at the offset row.
+//
+// Idempotent: only touches PENDING rows. Re-running after a partial
+// run finishes the leftovers; running on a fully-reconciled rider is
+// a no-op.
+ridersRouter.post('/:id/account/backfill-status', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const rider = await prisma.rider.findFirst({ where: { id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+  // Pass 1 — settlement rows (negative MANUAL_ADJUSTMENT) and historical
+  // payouts are themselves settled events; mark them PAID up front so they
+  // don't show as "Pendente" in the timeline.
+  const settlementsResult = await prisma.riderTransaction.updateMany({
+    where: { riderId: id, type: 'MANUAL_ADJUSTMENT', amount: { lt: 0 }, status: 'PENDING' },
+    data: { status: 'PAID', paidAt: new Date() },
+  });
+
+  // Re-fetch after the updateMany so we have the canonical list of negative
+  // offsets to walk in chronological order. Includes the rows we just
+  // flipped — those are the historical payment offsets.
+  const offsets = await prisma.riderTransaction.findMany({
+    where: { riderId: id, type: 'MANUAL_ADJUSTMENT', amount: { lt: 0 } },
+    orderBy: { date: 'asc' },
+  });
+
+  // Positive PENDING rows that we'll consume in date order.
+  const pendingPositives = await prisma.riderTransaction.findMany({
+    where: { riderId: id, status: 'PENDING', amount: { gt: 0 } },
+    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+  });
+
+  // Walk each offset and consume positives until cumulative ~= |offset|.
+  // Tolerance accounts for the cent-level rounding that creeps in when an
+  // operator nudges fees by hand.
+  const TOL = 0.01;
+  let cursor = 0; // index into pendingPositives
+  let txMarkedPaid = 0;
+  let totalSettled = 0;
+
+  for (const off of offsets) {
+    let target = Math.abs(Number(off.amount || 0));
+    if (target <= 0) continue;
+    const flippedIds = [];
+    let consumed = 0;
+    while (cursor < pendingPositives.length && (target - consumed) > TOL) {
+      const pos = pendingPositives[cursor];
+      const posAmt = Number(pos.amount || 0);
+      // Only consume if this row doesn't overshoot; otherwise leave it for
+      // the next offset (or to remain pending). Allows partial periods to
+      // accumulate without arbitrarily splitting a row.
+      if (posAmt - (target - consumed) > TOL) break;
+      flippedIds.push(pos.id);
+      consumed += posAmt;
+      cursor += 1;
+    }
+    if (flippedIds.length) {
+      await prisma.riderTransaction.updateMany({
+        where: { id: { in: flippedIds } },
+        data: { status: 'PAID', paidAt: off.date, paidByTxId: off.id },
+      });
+      txMarkedPaid += flippedIds.length;
+      totalSettled += consumed;
+    }
+  }
+
+  return res.json({
+    ok: true,
+    settlementsMarkedPaid: settlementsResult.count,
+    txMarkedPaid,
+    totalSettled,
+    offsetsAvailable: offsets.length,
+    pendingPositivesRemaining: pendingPositives.length - cursor,
+  });
+});
+
 // POST /riders/:id/transactions/:txId/cancel — flip a PENDING transaction
 // to CANCELLED and reverse its balance impact. Idempotent: cancelling an
 // already-cancelled row is a no-op; PAID rows refuse with 409 because
