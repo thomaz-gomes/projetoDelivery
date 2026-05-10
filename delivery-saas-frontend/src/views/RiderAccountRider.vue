@@ -27,6 +27,8 @@ const paginationStart = computed(() => total.value === 0 ? 0 : (page.value - 1) 
 const paginationEnd = computed(() => Math.min(page.value * pageSize.value, total.value));
 
 const filters = ref({ from: '', to: '' });
+const showCustomRange = ref(false);
+const activePreset = ref('all');
 
 function riderStatusBadge(status) {
   switch (status) {
@@ -137,6 +139,49 @@ function changePageSize() {
   fetchTransactions();
 }
 
+function applyFilters() {
+  // Manual range = no preset highlighted; the chip row falls back to
+  // grey so the user knows they're on a custom range.
+  activePreset.value = 'custom';
+  page.value = 1;
+  fetchTransactions();
+}
+
+function clearFilters() {
+  if (!filters.value.from && !filters.value.to) return;
+  filters.value.from = '';
+  filters.value.to = '';
+  activePreset.value = 'all';
+  page.value = 1;
+  fetchTransactions();
+}
+
+function applyPreset(preset) {
+  const now = new Date();
+  const brtNow = new Date(now.getTime() - (now.getTimezoneOffset() + 180) * 60000);
+  const today = brtNow.toISOString().slice(0, 10);
+  if (preset === 'today') {
+    filters.value.from = today;
+    filters.value.to = today;
+  } else if (preset === 'week') {
+    // Week starts Monday — closer to how riders think about a work week.
+    const d = new Date(brtNow);
+    const dow = d.getUTCDay() || 7; // Sunday=7 instead of 0
+    d.setUTCDate(d.getUTCDate() - (dow - 1));
+    filters.value.from = d.toISOString().slice(0, 10);
+    filters.value.to = today;
+  } else if (preset === 'month') {
+    filters.value.from = today.slice(0, 8) + '01';
+    filters.value.to = today;
+  } else if (preset === 'all') {
+    filters.value.from = '';
+    filters.value.to = '';
+  }
+  activePreset.value = preset;
+  page.value = 1;
+  fetchTransactions();
+}
+
 onMounted(() => { fetchTransactions(); });
 </script>
 
@@ -148,6 +193,63 @@ onMounted(() => { fetchTransactions(); });
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
+
+    <!-- Period filter — quick presets first (most riders just want
+         today/week/month) and then a "Personalizado" toggle for the
+         date inputs so the row stays compact on phones. -->
+    <div class="card mb-3 p-2 px-3">
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-sm preset-btn"
+          :class="activePreset === 'today' ? 'btn-primary' : 'btn-outline-secondary'"
+          @click="applyPreset('today')"
+        >Hoje</button>
+        <button
+          type="button"
+          class="btn btn-sm preset-btn"
+          :class="activePreset === 'week' ? 'btn-primary' : 'btn-outline-secondary'"
+          @click="applyPreset('week')"
+        >Esta semana</button>
+        <button
+          type="button"
+          class="btn btn-sm preset-btn"
+          :class="activePreset === 'month' ? 'btn-primary' : 'btn-outline-secondary'"
+          @click="applyPreset('month')"
+        >Este mês</button>
+        <button
+          type="button"
+          class="btn btn-sm preset-btn"
+          :class="activePreset === 'all' || (!filters.from && !filters.to) ? 'btn-primary' : 'btn-outline-secondary'"
+          @click="applyPreset('all')"
+        >Tudo</button>
+        <button
+          type="button"
+          class="btn btn-sm btn-link text-decoration-none ms-auto"
+          @click="showCustomRange = !showCustomRange"
+        >
+          <i class="bi bi-calendar-range me-1"></i>Personalizado
+        </button>
+      </div>
+      <div v-if="showCustomRange" class="row g-2 mt-2">
+        <div class="col-6 col-md-4">
+          <label class="form-label small mb-1">De</label>
+          <input type="date" class="form-control form-control-sm" v-model="filters.from" :max="filters.to || undefined" />
+        </div>
+        <div class="col-6 col-md-4">
+          <label class="form-label small mb-1">Até</label>
+          <input type="date" class="form-control form-control-sm" v-model="filters.to" :min="filters.from || undefined" />
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-end gap-2">
+          <button class="btn btn-primary btn-sm flex-grow-1" @click="applyFilters" :disabled="loading">
+            <i class="bi bi-funnel me-1"></i>Filtrar
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" @click="clearFilters" :disabled="loading || (!filters.from && !filters.to)">
+            Limpar
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div class="card mb-3 p-3">
       <div class="small text-muted">Saldo no período</div>
@@ -260,4 +362,5 @@ onMounted(() => { fetchTransactions(); });
 .statement-row { transition: background-color 0.15s ease; }
 .statement-row:hover { background-color: rgba(0,0,0,0.02); }
 .min-w-0 { min-width: 0; }
+.preset-btn { font-size: 0.8rem; padding: 0.25rem 0.7rem; border-radius: 999px; }
 </style>
