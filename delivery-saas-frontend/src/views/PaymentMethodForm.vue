@@ -88,11 +88,11 @@
               <div class="mb-3 row">
                 <div class="col-md-6" v-if="form.discountType === 'percent'">
                   <label class="form-label">Percentual (%)</label>
-                  <input type="number" step="0.01" min="0" max="100" class="form-control" v-model.number="form.discountPercent" placeholder="Ex: 5">
+                  <input type="number" step="0.01" min="0.01" max="100" class="form-control" v-model.number="form.discountPercent" placeholder="Ex: 5">
                 </div>
                 <div class="col-md-6" v-else>
                   <label class="form-label">Valor fixo (R$)</label>
-                  <input type="number" step="0.01" min="0" class="form-control" v-model.number="form.discountFixed" placeholder="Ex: 5.00">
+                  <input type="number" step="0.01" min="0.01" class="form-control" v-model.number="form.discountFixed" placeholder="Ex: 5.00">
                 </div>
               </div>
 
@@ -119,10 +119,8 @@
               </div>
 
               <AvailabilityScheduler
-                :always-available="form.alwaysAvailable"
-                :schedule="form.schedule"
-                @update:always-available="form.alwaysAvailable = $event"
-                @update:schedule="form.schedule = $event"
+                v-model:alwaysAvailable="form.alwaysAvailable"
+                v-model:schedule="form.schedule"
               />
             </div>
           </div>
@@ -232,7 +230,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
@@ -281,6 +279,11 @@ const defaultForm = () => ({
 
 const form = ref(defaultForm())
 
+watch(() => form.value.discountType, (t) => {
+  if (t === 'percent') form.value.discountFixed = null
+  else form.value.discountPercent = null
+})
+
 async function load() {
   if (!isEdit) return
   loading.value = true
@@ -296,6 +299,10 @@ async function load() {
     }
     form.value.schedule = Array.isArray(d.schedule) ? d.schedule : []
     form.value.allowedOrderTypes = Array.isArray(d.allowedOrderTypes) ? d.allowedOrderTypes : []
+    form.value.discountPercent = d.discountPercent != null && d.discountPercent !== ''
+      ? Number(d.discountPercent) : null
+    form.value.discountFixed = d.discountFixed != null && d.discountFixed !== ''
+      ? Number(d.discountFixed) : null
   } catch (e) { console.error(e); Swal.fire({ icon: 'error', text: 'Falha ao carregar forma' }) }
   finally { loading.value = false }
 }
