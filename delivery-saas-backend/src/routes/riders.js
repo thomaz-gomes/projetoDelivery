@@ -1732,6 +1732,43 @@ ridersRouter.patch('/:id/transactions/:txId', requireRole('ADMIN'), async (req, 
   res.json({ ok: true, tx: updated });
 });
 
+// POST /riders/:id/transactions/:txId/cancel — flip a PENDING transaction
+// to CANCELLED and reverse its balance impact. Idempotent: cancelling an
+// already-cancelled row is a no-op; PAID rows refuse with 409 because
+// they're tied to a payment offset that would need a separate undo.
+ridersRouter.post('/:id/transactions/:txId/cancel', requireRole('ADMIN'), async (req, res) => {
+  const { id, txId } = req.params;
+  const companyId = req.user.companyId;
+  const rider = await prisma.rider.findFirst({ where: { id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+  const existing = await prisma.riderTransaction.findFirst({ where: { id: txId, riderId: id } });
+  if (!existing) return res.status(404).json({ message: 'Transação não encontrada' });
+
+  if (existing.status === 'CANCELLED') return res.json({ ok: true, tx: existing });
+  if (existing.status === 'PAID') {
+    return res.status(409).json({ message: 'Não é possível cancelar uma transação já paga. Estorne o pagamento primeiro.' });
+  }
+
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 255) : null;
+
+  // Reverse the balance impact in the same transaction so we never leave
+  // the account inconsistent with the row's status.
+  const [updated] = await prisma.$transaction([
+    prisma.riderTransaction.update({
+      where: { id: txId },
+      data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: reason },
+    }),
+    prisma.riderAccount.upsert({
+      where: { riderId: id },
+      update: { balance: { decrement: existing.amount } },
+      create: { riderId: id, balance: -Number(existing.amount || 0) },
+    }),
+  ]);
+
+  res.json({ ok: true, tx: updated });
+});
+
 // Get orders assigned to the authenticated rider (convenience endpoint)
 ridersRouter.get('/me/orders', async (req, res) => {
   try {
@@ -1891,7 +1928,9 @@ ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => 
     return isNaN(dt) ? null : dt;
   }
 
-  const where = { riderId: id };
+  // Only PENDING rows count toward the period payout. PAID/CANCELLED rows
+  // were either already settled or reversed and shouldn't be re-paid.
+  const where = { riderId: id, status: 'PENDING' };
   const fromDate = parseDateBRT(from);
   let toDate = parseDateBRT(to);
   if (fromDate || toDate) {
@@ -1904,16 +1943,27 @@ ridersRouter.post('/:id/account/pay', requireRole('ADMIN'), async (req, res) => 
   const items = await prisma.riderTransaction.findMany({ where });
   const sum = items.reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
-  if (!sum || Number(sum) === 0) return res.json({ ok: true, message: 'Nenhuma transação para pagar neste período', total: 0 });
+  if (!sum || Number(sum) === 0) return res.json({ ok: true, message: 'Nenhuma transação pendente para pagar neste período', total: 0 });
 
   // Create a payment transaction with negative amount to deduct balance
   const note = `Pagamento do período ${from || '-'} → ${to || '-'}`;
   const paymentTx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: -Math.abs(sum), type: 'MANUAL_ADJUSTMENT', date: new Date(), note });
 
+  // Flip the source rows from PENDING to PAID and link them to the payment
+  // tx so the UI can show "Pago em <date>" per row and we can theoretically
+  // reverse the payment later by undoing this batch.
+  const ids = items.map(it => it.id);
+  if (ids.length) {
+    await prisma.riderTransaction.updateMany({
+      where: { id: { in: ids } },
+      data: { status: 'PAID', paidAt: new Date(), paidByTxId: paymentTx?.id || null },
+    });
+  }
+
   // Bridge: registrar no módulo financeiro como PAGO (com CashFlowEntry e atualização de saldo)
   try { await createFinancialEntryForRider(paymentTx, companyId, accountId || null, { paidNow: true }); } catch (e) { console.warn('Financial bridge rider payment error:', e?.message); }
 
-  return res.json({ ok: true, message: 'Pagamento registrado', total: sum, tx: paymentTx });
+  return res.json({ ok: true, message: 'Pagamento registrado', total: sum, count: ids.length, tx: paymentTx });
 });
 
 // POST /riders/:id/dedup-daily-rates

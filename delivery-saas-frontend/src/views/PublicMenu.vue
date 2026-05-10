@@ -583,7 +583,11 @@
 
                 <div v-if="customerFormMsg" class="alert mb-3" :class="customerFormMsgType" style="border-radius:10px;font-size:13px;padding:10px 14px">{{ customerFormMsg }}</div>
 
-                <div class="mb-3">
+                <!-- Name field is irrelevant on the login sub-form: existing
+                     customers already supplied their name at registration and
+                     doLoginInCheckout doesn't read it — auth uses phone +
+                     password and the server returns the saved profile. -->
+                <div v-if="identityMode !== 'login'" class="mb-3">
                   <label class="form-label">Como devemos te chamar?</label>
                   <input v-model="customer.name" class="form-control" type="text" placeholder="Seu nome" autocomplete="name" />
                 </div>
@@ -636,9 +640,14 @@
 
                 <!-- Login sub-form -->
                 <div v-else-if="identityMode === 'login'">
-                  <div class="mb-3">
+                  <div class="mb-2">
                     <label class="form-label">Senha</label>
                     <input v-model="loginForm.password" class="form-control" type="password" autocomplete="current-password" />
+                  </div>
+                  <div class="mb-3 text-end">
+                    <a href="#" @click.prevent="doForgotPassword" class="small" style="text-decoration:none;color:var(--primary);" :class="{ 'pe-none opacity-50': customerFormLoading }">
+                      <i class="bi bi-key me-1"></i>Esqueci minha senha
+                    </a>
                   </div>
                   <div class="d-flex justify-content-between align-items-center gap-2">
                     <a href="#" @click.prevent="identityMode = null" class="small" style="text-decoration:none;color:var(--text-secondary);">
@@ -1115,6 +1124,7 @@ import { io } from 'socket.io-client'
 import { SOCKET_URL } from '@/config'
 import { loadMenuSnapshot, saveMenuSnapshot } from '../utils/menuDb.js';
 import { extractMenuImageUrls, precacheMenuImages, gcMenuImages, registerMenuServiceWorker } from '../utils/menuOfflineSync.js';
+import Swal from 'sweetalert2';
 
 let route;
 let router;
@@ -3624,6 +3634,46 @@ async function doLoginInCheckout() {
     const status = err?.response?.status
     if (status === 401) customerFormMsg.value = 'Usuário ou senha inválidos'
     else customerFormMsg.value = err?.response?.data?.message || 'Erro ao autenticar'
+    customerFormMsgType.value = 'alert-danger'
+  } finally { customerFormLoading.value = false }
+}
+
+async function doForgotPassword() {
+  customerFormMsg.value = ''
+  const raw = loginForm.value.phone || phoneInput.value || ''
+  const digits = removePhoneMask(raw)
+  if (!digits || String(digits).length < 10) {
+    customerFormMsg.value = 'Informe seu WhatsApp (DDD + número) na etapa anterior antes de pedir uma nova senha'
+    customerFormMsgType.value = 'alert-danger'
+    return
+  }
+  // Confirm before rotating the password — the old one is invalidated as
+  // soon as the request lands on the server, so a misclick locks the user
+  // out until the WhatsApp message arrives.
+  let confirmed = true
+  try {
+    const result = await Swal.fire({
+      title: 'Enviar nova senha?',
+      text: 'Sua senha atual será substituída por uma nova, enviada pelo WhatsApp da loja.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Enviar',
+      cancelButtonText: 'Cancelar',
+    })
+    confirmed = !!result.isConfirmed
+  } catch(_) { /* fall through with confirmed=true */ }
+  if (!confirmed) return
+
+  customerFormLoading.value = true
+  try {
+    await api.post(`/public/${companyId}/forgot-password`, { whatsapp: digits })
+    customerFormMsg.value = 'Se houver conta para este número, enviamos a nova senha pelo WhatsApp. Verifique suas mensagens.'
+    customerFormMsgType.value = 'alert-success'
+  } catch(err) {
+    const status = err?.response?.status
+    if (status === 503) customerFormMsg.value = err?.response?.data?.message || 'WhatsApp da loja indisponível. Entre em contato com a loja.'
+    else if (status === 502) customerFormMsg.value = err?.response?.data?.message || 'Senha redefinida, mas falhou o envio pelo WhatsApp. Entre em contato com a loja.'
+    else customerFormMsg.value = err?.response?.data?.message || 'Não foi possível enviar a nova senha. Tente novamente.'
     customerFormMsgType.value = 'alert-danger'
   } finally { customerFormLoading.value = false }
 }

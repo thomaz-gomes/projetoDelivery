@@ -1,7 +1,7 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
 import { signToken, authMiddleware } from '../auth.js'
-import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId } from '../services/customerAccounts.js'
+import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId, resetCustomerAccountPassword } from '../services/customerAccounts.js'
 import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js'
 import jwt from 'jsonwebtoken'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
@@ -1741,6 +1741,73 @@ publicMenuRouter.post('/:companyId/login', async (req, res) => {
     return res.status(500).json({ message: 'Erro ao autenticar' })
   }
 })
+
+// POST /public/:companyId/forgot-password
+// body: { whatsapp }
+//
+// Bcrypt hashes are one-way, so the original password can't be recovered.
+// Instead, generate a fresh temporary password, persist its hash, and send
+// the plaintext over the company's connected WhatsApp instance — the same
+// channel the customer used to register, so we don't widen the trust
+// surface. Without a connected instance we refuse and tell the user to
+// contact the store, since SMS/email are not configured.
+publicMenuRouter.post('/:companyId/forgot-password', async (req, res) => {
+  const { companyId } = req.params;
+  const { whatsapp } = req.body || {};
+  if (!whatsapp) return res.status(400).json({ message: 'WhatsApp é obrigatório' });
+  try {
+    const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true } });
+    if (!company) return res.status(404).json({ message: 'Empresa não encontrada' });
+
+    const cust = await prisma.customer.findFirst({ where: { companyId, whatsapp: String(whatsapp) }, select: { id: true, fullName: true, whatsapp: true } });
+    // Generic 200 when account is missing — keeps the endpoint from confirming
+    // whether a number is registered, which would let an attacker harvest
+    // customer phone numbers by polling.
+    if (!cust) return res.json({ ok: true });
+
+    const account = await findAccountByCustomerId({ companyId, customerId: cust.id });
+    if (!account) return res.json({ ok: true });
+
+    // Resolve the connected WhatsApp instance up front. If the company
+    // doesn't have one we surface an error instead of resetting silently —
+    // otherwise the customer's password would change without them ever
+    // receiving the new value.
+    const { pickConnectedInstance } = await import('../services/notify.js');
+    const inst = await pickConnectedInstance(companyId);
+    if (!inst || inst.status !== 'CONNECTED' || !inst.instanceName) {
+      return res.status(503).json({ message: 'WhatsApp da loja indisponível no momento. Entre em contato com a loja para redefinir sua senha.' });
+    }
+
+    // 8-char alphanumeric, excluding confusable glyphs (0/O, 1/l/I) so the
+    // customer can re-type without guessing.
+    const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    const cryptoMod = await import('crypto');
+    const newPassword = Array.from(cryptoMod.randomBytes(8)).map(b => ALPHABET[b % ALPHABET.length]).join('');
+
+    await resetCustomerAccountPassword({ accountId: account.id, plainPassword: newPassword });
+
+    const { evoSendText, normalizePhone } = await import('../wa.js');
+    const to = normalizePhone(cust.whatsapp || whatsapp);
+    const firstName = (cust.fullName || '').split(/\s+/)[0] || '';
+    const greeting = firstName ? `Olá, ${firstName}!` : 'Olá!';
+    const text = `${greeting} 🔐\n\nVocê pediu para lembrar sua senha. Geramos uma nova:\n\n*${newPassword}*\n\nUse para entrar e troque pela senha que preferir nas configurações da sua conta.\n\nSe não foi você quem solicitou, ignore esta mensagem e troque a senha em seguida.`;
+
+    try {
+      await evoSendText({ instanceName: inst.instanceName, to, text });
+    } catch (e) {
+      console.error('[forgot-password] evoSendText failed', e);
+      // We already rotated the password — failing the request would leave
+      // the customer locked out without telling them. Better to surface a
+      // soft error so the operator can resend or contact them directly.
+      return res.status(502).json({ message: 'Senha redefinida, mas falhou o envio pelo WhatsApp. Entre em contato com a loja.' });
+    }
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('Erro forgot-password public account', e);
+    return res.status(500).json({ message: 'Erro ao processar solicitação' });
+  }
+});
 
 // Public: GET cashback settings (no auth required, returns only public fields)
 publicMenuRouter.get('/:companyId/cashback-settings', async (req, res) => {

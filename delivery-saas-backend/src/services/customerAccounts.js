@@ -22,3 +22,12 @@ export async function verifyPassword(account, password){
   if(!account) return false
   return bcrypt.compare(String(password || ''), account.password)
 }
+
+// Resets the account's password to a freshly hashed value. Returns the
+// updated account row. Caller is responsible for sending the plain password
+// to the customer through a trusted channel (e.g., the WhatsApp instance
+// already connected to their company).
+export async function resetCustomerAccountPassword({ accountId, plainPassword }){
+  const hashed = await bcrypt.hash(String(plainPassword || ''), 10)
+  return prisma.customerAccount.update({ where: { id: accountId }, data: { password: hashed } })
+}

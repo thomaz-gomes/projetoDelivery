@@ -852,6 +852,12 @@ enum RiderTransactionType {
   GOAL_REWARD
 }
 
+enum RiderTransactionStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
 enum RiderBonusRuleType {
   EARLY_CHECKIN
 }
@@ -911,8 +917,21 @@ model RiderTransaction {
   amount    Decimal
   date      DateTime // date of transaction (can be used for daily grouping)
   note      String?
+  // Lifecycle status: fees/bonuses start PENDING, payment offsets are PAID,
+  // operator-cancelled rows are CANCELLED (balance reversed).
+  status    RiderTransactionStatus @default(PENDING)
+  paidAt    DateTime?
+  // Links a per-row PAID flip to the offsetting payment transaction created
+  // by /account/pay so we can show "Paid by period XYZ" / undo it later.
+  paidByTxId  String?
+  paidByTx    RiderTransaction?    @relation("RiderTxPaidBy", fields: [paidByTxId], references: [id])
+  paidTxs     RiderTransaction[]   @relation("RiderTxPaidBy")
+  cancelledAt DateTime?
+  cancelReason String?
   createdAt DateTime             @default(now())
   goalAchievement  RiderGoalAchievement?
+
+  @@index([riderId, status])
 }
 
 // ---- Rider Goals (Gamification) ----
