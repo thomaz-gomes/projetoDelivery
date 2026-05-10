@@ -34,4 +34,26 @@ router.post('/discounts', async (req, res) => {
   }
 })
 
+// POST /public/:companyId/cart/payment-preview
+router.post('/payment-preview', async (req, res) => {
+  const companyId = req.params.companyId
+  const { paymentMethodId, paymentMethodCode, orderType, subtotal } = req.body || {}
+  try {
+    let pm = null
+    if (paymentMethodId) {
+      pm = await prisma.paymentMethod.findFirst({ where: { id: paymentMethodId, companyId, isActive: true } })
+    } else if (paymentMethodCode) {
+      pm = await prisma.paymentMethod.findFirst({
+        where: { companyId, isActive: true, OR: [{ code: paymentMethodCode }, { name: paymentMethodCode }] },
+      })
+    }
+    const { evaluateDiscountRule } = await import('../utils/paymentDiscount.js')
+    const r = evaluateDiscountRule(pm, { orderType, subtotal: Number(subtotal) || 0, now: new Date() })
+    res.json(r)
+  } catch (e) {
+    console.error('Failed to preview payment discount', e)
+    res.status(500).json({ message: 'Failed to preview payment discount' })
+  }
+})
+
 export default router
