@@ -1299,6 +1299,10 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         if (/dinheiro|cash|money/i.test(String(payment.methodCode || ''))) {
           payment.method = 'Dinheiro'
           payment.methodCode = 'Dinheiro'
+          // also try to resolve a real DB "Dinheiro" row so discount rules can fire
+          resolvedPaymentMethod = await prisma.paymentMethod.findFirst({
+            where: { companyId, isActive: true, OR: [{ code: 'Dinheiro' }, { name: 'Dinheiro' }, { code: 'CASH' }] },
+          })
         } else {
           return res.status(400).json({ message: 'Método de pagamento inválido' })
         }
