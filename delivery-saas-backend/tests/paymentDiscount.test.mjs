@@ -124,3 +124,21 @@ test('removesCoupon flips when ignoreCoupons=true and rule applies', () => {
   );
   assert.equal(r.removesCoupon, true);
 });
+
+test('schedule with reordered slots is matched by day field, not array index', () => {
+  // Put Sunday (day 0) at the END of the array instead of the start
+  const slots = [];
+  for (let i = 1; i <= 6; i++) slots.push({ day: i, enabled: false, from: '11:00', to: '14:00' });
+  slots.push({ day: 0, enabled: true, from: '11:00', to: '14:00' }); // Sunday last
+  const r = evaluateDiscountRule(
+    { ...base, alwaysAvailable: false, schedule: slots, discountPercent: 10 },
+    ctx(), // Sunday 13:00
+  );
+  assert.equal(r.applies, true);
+});
+
+test('non-finite discountPercent does not apply (NaN guard)', () => {
+  const r = evaluateDiscountRule({ ...base, discountPercent: 'abc' }, ctx());
+  assert.equal(r.applies, false);
+  assert.equal(r.amount, 0);
+});

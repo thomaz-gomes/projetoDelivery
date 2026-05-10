@@ -21,7 +21,7 @@ function hmToMin(s) {
 function isWithinSchedule(schedule, now) {
   if (!Array.isArray(schedule)) return false;
   const day = now.getDay(); // 0..6
-  const slot = schedule[day];
+  const slot = schedule.find((s) => s && Number(s.day) === day);
   if (!slot || !slot.enabled) return false;
   const from = hmToMin(slot.from);
   const to = hmToMin(slot.to);
@@ -54,9 +54,13 @@ export function evaluateDiscountRule(method, ctx) {
   const sub = Number(ctx.subtotal) || 0;
   let amount = 0;
   if (method.discountPercent != null && method.discountPercent !== '') {
-    amount = round2(sub * Number(method.discountPercent) / 100);
+    const pct = Number(method.discountPercent);
+    if (!Number.isFinite(pct) || pct <= 0) return result;
+    amount = round2(sub * pct / 100);
   } else if (method.discountFixed != null && method.discountFixed !== '') {
-    amount = round2(Number(method.discountFixed));
+    const fix = Number(method.discountFixed);
+    if (!Number.isFinite(fix) || fix <= 0) return result;
+    amount = round2(fix);
   } else {
     return result; // rule on but no value configured
   }
