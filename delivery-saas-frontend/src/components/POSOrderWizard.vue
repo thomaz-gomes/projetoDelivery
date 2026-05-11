@@ -915,10 +915,12 @@ async function recalcPaymentDiscount() {
             return;
           }
           // user confirmed — clear coupon
-          couponApplied.value = false;
-          couponDiscount.value = 0;
-          couponCode.value = '';
-          couponInfo.value = null;
+          try { removeCoupon(); } catch (e) {
+            couponApplied.value = false;
+            couponDiscount.value = 0;
+            couponCode.value = '';
+            couponInfo.value = null;
+          }
         } finally {
           _posPaymentDiscountModalOpen = false;
         }
@@ -1015,7 +1017,7 @@ const isCashPayment = computed(()=> {
 });
 watch(paymentMethodCode, ()=> { if(!isCashPayment.value) changeFor.value = null; });
 watch(paymentMethodCode, () => { recalcPaymentDiscount(); });
-watch(orderType, () => { recalcPaymentDiscount(); });
+watch(orderType, () => { recalcPaymentDiscount(); }, { flush: 'post' });
 watch(subtotal, () => { recalcPaymentDiscount(); });
 
 async function loadMenu(){
