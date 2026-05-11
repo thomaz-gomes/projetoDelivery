@@ -1,8 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 
 // secretStore reads CERT_STORE_KEY lazily on each call. Set before import.
-process.env.CERT_STORE_KEY = 'a'.repeat(64)
+process.env.CERT_STORE_KEY = crypto.randomBytes(32).toString('base64')
 
 const { encrypt, decrypt } = await import('../src/messaging/crypto.js')
 
