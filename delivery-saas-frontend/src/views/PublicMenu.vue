@@ -852,7 +852,12 @@
               </div>
                   <ListGroup :items="paymentMethods" itemKey="code" :selectedId="paymentMethod" :showActions="false" @select="paymentMethod = $event">
                     <template #primary="{ item }">
-                      <div><strong>{{ item.name }}</strong></div>
+                      <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <strong>{{ item.name }}</strong>
+                        <span v-if="paymentMethodDiscountLabel(item)" class="badge bg-success-subtle text-success border border-success-subtle">
+                          <i class="bi bi-tag-fill me-1"></i>{{ paymentMethodDiscountLabel(item) }}
+                        </span>
+                      </div>
                       <div v-if="item.description" class="small text-muted">{{ item.description }}</div>
                     </template>
                   </ListGroup>
@@ -3216,6 +3221,35 @@ async function evaluateDiscountsNow(){
 function scheduleEvaluateDiscounts(){
   try{ if(_discountsDebounce) clearTimeout(_discountsDebounce) }catch(e){}
   _discountsDebounce = setTimeout(()=> evaluateDiscountsNow(), 300)
+}
+
+// Returns a short label like "5% OFF" or "R$ 5,00 OFF" when a payment method
+// has an active discount rule that would apply for the current orderType.
+// Returns null when no badge should be shown.
+function paymentMethodDiscountLabel(pm) {
+  if (!pm || !pm.discountEnabled) return null
+  // Respect allowedOrderTypes (skip schedule check for v1 — keeps the CTA simple)
+  const allowed = Array.isArray(pm.allowedOrderTypes) ? pm.allowedOrderTypes : []
+  if (allowed.length > 0) {
+    const want = String(orderType.value || 'DELIVERY').toUpperCase()
+    const norm = (t) => {
+      const u = String(t || '').toUpperCase()
+      if (u === 'DELIVERY') return 'DELIVERY'
+      if (u === 'BALCAO' || u === 'BALCÃO' || u === 'INDOOR') return 'BALCAO'
+      return 'TAKEOUT'
+    }
+    if (!allowed.map(norm).includes(norm(want))) return null
+  }
+  const pct = pm.discountPercent != null && pm.discountPercent !== '' ? Number(pm.discountPercent) : null
+  if (pct != null && Number.isFinite(pct) && pct > 0) {
+    const txt = Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(2).replace(/\.?0+$/, '')}%`
+    return `${txt} OFF`
+  }
+  const fix = pm.discountFixed != null && pm.discountFixed !== '' ? Number(pm.discountFixed) : null
+  if (fix != null && Number.isFinite(fix) && fix > 0) {
+    return `${formatCurrency(fix)} OFF`
+  }
+  return null
 }
 
 async function recalcPaymentDiscount() {
