@@ -65,6 +65,7 @@ import path from 'path';
 import startReportsCleanup from './cleanupReports.js';
 import startForceOpenCleanup from './cleanupForceOpen.js';
 import saasRouter from './routes/saas.js'
+import adminMetaConfigRouter from './routes/adminMetaConfig.js'
 import { requireModule } from './modules.js'
 import financialRouter from './routes/financial/index.js'
 import metaPixelRouter from './routes/metaPixel.js'
@@ -285,6 +286,8 @@ app.use('/agent-setup', agentSetupRouter);
 app.use('/agent-print', requireModule('printing'), agentPrintRouter);
 // SaaS management (plans, modules, subscriptions, invoices)
 app.use('/saas', saasRouter);
+// Admin: Meta App config (SUPER_ADMIN only — gated inside the router)
+app.use('/admin', adminMetaConfigRouter);
 // AI Credits: saldo, histórico e gestão de créditos de IA por empresa
 app.use('/ai-credits', aiCreditsRouter);
 app.use('/ai-studio', aiStudioRouter);
