@@ -207,6 +207,7 @@
           <div v-if="cart.length > 0 && !embedded" class="mt-2 small text-end text-muted border-top pt-2">
             <div v-if="couponDiscount > 0">Cupom: <span class="text-success">-{{ formatCurrency(couponDiscount) }}</span></div>
             <div v-if="manualDiscount > 0">Desconto: <span class="text-danger">-{{ formatCurrency(manualDiscount) }}</span></div>
+            <div v-if="paymentDiscount > 0">Desconto pagamento: <span class="text-success">-{{ formatCurrency(paymentDiscount) }}</span></div>
             <div v-if="surcharge > 0">Acréscimo: <span class="text-primary">+{{ formatCurrency(surcharge) }}</span></div>
             <div v-if="orderType === 'DELIVERY'">Entrega: <span :class="isFreeDeliveryActive ? 'text-success' : ''">{{ isFreeDeliveryActive ? 'Grátis' : formatCurrency(deliveryFee) }}</span></div>
             <div class="fw-semibold text-dark">Total: {{ formatCurrency(totalWithDelivery) }}</div>
@@ -352,6 +353,9 @@
           <CurrencyInput label="Troco para (opcional)" labelClass="form-label small" v-model="changeFor" inputClass="form-control" placeholder="Ex: 100" />
         </div>
         <div class="alert alert-light small">
+          <div v-if="paymentDiscount > 0" class="d-flex justify-content-between text-success">
+            <span>Desconto pagamento</span><span>-{{ formatCurrency(paymentDiscount) }}</span>
+          </div>
           <div v-if="appliedCashback > 0" class="d-flex justify-content-between text-success">
             <span>Cashback aplicado</span><span>-{{ formatCurrency(appliedCashback) }}</span>
           </div>
@@ -382,6 +386,7 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import ListGroup from './form/list-group/ListGroup.vue';
 import api from '../api';
+import Swal from 'sweetalert2';
 import { useAuthStore } from '../stores/auth';
 import { formatCurrency } from '../utils/formatters.js';
 
@@ -865,6 +870,67 @@ const couponError = ref('');
 const manualDiscount = ref(0);
 const surcharge = ref(0);
 
+// Payment-method discount preview (mirrors public checkout)
+const paymentDiscount = ref(0);
+const paymentDiscountInfo = ref({ removesCoupon: false, blocksCashback: false });
+let _posPreviousPaymentMethod = paymentMethodCode.value;
+let _posPaymentPreviewSeq = 0;
+let _posPaymentDiscountModalOpen = false;
+
+async function recalcPaymentDiscount() {
+  const mySeq = ++_posPaymentPreviewSeq;
+  paymentDiscount.value = 0;
+  paymentDiscountInfo.value = { removesCoupon: false, blocksCashback: false };
+  if (!paymentMethodCode.value) return;
+  const pm = paymentMethods.value.find(m => (m.code || m.name) === paymentMethodCode.value);
+  if (!pm || !pm.discountEnabled) return;
+  try {
+    const res = await api.post('/menu/payment-preview', {
+      paymentMethodCode: paymentMethodCode.value,
+      orderType: orderType.value,
+      subtotal: subtotal.value,
+    });
+    if (mySeq !== _posPaymentPreviewSeq) return;
+    const data = res.data || {};
+    if (data.applies) {
+      paymentDiscount.value = Number(data.amount || 0);
+      paymentDiscountInfo.value = {
+        removesCoupon: !!data.removesCoupon,
+        blocksCashback: !!data.blocksCashback,
+      };
+      if (data.removesCoupon && couponDiscount.value > 0) {
+        if (_posPaymentDiscountModalOpen) return;
+        _posPaymentDiscountModalOpen = true;
+        try {
+          const ok = await Swal.fire({
+            icon: 'warning',
+            title: 'Cupom não cumulativo',
+            text: 'Este método de pagamento remove o cupom aplicado. Deseja continuar?',
+            showCancelButton: true,
+            confirmButtonText: 'Sim, manter este método',
+            cancelButtonText: 'Cancelar',
+          });
+          if (!ok.isConfirmed) {
+            paymentMethodCode.value = _posPreviousPaymentMethod;
+            return;
+          }
+          // user confirmed — clear coupon
+          couponApplied.value = false;
+          couponDiscount.value = 0;
+          couponCode.value = '';
+          couponInfo.value = null;
+        } finally {
+          _posPaymentDiscountModalOpen = false;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to preview payment discount', e);
+  } finally {
+    if (mySeq === _posPaymentPreviewSeq) _posPreviousPaymentMethod = paymentMethodCode.value;
+  }
+}
+
 // Cashback (mirrors PublicMenu): customer-bound credit applied before payment.
 const cashbackEnabled = ref(false);
 const cashbackMinRedeem = ref(0);
@@ -881,7 +947,7 @@ const cashbackCanRedeem = computed(() => {
 
 const totalBeforeCashback = computed(() => {
   try {
-    const base = Math.max(0, subtotal.value - Number(couponDiscount.value || 0) - Number(manualDiscount.value || 0) + Number(surcharge.value || 0));
+    const base = Math.max(0, subtotal.value - Number(couponDiscount.value || 0) - Number(manualDiscount.value || 0) - Number(paymentDiscount.value || 0) + Number(surcharge.value || 0));
     return base + Number(deliveryFee.value || 0);
   } catch (e) { return subtotal.value + deliveryFee.value; }
 });
@@ -948,6 +1014,9 @@ const isCashPayment = computed(()=> {
   return code === 'CASH' || /dinheiro/.test(name);
 });
 watch(paymentMethodCode, ()=> { if(!isCashPayment.value) changeFor.value = null; });
+watch(paymentMethodCode, () => { recalcPaymentDiscount(); });
+watch(orderType, () => { recalcPaymentDiscount(); });
+watch(subtotal, () => { recalcPaymentDiscount(); });
 
 async function loadMenu(){
   if(menuLoading.value) return; menuLoading.value=true;
@@ -998,6 +1067,7 @@ async function loadMenu(){
       console.log('PDV: first product sample=', (cats[0].products || [])[0] || null);
     }
     paymentMethods.value = data.company?.paymentMethods || [];
+    nextTick(() => { recalcPaymentDiscount(); });
     // ensure stores are loaded so the user can assign a store before finalizing
     if(!stores.value || stores.value.length===0) await loadStores();
   } catch(e){ console.error('Falha ao carregar menu público para PDV', e); }

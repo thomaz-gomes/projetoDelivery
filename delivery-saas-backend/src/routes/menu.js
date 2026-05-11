@@ -12,6 +12,7 @@ import { getOrCreateDefaults } from './storePricingDefaults.js'
 import { normalizeToIngredientUnit, areUnitsCompatible } from '../utils/unitConversion.js'
 import { makeCopyName } from '../utils/copyName.js'
 import { optimizeForWeb } from '../utils/imageOptimizer.js'
+import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -1003,6 +1004,27 @@ router.delete('/payment-methods/:id', requireRole('ADMIN'), async (req, res) => 
 
   await prisma.paymentMethod.delete({ where: { id } })
   res.json({ message: 'Removido' })
+})
+
+// POST /menu/payment-preview - admin-scoped mirror of /public/:companyId/cart/payment-preview
+router.post('/payment-preview', async (req, res) => {
+  const companyId = req.user.companyId
+  const { paymentMethodId, paymentMethodCode, orderType, subtotal } = req.body || {}
+  try {
+    let pm = null
+    if (paymentMethodId) {
+      pm = await prisma.paymentMethod.findFirst({ where: { id: paymentMethodId, companyId, isActive: true } })
+    } else if (paymentMethodCode) {
+      pm = await prisma.paymentMethod.findFirst({
+        where: { companyId, isActive: true, OR: [{ code: paymentMethodCode }, { name: paymentMethodCode }] },
+      })
+    }
+    const r = evaluateDiscountRule(pm, { orderType, subtotal: Number(subtotal) || 0, now: new Date() })
+    res.json(r)
+  } catch (e) {
+    console.error('Failed to preview payment discount', e)
+    res.status(500).json({ message: 'Failed to preview payment discount' })
+  }
 })
 
 // GET /products/:id/pricing-analysis
