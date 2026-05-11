@@ -362,7 +362,7 @@ model WhatsAppInstance {
 model MetaMessagingAccount {
   id                 String            @id @default(uuid())
   companyId          String
-  kind               MessagingProvider
+  provider           MessagingProvider
   externalId         String
   displayName        String?
   accessToken        String            @db.Text
@@ -381,8 +381,9 @@ model MetaMessagingAccount {
   menusAsFb     Menu[]  @relation("MenuFb")
   menusAsIg     Menu[]  @relation("MenuIg")
 
-  @@unique([companyId, kind, externalId])
+  @@unique([companyId, provider, externalId])
   @@index([companyId])
+  @@index([provider, externalId])
 }
 
 model Customer {
