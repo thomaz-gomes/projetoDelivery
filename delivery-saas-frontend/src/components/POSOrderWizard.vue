@@ -344,11 +344,9 @@
           <label class="form-label small">Forma</label>
           <ListGroup :items="paymentMethods" itemKey="code" :selectedId="paymentMethodCode" :showActions="false" @select="paymentMethodCode = $event">
             <template #primary="{ item }">
-              <div class="d-flex align-items-center gap-2 flex-wrap">
-                <strong>{{ item.name }}</strong>
-                <span v-if="paymentMethodDiscountLabel(item)" class="badge bg-success-subtle text-success border border-success-subtle">
-                  <i class="bi bi-tag-fill me-1"></i>{{ paymentMethodDiscountLabel(item) }}
-                </span>
+              <div><strong>{{ item.name }}</strong></div>
+              <div v-if="paymentMethodSavings(item) > 0" class="small text-success fw-semibold">
+                <i class="bi bi-tag-fill me-1"></i>Economize {{ formatCurrency(paymentMethodSavings(item)) }} pagando com {{ item.name }}
               </div>
               <div v-if="item.description" class="small text-muted">{{ item.description }}</div>
             </template>
@@ -882,10 +880,10 @@ let _posPreviousPaymentMethod = paymentMethodCode.value;
 let _posPaymentPreviewSeq = 0;
 let _posPaymentDiscountModalOpen = false;
 
-// Returns a short label like "5% OFF" or "R$ 5,00 OFF" when a payment method
-// has an active discount rule that would apply for the current orderType.
-function paymentMethodDiscountLabel(pm) {
-  if (!pm || !pm.discountEnabled) return null
+// Returns the BRL savings amount for the given payment method against the
+// current cart subtotal. Returns 0 when the rule does not apply.
+function paymentMethodSavings(pm) {
+  if (!pm || !pm.discountEnabled) return 0
   const allowed = Array.isArray(pm.allowedOrderTypes) ? pm.allowedOrderTypes : []
   if (allowed.length > 0) {
     const norm = (t) => {
@@ -894,18 +892,18 @@ function paymentMethodDiscountLabel(pm) {
       if (u === 'BALCAO' || u === 'BALCÃO' || u === 'INDOOR') return 'BALCAO'
       return 'TAKEOUT'
     }
-    if (!allowed.map(norm).includes(norm(orderType.value))) return null
+    if (!allowed.map(norm).includes(norm(orderType.value))) return 0
   }
+  const sub = Number(subtotal.value) || 0
   const pct = pm.discountPercent != null && pm.discountPercent !== '' ? Number(pm.discountPercent) : null
   if (pct != null && Number.isFinite(pct) && pct > 0) {
-    const txt = Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(2).replace(/\.?0+$/, '')}%`
-    return `${txt} OFF`
+    return Math.min(sub, Math.round(sub * pct) / 100)
   }
   const fix = pm.discountFixed != null && pm.discountFixed !== '' ? Number(pm.discountFixed) : null
   if (fix != null && Number.isFinite(fix) && fix > 0) {
-    return `${formatCurrency(fix)} OFF`
+    return Math.min(sub, fix)
   }
-  return null
+  return 0
 }
 
 async function recalcPaymentDiscount() {
