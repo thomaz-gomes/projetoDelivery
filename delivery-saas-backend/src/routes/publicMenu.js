@@ -9,6 +9,7 @@ import * as cashbackSvc from '../services/cashback.js'
 import { nextDisplaySimple } from '../utils/displaySimple.js'
 import { geocodeOrderIfNeeded } from '../utils/geocode.js'
 import { isAvailableNow } from '../services/availability.js'
+import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -1287,15 +1288,9 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
     couponDiscount = 0
   }
 
-  const computedTotal = Math.max(0, subtotal - Number(couponDiscount || 0)) + Number(deliveryFee || 0)
-
-  // Prefer client-provided payment.amount when present and greater than 0.
-  // This ensures we persist the authoritative amount when frontends send it
-  // (avoids double-counting when item.price already included option prices).
-  const total = (payment && Number.isFinite(Number(payment.amount)) && Number(payment.amount) > 0) ? Number(payment.amount) : computedTotal
-
     // optional: validate payment method. Accept either code or name from incoming payload,
     // but store the canonical payment method NAME in the persisted payload (user requested)
+    let resolvedPaymentMethod = null
     if (payment && payment.methodCode) {
       const pm = await prisma.paymentMethod.findFirst({ where: { companyId, isActive: true, OR: [{ code: payment.methodCode }, { name: payment.methodCode }] } })
       if (!pm) {
@@ -1304,6 +1299,10 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         if (/dinheiro|cash|money/i.test(String(payment.methodCode || ''))) {
           payment.method = 'Dinheiro'
           payment.methodCode = 'Dinheiro'
+          // also try to resolve a real DB "Dinheiro" row so discount rules can fire
+          resolvedPaymentMethod = await prisma.paymentMethod.findFirst({
+            where: { companyId, isActive: true, OR: [{ code: 'Dinheiro' }, { name: 'Dinheiro' }, { code: 'CASH' }] },
+          })
         } else {
           return res.status(400).json({ message: 'Método de pagamento inválido' })
         }
@@ -1311,8 +1310,36 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         // prefer storing the user-friendly name in the payload (keeps display consistent)
         payment.method = pm.name
         payment.methodCode = pm.name
+        resolvedPaymentMethod = pm
       }
     }
+
+    // Payment-method discount rule
+    let paymentDiscount = 0
+    let paymentBlocksCashback = false
+    let couponRemovedByPayment = false
+    if (resolvedPaymentMethod) {
+      const ruleResult = evaluateDiscountRule(resolvedPaymentMethod, {
+        orderType,
+        subtotal,
+        now: new Date(),
+      })
+      if (ruleResult.applies) {
+        paymentDiscount = ruleResult.amount
+        paymentBlocksCashback = ruleResult.blocksCashback
+        if (ruleResult.removesCoupon && Number(couponDiscount) > 0) {
+          couponDiscount = 0
+          couponRemovedByPayment = true
+        }
+      }
+    }
+
+  const computedTotal = Math.max(0, subtotal - Number(couponDiscount || 0) - Number(paymentDiscount || 0)) + Number(deliveryFee || 0)
+
+  // Prefer client-provided payment.amount when present and greater than 0.
+  // This ensures we persist the authoritative amount when frontends send it
+  // (avoids double-counting when item.price already included option prices).
+  const total = (payment && Number.isFinite(Number(payment.amount)) && Number(payment.amount) > 0) ? Number(payment.amount) : computedTotal
 
     // Try to create/find a Customer when contact (whatsapp/phone) or name is provided from public menu.
     // This is best-effort: if customer creation fails we still allow the order to be created but log the issue.
@@ -1566,6 +1593,12 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
       } catch (e) {
         console.warn('Failed to normalize delivery address for public order persistence', e?.message || e)
       }
+      if (paymentBlocksCashback) {
+        payloadToPersist.payment = { ...(payloadToPersist.payment || {}), blocksCashback: true }
+      }
+      if (couponRemovedByPayment) {
+        payloadToPersist.payment = { ...(payloadToPersist.payment || {}), couponRemovedByRule: true }
+      }
       try { console.log('Payload to persist (snippet):', JSON.stringify(payloadToPersist).slice(0,2000)) } catch(e){}
 
       // compute denormalized neighborhood for quick queries/displays
@@ -1589,6 +1622,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
           // persist coupon info if provided in payload (new columns)
           couponCode: (raw && raw.coupon && raw.coupon.code) ? String(raw.coupon.code) : null,
           couponDiscount: Number(couponDiscount || 0),
+          paymentDiscount: paymentDiscount > 0 ? String(paymentDiscount) : null,
           orderType: String(orderType || ''),
           deliveryFee: deliveryFee,
           // attach resolved storeId and menuId so downstream consumers (e.g. WhatsApp routing) can rely on them
@@ -1672,7 +1706,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
     }
 
     // Return the stored total (already includes deliveryFee) and deliveryFee separately
-    res.status(201).json({ id: created.id, displayId: created.displayId, displaySimple: created.displaySimple, total: Number(created.total), deliveryFee: Number(created.deliveryFee || 0) })
+    res.status(201).json({ id: created.id, displayId: created.displayId, displaySimple: created.displaySimple, total: Number(created.total), deliveryFee: Number(created.deliveryFee || 0), paymentDiscount, couponRemovedByPayment })
   } catch (e) {
     console.error('Error creating public order', e)
     res.status(500).json({ message: 'Erro ao criar pedido' })

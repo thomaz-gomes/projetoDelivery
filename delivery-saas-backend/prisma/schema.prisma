@@ -240,6 +240,7 @@ model Order {
   // persisted coupon information (nullable - may be null for older orders)
   couponCode           String?
   couponDiscount       Decimal?
+  paymentDiscount      Decimal? // value frozen at order-creation time for audit
   discountIfood        Decimal?  // desconto pago pelo iFood (marketplace) — entra no caixa da loja
   discountMerchant     Decimal?  // desconto absorvido pela loja — NÃO entra no caixa
   deliveryFee          Decimal?
@@ -1569,6 +1570,16 @@ model PaymentMethod {
   config           Json?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  // Discount rule (per payment method)
+  discountEnabled   Boolean  @default(false)
+  discountPercent   Decimal? // mutually exclusive with discountFixed
+  discountFixed     Decimal?
+  ignoreCoupons     Boolean  @default(false)
+  generatesCashback Boolean  @default(true)
+  alwaysAvailable   Boolean  @default(true)
+  schedule          Json?    // [{day:0..6, enabled, from:"HH:mm", to:"HH:mm"}]
+  allowedOrderTypes Json?    // ["DELIVERY","BALCAO","TAKEOUT"] — null/[] = all
 
   @@unique([companyId, code], name: "company_payment_code_key")
 }

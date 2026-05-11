@@ -337,8 +337,10 @@
                 <div class="cart-sidebar-summary">
                   <div class="d-flex justify-content-between mb-1"><span>Subtotal</span><span>{{ formatCurrency(subtotal) }}</span></div>
                   <div class="d-flex justify-content-between mb-1"><span>Entrega</span><span>{{ orderType === 'DELIVERY' ? (Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee)) : '—' }}</span></div>
-                 
-                    
+                  <div v-if="paymentDiscount > 0" class="d-flex justify-content-between mb-1 text-success">
+                    <span>Desconto pagamento</span><span>−{{ formatCurrency(paymentDiscount) }}</span>
+                  </div>
+
                   <div class="d-flex justify-content-between cart-sidebar-total"><span>Total</span><span>{{ formatCurrency(finalTotal) }}</span></div>
                 </div>
 
@@ -946,6 +948,7 @@
                   <div class="d-flex justify-content-between"><div class="text-muted">Taxa de entrega</div><div>{{ Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee) }}</div></div>
                 </div>
                 <div v-if="useCashback && Number(useCashbackAmount) > 0" class="d-flex justify-content-between text-success"><div>Cashback usado</div><div>-{{ formatCurrency(useCashbackAmount) }}</div></div>
+                <div v-if="paymentDiscount > 0" class="d-flex justify-content-between text-success"><div>Desconto pagamento</div><div>−{{ formatCurrency(paymentDiscount) }}</div></div>
                 <div class="d-flex justify-content-between fw-bold mt-2"><div>Total</div><div>{{ formatCurrency(finalTotal) }}</div></div>
                 <div v-if="cashbackEnabled && estimatedCashbackTotal > 0" class="d-flex justify-content-between mt-1 small" style="color: #198754;"><div><i class="bi bi-cash-stack me-1"></i>Cashback a receber</div><div>+{{ formatCurrency(estimatedCashbackTotal) }}</div></div>
               </div>
@@ -1028,6 +1031,7 @@
               </span></div>
               <div v-if="couponApplied" class="d-flex justify-content-between mb-1 text-success"><span>Cupom</span><span>-{{ formatCurrency(couponDiscount) }}</span></div>
               <div v-if="discountsTotal > 0" class="d-flex justify-content-between mb-1 text-success"><span>Descontos</span><span>-{{ formatCurrency(discountsTotal) }}</span></div>
+              <div v-if="paymentDiscount > 0" class="d-flex justify-content-between mb-1 text-success"><span>Desconto pagamento</span><span>−{{ formatCurrency(paymentDiscount) }}</span></div>
               
               <div v-if="cashbackEnabled && estimatedCashbackTotal > 0" class="drawer-cashback-row">
                 <i class="bi bi-stars me-1"></i> Você receberá {{ formatCurrency(estimatedCashbackTotal) }} de cashback
@@ -2592,6 +2596,11 @@ watch(orderType, (v) => {
   try{ scheduleEvaluateDiscounts() }catch(e){}
 })
 
+// Recalculate payment-method discount when selection, order type or subtotal change
+watch(paymentMethod, () => { try { recalcPaymentDiscount() } catch (e) {} })
+watch(orderType, () => { try { recalcPaymentDiscount() } catch (e) {} }, { flush: 'post' })
+watch(subtotal, () => { try { recalcPaymentDiscount() } catch (e) {} })
+
 const formatCurrency = (v) => {
   try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)); }catch(e){ return v; }
 }
@@ -3170,6 +3179,13 @@ const discountsTotal = ref(0)
 const discountsLoading = ref(false)
 let _discountsDebounce = null
 
+// Payment-method discount preview state
+const paymentDiscount = ref(0)
+const paymentDiscountInfo = ref({ removesCoupon: false, blocksCashback: false })
+let previousPaymentMethod = paymentMethod.value
+let _paymentPreviewSeq = 0
+let _paymentDiscountModalOpen = false
+
 async function evaluateDiscountsNow(){
   try{
     discountsLoading.value = true
@@ -3202,12 +3218,69 @@ function scheduleEvaluateDiscounts(){
   _discountsDebounce = setTimeout(()=> evaluateDiscountsNow(), 300)
 }
 
+async function recalcPaymentDiscount() {
+  const mySeq = ++_paymentPreviewSeq
+  paymentDiscount.value = 0
+  paymentDiscountInfo.value = { removesCoupon: false, blocksCashback: false }
+  if (!paymentMethod.value) return
+  // find current selected method row (paymentMethods has full rows including discountEnabled)
+  const pm = paymentMethods.value.find(m => m.code === paymentMethod.value || m.name === paymentMethod.value)
+  if (!pm || !pm.discountEnabled) return
+  try {
+    const res = await api.post(`/public/${companyId}/cart/payment-preview`, {
+      paymentMethodCode: paymentMethod.value,
+      orderType: orderType.value,
+      subtotal: subtotal.value,
+    })
+    if (mySeq !== _paymentPreviewSeq) return // stale response, a newer call has started
+    const data = res.data || {}
+    if (data.applies) {
+      paymentDiscount.value = Number(data.amount || 0)
+      paymentDiscountInfo.value = {
+        removesCoupon: !!data.removesCoupon,
+        blocksCashback: !!data.blocksCashback,
+      }
+      // If a coupon is currently applied and the rule removes it, confirm with the user
+      if (data.removesCoupon && couponDiscount.value > 0) {
+        if (_paymentDiscountModalOpen) return // another modal already handling this
+        _paymentDiscountModalOpen = true
+        try {
+          const ok = await Swal.fire({
+            icon: 'warning',
+            title: 'Cupom não cumulativo',
+            text: 'Este método de pagamento remove o cupom aplicado. Deseja continuar?',
+            showCancelButton: true,
+            confirmButtonText: 'Sim, manter este método',
+            cancelButtonText: 'Cancelar',
+          })
+          if (!ok.isConfirmed) {
+            paymentMethod.value = previousPaymentMethod
+            return // watcher will re-run recalcPaymentDiscount with old method
+          }
+          // user confirmed — remove the coupon
+          try { removeCoupon() } catch (e) {
+            couponApplied.value = false
+            couponDiscount.value = 0
+            couponInfo.value = null
+          }
+        } finally {
+          _paymentDiscountModalOpen = false
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to preview payment discount', e)
+  } finally {
+    if (mySeq === _paymentPreviewSeq) previousPaymentMethod = paymentMethod.value
+  }
+}
+
 // Final total after coupon discount and customer-group discounts. Delivery fee is calculated only after the
 // customer selects an address (neighborhood). The CTA and cart should not
 // include delivery fee until a neighborhood is chosen.
 const finalTotal = computed(() => {
   try{
-    const base = Math.max(0, subtotal.value - (couponDiscount.value || 0) - (discountsTotal.value || 0))
+    const base = Math.max(0, subtotal.value - (couponDiscount.value || 0) - (discountsTotal.value || 0) - (paymentDiscount.value || 0))
     const includeDelivery = orderType.value === 'DELIVERY' && neighborhood.value && String(neighborhood.value).trim() !== ''
     // prefer explicit refreshed fee when available
     const fee = Number(currentDeliveryFee.value || 0) || Number(deliveryFee.value || 0)
@@ -4117,6 +4190,9 @@ onMounted(async ()=>{
         paymentMethod.value = 'CASH';
       }
     }
+    // initial payment-method discount preview after methods are loaded
+    previousPaymentMethod = paymentMethod.value
+    try { recalcPaymentDiscount() } catch (e) {}
     // fetch public neighborhoods for this company (used to compute delivery fee)
     try{
       const nr = await api.get(publicPath(`/public/${companyId}/neighborhoods`))

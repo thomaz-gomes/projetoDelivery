@@ -11,6 +11,7 @@
       <div class="card-body">
         <ul class="nav nav-tabs mb-3">
           <li class="nav-item"><a class="nav-link" :class="{ active: tab === 'basic' }" href="#" @click.prevent="tab = 'basic'">Geral</a></li>
+          <li class="nav-item"><a class="nav-link" :class="{ active: tab === 'discount' }" href="#" @click.prevent="tab = 'discount'">Desconto</a></li>
           <li v-if="hasFinancial" class="nav-item"><a class="nav-link" :class="{ active: tab === 'financial' }" href="#" @click.prevent="tab = 'financial'">Financeiro</a></li>
           <li v-if="hasFiscal" class="nav-item"><a class="nav-link" :class="{ active: tab === 'fiscal' }" href="#" @click.prevent="tab = 'fiscal'">Fiscal</a></li>
         </ul>
@@ -59,6 +60,69 @@
               </div>
             </div>
 
+          </div>
+
+          <!-- TAB: Desconto -->
+          <div v-show="tab === 'discount'">
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" id="discountEnabled" v-model="form.discountEnabled" role="switch">
+              <label class="form-check-label fw-semibold" for="discountEnabled">Habilitar regra de desconto</label>
+              <div class="small text-muted">Aplica desconto automático no pedido ao selecionar este método</div>
+            </div>
+
+            <div v-if="form.discountEnabled">
+              <div class="mb-3">
+                <label class="form-label">Tipo de desconto</label>
+                <div class="d-flex gap-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" id="dtPercent" value="percent" v-model="form.discountType">
+                    <label class="form-check-label" for="dtPercent">Percentual (%)</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" id="dtFixed" value="fixed" v-model="form.discountType">
+                    <label class="form-check-label" for="dtFixed">Valor fixo (R$)</label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mb-3 row">
+                <div class="col-md-6" v-if="form.discountType === 'percent'">
+                  <label class="form-label">Percentual (%)</label>
+                  <input type="number" step="0.01" min="0.01" max="100" class="form-control" v-model.number="form.discountPercent" placeholder="Ex: 5">
+                </div>
+                <div class="col-md-6" v-else>
+                  <label class="form-label">Valor fixo (R$)</label>
+                  <input type="number" step="0.01" min="0.01" class="form-control" v-model.number="form.discountFixed" placeholder="Ex: 5.00">
+                </div>
+              </div>
+
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="ignoreCoupons" v-model="form.ignoreCoupons" role="switch">
+                <label class="form-check-label" for="ignoreCoupons">Ignorar cupons ao selecionar este método</label>
+              </div>
+
+              <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="generatesCashback" v-model="form.generatesCashback" role="switch">
+                <label class="form-check-label" for="generatesCashback">Gerar cashback</label>
+                <div class="small text-muted">Quando desligado, pedidos pagos com este método não geram cashback</div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Tipos de pedido permitidos</label>
+                <div class="small text-muted mb-2">Vazio = todos os tipos</div>
+                <div class="d-flex gap-3 flex-wrap">
+                  <div class="form-check" v-for="t in orderTypeOptions" :key="t.value">
+                    <input class="form-check-input" type="checkbox" :id="`ot-${t.value}`" :value="t.value" v-model="form.allowedOrderTypes">
+                    <label class="form-check-label" :for="`ot-${t.value}`">{{ t.label }}</label>
+                  </div>
+                </div>
+              </div>
+
+              <AvailabilityScheduler
+                v-model:alwaysAvailable="form.alwaysAvailable"
+                v-model:schedule="form.schedule"
+              />
+            </div>
           </div>
 
           <!-- TAB: Financeiro -->
@@ -166,11 +230,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import Swal from 'sweetalert2'
 import { useModulesStore } from '../stores/modules.js'
+import AvailabilityScheduler from '../components/AvailabilityScheduler.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -188,15 +253,36 @@ const accounts = ref([])
 const hasFinancial = computed(() => modules.has('financial'))
 const hasFiscal = computed(() => modules.has('fiscal'))
 
+const orderTypeOptions = [
+  { value: 'DELIVERY', label: 'Delivery' },
+  { value: 'BALCAO', label: 'Balcão' },
+  { value: 'TAKEOUT', label: 'Retirada' },
+]
+
 const defaultForm = () => ({
   id: null, name: '', description: '', code: '', isActive: true, isOnline: false,
   noChange: false, paymentType: '', cardBrand: '', taxRate: null, fixedFee: null,
   transferFormat: '', daysToReceive: null, accountId: '',
   intermediaryName: '', intermediaryCnpj: '', platformUserCode: '',
-  config: {}
+  config: {},
+  // discount rule
+  discountEnabled: false,
+  discountType: 'percent', // UI-only toggle: 'percent' | 'fixed'
+  discountPercent: null,
+  discountFixed: null,
+  ignoreCoupons: false,
+  generatesCashback: true,
+  alwaysAvailable: true,
+  schedule: [],
+  allowedOrderTypes: [],
 })
 
 const form = ref(defaultForm())
+
+watch(() => form.value.discountType, (t) => {
+  if (t === 'percent') form.value.discountFixed = null
+  else form.value.discountPercent = null
+})
 
 async function load() {
   if (!isEdit) return
@@ -205,6 +291,18 @@ async function load() {
     const res = await api.get(`/menu/payment-methods/${id}`)
     const d = res.data || {}
     form.value = { ...defaultForm(), ...d }
+    // derive UI toggle from persisted fields
+    if (d.discountFixed != null && (d.discountPercent == null || d.discountPercent === '')) {
+      form.value.discountType = 'fixed'
+    } else {
+      form.value.discountType = 'percent'
+    }
+    form.value.schedule = Array.isArray(d.schedule) ? d.schedule : []
+    form.value.allowedOrderTypes = Array.isArray(d.allowedOrderTypes) ? d.allowedOrderTypes : []
+    form.value.discountPercent = d.discountPercent != null && d.discountPercent !== ''
+      ? Number(d.discountPercent) : null
+    form.value.discountFixed = d.discountFixed != null && d.discountFixed !== ''
+      ? Number(d.discountFixed) : null
   } catch (e) { console.error(e); Swal.fire({ icon: 'error', text: 'Falha ao carregar forma' }) }
   finally { loading.value = false }
 }
@@ -246,6 +344,16 @@ async function save() {
       intermediaryName: form.value.intermediaryName || null,
       intermediaryCnpj: form.value.intermediaryCnpj || null,
       platformUserCode: form.value.platformUserCode || null,
+      discountEnabled: !!form.value.discountEnabled,
+      discountPercent: form.value.discountEnabled && form.value.discountType === 'percent' && form.value.discountPercent != null && form.value.discountPercent !== ''
+        ? Number(form.value.discountPercent) : null,
+      discountFixed: form.value.discountEnabled && form.value.discountType === 'fixed' && form.value.discountFixed != null && form.value.discountFixed !== ''
+        ? Number(form.value.discountFixed) : null,
+      ignoreCoupons: !!form.value.ignoreCoupons,
+      generatesCashback: form.value.generatesCashback !== false,
+      alwaysAvailable: form.value.alwaysAvailable !== false,
+      schedule: form.value.discountEnabled && !form.value.alwaysAvailable ? form.value.schedule : null,
+      allowedOrderTypes: Array.isArray(form.value.allowedOrderTypes) ? form.value.allowedOrderTypes : [],
       config: form.value.config || {}
     }
     if (isEdit) {

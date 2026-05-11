@@ -18,6 +18,7 @@ import { createFinancialEntriesForOrder } from '../services/financial/orderFinan
 import { tryEmitIfoodChat } from '../services/ifoodChatEmitter.js';
 import { nextDisplaySimple, startOfDayForDateInTz } from '../utils/displaySimple.js';
 import { geocodeOrderIfNeeded } from '../utils/geocode.js';
+import { evaluateDiscountRule } from '../utils/paymentDiscount.js';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -410,7 +411,11 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
         else await prisma.order.update({ where: { id: updated.id }, data: { outOfSession: true } });
       } catch (e) {}
       try { const c = await prisma.affiliateSale.count({ where: { orderId: updated.id } }); if (c === 0) await trackAffiliateSale(updated, updated.companyId); } catch (e) {}
-      try { const cb = await import('../services/cashbackService.js').then(m => m.default || m); if (cb.creditWalletForOrder) await cb.creditWalletForOrder(updated); } catch (e) {}
+      // Skip cashback if payment-method rule blocks generation
+      const blocksCashback = !!(existing?.payload?.payment?.blocksCashback);
+      if (!blocksCashback) {
+        try { const cb = await import('../services/cashbackService.js').then(m => m.default || m); if (cb.creditWalletForOrder) await cb.creditWalletForOrder(updated); } catch (e) {}
+      }
     }
 
     return res.json({ ok: true, order: updated });
@@ -950,7 +955,11 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
                 }
               } catch (eFind) { /* ignore */ }
             }
-            if (clientId) {
+            // Skip cashback if payment-method rule blocks generation
+            const blocksCashback = !!(updated?.payload?.payment?.blocksCashback)
+            if (blocksCashback) {
+              console.log('Cashback credit skipped: payment method blocks cashback for order', updated.id)
+            } else if (clientId) {
               try{
                 const res = await cashbackSvc.creditWalletForOrder(updated.companyId, clientId, updated, 'Cashback automático de compra')
                 if(res && res.amount){
@@ -1209,8 +1218,36 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       } catch (e) { couponDiscount = 0; }
     }
 
+    // Resolve payment method early so we can evaluate discount rules before computing the total
+    let resolvedPaymentMethod = null;
+    let resolvedPaymentCode = null;
+    if (payment && (payment.methodCode || payment.method)) {
+      resolvedPaymentCode = String(payment.methodCode || payment.method).trim();
+      resolvedPaymentMethod = await prisma.paymentMethod.findFirst({ where: { companyId, isActive: true, OR: [{ code: resolvedPaymentCode }, { name: resolvedPaymentCode }] } });
+    }
+
+    // Payment-method discount rule
+    let paymentDiscount = 0;
+    let paymentBlocksCashback = false;
+    let couponRemovedByPayment = false;
+    if (resolvedPaymentMethod) {
+      const ruleResult = evaluateDiscountRule(resolvedPaymentMethod, {
+        orderType: type,
+        subtotal,
+        now: new Date(),
+      });
+      if (ruleResult.applies) {
+        paymentDiscount = ruleResult.amount;
+        paymentBlocksCashback = ruleResult.blocksCashback;
+        if (ruleResult.removesCoupon && Number(couponDiscount) > 0) {
+          couponDiscount = 0;
+          couponRemovedByPayment = true;
+        }
+      }
+    }
+
     const discountMerchantAmt = Number(_discountMerchant || 0);
-    const computedTotal = Math.max(0, subtotal - couponDiscount - discountMerchantAmt - appliedCashbackAmt) + Number(deliveryFee || 0);
+    const computedTotal = Math.max(0, subtotal - couponDiscount - discountMerchantAmt - appliedCashbackAmt - paymentDiscount) + Number(deliveryFee || 0);
 
     // Prefer payment amount when provided by PDV client as authoritative total.
     // Accept 0 only when computedTotal is also 0 (genuine zero-value/bonification order).
@@ -1220,19 +1257,19 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
     const payAmt = (payment && payment.amount != null && Number.isFinite(Number(payment.amount))) ? Number(payment.amount) : null;
     const total = (payAmt !== null && (payAmt > 0 || computedTotal === 0)) ? payAmt : computedTotal;
 
-    // validate payment method if provided
+    // Build payment payload reusing the already-resolved payment method
     let paymentPayload = null;
-    if (payment && (payment.methodCode || payment.method)) {
-      const code = String(payment.methodCode || payment.method).trim();
-      const pm = await prisma.paymentMethod.findFirst({ where: { companyId, isActive: true, OR: [{ code }, { name: code }] } });
+    if (payment && resolvedPaymentCode) {
       // Se não encontrado no DB (ex: método virtual padrão do menu público), aceita o código informado
       paymentPayload = {
-        method: pm ? pm.name : code,
-        methodCode: pm ? pm.name : code,
+        method: resolvedPaymentMethod ? resolvedPaymentMethod.name : resolvedPaymentCode,
+        methodCode: resolvedPaymentMethod ? resolvedPaymentMethod.name : resolvedPaymentCode,
         amount: Number(payment.amount || total),
         changeFor: payment.changeFor != null ? Number(payment.changeFor) : null,
         raw: payment.raw || null
       };
+      if (paymentBlocksCashback) paymentPayload.blocksCashback = true;
+      if (couponRemovedByPayment) paymentPayload.couponRemovedByRule = true;
     }
 
     // find or create customer (best-effort). If client provided an explicit customerId, prefer it.
@@ -1292,6 +1329,7 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
         total,
         couponCode,
         couponDiscount: Number(couponDiscount || 0),
+        paymentDiscount: paymentDiscount > 0 ? String(paymentDiscount) : null,
         discountMerchant: _discountMerchant != null && Number(_discountMerchant) > 0 ? Number(_discountMerchant) : undefined,
         additionalFees: _additionalFees != null && Number(_additionalFees) > 0 ? Number(_additionalFees) : undefined,
         orderType: type,

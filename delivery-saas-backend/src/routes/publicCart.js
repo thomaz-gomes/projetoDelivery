@@ -3,6 +3,7 @@ import { evaluateCartDiscounts } from '../services/customerGroups.js'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
 import { normalizePhone } from '../services/customers.js'
 import { prisma } from '../prisma.js'
+import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
 
 const router = express.Router({ mergeParams: true })
 
@@ -31,6 +32,27 @@ router.post('/discounts', async (req, res) => {
   } catch (e) {
     console.error('Failed to evaluate discounts', e)
     res.status(500).json({ message: 'Failed to evaluate discounts' })
+  }
+})
+
+// POST /public/:companyId/cart/payment-preview
+router.post('/payment-preview', async (req, res) => {
+  const companyId = req.params.companyId
+  const { paymentMethodId, paymentMethodCode, orderType, subtotal } = req.body || {}
+  try {
+    let pm = null
+    if (paymentMethodId) {
+      pm = await prisma.paymentMethod.findFirst({ where: { id: paymentMethodId, companyId, isActive: true } })
+    } else if (paymentMethodCode) {
+      pm = await prisma.paymentMethod.findFirst({
+        where: { companyId, isActive: true, OR: [{ code: paymentMethodCode }, { name: paymentMethodCode }] },
+      })
+    }
+    const r = evaluateDiscountRule(pm, { orderType, subtotal: Number(subtotal) || 0, now: new Date() })
+    res.json(r)
+  } catch (e) {
+    console.error('Failed to preview payment discount', e)
+    res.status(500).json({ message: 'Failed to preview payment discount' })
   }
 })
 

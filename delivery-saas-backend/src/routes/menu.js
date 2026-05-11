@@ -12,6 +12,7 @@ import { getOrCreateDefaults } from './storePricingDefaults.js'
 import { normalizeToIngredientUnit, areUnitsCompatible } from '../utils/unitConversion.js'
 import { makeCopyName } from '../utils/copyName.js'
 import { optimizeForWeb } from '../utils/imageOptimizer.js'
+import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -918,12 +919,56 @@ router.get('/payment-methods/:id', async (req, res) => {
   res.json(row)
 })
 
-const PM_EXTRA_FIELDS = ['description','isOnline','noChange','paymentType','cardBrand','taxRate','fixedFee','transferFormat','daysToReceive','accountId','intermediaryName','intermediaryCnpj','platformUserCode']
+const PM_EXTRA_FIELDS = [
+  'description','isOnline','noChange','paymentType','cardBrand','taxRate','fixedFee',
+  'transferFormat','daysToReceive','accountId','intermediaryName','intermediaryCnpj','platformUserCode',
+  'discountEnabled','discountPercent','discountFixed','ignoreCoupons','generatesCashback',
+  'alwaysAvailable','schedule','allowedOrderTypes',
+]
+
+function validateDiscountRule(body) {
+  if (!body || body.discountEnabled !== true) return null
+  const hasPercent = body.discountPercent != null && body.discountPercent !== ''
+  const hasFixed = body.discountFixed != null && body.discountFixed !== ''
+  if (hasPercent && hasFixed) return 'Defina apenas um: percentual OU valor fixo'
+  if (!hasPercent && !hasFixed) return 'Informe percentual ou valor fixo de desconto'
+  if (hasPercent) {
+    const p = Number(body.discountPercent)
+    if (!Number.isFinite(p) || p <= 0 || p > 100) return 'Percentual deve ser entre 0 e 100'
+  }
+  if (hasFixed) {
+    const v = Number(body.discountFixed)
+    if (!Number.isFinite(v) || v <= 0) return 'Valor fixo deve ser positivo'
+  }
+  if (body.allowedOrderTypes != null) {
+    if (!Array.isArray(body.allowedOrderTypes)) return 'allowedOrderTypes deve ser um array'
+    const ALLOWED_OT = ['DELIVERY', 'BALCAO', 'TAKEOUT']
+    for (const t of body.allowedOrderTypes) {
+      if (typeof t !== 'string' || !ALLOWED_OT.includes(String(t).toUpperCase())) {
+        return 'allowedOrderTypes contém valor inválido (use DELIVERY, BALCAO ou TAKEOUT)'
+      }
+    }
+  }
+  if (body.schedule != null) {
+    if (!Array.isArray(body.schedule)) return 'schedule deve ser um array'
+    for (const s of body.schedule) {
+      if (!s || typeof s !== 'object') return 'schedule contém entrada inválida'
+      const d = Number(s.day)
+      if (!Number.isInteger(d) || d < 0 || d > 6) return 'schedule.day deve ser 0..6'
+      if (s.enabled !== undefined && typeof s.enabled !== 'boolean') return 'schedule.enabled deve ser boolean'
+      if (s.from != null && s.from !== '' && !/^\d{1,2}:\d{2}$/.test(String(s.from))) return 'schedule.from inválido (HH:mm)'
+      if (s.to != null && s.to !== '' && !/^\d{1,2}:\d{2}$/.test(String(s.to))) return 'schedule.to inválido (HH:mm)'
+    }
+  }
+  return null
+}
 
 router.post('/payment-methods', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const { name, code, config = {}, isActive = true } = req.body || {}
   if (!name || !code) return res.status(400).json({ message: 'name e code são obrigatórios' })
+  const ruleErr = validateDiscountRule(req.body)
+  if (ruleErr) return res.status(400).json({ message: ruleErr })
   const extra = {}
   for (const f of PM_EXTRA_FIELDS) { if (req.body[f] !== undefined) extra[f] = req.body[f] }
   const created = await prisma.paymentMethod.create({ data: { companyId, name, code, config, isActive: Boolean(isActive), ...extra } })
@@ -935,6 +980,9 @@ router.patch('/payment-methods/:id', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const existing = await prisma.paymentMethod.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Método não encontrado' })
+  const merged = { ...existing, ...req.body }
+  const ruleErr = validateDiscountRule(merged)
+  if (ruleErr) return res.status(400).json({ message: ruleErr })
   const { name, code, config, isActive } = req.body || {}
   const extra = {}
   for (const f of PM_EXTRA_FIELDS) { if (req.body[f] !== undefined) extra[f] = req.body[f] }
@@ -956,6 +1004,27 @@ router.delete('/payment-methods/:id', requireRole('ADMIN'), async (req, res) => 
 
   await prisma.paymentMethod.delete({ where: { id } })
   res.json({ message: 'Removido' })
+})
+
+// POST /menu/payment-preview - admin-scoped mirror of /public/:companyId/cart/payment-preview
+router.post('/payment-preview', async (req, res) => {
+  const companyId = req.user.companyId
+  const { paymentMethodId, paymentMethodCode, orderType, subtotal } = req.body || {}
+  try {
+    let pm = null
+    if (paymentMethodId) {
+      pm = await prisma.paymentMethod.findFirst({ where: { id: paymentMethodId, companyId, isActive: true } })
+    } else if (paymentMethodCode) {
+      pm = await prisma.paymentMethod.findFirst({
+        where: { companyId, isActive: true, OR: [{ code: paymentMethodCode }, { name: paymentMethodCode }] },
+      })
+    }
+    const r = evaluateDiscountRule(pm, { orderType, subtotal: Number(subtotal) || 0, now: new Date() })
+    res.json(r)
+  } catch (e) {
+    console.error('Failed to preview payment discount', e)
+    res.status(500).json({ message: 'Failed to preview payment discount' })
+  }
 })
 
 // GET /products/:id/pricing-analysis

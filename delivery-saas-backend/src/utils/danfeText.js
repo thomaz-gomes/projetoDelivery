@@ -110,7 +110,7 @@ export function buildDanfeText(data) {
   lines.push(sep)
 
   // ── Divisão IV: Totais ──────────────────────────────────────────────
-  const desconto = Number(order.couponDiscount || 0) + Number(order.discountMerchant || 0)
+  const desconto = Number(order.couponDiscount || 0) + Number(order.discountMerchant || 0) + Number(order.paymentDiscount || 0)
   const acrescimo = Number(order.deliveryFee || 0)
   const payRaw = (order.payload && order.payload.payment) || {}
   // changeFor = valor entregue pelo cliente (ex: R$ 50 para um pedido de R$ 40).
