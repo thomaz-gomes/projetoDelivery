@@ -1,0 +1,30 @@
+{
+  "id": "111122223333444",
+  "changes": [
+    {
+      "field": "messages",
+      "value": {
+        "messaging_product": "whatsapp",
+        "metadata": {
+          "display_phone_number": "+5571999990000",
+          "phone_number_id": "999888777666555"
+        },
+        "contacts": [
+          {
+            "wa_id": "5571999990000",
+            "profile": { "name": "Alice Meta" }
+          }
+        ],
+        "messages": [
+          {
+            "from": "5571999990000",
+            "id": "wamid.test_text_1",
+            "timestamp": "1715000000",
+            "type": "text",
+            "text": { "body": "Olá pelo Meta Cloud" }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -50,6 +50,10 @@ export class MessagingError extends Error {
 //   - menuId / storeId: pre-resolved menu/store linkage from the account row.
 //   - latitude / longitude: location-message coordinates.
 //   - mediaFileName: original filename for DOCUMENT-type media.
+//   - mediaId: provider-side media handle for lazy download (Meta WA Cloud
+//     requires a Bearer-authenticated GET /<media_id> + GET <short-lived-url>
+//     dance, so the inbound parser leaves mediaUrl null and stores the id
+//     here for the pipeline / downloadMedia to resolve later).
 //   - reorderButton: { orderId } — set when an inbound button reply was
 //     identified as a "Repetir pedido" tap. The pipeline routes these
 //     through buttonReplies.js before running the regular automations.
@@ -59,6 +63,7 @@ export function normalizedMessage({
   menuId = null, storeId = null,
   contactName = null, contactProfilePic = null,
   type, body = null, mediaUrl = null, mimeType = null, mediaFileName = null,
+  mediaId = null,
   latitude = null, longitude = null,
   reorderButton = null,
   timestamp, raw,
@@ -69,6 +74,7 @@ export function normalizedMessage({
     menuId, storeId,
     contactName, contactProfilePic,
     type, body, mediaUrl, mimeType, mediaFileName,
+    mediaId,
     latitude, longitude,
     reorderButton,
     timestamp: timestamp instanceof Date ? timestamp : new Date(timestamp),

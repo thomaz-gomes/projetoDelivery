@@ -1,0 +1,35 @@
+{
+  "id": "111122223333444",
+  "changes": [
+    {
+      "field": "messages",
+      "value": {
+        "messaging_product": "whatsapp",
+        "metadata": {
+          "display_phone_number": "+5571999990001",
+          "phone_number_id": "999888777666555"
+        },
+        "contacts": [
+          {
+            "wa_id": "5571999990001",
+            "profile": { "name": "Bob Meta" }
+          }
+        ],
+        "messages": [
+          {
+            "from": "5571999990001",
+            "id": "wamid.test_image_1",
+            "timestamp": "1715000100",
+            "type": "image",
+            "image": {
+              "id": "1099999888777666",
+              "mime_type": "image/jpeg",
+              "sha256": "abc123",
+              "caption": "Confira a foto do produto"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
