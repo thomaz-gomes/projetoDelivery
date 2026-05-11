@@ -839,8 +839,9 @@ async function enhanceImage() {
 async function loadGallery() {
   galleryLoading.value = true
   try {
-    const res = await api.get('/media')
-    galleryItems.value = res.data || []
+    const res = await api.get('/media', { params: { pageSize: 100 } })
+    const data = res.data || {}
+    galleryItems.value = Array.isArray(data) ? data : (data.items || [])
   } catch {
     galleryItems.value = []
   } finally {

@@ -59,16 +59,16 @@
                 >
                   <i class="bi bi-trash"></i>
                 </button>
-                <a
-                  v-if="item.aiEnhanced"
-                  :href="assetUrl(hqDownloadUrl(item.url))"
-                  :download="(item.filename || 'image') + '.jpg'"
-                  class="download-hq-trigger"
-                  title="Baixar HD para redes sociais"
-                  @click.stop
+                <button
+                  type="button"
+                  class="download-media-trigger"
+                  :title="downloadingId === item.id ? 'Baixando...' : 'Baixar imagem'"
+                  :disabled="downloadingId === item.id"
+                  @click.stop="downloadMedia(item)"
                 >
-                  <i class="bi bi-download"></i>
-                </a>
+                  <span v-if="downloadingId === item.id" class="spinner-border spinner-border-sm" role="status"></span>
+                  <i v-else class="bi bi-download"></i>
+                </button>
                 <button
                   type="button"
                   class="zoom-media-trigger"
@@ -82,6 +82,30 @@
             <div v-else class="media-library-empty">
               <i class="bi bi-images d-block mb-2" style="font-size:2rem"></i>
               Nenhuma imagem na biblioteca
+            </div>
+
+            <!-- Pagination controls -->
+            <div v-if="totalPages > 1 && !loading" class="media-library-pagination">
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary"
+                :disabled="currentPage <= 1 || loading"
+                @click="goToPage(currentPage - 1)"
+              >
+                <i class="bi bi-chevron-left"></i>
+              </button>
+              <span class="media-library-pagination__info">
+                Página <strong>{{ currentPage }}</strong> de <strong>{{ totalPages }}</strong>
+                <span class="text-muted ms-2">({{ totalItems }} {{ totalItems === 1 ? 'imagem' : 'imagens' }})</span>
+              </span>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary"
+                :disabled="currentPage >= totalPages || loading"
+                @click="goToPage(currentPage + 1)"
+              >
+                <i class="bi bi-chevron-right"></i>
+              </button>
             </div>
           </div>
 
@@ -279,7 +303,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useMediaLibrary } from '../../composables/useMediaLibrary.js'
 import { useAiStudio } from '../../composables/useAiStudio.js'
-import { assetUrl, hqDownloadUrl } from '../../utils/assetUrl.js'
+import { assetUrl } from '../../utils/assetUrl.js'
 import ImageLightbox from '../../views/inbox/ImageLightbox.vue'
 import api from '../../api.js'
 import Swal from 'sweetalert2'
@@ -304,6 +328,11 @@ const selectedMedia = ref(null)
 const lightboxSrc = ref(null)
 const loading = ref(false)
 const libraryItems = ref([])
+const currentPage = ref(1)
+const pageSize = ref(24)
+const totalPages = ref(1)
+const totalItems = ref(0)
+const downloadingId = ref(null)
 
 // ── Generate (Criar com IA) state ──
 const genDescription = ref('')
@@ -374,18 +403,20 @@ watch(isOpen, (open) => {
     genLoading.value = false
     showCropper.value = false
     selectedUrl.value = currentUrl.value || null
-    loadLibrary()
+    currentPage.value = 1
+    loadLibrary(1)
   }
 })
 
 // ── Library ──
-async function loadLibrary() {
+async function loadLibrary(page = 1) {
   loading.value = true
   try {
-    const res = await api.get('/media')
-    let items = res.data || []
-    // Move current image to top of list
-    if (currentUrl.value) {
+    const res = await api.get('/media', { params: { page, pageSize: pageSize.value } })
+    const data = res.data || {}
+    let items = Array.isArray(data) ? data : (data.items || [])
+    // Move current image to top only on the first page
+    if (page === 1 && currentUrl.value) {
       const idx = items.findIndex(i => i.url === currentUrl.value)
       if (idx > 0) {
         const [item] = items.splice(idx, 1)
@@ -393,10 +424,49 @@ async function loadLibrary() {
       }
     }
     libraryItems.value = items
+    currentPage.value = data.page || page
+    totalPages.value = data.totalPages || 1
+    totalItems.value = data.total || items.length
   } catch (e) {
     libraryItems.value = []
+    currentPage.value = 1
+    totalPages.value = 1
+    totalItems.value = 0
   } finally {
     loading.value = false
+  }
+}
+
+function goToPage(page) {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return
+  loadLibrary(page)
+}
+
+// Force-download an image by fetching it as a blob and triggering an anchor click.
+// This bypasses the browser's "navigate to URL" behavior that happens when the
+// download attribute is ignored (cross-origin, missing headers, etc.).
+async function downloadMedia(item) {
+  if (downloadingId.value) return
+  downloadingId.value = item.id
+  try {
+    // Use the backend download endpoint which sets Content-Disposition: attachment
+    const res = await api.get(`/media/${item.id}/download`, { responseType: 'blob' })
+    const blob = res.data
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = item.filename || `image-${item.id}.webp`
+    document.body.appendChild(a)
+    a.click()
+    setTimeout(() => {
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    }, 100)
+  } catch (e) {
+    console.error('Failed to download media', e)
+    Swal.fire({ icon: 'error', text: 'Não foi possível baixar a imagem', customClass: { container: 'swal-above-modal' } })
+  } finally {
+    downloadingId.value = null
   }
 }
 

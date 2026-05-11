@@ -363,7 +363,7 @@
   background: #dc3545;
   color: #fff;
 }
-.media-library-grid__item .download-hq-trigger {
+.media-library-grid__item .download-media-trigger {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -377,20 +377,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 0.15s, transform 0.15s;
+  opacity: 0.55;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
   z-index: 2;
   cursor: pointer;
-  text-decoration: none;
 }
-.media-library-grid__item:hover .download-hq-trigger {
+.media-library-grid__item:hover .download-media-trigger,
+.media-library-grid__item .download-media-trigger:focus-visible {
   opacity: 1;
-  transform: translateY(0);
 }
-.media-library-grid__item .download-hq-trigger:hover {
+.media-library-grid__item .download-media-trigger:hover {
   background: #4ecdc4;
   color: #000;
+}
+.media-library-grid__item .download-media-trigger:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 /* ── Zoom / ampliar imagem ── */
@@ -408,19 +410,36 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 0.15s, transform 0.15s;
+  opacity: 0.55;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
   z-index: 2;
   cursor: pointer;
 }
-.media-library-grid__item:hover .zoom-media-trigger {
+.media-library-grid__item:hover .zoom-media-trigger,
+.media-library-grid__item .zoom-media-trigger:focus-visible {
   opacity: 1;
-  transform: translateY(0);
 }
 .media-library-grid__item .zoom-media-trigger:hover {
   background: var(--bs-primary, #0d6efd);
   color: #fff;
+}
+
+/* ── Pagination controls ── */
+.media-library-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--pm-border, #e9ecef);
+}
+.media-library-pagination__info {
+  font-size: 0.85rem;
+  color: var(--text-muted, #6c757d);
+}
+.media-library-pagination__info strong {
+  color: var(--text-primary, #212529);
 }
 
 /* ── Criar com IA Tab ─────────────────────────────────────────── */
