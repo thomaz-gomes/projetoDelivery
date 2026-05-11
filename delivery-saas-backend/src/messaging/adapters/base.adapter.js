@@ -14,15 +14,20 @@ export const ADAPTER_INTERFACE = {
 
 // Erros tipados que adapters podem lançar
 export class MetaWindowExpiredError extends Error {
-  constructor(channel) {
+  constructor(channel, { channelContactId = null, accountId = null } = {}) {
     super(`Meta 24h messaging window expired for ${channel}`)
+    this.name = 'MetaWindowExpiredError'
     this.code = 'META_WINDOW_EXPIRED'
+    this.channel = channel
+    this.channelContactId = channelContactId
+    this.accountId = accountId
   }
 }
 
 export class MetaNotConfiguredError extends Error {
   constructor() {
     super('Meta App not configured in admin settings')
+    this.name = 'MetaNotConfiguredError'
     this.code = 'META_NOT_CONFIGURED'
   }
 }
@@ -30,6 +35,7 @@ export class MetaNotConfiguredError extends Error {
 export class MessagingError extends Error {
   constructor(message, code = 'MESSAGING_ERROR') {
     super(message)
+    this.name = 'MessagingError'
     this.code = code
   }
 }
