@@ -409,6 +409,7 @@ model Customer {
   importedLastPurchase           DateTime?
   importedFinancialBalanceTotal  Float?
   importedFinancialBalancePeriod Float?
+  metaIdentities                 Json?
   createdAt                      DateTime              @default(now())
   updatedAt                      DateTime              @updatedAt
   addresses                      CustomerAddress[]
@@ -2691,6 +2692,7 @@ model QuickReply {
   mediaUrl      String?
   mediaMimeType String?
   mediaFileName String?
+  metaTemplateId String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
