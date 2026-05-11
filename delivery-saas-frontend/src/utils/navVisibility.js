@@ -17,7 +17,8 @@ export function buildVisibleNav(user, enabledModules, nav) {
         { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
         { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },
         { name: 'Empresas', to: '/saas/companies', icon: 'bi bi-building' },
-        { name: 'Mensalidades', to: '/saas/billing', icon: 'bi bi-receipt' }
+        { name: 'Mensalidades', to: '/saas/billing', icon: 'bi bi-receipt' },
+        { name: 'Meta App', to: '/saas/meta-config', icon: 'bi bi-meta' }
       ];
       if (role === 'MASTER') {
         nav.push({ name: 'Super Admins', to: '/saas/super-admins', icon: 'bi bi-shield-lock' });
