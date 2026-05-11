@@ -2628,10 +2628,12 @@ model Conversation {
   store            Store?             @relation(fields: [storeId], references: [id])
   menuId           String?
   menu             Menu?              @relation(fields: [menuId], references: [id])
-  channel          Channel
-  channelContactId String
-  instanceName     String?
-  customerId       String?
+  channel           Channel
+  channelContactId  String
+  instanceName      String?
+  provider          MessagingProvider?
+  providerAccountId String?
+  customerId        String?
   customer         Customer?          @relation(fields: [customerId], references: [id])
   assignedUserId   String?
   assignedUser     User?              @relation("ConversationAssignee", fields: [assignedUserId], references: [id])
@@ -2648,6 +2650,7 @@ model Conversation {
   @@unique([companyId, channel, channelContactId], name: "company_channel_contact")
   @@index([companyId, status, lastMessageAt])
   @@index([storeId, status])
+  @@index([companyId, channel, provider])
 }
 
 model Message {
