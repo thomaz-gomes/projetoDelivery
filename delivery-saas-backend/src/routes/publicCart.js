@@ -3,6 +3,7 @@ import { evaluateCartDiscounts } from '../services/customerGroups.js'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
 import { normalizePhone } from '../services/customers.js'
 import { prisma } from '../prisma.js'
+import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
 
 const router = express.Router({ mergeParams: true })
 
@@ -47,7 +48,6 @@ router.post('/payment-preview', async (req, res) => {
         where: { companyId, isActive: true, OR: [{ code: paymentMethodCode }, { name: paymentMethodCode }] },
       })
     }
-    const { evaluateDiscountRule } = await import('../utils/paymentDiscount.js')
     const r = evaluateDiscountRule(pm, { orderType, subtotal: Number(subtotal) || 0, now: new Date() })
     res.json(r)
   } catch (e) {

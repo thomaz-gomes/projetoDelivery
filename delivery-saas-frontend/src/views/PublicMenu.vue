@@ -3183,6 +3183,8 @@ let _discountsDebounce = null
 const paymentDiscount = ref(0)
 const paymentDiscountInfo = ref({ removesCoupon: false, blocksCashback: false })
 let previousPaymentMethod = paymentMethod.value
+let _paymentPreviewSeq = 0
+let _paymentDiscountModalOpen = false
 
 async function evaluateDiscountsNow(){
   try{
@@ -3217,6 +3219,7 @@ function scheduleEvaluateDiscounts(){
 }
 
 async function recalcPaymentDiscount() {
+  const mySeq = ++_paymentPreviewSeq
   paymentDiscount.value = 0
   paymentDiscountInfo.value = { removesCoupon: false, blocksCashback: false }
   if (!paymentMethod.value) return
@@ -3229,6 +3232,7 @@ async function recalcPaymentDiscount() {
       orderType: orderType.value,
       subtotal: subtotal.value,
     })
+    if (mySeq !== _paymentPreviewSeq) return // stale response, a newer call has started
     const data = res.data || {}
     if (data.applies) {
       paymentDiscount.value = Number(data.amount || 0)
@@ -3238,30 +3242,36 @@ async function recalcPaymentDiscount() {
       }
       // If a coupon is currently applied and the rule removes it, confirm with the user
       if (data.removesCoupon && couponDiscount.value > 0) {
-        const ok = await Swal.fire({
-          icon: 'warning',
-          title: 'Cupom não cumulativo',
-          text: 'Este método de pagamento remove o cupom aplicado. Deseja continuar?',
-          showCancelButton: true,
-          confirmButtonText: 'Sim, manter este método',
-          cancelButtonText: 'Cancelar',
-        })
-        if (!ok.isConfirmed) {
-          paymentMethod.value = previousPaymentMethod
-          return // watcher will re-run recalcPaymentDiscount with old method
-        }
-        // user confirmed — remove the coupon
-        try { removeCoupon() } catch (e) {
-          couponApplied.value = false
-          couponDiscount.value = 0
-          couponInfo.value = null
+        if (_paymentDiscountModalOpen) return // another modal already handling this
+        _paymentDiscountModalOpen = true
+        try {
+          const ok = await Swal.fire({
+            icon: 'warning',
+            title: 'Cupom não cumulativo',
+            text: 'Este método de pagamento remove o cupom aplicado. Deseja continuar?',
+            showCancelButton: true,
+            confirmButtonText: 'Sim, manter este método',
+            cancelButtonText: 'Cancelar',
+          })
+          if (!ok.isConfirmed) {
+            paymentMethod.value = previousPaymentMethod
+            return // watcher will re-run recalcPaymentDiscount with old method
+          }
+          // user confirmed — remove the coupon
+          try { removeCoupon() } catch (e) {
+            couponApplied.value = false
+            couponDiscount.value = 0
+            couponInfo.value = null
+          }
+        } finally {
+          _paymentDiscountModalOpen = false
         }
       }
     }
   } catch (e) {
     console.warn('Failed to preview payment discount', e)
   } finally {
-    previousPaymentMethod = paymentMethod.value
+    if (mySeq === _paymentPreviewSeq) previousPaymentMethod = paymentMethod.value
   }
 }
 
