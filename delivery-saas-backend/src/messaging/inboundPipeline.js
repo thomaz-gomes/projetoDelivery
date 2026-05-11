@@ -8,14 +8,11 @@
 //   5. Updates the Conversation lastMessageAt / unreadCount
 //   6. Runs automations (greeting, out-of-hours, keyword→tag, etc.)
 //   7. Emits Socket.IO inbox:new-message
-//
-// NOTE: `automations.js` and `phoneVariants.js` are added in Tasks 8 and 9.
-// Until then this module's imports below will fail at runtime — that's
-// expected. The file is parse-clean and the structure is final.
 
 import { prisma } from '../prisma.js'
 import { emitirInboxNewMessage } from '../socketEmitters.js'
 import { runAutomations } from './automations.js'
+import { phoneVariants } from './phoneVariants.js'
 
 export async function process(msg) {
   // 1. Dedup by externalId scoped to companyId
@@ -189,11 +186,4 @@ async function resolveConversation(msg, customer) {
     }
     throw err
   }
-}
-
-// Stub — replaced by the real helper in Task 9 (phoneVariants.js).
-// Keeping a local fallback so this module parses and unit tests for the
-// non-WhatsApp paths can run before Task 9 lands.
-function phoneVariants(phone) {
-  return [phone]
 }
