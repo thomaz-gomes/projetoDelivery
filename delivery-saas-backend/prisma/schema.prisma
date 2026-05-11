@@ -150,6 +150,9 @@ model Company {
   quickReplies      QuickReply[]
   greetingTimeRules GreetingTimeRule[]
 
+  // ---- Meta Messaging (WhatsApp Cloud / Facebook / Instagram) ----
+  metaMessagingAccounts MetaMessagingAccount[]
+
   // ---- Error monitoring ----
   errorLogs ErrorLog[]
 
@@ -351,6 +354,35 @@ model WhatsAppInstance {
   stores       Store[]
   // menus assigned to this WhatsApp instance (preferred: link via menu/cardápio)
   menus        Menu[]   @relation("MenuWhatsAppInstance")
+}
+
+// Polymorphic Meta-provided messaging account: WhatsApp Cloud API,
+// Facebook Messenger Page, or Instagram Direct. One row per
+// (company, kind, externalId).
+model MetaMessagingAccount {
+  id                 String            @id @default(uuid())
+  companyId          String
+  kind               MessagingProvider
+  externalId         String
+  displayName        String?
+  accessToken        String            @db.Text
+  refreshToken       String?           @db.Text
+  tokenExpiresAt     DateTime?
+  wabaId             String?
+  fbPageId           String?
+  webhookVerifyToken String            @unique
+  status             String            @default("ACTIVE")
+  lastError          String?           @db.Text
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  company       Company @relation(fields: [companyId], references: [id])
+  menusAsMetaWa Menu[]  @relation("MenuMetaWa")
+  menusAsFb     Menu[]  @relation("MenuFb")
+  menusAsIg     Menu[]  @relation("MenuIg")
+
+  @@unique([companyId, kind, externalId])
+  @@index([companyId])
 }
 
 model Customer {
@@ -647,6 +679,14 @@ model Menu {
   // ---- WhatsApp / Inbox ----
   whatsappInstanceId String?
   whatsappInstance   WhatsAppInstance? @relation("MenuWhatsAppInstance", fields: [whatsappInstanceId], references: [id])
+  // ---- Meta Messaging (WhatsApp Cloud / Facebook / Instagram) ----
+  // Forward-declared FKs for MetaMessagingAccount — wired up by future task.
+  metaWaAccountId    String?
+  metaWaAccount      MetaMessagingAccount? @relation("MenuMetaWa", fields: [metaWaAccountId], references: [id])
+  facebookAccountId  String?
+  facebookAccount    MetaMessagingAccount? @relation("MenuFb", fields: [facebookAccountId], references: [id])
+  instagramAccountId String?
+  instagramAccount   MetaMessagingAccount? @relation("MenuIg", fields: [instagramAccountId], references: [id])
   outOfHoursReplyId  String?
   outOfHoursReply    QuickReply?       @relation("MenuOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
   greetingReplyId    String?
@@ -2538,6 +2578,16 @@ enum Channel {
   WHATSAPP
   FACEBOOK
   INSTAGRAM
+}
+
+// Provider of a messaging integration. Distinguishes the legacy
+// Evolution API WhatsApp transport from the three Meta-provided
+// transports (WhatsApp Cloud API, Facebook Messenger, Instagram Direct).
+enum MessagingProvider {
+  EVOLUTION_WA
+  META_WA
+  META_FB
+  META_IG
 }
 
 enum ConversationStatus {
