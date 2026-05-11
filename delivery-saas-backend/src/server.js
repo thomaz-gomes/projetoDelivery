@@ -12,6 +12,8 @@ import { startScheduler as startMdeScheduler } from './services/mdeQueue.js';
 import { initEncryptionKey } from './services/encryption.js';
 import { startReconciliationJob } from './jobs/financialReconciliation.js';
 import { logError } from './utils/errorLogger.js';
+// Register messaging adapters (router.registerAdapter side effect).
+import './messaging/index.js';
 
 // Ensure CERT_STORE_KEY is available for certificate password encryption.
 // In development, auto-generate a key and persist it to .env so it survives restarts.

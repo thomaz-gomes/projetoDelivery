@@ -1,0 +1,21 @@
+{
+  "event": "messages.upsert",
+  "instance": "test",
+  "data": {
+    "key": {
+      "remoteJid": "5571999990002@s.whatsapp.net",
+      "fromMe": false,
+      "id": "3EB0C2FCB5A4D4F1A8E003"
+    },
+    "pushName": "Carol Test",
+    "messageTimestamp": 1715000200,
+    "message": {
+      "audioMessage": {
+        "url": "https://mmg.whatsapp.net/d/f/encrypted-audio-blob.enc",
+        "mimetype": "audio/ogg; codecs=opus",
+        "ptt": true,
+        "seconds": 7
+      }
+    }
+  }
+}
