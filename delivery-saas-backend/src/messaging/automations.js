@@ -22,10 +22,7 @@
 
 import { prisma } from '../prisma.js'
 import { renderQuickReplyVariables } from '../utils/quickReplyVars.js'
-import {
-  renderRemindLastOrderTemplate,
-  createShortReorderLink,
-} from '../services/reorderHelpers.js'
+import { renderRemindLastOrderTemplate } from '../services/reorderHelpers.js'
 
 // ---------------------------------------------------------------------------
 // Outbound stub
@@ -264,8 +261,10 @@ async function resolveMenuFromAccount(conversation) {
   })()
   if (!where) return null
 
+  // Menu.storeId is non-nullable in the schema, so no extra filter is needed
+  // here — the provider-specific account-id match above is sufficient.
   const menu = await prisma.menu.findFirst({
-    where: { ...where, storeId: { not: undefined } },
+    where,
     select: { id: true },
   })
   if (!menu) return null
