@@ -7,8 +7,10 @@
 import { registerAdapter } from './router.js'
 import whatsappEvolution from './adapters/whatsappEvolution.adapter.js'
 import whatsappMeta from './adapters/whatsappMeta.adapter.js'
+import facebook from './adapters/facebook.adapter.js'
 
 registerAdapter(whatsappEvolution.provider, whatsappEvolution)
 registerAdapter(whatsappMeta.provider, whatsappMeta)
+registerAdapter(facebook.provider, facebook)
 
 export * from './router.js'
