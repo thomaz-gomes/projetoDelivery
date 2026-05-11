@@ -155,7 +155,9 @@ async function resolveCustomerByPhone(msg) {
       data: {
         companyId: msg.companyId,
         whatsapp: phone,
-        fullName: msg.contactName || phone,
+        // Match OLD webhookEvolution.js: null fallback so unnamed customers
+        // don't show their phone number as their display name in the CRM.
+        fullName: msg.contactName || null,
       },
     })
     return customer

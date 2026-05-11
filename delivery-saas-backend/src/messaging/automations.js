@@ -400,7 +400,7 @@ export async function runAutomations({ conversation, message, customer, normaliz
     // Historically gated by the Evolution toggle on Company. Kept as-is so
     // automations stay opt-in per company until a multi-channel toggle is
     // introduced.
-    console.log('[automations] evolutionEnabled=false — skipping')
+    console.log(`[automations] evolutionEnabled=false — skipping (menu=${menu.id})`)
     return
   }
 

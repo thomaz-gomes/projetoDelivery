@@ -52,10 +52,12 @@ export async function routeInbound(provider, payload, account) {
 export async function sendOutbound({ conversationId, content, userId }) {
   const conv = await prisma.conversation.findUnique({ where: { id: conversationId } })
   if (!conv) throw new MessagingError('Conversation not found', 'NOT_FOUND')
-  if (!conv.provider) throw new MessagingError('Conversation has no provider set', 'NO_PROVIDER')
 
-  const adapter = getAdapter(conv.provider)
+  // resolveAccount handles the legacy-conversation fallback (provider=null but
+  // instanceName set) and mutates conv.provider as a side effect when it
+  // backfills. Throws NO_PROVIDER / NO_PROVIDER_ACCOUNT for unresolvable cases.
   const account = await resolveAccount(conv)
+  const adapter = getAdapter(conv.provider)
 
   const result = await adapter.sendMessage(account, conv.channelContactId, content)
 
@@ -99,6 +101,35 @@ export async function sendOutbound({ conversationId, content, userId }) {
 }
 
 async function resolveAccount(conv) {
+  // Legacy conversations created before MessagingProvider tracking won't have
+  // `provider` or `providerAccountId` set. The inbound pipeline backfills
+  // both on the next inbound, but operator-initiated outbounds may fire
+  // first. For WHATSAPP we can resolve the account by instanceName and
+  // backfill the linkage as a side effect so future sends are fast.
+  if (!conv.provider && conv.channel === 'WHATSAPP' && conv.instanceName) {
+    const account = await prisma.whatsAppInstance.findFirst({
+      where: { instanceName: conv.instanceName, companyId: conv.companyId },
+    })
+    if (account) {
+      await prisma.conversation.update({
+        where: { id: conv.id },
+        data: { provider: 'EVOLUTION_WA', providerAccountId: account.id },
+      }).catch(() => {})
+      conv.provider = 'EVOLUTION_WA'
+      conv.providerAccountId = account.id
+      return account
+    }
+  }
+
+  if (!conv.provider) {
+    throw new MessagingError('Conversation has no provider set', 'NO_PROVIDER')
+  }
+  if (!conv.providerAccountId) {
+    // Data corruption: provider set but no account → fail loud rather than
+    // hand a null id to findUnique (which would throw an opaque P2025).
+    throw new MessagingError('Conversation has provider but no providerAccountId', 'NO_PROVIDER_ACCOUNT')
+  }
+
   if (conv.provider === 'EVOLUTION_WA') {
     return prisma.whatsAppInstance.findUnique({ where: { id: conv.providerAccountId } })
   }

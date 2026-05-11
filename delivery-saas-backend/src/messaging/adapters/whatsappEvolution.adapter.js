@@ -206,7 +206,9 @@ const adapter = {
 
 // ─── helpers (ported from webhookEvolution.js#extractMessageInfo) ───────────
 
-function extractMessageInfo(messageContent) {
+// Exported so evolutionOutboundEcho.js can extract type/body/mediaUrl/mimeType
+// from fromMe echoes without re-implementing every WhatsApp message shape.
+export function extractMessageInfo(messageContent) {
   if (messageContent.imageMessage) {
     const im = messageContent.imageMessage
     return {
