@@ -5,13 +5,15 @@
 //   2. Resolves the Customer (by phone for WhatsApp, by metaIdentities for Meta channels)
 //   3. Resolves the Conversation (find or create by company+channel+contact)
 //   4. Persists the Message
-//   5. Updates the Conversation lastMessageAt / unreadCount
-//   6. Runs automations (greeting, out-of-hours, keyword→tag, etc.)
-//   7. Emits Socket.IO inbox:new-message
+//   5. Updates the Conversation (last activity, unread, status reopen, backfill linkage)
+//   6. Pre-automation hook: handle interactive-button taps (reorder etc.)
+//   7. Runs automations (greeting, out-of-hours, keyword→tag, etc.)
+//   8. Emits Socket.IO inbox:new-message
 
 import { prisma } from '../prisma.js'
 import { emitirInboxNewMessage } from '../socketEmitters.js'
 import { runAutomations } from './automations.js'
+import { handleButtonReply } from './buttonReplies.js'
 import { phoneVariants } from './phoneVariants.js'
 
 export async function process(msg) {
@@ -43,30 +45,79 @@ export async function process(msg) {
       body: msg.body,
       mediaUrl: msg.mediaUrl,
       mediaMimeType: msg.mimeType,
+      mediaFileName: msg.mediaFileName || null,
+      latitude: msg.latitude != null ? Number(msg.latitude) : null,
+      longitude: msg.longitude != null ? Number(msg.longitude) : null,
       externalId: msg.externalId,
       status: 'DELIVERED',
       createdAt: msg.timestamp,
     },
   })
 
-  // 5. Update Conversation last activity + unread counter
-  await prisma.conversation.update({
+  // 5. Update Conversation last activity + unread + status reopen + backfill
+  const updateData = {
+    lastMessageAt: msg.timestamp,
+    unreadCount: { increment: 1 },
+  }
+  if (conversation.status === 'CLOSED') updateData.status = 'OPEN'
+  if (msg.contactName && !conversation.contactName) updateData.contactName = msg.contactName
+  if (customer?.id && !conversation.customerId) updateData.customerId = customer.id
+  if (msg.menuId && !conversation.menuId) updateData.menuId = msg.menuId
+  if (msg.storeId && !conversation.storeId) updateData.storeId = msg.storeId
+  if (msg.instanceName && !conversation.instanceName) updateData.instanceName = msg.instanceName
+  if (msg.providerAccountId && !conversation.providerAccountId) {
+    updateData.providerAccountId = msg.providerAccountId
+  }
+  if (msg.provider && !conversation.provider) updateData.provider = msg.provider
+
+  const updatedConversation = await prisma.conversation.update({
     where: { id: conversation.id },
-    data: {
-      lastMessageAt: msg.timestamp,
-      unreadCount: { increment: 1 },
+    data: updateData,
+    include: {
+      customer: { select: { id: true, fullName: true, whatsapp: true } },
+      assignedUser: { select: { id: true, name: true } },
+      store: { select: { id: true, name: true } },
     },
   })
 
-  // 6. Run automations (greeting, out-of-hours, keyword tagging, etc.)
-  await runAutomations({ conversation, message, customer, normalizedMessage: msg })
+  // 6. Emit Socket.IO event so the inbox UI updates in real time. Emit before
+  //    automations so the operator sees the message immediately even if an
+  //    automation send takes a few hundred ms.
+  try {
+    await emitirInboxNewMessage({
+      companyId: msg.companyId,
+      conversation: updatedConversation,
+      message,
+    })
+  } catch (err) {
+    console.warn('[inboundPipeline] failed to emit inbox:new-message', err?.message || err)
+  }
 
-  // 7. Emit Socket.IO event so the inbox UI updates in real time
-  await emitirInboxNewMessage({
-    companyId: msg.companyId,
-    conversation: { ...conversation, lastMessageAt: msg.timestamp },
-    message,
-  })
+  // 7. Pre-automation hook: handle interactive-button taps (reorder etc.).
+  //    When a recognised button fires we short-circuit the rest of the
+  //    automation pipeline so the customer isn't greeted twice in the same
+  //    minute.
+  try {
+    const handled = await handleButtonReply({
+      conversation: updatedConversation,
+      normalizedMessage: msg,
+    })
+    if (handled) return { skipped: false, messageId: message.id, buttonHandled: true }
+  } catch (err) {
+    console.error('[inboundPipeline] button-reply handler error', err)
+  }
+
+  // 8. Run automations (greeting, out-of-hours, keyword tagging, etc.)
+  try {
+    await runAutomations({
+      conversation: updatedConversation,
+      message,
+      customer,
+      normalizedMessage: msg,
+    })
+  } catch (err) {
+    console.error('[inboundPipeline] automations error', err)
+  }
 
   return { skipped: false, messageId: message.id }
 }
@@ -84,7 +135,17 @@ async function resolveCustomerByPhone(msg) {
   let customer = await prisma.customer.findFirst({
     where: { companyId: msg.companyId, whatsapp: { in: variants } },
   })
-  if (customer) return customer
+  if (customer) {
+    // Normalize stored whatsapp to the canonical (with-DDI, with-9) form if
+    // the existing record is a legacy variant. Best-effort; failures (e.g.
+    // unique conflict) are silently swallowed.
+    if (customer.whatsapp !== phone) {
+      await prisma.customer
+        .update({ where: { id: customer.id }, data: { whatsapp: phone } })
+        .catch(() => {})
+    }
+    return customer
+  }
 
   // Race-safe create: the @@unique([companyId, whatsapp]) (`company_whatsapp`)
   // constraint can fire if a concurrent webhook for the same contact races
@@ -137,13 +198,20 @@ async function resolveCustomerByMetaIdentity(msg) {
 }
 
 async function resolveConversation(msg, customer) {
+  // For WhatsApp, the same contact can show up under multiple phone variants
+  // (with/without 9th digit). Look up the conversation across all variants
+  // to avoid creating duplicates.
+  const contactIds = msg.channel === 'WHATSAPP'
+    ? phoneVariants(msg.channelContactId)
+    : [msg.channelContactId]
+
   // Fast path: existing conversation. Preserves the provider-backfill for
   // legacy rows that were created before MessagingProvider was tracked.
   let conversation = await prisma.conversation.findFirst({
     where: {
       companyId: msg.companyId,
       channel: msg.channel,
-      channelContactId: msg.channelContactId,
+      channelContactId: { in: contactIds },
     },
   })
   if (conversation) {
@@ -166,6 +234,10 @@ async function resolveConversation(msg, customer) {
         companyId: msg.companyId,
         channel: msg.channel,
         provider: msg.provider,
+        providerAccountId: msg.providerAccountId || null,
+        instanceName: msg.instanceName || null,
+        storeId: msg.storeId || null,
+        menuId: msg.menuId || null,
         channelContactId: msg.channelContactId,
         customerId: customer?.id,
         contactName: msg.contactName || null,
@@ -179,7 +251,7 @@ async function resolveConversation(msg, customer) {
         where: {
           companyId: msg.companyId,
           channel: msg.channel,
-          channelContactId: msg.channelContactId,
+          channelContactId: { in: contactIds },
         },
       })
       if (conversation) return conversation

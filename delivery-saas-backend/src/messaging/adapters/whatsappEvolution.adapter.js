@@ -4,14 +4,18 @@
 // performs outbound sends via the helpers in src/wa.js so we match the URL
 // fan-out / header pattern the rest of the codebase already uses.
 //
-// Parser logic is ported from webhookEvolution.js#processSingleMessage and
-// #extractMessageInfo (~Feb 2026) — do NOT diverge without coordinating with
-// that file, since both coexist until Task 12 swaps the webhook over.
+// Parser logic is ported from the legacy webhookEvolution.js#processSingleMessage
+// and #extractMessageInfo — the webhook is now a thin handler that delegates
+// to this adapter via router.routeInbound.
 
+import axios from 'axios'
+import fs from 'fs'
+import path from 'path'
+import crypto from 'crypto'
 import { normalizedMessage } from './base.adapter.js'
 import { normalizePhone } from '../phoneVariants.js'
 import { prisma } from '../../prisma.js'
-import { evoSendText, evoSendMediaUrl } from '../../wa.js'
+import { evoSendText, evoSendMediaUrl, evoSendButtons } from '../../wa.js'
 
 const PROVIDER = 'EVOLUTION_WA'
 const CHANNEL = 'WHATSAPP'
@@ -28,10 +32,19 @@ const adapter = {
   // payload shape (Evolution v2):
   //   { event, instance, data: { key, message, pushName, messageTimestamp } }
   //   - data may also be an array of message objects (MESSAGES_UPSERT batch)
-  // account: a WhatsAppInstance row (id, companyId, instanceName, ...)
+  // account: a WhatsAppInstance row (id, companyId, instanceName, ...) with
+  // optional eager-loaded `menus`/`stores` arrays from the webhook handler so
+  // we can attach menuId/storeId/instanceName to each normalized message.
   async parseInbound(payload, account) {
     const raw = payload?.data
     const events = Array.isArray(raw) ? raw : (raw ? [raw] : [])
+
+    const accountId = account?.id || null
+    const instanceName = account?.instanceName || payload?.instance || payload?.instanceName || null
+    const menuId = account?.menus?.[0]?.id || null
+    const storeIdFromMenu = account?.menus?.[0]?.storeId || null
+    const storeIdFromStores = account?.stores?.[0]?.id || null
+    const storeId = menuId ? storeIdFromMenu : storeIdFromStores
 
     const out = []
     const seen = new Set()
@@ -52,6 +65,10 @@ const adapter = {
       const messageContent = ev.message || {}
       if (messageContent.protocolMessage || messageContent.reactionMessage) continue
 
+      // Skip OUTBOUND echoes — fromMe events are our own sends bouncing back
+      // through the webhook; the pipeline only handles INBOUND.
+      if (key.fromMe) continue
+
       const externalId = key.id || null
       if (externalId) {
         if (seen.has(externalId)) continue
@@ -68,17 +85,48 @@ const adapter = {
         ? new Date(tsSeconds * 1000)
         : new Date()
 
+      // Detect an interactive-button reply (e.g. "Repetir pedido"). The
+      // pipeline routes these through buttonReplies.js BEFORE running the
+      // regular greeting/keyword automations.
+      const reorderButton = extractReorderButton(messageContent)
+
+      // Best-effort media decryption (Evolution-specific). The webhook used
+      // to do this inline; centralising here keeps the pipeline channel-
+      // agnostic. Failures are logged but never block message persistence —
+      // the encrypted URL is preserved on the message as a fallback.
+      let localMediaUrl = info.mediaUrl
+      if (info.type !== 'TEXT' && info.type !== 'LOCATION' && account?.companyId) {
+        try {
+          const inlineBase64 = pickInlineBase64(messageContent, ev)
+          if (inlineBase64) {
+            localMediaUrl = await saveBase64Media(inlineBase64, account.companyId, info.mimeType)
+          } else if (instanceName) {
+            localMediaUrl = await downloadMediaViaEvolution(instanceName, ev, account.companyId, info.mimeType)
+          }
+        } catch (err) {
+          console.error('[whatsappEvolution.adapter] media download failed:', err?.response?.data || err?.message || err)
+        }
+      }
+
       out.push(normalizedMessage({
         externalId,
         channel: CHANNEL,
         provider: PROVIDER,
         companyId: account?.companyId || null,
         channelContactId: phone,
+        providerAccountId: accountId,
+        instanceName,
+        menuId,
+        storeId,
         contactName: ev.pushName || null,
         type: info.type,
         body: info.body,
-        mediaUrl: info.mediaUrl,
+        mediaUrl: localMediaUrl,
         mimeType: info.mimeType,
+        mediaFileName: info.mediaFileName,
+        latitude: info.latitude,
+        longitude: info.longitude,
+        reorderButton,
         timestamp,
         raw: ev,
       }))
@@ -86,23 +134,41 @@ const adapter = {
     return out
   },
 
-  // Operator-initiated text send. We delegate to evoSendText (wa.js) which
-  // already handles the URL fan-out across Evolution build variants.
+  // Operator-initiated send. Dispatches by content.type to text vs media
+  // vs interactive-buttons. Returns { externalId, status } so the router
+  // can persist the outbound Message with provider linkage.
   async sendMessage(account, to, content) {
     const instanceName = account?.instanceName
     if (!instanceName) throw new Error('Evolution adapter: account.instanceName is required')
+
+    const type = String(content?.type || 'TEXT').toUpperCase()
+
+    if (type === 'BUTTONS') {
+      const description = content?.text ?? content?.body ?? ''
+      const buttons = content?.buttons || []
+      const data = await evoSendButtons({ instanceName, to, description, buttons })
+      return { externalId: data?.key?.id || null, status: 'SENT' }
+    }
+
+    if (content?.mediaUrl) {
+      const mimeType = content.mimeType || inferMimeTypeForKind(type)
+      const caption = content?.text ?? content?.body ?? ''
+      const data = await evoSendMediaUrl({
+        instanceName,
+        to,
+        mediaUrl: content.mediaUrl,
+        filename: content.mediaFileName || 'arquivo',
+        mimeType,
+        caption,
+      })
+      return { externalId: data?.key?.id || null, status: 'SENT' }
+    }
+
     const text = content?.text ?? content?.body ?? ''
     const data = await evoSendText({ instanceName, to, text })
-    return {
-      externalId: data?.key?.id || null,
-      status: 'SENT',
-    }
+    return { externalId: data?.key?.id || null, status: 'SENT' }
   },
 
-  // TODO(Task 12): port full media send (file upload, monthDir, etc.).
-  // For now, delegate to evoSendMediaUrl assuming mediaUrl is already a public
-  // URL the Evolution API can reach. If only text/caption is supplied, fall
-  // back to sendMessage so callers aren't blocked by media gaps.
   async sendMedia(account, to, mediaUrl, type, caption) {
     const instanceName = account?.instanceName
     if (!instanceName) throw new Error('Evolution adapter: account.instanceName is required')
@@ -117,21 +183,23 @@ const adapter = {
       mimeType,
       caption: caption || '',
     })
-    return {
-      externalId: data?.key?.id || null,
-      status: 'SENT',
-    }
+    return { externalId: data?.key?.id || null, status: 'SENT' }
   },
 
   async resolveAccount(externalId /* instance name */) {
     if (!externalId) return null
-    return prisma.whatsAppInstance.findFirst({ where: { instanceName: externalId } })
+    return prisma.whatsAppInstance.findFirst({
+      where: { instanceName: externalId },
+      include: {
+        menus: { select: { id: true, storeId: true }, take: 1 },
+        stores: { select: { id: true }, take: 1 },
+      },
+    })
   },
 
-  // Evolution surfaces media as URLs inside the payload; the inbound pipeline
-  // stores the URL as-is and the existing webhook code does the decryption.
-  // Returning null tells the pipeline "nothing extra to fetch here".
   async downloadMedia() {
+    // Media is fetched inline during parseInbound (via the Evolution
+    // decryption endpoint); nothing extra to do here.
     return null
   },
 }
@@ -146,6 +214,9 @@ function extractMessageInfo(messageContent) {
       body: im.caption || null,
       mediaUrl: im.url || null,
       mimeType: im.mimetype || 'image/jpeg',
+      mediaFileName: null,
+      latitude: null,
+      longitude: null,
     }
   }
   if (messageContent.audioMessage) {
@@ -155,6 +226,9 @@ function extractMessageInfo(messageContent) {
       body: null,
       mediaUrl: am.url || null,
       mimeType: am.mimetype || 'audio/ogg',
+      mediaFileName: null,
+      latitude: null,
+      longitude: null,
     }
   }
   if (messageContent.videoMessage) {
@@ -164,6 +238,9 @@ function extractMessageInfo(messageContent) {
       body: vm.caption || null,
       mediaUrl: vm.url || null,
       mimeType: vm.mimetype || 'video/mp4',
+      mediaFileName: null,
+      latitude: null,
+      longitude: null,
     }
   }
   if (messageContent.documentWithCaptionMessage) {
@@ -173,6 +250,9 @@ function extractMessageInfo(messageContent) {
       body: docMsg.caption || null,
       mediaUrl: docMsg.url || null,
       mimeType: docMsg.mimetype || 'application/octet-stream',
+      mediaFileName: docMsg.fileName || null,
+      latitude: null,
+      longitude: null,
     }
   }
   if (messageContent.documentMessage) {
@@ -182,6 +262,9 @@ function extractMessageInfo(messageContent) {
       body: dm.caption || null,
       mediaUrl: dm.url || null,
       mimeType: dm.mimetype || 'application/octet-stream',
+      mediaFileName: dm.fileName || null,
+      latitude: null,
+      longitude: null,
     }
   }
   if (messageContent.locationMessage) {
@@ -191,6 +274,9 @@ function extractMessageInfo(messageContent) {
       body: loc.name || loc.address || `${loc.degreesLatitude},${loc.degreesLongitude}`,
       mediaUrl: null,
       mimeType: null,
+      mediaFileName: null,
+      latitude: loc.degreesLatitude != null ? Number(loc.degreesLatitude) : null,
+      longitude: loc.degreesLongitude != null ? Number(loc.degreesLongitude) : null,
     }
   }
   if (messageContent.stickerMessage) {
@@ -200,6 +286,9 @@ function extractMessageInfo(messageContent) {
       body: null,
       mediaUrl: sm.url || null,
       mimeType: sm.mimetype || 'image/webp',
+      mediaFileName: null,
+      latitude: null,
+      longitude: null,
     }
   }
   // Default: text
@@ -207,7 +296,35 @@ function extractMessageInfo(messageContent) {
     messageContent.conversation ||
     messageContent.extendedTextMessage?.text ||
     null
-  return { type: 'TEXT', body, mediaUrl: null, mimeType: null }
+  return {
+    type: 'TEXT', body, mediaUrl: null, mimeType: null,
+    mediaFileName: null, latitude: null, longitude: null,
+  }
+}
+
+// Detects an inbound interactive-button reply across the Evolution payload
+// shapes seen in the wild and returns { orderId } when it's a recognised
+// "Repetir pedido" tap, else null. The button id format `reorder:<orderId>`
+// is set when sending the button in automations.js#maybeSendRegisteredGreeting.
+function extractReorderButton(messageContent) {
+  if (!messageContent || typeof messageContent !== 'object') return null
+  const br = messageContent.buttonsResponseMessage
+    || messageContent.templateButtonReplyMessage
+    || messageContent.interactiveResponseMessage
+    || null
+  if (!br) return null
+  const buttonId =
+    br.selectedButtonId ||
+    br.selectedId ||
+    br.body?.text ||
+    br.nativeFlowResponseMessage?.paramsJson ||
+    null
+  if (!buttonId) return null
+  const id = String(buttonId)
+  if (!id.startsWith('reorder:')) return null
+  const orderId = id.slice('reorder:'.length).trim()
+  if (!orderId) return null
+  return { orderId }
 }
 
 function inferMimeTypeForKind(kind) {
@@ -217,6 +334,78 @@ function inferMimeTypeForKind(kind) {
   if (k === 'AUDIO') return 'audio/ogg'
   if (k === 'STICKER') return 'image/webp'
   return 'application/octet-stream'
+}
+
+// ─── media helpers (Evolution-specific decryption) ──────────────────────────
+
+function pickInlineBase64(messageContent, ev) {
+  return (
+    messageContent.base64 ||
+    messageContent.imageMessage?.base64 ||
+    messageContent.audioMessage?.base64 ||
+    messageContent.videoMessage?.base64 ||
+    messageContent.documentMessage?.base64 ||
+    messageContent.documentWithCaptionMessage?.message?.documentMessage?.base64 ||
+    messageContent.stickerMessage?.base64 ||
+    ev?.base64 ||
+    null
+  )
+}
+
+function mimeToExtension(mime) {
+  const map = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'audio/ogg': 'ogg',
+    'audio/ogg; codecs=opus': 'ogg',
+    'audio/mpeg': 'mp3',
+    'video/mp4': 'mp4',
+    'application/pdf': 'pdf',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  }
+  return map[mime] || mime?.split('/')?.[1] || 'bin'
+}
+
+function buildMediaTarget(companyId, mimeType) {
+  const now = new Date()
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const ext = mimeToExtension(mimeType)
+  const filename = `${crypto.randomUUID()}.${ext}`
+  const relDir = `uploads/inbox/${companyId}/${yearMonth}`
+  const absDir = path.join(process.cwd(), 'public', relDir)
+  fs.mkdirSync(absDir, { recursive: true })
+  return {
+    filePath: path.join(absDir, filename),
+    publicUrl: `/public/${relDir}/${filename}`,
+  }
+}
+
+async function saveBase64Media(base64, companyId, mimeType) {
+  const { filePath, publicUrl } = buildMediaTarget(companyId, mimeType)
+  const buffer = Buffer.from(base64, 'base64')
+  fs.writeFileSync(filePath, buffer)
+  return publicUrl
+}
+
+async function downloadMediaViaEvolution(instanceName, msg, companyId, mimeType) {
+  const baseURL = process.env.EVOLUTION_API_BASE_URL
+  const apiKey = process.env.EVOLUTION_API_API_KEY
+  if (!baseURL || !apiKey) throw new Error('Evolution API not configured')
+
+  const url = `${baseURL.replace(/\/$/, '')}/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`
+  const { data } = await axios.post(
+    url,
+    { message: { key: msg.key }, convertToMp4: false },
+    { headers: { apikey: apiKey, 'Content-Type': 'application/json' }, timeout: 30000 }
+  )
+
+  const base64 = data?.base64 || data?.media || data?.mediaBase64 || null
+  if (!base64) throw new Error('No base64 returned from Evolution API')
+
+  return saveBase64Media(base64, companyId, data?.mimetype || mimeType)
 }
 
 export default adapter

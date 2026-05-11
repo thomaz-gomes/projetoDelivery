@@ -25,23 +25,37 @@ import { renderQuickReplyVariables } from '../utils/quickReplyVars.js'
 import { renderRemindLastOrderTemplate } from '../services/reorderHelpers.js'
 
 // ---------------------------------------------------------------------------
-// Outbound stub
+// Outbound dispatch (wired in Task 12)
 // ---------------------------------------------------------------------------
-// TODO(Task 12): replace with router.sendOutbound — the messaging router will
-// dispatch to the correct adapter (Evolution / Meta) based on
-// conversation.provider. For Task 8 we only care about the automation
-// dispatch shape; actual wire-up lands when webhookEvolution.js is removed.
+// Routes automation-generated messages through the messaging router so the
+// correct adapter (Evolution / Meta) is selected based on
+// conversation.provider. We use a dynamic import to side-step the
+// router ↔ inboundPipeline ↔ automations import cycle — at call time the
+// router module is fully initialised so binding resolution is safe.
+//
+// The router's sendOutbound persists its own OUTBOUND Message and emits the
+// inbox:new-message socket event, so callers must NOT also persist the
+// message themselves (the previous stub used to log + the caller persisted).
 async function sendOutbound({ conversation, content }) {
-  // content: { body?, mediaUrl?, mediaMimeType?, mediaFileName?, buttons?, type? }
-  console.log(
-    '[automations] outbound stub:',
-    JSON.stringify({
-      conversationId: conversation?.id,
-      channel: conversation?.channel,
-      provider: conversation?.provider,
-      content,
+  // content shape from automation callers:
+  //   { type, body?, mediaUrl?, mediaMimeType?, mediaFileName?, buttons? }
+  // Router/adapter expect: { type, text, mediaUrl, mimeType, ... }
+  try {
+    const { sendOutbound: routerSendOutbound } = await import('./router.js')
+    await routerSendOutbound({
+      conversationId: conversation.id,
+      content: {
+        type: content.type || 'TEXT',
+        text: content.body || null,
+        mediaUrl: content.mediaUrl || null,
+        mimeType: content.mediaMimeType || null,
+        mediaFileName: content.mediaFileName || null,
+        buttons: content.buttons || null,
+      },
     })
-  )
+  } catch (err) {
+    console.warn('[automations] outbound dispatch failed:', err?.message || err)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +138,8 @@ async function sendAutoReply(conversation, quickReply) {
       })
     : ''
 
+  // The router's sendOutbound persists the OUTBOUND Message and emits the
+  // inbox:new-message socket event, so we don't duplicate persistence here.
   try {
     await sendOutbound({
       conversation,
@@ -133,18 +149,6 @@ async function sendAutoReply(conversation, quickReply) {
         mediaUrl: quickReply.mediaUrl || null,
         mediaMimeType: quickReply.mediaMimeType || null,
         mediaFileName: quickReply.mediaFileName || null,
-      },
-    })
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        direction: 'OUTBOUND',
-        type: hasMedia ? detectMessageTypeFromMime(quickReply.mediaMimeType) : 'TEXT',
-        body: hasBody ? resolvedBody : null,
-        mediaUrl: quickReply.mediaUrl || null,
-        mediaMimeType: quickReply.mediaMimeType || null,
-        mediaFileName: quickReply.mediaFileName || null,
-        status: 'SENT',
       },
     })
   } catch (e) {
@@ -199,6 +203,9 @@ async function maybeSendRegisteredGreeting({ conversation, menu }) {
       customer,
       order: lastOrder,
     })
+    // The router's sendOutbound persists the OUTBOUND Message, updates
+    // Conversation.lastMessageAt and emits inbox:new-message, so we don't
+    // duplicate that work here.
     try {
       await sendOutbound({
         conversation,
@@ -207,19 +214,6 @@ async function maybeSendRegisteredGreeting({ conversation, menu }) {
           body: text,
           buttons: [{ id: `reorder:${lastOrder.id}`, displayText: 'Repetir pedido' }],
         },
-      })
-      await prisma.message.create({
-        data: {
-          conversationId: conversation.id,
-          direction: 'OUTBOUND',
-          type: 'TEXT',
-          body: text,
-          status: 'SENT',
-        },
-      })
-      await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { lastMessageAt: new Date() },
       })
     } catch (e) {
       console.warn(

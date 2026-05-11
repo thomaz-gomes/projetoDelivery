@@ -40,17 +40,37 @@ export class MessagingError extends Error {
   }
 }
 
-// Helper: shape canônico de mensagem normalizada
+// Helper: shape canônico de mensagem normalizada.
+//
+// Optional fields (left null/undefined when the adapter doesn't surface them):
+//   - providerAccountId: the account row id (WhatsAppInstance.id /
+//     MetaMessagingAccount.id) the message arrived on. Used by the inbound
+//     pipeline to seed Conversation.providerAccountId / menuId / storeId.
+//   - instanceName: legacy Conversation.instanceName field (Evolution only).
+//   - menuId / storeId: pre-resolved menu/store linkage from the account row.
+//   - latitude / longitude: location-message coordinates.
+//   - mediaFileName: original filename for DOCUMENT-type media.
+//   - reorderButton: { orderId } — set when an inbound button reply was
+//     identified as a "Repetir pedido" tap. The pipeline routes these
+//     through buttonReplies.js before running the regular automations.
 export function normalizedMessage({
   externalId, channel, provider, companyId, channelContactId,
+  providerAccountId = null, instanceName = null,
+  menuId = null, storeId = null,
   contactName = null, contactProfilePic = null,
-  type, body = null, mediaUrl = null, mimeType = null,
+  type, body = null, mediaUrl = null, mimeType = null, mediaFileName = null,
+  latitude = null, longitude = null,
+  reorderButton = null,
   timestamp, raw,
 }) {
   return {
     externalId, channel, provider, companyId, channelContactId,
+    providerAccountId, instanceName,
+    menuId, storeId,
     contactName, contactProfilePic,
-    type, body, mediaUrl, mimeType,
+    type, body, mediaUrl, mimeType, mediaFileName,
+    latitude, longitude,
+    reorderButton,
     timestamp: timestamp instanceof Date ? timestamp : new Date(timestamp),
     raw,
   }

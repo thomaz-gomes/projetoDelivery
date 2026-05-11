@@ -59,14 +59,19 @@ export async function sendOutbound({ conversationId, content, userId }) {
 
   const result = await adapter.sendMessage(account, conv.channelContactId, content)
 
+  // Interactive button sends are persisted as TEXT messages (the prisma
+  // MessageType enum has no BUTTONS variant; the body carries the text the
+  // customer sees alongside the buttons).
+  const persistedType = content.type === 'BUTTONS' ? 'TEXT' : content.type
   const message = await prisma.message.create({
     data: {
       conversationId: conv.id,
       direction: 'OUTBOUND',
-      type: content.type,
+      type: persistedType,
       body: content.text || null,
       mediaUrl: content.mediaUrl || null,
       mediaMimeType: content.mimeType || null,
+      mediaFileName: content.mediaFileName || null,
       externalId: result.externalId || null,
       status: result.status || 'SENT',
       authorUserId: userId || null,
