@@ -205,18 +205,22 @@
                     <li class="mb-2">
                       Crie um registro do tipo <strong>A</strong> com os seguintes dados:
                       <table class="table table-sm table-bordered mt-1 mb-0">
-                        <tr><td class="fw-bold" style="width:120px">Nome/Host</td><td><code>@</code> (ou deixe em branco)</td></tr>
-                        <tr><td class="fw-bold">Tipo</td><td><code>A</code></td></tr>
-                        <tr><td class="fw-bold">Valor/Destino</td><td><code>{{ domainPricing.serverIp }}</code></td></tr>
-                        <tr><td class="fw-bold">TTL</td><td><code>3600</code> (ou padrão)</td></tr>
+                        <tbody>
+                          <tr><td class="fw-bold" style="width:120px">Nome/Host</td><td><code>@</code> (ou deixe em branco)</td></tr>
+                          <tr><td class="fw-bold">Tipo</td><td><code>A</code></td></tr>
+                          <tr><td class="fw-bold">Valor/Destino</td><td><code>{{ domainPricing.serverIp }}</code></td></tr>
+                          <tr><td class="fw-bold">TTL</td><td><code>3600</code> (ou padrão)</td></tr>
+                        </tbody>
                       </table>
                     </li>
                     <li class="mb-2">
                       Se deseja usar <strong>www</strong>, crie também um registro <strong>CNAME</strong>:
                       <table class="table table-sm table-bordered mt-1 mb-0">
-                        <tr><td class="fw-bold" style="width:120px">Nome/Host</td><td><code>www</code></td></tr>
-                        <tr><td class="fw-bold">Tipo</td><td><code>CNAME</code></td></tr>
-                        <tr><td class="fw-bold">Valor/Destino</td><td><code>{{ domainForm.domain || 'seu-dominio.com.br' }}</code></td></tr>
+                        <tbody>
+                          <tr><td class="fw-bold" style="width:120px">Nome/Host</td><td><code>www</code></td></tr>
+                          <tr><td class="fw-bold">Tipo</td><td><code>CNAME</code></td></tr>
+                          <tr><td class="fw-bold">Valor/Destino</td><td><code>{{ domainForm.domain || 'seu-dominio.com.br' }}</code></td></tr>
+                        </tbody>
                       </table>
                     </li>
                     <li class="mb-2">Aguarde a propagação do DNS (pode levar até <strong>24 horas</strong>, normalmente menos de 1 hora)</li>
