@@ -2628,12 +2628,15 @@ model Conversation {
   store            Store?             @relation(fields: [storeId], references: [id])
   menuId           String?
   menu             Menu?              @relation(fields: [menuId], references: [id])
-  channel           Channel
-  channelContactId  String
-  instanceName      String?
-  provider          MessagingProvider?
+  channel          Channel
+  channelContactId String
+  instanceName     String?
+  /// providerAccountId is a logical FK resolved at runtime via `provider`:
+  ///   EVOLUTION_WA -> WhatsAppInstance.id
+  ///   META_WA / META_FB / META_IG -> MetaMessagingAccount.id
+  provider         MessagingProvider?
   providerAccountId String?
-  customerId        String?
+  customerId       String?
   customer         Customer?          @relation(fields: [customerId], references: [id])
   assignedUserId   String?
   assignedUser     User?              @relation("ConversationAssignee", fields: [assignedUserId], references: [id])
