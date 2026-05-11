@@ -81,6 +81,7 @@ import { paymentRouter } from './routes/payment.js'
 import leadsRouter from './routes/leads.js'
 import customDomainRouter from './routes/customDomain.js'
 import webhookEvolutionRouter from './routes/webhookEvolution.js'
+import webhookMetaRouter from './routes/webhookMeta.js'
 import inboxRouter from './routes/inbox.js'
 import { luccaRouter } from './routes/lucca.js'
 import ifoodChatRouter from './routes/ifoodChat.js'
@@ -206,6 +207,12 @@ app.use((req, res, next) => {
   }
   return next();
 });
+// Meta webhook MUST be mounted BEFORE the global JSON body parser so its POST
+// handler can read the exact request bytes via express.raw() — required for
+// HMAC validation against the X-Hub-Signature-256 header. The GET handshake
+// has no body and is unaffected by parser ordering.
+app.use(webhookMetaRouter);
+
 // capture raw body for debugging parsing errors (verify is called before parsing)
 app.use(bodyParser.json({ limit: "50mb", verify: (req, _res, buf) => { try { req.rawBody = buf && buf.toString ? buf.toString() : null } catch(_) { req.rawBody = null } } }));
 
