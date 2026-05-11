@@ -4010,7 +4010,7 @@ function nextFromDelivery(){
   }
   // ensure delivery fee is refreshed before moving to next step
   try{ refreshDeliveryFee() }catch(e){}
-  checkoutStep.value = (orderType.value === 'DELIVERY' ? 'payment' : 'review')
+  checkoutStep.value = 'payment'
 }
 
 function goToCustomer(){ checkoutStep.value = 'identity' }
