@@ -10,6 +10,7 @@ import { nextDisplaySimple } from '../utils/displaySimple.js'
 import { geocodeOrderIfNeeded } from '../utils/geocode.js'
 import { isAvailableNow } from '../services/availability.js'
 import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
+import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -778,20 +779,8 @@ publicMenuRouter.post('/:companyId/neighborhoods/match', async (req, res) => {
   const { text } = req.body || {}
   if (!text) return res.status(400).json({ message: 'text é obrigatório' })
   try {
-    const txt = String(text).toLowerCase()
     const neighborhoods = await prisma.neighborhood.findMany({ where: { companyId } })
-    const matched = neighborhoods.find(n => {
-      if (!n || !n.name) return false
-      const name = String(n.name).toLowerCase()
-      if (txt.includes(name)) return true
-      if (n.aliases) {
-        try{
-          const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases)
-          if (arr.some(a => txt.includes(String(a || '').toLowerCase()))) return true
-        }catch(e){}
-      }
-      return false
-    })
+    const matched = findNeighborhoodMatch(neighborhoods, text)
     if (matched) return res.json({ match: matched.name, deliveryFee: Number(matched.deliveryFee || 0) })
     return res.json({ match: null })
   } catch (e) {
@@ -1177,19 +1166,13 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   // subtotal (use sanitized items)
   const subtotal = items.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0)
 
-    // find neighborhood delivery fee (case-insensitive match against name or aliases)
+    // find neighborhood delivery fee — shared normalization keeps geocoded
+    // phrases ("Centro, Eunápolis"), accent variants and punctuation aligned
+    // with what the frontend showed the customer.
     const neighborhoods = await prisma.neighborhood.findMany({ where: { companyId } })
-    const neighborhoodName = (address.neighborhood || '').trim().toLowerCase()
     let deliveryFee = 0
-    if (neighborhoodName) {
-      const match = neighborhoods.find(n => {
-        if (!n) return false
-        if ((n.name || '').toLowerCase() === neighborhoodName) return true
-        if (n.aliases && Array.isArray(n.aliases)) {
-          return n.aliases.map(a => String(a).toLowerCase()).includes(neighborhoodName)
-        }
-        return false
-      })
+    if (address.neighborhood) {
+      const match = findNeighborhoodMatch(neighborhoods, address.neighborhood)
       if (match) deliveryFee = Number(match.deliveryFee || 0)
     }
 

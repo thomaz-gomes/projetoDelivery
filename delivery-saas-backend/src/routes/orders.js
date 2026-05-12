@@ -19,6 +19,7 @@ import { tryEmitIfoodChat } from '../services/ifoodChatEmitter.js';
 import { nextDisplaySimple, startOfDayForDateInTz } from '../utils/displaySimple.js';
 import { geocodeOrderIfNeeded } from '../utils/geocode.js';
 import { evaluateDiscountRule } from '../utils/paymentDiscount.js';
+import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -1545,27 +1546,15 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
     const allNeighs = await prisma.neighborhood.findMany({ where: { companyId } });
 
     function matchNeighborhood(deliveryNeighborhood, address, payload) {
-      if (deliveryNeighborhood) {
-        const needle = String(deliveryNeighborhood).trim().toLowerCase();
-        const m = allNeighs.find(n => {
-          if (!n?.name) return false;
-          if (String(n.name).trim().toLowerCase() === needle) return true;
-          if (n.aliases) {
-            try {
-              const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
-              return arr.some(a => String(a || '').trim().toLowerCase() === needle);
-            } catch (e) { return false; }
-          }
-          return false;
-        });
-        if (m) return m;
-      }
+      // Try the order's denormalized neighborhood first.
+      const direct = findNeighborhoodMatch(allNeighs, deliveryNeighborhood);
+      if (direct) return direct;
 
+      // Fall back to address + geocoded payload fields, joined as one phrase.
       const addrCandidates = [];
       if (address) addrCandidates.push(String(address));
       try {
         const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
-        // Handle both iFood wrapper format (p.order.delivery) and flat format (p.delivery)
         const d = p?.order?.delivery?.deliveryAddress || p?.delivery?.deliveryAddress || null;
         if (d) {
           if (d.neighborhood) addrCandidates.push(d.neighborhood);
@@ -1575,20 +1564,7 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
         }
       } catch (e) {}
       if (!addrCandidates.length) return null;
-
-      const addrText = addrCandidates.join(' ').toLowerCase();
-      return allNeighs.find(n => {
-        if (!n?.name) return false;
-        const name = String(n.name).toLowerCase();
-        if (addrText.includes(name)) return true;
-        if (n.aliases) {
-          try {
-            const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
-            return arr.some(a => addrText.includes(String(a || '').toLowerCase()));
-          } catch (e) { return false; }
-        }
-        return false;
-      }) || null;
+      return findNeighborhoodMatch(allNeighs, addrCandidates.join(' '));
     }
 
     const results = [];

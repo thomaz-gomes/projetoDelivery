@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { requireModuleStrict } from '../modules.js';
+import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js';
 
 export const neighborhoodsRouter = express.Router();
 neighborhoodsRouter.use(authMiddleware);
@@ -22,22 +23,8 @@ neighborhoodsRouter.post('/match', async (req, res) => {
   if (!text) return res.status(400).json({ message: 'text é obrigatório' });
 
   try {
-    const txt = String(text).toLowerCase();
     const neighs = await prisma.neighborhood.findMany({ where: { companyId } });
-    const matched = neighs.find(n => {
-      if (!n || !n.name) return false;
-      const name = String(n.name).toLowerCase();
-      if (txt.includes(name)) return true;
-      if (n.aliases) {
-        try {
-          const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
-          if (arr.some(a => txt.includes(String(a || '').toLowerCase()))) return true;
-        } catch (e) {
-          // ignore
-        }
-      }
-      return false;
-    });
+    const matched = findNeighborhoodMatch(neighs, text);
     res.json({ match: matched ? matched.name : null });
   } catch (e) {
     console.error('POST /neighborhoods/match', e);

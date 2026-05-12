@@ -1,4 +1,5 @@
 import { prisma } from '../prisma.js';
+import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js';
 
 const BRT_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC-3
 
@@ -13,27 +14,8 @@ function toDateOnlyBRT(d) {
 
 export async function findNeighborhoodForName(companyId, candidateName) {
   if (!candidateName) return null;
-  const needle = String(candidateName).trim().toLowerCase();
-
-  // fetch all neighborhoods for company and do matching in JS (aliases are JSON)
   const neighborhoods = await prisma.neighborhood.findMany({ where: { companyId } });
-
-  // exact name match (case-insensitive)
-  let found = neighborhoods.find(n => String(n.name || '').trim().toLowerCase() === needle);
-  if (found) return found;
-
-  // search aliases (aliases stored as JSON array)
-  for (const n of neighborhoods) {
-    if (!n.aliases) continue;
-    try {
-      const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
-      if (arr.some(a => String(a || '').trim().toLowerCase() === needle)) return n;
-    } catch (e) {
-      // ignore parse errors
-    }
-  }
-
-  return null;
+  return findNeighborhoodMatch(neighborhoods, candidateName);
 }
 
 export async function addRiderTransaction({ companyId, riderId, orderId = null, amount = 0, type = 'DELIVERY_FEE', date = new Date(), note = null, status = null }) {
