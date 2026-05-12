@@ -622,7 +622,7 @@ router.post('/conversations/:id/link-customer', async (req, res) => {
     // Verify conversation ownership
     const existing = await prisma.conversation.findUnique({
       where: { id: req.params.id },
-      select: { companyId: true },
+      select: { companyId: true, channel: true, provider: true, channelContactId: true },
     });
     if (!existing || existing.companyId !== companyId) {
       return res.status(404).json({ message: 'Conversa não encontrada' });
@@ -631,10 +631,26 @@ router.post('/conversations/:id/link-customer', async (req, res) => {
     // Verify customer belongs to same company
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
-      select: { companyId: true },
+      select: { companyId: true, metaIdentities: true },
     });
     if (!customer || customer.companyId !== companyId) {
       return res.status(404).json({ message: 'Cliente não encontrado' });
+    }
+
+    // For Meta channels (FB/IG), record the external identity on the customer
+    // so future inbound messages from this contact resolve to them automatically.
+    // WhatsApp keeps its existing behavior (no Customer.whatsapp mutation here).
+    if (existing.channel === 'FACEBOOK' || existing.channel === 'INSTAGRAM') {
+      const ids = Array.isArray(customer.metaIdentities) ? customer.metaIdentities : [];
+      const provider = existing.provider;
+      const externalId = existing.channelContactId;
+      if (provider && externalId && !ids.some((i) => i && i.provider === provider && i.externalId === externalId)) {
+        ids.push({ provider, externalId });
+        await prisma.customer.update({
+          where: { id: customerId },
+          data: { metaIdentities: ids },
+        });
+      }
     }
 
     const conversation = await prisma.conversation.update({
