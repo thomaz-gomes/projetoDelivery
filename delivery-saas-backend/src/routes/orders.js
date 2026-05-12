@@ -1650,6 +1650,28 @@ ordersRouter.post('/retroactive-rider-fees', requireRole('ADMIN', 'SUPER_ADMIN')
       if (riderFee > 0) totalCredited += riderFee;
     }
 
+    // After backfilling retroactive delivery fees, trigger bonus generation
+    // for each (rider, day) pair we touched. The function is idempotent, but
+    // we dedupe here to avoid redundant DB work.
+    if (!dryRun) {
+      try {
+        const { generateMissingCheckinBonusesForDay } = await import('../services/riderAccount.js');
+        const seen = new Set();
+        for (const r of results) {
+          if (!r.willCredit) continue;
+          const order = candidates.find(o => o.id === r.orderId);
+          if (!order || !order.riderId) continue;
+          const d = order.createdAt || new Date();
+          const dayKey = `${order.riderId}::${new Date(d).toISOString().slice(0, 10)}`;
+          if (seen.has(dayKey)) continue;
+          seen.add(dayKey);
+          await generateMissingCheckinBonusesForDay({ companyId, riderId: order.riderId, date: d });
+        }
+      } catch (e) {
+        console.warn('[retroactive-rider-fees] bonus backfill failed:', e?.message || e);
+      }
+    }
+
     return res.json({
       dryRun: !!dryRun,
       checked: candidates.length,

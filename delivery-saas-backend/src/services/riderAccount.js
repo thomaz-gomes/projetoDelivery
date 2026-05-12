@@ -163,14 +163,16 @@ export async function generateMissingCheckinBonusesForDay({ companyId, riderId, 
   if (deliveryTxs.length === 0) return;
 
   // Pre-load existing bonuses for this day to ensure idempotency.
+  // We INCLUDE CANCELLED rows here on purpose: if an admin previously
+  // cancelled a bonus for a given delivery+rule, we must not silently
+  // recreate it during a backfill — that would undo their decision.
   const existingBonuses = await prisma.riderTransaction.findMany({
     where: {
       riderId,
       type: 'EARLY_CHECKIN_BONUS',
       date: { gte: dayStart, lt: dayEnd },
-      status: { not: 'CANCELLED' },
     },
-    select: { orderId: true, note: true },
+    select: { orderId: true, note: true, status: true },
   });
   const existingKey = new Set(existingBonuses.map((b) => `${b.orderId || ''}::${b.note || ''}`));
 
