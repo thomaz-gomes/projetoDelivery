@@ -64,14 +64,23 @@ function deleteQuickReplyMedia(mediaUrl) {
 router.get('/conversations', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { storeId, status, search, cursor, mine, unread, limit: rawLimit } = req.query;
+    const { storeId, status, search, cursor, mine, unread, channel, limit: rawLimit } = req.query;
     const limit = Math.min(Math.max(parseInt(rawLimit, 10) || 50, 1), 100);
+
+    const ALLOWED_CHANNELS = ['WHATSAPP', 'FACEBOOK', 'INSTAGRAM'];
 
     const where = { companyId };
     if (storeId) where.storeId = storeId;
     if (status) where.status = status.toUpperCase();
     if (mine === 'true' || mine === '1') where.assignedUserId = req.user.id;
     if (unread === 'true' || unread === '1') where.unreadCount = { gt: 0 };
+    if (channel) {
+      const ch = String(channel).toUpperCase();
+      if (!ALLOWED_CHANNELS.includes(ch)) {
+        return res.status(400).json({ message: 'Canal invalido' });
+      }
+      where.channel = ch;
+    }
     if (search) {
       where.OR = [
         { contactName: { contains: search, mode: 'insensitive' } },

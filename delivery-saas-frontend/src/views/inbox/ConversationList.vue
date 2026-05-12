@@ -15,6 +15,19 @@
       </select>
     </div>
 
+    <!-- Filter row 0: channel chips -->
+    <div class="d-flex gap-1 px-2 pt-2 flex-wrap">
+      <button
+        v-for="opt in channelOptions"
+        :key="opt.value ?? 'all'"
+        class="btn btn-sm"
+        :class="filters.channel === opt.value ? 'btn-primary' : 'btn-outline-secondary'"
+        @click="setChannel(opt.value)"
+      >
+        <i v-if="opt.icon" :class="['bi', opt.icon, 'me-1']"></i>{{ opt.label }}
+      </button>
+    </div>
+
     <!-- Filter row 1: status -->
     <div class="d-flex gap-1 px-2 pt-2">
       <button
@@ -85,6 +98,13 @@ const statusOptions = [
   { label: 'Todas', value: '' },
 ];
 
+const channelOptions = [
+  { label: 'Todos', value: null, icon: null },
+  { label: 'WhatsApp', value: 'WHATSAPP', icon: 'bi-whatsapp' },
+  { label: 'Messenger', value: 'FACEBOOK', icon: 'bi-messenger' },
+  { label: 'Instagram', value: 'INSTAGRAM', icon: 'bi-instagram' },
+];
+
 const mineCount = computed(() => {
   const userId = authStore.user?.id;
   if (!userId) return 0;
@@ -107,6 +127,10 @@ function onSearchInput() {
 function setStatus(value) {
   filters.status = value;
   inboxStore.fetchConversations();
+}
+
+function setChannel(value) {
+  inboxStore.setChannelFilter(value);
 }
 
 function toggleMine() {
