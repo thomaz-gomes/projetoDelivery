@@ -16,7 +16,9 @@
                     <th class="text-end">Saldo registrado (R$)</th>
                     <th class="text-end">Retiradas</th>
                     <th class="text-end">Reforços</th>
-                    <th class="text-end">Diferença</th>
+                    <th class="text-end" title="Diferença do dinheiro físico em caixa (declarado − esperado). Os demais métodos aparecem em 'Mais detalhes'.">
+                      Diferença (caixa)
+                    </th>
                     <th></th>
                   </tr>
                 </thead>
@@ -29,8 +31,12 @@
                     <td class="text-end">{{ formatCurrency(Number(s.summary?.totalWithdrawals || totalWithdrawalsFor(s))) }}</td>
                     <td class="text-end">{{ formatCurrency(Number(s.summary?.totalReinforcements || totalReinforcementsFor(s))) }}</td>
                     <td class="text-end">
-                      <span v-if="s.differences" :class="totalDiffClass(s.differences)">
-                        {{ formatCurrency(totalDiff(s.differences)) }}
+                      <span
+                        v-if="s.differences"
+                        :class="cashDiffClass(s.differences)"
+                        :title="diffTooltip(s.differences)"
+                      >
+                        {{ formatCurrency(cashDiff(s.differences)) }}
                       </span>
                       <span v-else class="text-muted">—</span>
                     </td>
@@ -88,14 +94,29 @@ function totalWithdrawalsFor(s) {
 function totalReinforcementsFor(s) {
   return (s.movements || []).filter(x => String(x.type||'').toUpperCase() === 'REINFORCEMENT').reduce((a,b)=>a+Number(b.amount||0),0);
 }
-function totalDiff(differences) {
+// The list-row column reflects ONLY the Dinheiro diff — the cash drawer
+// is the single place where a physical conference happens. PIX, Cartão,
+// Pagamento Online etc. settle in the bank/gateway and create "phantom
+// breaks" when the operator only declares cash on close (declared=0 vs
+// expected=total_of_method). Detail of every method is still available
+// in the "Mais detalhes" modal.
+function cashDiff(differences) {
   if (!differences) return 0;
-  return Object.values(differences).reduce((sum, v) => sum + Number(v || 0), 0);
+  return Number(differences['Dinheiro'] || 0);
 }
-function totalDiffClass(differences) {
-  const d = totalDiff(differences);
+function cashDiffClass(differences) {
+  const d = cashDiff(differences);
   if (Math.abs(d) < 0.01) return 'text-success fw-semibold';
   return d > 0 ? 'text-primary fw-semibold' : 'text-danger fw-semibold';
+}
+// Reveal the full per-method breakdown on hover so the operator can spot
+// when a non-cash method needs reconciliation in the financial module.
+function diffTooltip(differences) {
+  if (!differences) return '';
+  const parts = Object.entries(differences)
+    .filter(([, v]) => Math.abs(Number(v || 0)) >= 0.01)
+    .map(([m, v]) => `${m}: ${Number(v).toFixed(2).replace('.', ',')}`);
+  return parts.length ? `Por método:\n${parts.join('\n')}` : 'Sem diferenças';
 }
 
 function openDetail(s) {
