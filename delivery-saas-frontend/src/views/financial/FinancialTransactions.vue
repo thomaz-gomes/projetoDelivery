@@ -275,6 +275,7 @@
 import api from '../../api';
 import TextInput from '../../components/form/input/TextInput.vue';
 import SelectInput from '../../components/form/select/SelectInput.vue';
+import { localDateKey } from '../../utils/dates';
 
 export default {
   name: 'FinancialTransactions',
@@ -448,7 +449,7 @@ export default {
       }
     },
     openPayModal(tx) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localDateKey();
       this.payForm = {
         id: tx.id,
         type: tx.type,
@@ -474,7 +475,7 @@ export default {
         accountId: tx.accountId || '',
         costCenterId: tx.costCenterId || '',
         payAmount: Number(tx.paidAmount || tx.netAmount),
-        paidDate: tx.paidAt ? tx.paidAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        paidDate: tx.paidAt ? tx.paidAt.slice(0, 10) : localDateKey(),
         notes: tx.notes || '',
         isEditing: true,
       };

@@ -159,6 +159,7 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '../../api.js'
 import BaseChart from '@/components/BaseChart.vue'
+import { localDateKey } from '../../utils/dates'
 
 const loading = ref(false)
 const loaded = ref(false)
@@ -196,10 +197,10 @@ function setPeriod(key) {
   filters.value.period = key
   if (key !== 'custom') {
     const now = new Date()
-    const to = now.toISOString().slice(0, 10)
+    const to = localDateKey(now)
     let from = to
-    if (key === '7d') { const d = new Date(now); d.setDate(d.getDate() - 7); from = d.toISOString().slice(0, 10) }
-    else if (key === '30d') { const d = new Date(now); d.setDate(d.getDate() - 30); from = d.toISOString().slice(0, 10) }
+    if (key === '7d') { const d = new Date(now); d.setDate(d.getDate() - 7); from = localDateKey(d) }
+    else if (key === '30d') { const d = new Date(now); d.setDate(d.getDate() - 30); from = localDateKey(d) }
     filters.value.dateFrom = from
     filters.value.dateTo = to
   }

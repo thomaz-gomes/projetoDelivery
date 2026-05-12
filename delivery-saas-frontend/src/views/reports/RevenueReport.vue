@@ -188,6 +188,7 @@
 <script>
 import BaseChart from '@/components/BaseChart.vue';
 import api from '../../api';
+import { localDateKey } from '../../utils/dates';
 
 const CHANNEL_COLORS = {
   'Delivery': '#4f81e0',
@@ -196,12 +197,12 @@ const CHANNEL_COLORS = {
 };
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateKey();
 }
 
 function firstDayOfMonthStr() {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  return localDateKey(new Date(d.getFullYear(), d.getMonth(), 1));
 }
 
 const FMT = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });

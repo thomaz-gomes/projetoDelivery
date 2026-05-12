@@ -8,6 +8,15 @@ export function parseDate(val) {
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
+// Returns the calendar date as YYYY-MM-DD using the browser's LOCAL timezone.
+// Use this instead of `new Date().toISOString().slice(0, 10)` when populating
+// <input type="date"> "today" defaults — toISOString() returns UTC, which at
+// 22:00 BRT already rolls to the next day and creates "tomorrow's" filters.
+export function localDateKey(d = new Date()) {
+  const dt = parseDate(d) || new Date();
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
 export function formatDate(d) {
   const dt = parseDate(d);
   if (!dt) return '-';

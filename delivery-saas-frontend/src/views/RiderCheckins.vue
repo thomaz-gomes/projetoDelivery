@@ -95,6 +95,7 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import Swal from 'sweetalert2';
+import { localDateKey } from '../utils/dates';
 import ListCard from '../components/ListCard.vue';
 import SelectInput from '../components/form/select/SelectInput.vue';
 
@@ -106,8 +107,8 @@ const actionLoading = ref(null);
 
 // Filters — default to current month
 const now = new Date();
-const filterFrom = ref(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10));
-const filterTo = ref(now.toISOString().slice(0, 10));
+const filterFrom = ref(localDateKey(new Date(now.getFullYear(), now.getMonth(), 1)));
+const filterTo = ref(localDateKey(now));
 const filterRider = ref('');
 
 const riderOptions = computed(() =>

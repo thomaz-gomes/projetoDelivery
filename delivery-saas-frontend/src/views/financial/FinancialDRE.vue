@@ -219,14 +219,15 @@
 
 <script>
 import api from '../../api';
+import { localDateKey } from '../../utils/dates';
 
 export default {
   name: 'FinancialDRE',
   data() {
     const now = new Date();
     return {
-      dateFrom: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
-      dateTo: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0],
+      dateFrom: localDateKey(new Date(now.getFullYear(), now.getMonth(), 1)),
+      dateTo: localDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
       dre: null,
       loading: false,
       stores: [],

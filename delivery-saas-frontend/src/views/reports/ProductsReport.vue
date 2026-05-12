@@ -110,16 +110,17 @@
 <script>
 import BaseChart from '@/components/BaseChart.vue';
 import api from '../../api';
+import { localDateKey } from '../../utils/dates';
 
 const COLORS = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac']
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateKey();
 }
 
 function firstDayOfMonthStr() {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  return localDateKey(new Date(d.getFullYear(), d.getMonth(), 1));
 }
 
 export default {

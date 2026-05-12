@@ -6,13 +6,14 @@ import RiderHeader from '../../components/rider/RiderHeader.vue';
 import MobileBottomNav from '../../components/MobileBottomNav.vue';
 import SwipeableViews from '../../components/rider/SwipeableViews.vue';
 import { useRouter } from 'vue-router';
+import { localDateKey } from '../../utils/dates';
 
 const router = useRouter();
 const checkedIn = ref(null); // null = loading, true/false after check
 
 async function verifyCheckin() {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const { data } = await api.get('/riders/me/checkins', { params: { from: today } });
     checkedIn.value = data.length > 0;
   } catch (e) {

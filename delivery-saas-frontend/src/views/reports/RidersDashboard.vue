@@ -142,13 +142,14 @@ import api from '../../api'
 import SelectInput from '../../components/form/select/SelectInput.vue'
 import BaseButton from '../../components/BaseButton.vue'
 import BaseChart from '@/components/BaseChart.vue'
+import { localDateKey } from '../../utils/dates'
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return localDateKey()
 }
 function firstDayOfMonthStr() {
   const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
+  return localDateKey(new Date(d.getFullYear(), d.getMonth(), 1))
 }
 function formatCurrency(val) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)

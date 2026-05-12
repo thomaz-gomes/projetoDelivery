@@ -261,6 +261,7 @@
 <script>
 import api from '../../api';
 import Swal from 'sweetalert2';
+import { localDateKey } from '../../utils/dates';
 
 export default {
   name: 'FinancialDashboard',
@@ -312,8 +313,8 @@ export default {
         const today = new Date();
         const future = new Date(); future.setDate(future.getDate() + 90);
         const params = {
-          from: today.toISOString().slice(0, 10),
-          to: future.toISOString().slice(0, 10),
+          from: localDateKey(today),
+          to: localDateKey(future),
         };
         const { data } = await api.get('/financial/settlements/pending', { params });
         this.pendingSettlements = data || [];
@@ -330,8 +331,8 @@ export default {
     setHistoryRange(days) {
       const to = new Date();
       const from = new Date(); from.setDate(from.getDate() - days);
-      this.historyFilter.from = from.toISOString().slice(0, 10);
-      this.historyFilter.to = to.toISOString().slice(0, 10);
+      this.historyFilter.from = localDateKey(from);
+      this.historyFilter.to = localDateKey(to);
       if (this.showHistoryModal) this.loadSettlementHistory();
     },
     async loadSettlementHistory() {

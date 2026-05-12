@@ -145,6 +145,7 @@
 <script>
 import api from '../../api';
 import Swal from 'sweetalert2';
+import { localDateKey } from '../../utils/dates';
 
 export default {
   name: 'FinancialSettlements',
@@ -178,7 +179,7 @@ export default {
     todayStr(deltaDays = 0) {
       const d = new Date();
       d.setDate(d.getDate() + deltaDays);
-      return d.toISOString().slice(0, 10);
+      return localDateKey(d);
     },
     async loadGateways() {
       try {

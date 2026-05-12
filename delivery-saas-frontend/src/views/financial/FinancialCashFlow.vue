@@ -146,14 +146,15 @@
 <script>
 import api from '../../api';
 import SelectInput from '../../components/form/select/SelectInput.vue';
+import { localDateKey } from '../../utils/dates';
 
 export default {
   name: 'FinancialCashFlow',
   components: { SelectInput },
   data() {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    const startOfMonth = localDateKey(new Date(now.getFullYear(), now.getMonth(), 1));
+    const endOfMonth = localDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     return {
       data: null,
       accounts: [],
