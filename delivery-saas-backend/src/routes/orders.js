@@ -345,9 +345,12 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
       if (payments && typeof payments === 'object' && !Array.isArray(payments)) {
         if (payments.prepaid === true) return true;
         const methods = payments.methods || [];
-        if (methods.length > 0 && methods.every(m => m.prepaid === true)) return true;
+        if (methods.length > 0 && methods.every(m => m.prepaid === true || m.isOnline === true)) return true;
       }
       if (p.payment?.prepaid === true) return true;
+      // Public/POS orders flag online methods on the payment payload so we
+      // treat them as already settled (PIX online, cartão online etc.).
+      if (p.payment?.isOnline === true) return true;
       return false;
     })();
 
@@ -1270,6 +1273,12 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       };
       if (paymentBlocksCashback) paymentPayload.blocksCashback = true;
       if (couponRemovedByPayment) paymentPayload.couponRemovedByRule = true;
+      // Online methods are already settled — mark prepaid so the rider's
+      // "Entregue" transition skips CONFIRMACAO_PAGAMENTO.
+      if (resolvedPaymentMethod && resolvedPaymentMethod.isOnline === true) {
+        paymentPayload.isOnline = true;
+        paymentPayload.prepaid = true;
+      }
     }
 
     // find or create customer (best-effort). If client provided an explicit customerId, prefer it.

@@ -1311,6 +1311,14 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
         payment.method = pm.name
         payment.methodCode = pm.name
         resolvedPaymentMethod = pm
+        // Online payment methods (PIX online, cartão online etc.) are settled
+        // before the rider delivers — they must NOT land in "Confirmação de
+        // pagamento" after delivery. Flag prepaid so the rider's "Entregue"
+        // transition goes straight to CONCLUIDO.
+        if (pm.isOnline === true) {
+          payment.isOnline = true
+          payment.prepaid = true
+        }
       }
     }
 
