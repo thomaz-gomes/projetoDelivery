@@ -9,9 +9,13 @@
     <div class="flex-grow-1 min-width-0">
       <div class="d-flex align-items-center gap-1">
         <span class="fw-semibold text-truncate">{{ displayName }}</span>
-        <i class="bi bi-whatsapp text-success" style="font-size: 0.85rem;"></i>
+        <ChannelBadge
+          v-if="conversation?.channel"
+          :channel="conversation.channel"
+          :provider="conversation.provider"
+        />
       </div>
-      
+
       <TagChips
         v-if="conversation"
         :conversation-id="conversation.id"
@@ -82,6 +86,7 @@ import { ref, computed } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import AssignUserModal from './AssignUserModal.vue';
 import TagChips from './TagChips.vue';
+import ChannelBadge from '@/components/inbox/ChannelBadge.vue';
 
 const props = defineProps({
   conversation: { type: Object, default: null },

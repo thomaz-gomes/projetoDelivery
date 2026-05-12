@@ -109,6 +109,21 @@ router.get('/conversations', async (req, res) => {
       },
     });
 
+    // Attach lastInboundAt to each conversation (timestamp of the most recent
+    // INBOUND Message). Used by the frontend to detect the Meta 24h-window
+    // expiration. Per-conversation lookup is acceptable because the list is
+    // capped at `limit` (default 50, max 100).
+    await Promise.all(
+      conversations.map(async c => {
+        const last = await prisma.message.findFirst({
+          where: { conversationId: c.id, direction: 'INBOUND' },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        });
+        c.lastInboundAt = last?.createdAt || null;
+      })
+    );
+
     return res.json(conversations);
   } catch (err) {
     console.error('[inbox] GET /conversations error:', err);
@@ -134,6 +149,14 @@ router.get('/conversations/:id', async (req, res) => {
     if (!conversation || conversation.companyId !== companyId) {
       return res.status(404).json({ message: 'Conversa não encontrada' });
     }
+
+    // Attach lastInboundAt for Meta 24h-window detection on the frontend.
+    const lastInbound = await prisma.message.findFirst({
+      where: { conversationId: conversation.id, direction: 'INBOUND' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    conversation.lastInboundAt = lastInbound?.createdAt || null;
 
     return res.json(conversation);
   } catch (err) {

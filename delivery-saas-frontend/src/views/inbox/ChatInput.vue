@@ -18,7 +18,7 @@
     </div>
 
     <!-- Quick reply chips -->
-    <div v-if="quickReplies.length && !inboxStore.internalMode" class="d-flex gap-1 mb-2 overflow-auto pb-1" style="scrollbar-width: thin;">
+    <div v-if="quickReplies.length && !inboxStore.internalMode && !disabled" class="d-flex gap-1 mb-2 overflow-auto pb-1" style="scrollbar-width: thin;">
       <button
         v-for="reply in quickReplies"
         :key="reply.id"
@@ -43,13 +43,14 @@
         class="btn btn-sm"
         :class="inboxStore.internalMode ? 'btn-warning' : 'btn-light'"
         :title="inboxStore.internalMode ? 'Modo nota interna ativo' : 'Ativar nota interna'"
+        :disabled="disabled"
         @click="inboxStore.toggleInternalMode()"
       >
         <i class="bi bi-lock"></i>
       </button>
 
       <!-- Attach -->
-      <button class="btn btn-sm btn-light" @click="triggerFileInput" :disabled="sending || inboxStore.internalMode">
+      <button class="btn btn-sm btn-light" @click="triggerFileInput" :disabled="disabled || sending || inboxStore.internalMode">
         <i class="bi bi-paperclip" style="font-size: 1.2rem;"></i>
       </button>
       <input ref="fileInput" type="file" class="d-none" accept="image/*,.pdf,.doc,.docx" @change="onFileSelected" />
@@ -60,8 +61,9 @@
         v-model="text"
         class="form-control form-control-sm"
         rows="1"
-        :placeholder="inboxStore.internalMode ? 'Escrever nota interna (não enviada ao cliente)...' : 'Digite uma mensagem...'"
+        :placeholder="disabled ? 'Envio livre indisponível para esta conversa' : (inboxStore.internalMode ? 'Escrever nota interna (não enviada ao cliente)...' : 'Digite uma mensagem...')"
         style="max-height: 120px; resize: none;"
+        :disabled="disabled"
         @keydown="onKeydown"
         @input="autoResize"
         @paste="onPaste"
@@ -69,7 +71,7 @@
 
       <!-- Send -->
       <button class="btn btn-sm" :class="inboxStore.internalMode ? 'btn-warning' : 'btn-success'"
-        :disabled="(!text.trim() && !selectedFile) || sending"
+        :disabled="disabled || (!text.trim() && !selectedFile) || sending"
         @click="send"
       >
         <i v-if="sending" class="bi bi-arrow-repeat spin"></i>
@@ -85,7 +87,10 @@ import { useInboxStore } from '@/stores/inbox';
 import { compressImage } from '@/utils/compressImage';
 import QuickReplyPicker from './QuickReplyPicker.vue';
 
-const props = defineProps({ conversationId: { type: String, required: true } });
+const props = defineProps({
+  conversationId: { type: String, required: true },
+  disabled: { type: Boolean, default: false },
+});
 
 const inboxStore = useInboxStore();
 const text = ref('');
@@ -188,6 +193,7 @@ function autoResize() {
 }
 
 async function send() {
+  if (props.disabled) return;
   const body = text.value.trim();
   if (!body && !selectedFile.value) return;
   sending.value = true;

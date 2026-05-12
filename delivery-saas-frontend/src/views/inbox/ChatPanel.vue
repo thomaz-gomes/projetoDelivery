@@ -52,9 +52,19 @@
       </template>
     </div>
 
+    <!-- Meta 24h-window banner -->
+    <div v-if="metaWindow.show" class="alert alert-warning mb-0 rounded-0 d-flex align-items-center gap-2 py-2 px-3" role="alert">
+      <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
+      <div class="flex-grow-1 small">{{ metaWindow.message }}</div>
+      <button class="btn btn-sm btn-warning text-nowrap" @click="onSendTemplate">
+        <i class="bi bi-file-earmark-text me-1"></i>Enviar template
+      </button>
+    </div>
+
     <!-- Input -->
     <ChatInput
       :conversation-id="conversationId"
+      :disabled="metaWindow.show"
     />
 
     <!-- Lightbox -->
@@ -64,11 +74,15 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import Swal from 'sweetalert2';
 import { useInboxStore } from '@/stores/inbox';
 import ConversationHeader from './ConversationHeader.vue';
 import ChatBubble from './ChatBubble.vue';
 import ChatInput from './ChatInput.vue';
 import ImageLightbox from './ImageLightbox.vue';
+
+const META_PROVIDERS = ['META_WA', 'META_FB', 'META_IG'];
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 const props = defineProps({
   conversationId: { type: String, required: true },
@@ -111,6 +125,39 @@ const groupedItems = computed(() => {
   }
   return items;
 });
+
+// Meta 24h-window detection — for META_WA / META_FB / META_IG conversations
+// Meta only allows free-form replies within 24h of the last inbound message.
+// Outside that window, the operator must send an approved template.
+const metaWindow = computed(() => {
+  const conv = inboxStore.activeConversation;
+  if (!conv) return { show: false, message: '' };
+  if (!META_PROVIDERS.includes(conv.provider)) return { show: false, message: '' };
+
+  const lastInboundAt = conv.lastInboundAt ? new Date(conv.lastInboundAt).getTime() : null;
+  if (!lastInboundAt) {
+    return {
+      show: true,
+      message: 'Aguardando primeira mensagem do cliente — Meta exige inbound antes de iniciar conversa.',
+    };
+  }
+  const ageMs = Date.now() - lastInboundAt;
+  if (ageMs > TWENTY_FOUR_HOURS_MS) {
+    return {
+      show: true,
+      message: 'Janela de 24h expirada — Meta restringe envio livre. Use template aprovado.',
+    };
+  }
+  return { show: false, message: '' };
+});
+
+function onSendTemplate() {
+  Swal.fire({
+    icon: 'info',
+    title: 'Em breve',
+    text: 'O envio de templates aprovados pela Meta estará disponível em breve.',
+  });
+}
 
 function onReply(messageId) {
   inboxStore.setReplyTo?.(messageId);
