@@ -337,11 +337,19 @@ async function fetchPeriodFees() {
     let dailyRatesTotal = 0;
     for (const t of items) {
       const amt = Number(t.amount || 0);
-      if (amt >= 0) earnings += amt;
-      else paid += Math.abs(amt);
-      if (t.type === 'DELIVERY_FEE') deliveries++;
-      if (t.type === 'EARLY_CHECKIN_BONUS' || t.type === 'GOAL_REWARD') bonusTotal += amt;
-      if (t.type === 'DAILY_RATE') { dailyRatesCount++; dailyRatesTotal += amt; }
+      // Cancelled rows are reversed — they don't count anywhere.
+      if (t.status === 'CANCELLED') continue;
+      // Positive amounts are earnings (fees, bonuses, daily rates). When their
+      // status is PAID, the rider has already received that money.
+      // Negative amounts are the offsetting payment rows themselves — we skip
+      // them here to avoid double-counting against the positive PAID rows.
+      if (amt > 0) {
+        earnings += amt;
+        if (t.status === 'PAID') paid += amt;
+        if (t.type === 'DELIVERY_FEE') deliveries++;
+        if (t.type === 'EARLY_CHECKIN_BONUS' || t.type === 'GOAL_REWARD') bonusTotal += amt;
+        if (t.type === 'DAILY_RATE') { dailyRatesCount++; dailyRatesTotal += amt; }
+      }
     }
     periodEarnings.value = earnings;
     periodPaid.value = paid;
@@ -413,6 +421,39 @@ async function pagarPeriodo() {
   } catch (e) {
     console.error('pagarPeriodo failed', e);
     Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao registrar pagamento' });
+  }
+}
+
+async function backfillBonuses() {
+  if (!isAdmin.value) return;
+  const confirmation = await Swal.fire({
+    title: 'Recalcular bônus de check-in?',
+    html: 'Gera bônus retroativos para entregas que ficaram sem bônus porque o check-in foi feito depois delas.<br><br>Operação <b>idempotente</b>: bônus já existentes são preservados.',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Recalcular',
+    cancelButtonText: 'Cancelar',
+  });
+  if (!confirmation.isConfirmed) return;
+  try {
+    const { data } = await api.post(`/riders/${riderId}/account/backfill-bonuses`);
+    await Swal.fire({
+      icon: 'success',
+      title: 'Bônus recalculados',
+      html: `
+        <div style="text-align:left">
+          Dias processados: <b>${data.daysProcessed || 0}</b><br>
+          Bônus criados agora: <b>${data.bonusesCreated || 0}</b><br>
+          Total de bônus no período: <b>${data.bonusesAfter || 0}</b>
+        </div>
+      `,
+    });
+    await fetchBalance();
+    await fetchTransactions();
+    await fetchPeriodFees();
+  } catch (e) {
+    console.error('backfillBonuses failed', e);
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao recalcular bônus' });
   }
 }
 
@@ -681,6 +722,9 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
               </button>
               <button class="btn btn-sm btn-outline-primary" @click="backfillStatus" :disabled="!isAdmin" title="Marca como Pago as taxas que já foram quitadas por pagamentos antigos">
                 Reconciliar histórico
+              </button>
+              <button class="btn btn-sm btn-outline-success" @click="backfillBonuses" :disabled="!isAdmin" title="Gera bônus de check-in retroativos para entregas anteriores ao horário do check-in">
+                Recalcular bônus
               </button>
             </div>
           </div>

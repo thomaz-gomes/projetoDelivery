@@ -560,6 +560,14 @@ ridersRouter.post('/me/checkin', async (req, res) => {
     await checkGoalsOnEvent('CHECKIN', rider.id, companyId);
   } catch (e) { console.warn('[goals] check on checkin failed:', e?.message || e); }
 
+  // Retroactively generate EARLY_CHECKIN bonuses for any deliveries already
+  // booked today — without this, riders who check in after a few deliveries
+  // would only see bonuses on subsequent deliveries.
+  try {
+    const { generateMissingCheckinBonusesForDay } = await import('../services/riderAccount.js');
+    await generateMissingCheckinBonusesForDay({ companyId, riderId: rider.id, date: new Date() });
+  } catch (e) { console.warn('[checkin] retroactive bonus generation failed:', e?.message || e); }
+
   res.status(201).json(checkin);
 });
 
@@ -1813,6 +1821,62 @@ ridersRouter.post('/:id/account/backfill-status', requireRole('ADMIN'), async (r
     totalSettled,
     offsetsAvailable: offsets.length,
     pendingPositivesRemaining: pendingPositives.length - cursor,
+  });
+});
+
+// POST /riders/:id/account/backfill-bonuses — retroactively generate any
+// missing EARLY_CHECKIN_BONUS rows for past days where the rider had
+// qualifying check-ins but some deliveries booked before the check-in didn't
+// receive a bonus. Idempotent: existing bonuses are detected by
+// (orderId, rule note) and skipped.
+ridersRouter.post('/:id/account/backfill-bonuses', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const rider = await prisma.rider.findFirst({ where: { id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+  const { generateMissingCheckinBonusesForDay } = await import('../services/riderAccount.js');
+
+  // Find every distinct day that has at least one rider transaction. We
+  // backfill per-day to keep the logic identical to the live path.
+  const deliveryDates = await prisma.riderTransaction.findMany({
+    where: { riderId: id, type: 'DELIVERY_FEE', amount: { gt: 0 }, status: { not: 'CANCELLED' } },
+    select: { date: true },
+    orderBy: { date: 'asc' },
+  });
+  const uniqueDays = new Set();
+  for (const t of deliveryDates) {
+    const d = new Date(t.date);
+    uniqueDays.add(`${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`);
+  }
+
+  const bonusesBefore = await prisma.riderTransaction.count({
+    where: { riderId: id, type: 'EARLY_CHECKIN_BONUS', status: { not: 'CANCELLED' } },
+  });
+
+  let daysProcessed = 0;
+  for (const t of deliveryDates) {
+    const dayKey = `${new Date(t.date).getUTCFullYear()}-${new Date(t.date).getUTCMonth()}-${new Date(t.date).getUTCDate()}`;
+    if (!uniqueDays.has(dayKey)) continue; // already processed this day
+    uniqueDays.delete(dayKey);
+    try {
+      await generateMissingCheckinBonusesForDay({ companyId, riderId: id, date: t.date });
+      daysProcessed++;
+    } catch (e) {
+      console.warn('[backfill-bonuses] failed for day', dayKey, e?.message || e);
+    }
+  }
+
+  const bonusesAfter = await prisma.riderTransaction.count({
+    where: { riderId: id, type: 'EARLY_CHECKIN_BONUS', status: { not: 'CANCELLED' } },
+  });
+
+  return res.json({
+    ok: true,
+    daysProcessed,
+    bonusesCreated: bonusesAfter - bonusesBefore,
+    bonusesBefore,
+    bonusesAfter,
   });
 });
 

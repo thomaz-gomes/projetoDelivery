@@ -118,46 +118,91 @@ export async function addDeliveryAndDailyIfNeeded({ companyId, riderId, orderId,
   // Check early check-in bonus rules (per delivery, never on daily rate alone)
   if (riderFee <= 0) return; // no delivery fee = no bonus
   try {
-    const bonusDayStart = toDateOnlyBRT(orderDate);
-    const bonusDayEnd = new Date(bonusDayStart);
-    bonusDayEnd.setDate(bonusDayEnd.getDate() + 1);
-
-    // Find today's check-ins for this rider
-    const todayCheckins = await prisma.riderCheckin.findMany({
-      where: { riderId, checkinAt: { gte: bonusDayStart, lt: bonusDayEnd } }
-    });
-    if (todayCheckins.length === 0) return;
-
-    // Find active EARLY_CHECKIN bonus rules for this company
-    const bonusRules = await prisma.riderBonusRule.findMany({
-      where: { companyId, type: 'EARLY_CHECKIN', active: true }
-    });
-
-    for (const rule of bonusRules) {
-      const [deadlineH, deadlineM] = rule.deadlineTime.split(':').map(Number);
-      const qualifies = todayCheckins.some(c => {
-        if (rule.shiftId && c.shiftId !== rule.shiftId) return false;
-        // deadlineTime is stored in BRT; checkinAt is UTC — convert to BRT before comparing
-        const brtDate = new Date(new Date(c.checkinAt).getTime() - BRT_OFFSET_MS);
-        const checkinMinutes = brtDate.getUTCHours() * 60 + brtDate.getUTCMinutes();
-        const deadlineMinutes = deadlineH * 60 + deadlineM;
-        return checkinMinutes <= deadlineMinutes;
-      });
-
-      if (qualifies) {
-        await addRiderTransaction({
-          companyId,
-          riderId,
-          orderId,
-          amount: Number(rule.bonusAmount),
-          type: 'EARLY_CHECKIN_BONUS',
-          date: orderDate,
-          note: `Bônus: ${rule.name}`
-        });
-      }
-    }
+    await generateMissingCheckinBonusesForDay({ companyId, riderId, date: orderDate });
   } catch (e) {
     console.warn('[riderAccount] bonus check failed:', e?.message || e);
+  }
+}
+
+// For a given rider+day, ensures each qualifying DELIVERY_FEE transaction has
+// the corresponding EARLY_CHECKIN_BONUS rows for every active rule whose
+// deadline is met by at least one check-in that day. Idempotent — existing
+// bonuses (same orderId + rule note) are skipped.
+//
+// Called from:
+//   - addDeliveryAndDailyIfNeeded (after a new delivery fee is created)
+//   - riders.js check-in creation (so deliveries already booked earlier in
+//     the day retroactively receive the bonus once the rider checks in)
+export async function generateMissingCheckinBonusesForDay({ companyId, riderId, date }) {
+  if (!companyId || !riderId || !date) return;
+
+  const dayStart = toDateOnlyBRT(date);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
+  const todayCheckins = await prisma.riderCheckin.findMany({
+    where: { riderId, checkinAt: { gte: dayStart, lt: dayEnd } },
+  });
+  if (todayCheckins.length === 0) return;
+
+  const bonusRules = await prisma.riderBonusRule.findMany({
+    where: { companyId, type: 'EARLY_CHECKIN', active: true },
+  });
+  if (bonusRules.length === 0) return;
+
+  // All delivery fees this rider booked today that we may need to bonus.
+  const deliveryTxs = await prisma.riderTransaction.findMany({
+    where: {
+      riderId,
+      type: 'DELIVERY_FEE',
+      date: { gte: dayStart, lt: dayEnd },
+      amount: { gt: 0 },
+      status: { not: 'CANCELLED' },
+    },
+  });
+  if (deliveryTxs.length === 0) return;
+
+  // Pre-load existing bonuses for this day to ensure idempotency.
+  const existingBonuses = await prisma.riderTransaction.findMany({
+    where: {
+      riderId,
+      type: 'EARLY_CHECKIN_BONUS',
+      date: { gte: dayStart, lt: dayEnd },
+      status: { not: 'CANCELLED' },
+    },
+    select: { orderId: true, note: true },
+  });
+  const existingKey = new Set(existingBonuses.map((b) => `${b.orderId || ''}::${b.note || ''}`));
+
+  for (const rule of bonusRules) {
+    const [deadlineH, deadlineM] = String(rule.deadlineTime || '').split(':').map(Number);
+    if (!Number.isFinite(deadlineH) || !Number.isFinite(deadlineM)) continue;
+    const deadlineMinutes = deadlineH * 60 + deadlineM;
+
+    const qualifies = todayCheckins.some((c) => {
+      if (rule.shiftId && c.shiftId !== rule.shiftId) return false;
+      const brtDate = new Date(new Date(c.checkinAt).getTime() - BRT_OFFSET_MS);
+      const checkinMinutes = brtDate.getUTCHours() * 60 + brtDate.getUTCMinutes();
+      return checkinMinutes <= deadlineMinutes;
+    });
+    if (!qualifies) continue;
+
+    const note = `Bônus: ${rule.name}`;
+    for (const dlv of deliveryTxs) {
+      if (!dlv.orderId) continue;
+      const key = `${dlv.orderId}::${note}`;
+      if (existingKey.has(key)) continue;
+      await addRiderTransaction({
+        companyId,
+        riderId,
+        orderId: dlv.orderId,
+        amount: Number(rule.bonusAmount),
+        type: 'EARLY_CHECKIN_BONUS',
+        date: dlv.date,
+        note,
+      });
+      existingKey.add(key);
+    }
   }
 }
 
@@ -170,5 +215,6 @@ export default {
   findNeighborhoodForName,
   addRiderTransaction,
   addDeliveryAndDailyIfNeeded,
+  generateMissingCheckinBonusesForDay,
   getRiderBalance,
 };
