@@ -1923,6 +1923,49 @@ ridersRouter.post('/:id/transactions/:txId/cancel', requireRole('ADMIN'), async 
   res.json({ ok: true, tx: updated });
 });
 
+// POST /riders/:id/transactions/:txId/pay — settle a single PENDING transaction.
+// Mirrors /account/pay logic for one row: creates a negative MANUAL_ADJUSTMENT
+// offset and flips the source row to PAID with paidByTxId linking the two.
+ridersRouter.post('/:id/transactions/:txId/pay', requireRole('ADMIN'), async (req, res) => {
+  const { id, txId } = req.params;
+  const companyId = req.user.companyId;
+  const rider = await prisma.rider.findFirst({ where: { id, companyId } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+  const existing = await prisma.riderTransaction.findFirst({ where: { id: txId, riderId: id } });
+  if (!existing) return res.status(404).json({ message: 'Transação não encontrada' });
+  if (existing.status === 'PAID') return res.status(409).json({ message: 'Lançamento já está pago' });
+  if (existing.status === 'CANCELLED') return res.status(409).json({ message: 'Lançamento está cancelado' });
+
+  const amount = Number(existing.amount || 0);
+  if (amount <= 0) return res.status(400).json({ message: 'Apenas lançamentos de valor positivo podem ser pagos individualmente' });
+
+  const { accountId } = req.body || {};
+
+  const note = `Pagamento avulso (${existing.id.slice(0, 8)})`;
+  const paymentTx = await riderAccountService.addRiderTransaction({
+    companyId,
+    riderId: id,
+    amount: -amount,
+    type: 'MANUAL_ADJUSTMENT',
+    date: new Date(),
+    note,
+  });
+
+  await prisma.riderTransaction.update({
+    where: { id: txId },
+    data: { status: 'PAID', paidAt: new Date(), paidByTxId: paymentTx?.id || null },
+  });
+
+  try {
+    await createFinancialEntryForRider(paymentTx, companyId, accountId || null, { paidNow: true });
+  } catch (e) {
+    console.warn('Financial bridge rider single-pay error:', e?.message);
+  }
+
+  return res.json({ ok: true, total: amount, tx: paymentTx });
+});
+
 // Get orders assigned to the authenticated rider (convenience endpoint)
 ridersRouter.get('/me/orders', async (req, res) => {
   try {

@@ -266,6 +266,47 @@ function cancelEdit() {
   editNote.value = '';
 }
 
+async function payTransaction(tx) {
+  if (!isAdmin.value || !tx?.id) return;
+  if (tx.status === 'PAID') {
+    Swal.fire({ icon: 'info', text: 'Este lançamento já está pago.' });
+    return;
+  }
+  if (tx.status === 'CANCELLED') return;
+  const amt = Number(tx.amount || 0);
+  if (amt <= 0) {
+    Swal.fire({ icon: 'warning', text: 'Apenas lançamentos de valor positivo podem ser pagos individualmente.' });
+    return;
+  }
+
+  const acctName = financialAccounts.value.find(a => a.id === selectedAccountId.value)?.name || null;
+  const acctLine = acctName ? `<br><b>Conta de saída:</b> ${acctName}` : '';
+
+  const confirmation = await Swal.fire({
+    title: 'Pagar lançamento?',
+    html: `<b>Tipo:</b> ${typeLabel(tx.type)}`
+      + `<br><b>Data:</b> ${formatDateWithOptionalTime(tx.date)}`
+      + `<br><b style="font-size:1.1em">Valor: ${formatCurrency(amt)}</b>`
+      + acctLine,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Pagar',
+    cancelButtonText: 'Voltar',
+    confirmButtonColor: '#198754',
+  });
+  if (!confirmation.isConfirmed) return;
+
+  try {
+    await api.post(`/riders/${riderId}/transactions/${tx.id}/pay`, { accountId: selectedAccountId.value || null });
+    Swal.fire({ icon: 'success', toast: true, position: 'top-end', timer: 1800, showConfirmButton: false, text: 'Lançamento pago.' });
+    await fetchBalance();
+    await fetchTransactions();
+  } catch (e) {
+    console.error('payTransaction failed', e);
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao pagar lançamento' });
+  }
+}
+
 async function cancelTransaction(tx) {
   if (!isAdmin.value || !tx?.id) return;
   if (tx.status === 'PAID') {
@@ -842,14 +883,30 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
                 <td>{{ t.order?.displaySimple ? `#${t.order.displaySimple}` : (t.order?.displayId || '—') }}</td>
                 <td>{{ t.note || '—' }}</td>
                 <td v-if="isAdmin" class="text-end">
-                  <button
-                    v-if="t.status === 'PENDING'"
-                    class="btn btn-sm btn-outline-danger"
-                    @click="cancelTransaction(t)"
-                    title="Cancelar transação (reverte saldo)"
-                  >
-                    <i class="bi bi-x-circle"></i>
-                  </button>
+                  <div v-if="t.status === 'PENDING'" class="btn-group">
+                    <button
+                      class="btn btn-sm btn-outline-success"
+                      @click="payTransaction(t)"
+                      :disabled="Number(t.amount || 0) <= 0"
+                      title="Pagar lançamento individualmente"
+                    >
+                      <i class="bi bi-cash"></i>
+                    </button>
+                    <button
+                      class="btn btn-sm btn-outline-primary"
+                      @click="startEdit(t)"
+                      title="Editar lançamento"
+                    >
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <button
+                      class="btn btn-sm btn-outline-danger"
+                      @click="cancelTransaction(t)"
+                      title="Cancelar transação (reverte saldo)"
+                    >
+                      <i class="bi bi-x-circle"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
