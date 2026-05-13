@@ -216,6 +216,7 @@ const router = createRouter({
   { path: '/coupons/:id/edit', component: CouponForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'COUPONS' } },
   { path: '/claim/:token', component: Claim, meta: { requiresAuth: true } }
    ,{ path: '/rider/claim/:token', component: () => import('./views/RiderClaim.vue'), meta: { requiresAuth: true, noSidebar: true } }
+   ,{ path: '/legal/data-deletion', component: () => import('./views/public/DataDeletion.vue'), meta: { noSidebar: true } }
    ,{ path: '/public/:storeSlug', component: PublicSlugResolver }
    ,{ path: '/public/:companyId/menu', component: PublicMenu }
   ,{ path: '/public/:companyId/profile', component: PublicProfile }
