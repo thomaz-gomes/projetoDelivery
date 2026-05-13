@@ -96,6 +96,10 @@ async function trySendViaConversationList(orderNumber, message) {
 /**
  * FLUXO 2: Encontra o card do pedido na tela de expedição, abre detalhes,
  * clica no botão de chat (que cria a conversa) e envia a mensagem.
+ *
+ * Marca isInitialConversation=true para o typeAndSend dar mais tempo pra
+ * UI estabilizar — criação de conversa nova passa por um estado de
+ * loading no React onde o botão de enviar nasce disabled.
  */
 async function sendViaOrderCard(orderNumber, message) {
   const cleanNumber = orderNumber.replace(/^#/, '');
@@ -112,18 +116,34 @@ async function sendViaOrderCard(orderNumber, message) {
   const chatBtn = await waitForElement(SELECTORS.orderDetailsChatButton, 5000);
   if (!chatBtn) throw new Error(`Botão de chat não encontrado nos detalhes do pedido ${orderNumber}`);
   chatBtn.click();
-  await sleep(2000);
+  // Conversa nova: aguardamos mais para o React montar o textarea +
+  // habilitar o botão de envio (em conversa existente o ciclo já foi).
+  await sleep(2500);
 
-  await typeAndSend(message, orderNumber);
+  await typeAndSend(message, orderNumber, { isInitialConversation: true });
 }
 
 /**
  * Digita a mensagem e envia (ou para se modo debug).
  * Assume que o campo de mensagem já está visível.
+ *
+ * @param {string} message - texto a enviar
+ * @param {string} orderNumber - número do pedido (pra log)
+ * @param {{ isInitialConversation?: boolean }} [opts] - flags de UX
+ *   isInitialConversation: indica que a conversa foi criada agora
+ *     (Fluxo 2). O React do iFood mantém o botão de enviar disabled
+ *     até validar o input no próximo ciclo — sem o polling adicional,
+ *     o click() acontecia no botão disabled e a mensagem ficava
+ *     pendurada no campo. Em conversa existente esse race é raro.
  */
-async function typeAndSend(message, orderNumber) {
+async function typeAndSend(message, orderNumber, opts = {}) {
   const input = await waitForElement(SELECTORS.messageInput, 5000);
   if (!input) throw new Error('Campo de mensagem não encontrado');
+
+  // Foco antes de "digitar" — alguns componentes React só registram
+  // mudanças no estado controlado quando o elemento está focado.
+  try { input.focus(); } catch (_) { /* ignore */ }
+  await sleep(100);
 
   // React controlled inputs: usar native setter
   const nativeSetter =
@@ -135,9 +155,18 @@ async function typeAndSend(message, orderNumber) {
   } else {
     input.value = message;
   }
-  input.dispatchEvent(new Event('input', { bubbles: true }));
+  // InputEvent com data + inputType simula digitação real; o componente
+  // React valida o conteúdo no listener de onChange e libera o botão.
+  try {
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: message }));
+  } catch (_) {
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
   input.dispatchEvent(new Event('change', { bubbles: true }));
-  await sleep(500);
+
+  // Em conversa nova damos mais tempo pra UI estabilizar antes de
+  // procurar o botão habilitado.
+  await sleep(opts.isInitialConversation ? 900 : 500);
 
   // Checar modo debug
   const { debugMode } = await chrome.storage.local.get(['debugMode']);
@@ -146,20 +175,76 @@ async function typeAndSend(message, orderNumber) {
     return;
   }
 
-  // Enviar
-  const sendBtn = await waitForElement(SELECTORS.sendButton, 2000);
+  // Polling pelo botão *habilitado* (não basta existir — o iFood
+  // renderiza o botão disabled enquanto o estado React não confirma
+  // que tem texto. Esse era o bug do Fluxo 2: click no disabled =
+  // no-op silencioso).
+  const sendBtn = await waitForEnabledSendButton(opts.isInitialConversation ? 5000 : 3000);
+
   if (sendBtn) {
     sendBtn.click();
   } else {
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+    // Fallback: tentar Enter (alguns componentes ouvem keydown).
+    pressEnter(input);
   }
-  await sleep(1000);
+
+  // Verifica se a mensagem realmente saiu olhando se o textarea esvaziou.
+  // Se ainda tiver o texto, o click foi consumido por botão disabled —
+  // tentamos uma segunda via via Enter.
+  const cleared = await waitForCleared(input, 2000);
+  if (!cleared) {
+    console.warn(`[iFood Extension] Botão não enviou — tentando Enter como fallback (pedido ${orderNumber})`);
+    pressEnter(input);
+    const cleared2 = await waitForCleared(input, 2000);
+    if (!cleared2) {
+      throw new Error('Mensagem digitada mas não enviada — botão ficou disabled e Enter não disparou');
+    }
+  }
+
+  await sleep(500);
 
   // Fechar tudo
   await closeChatPanel();
   console.log(`[iFood Extension] Mensagem enviada para pedido ${orderNumber}`);
+}
+
+/**
+ * Polling do botão de envio até ele existir E estar habilitado.
+ * Retorna o elemento ou null se estourar o timeout.
+ */
+async function waitForEnabledSendButton(timeout = 3000) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const btn = document.querySelector(SELECTORS.sendButton);
+    if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
+      return btn;
+    }
+    await sleep(150);
+  }
+  return null;
+}
+
+/**
+ * Dispara a sequência de eventos de teclado equivalente a Enter no
+ * elemento focado. Usado como fallback quando o botão não envia.
+ */
+function pressEnter(input) {
+  const opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+  input.dispatchEvent(new KeyboardEvent('keydown', opts));
+  input.dispatchEvent(new KeyboardEvent('keypress', opts));
+  input.dispatchEvent(new KeyboardEvent('keyup', opts));
+}
+
+/**
+ * Aguarda o textarea ser limpo (sinal de envio bem-sucedido).
+ */
+async function waitForCleared(input, timeout = 2000) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    if (!input.value || input.value.trim() === '') return true;
+    await sleep(100);
+  }
+  return false;
 }
 
 /**
