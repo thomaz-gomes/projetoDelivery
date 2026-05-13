@@ -627,9 +627,15 @@ ridersRouter.get('/me/shifts', requireRole('RIDER'), async (req, res) => {
       }
       const topNeighborhood = Object.entries(neighCount).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
-      // Ganhos no turno
+      // Ganhos no turno: apenas tipos que representam produção (taxas + diária + bônus + metas).
+      // Exclui MANUAL_ADJUSTMENT (inclui offsets negativos de /account/pay) e lançamentos cancelados.
       const txs = await prisma.riderTransaction.findMany({
-        where: { riderId: rider.id, date: { gte: c.checkinAt, lte: windowEnd } },
+        where: {
+          riderId: rider.id,
+          date: { gte: c.checkinAt, lte: windowEnd },
+          type: { in: ['DELIVERY_FEE', 'DAILY_RATE', 'EARLY_CHECKIN_BONUS', 'GOAL_REWARD'] },
+          status: { not: 'CANCELLED' },
+        },
         select: { amount: true, type: true },
       });
       const totalEarned = txs.reduce((s, t) => s + Number(t.amount || 0), 0);
