@@ -234,7 +234,21 @@ router.post('/auth/meta/connect', authMiddleware, async (req, res) => {
 
       const verifyToken = crypto.randomBytes(32).toString('hex')
       const expiresAt = new Date(Date.now() + data.expiresIn * 1000)
-      const encToken = encrypt(data.longToken)
+
+      // Pick the right access token per provider:
+      // - META_FB: the Page's own access_token (required for /subscribed_apps and Messenger sends)
+      // - META_IG: the linked FB Page's access_token (IG events go through the Page)
+      // - META_WA: the user's long-lived token (Cloud API accepts it for /messages and /register)
+      let tokenForAccount = data.longToken
+      if (provider === 'META_FB') {
+        const page = data.accounts?.pages?.find(p => p.id === sel.externalId)
+        if (page?.access_token) tokenForAccount = page.access_token
+      } else if (provider === 'META_IG') {
+        const linkedPageId = sel.fbPageId
+        const page = linkedPageId ? data.accounts?.pages?.find(p => p.id === linkedPageId) : null
+        if (page?.access_token) tokenForAccount = page.access_token
+      }
+      const encToken = encrypt(tokenForAccount)
 
       const acc = await prisma.metaMessagingAccount.upsert({
         where: {
@@ -281,11 +295,23 @@ router.post('/auth/meta/connect', authMiddleware, async (req, res) => {
       }
 
       try {
-        await subscribeWebhook(acc, data.longToken)
+        // FB/IG: use the page-specific token; WA: user long-lived token.
+        await subscribeWebhook(acc, tokenForAccount)
       } catch (subErr) {
+        console.error('[auth/meta/connect] subscribe failed', {
+          provider,
+          externalId: sel.externalId,
+          fbPageId: sel.fbPageId,
+          status: subErr?.response?.status,
+          metaError: subErr?.response?.data?.error,
+          message: subErr?.message,
+        })
         // Webhook subscription failed but the account row is saved: surface
         // the error via lastError so the SPA can show a retry prompt.
-        const lastError = subErr?.response?.data?.error?.message || subErr?.message || 'subscribe_failed'
+        const metaErr = subErr?.response?.data?.error
+        const lastError = metaErr?.message
+          ? `${metaErr.message}${metaErr.code ? ` (code=${metaErr.code})` : ''}`
+          : subErr?.message || 'subscribe_failed'
         await prisma.metaMessagingAccount.update({
           where: { id: acc.id },
           data: { lastError },
