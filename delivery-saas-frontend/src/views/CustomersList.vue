@@ -93,22 +93,62 @@ function starsHtml(stars) {
   return '★'.repeat(stars) + '☆'.repeat(4 - stars)
 }
 
-// Merge modal state
+// ── Merge modal state ────────────────────────────────────────────────
+// The merge modal needs a customer list independent from the main page —
+// otherwise the operator who just searched "fernando" to find the duplicate
+// would only see fernandos as merge candidates and never find the other
+// account they want to combine with. mergeCandidates is populated by its
+// own backend query, debounced via mergeSearchTimer.
 const showMerge = ref(false)
 const mergeStep = ref(1)
 const primaryId = ref(null)
 const mergeQuery = ref('')
+const mergeCandidates = ref([])
+const mergeLoading = ref(false)
 const selectedMerge = ref(new Set())
 const overwrite = ref({ fullName: false, cpf: false, whatsapp: false, phone: false, ifoodCustomerId: false })
 
+// Snapshot picked customers (primary + each merge target) so they remain
+// available even after a fresh search drops them from mergeCandidates.
+// Step 3 ("overwrite fields") reads from this cache, not from the live list.
+const pickedCustomers = ref(new Map())
+
+let mergeSearchTimer = null
+
+async function fetchMergeCandidates(){
+  mergeLoading.value = true
+  try {
+    const { data } = await api.get('/customers', { params: { q: mergeQuery.value || '', take: 50, skip: 0 } })
+    mergeCandidates.value = Array.isArray(data?.rows) ? data.rows : []
+  } catch (e) {
+    console.error('merge candidates fetch failed', e)
+    mergeCandidates.value = []
+  } finally {
+    mergeLoading.value = false
+  }
+}
+
+function onMergeSearchInput(){
+  if (mergeSearchTimer) clearTimeout(mergeSearchTimer)
+  mergeSearchTimer = setTimeout(fetchMergeCandidates, 300)
+}
+
+watch(primaryId, (id) => {
+  if (!id) return
+  const found = mergeCandidates.value.find(c => c.id === id)
+  if (found) pickedCustomers.value.set(id, found)
+})
+
 const primaryObj = computed(() => {
   if(!primaryId.value) return null
-  return (store.list || []).find(c => c.id === primaryId.value) || null
+  return pickedCustomers.value.get(primaryId.value)
+    || mergeCandidates.value.find(c => c.id === primaryId.value)
+    || null
 })
 
 const selectedList = computed(() => {
-  const s = Array.from(selectedMerge.value || [])
-  return (store.list || []).filter(c => s.includes(c.id) && c.id !== primaryId.value)
+  const ids = Array.from(selectedMerge.value || []).filter(id => id !== primaryId.value)
+  return ids.map(id => pickedCustomers.value.get(id) || mergeCandidates.value.find(c => c.id === id)).filter(Boolean)
 })
 
 function candidateFor(field){
@@ -120,18 +160,30 @@ function candidateFor(field){
 }
 
 function openMergeModal(){
-  // ensure store data loaded
-  if(!store.list || store.list.length === 0) load()
   showMerge.value = true
   mergeStep.value = 1
   primaryId.value = null
   selectedMerge.value = new Set()
+  pickedCustomers.value = new Map()
   mergeQuery.value = ''
+  fetchMergeCandidates()
 }
 
 function closeMergeModal(){ showMerge.value = false }
 
-function toggleSelect(id){ if(selectedMerge.value.has(id)) selectedMerge.value.delete(id); else selectedMerge.value.add(id) }
+function toggleSelect(id){
+  if(selectedMerge.value.has(id)) {
+    selectedMerge.value.delete(id)
+  } else {
+    selectedMerge.value.add(id)
+    // Cache the customer so step 3 can read its fields even if the operator
+    // later narrows the search and drops it from mergeCandidates.
+    const found = mergeCandidates.value.find(c => c.id === id)
+    if (found) pickedCustomers.value.set(id, found)
+  }
+  // Force reactivity on the Set wrapper
+  selectedMerge.value = new Set(selectedMerge.value)
+}
 
 function nextMergeStep(){ if(mergeStep.value === 1 && !primaryId.value){ Swal.fire({ icon:'warning', text:'Selecione a conta principal' }); return } mergeStep.value++ }
 function prevMergeStep(){ if(mergeStep.value>1) mergeStep.value-- }
@@ -266,22 +318,57 @@ async function performMerge(){
 
       <div v-if="mergeStep === 1" class="mt-3">
         <p class="text-muted small">Selecione a conta principal que receberá os dados</p>
-        <select class="form-select" v-model="primaryId">
+        <!-- Independent search (NOT bound to main page filter). Debounced
+             backend call updates mergeCandidates, so the dropdown reflects
+             the modal's own query. -->
+        <div class="input-group mb-2">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input
+            class="form-control"
+            placeholder="Buscar cliente por nome, CPF ou WhatsApp"
+            v-model="mergeQuery"
+            @input="onMergeSearchInput"
+          />
+          <span v-if="mergeLoading" class="input-group-text">
+            <span class="spinner-border spinner-border-sm" role="status"></span>
+          </span>
+        </div>
+        <select class="form-select" v-model="primaryId" size="8">
           <option :value="null">-- Selecione --</option>
-          <option v-for="c in store.list" :key="c.id" :value="c.id">
+          <option v-for="c in mergeCandidates" :key="c.id" :value="c.id">
             {{ c.fullName }} — {{ c.cpf || '-' }} — {{ c.whatsapp || c.phone || '—' }} — {{ c.stats?.totalOrders || 0 }} pedidos
           </option>
         </select>
+        <div v-if="!mergeLoading && mergeCandidates.length === 0" class="text-muted small mt-2">
+          Nenhum cliente encontrado para "{{ mergeQuery }}".
+        </div>
       </div>
 
       <div v-if="mergeStep === 2" class="mt-3">
         <p class="text-muted small">Buscar e marcar contas para mesclar</p>
-        <input class="form-control mb-2" placeholder="Buscar por nome/CPF/WhatsApp" v-model="mergeQuery" />
+        <div class="input-group mb-2">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input
+            class="form-control"
+            placeholder="Buscar por nome, CPF ou WhatsApp"
+            v-model="mergeQuery"
+            @input="onMergeSearchInput"
+          />
+          <span v-if="mergeLoading" class="input-group-text">
+            <span class="spinner-border spinner-border-sm" role="status"></span>
+          </span>
+        </div>
         <div style="max-height:240px;overflow:auto">
-          <div v-for="c in (store.list || []).filter(i => !mergeQuery || (i.fullName||'').toLowerCase().includes(mergeQuery.toLowerCase()) || (i.whatsapp||'').includes(mergeQuery) || (i.cpf||'').includes(mergeQuery))" :key="c.id" class="form-check">
+          <div v-for="c in mergeCandidates.filter(i => i.id !== primaryId)" :key="c.id" class="form-check">
             <input class="form-check-input" type="checkbox" :id="'m-'+c.id" :checked="selectedMerge.has(c.id)" @change.prevent="toggleSelect(c.id)" />
             <label class="form-check-label" :for="'m-'+c.id">{{ c.fullName }} — {{ c.cpf || '-' }} — {{ c.whatsapp || c.phone || '—' }} ({{ c.stats?.totalOrders || 0 }} pedidos)</label>
           </div>
+          <div v-if="!mergeLoading && mergeCandidates.filter(i => i.id !== primaryId).length === 0" class="text-muted small">
+            Nenhum cliente para mesclar com a busca atual.
+          </div>
+        </div>
+        <div v-if="selectedMerge.size > 0" class="small text-muted mt-2">
+          <i class="bi bi-info-circle me-1"></i>{{ selectedMerge.size }} selecionado(s). Refine a busca acima para encontrar mais — os já marcados permanecem.
         </div>
       </div>
 
