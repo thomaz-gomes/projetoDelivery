@@ -195,9 +195,18 @@ const allMethods = computed(() => {
     ...Object.keys(paymentsByMethod.value),
     ...Object.keys(ordersByMethod.value),
   ]);
+  // Drop rows whose expected value is effectively zero — happens for
+  // online/prepaid methods that have orders but don't contribute to the
+  // cash conference (gateway settles outside the drawer). Dinheiro is
+  // pinned because the operator must always declare what's physically
+  // in the till, even with no sales (opening balance still applies).
+  const meaningful = [...keys].filter(k => {
+    if (k === 'Dinheiro') return true;
+    return Math.abs(Number(inRegisterByMethod.value[k] ?? paymentsByMethod.value[k] ?? 0)) >= 0.01;
+  });
   // Dinheiro first, then alphabetical
-  const rest = [...keys].filter(k => k !== 'Dinheiro').sort();
-  return keys.has('Dinheiro') ? ['Dinheiro', ...rest] : rest;
+  const rest = meaningful.filter(k => k !== 'Dinheiro').sort();
+  return meaningful.includes('Dinheiro') ? ['Dinheiro', ...rest] : rest;
 });
 
 const closerName = computed(() => {
