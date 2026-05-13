@@ -44,6 +44,10 @@ export function normalizeMethod(name) {
  * Extrai a lista de pagamentos de um order payload independente da origem
  * @public — também usada pelo endpoint orders-by-method
  * (paymentConfirmed manual, payload.payment legacy, ou estrutura iFood).
+ *
+ * Preserva as flags `prepaid` e `isOnline` quando presentes: o agregador
+ * de caixa precisa delas para excluir pagamentos que não passam pela
+ * gaveta (iFood prepago, Pagamento Online, PIX online, etc.).
  */
 export function extractPayments(payload, orderTotal) {
   // 1. paymentConfirmed definido explicitamente pelo operador (prioridade máxima)
@@ -63,6 +67,8 @@ export function extractPayments(payload, orderTotal) {
     return ifoodMethods.map(m => ({
       method: m.method || m.type || 'Outros',
       amount: Number(m.value ?? m.amount ?? 0),
+      prepaid: m.prepaid === true,
+      isOnline: m.isOnline === true,
     }));
   }
 
@@ -72,6 +78,8 @@ export function extractPayments(payload, orderTotal) {
     return altMethods.map(m => ({
       method: m.method || m.type || 'Outros',
       amount: Number(m.value ?? m.amount ?? 0),
+      prepaid: m.prepaid === true,
+      isOnline: m.isOnline === true,
     }));
   }
 
@@ -85,7 +93,32 @@ export function extractPayments(payload, orderTotal) {
 }
 
 /**
+ * Pagamento não passa pelo caixa físico — devolve TRUE para qualquer um:
+ *  - flag explícita `prepaid` ou `isOnline` (commit 6c97328 + iFood prepago)
+ *  - payload-level prepaid de pedidos iFood (payments.prepaid === true)
+ *  - método normalizado "Pagamento Online" (gateway, link de pagamento)
+ */
+function isOffCashRegisterPayment(p) {
+  if (!p || typeof p !== 'object') return false;
+  if (p.prepaid === true) return true;
+  if (p.isOnline === true) return true;
+  const raw = (p.method || p.methodCode || p.name || '').toString().toLowerCase();
+  if (raw === 'online' || raw.startsWith('online') || raw === 'prepaid' || raw === 'prepago') return true;
+  // iFood prepago em algumas variações: payload usa `paymentType: 'PREPAID'`
+  if (typeof p.paymentType === 'string' && p.paymentType.toUpperCase().includes('PREPAID')) return true;
+  return false;
+}
+
+/**
  * Agrega pagamentos por forma de pagamento a partir de pedidos concluídos vinculados a uma sessão de caixa.
+ *
+ * Pula pagamentos que NÃO passam pela gaveta (online, prepago, gateway).
+ * O extrato físico do caixa só deveria comparar contra o que o operador
+ * tem fisicamente para conferir — iFood prepago, PIX online e métodos
+ * de Pagamento Online liquidam no banco/gateway, não em caixa, e estavam
+ * gerando "quebras fantasma" quando o operador (corretamente) não os
+ * declarava no fechamento.
+ *
  * @returns {{ [method: string]: number }} Ex: { "Dinheiro": 150.50, "PIX": 200.00 }
  */
 export async function aggregatePaymentsByMethod(sessionId, companyId) {
@@ -102,12 +135,24 @@ export async function aggregatePaymentsByMethod(sessionId, companyId) {
   for (const o of orders) {
     try {
       const payload = o.payload || {};
+      // Pedidos com bloco payments inteiro marcado prepaid (iFood) caem
+      // fora desde o início — não precisamos olhar método a método.
+      const payloadPrepaid = payload?.payments?.prepaid === true
+        || payload?.order?.payments?.prepaid === true
+        || payload?.payment?.prepaid === true
+        || payload?.payment?.isOnline === true;
+      if (payloadPrepaid) continue;
+
       const payments = extractPayments(payload, o.total);
       if (!Array.isArray(payments)) continue;
 
       for (const p of payments) {
+        if (isOffCashRegisterPayment(p)) continue;
         const raw = (p && (p.method || p.methodCode || p.name)) || 'Outros';
         const method = normalizeMethod(raw);
+        // Mesmo após o normalize, "Pagamento Online" não tem como bater
+        // em caixa — pula como rede de seguraça.
+        if (method === 'Pagamento Online') continue;
         const amt = (p && p.amount != null) ? Number(p.amount) : (o.total != null ? Number(o.total) : 0);
         byMethodCents[method] = (byMethodCents[method] || 0) + Math.round((Number(amt) || 0) * 100);
       }
