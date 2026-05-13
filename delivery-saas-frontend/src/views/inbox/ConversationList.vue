@@ -15,10 +15,10 @@
       </select>
     </div>
 
-    <!-- Filter row 0: channel chips -->
-    <div class="d-flex gap-1 px-2 pt-2 flex-wrap">
+    <!-- Filter row 0: channel chips (only when 2+ channels integrated) -->
+    <div v-if="visibleChannelOptions.length > 2" class="d-flex gap-1 px-2 pt-2 flex-wrap">
       <button
-        v-for="opt in channelOptions"
+        v-for="opt in visibleChannelOptions"
         :key="opt.value ?? 'all'"
         class="btn btn-sm"
         :class="filters.channel === opt.value ? 'btn-primary' : 'btn-outline-secondary'"
@@ -91,6 +91,7 @@ const filters = inboxStore.filters;
 
 const searchInput = ref(filters.search);
 const stores = ref([]);
+const integratedChannels = ref(new Set());
 
 const statusOptions = [
   { label: 'Abertas', value: 'OPEN' },
@@ -104,6 +105,11 @@ const channelOptions = [
   { label: 'Messenger', value: 'FACEBOOK', icon: 'bi-messenger' },
   { label: 'Instagram', value: 'INSTAGRAM', icon: 'bi-instagram' },
 ];
+
+const visibleChannelOptions = computed(() => {
+  const integrated = integratedChannels.value;
+  return channelOptions.filter(o => o.value === null || integrated.has(o.value));
+});
 
 const mineCount = computed(() => {
   const userId = authStore.user?.id;
@@ -156,5 +162,20 @@ onMounted(async () => {
     const { data } = await api.get('/stores');
     stores.value = Array.isArray(data) ? data : (data.stores || []);
   } catch (e) { stores.value = []; }
+
+  try {
+    const { data } = await api.get('/menu/menus');
+    const menus = Array.isArray(data) ? data : (data.menus || []);
+    const channels = new Set();
+    for (const m of menus) {
+      if (m.whatsappInstanceId || m.metaWaAccountId) channels.add('WHATSAPP');
+      if (m.facebookAccountId) channels.add('FACEBOOK');
+      if (m.instagramAccountId) channels.add('INSTAGRAM');
+    }
+    integratedChannels.value = channels;
+    if (filters.channel && !channels.has(filters.channel)) {
+      inboxStore.setChannelFilter(null);
+    }
+  } catch (e) { integratedChannels.value = new Set(); }
 });
 </script>
