@@ -330,7 +330,8 @@ async function fetchPeriodFees() {
     const { data } = await api.get(`/riders/${riderId}/transactions`, { params });
     const items = data.items || [];
     let earnings = 0;
-    let paid = 0;
+    let paidOut = 0;
+    let pendingInPeriod = 0;
     let deliveries = 0;
     let bonusTotal = 0;
     let dailyRatesCount = 0;
@@ -339,21 +340,28 @@ async function fetchPeriodFees() {
       const amt = Number(t.amount || 0);
       // Cancelled rows are reversed — they don't count anywhere.
       if (t.status === 'CANCELLED') continue;
-      // Positive amounts are earnings (fees, bonuses, daily rates). When their
-      // status is PAID, the rider has already received that money.
-      // Negative amounts are the offsetting payment rows themselves — we skip
-      // them here to avoid double-counting against the positive PAID rows.
+      // Mirror backend /account/pay: it pays the sum of all PENDING rows in the
+      // period, regardless of sign. Keeping the same calculation here ensures
+      // the PAGAR button label matches what will actually be settled.
+      if (t.status === 'PENDING') pendingInPeriod += amt;
       if (amt > 0) {
+        // Positive amounts = earnings (delivery fees, daily rates, bonuses, manual credits).
         earnings += amt;
-        if (t.status === 'PAID') paid += amt;
         if (t.type === 'DELIVERY_FEE') deliveries++;
         if (t.type === 'EARLY_CHECKIN_BONUS' || t.type === 'GOAL_REWARD') bonusTotal += amt;
         if (t.type === 'DAILY_RATE') { dailyRatesCount++; dailyRatesTotal += amt; }
+      } else if (amt < 0 && t.status === 'PAID') {
+        // Negative PAID rows = payment offsets created by /account/pay (cash outflow).
+        // Sum the absolute value as money actually paid out during the period.
+        paidOut += -amt;
       }
     }
     periodEarnings.value = earnings;
-    periodPaid.value = paid;
-    periodBalance.value = earnings - paid;
+    periodPaid.value = paidOut;
+    // "Valor a pagar" must match what the PAGAR button will actually settle
+    // (backend /account/pay sums PENDING rows in the period), not earnings - paidOut,
+    // because payments made in the period may have settled fees from earlier periods.
+    periodBalance.value = pendingInPeriod;
     periodDeliveries.value = deliveries;
     periodBonusTotal.value = bonusTotal;
     periodDailyRatesCount.value = dailyRatesCount;
