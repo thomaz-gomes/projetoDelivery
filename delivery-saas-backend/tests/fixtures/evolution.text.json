@@ -1,0 +1,16 @@
+{
+  "event": "messages.upsert",
+  "instance": "test",
+  "data": {
+    "key": {
+      "remoteJid": "5571999990000@s.whatsapp.net",
+      "fromMe": false,
+      "id": "3EB0C2FCB5A4D4F1A8E001"
+    },
+    "pushName": "Alice Test",
+    "messageTimestamp": 1715000000,
+    "message": {
+      "conversation": "Olá, gostaria de fazer um pedido"
+    }
+  }
+}

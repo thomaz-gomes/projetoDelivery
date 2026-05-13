@@ -17,6 +17,12 @@
     <div class="flex-grow-1 ms-2 min-width-0">
       <div class="d-flex justify-content-between align-items-baseline">
         <span class="text-truncate small">
+          <ChannelBadge
+            v-if="conversation.channel"
+            :channel="conversation.channel"
+            :provider="conversation.provider"
+            class="me-1"
+          />
           <span class="fw-semibold">{{ displayName }}</span>
           <span v-if="phoneDisplay" class="text-muted ms-1" style="font-size: 0.7rem;">· {{ phoneDisplay }}</span>
         </span>
@@ -32,6 +38,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import ChannelBadge from '@/components/inbox/ChannelBadge.vue';
 
 const props = defineProps({
   conversation: { type: Object, required: true },

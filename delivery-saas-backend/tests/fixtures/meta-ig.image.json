@@ -1,0 +1,22 @@
+{
+  "id": "17841400000000000",
+  "time": 1715000100000,
+  "messaging": [
+    {
+      "sender": { "id": "IGSID_USER_2" },
+      "recipient": { "id": "17841400000000000" },
+      "timestamp": 1715000100000,
+      "message": {
+        "mid": "m.ig_test_image_1",
+        "attachments": [
+          {
+            "type": "image",
+            "payload": {
+              "url": "https://scontent.cdninstagram.example/image.jpg"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

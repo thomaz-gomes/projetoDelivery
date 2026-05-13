@@ -65,6 +65,7 @@ import path from 'path';
 import startReportsCleanup from './cleanupReports.js';
 import startForceOpenCleanup from './cleanupForceOpen.js';
 import saasRouter from './routes/saas.js'
+import adminMetaConfigRouter from './routes/adminMetaConfig.js'
 import { requireModule } from './modules.js'
 import financialRouter from './routes/financial/index.js'
 import metaPixelRouter from './routes/metaPixel.js'
@@ -80,6 +81,8 @@ import { paymentRouter } from './routes/payment.js'
 import leadsRouter from './routes/leads.js'
 import customDomainRouter from './routes/customDomain.js'
 import webhookEvolutionRouter from './routes/webhookEvolution.js'
+import webhookMetaRouter from './routes/webhookMeta.js'
+import metaOauthRouter from './routes/metaOauth.js'
 import inboxRouter from './routes/inbox.js'
 import { luccaRouter } from './routes/lucca.js'
 import ifoodChatRouter from './routes/ifoodChat.js'
@@ -205,6 +208,12 @@ app.use((req, res, next) => {
   }
   return next();
 });
+// Meta webhook MUST be mounted BEFORE the global JSON body parser so its POST
+// handler can read the exact request bytes via express.raw() — required for
+// HMAC validation against the X-Hub-Signature-256 header. The GET handshake
+// has no body and is unaffected by parser ordering.
+app.use(webhookMetaRouter);
+
 // capture raw body for debugging parsing errors (verify is called before parsing)
 app.use(bodyParser.json({ limit: "50mb", verify: (req, _res, buf) => { try { req.rawBody = buf && buf.toString ? buf.toString() : null } catch(_) { req.rawBody = null } } }));
 
@@ -285,6 +294,10 @@ app.use('/agent-setup', agentSetupRouter);
 app.use('/agent-print', requireModule('printing'), agentPrintRouter);
 // SaaS management (plans, modules, subscriptions, invoices)
 app.use('/saas', saasRouter);
+// Admin: Meta App config (SUPER_ADMIN only — gated inside the router)
+app.use('/admin', adminMetaConfigRouter);
+// Tenant Meta OAuth flow (Pages / Instagram / WhatsApp WABA)
+app.use(metaOauthRouter);
 // AI Credits: saldo, histórico e gestão de créditos de IA por empresa
 app.use('/ai-credits', aiCreditsRouter);
 app.use('/ai-studio', aiStudioRouter);

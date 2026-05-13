@@ -99,6 +99,7 @@ import SaasErrorLogs from './views/SaasErrorLogs.vue';
 const SaasGatewayConfig = () => import('./views/SaasGatewayConfig.vue')
 const SaasSuperAdmins = () => import('./views/SaasSuperAdmins.vue')
 const AdminBilling = () => import('./views/AdminBilling.vue')
+const MetaPlatformConfig = () => import('./views/admin/MetaPlatformConfig.vue')
 import CashbackSettings from './views/cashback/CashbackSettings.vue';
 import NfeEmissao from './views/NfeEmissao.vue';
 import NfeEmissoesRelatorio from './views/NfeEmissoesRelatorio.vue';
@@ -191,6 +192,7 @@ const router = createRouter({
   { path: '/settings/ifood', component: IFoodIntegration, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/settings/integrations/aiqfome', component: () => import('./components/AiqfomeConfig.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/meta-pixel', component: MetaPixelIntegration, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/settings/meta-integrations', component: () => import('./views/settings/MetaIntegrations.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/integrations/new', component: IntegrationForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/integrations/:id', component: IntegrationForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
@@ -282,6 +284,7 @@ const router = createRouter({
   ,{ path: '/saas/gateway', component: SaasGatewayConfig, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/super-admins', component: SaasSuperAdmins, meta: { requiresAuth: true, role: 'MASTER' } }
   ,{ path: '/saas/error-logs', component: SaasErrorLogs, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/meta-config', component: MetaPlatformConfig, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
     { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CASHBACK' } },
     { path: '/nfe/emissao', component: NfeEmissao, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'FISCAL' } },
@@ -491,6 +494,7 @@ const PAGE_TITLES = [
   ['/settings/users', 'Usuários'],
   ['/settings/cashback', 'Cashback'],
   ['/settings/meta-pixel', 'Meta Pixel'],
+  ['/settings/meta-integrations', 'Integrações Meta'],
   ['/settings/printer-setup', 'Impressão'],
   ['/settings/rider-tracking', 'Rastreamento de Entregadores'],
   ['/settings/rider-shifts', 'Turnos'],
@@ -523,6 +527,7 @@ const PAGE_TITLES = [
   ['/saas/ai-usage', 'Uso de IA'],
   ['/saas/super-admins', 'Super Admins'],
   ['/saas/error-logs', 'Logs de erro'],
+  ['/saas/meta-config', 'Configuração Meta'],
   ['/saas', 'SaaS Admin'],
   ['/store', 'Loja de Complementos'],
   ['/affiliate', 'Painel de Afiliado'],

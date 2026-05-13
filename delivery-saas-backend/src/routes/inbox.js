@@ -64,14 +64,23 @@ function deleteQuickReplyMedia(mediaUrl) {
 router.get('/conversations', async (req, res) => {
   try {
     const { companyId } = req.user;
-    const { storeId, status, search, cursor, mine, unread, limit: rawLimit } = req.query;
+    const { storeId, status, search, cursor, mine, unread, channel, limit: rawLimit } = req.query;
     const limit = Math.min(Math.max(parseInt(rawLimit, 10) || 50, 1), 100);
+
+    const ALLOWED_CHANNELS = ['WHATSAPP', 'FACEBOOK', 'INSTAGRAM'];
 
     const where = { companyId };
     if (storeId) where.storeId = storeId;
     if (status) where.status = status.toUpperCase();
     if (mine === 'true' || mine === '1') where.assignedUserId = req.user.id;
     if (unread === 'true' || unread === '1') where.unreadCount = { gt: 0 };
+    if (channel) {
+      const ch = String(channel).toUpperCase();
+      if (!ALLOWED_CHANNELS.includes(ch)) {
+        return res.status(400).json({ message: 'Canal invalido' });
+      }
+      where.channel = ch;
+    }
     if (search) {
       where.OR = [
         { contactName: { contains: search, mode: 'insensitive' } },
@@ -100,6 +109,21 @@ router.get('/conversations', async (req, res) => {
       },
     });
 
+    // Attach lastInboundAt to each conversation (timestamp of the most recent
+    // INBOUND Message). Used by the frontend to detect the Meta 24h-window
+    // expiration. Per-conversation lookup is acceptable because the list is
+    // capped at `limit` (default 50, max 100).
+    await Promise.all(
+      conversations.map(async c => {
+        const last = await prisma.message.findFirst({
+          where: { conversationId: c.id, direction: 'INBOUND' },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        });
+        c.lastInboundAt = last?.createdAt || null;
+      })
+    );
+
     return res.json(conversations);
   } catch (err) {
     console.error('[inbox] GET /conversations error:', err);
@@ -125,6 +149,14 @@ router.get('/conversations/:id', async (req, res) => {
     if (!conversation || conversation.companyId !== companyId) {
       return res.status(404).json({ message: 'Conversa não encontrada' });
     }
+
+    // Attach lastInboundAt for Meta 24h-window detection on the frontend.
+    const lastInbound = await prisma.message.findFirst({
+      where: { conversationId: conversation.id, direction: 'INBOUND' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    conversation.lastInboundAt = lastInbound?.createdAt || null;
 
     return res.json(conversation);
   } catch (err) {
@@ -590,7 +622,7 @@ router.post('/conversations/:id/link-customer', async (req, res) => {
     // Verify conversation ownership
     const existing = await prisma.conversation.findUnique({
       where: { id: req.params.id },
-      select: { companyId: true },
+      select: { companyId: true, channel: true, provider: true, channelContactId: true },
     });
     if (!existing || existing.companyId !== companyId) {
       return res.status(404).json({ message: 'Conversa não encontrada' });
@@ -599,10 +631,26 @@ router.post('/conversations/:id/link-customer', async (req, res) => {
     // Verify customer belongs to same company
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
-      select: { companyId: true },
+      select: { companyId: true, metaIdentities: true },
     });
     if (!customer || customer.companyId !== companyId) {
       return res.status(404).json({ message: 'Cliente não encontrado' });
+    }
+
+    // For Meta channels (FB/IG), record the external identity on the customer
+    // so future inbound messages from this contact resolve to them automatically.
+    // WhatsApp keeps its existing behavior (no Customer.whatsapp mutation here).
+    if (existing.channel === 'FACEBOOK' || existing.channel === 'INSTAGRAM') {
+      const ids = Array.isArray(customer.metaIdentities) ? customer.metaIdentities : [];
+      const provider = existing.provider;
+      const externalId = existing.channelContactId;
+      if (provider && externalId && !ids.some((i) => i && i.provider === provider && i.externalId === externalId)) {
+        ids.push({ provider, externalId });
+        await prisma.customer.update({
+          where: { id: customerId },
+          data: { metaIdentities: ids },
+        });
+      }
     }
 
     const conversation = await prisma.conversation.update({

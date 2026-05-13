@@ -17,6 +17,7 @@ export const useInboxStore = defineStore('inbox', {
       search: '',
       mine: false,
       unread: false,
+      channel: null,
     },
     replyToMessageId: null,
     internalMode: false,
@@ -43,6 +44,7 @@ export const useInboxStore = defineStore('inbox', {
         if (this.filters.search) params.search = this.filters.search;
         if (this.filters.mine) params.mine = 'true';
         if (this.filters.unread) params.unread = 'true';
+        if (this.filters.channel) params.channel = this.filters.channel;
         const { data } = await api.get('/inbox/conversations', { params });
         this.conversations = Array.isArray(data) ? data : [];
         this.recalcUnread();
@@ -335,6 +337,11 @@ export const useInboxStore = defineStore('inbox', {
         const { data } = await api.get('/inbox/tags');
         this.allTags = Array.isArray(data) ? data : [];
       } catch (e) { this.allTags = []; }
+    },
+
+    setChannelFilter(value) {
+      this.filters.channel = value || null;
+      return this.fetchConversations();
     },
 
     setReplyTo(messageId) { this.replyToMessageId = messageId; },

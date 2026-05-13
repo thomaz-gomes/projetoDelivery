@@ -150,6 +150,9 @@ model Company {
   quickReplies      QuickReply[]
   greetingTimeRules GreetingTimeRule[]
 
+  // ---- Meta Messaging (WhatsApp Cloud / Facebook / Instagram) ----
+  metaMessagingAccounts MetaMessagingAccount[]
+
   // ---- Error monitoring ----
   errorLogs ErrorLog[]
 
@@ -353,6 +356,36 @@ model WhatsAppInstance {
   menus        Menu[]   @relation("MenuWhatsAppInstance")
 }
 
+// Polymorphic Meta-provided messaging account: WhatsApp Cloud API,
+// Facebook Messenger Page, or Instagram Direct. One row per
+// (company, kind, externalId).
+model MetaMessagingAccount {
+  id                 String            @id @default(uuid())
+  companyId          String
+  provider           MessagingProvider
+  externalId         String
+  displayName        String?
+  accessToken        String            @db.Text
+  refreshToken       String?           @db.Text
+  tokenExpiresAt     DateTime?
+  wabaId             String?
+  fbPageId           String?
+  webhookVerifyToken String            @unique
+  status             String            @default("ACTIVE")
+  lastError          String?           @db.Text
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  company       Company @relation(fields: [companyId], references: [id])
+  menusAsMetaWa Menu[]  @relation("MenuMetaWa")
+  menusAsFb     Menu[]  @relation("MenuFb")
+  menusAsIg     Menu[]  @relation("MenuIg")
+
+  @@unique([companyId, provider, externalId])
+  @@index([companyId])
+  @@index([provider, externalId])
+}
+
 model Customer {
   id                             String                @id @default(uuid())
   companyId                      String
@@ -376,6 +409,7 @@ model Customer {
   importedLastPurchase           DateTime?
   importedFinancialBalanceTotal  Float?
   importedFinancialBalancePeriod Float?
+  metaIdentities                 Json?
   createdAt                      DateTime              @default(now())
   updatedAt                      DateTime              @updatedAt
   addresses                      CustomerAddress[]
@@ -647,6 +681,14 @@ model Menu {
   // ---- WhatsApp / Inbox ----
   whatsappInstanceId String?
   whatsappInstance   WhatsAppInstance? @relation("MenuWhatsAppInstance", fields: [whatsappInstanceId], references: [id])
+  // ---- Meta Messaging (WhatsApp Cloud / Facebook / Instagram) ----
+  // Forward-declared FKs for MetaMessagingAccount — wired up by future task.
+  metaWaAccountId    String?
+  metaWaAccount      MetaMessagingAccount? @relation("MenuMetaWa", fields: [metaWaAccountId], references: [id])
+  facebookAccountId  String?
+  facebookAccount    MetaMessagingAccount? @relation("MenuFb", fields: [facebookAccountId], references: [id])
+  instagramAccountId String?
+  instagramAccount   MetaMessagingAccount? @relation("MenuIg", fields: [instagramAccountId], references: [id])
   outOfHoursReplyId  String?
   outOfHoursReply    QuickReply?       @relation("MenuOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
   greetingReplyId    String?
@@ -2540,6 +2582,16 @@ enum Channel {
   INSTAGRAM
 }
 
+// Provider of a messaging integration. Distinguishes the legacy
+// Evolution API WhatsApp transport from the three Meta-provided
+// transports (WhatsApp Cloud API, Facebook Messenger, Instagram Direct).
+enum MessagingProvider {
+  EVOLUTION_WA
+  META_WA
+  META_FB
+  META_IG
+}
+
 enum ConversationStatus {
   OPEN
   CLOSED
@@ -2580,6 +2632,11 @@ model Conversation {
   channel          Channel
   channelContactId String
   instanceName     String?
+  /// providerAccountId is a logical FK resolved at runtime via `provider`:
+  ///   EVOLUTION_WA -> WhatsAppInstance.id
+  ///   META_WA / META_FB / META_IG -> MetaMessagingAccount.id
+  provider         MessagingProvider?
+  providerAccountId String?
   customerId       String?
   customer         Customer?          @relation(fields: [customerId], references: [id])
   assignedUserId   String?
@@ -2597,6 +2654,7 @@ model Conversation {
   @@unique([companyId, channel, channelContactId], name: "company_channel_contact")
   @@index([companyId, status, lastMessageAt])
   @@index([storeId, status])
+  @@index([companyId, channel, provider])
 }
 
 model Message {
@@ -2634,6 +2692,7 @@ model QuickReply {
   mediaUrl      String?
   mediaMimeType String?
   mediaFileName String?
+  metaTemplateId String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

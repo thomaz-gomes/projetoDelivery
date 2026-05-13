@@ -1,0 +1,35 @@
+{
+  "id": "111122223333444",
+  "changes": [
+    {
+      "field": "messages",
+      "value": {
+        "messaging_product": "whatsapp",
+        "metadata": {
+          "display_phone_number": "+5571999990002",
+          "phone_number_id": "999888777666555"
+        },
+        "contacts": [
+          {
+            "wa_id": "5571999990002",
+            "profile": { "name": "Carol Meta" }
+          }
+        ],
+        "messages": [
+          {
+            "from": "5571999990002",
+            "id": "wamid.test_audio_1",
+            "timestamp": "1715000200",
+            "type": "audio",
+            "audio": {
+              "id": "1099999888777777",
+              "mime_type": "audio/ogg; codecs=opus",
+              "sha256": "def456",
+              "voice": true
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
