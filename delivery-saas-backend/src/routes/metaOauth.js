@@ -269,8 +269,9 @@ router.post('/auth/meta/connect', authMiddleware, async (req, res) => {
 
       if (sel.menuId) {
         // Verify the menu belongs to the same tenant before linking.
+        // Menu has no direct companyId column; tenant is enforced via Menu.store.companyId.
         const menu = await prisma.menu.findFirst({
-          where: { id: sel.menuId, companyId: req.user.companyId },
+          where: { id: sel.menuId, store: { companyId: req.user.companyId } },
           select: { id: true },
         })
         if (menu) {
