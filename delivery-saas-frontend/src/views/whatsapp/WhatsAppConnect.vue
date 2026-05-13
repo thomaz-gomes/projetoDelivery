@@ -337,42 +337,55 @@ async function manageModal(inst) {
   let qrUrl = null;
   try { statusText = await fetchStatusFor(); } catch (_) { statusText = 'UNKNOWN'; }
   try { qrUrl = await fetchQrFor(); } catch (_) { qrUrl = null; }
+  const steps = [
+    'Abra o WhatsApp no seu celular.',
+    'Toque em <strong>Mais opções</strong> no Android ou em <strong>Configurações</strong> no iPhone.',
+    'Toque em <strong>Dispositivos conectados</strong> e, em seguida, em <strong>Conectar dispositivo</strong>.',
+    'Escaneie o QR code para confirmar.',
+  ];
   const stepsHtml = `
-    <div style="display:flex;flex-direction:column;gap:12px;font-family:inherit;color:#222;">
-      ${["Abra o WhatsApp no seu celular.",
-         "Toque em <b>Mais opções</b> • no Android ou em <b>Configurações</b> no iPhone.",
-         "Toque em <b>Dispositivos conectados</b> e, em seguida, em <b>Conectar dispositivo</b>.",
-         "Escaneie o QR code para confirmar."].map((text, idx) => `
-        <div style="display:flex;gap:12px;align-items:flex-start;">
-          <div style="min-width:36px;min-height:36px;border-radius:50%;border:2px solid #1f7a5a;color:#0b6b52;display:flex;align-items:center;justify-content:center;font-weight:700;background:#fff;box-shadow:none;">${idx+1}</div>
-          <div style="line-height:1.3;">${text}</div>
+    <p class="text-muted mb-4">Conecte seu WhatsApp em 4 passos simples:</p>
+    ${steps.map((text, idx) => `
+      <div class="mb-3">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge rounded-pill bg-primary" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${idx + 1}</span>
+          <span style="line-height:1.3">${text}</span>
         </div>
-      `).join('')}
-
-      <div style="margin-top:8px;color:#6c757d;">
-        <strong style="color:#222;display:block;margin-bottom:6px;">Dicas</strong>
-        <ul style="margin:0;padding-left:20px;color:#6c757d;">
-          <li>Mantenha o aparelho conectado à internet.</li>
-          <li>Evite abrir o WhatsApp Web em outros PCs ao mesmo tempo.</li>
-          <li>Se o status travar em <i>QRCODE/PAIRING</i>, recarregue o QR.</li>
-        </ul>
       </div>
+    `).join('')}
+
+    <div class="mt-4 p-3 bg-light rounded">
+      <strong class="d-block mb-2">Dicas</strong>
+      <ul class="mb-0 text-muted small" style="padding-left:18px">
+        <li>Mantenha o aparelho conectado à internet.</li>
+        <li>Evite abrir o WhatsApp Web em outros PCs ao mesmo tempo.</li>
+        <li>Se o status travar em <i>QRCODE/PAIRING</i>, recarregue o QR.</li>
+      </ul>
     </div>
   `;
 
   const html = `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:260px;">${stepsHtml}</div>
+    <div class="d-flex gap-4 flex-wrap text-start">
+      <div style="flex:1;min-width:280px;">${stepsHtml}</div>
       <div style="width:320px;flex:0 0 320px;">
-        <div><div class="mb-2">Status: <strong id="sw-status">${statusText}</strong></div></div>
-        <div id="sw-qr-box" class="mt-2">${qrUrl ? `<img id="sw-qr-img" src="${qrUrl}" style="max-width:280px;" />` : '<div class="text-muted">QR não disponível</div>'}</div>
-        <div class="mt-3 d-flex gap-2">
-          <button id="sw-btn-fetch-qr" class="btn btn-outline-secondary btn-sm">Carregar QR</button>
-          <button id="sw-btn-fetch-status" class="btn btn-outline-secondary btn-sm">Atualizar status</button>
-        </div>
-        <div class="mt-2 d-flex gap-2">
-          <button id="sw-btn-assign" class="btn btn-primary btn-sm">Atribuir/Reconfigurar</button>
-          <button id="sw-btn-remove" class="btn btn-danger btn-sm">Remover</button>
+        <div class="card border-0 bg-light p-3">
+          <div class="mb-3">
+            <small class="text-muted d-block">Status</small>
+            <strong id="sw-status">${statusText}</strong>
+          </div>
+          <div id="sw-qr-box" class="text-center mb-3">
+            ${qrUrl
+              ? `<img id="sw-qr-img" src="${qrUrl}" style="max-width:100%;height:auto;border-radius:8px;" />`
+              : '<div class="text-muted py-5">QR não disponível</div>'}
+          </div>
+          <div class="d-flex gap-2 mb-2">
+            <button id="sw-btn-fetch-qr" class="btn btn-outline-secondary btn-sm flex-fill">Carregar QR</button>
+            <button id="sw-btn-fetch-status" class="btn btn-outline-secondary btn-sm flex-fill">Atualizar status</button>
+          </div>
+          <div class="d-flex gap-2">
+            <button id="sw-btn-assign" class="btn btn-primary btn-sm flex-fill">Atribuir/Reconfigurar</button>
+            <button id="sw-btn-remove" class="btn btn-outline-danger btn-sm flex-fill">Remover</button>
+          </div>
         </div>
       </div>
     </div>
