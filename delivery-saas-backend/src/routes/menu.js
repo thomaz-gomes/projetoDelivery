@@ -27,7 +27,11 @@ router.get('/menus', async (req, res) => {
     const companyId = req.user.companyId
     // SUPER_ADMIN has companyId = null; avoid passing null into a non-nullable where filter
     const where = companyId ? { store: { companyId } } : {}
-    const rows = await prisma.menu.findMany({ where, orderBy: { position: 'asc' } })
+    const rows = await prisma.menu.findMany({
+      where,
+      orderBy: { position: 'asc' },
+      include: { customDomain: { select: { domain: true, status: true } } },
+    })
     res.json(rows)
   } catch (e) {
     console.error('GET /menu/menus failed', e)

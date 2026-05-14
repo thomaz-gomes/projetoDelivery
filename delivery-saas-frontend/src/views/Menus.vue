@@ -39,7 +39,7 @@
                 <tr>
                   <th>Nome</th>
                   <th>Loja</th>
-                  <th>Public</th>
+                  <th>Site</th>
                   <th style="width:120px">Ações</th>
                 </tr>
               </thead>
@@ -61,7 +61,7 @@
                   <td>{{ m.storeId ? (storesMap[m.storeId]?.name || m.storeId) : 'Nenhuma' }}</td>
                   <td>
                     <div class="d-flex align-items-center gap-1">
-                      <a :href="getPublicLink(m)" target="_blank" class="text-monospace small text-truncate" style="max-width: 220px" :title="getPublicLink(m)">{{ getPublicLink(m) }}</a>
+                      <a :href="getPublicLink(m)" target="_blank" class="text-monospace small text-truncate" style="max-width: 220px" :title="getPublicLink(m)">{{ getSiteDisplay(m) }}</a>
                       <button class="btn btn-sm btn-link p-0 text-muted" @click.stop="copyPublicLink(m)" title="Copiar link"><i class="bi bi-clipboard"></i></button>
                     </div>
                   </td>
@@ -225,7 +225,17 @@ async function toggleMenuActive(m){
   }
 }
 
+function hasActiveCustomDomain(m){
+  return !!(m && m.customDomain && m.customDomain.status === 'ACTIVE' && m.customDomain.domain)
+}
+
+function getSiteDisplay(m){
+  if (hasActiveCustomDomain(m)) return m.customDomain.domain
+  return getPublicLink(m)
+}
+
 function getPublicLink(m){
+  if (hasActiveCustomDomain(m)) return `https://${m.customDomain.domain}`
   const store = storesMap[m.storeId]
   const slug = m && m.slug ? m.slug : (store ? (store.slug || slugify(store.name || String(store.id))) : companyId)
   return `${window.location.origin}/public/${slug}`
@@ -233,10 +243,15 @@ function getPublicLink(m){
 
 function copyPublicLink(m){
   try{
-    // prefer menu slug when available, then store slug, then fallback to companyId
-    const store = storesMap[m.storeId]
-    const slug = m && m.slug ? m.slug : (store ? (store.slug || slugify(store.name || String(store.id))) : companyId)
-    const link = `${window.location.origin}/public/${slug}`
+    // prefer custom domain when ACTIVE; otherwise menu slug → store slug → companyId
+    let link
+    if (hasActiveCustomDomain(m)) {
+      link = `https://${m.customDomain.domain}`
+    } else {
+      const store = storesMap[m.storeId]
+      const slug = m && m.slug ? m.slug : (store ? (store.slug || slugify(store.name || String(store.id))) : companyId)
+      link = `${window.location.origin}/public/${slug}`
+    }
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(link)
       Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1200, icon:'success', title: 'Link copiado' })
