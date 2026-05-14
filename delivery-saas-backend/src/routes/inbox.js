@@ -903,6 +903,159 @@ router.get('/customer/:id', async (req, res) => {
   }
 });
 
+// ─── 12c. GET /search-contacts?q=... — Find customers with WhatsApp for inbox search
+//
+// Returns a small list of contacts whose fullName or whatsapp matches the
+// query. Numeric queries are treated as phone numbers and matched against
+// all phone variants (with/without DDI, with/without 9th digit). Each row
+// includes the existing WhatsApp Conversation (if any) so the frontend can
+// open it directly; otherwise the row is "openable as new". When the query
+// is numeric and matches no Customer, we add a single synthetic row so the
+// user can create a contact + conversation on the fly.
+router.get('/search-contacts', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json([]);
+
+    const digits = q.replace(/\D+/g, '');
+    const isNumeric = digits.length >= 4 && digits.length === q.replace(/\s|-|\(|\)|\+/g, '').length;
+
+    let customers = [];
+    if (isNumeric) {
+      const variants = buildPhoneVariants(digits);
+      customers = await prisma.customer.findMany({
+        where: { companyId, whatsapp: { in: variants } },
+        select: { id: true, fullName: true, whatsapp: true, phone: true },
+        take: 20,
+      });
+    } else {
+      customers = await prisma.customer.findMany({
+        where: {
+          companyId,
+          whatsapp: { not: null },
+          fullName: { contains: q, mode: 'insensitive' },
+        },
+        select: { id: true, fullName: true, whatsapp: true, phone: true },
+        orderBy: { fullName: 'asc' },
+        take: 20,
+      });
+    }
+
+    // For each contact, look up the matching WhatsApp conversation (any status)
+    // so the frontend can show "tem conversa" badge and route the click.
+    const rows = await Promise.all(customers.map(async (c) => {
+      const variants = buildPhoneVariants(c.whatsapp || '');
+      const conversation = await prisma.conversation.findFirst({
+        where: { companyId, channel: 'WHATSAPP', channelContactId: { in: variants } },
+        select: { id: true, status: true, lastMessageAt: true },
+        orderBy: { lastMessageAt: 'desc' },
+      });
+      return { type: 'contact', customer: c, conversation };
+    }));
+
+    // Numeric query that didn't resolve to any Customer → offer "create new".
+    if (isNumeric && rows.length === 0) {
+      rows.push({ type: 'new-number', whatsapp: digits });
+    }
+
+    return res.json(rows);
+  } catch (err) {
+    console.error('[inbox] GET /search-contacts error:', err);
+    return res.status(500).json({ message: 'Erro ao buscar contatos', error: err.message });
+  }
+});
+
+// ─── 12d. POST /start-conversation — Open existing or create a new WhatsApp Conversation
+//
+// Body: { customerId?, whatsapp? }
+//
+// - If customerId is given, the conversation is anchored to that customer.
+// - Otherwise, whatsapp (digits, with or without DDI) is normalized and the
+//   matching Customer is found via buildPhoneVariants. If still none, a new
+//   Customer is created silently with fullName = whatsapp.
+// - We look up the WhatsApp Conversation for that contact (any status). If
+//   found: status flips to OPEN (reopen behavior) and the existing row is
+//   returned. If not found: a new Conversation is created with status=OPEN
+//   and channelContactId = normalized phone with DDI.
+router.post('/start-conversation', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    let { customerId, whatsapp } = req.body || {};
+
+    let customer = null;
+    if (customerId) {
+      customer = await prisma.customer.findFirst({ where: { id: customerId, companyId } });
+      if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
+    } else {
+      const digits = String(whatsapp || '').replace(/\D+/g, '');
+      if (!digits) return res.status(400).json({ message: 'customerId ou whatsapp é obrigatório' });
+      const variants = buildPhoneVariants(digits);
+      customer = await prisma.customer.findFirst({ where: { companyId, whatsapp: { in: variants } } });
+      if (!customer) {
+        // Store whatsapp without DDI (matches services/customers.js convention).
+        const storedWhatsapp = digits.startsWith('55') ? digits.slice(2) : digits;
+        customer = await prisma.customer.create({
+          data: { companyId, fullName: storedWhatsapp, whatsapp: storedWhatsapp },
+        });
+      }
+    }
+
+    // Canonical channelContactId is the with-DDI form, matching what inbound
+    // webhooks write. buildPhoneVariants is still used for lookup to catch
+    // legacy rows that may have been stored without the country prefix.
+    const phoneDigits = String(customer.whatsapp || '').replace(/\D+/g, '');
+    if (!phoneDigits) return res.status(400).json({ message: 'Cliente não possui WhatsApp cadastrado' });
+    const variants = buildPhoneVariants(phoneDigits);
+    const canonicalContactId = phoneDigits.startsWith('55') ? phoneDigits : '55' + phoneDigits;
+
+    let conversation = await prisma.conversation.findFirst({
+      where: { companyId, channel: 'WHATSAPP', channelContactId: { in: variants } },
+    });
+
+    if (conversation) {
+      // Reopen if it was closed/archived. Always ensure the customer is linked.
+      const updates = {};
+      if (conversation.status !== 'OPEN') updates.status = 'OPEN';
+      if (!conversation.customerId) updates.customerId = customer.id;
+      if (Object.keys(updates).length) {
+        conversation = await prisma.conversation.update({
+          where: { id: conversation.id },
+          data: updates,
+        });
+      }
+    } else {
+      conversation = await prisma.conversation.create({
+        data: {
+          companyId,
+          channel: 'WHATSAPP',
+          channelContactId: canonicalContactId,
+          customerId: customer.id,
+          contactName: customer.fullName || null,
+          status: 'OPEN',
+          unreadCount: 0,
+        },
+      });
+    }
+
+    // Return with the same shape as GET /conversations/:id so the frontend
+    // can drop it into the store without an extra fetch.
+    const full = await prisma.conversation.findUnique({
+      where: { id: conversation.id },
+      include: {
+        customer: { select: { id: true, fullName: true, whatsapp: true, phone: true, email: true, cpf: true } },
+        assignedUser: { select: { id: true, name: true } },
+        store: { select: { id: true, name: true } },
+        menu: { select: { id: true, name: true } },
+      },
+    });
+    return res.json(full);
+  } catch (err) {
+    console.error('[inbox] POST /start-conversation error:', err);
+    return res.status(500).json({ message: 'Erro ao iniciar conversa', error: err.message });
+  }
+});
+
 // ─── 12b. GET /customer/by-phone/:phone — Find customer by phone variants ───
 
 router.get('/customer/by-phone/:phone', async (req, res) => {

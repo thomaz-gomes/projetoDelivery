@@ -1,14 +1,54 @@
 <template>
   <div class="d-flex flex-column h-100" style="min-height: 0;">
     <!-- Search + Store filter -->
-    <div class="p-2 border-bottom d-flex gap-2">
-      <input
-        type="text"
-        v-model="searchInput"
-        @input="onSearchInput"
-        placeholder="Buscar contato ou mensagem..."
-        class="form-control form-control-sm flex-grow-1"
-      />
+    <div class="p-2 border-bottom d-flex gap-2 position-relative">
+      <div class="flex-grow-1 position-relative">
+        <input
+          type="text"
+          v-model="searchInput"
+          @input="onSearchInput"
+          @focus="onSearchFocus"
+          @blur="onSearchBlur"
+          placeholder="Buscar contato por nome ou número..."
+          class="form-control form-control-sm"
+        />
+        <!-- Search results dropdown -->
+        <div
+          v-if="searchOpen && (searchResults.length > 0 || searchLoading || searchError)"
+          class="search-dropdown"
+        >
+          <div v-if="searchLoading" class="search-dropdown__hint">Buscando...</div>
+          <div v-else-if="searchError" class="search-dropdown__hint text-danger">{{ searchError }}</div>
+          <template v-else>
+            <button
+              v-for="(r, i) in searchResults"
+              :key="r.type === 'contact' ? r.customer.id : 'new-' + i"
+              type="button"
+              class="search-dropdown__item"
+              @mousedown.prevent="onPickResult(r)"
+            >
+              <template v-if="r.type === 'contact'">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div class="me-2 text-truncate">
+                    <div class="fw-semibold text-truncate">{{ r.customer.fullName || r.customer.whatsapp || '—' }}</div>
+                    <div class="small text-muted text-truncate">
+                      <i class="bi bi-whatsapp me-1"></i>{{ r.customer.whatsapp || '—' }}
+                    </div>
+                  </div>
+                  <span v-if="r.conversation" class="badge bg-success-subtle text-success-emphasis flex-shrink-0">Conversa</span>
+                  <span v-else class="badge bg-light text-muted flex-shrink-0">Nova</span>
+                </div>
+              </template>
+              <template v-else>
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-plus-circle text-success"></i>
+                  <span>Iniciar conversa com <strong>{{ r.whatsapp }}</strong></span>
+                </div>
+              </template>
+            </button>
+          </template>
+        </div>
+      </div>
       <select v-model="filters.storeId" @change="onFiltersChange" class="form-select form-select-sm" style="width: auto; max-width: 140px;">
         <option :value="null">Todas as lojas</option>
         <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
@@ -89,8 +129,13 @@ const inboxStore = useInboxStore();
 const authStore = useAuthStore();
 const filters = inboxStore.filters;
 
-const searchInput = ref(filters.search);
+const searchInput = ref('');
 const stores = ref([]);
+const searchOpen = ref(false);
+const searchLoading = ref(false);
+const searchError = ref('');
+const searchResults = ref([]);
+let searchToken = 0;
 
 const statusOptions = [
   { label: 'Abertas', value: 'OPEN' },
@@ -118,10 +163,66 @@ const unreadCount = computed(() => {
 let searchTimer = null;
 function onSearchInput() {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    filters.search = searchInput.value;
-    inboxStore.fetchConversations();
-  }, 400);
+  const q = (searchInput.value || '').trim();
+  if (!q) {
+    searchResults.value = [];
+    searchError.value = '';
+    searchLoading.value = false;
+    return;
+  }
+  searchLoading.value = true;
+  searchError.value = '';
+  searchOpen.value = true;
+  searchTimer = setTimeout(async () => {
+    const myToken = ++searchToken;
+    try {
+      const data = await inboxStore.searchContacts(q);
+      if (myToken !== searchToken) return; // stale
+      searchResults.value = data;
+    } catch (e) {
+      if (myToken !== searchToken) return;
+      searchError.value = e?.response?.data?.message || 'Falha ao buscar contatos';
+      searchResults.value = [];
+    } finally {
+      if (myToken === searchToken) searchLoading.value = false;
+    }
+  }, 300);
+}
+
+function onSearchFocus() {
+  if (searchInput.value.trim()) searchOpen.value = true;
+}
+
+function onSearchBlur() {
+  // Delay so click on a result (mousedown) registers before the dropdown closes.
+  setTimeout(() => { searchOpen.value = false; }, 150);
+}
+
+async function onPickResult(r) {
+  try {
+    if (r.type === 'contact' && r.conversation) {
+      // Existing conversation — ensure store has it then open. If the row was
+      // CLOSED, the list (filtered by OPEN) won't have it; start-conversation
+      // reopens server-side and returns the updated row.
+      const inStore = inboxStore.conversations.some(c => c.id === r.conversation.id);
+      let convId = r.conversation.id;
+      if (!inStore || r.conversation.status !== 'OPEN') {
+        const conv = await inboxStore.startConversation({ customerId: r.customer.id });
+        convId = conv?.id || convId;
+      }
+      emit('select', convId);
+    } else if (r.type === 'contact') {
+      const conv = await inboxStore.startConversation({ customerId: r.customer.id });
+      if (conv?.id) emit('select', conv.id);
+    } else if (r.type === 'new-number') {
+      const conv = await inboxStore.startConversation({ whatsapp: r.whatsapp });
+      if (conv?.id) emit('select', conv.id);
+    }
+  } finally {
+    searchInput.value = '';
+    searchResults.value = [];
+    searchOpen.value = false;
+  }
 }
 
 function setStatus(value) {
@@ -158,3 +259,36 @@ onMounted(async () => {
   } catch (e) { stores.value = []; }
 });
 </script>
+
+<style scoped>
+.search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 1050;
+}
+.search-dropdown__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #f1f3f5;
+}
+.search-dropdown__item:last-child { border-bottom: 0; }
+.search-dropdown__item:hover { background: #f8f9fa; }
+.search-dropdown__hint {
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  color: #6c757d;
+}
+</style>

@@ -124,6 +124,22 @@ export const useInboxStore = defineStore('inbox', {
       return data;
     },
 
+    async searchContacts(q) {
+      if (!q || !String(q).trim()) return [];
+      const { data } = await api.get('/inbox/search-contacts', { params: { q } });
+      return Array.isArray(data) ? data : [];
+    },
+
+    async startConversation({ customerId, whatsapp } = {}) {
+      const { data } = await api.post('/inbox/start-conversation', { customerId, whatsapp });
+      if (data && data.id) {
+        const idx = this.conversations.findIndex(c => c.id === data.id);
+        if (idx >= 0) this.conversations[idx] = { ...this.conversations[idx], ...data };
+        else this.conversations.unshift(data);
+      }
+      return data;
+    },
+
     async fetchQuickReplies() {
       const { data } = await api.get('/inbox/quick-replies');
       this.quickReplies = Array.isArray(data) ? data : [];

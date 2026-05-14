@@ -10,6 +10,7 @@ import { prisma } from './prisma.js'
 import { runRecurringBilling } from './jobs/recurringBilling.js'
 import { aggregateMenuEvents } from './jobs/aggregateMenuEvents.js'
 import { generateRecurringExpenses } from './jobs/generateRecurringExpenses.js'
+import { closeInactiveConversations } from './jobs/closeInactiveConversations.js'
 
 /**
  * Reset mensal de créditos de IA: toda empresa tem seus créditos restaurados
@@ -79,6 +80,20 @@ cron.schedule('30 2 * * *', async () => {
   }
 }, {
   timezone: 'America/Sao_Paulo',
+})
+
+/**
+ * Auto-close de conversas inativas: a cada hora marca como CLOSED conversas
+ * cuja última mensagem foi há mais de 24h. Mensagem inbound nova reabre
+ * automaticamente (ver messaging/inboundPipeline.js).
+ */
+cron.schedule('0 * * * *', async () => {
+  try {
+    const { closed } = await closeInactiveConversations()
+    if (closed > 0) console.log(`[Cron] Conversas auto-fechadas por inatividade (>24h): ${closed}`)
+  } catch (err) {
+    console.error('[Cron] Erro ao fechar conversas inativas:', err)
+  }
 })
 
 /**

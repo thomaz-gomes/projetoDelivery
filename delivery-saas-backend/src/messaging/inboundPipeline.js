@@ -217,10 +217,16 @@ async function resolveConversation(msg, customer) {
     },
   })
   if (conversation) {
-    if (!conversation.provider && msg.provider) {
+    // Reopen conversations that were auto-closed by the 24h inactivity job
+    // (or manually closed/archived) — inbound traffic should always bring
+    // them back into the operator's main queue.
+    const patch = {}
+    if (!conversation.provider && msg.provider) patch.provider = msg.provider
+    if (conversation.status !== 'OPEN') patch.status = 'OPEN'
+    if (Object.keys(patch).length) {
       conversation = await prisma.conversation.update({
         where: { id: conversation.id },
-        data: { provider: msg.provider },
+        data: patch,
       })
     }
     return conversation
