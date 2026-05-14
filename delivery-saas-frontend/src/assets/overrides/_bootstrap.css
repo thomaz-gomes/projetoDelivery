@@ -6,6 +6,11 @@
 body {
   background-color: var(--bg-app);
   color: var(--text-primary);
+  min-height: 100vh;
+  margin: 0;
+}
+#app {
+  min-height: 100vh;
 }
 
 /* ── Cards ── */
