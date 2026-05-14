@@ -846,6 +846,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
                 <th>Tipo</th>
                 <th>Valor</th>
                 <th>Status</th>
+                <th>Pago em</th>
                 <th>Pedido</th>
                 <th>Observação</th>
                 <th v-if="isAdmin" class="text-end">Ações</th>
@@ -853,7 +854,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             </thead>
             <tbody>
               <tr v-if="!loadingTx && transactions.length === 0">
-                <td :colspan="isAdmin ? 7 : 6" class="text-center text-muted py-4">Nenhuma transação no período.</td>
+                <td :colspan="isAdmin ? 8 : 7" class="text-center text-muted py-4">Nenhuma transação no período.</td>
               </tr>
               <tr v-for="t in transactions" :key="t.id" :class="{ 'text-muted': t.status === 'CANCELLED' }">
                 <td>{{ formatDateWithOptionalTime(t.date) }}</td>
@@ -880,6 +881,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
                     {{ statusBadge(t.status).label }}
                   </span>
                 </td>
+                <td>{{ t.paidAt ? formatDateWithOptionalTime(t.paidAt) : '—' }}</td>
                 <td>{{ t.order?.displaySimple ? `#${t.order.displaySimple}` : (t.order?.displayId || '—') }}</td>
                 <td>{{ t.note || '—' }}</td>
                 <td v-if="isAdmin" class="text-end">

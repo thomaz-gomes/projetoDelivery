@@ -297,10 +297,13 @@ onMounted(() => { fetchTransactions(); });
           :class="{ 'opacity-50': t.status === 'CANCELLED' }"
         >
           <div class="flex-grow-1 min-w-0">
-            <div class="small text-muted d-flex align-items-center gap-2 mb-1">
+            <div class="small text-muted d-flex align-items-center gap-2 mb-1 flex-wrap">
               <span>{{ formatDateWithOptionalTime(t.date) }}</span>
               <span class="badge" :class="riderStatusBadge(t.status).cls" style="font-size:0.65rem">
                 {{ riderStatusBadge(t.status).label }}
+              </span>
+              <span v-if="t.paidAt" class="text-success" style="font-size:0.7rem">
+                <i class="bi bi-check-circle-fill me-1"></i>Pago em {{ formatDateWithOptionalTime(t.paidAt) }}
               </span>
             </div>
             <div class="text-truncate" :class="{ 'text-decoration-line-through': t.status === 'CANCELLED' }">
