@@ -249,17 +249,64 @@ customersRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
   const { id } = req.params;
   const { fullName, cpf, whatsapp, phone } = req.body || {};
+
+  // Multi-tenant guard: ensure the target customer belongs to this company.
+  const existing = await prisma.customer.findFirst({ where: { id, companyId }, select: { id: true } });
+  if (!existing) return res.status(404).json({ message: 'Cliente não encontrado' });
+
   const patch = {};
   if (fullName) patch.fullName = fullName;
   if (cpf !== undefined) patch.cpf = cpf ? cpf.replace(/\D+/g, '') : null;
   if (whatsapp !== undefined) patch.whatsapp = whatsapp ? normalizePhone(whatsapp) : null;
   if (phone !== undefined) patch.phone = phone ? normalizePhone(phone) : null;
 
-  const updated = await prisma.customer.update({
-    where: { id },
-    data: patch,
-  });
-  res.json(updated);
+  // Pre-check unique fields (companyId+whatsapp, companyId+cpf) so we can
+  // return a useful 409 with the conflicting customer id — instead of
+  // letting Prisma throw P2002, which surfaces as a generic 500.
+  if (patch.whatsapp) {
+    const conflict = await prisma.customer.findFirst({
+      where: { companyId, whatsapp: patch.whatsapp, id: { not: id } },
+      select: { id: true, fullName: true },
+    });
+    if (conflict) {
+      return res.status(409).json({
+        message: `WhatsApp já cadastrado para "${conflict.fullName}". Use a opção de combinar clientes para mesclar os cadastros.`,
+        conflictField: 'whatsapp',
+        conflictCustomerId: conflict.id,
+      });
+    }
+  }
+  if (patch.cpf) {
+    const conflict = await prisma.customer.findFirst({
+      where: { companyId, cpf: patch.cpf, id: { not: id } },
+      select: { id: true, fullName: true },
+    });
+    if (conflict) {
+      return res.status(409).json({
+        message: `CPF já cadastrado para "${conflict.fullName}". Use a opção de combinar clientes para mesclar os cadastros.`,
+        conflictField: 'cpf',
+        conflictCustomerId: conflict.id,
+      });
+    }
+  }
+
+  try {
+    const updated = await prisma.customer.update({ where: { id }, data: patch });
+    return res.json(updated);
+  } catch (e) {
+    // Race condition fallback: another request claimed the value between
+    // the pre-check and the update. Surface as 409 with a generic message.
+    if (e?.code === 'P2002') {
+      const field = Array.isArray(e?.meta?.target) ? e.meta.target.find(f => f !== 'companyId') : null;
+      return res.status(409).json({
+        message: field === 'cpf'
+          ? 'CPF já cadastrado para outro cliente.'
+          : 'WhatsApp já cadastrado para outro cliente.',
+        conflictField: field || null,
+      });
+    }
+    throw e;
+  }
 });
 
 // Create a new address for an existing customer
