@@ -4,7 +4,7 @@
     <div
       class="border-end bg-white d-flex flex-column"
       :class="{ 'd-none d-md-flex': inboxStore.activeConversationId }"
-      style="width: 360px; min-width: 300px; flex-shrink: 0;"
+      style="width: 360px; min-width: 300px; flex-shrink: 0; min-height: 0;"
     >
       <ConversationList @select="selectConversation" />
     </div>

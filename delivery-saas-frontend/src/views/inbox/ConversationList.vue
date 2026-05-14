@@ -1,5 +1,5 @@
 <template>
-  <div class="d-flex flex-column h-100">
+  <div class="d-flex flex-column h-100" style="min-height: 0;">
     <!-- Search + Store filter -->
     <div class="p-2 border-bottom d-flex gap-2">
       <input
@@ -60,7 +60,7 @@
     </div>
 
     <!-- List -->
-    <div class="flex-grow-1 overflow-auto">
+    <div class="flex-grow-1 overflow-auto" style="min-height: 0;">
       <div v-if="inboxStore.loading" class="text-center py-3 text-muted small">Carregando...</div>
       <ConversationItem
         v-for="conv in inboxStore.conversations"
