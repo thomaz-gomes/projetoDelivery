@@ -311,7 +311,7 @@ function goToRiderQr(){
 </script>
 
 <template>
-  <div :class="isRiderRoute ? 'rider-app' : 'bg-light text-dark'">
+  <div :class="isRiderRoute ? 'rider-app' : 'bg-light text-dark'" :style="!isRiderRoute ? 'min-height: 100vh' : ''">
     <template v-if="showLayout">
       <!-- Mobile top header with hamburger (visible < md) -->
       <header v-if="showMobileHeader" class="mobile-topbar d-md-none">

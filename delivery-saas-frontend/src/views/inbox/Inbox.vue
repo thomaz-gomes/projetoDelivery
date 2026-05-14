@@ -1,5 +1,5 @@
 <template>
-  <div class="d-flex" style="height: calc(100vh - 56px); overflow: hidden;">
+  <div class="d-flex h-100" style="overflow: hidden;">
     <!-- List panel: 360px wide, hide on mobile when chat is active -->
     <div
       class="border-end bg-white d-flex flex-column"
