@@ -933,6 +933,60 @@ nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), 
       )
     }
 
+    // Enrich each protocol with emitente config (CNPJ, IE, endereço, razão,
+    // fone) loaded from the per-store settings.json. Also extract the 44-digit
+    // chNFe + dhRecbto + qrCode so the DANFE renderer has everything it needs
+    // without re-fetching anything. SEFAZ response doesn't carry the qrCode —
+    // it lives in the signed NFe XML at nfe-module/nfe/xmls/emitidas/, which
+    // we locate by serie + nNF parsed from chNFe.
+    const emitCache = new Map()
+    const emitidasDir = path.join(process.cwd(), 'nfe-module', 'nfe', 'xmls', 'emitidas')
+    let emitidasFiles = []
+    try { emitidasFiles = fs.readdirSync(emitidasDir) } catch { /* dir may not exist yet */ }
+
+    data = data.map((p) => {
+      const cacheKey = `${p.companyId}::${p.storeId || ''}`
+      if (!emitCache.has(cacheKey)) {
+        try { emitCache.set(cacheKey, getEmitenteConfig(p.companyId, p.storeId)) }
+        catch { emitCache.set(cacheKey, null) }
+      }
+      const emit = emitCache.get(cacheKey)
+
+      const chMatch = p.rawXml?.match(/<chNFe>(\d{44})<\/chNFe>/)
+      const chNFe = chMatch ? chMatch[1] : null
+      const protoMatch = p.rawXml?.match(/<protNFe[\s\S]*?<\/protNFe>/)
+      const protoBlock = protoMatch ? protoMatch[0] : ''
+      const dhMatch = protoBlock.match(/<dhRecbto>([^<]+)<\/dhRecbto>/)
+      const digValMatch = protoBlock.match(/<digVal>([^<]+)<\/digVal>/)
+
+      // chNFe positions 22-24 = serie, 25-33 = nNF — match the signed XML
+      // file pattern `nfe-<serie>-<nNF>-<timestamp>.xml` to pull out the
+      // CDATA-wrapped qrCode that the spec mandates on every DANFE NFC-e.
+      let qrCodeUrl = null
+      if (chNFe && emitidasFiles.length) {
+        const serie = String(parseInt(chNFe.slice(22, 25), 10))
+        const nNF = String(parseInt(chNFe.slice(25, 34), 10))
+        const prefix = `nfe-${serie}-${nNF}-`
+        const match = emitidasFiles.find((f) => f.startsWith(prefix))
+        if (match) {
+          try {
+            const xml = fs.readFileSync(path.join(emitidasDir, match), 'utf8')
+            const qrMatch = xml.match(/<qrCode><!\[CDATA\[([^\]]+)\]\]><\/qrCode>/) || xml.match(/<qrCode>([^<]+)<\/qrCode>/)
+            if (qrMatch) qrCodeUrl = qrMatch[1]
+          } catch { /* ignore */ }
+        }
+      }
+
+      return {
+        ...p,
+        emit,
+        chNFe,
+        dhRecbto: dhMatch ? dhMatch[1] : null,
+        digVal: digValMatch ? digValMatch[1] : null,
+        qrCodeUrl,
+      }
+    })
+
     return res.json({ data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } })
   } catch (err) {
     return res.status(500).json({ error: err?.message || String(err) })
