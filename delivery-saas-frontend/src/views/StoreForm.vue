@@ -593,6 +593,11 @@ async function load() {
       form.value.ibgeCode = s.ibgeCode || ''
       form.value.latitude = s.latitude != null ? s.latitude : null
       form.value.longitude = s.longitude != null ? s.longitude : null
+      // Telefone e WhatsApp da loja — gravados em Store.phone/Store.whatsapp.
+      // O save() já enviava esses campos pro backend, mas o load() não estava
+      // lendo de volta, fazendo o campo parecer "não persistir" ao reabrir.
+      form.value.phone = s.phone || ''
+      form.value.whatsapp = s.whatsapp || ''
       // Load cities for the state if store already has one
       if (s.state) loadIbgeCities(s.state)
   form.value.logoUrl = s.logoUrl ? assetUrl(s.logoUrl) : ''

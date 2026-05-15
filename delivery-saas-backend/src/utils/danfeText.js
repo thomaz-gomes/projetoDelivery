@@ -60,7 +60,13 @@ export function buildDanfeText(data, opts = {}) {
   const bairro = enderEmit.xBairro || ''
   const municipio = [enderEmit.xMun, enderEmit.UF].filter(Boolean).join(' - ')
   const cep = (enderEmit.CEP || '').replace(/\D/g, '').replace(/^(\d{5})(\d{3})$/, '$1-$2')
-  const fone = enderEmit.fone || (emitenteConfig && emitenteConfig.fone) || ''
+  // Fone: tenta enderEmit.fone → emitenteConfig.fone → Store.phone (Prisma).
+  // Permite ao operador ter um telefone fiscal separado no enderEmit OU
+  // reutilizar o telefone geral da loja se não cadastrou o fiscal.
+  const fone = enderEmit.fone
+    || (emitenteConfig && emitenteConfig.fone)
+    || (order && order.store && order.store.phone)
+    || ''
 
   const sep = '-'.repeat(W)
   const dbl = '='.repeat(W)
