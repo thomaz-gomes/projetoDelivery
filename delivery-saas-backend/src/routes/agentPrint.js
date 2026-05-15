@@ -135,7 +135,17 @@ async function formatDanfeText(orderId) {
     console.warn('formatDanfeText: failed to load fiscal config:', e && e.message)
   }
 
-  return buildDanfeText({ protocol, order, fiscalConfig, emitenteConfig })
+  // Match the DANFE width to the company's configured printer so the agent
+  // does not have to wrap our pre-formatted columns. PrinterSetting.width
+  // stores the effective column count (default 48 = 80mm Font A; 32 for
+  // 58mm Font A). Falls back to 48 if no setting is configured.
+  let cols = 48
+  try {
+    const setting = await prisma.printerSetting.findUnique({ where: { companyId: order.companyId } })
+    if (setting && Number(setting.width) > 0) cols = Number(setting.width)
+  } catch (e) { /* keep default */ }
+
+  return buildDanfeText({ protocol, order, fiscalConfig, emitenteConfig }, { cols })
 }
 
 router.post('/', async (req, res) => {

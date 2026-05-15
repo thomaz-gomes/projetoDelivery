@@ -53,10 +53,20 @@ test('DANFE — título da divisão II usa "DANFE NFC-e"', () => {
   assert.match(out, /de Consumidor Eletronica/i)
 })
 
-test('DANFE — cabeçalho dos itens com colunas (# Cod Descricao + Qtd UN x Vl Unit / Vl Total)', () => {
+test('DANFE — cabeçalho dos itens com colunas (# Cod Descricao + Qtd x Vl Unit / Vl Total)', () => {
   const out = buildDanfeText(makeFixture())
   assert.match(out, /# Cod\s+Descricao/)
-  assert.match(out, /Qtd UN x Vl Unit.*Vl Total/)
+  assert.match(out, /Qtd x Vl Unit\s+Vl Total/)
+})
+
+test('DANFE — largura configurável via opts.cols (32 cols para 58mm)', () => {
+  const out = buildDanfeText(makeFixture(), { cols: 32 })
+  // URLs e o placeholder [QR:...] são longos demais para se ajustar a 32
+  // colunas — confiamos no agente para fazer a quebra com _wordBreakSmart.
+  for (const line of out.split('\n')) {
+    if (/^https?:|^\[QR:/.test(line.trimStart())) continue
+    assert.ok(line.length <= 32, `linha excedeu 32 cols (${line.length}): ${line}`)
+  }
 })
 
 test('DANFE — itens enumerados com SKU padrão 123123 + nome do produto', () => {

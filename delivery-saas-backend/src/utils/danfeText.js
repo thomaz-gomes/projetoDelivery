@@ -5,7 +5,8 @@
  * Técnicas do DANFE NFC-e + QR Code), alinhado visualmente com o modelo
  * "padrão Saipos" que o operador esperava na impressora térmica.
  *
- * Layout (48 colunas — impressora térmica 80mm):
+ * Layout (largura configurável — 48 colunas em 80mm Font A,
+ * 32 colunas em 58mm Font A):
  *   I    Cabeçalho (nome fantasia, CNPJ + razão, endereço, fone + I.E.)
  *   II   Identificação (DANFE NFC-e)
  *   III  Itens (cabeçalho de colunas + 2 linhas por item: # cód nome /
@@ -19,10 +20,15 @@
  *   X    Tributos Aproximados (Lei 12.741, estimativa IBPT)
  *
  * @param {object} data
+ * @param {object} [opts]
+ * @param {number} [opts.cols=48]  Largura útil em colunas. 32 para 58mm,
+ *                                 48 para 80mm Font A. Deve bater com o
+ *                                 PrinterSetting.width para evitar wrap.
  * @returns {string} Texto multilinha pronto para impressão.
  */
-export function buildDanfeText(data) {
+export function buildDanfeText(data, opts = {}) {
   const { protocol, order, fiscalConfig = {}, emitenteConfig = null } = data
+  const W = Number(opts.cols) > 0 ? Number(opts.cols) : 48
   const rawXml = protocol?.rawXml || ''
 
   const extract = (tag, xml) => {
@@ -52,7 +58,6 @@ export function buildDanfeText(data) {
   const cep = (enderEmit.CEP || '').replace(/\D/g, '').replace(/^(\d{5})(\d{3})$/, '$1-$2')
   const fone = enderEmit.fone || (emitenteConfig && emitenteConfig.fone) || ''
 
-  const W = 48
   const sep = '-'.repeat(W)
   const dbl = '='.repeat(W)
   const center = (s) => { const sp = Math.max(0, W - s.length); return ' '.repeat(Math.floor(sp / 2)) + s }
@@ -104,20 +109,26 @@ export function buildDanfeText(data) {
 
   // ── Divisão II: Identificação do documento ──────────────────────────
   lines.push(center('DANFE NFC-e'))
-  lines.push(center('Documento Auxiliar da Nota Fiscal'))
-  lines.push(center('de Consumidor Eletronica'))
+  if (W >= 36) {
+    lines.push(center('Documento Auxiliar da Nota Fiscal'))
+    lines.push(center('de Consumidor Eletronica'))
+  } else {
+    lines.push(center('Doc. Auxiliar NFC-e'))
+  }
   lines.push(sep)
   if (tpAmb === '2') {
-    lines.push(center('** HOMOLOGACAO - SEM VALOR FISCAL **'))
+    lines.push(center(W >= 38 ? '** HOMOLOGACAO - SEM VALOR FISCAL **' : 'HOMOLOGACAO - SEM VALOR FISCAL'))
     lines.push(sep)
   }
 
   // ── Divisão III: Itens ──────────────────────────────────────────────
   // Cabeçalho compacto: "#  Cód   Descrição"; depois cada item ocupa duas
   // linhas (descrição completa + bloco quantidade/valor unitário/total
-  // alinhados à direita) para caber confortavelmente em 48 colunas.
+  // alinhados à direita). Funciona tanto em 48 colunas quanto em 32 cols
+  // — o sub-cabeçalho da segunda linha cabe na largura mínima.
   lines.push(ljust('# Cod   Descricao', W))
-  lines.push(rjust('Qtd UN x Vl Unit             Vl Total', W))
+  const subHeader = 'Qtd x Vl Unit   Vl Total'
+  lines.push(rjust(subHeader.length <= W ? subHeader : 'Vl Unit  Vl Total', W))
   lines.push(sep)
   const items = order.items || []
   let totalItens = 0
@@ -203,7 +214,10 @@ export function buildDanfeText(data) {
   // (typical for legacy payload.payment{} without amount/value).
   if (payments.length === 1 && payments[0].value === 0) payments[0].value = vNF
 
-  lines.push(ljust('FORMA DE PAGAMENTO', W - 10) + rjust('Valor Pago', 10))
+  // Header da seção. Em larguras estreitas (<= 32 cols), "Valor Pago"
+  // sobrescreveria a label, então omitimos o sub-rótulo.
+  if (W >= 36) lines.push(ljust('FORMA DE PAGAMENTO', W - 10) + rjust('Valor Pago', 10))
+  else lines.push('FORMA DE PAGAMENTO')
   for (const p of payments) {
     lines.push(totalLine(p.label, p.value))
   }
@@ -285,9 +299,18 @@ export function buildDanfeText(data) {
   if (deliveryFee > 0) {
     lines.push(`Taxa de entrega: ${money(deliveryFee)}`)
   }
-  lines.push(`Tributos Aproximados — Total ${money(tributosTotal)}`)
-  lines.push(`Federal ${money(tributosFederal)}  Estadual ${money(tributosEstadual)}`)
-  lines.push(`Municipal ${money(tributosMunicipal)}  Fonte: IBPT`)
+  if (W >= 38) {
+    lines.push(`Tributos Aproximados — Total ${money(tributosTotal)}`)
+    lines.push(`Federal ${money(tributosFederal)}  Estadual ${money(tributosEstadual)}`)
+    lines.push(`Municipal ${money(tributosMunicipal)}  Fonte: IBPT`)
+  } else {
+    // Em larguras estreitas, uma linha por valor.
+    lines.push('Tributos Aprox. (IBPT):')
+    lines.push(totalLine('Total', tributosTotal))
+    lines.push(totalLine('Federal', tributosFederal))
+    lines.push(totalLine('Estadual', tributosEstadual))
+    lines.push(totalLine('Municipal', tributosMunicipal))
+  }
 
   lines.push(dbl)
 
