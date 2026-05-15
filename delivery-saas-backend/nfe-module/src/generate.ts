@@ -192,7 +192,7 @@ export async function generateNFCeXml(payload: {
     pCOFINS?: number    // alíquota COFINS %
     pIPI?: number       // alíquota IPI %
   }>
-  pag?: { tPag?: string; vPag?: string; vTroco?: string }
+  pag?: { tPag?: string; vPag?: string; vTroco?: string; card?: { tBand?: string; CNPJ?: string; cAut?: string } }
   infRespTec?: { CNPJ: string; xContato: string; email: string; fone: string }
   csc?: string
   cscId?: string
@@ -321,8 +321,16 @@ export async function generateNFCeXml(payload: {
         tPag: safeTpag,
         vPag: fmtDec2(payload.pag?.vPag || vNF),
       }
-      // cStat 391: tPag=03/04 (credit/debit) requires <card> with tpIntegra=2 (não integrado)
-      if (safeTpag === '03' || safeTpag === '04') detPag.card = { tpIntegra: '2' }
+      // cStat 391/SEFAZ-BA: tPag=03/04 (credit/debit) requires <card> with at least
+      // tpIntegra and tBand. Default tBand=99 (Outros) when the caller hasn't
+      // identified the bandeira; otherwise SEFAZ-BA rejects with "Nao informados
+      // os dados do cartao de credito/debito nas Formas de Pagamento".
+      if (safeTpag === '03' || safeTpag === '04') {
+        const card: any = { tpIntegra: '2', tBand: payload.pag?.card?.tBand || '99' }
+        if (payload.pag?.card?.CNPJ) card.CNPJ = payload.pag.card.CNPJ.replace(/\D/g, '').padStart(14, '0')
+        if (payload.pag?.card?.cAut) card.cAut = payload.pag.card.cAut
+        detPag.card = card
+      }
       return { detPag, vTroco: fmtDec2(payload.pag?.vTroco || '0') }
     })()
   }
