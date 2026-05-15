@@ -768,26 +768,27 @@ onMounted(load)
 </script>
 
 <style scoped>
-/* Cupom DANFE NFC-e — proporções de impressora térmica 80mm */
+/* Cupom DANFE NFC-e — proporções de impressora térmica 80mm + Font B
+   compacta (mesma fonte que o agente usa para imprimir). */
 .danfe-cupom {
-  max-width: 340px;
-  font-size: 11px;
+  max-width: 320px;
+  font-size: 10px;
   font-family: "Courier New", monospace;
   color: #000;
   background: #fff;
   padding: 8px;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 .danfe-store-name {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: none;
 }
-.danfe-small { font-size: 10px; }
+.danfe-small { font-size: 9px; }
 .danfe-items-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 10px;
+  font-size: 9px;
 }
 .danfe-items-table th {
   border-bottom: 1px solid #000;
