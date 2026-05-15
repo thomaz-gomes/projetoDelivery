@@ -54,7 +54,19 @@
     <!-- Tabela -->
     <ListCard title="Notas Fiscais Emitidas" icon="bi bi-receipt">
       <template #actions>
-        <span class="text-muted small">{{ total }} nota(s)</span>
+        <div class="d-flex align-items-center gap-2">
+          <button
+            class="btn btn-sm btn-outline-success"
+            @click="downloadXmls"
+            :disabled="exporting || rows.length === 0"
+            title="Baixa um ZIP com todos os XMLs no formato nfeProc (NFe assinada + protocolo) + relacao.csv, padrão para envio ao contador"
+          >
+            <span v-if="exporting" class="spinner-border spinner-border-sm me-1"></span>
+            <i v-else class="bi bi-file-earmark-zip me-1"></i>
+            {{ exporting ? 'Gerando...' : 'Baixar XMLs do período' }}
+          </button>
+          <span class="text-muted small">{{ total }} nota(s)</span>
+        </div>
       </template>
 
       <div class="table-responsive">
@@ -626,6 +638,44 @@ async function downloadXml(row) {
     URL.revokeObjectURL(url)
   } catch (e) {
     showAlert('danger', 'Erro ao baixar XML: ' + (e?.response?.data?.error || e?.message || 'Erro'))
+  }
+}
+
+// Download bundle (ZIP) with every NFC-e in the current filter period in
+// nfeProc format + relacao.csv summary — what contadores ask for monthly.
+const exporting = ref(false)
+async function downloadXmls() {
+  exporting.value = true
+  try {
+    const params = {}
+    if (filters.value.from)   params.from   = filters.value.from
+    if (filters.value.to)     params.to     = filters.value.to
+    if (filters.value.status) params.status = filters.value.status
+    const resp = await api.get('/nfe/export', { params, responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/zip' }))
+    const a = document.createElement('a')
+    a.href = url
+    const fromTag = (filters.value.from || 'inicio').replace(/[^0-9-]/g, '')
+    const toTag = (filters.value.to || 'hoje').replace(/[^0-9-]/g, '')
+    a.download = `nfes-${fromTag}_${toTag}.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+    showAlert('success', 'Arquivo gerado — verifique a pasta de Downloads.')
+  } catch (e) {
+    // 404 chega como blob — converter pra JSON pra ler a mensagem
+    let msg = 'Erro ao gerar ZIP'
+    try {
+      if (e?.response?.data instanceof Blob) {
+        const txt = await e.response.data.text()
+        const parsed = JSON.parse(txt)
+        msg = parsed?.error || msg
+      } else {
+        msg = e?.response?.data?.error || e?.message || msg
+      }
+    } catch { /* keep default */ }
+    showAlert('warning', msg)
+  } finally {
+    exporting.value = false
   }
 }
 
