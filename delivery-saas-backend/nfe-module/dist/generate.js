@@ -278,11 +278,14 @@ async function generateNFCeXml(payload) {
                 vPag: fmtDec2(payload.pag?.vPag || vNF),
             };
             // cStat 391/SEFAZ-BA: tPag=03/04 (credit/debit) requires <card> with at least
-            // tpIntegra and tBand. Default tBand=99 (Outros) when the caller hasn't
-            // identified the bandeira; otherwise SEFAZ-BA rejects with "Nao informados
-            // os dados do cartao de credito/debito nas Formas de Pagamento".
+            // tpIntegra and tBand. tpIntegra=1 (integrado, e.g. Mercado Pago) demands
+            // CNPJ + tBand; tpIntegra=2 (não integrado) accepts tBand alone with '99'
+            // (Outros) as the safe fallback when the bandeira is unknown.
             if (safeTpag === '03' || safeTpag === '04') {
-                const card = { tpIntegra: '2', tBand: payload.pag?.card?.tBand || '99' };
+                const card = {
+                    tpIntegra: payload.pag?.card?.tpIntegra || '2',
+                    tBand: payload.pag?.card?.tBand || '99',
+                };
                 if (payload.pag?.card?.CNPJ)
                     card.CNPJ = payload.pag.card.CNPJ.replace(/\D/g, '').padStart(14, '0');
                 if (payload.pag?.card?.cAut)

@@ -202,13 +202,14 @@ export function buildNfePayload(data) {
       }
     },
     transp: { modFrete: '9' },
-    pag: {
-      detPag: {
+    pag: (() => {
+      const detPag = {
         tPag: pag?.tPag || '99',
-        vPag: fmtDec2(pag?.vPag || total.vNF || total.vProd || '0')
-      },
-      vTroco: fmtDec2(pag?.vTroco || '0')
-    }
+        vPag: fmtDec2(pag?.vPag || total.vNF || total.vProd || '0'),
+      }
+      if (pag?.card) detPag.card = pag.card
+      return { detPag, vTroco: fmtDec2(pag?.vTroco || '0') }
+    })()
   }
 
   // NFC-e (mod 65): <dest> is optional — omit entirely for anonymous sales (no CPF/CNPJ).
@@ -333,7 +334,8 @@ export async function signNfeXml(infNFe, certConfig, fiscalOpts = {}) {
     pag: {
       tPag: infNFe.pag?.detPag?.tPag || '99',
       vPag: infNFe.pag?.detPag?.vPag || '0.00',
-      vTroco: infNFe.pag?.vTroco || '0.00'
+      vTroco: infNFe.pag?.vTroco || '0.00',
+      card: infNFe.pag?.detPag?.card || null,
     },
     csc: fiscalOpts.csc || null,
     cscId: fiscalOpts.cscId || null
@@ -498,6 +500,37 @@ const PAYMENT_MAP = {
   ONLINE: '01',
 }
 
+// SEFAZ NFC-e card brand codes for <tBand>. Falls back to '99' (Outros) when
+// the configured brand is unknown — accepted by SVRS for tpIntegra=2.
+function brandToTBand(brand) {
+  if (!brand) return '99'
+  const b = String(brand).toLowerCase().trim()
+  if (/visa/.test(b)) return '01'
+  if (/master/.test(b)) return '02'
+  if (/amex|american/.test(b)) return '03'
+  if (/sorocred/.test(b)) return '04'
+  if (/diners/.test(b)) return '05'
+  if (/elo/.test(b)) return '06'
+  if (/hiper/.test(b)) return '07'
+  if (/aura/.test(b)) return '08'
+  if (/cabal/.test(b)) return '09'
+  if (/banricompras/.test(b)) return '10'
+  return '99'
+}
+
+// Maps PaymentMethod.paymentType to NFC-e tPag codes. Returns null when the
+// type is unrecognized so the caller can fall back to PAYMENT_MAP/'01'.
+function paymentTypeToTPag(type) {
+  if (!type) return null
+  const t = String(type).toLowerCase().trim()
+  if (/credit|cr[eé]dito/.test(t)) return '03'
+  if (/debit|d[eé]bito/.test(t)) return '04'
+  if (/pix/.test(t)) return '17'
+  if (/cash|dinheiro|money/.test(t)) return '01'
+  if (/voucher|vale|ticket/.test(t)) return '05'
+  return null
+}
+
 export async function emitNfeFromOrder(orderId) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -619,7 +652,45 @@ export async function emitNfeFromOrder(orderId) {
 
   const paymentRaw = order.payload?.payment || order.payload?.rawPayload?.payment || {}
   const methodKey = paymentRaw.method || paymentRaw.methodCode || paymentRaw.type || ''
-  const tPag = PAYMENT_MAP[methodKey] || '99'
+
+  // Resolve the company's PaymentMethod by code/name to pick up the
+  // accurate tPag, card brand and intermediary CNPJ. The static PAYMENT_MAP
+  // remains as a fallback when no PaymentMethod row is configured.
+  let paymentMethodRow = null
+  if (methodKey) {
+    try {
+      paymentMethodRow = await prisma.paymentMethod.findFirst({
+        where: {
+          companyId: order.companyId,
+          OR: [{ code: String(methodKey) }, { name: String(methodKey) }],
+        },
+      })
+    } catch (e) { /* non-blocking */ }
+  }
+
+  let tPag = PAYMENT_MAP[methodKey] || '99'
+  if (paymentMethodRow?.paymentType) {
+    const fromType = paymentTypeToTPag(paymentMethodRow.paymentType)
+    if (fromType) tPag = fromType
+  }
+
+  // <card> group for card payments (tPag=03 credit, 04 debit). Without it
+  // SEFAZ-BA rejects with cStat 391 ("Nao informados os dados do cartao de
+  // credito/debito"). When the PaymentMethod is flagged as online and has
+  // an intermediary CNPJ, we send tpIntegra=1 (integrado) with the proper
+  // CNPJ + bandeira; otherwise tpIntegra=2 (não integrado) with the
+  // bandeira when known, defaulting to '99' (Outros).
+  let cardData = null
+  if (tPag === '03' || tPag === '04') {
+    const intermediaryCnpjDigits = String(paymentMethodRow?.intermediaryCnpj || '').replace(/\D/g, '')
+    const isOnlineIntegrated = !!paymentMethodRow?.isOnline && intermediaryCnpjDigits.length === 14
+    cardData = {
+      tpIntegra: isOnlineIntegrated ? '1' : '2',
+      tBand: brandToTBand(paymentMethodRow?.cardBrand) || '99',
+    }
+    if (isOnlineIntegrated) cardData.CNPJ = intermediaryCnpjDigits
+    if (paymentRaw.authCode || paymentRaw.cAut) cardData.cAut = String(paymentRaw.authCode || paymentRaw.cAut)
+  }
 
     // Resolve customer CPF from multiple possible sources
     const customerCpf = order.customer?.cpf
@@ -679,7 +750,7 @@ export async function emitNfeFromOrder(orderId) {
       vICMS: '0.00',
       vNF: vProd.toFixed(2)
     },
-    pag: { tPag, vPag: vProd.toFixed(2), vTroco: '0.00' }
+    pag: { tPag, vPag: vProd.toFixed(2), vTroco: '0.00', card: cardData }
   }
 
   const infNFe = buildNfePayload(data)
