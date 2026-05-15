@@ -510,17 +510,25 @@ async function sendEmail() {
 }
 
 function openDanfe(row) {
-  // Build items list from order payload
+  // Build items list. Prefer the OrderItem relation (canonical for POS and
+  // public-menu orders); fall back to payload.items for legacy/imported
+  // orders that store items inside the JSON payload instead.
   const items = []
   try {
+    const relItems = Array.isArray(row.order?.items) ? row.order.items : []
     const payload = row.order?.payload || {}
-    const rawItems = payload.items || payload.rawPayload?.items || []
+    const payloadItems = Array.isArray(payload.items)
+      ? payload.items
+      : (Array.isArray(payload.rawPayload?.items) ? payload.rawPayload.items : [])
+    const rawItems = relItems.length ? relItems : payloadItems
     for (const it of rawItems) {
+      const qty = Number(it.quantity || it.qCom || 1)
+      const price = Number(it.price || it.vUnCom || 0)
       items.push({
         name: it.name || it.xProd || 'Produto',
-        qty: Number(it.quantity || it.qCom || 1),
-        price: Number(it.price || it.vUnCom || 0),
-        total: Number(it.quantity || 1) * Number(it.price || 0)
+        qty,
+        price,
+        total: qty * price,
       })
     }
   } catch { /* ignore */ }

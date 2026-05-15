@@ -907,7 +907,17 @@ nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), 
         where, skip, take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          order: { select: { id: true, displayId: true, displaySimple: true, customerName: true, total: true, payload: true } },
+          order: {
+            select: {
+              id: true,
+              displayId: true,
+              displaySimple: true,
+              customerName: true,
+              total: true,
+              payload: true,
+              items: { select: { id: true, name: true, quantity: true, price: true } },
+            },
+          },
           store: { select: { id: true, name: true } }
         }
       }),
