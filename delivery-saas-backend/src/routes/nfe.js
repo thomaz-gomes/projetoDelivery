@@ -937,10 +937,13 @@ nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), 
     // fone) loaded from the per-store settings.json. Also extract the 44-digit
     // chNFe + dhRecbto + qrCode so the DANFE renderer has everything it needs
     // without re-fetching anything. SEFAZ response doesn't carry the qrCode —
-    // it lives in the signed NFe XML at nfe-module/nfe/xmls/emitidas/, which
-    // we locate by serie + nNF parsed from chNFe.
+    // it lives in the signed NFe XML at /app/nfe/xmls/emitidas/ (relative
+    // path "./nfe/xmls/emitidas" from cwd /app, matching nfe-module/config.json
+    // xmlDirs.emitidas). The "nfe-module/" prefix that previously appeared in
+    // this path was wrong — the module writes the files to cwd-relative paths,
+    // not module-relative.
     const emitCache = new Map()
-    const emitidasDir = path.join(process.cwd(), 'nfe-module', 'nfe', 'xmls', 'emitidas')
+    const emitidasDir = path.join(process.cwd(), 'nfe', 'xmls', 'emitidas')
     let emitidasFiles = []
     try { emitidasFiles = fs.readdirSync(emitidasDir) } catch { /* dir may not exist yet */ }
 
