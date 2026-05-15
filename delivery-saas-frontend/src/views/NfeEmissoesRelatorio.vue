@@ -277,7 +277,7 @@
                   </tr>
                   <tr v-for="(it, i) in danfeModal.items" :key="i">
                     <td>{{ String(i + 1).padStart(3, '0') }}</td>
-                    <td>{{ (it.id || '').slice(0, 8) || '—' }}</td>
+                    <td>123123</td>
                     <td>{{ it.name }}</td>
                     <td class="text-end">{{ it.qty }}</td>
                     <td class="text-end">UN</td>
