@@ -137,24 +137,22 @@ async function formatDanfeText(orderId) {
 
   // Match the DANFE width to the company's configured printer so the agent
   // does not have to wrap our pre-formatted columns. PrinterSetting.width
-  // stores the Font A column count (default 48 = 80mm; 32 for 58mm).
+  // stores the effective column count (default 48 = 80mm Font A; 32 for
+  // 58mm Font A). Falls back to 48 if no setting is configured.
   //
-  // We render the DANFE in Font B (smaller, denser) for a more compact
-  // receipt — Font B fits more cols at the same paper width:
-  //   80mm:  48 cols Font A  →  64 cols Font B
-  //   58mm:  32 cols Font A  →  42 cols Font B
-  // The [FONT:B] directive prepended below tells templateEngine to switch
-  // before printing; opts.cols matches the Font B column count so our
-  // pre-aligned columns line up under the smaller font.
-  let fontACols = 48
+  // NOTE: We previously prepended "[FONT:B]" to switch to the denser
+  // ESC/POS font, but older print-agent builds don't recognize that
+  // directive and print it as literal text. Until every operator has
+  // the latest agent, we render at Font A and rely on opts.compact
+  // (set below) to keep the receipt visually shorter via tighter
+  // section spacing.
+  let cols = 48
   try {
     const setting = await prisma.printerSetting.findUnique({ where: { companyId: order.companyId } })
-    if (setting && Number(setting.width) > 0) fontACols = Number(setting.width)
+    if (setting && Number(setting.width) > 0) cols = Number(setting.width)
   } catch (e) { /* keep default */ }
-  const cols = fontACols === 32 ? 42 : 64
 
-  const body = buildDanfeText({ protocol, order, fiscalConfig, emitenteConfig }, { cols })
-  return `[FONT:B]\n${body}`
+  return buildDanfeText({ protocol, order, fiscalConfig, emitenteConfig }, { cols, compact: true })
 }
 
 router.post('/', async (req, res) => {

@@ -29,6 +29,10 @@
 export function buildDanfeText(data, opts = {}) {
   const { protocol, order, fiscalConfig = {}, emitenteConfig = null } = data
   const W = Number(opts.cols) > 0 ? Number(opts.cols) : 48
+  // Compact mode: drops redundant subtitle/banner lines and the IBPT footer
+  // so the cupom occupies less paper. Used when the printer's effective
+  // font can't be reduced (legacy print-agent builds without [FONT:B]).
+  const compact = !!opts.compact
   const rawXml = protocol?.rawXml || ''
 
   const extract = (tag, xml) => {
@@ -109,11 +113,14 @@ export function buildDanfeText(data, opts = {}) {
 
   // ── Divisão II: Identificação do documento ──────────────────────────
   lines.push(center('DANFE NFC-e'))
-  if (W >= 36) {
-    lines.push(center('Documento Auxiliar da Nota Fiscal'))
-    lines.push(center('de Consumidor Eletronica'))
-  } else {
-    lines.push(center('Doc. Auxiliar NFC-e'))
+  // Compact: oculta o subtítulo (3 linhas → 0). Não é exigido pelo MOC.
+  if (!compact) {
+    if (W >= 36) {
+      lines.push(center('Documento Auxiliar da Nota Fiscal'))
+      lines.push(center('de Consumidor Eletronica'))
+    } else {
+      lines.push(center('Doc. Auxiliar NFC-e'))
+    }
   }
   lines.push(sep)
   if (tpAmb === '2') {
@@ -124,11 +131,12 @@ export function buildDanfeText(data, opts = {}) {
   // ── Divisão III: Itens ──────────────────────────────────────────────
   // Cabeçalho compacto: "#  Cód   Descrição"; depois cada item ocupa duas
   // linhas (descrição completa + bloco quantidade/valor unitário/total
-  // alinhados à direita). Funciona tanto em 48 colunas quanto em 32 cols
-  // — o sub-cabeçalho da segunda linha cabe na largura mínima.
+  // alinhados à direita). Em compact mode, oculta o sub-header.
   lines.push(ljust('# Cod   Descricao', W))
-  const subHeader = 'Qtd x Vl Unit   Vl Total'
-  lines.push(rjust(subHeader.length <= W ? subHeader : 'Vl Unit  Vl Total', W))
+  if (!compact) {
+    const subHeader = 'Qtd x Vl Unit   Vl Total'
+    lines.push(rjust(subHeader.length <= W ? subHeader : 'Vl Unit  Vl Total', W))
+  }
   lines.push(sep)
   const items = order.items || []
   let totalItens = 0
@@ -179,7 +187,7 @@ export function buildDanfeText(data, opts = {}) {
   if (desconto > 0) lines.push(totalLine('Descontos R$', desconto, '- '))
   if (acrescimo > 0) lines.push(totalLine('Acrescimos R$', acrescimo, '+ '))
   lines.push(totalLine('VALOR A PAGAR R$', vNF))
-  lines.push('')
+  if (!compact) lines.push('')
 
   // ── Divisão V: Forma de Pagamento ──────────────────────────────────
   // Aceita payload.payments[] (multi), payload.payment{} (legado) ou cai
@@ -227,11 +235,13 @@ export function buildDanfeText(data, opts = {}) {
   lines.push(sep)
 
   // ── Divisão VI: Consulta por chave de acesso ───────────────────────
-  lines.push(center('Consulte pela Chave de Acesso em'))
+  // Em compact, "Consulte pela Chave de Acesso em" some — a URL + chave
+  // + QR Code abaixo já dão ao cliente como verificar a nota.
+  if (!compact) lines.push(center('Consulte pela Chave de Acesso em'))
   const consultaUrl = tpAmb === '1'
     ? 'http://nfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx'
     : 'http://hnfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx'
-  lines.push(center(consultaUrl))
+  if (!compact) lines.push(center(consultaUrl))
   if (chNFe) {
     const chaveFormatted = chNFe.replace(/(\d{4})(?=\d)/g, '$1 ').trim()
     // Quebra em até duas linhas para caber em W colunas
@@ -254,13 +264,17 @@ export function buildDanfeText(data, opts = {}) {
   // que o operador possa digitar manualmente em caso de falha.
   const qrUrl = chNFe ? `${consultaUrl}?p=${chNFe}` : consultaUrl
   lines.push(`[QR:${qrUrl}]`)
-  lines.push('')
+  if (!compact) lines.push('')
 
   // ── Divisão VIII: NFC-e + Protocolo ─────────────────────────────────
   lines.push(`NFC-e n. ${nNF}  Serie ${String(serie).padStart(3, '0')}`)
   lines.push(`Emissao: ${emissaoStr}`)
-  lines.push(`Protocolo de Autorizacao:`)
-  lines.push(nProt || '—')
+  if (compact) {
+    lines.push(`Protocolo: ${nProt || '—'}`)
+  } else {
+    lines.push(`Protocolo de Autorizacao:`)
+    lines.push(nProt || '—')
+  }
   lines.push(sep)
 
   // ── Divisão IX: Consumidor ──────────────────────────────────────────
@@ -289,9 +303,8 @@ export function buildDanfeText(data, opts = {}) {
   lines.push(sep)
 
   // ── Divisão X: Tributos Aproximados (IBPT — Lei 12.741) ────────────
-  // Estimativa para Simples Nacional, alinhada com o cálculo da DANFE
-  // visual do frontend. Substituir por valores reais via tabela IBPT
-  // assim que a integração estiver disponível.
+  // Estimativa para Simples Nacional. Em compact mode, condensa em uma
+  // única linha "Trib. Aprox. IBPT" para economizar papel.
   const tributosFederal = subtotal * 0.063
   const tributosEstadual = subtotal * 0.0961
   const tributosMunicipal = 0
@@ -299,7 +312,9 @@ export function buildDanfeText(data, opts = {}) {
   if (deliveryFee > 0) {
     lines.push(`Taxa de entrega: ${money(deliveryFee)}`)
   }
-  if (W >= 38) {
+  if (compact) {
+    lines.push(`Trib. Aprox. IBPT: ${money(tributosTotal)}`)
+  } else if (W >= 38) {
     lines.push(`Tributos Aproximados — Total ${money(tributosTotal)}`)
     lines.push(`Federal ${money(tributosFederal)}  Estadual ${money(tributosEstadual)}`)
     lines.push(`Municipal ${money(tributosMunicipal)}  Fonte: IBPT`)
