@@ -235,8 +235,10 @@
           <div class="modal-header d-print-none">
             <h5 class="modal-title"><i class="bi bi-receipt me-2"></i>DANFE NFC-e</h5>
             <div class="ms-auto d-flex gap-2">
-              <button class="btn btn-sm btn-primary" @click="printDanfe">
-                <i class="bi bi-printer me-1"></i>Imprimir
+              <button class="btn btn-sm btn-primary" @click="printDanfe" :disabled="printing">
+                <span v-if="printing" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="bi bi-printer me-1"></i>
+                {{ printing ? 'Enviando...' : 'Imprimir no agente' }}
               </button>
               <button class="btn-close" @click="danfeModal.show = false"></button>
             </div>
@@ -730,19 +732,36 @@ function openDanfe(row) {
   danfeModal.value = { show: true, row, items, emitNome, emitCnpj, emitEnder }
 }
 
-function printDanfe() {
-  const el = document.getElementById('danfe-print-area')
-  if (!el) return
-  const w = window.open('', '_blank', 'width=400,height=700')
-  w.document.write(`<html><head><title>DANFE NFC-e</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <style>body{font-size:12px;} .danfe-cupom{max-width:300px;margin:0 auto;}</style>
-    </head><body>`)
-  w.document.write(el.innerHTML)
-  w.document.write('</body></html>')
-  w.document.close()
-  w.focus()
-  setTimeout(() => { w.print(); w.close() }, 400)
+// Sends the DANFE to the connected print agent via POST /agent-print
+// (fiscal: true). Backend pulls the protocol + order + emit config and
+// formats the thermal text via buildDanfeText. Same path used by
+// SaleDetails.vue#imprimirDanfe — keeps the print pipeline centralized
+// instead of relying on the browser's window.print() dialog.
+const printing = ref(false)
+async function printDanfe() {
+  const row = danfeModal.value.row
+  const orderId = row?.order?.id || row?.orderId
+  if (!orderId) {
+    showAlert('warning', 'Pedido não identificado — não foi possível enviar para impressão.')
+    return
+  }
+  printing.value = true
+  try {
+    const { data } = await api.post('/agent-print', {
+      id: orderId,
+      storeId: row.order?.storeId || row.storeId || null,
+      fiscal: true,
+    })
+    if (data?.ok) {
+      showAlert('success', data.printed ? 'DANFE enviada ao agente de impressão.' : 'DANFE enfileirada para o próximo agente conectado.')
+    } else {
+      throw new Error(data?.error || 'Falha ao enviar para o agente')
+    }
+  } catch (e) {
+    showAlert('warning', e?.response?.data?.error || e?.message || 'Falha ao enviar DANFE ao agente.')
+  } finally {
+    printing.value = false
+  }
 }
 
 onMounted(load)
