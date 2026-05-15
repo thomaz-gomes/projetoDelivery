@@ -277,11 +277,13 @@ async function generateNFCeXml(payload) {
                 tPag: safeTpag,
                 vPag: fmtDec2(payload.pag?.vPag || vNF),
             };
-            // cStat 391/SEFAZ-BA: tPag=03/04 (credit/debit) requires <card> with at least
-            // tpIntegra and tBand. tpIntegra=1 (integrado, e.g. Mercado Pago) demands
-            // CNPJ + tBand; tpIntegra=2 (não integrado) accepts tBand alone with '99'
-            // (Outros) as the safe fallback when the bandeira is unknown.
-            if (safeTpag === '03' || safeTpag === '04') {
+            // cStat 391/SEFAZ-BA: tPag=03/04 (credit/debit) requires <card> with at
+            // least tpIntegra + tBand. SVRS also fires the same 391 rule for tPag=17
+            // (PIX) when the operator dispatches integrated PIX without the card
+            // group — even though the spec marks it optional. So we emit <card> for
+            // PIX rows as well when the caller provided card data.
+            const needsCardGroup = safeTpag === '03' || safeTpag === '04' || (safeTpag === '17' && !!payload.pag?.card);
+            if (needsCardGroup) {
                 const card = {
                     tpIntegra: payload.pag?.card?.tpIntegra || '2',
                     tBand: payload.pag?.card?.tBand || '99',

@@ -674,19 +674,22 @@ export async function emitNfeFromOrder(orderId) {
     if (fromType) tPag = fromType
   }
 
-  // <card> group for card payments (tPag=03 credit, 04 debit). Without it
-  // SEFAZ-BA rejects with cStat 391 ("Nao informados os dados do cartao de
-  // credito/debito"). When the PaymentMethod is flagged as online and has
-  // an intermediary CNPJ, we send tpIntegra=1 (integrado) with the proper
-  // CNPJ + bandeira; otherwise tpIntegra=2 (não integrado) with the
-  // bandeira when known, defaulting to '99' (Outros).
+  // <card> group:
+  // - tPag=03/04 (credit/debit): required by SEFAZ-BA. Without it cStat 391
+  //   ("Nao informados os dados do cartao de credito/debito") fires.
+  // - tPag=17 (PIX): SVRS reuses the same cStat 391 rule even for PIX rows
+  //   when the integration data is missing, so we emit <card> here too.
+  // tpIntegra=1 (integrado) when PaymentMethod is online AND has a 14-digit
+  // intermediary CNPJ; otherwise tpIntegra=2 (não integrado). PIX has no
+  // bandeira — '99' is the convention for "não se aplica".
   let cardData = null
-  if (tPag === '03' || tPag === '04') {
+  const isCardOrPix = tPag === '03' || tPag === '04' || tPag === '17'
+  if (isCardOrPix) {
     const intermediaryCnpjDigits = String(paymentMethodRow?.intermediaryCnpj || '').replace(/\D/g, '')
     const isOnlineIntegrated = !!paymentMethodRow?.isOnline && intermediaryCnpjDigits.length === 14
     cardData = {
       tpIntegra: isOnlineIntegrated ? '1' : '2',
-      tBand: brandToTBand(paymentMethodRow?.cardBrand) || '99',
+      tBand: tPag === '17' ? '99' : (brandToTBand(paymentMethodRow?.cardBrand) || '99'),
     }
     if (isOnlineIntegrated) cardData.CNPJ = intermediaryCnpjDigits
     if (paymentRaw.authCode || paymentRaw.cAut) cardData.cAut = String(paymentRaw.authCode || paymentRaw.cAut)
