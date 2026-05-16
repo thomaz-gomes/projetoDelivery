@@ -756,14 +756,16 @@ export async function emitNfeFromOrder(orderId) {
     const orderTypeUpper = String(order.orderType || '').toUpperCase()
     const indPres = orderTypeUpper === 'DELIVERY' ? '4' : '1'
 
-    // nNF: em produção, segue o contador manual cadastrado em
-    // settings.json (nextNNF) — SEFAZ exige sequência sem saltos por série.
-    // Em homologação caímos no displayId pra não consumir o contador real
-    // durante testes. Após uma autorização bem-sucedida o nextNNF é
-    // incrementado abaixo, antes de retornar ao caller.
+    // nNF: usa o contador manual cadastrado em settings.json (nextNNF) sempre
+    // que ele estiver presente — tanto em produção (onde SEFAZ exige sequência
+    // sem saltos por série) quanto em homologação (para o operador testar o
+    // comportamento de incremento antes de migrar). Quando o contador não
+    // estiver configurado, cai no displayId/timestamp para não bloquear a
+    // emissão. Após uma autorização bem-sucedida o nextNNF é incrementado
+    // abaixo, antes de retornar ao caller.
     const isProduction = tpAmb === '1'
     const configuredNextNNF = Number(emitenteConfig?.nextNNF) > 0 ? Math.floor(emitenteConfig.nextNNF) : null
-    const nNFForEmission = isProduction && configuredNextNNF
+    const nNFForEmission = configuredNextNNF
       ? String(configuredNextNNF)
       : String(order.displaySimple || order.displayId || Date.now())
 
@@ -844,10 +846,11 @@ export async function emitNfeFromOrder(orderId) {
     rawXml: result.rawXml
   })
 
-  // Em produção: se a autorização passou e usamos o contador manual, avança
-  // o nextNNF em settings.json. SEFAZ rejeita reuso de nNF na mesma série —
-  // o increment garante a próxima emissão saia com o número seguinte.
-  if (isProduction && configuredNextNNF && result.status === 'autorizado') {
+  // Se a autorização passou e usamos o contador manual, avança o nextNNF em
+  // settings.json. SEFAZ rejeita reuso de nNF na mesma série em produção —
+  // o increment garante a próxima emissão saia com o número seguinte. Em
+  // homologação o increment também roda para o operador validar o fluxo.
+  if (configuredNextNNF && result.status === 'autorizado') {
     try {
       await persistNextNNF(order.companyId, order.storeId, configuredNextNNF + 1)
     } catch (e) {
