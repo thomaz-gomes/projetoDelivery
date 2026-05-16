@@ -825,20 +825,15 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
 
         const neighs = await prisma.neighborhood.findMany({ where: { companyId: updated.companyId } });
 
-        // Priority 1: use deliveryNeighborhood field stored on the order (set by iFood/AiqFome webhooks)
+        // Use the shared matcher (strict normalize then soft substring) so
+        // this flow agrees with publicMenu/order-creation/retroactive script.
+        // Previously this used .toLowerCase()-only comparisons, which silently
+        // dropped accent and punctuation variants — that's why the retroactive
+        // script had to be re-run every day to backfill the missing rider fees.
+
+        // Priority 1: denormalized deliveryNeighborhood (iFood/AiqFome webhooks, PDV input)
         if (updated.deliveryNeighborhood) {
-          const stored = String(updated.deliveryNeighborhood).trim().toLowerCase();
-          const m = neighs.find(n => {
-            if (!n || !n.name) return false;
-            if (String(n.name).toLowerCase() === stored) return true;
-            if (n.aliases) {
-              try {
-                const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
-                if (arr.some(a => String(a || '').toLowerCase() === stored)) return true;
-              } catch (e) {}
-            }
-            return false;
-          });
+          const m = findNeighborhoodMatch(neighs, updated.deliveryNeighborhood);
           if (m) neighborhoodName = m.name;
         }
 
@@ -850,19 +845,7 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
           if (payloadText) addrCandidates.push(payloadText);
 
           if (addrCandidates.length) {
-            const addrText = addrCandidates.join(' ').toLowerCase();
-            const matched = neighs.find(n => {
-              if (!n || !n.name) return false;
-              const name = String(n.name).toLowerCase();
-              if (addrText.includes(name)) return true;
-              if (n.aliases) {
-                try {
-                  const arr = Array.isArray(n.aliases) ? n.aliases : JSON.parse(n.aliases);
-                  if (arr.some(a => addrText.includes(String(a || '').toLowerCase()))) return true;
-                } catch (e) {}
-              }
-              return false;
-            });
+            const matched = findNeighborhoodMatch(neighs, addrCandidates.join(' '));
             if (matched) neighborhoodName = matched.name;
           }
         }
@@ -1175,19 +1158,17 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       return s + (base + optsSum) * qty;
     }, 0);
 
-    // neighborhood delivery fee
+    // neighborhood delivery fee — use the shared matcher so accents,
+    // whitespace and punctuation variants resolve the same way as in
+    // publicMenu, the inbox order wizard and the retroactive rider script.
+    // Without this, a bairro typed exactly as cadastrado but with a missing
+    // accent (or an extra trailing space) fell through to deliveryFee = 0.
     let deliveryFee = 0;
     try {
-      const neighName = String(address.neighborhood || address.neigh || '').trim().toLowerCase();
+      const neighName = String(address?.neighborhood || address?.neigh || '').trim();
       if (neighName) {
         const neighRows = await prisma.neighborhood.findMany({ where: { companyId } });
-        const matched = neighRows.find(n => {
-          if (!n) return false;
-          const nm = String(n.name || '').toLowerCase();
-          if (nm === neighName) return true;
-          if (n.aliases && Array.isArray(n.aliases) && n.aliases.map(a => String(a).toLowerCase()).includes(neighName)) return true;
-          return false;
-        });
+        const matched = findNeighborhoodMatch(neighRows, neighName);
         if (matched) deliveryFee = Number(matched.deliveryFee || 0);
       }
     } catch (e) { deliveryFee = 0; }
