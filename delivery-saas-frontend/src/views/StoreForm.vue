@@ -150,11 +150,11 @@
                     <TextInput
                       label="Série"
                       labelClass="form-label fw-semibold"
-                      :modelValue="form.nfeSerie || '1'"
+                      v-model="form.nfeSerie"
+                      placeholder="1"
                       inputClass="form-control"
-                      readonly
                     />
-                    <div class="small text-muted mt-1">Definida acima</div>
+                    <div class="small text-muted mt-1">Sincroniza com o campo acima</div>
                   </div>
                   <div class="col-md-4">
                     <TextInput
