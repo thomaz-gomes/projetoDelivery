@@ -303,16 +303,32 @@ router.post('/conversations/:id/send', upload.single('media'), async (req, res) 
       },
     });
 
-    // Update conversation lastMessageAt
-    await prisma.conversation.update({
+    // Update conversation lastMessageAt and refetch so other windows can
+    // hydrate their conversation list preview / ordering.
+    const updatedConversation = await prisma.conversation.update({
       where: { id: conversation.id },
       data: { lastMessageAt: new Date() },
+      include: {
+        customer: { select: { id: true, fullName: true, whatsapp: true } },
+        assignedUser: { select: { id: true, name: true } },
+        store: { select: { id: true, name: true } },
+      },
     });
 
-    // Emit via Socket.IO
+    // Emit via Socket.IO. Match the pattern used by other inbox endpoints
+    // (internal-note, quick-reply, notify.js, router.sendOutbound): emit
+    // `inbox:new-message` to `company_${id}` so other operator windows update
+    // both their conversation list AND their open chat panel in real time.
     const io = req.app.get('io');
     if (io) {
-      io.to(`company:${companyId}`).emit('inbox:message-sent', { conversationId: conversation.id, message });
+      const payload = {
+        conversationId: conversation.id,
+        conversation: updatedConversation,
+        message,
+        companyId,
+      };
+      io.to(`company_${companyId}`).emit('inbox:new-message', payload);
+      io.emit('inbox:new-message:broadcast', payload);
     }
 
     return res.status(201).json(message);
@@ -572,7 +588,7 @@ router.patch('/conversations/:id', requireRole('ADMIN', 'ATTENDANT'), async (req
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`company:${companyId}`).emit('inbox:conversation-updated', conversation);
+      io.to(`company_${companyId}`).emit('inbox:conversation-updated', { conversation });
     }
 
     return res.json(conversation);

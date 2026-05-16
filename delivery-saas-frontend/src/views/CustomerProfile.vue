@@ -178,6 +178,41 @@ async function loadOrders(page = 1) {
   await store.fetchOrders(store.current.id, { skip: (page - 1) * ordersPerPage, take: ordersPerPage });
 }
 
+function extractItemOptions(it) {
+  try {
+    if (!it) return [];
+    let opts = it.options || it.selectedOptions || it.selected || [];
+    if ((!Array.isArray(opts) || opts.length === 0) && it.option) {
+      opts = Array.isArray(it.option) ? it.option : [it.option];
+    }
+    if ((!Array.isArray(opts) || opts.length === 0) && Array.isArray(it.optionGroups)) {
+      const byGroup = [];
+      for (const g of it.optionGroups) {
+        if (Array.isArray(g.selected)) byGroup.push(...g.selected);
+        else if (Array.isArray(g.selectedOptions)) byGroup.push(...g.selectedOptions);
+      }
+      if (byGroup.length) opts = byGroup;
+    }
+    if (!Array.isArray(opts)) return [];
+    return opts.filter(Boolean).map(o => {
+      if (o.option && (o.option.name || o.option.title || o.option.price !== undefined)) {
+        return {
+          name: o.option.name || o.option.title || '',
+          price: Number(o.option.price ?? o.option.unitPrice ?? o.option.amount ?? 0) || 0,
+          quantity: Number(o.qty ?? o.quantity ?? o.option.quantity ?? 1) || 1,
+        };
+      }
+      return {
+        name: o.name || o.title || '',
+        price: Number(o.price ?? o.unitPrice ?? o.amount ?? 0) || 0,
+        quantity: Number(o.quantity ?? o.qty ?? 1) || 1,
+      };
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
 function orderDisplayId(o) {
   if (o.displaySimple != null) return String(o.displaySimple).padStart(2, '0');
   if (o.displayId != null) return String(o.displayId).padStart(2, '0');
@@ -757,15 +792,26 @@ async function manualDebit() {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(item, idx) in selectedOrder.items" :key="idx">
-              <td>{{ item.quantity }}</td>
-              <td>
-                {{ item.name }}
-                <div v-if="item.notes" class="small text-muted">{{ item.notes }}</div>
-              </td>
-              <td class="text-end">{{ formatCurrency(Number(item.price || 0)) }}</td>
-              <td class="text-end">{{ formatCurrency(Number(item.price || 0) * item.quantity) }}</td>
-            </tr>
+            <template v-for="(item, idx) in selectedOrder.items" :key="idx">
+              <tr>
+                <td>{{ item.quantity }}</td>
+                <td>
+                  {{ item.name }}
+                  <div v-if="item.notes" class="small text-muted">{{ item.notes }}</div>
+                </td>
+                <td class="text-end">{{ formatCurrency(Number(item.price || 0)) }}</td>
+                <td class="text-end">{{ formatCurrency(Number(item.price || 0) * item.quantity) }}</td>
+              </tr>
+              <tr v-for="(opt, oi) in extractItemOptions(item)" :key="idx + '-opt-' + oi">
+                <td></td>
+                <td class="ps-4 small text-muted">
+                  <i class="bi bi-plus-circle me-1"></i>
+                  <span v-if="Number(opt.quantity || 1) > 1">{{ opt.quantity }}x </span>{{ opt.name }}
+                </td>
+                <td class="text-end small text-muted">{{ formatCurrency(Number(opt.price || 0)) }}</td>
+                <td class="text-end small text-muted">{{ formatCurrency(Number(opt.price || 0) * Number(opt.quantity || 1) * Number(item.quantity || 1)) }}</td>
+              </tr>
+            </template>
           </tbody>
           <tfoot>
             <tr v-if="selectedOrder.deliveryFee">
