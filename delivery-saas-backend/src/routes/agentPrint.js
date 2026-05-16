@@ -120,7 +120,17 @@ async function formatDanfeText(orderId) {
   const protocol = await prisma.nfeProtocol.findFirst({ where: { orderId }, orderBy: { createdAt: 'desc' } })
   if (!protocol) throw new Error(`NF-e não emitida para o pedido ${orderId}`)
 
-  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, store: true, company: true } })
+  // include product.sku so each item carries the human-readable code that
+  // appears in the <cProd> of the NFC-e and in the printed cupom (column
+  // "Cód"). Without it the template falls back to a static placeholder.
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: { include: { product: { select: { sku: true } } } },
+      store: true,
+      company: true,
+    },
+  })
   if (!order) throw new Error(`Pedido não encontrado: ${orderId}`)
 
   let fiscalConfig = {}

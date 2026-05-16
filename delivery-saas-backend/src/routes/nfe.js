@@ -915,7 +915,16 @@ nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), 
               customerName: true,
               total: true,
               payload: true,
-              items: { select: { id: true, name: true, quantity: true, price: true } },
+              items: {
+                select: {
+                  id: true,
+                  name: true,
+                  quantity: true,
+                  price: true,
+                  productId: true,
+                  product: { select: { sku: true } },
+                },
+              },
             },
           },
           store: { select: { id: true, name: true } }

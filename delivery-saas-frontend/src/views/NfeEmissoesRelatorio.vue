@@ -291,7 +291,7 @@
                   </tr>
                   <tr v-for="(it, i) in danfeModal.items" :key="i">
                     <td>{{ String(i + 1).padStart(3, '0') }}</td>
-                    <td>123123</td>
+                    <td>{{ it.sku || '—' }}</td>
                     <td>{{ it.name }}</td>
                     <td class="text-end">{{ it.qty }}</td>
                     <td class="text-end">UN</td>
@@ -758,6 +758,10 @@ function openDanfe(row) {
       const price = Number(it.price || it.vUnCom || 0)
       items.push({
         id: it.productId || it.id || '',
+        // SKU vem do product (relacionado via productId). Fallback para o
+        // próprio it.sku quando vier de payload legado, depois '—' para o
+        // placeholder não confundir com SKU real.
+        sku: it.product?.sku || it.sku || '',
         name: it.name || it.xProd || 'Produto',
         qty,
         price,

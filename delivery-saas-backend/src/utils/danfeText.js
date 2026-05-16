@@ -149,7 +149,10 @@ export function buildDanfeText(data, opts = {}) {
   let subtotal = 0
   items.forEach((it, idx) => {
     const itemNum = String(idx + 1).padStart(3, '0')
-    const cod = '123123' // SKU padrão até o cadastro ter campo SKU próprio
+    // Cód do produto na NFC-e: usa o SKU cadastrado quando disponível, com
+    // fallback para um placeholder estável. Requer que agentPrint inclua
+    // `product.sku` ao carregar order.items.
+    const cod = it.product?.sku || it.sku || '123123'
     const qty = Number(it.quantity || 1)
     const unit = Number(it.price || 0)
     const total = qty * unit
@@ -303,6 +306,11 @@ export function buildDanfeText(data, opts = {}) {
     const cnpjFmt = cnpjConsumidor.replace(/\D/g, '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
     lines.push(`CONSUMIDOR CNPJ: ${cnpjFmt}`)
     if (consumerName) lines.push(consumerName)
+  } else if (consumerName) {
+    // Sem CPF/CNPJ mas com nome (cliente cadastrado por nome/telefone): mostra
+    // o nome no cabeçalho do bloco — espelha o comportamento do modal de
+    // preview, que sempre exibe o nome quando existe.
+    lines.push(`CONSUMIDOR: ${consumerName}`)
   } else {
     lines.push(center('CONSUMIDOR NAO IDENTIFICADO'))
   }
