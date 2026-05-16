@@ -92,7 +92,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '../api';
 import Swal from 'sweetalert2';
 import { localDateKey } from '../utils/dates';
@@ -122,22 +122,37 @@ async function load() {
   try {
     const params = {};
     if (filterFrom.value) params.from = filterFrom.value;
-    if (filterTo.value) params.to = filterTo.value + 'T23:59:59';
+    // Send plain YYYY-MM-DD; backend resolves end-of-day in BRT.
+    if (filterTo.value) params.to = filterTo.value;
     if (filterRider.value) params.riderId = filterRider.value;
-    const [checkinsRes, ridersRes, rulesRes] = await Promise.all([
-      api.get('/riders/checkins', { params }),
-      api.get('/riders'),
-      api.get('/riders/bonus-rules')
-    ]);
-    checkins.value = checkinsRes.data;
-    riders.value = ridersRes.data;
-    bonusRules.value = rulesRes.data.filter(r => r.active && r.type === 'EARLY_CHECKIN');
+    const requests = [api.get('/riders/checkins', { params })];
+    // Reference data only needs to load once; subsequent filter changes
+    // shouldn't refetch the rider list (it was overwriting riderOptions
+    // mid-flow and could reset the dropdown selection).
+    if (!riders.value.length) requests.push(api.get('/riders'));
+    if (!bonusRules.value.length) requests.push(api.get('/riders/bonus-rules'));
+    const responses = await Promise.all(requests);
+    checkins.value = responses[0].data;
+    let i = 1;
+    if (!riders.value.length) { riders.value = responses[i++].data; }
+    if (!bonusRules.value.length) {
+      bonusRules.value = responses[i++].data.filter(r => r.active && r.type === 'EARLY_CHECKIN');
+    }
   } catch (e) {
     console.error(e);
   } finally {
     loading.value = false;
   }
 }
+
+// Auto-refresh when any filter changes — the explicit Buscar button stays
+// for discoverability, but users who just change the dropdown no longer
+// see stale rows that look like "the filter was ignored".
+let reloadTimer = null;
+watch([filterFrom, filterTo, filterRider], () => {
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => { load(); }, 250);
+});
 
 async function closeShift(c) {
   const confirm = await Swal.fire({
