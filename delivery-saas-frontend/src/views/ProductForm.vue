@@ -109,6 +109,17 @@
               </SelectInput>
               <div class="small text-muted mt-1">Se selecionado, sobrescreve os dados fiscais da categoria</div>
             </div>
+            <div class="col-md-4">
+              <TextInput
+                v-model="form.sku"
+                label="Cód. SKU (NFC-e)"
+                labelClass="form-label"
+                placeholder="Ex: 10245678"
+                inputClass="form-control"
+                maxlength="8"
+              />
+              <div class="small text-muted mt-1">Vai no &lt;cProd&gt; da nota fiscal. Gerado automático se ficar em branco.</div>
+            </div>
         </div>
 
         <!-- Disponibilidade e destaque -->
@@ -233,7 +244,7 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, specialTakeoutPriceEnabled: false, specialTakeoutPrice: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [] })
+const form = ref({ id: null, name: '', description: '', price: 0, specialTakeoutPriceEnabled: false, specialTakeoutPrice: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, sku: '', marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [] })
 const activeTab = ref('general')
 const cashbackEnabled = ref(false)
 const groups = ref([])
@@ -299,6 +310,7 @@ async function load(){
           categoryId: p.categoryId || (p.category && p.category.id) || null,
           cashbackPercent: (p.cashbackPercent !== undefined ? p.cashbackPercent : (p.cashback || null)),
           dadosFiscaisId: p.dadosFiscaisId || null,
+          sku: p.sku || '',
           alwaysAvailable: p.alwaysAvailable !== false,
           weeklySchedule: Array.isArray(p.weeklySchedule) ? p.weeklySchedule : [],
           // The toggle is a derived UI flag — "enabled" iff a non-null special
@@ -350,7 +362,7 @@ async function save(){
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
     if(isEdit){
-      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
+      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, sku: form.value.sku ? String(form.value.sku).trim() : null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
       if(form.value.marketplace) payload.marketplace = form.value.marketplace
       // include cashbackPercent when cashback module is enabled (allow null to clear)
       if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
@@ -372,7 +384,7 @@ async function save(){
         else { router.push({ path: '/menu/admin' }) }
       }
     } else {
-  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
+  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, sku: form.value.sku ? String(form.value.sku).trim() : null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
   if(form.value.marketplace) payload.marketplace = form.value.marketplace
   if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
   if(form.value.specialTakeoutPriceEnabled) payload.specialTakeoutPrice = Number(form.value.specialTakeoutPrice || 0)

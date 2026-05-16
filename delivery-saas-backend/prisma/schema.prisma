@@ -1175,6 +1175,10 @@ model Product {
   dadosFiscaisId      String?
   dadosFiscais        DadosFiscais?        @relation(fields: [dadosFiscaisId], references: [id])
   integrationCode     String?
+  // Código interno do produto que vai no <cProd> da NFC-e. Quando vazio,
+  // o emissor cai no UUID (feio mas válido). Geramos automaticamente com
+  // 8 dígitos iniciando em "1" para produtos já existentes.
+  sku                 String?
   highlightOnSlip     Boolean              @default(false)
   featured            Boolean              @default(false)
   // Availability scheduling (product-level; category-level wins on conflict)

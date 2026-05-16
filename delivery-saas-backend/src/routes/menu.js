@@ -507,7 +507,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-  const { name, description, price = 0, specialTakeoutPrice = undefined, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, stockIngredientId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, featured = false, alwaysAvailable = true, weeklySchedule = null } = body
+  const { name, description, price = 0, specialTakeoutPrice = undefined, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, stockIngredientId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, featured = false, alwaysAvailable = true, weeklySchedule = null, sku = null } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -540,7 +540,10 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
     // receipts from being printed with total 0 when the field was left blank.
     const stoNum = (specialTakeoutPrice === undefined || specialTakeoutPrice === null || specialTakeoutPrice === '') ? null : Number(specialTakeoutPrice)
     const stoFinal = (stoNum !== null && Number.isFinite(stoNum) && stoNum > 0) ? stoNum : null
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
+    // SKU: 8 dígitos começando em "1". Quando o operador não enviar, geramos
+    // automaticamente — assim a NFC-e nunca sai com UUID feio no <cProd>.
+    const skuValue = (sku && String(sku).trim()) ? String(sku).trim() : String(10000000 + Math.floor(Math.random() * 10000000))
+    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, sku: skuValue, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -606,7 +609,7 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, description, price, specialTakeoutPrice, categoryId, position, isActive, image, menuId, technicalSheetId, stockIngredientId, cashbackPercent, dadosFiscaisId, highlightOnSlip, featured, alwaysAvailable, weeklySchedule } = req.body || {}
+  const { name, description, price, specialTakeoutPrice, categoryId, position, isActive, image, menuId, technicalSheetId, stockIngredientId, cashbackPercent, dadosFiscaisId, highlightOnSlip, featured, alwaysAvailable, weeklySchedule, sku } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -701,6 +704,7 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
     // set cashbackPercent if provided (allow null to clear)
     cashbackPercent: cashbackPercent !== undefined ? (cashbackPercent === null ? null : Number(cashbackPercent)) : existing.cashbackPercent,
     dadosFiscaisId: dadosFiscaisId !== undefined ? (dadosFiscaisId || null) : existing.dadosFiscaisId,
+    sku: sku !== undefined ? (sku ? String(sku).trim() : null) : existing.sku,
     highlightOnSlip: highlightOnSlip !== undefined ? Boolean(highlightOnSlip) : existing.highlightOnSlip,
     featured: featured !== undefined ? Boolean(featured) : existing.featured,
     alwaysAvailable: alwaysAvailable !== undefined ? Boolean(alwaysAvailable) : existing.alwaysAvailable,

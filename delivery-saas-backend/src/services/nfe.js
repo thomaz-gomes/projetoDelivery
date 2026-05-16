@@ -621,11 +621,15 @@ export async function emitNfeFromOrder(orderId) {
     const ean = fiscal?.ean ? String(fiscal.ean).replace(/\D/g, '') : null
     const cEAN = (ean && ean.length >= 8) ? ean : 'SEM GTIN'
 
+    // cProd: prefere o SKU do produto (8 dígitos legíveis em <cProd> do NFe);
+    // se faltar (produto avulso ou ainda não backfilled), cai no índice do item
+    // — UUIDs poluem a nota e dificultam a conferência do contador.
+    const cProd = prod?.sku || String(idx + 1)
     return {
       nItem: idx + 1,
       prod: {
         xProd: item.name,
-        cProd: String(item.id || idx + 1),
+        cProd,
         NCM: ncm,
         CFOP: cfop,
         uCom: 'UN',
