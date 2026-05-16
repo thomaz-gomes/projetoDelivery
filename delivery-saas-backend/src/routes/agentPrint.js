@@ -120,9 +120,13 @@ async function formatDanfeText(orderId) {
   const protocol = await prisma.nfeProtocol.findFirst({ where: { orderId }, orderBy: { createdAt: 'desc' } })
   if (!protocol) throw new Error(`NF-e não emitida para o pedido ${orderId}`)
 
+  // `customer: true` é obrigatório para o danfeText.js conseguir imprimir o
+  // CPF (e o nome) no rodapé do cupom. Sem o include, order.customer fica
+  // undefined e o template cai em "CONSUMIDOR NAO IDENTIFICADO" mesmo quando
+  // o pedido tem cliente vinculado com CPF cadastrado.
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: true, store: true, company: true },
+    include: { items: true, store: true, company: true, customer: true },
   })
   if (!order) throw new Error(`Pedido não encontrado: ${orderId}`)
 
