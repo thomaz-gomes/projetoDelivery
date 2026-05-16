@@ -149,17 +149,39 @@ export function buildDanfeText(data, opts = {}) {
     lines.push(rjust(subHeader.length <= W ? subHeader : 'Vl Unit  Vl Total', W))
   }
   lines.push(sep)
-  const items = order.items || []
+  // Expande OrderItem em linhas do cupom: produto-pai + cada opcional como
+  // linha própria (espelha o que nfe.js emite em <det>), para que o cupom
+  // impresso bata com o XML enviado à SEFAZ.
+  const expandedItems = []
+  const rawItems = order.items || []
+  rawItems.forEach((it) => {
+    const qty = Number(it.quantity || 1) || 1
+    const basePrice = Number(it.price || 0) || 0
+    const opts = Array.isArray(it.options) ? it.options : []
+    const hasOptions = opts.length > 0
+    const isPlaceholder = hasOptions && basePrice > 0 && basePrice <= 0.10
+    if (basePrice > 0 && !isPlaceholder) {
+      expandedItems.push({ name: it.name, sku: it.sku || it.product?.sku, qty, unit: basePrice })
+    }
+    for (const opt of opts) {
+      const optQtyPerParent = Number(opt.quantity ?? opt.qty ?? 1) || 1
+      const optTotalQty = optQtyPerParent * qty
+      const optPrice = Number(opt.price) || 0
+      if (optTotalQty <= 0 || optPrice <= 0) continue
+      expandedItems.push({ name: opt.name || 'Opcional', sku: it.sku || it.product?.sku, qty: optTotalQty, unit: optPrice })
+    }
+    if (basePrice <= 0 && !hasOptions) {
+      expandedItems.push({ name: it.name, sku: it.sku || it.product?.sku, qty, unit: basePrice })
+    }
+  })
+
   let totalItens = 0
   let subtotal = 0
-  items.forEach((it, idx) => {
+  expandedItems.forEach((it, idx) => {
     const itemNum = String(idx + 1).padStart(3, '0')
-    // Cód do produto na NFC-e: usa o SKU cadastrado quando disponível, com
-    // fallback para um placeholder estável. agentPrint.js hidrata it.sku a
-    // partir do Product antes de chamar buildDanfeText.
-    const cod = it.sku || it.product?.sku || '123123'
-    const qty = Number(it.quantity || 1)
-    const unit = Number(it.price || 0)
+    const cod = it.sku || '123123'
+    const qty = it.qty
+    const unit = it.unit
     const total = qty * unit
     totalItens += qty
     subtotal += total
@@ -196,7 +218,7 @@ export function buildDanfeText(data, opts = {}) {
   // Versão sem formatação monetária — usada para contagem inteira ("002").
   const labelRight = (label, rightStr) => ljust(label, W - rightStr.length) + rightStr
 
-  lines.push(labelRight('QTD. TOTAL DE ITENS', String(items.length).padStart(3, '0')))
+  lines.push(labelRight('QTD. TOTAL DE ITENS', String(expandedItems.length).padStart(3, '0')))
   lines.push(totalLine('VALOR TOTAL R$', subtotal))
   if (desconto > 0) lines.push(totalLine('Descontos R$', desconto, '- '))
   if (acrescimo > 0) lines.push(totalLine('Acrescimos R$', acrescimo, '+ '))

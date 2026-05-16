@@ -626,11 +626,34 @@ export async function emitNfeFromOrder(orderId) {
       })
     : []
   const productMap = new Map(products.map(p => [p.id, p]))
+  try {
+    console.log('[NFe] fiscal resolution debug:', {
+      orderItemsCount: order.items.length,
+      productIdsRequested: productIds.length,
+      productsLoaded: products.length,
+      breakdown: products.map(p => ({
+        id: p.id.slice(0, 8),
+        name: p.name?.slice(0, 30),
+        hasProductFiscal: !!p.dadosFiscais,
+        productNcm: p.dadosFiscais?.ncm || null,
+        productCfops: p.dadosFiscais?.cfops || null,
+        categoryId: p.categoryId ? p.categoryId.slice(0, 8) : null,
+        hasCategoryFiscal: !!p.category?.dadosFiscais,
+        categoryNcm: p.category?.dadosFiscais?.ncm || null,
+        categoryCfops: p.category?.dadosFiscais?.cfops || null,
+      })),
+      missingProductIds: productIds
+        .filter(id => !productMap.has(id))
+        .map(id => id.slice(0, 8)),
+    })
+  } catch (e) { /* non-blocking */ }
 
-  const det = order.items.map((item, idx) => {
-    const prod = productMap.get(item.productId)
-    const fiscal = prod?.dadosFiscais || prod?.category?.dadosFiscais || null
-
+  // Resolve fiscal data for each OrderItem and expand the line: a parent
+  // <det> (when basePrice > 0) plus one <det> per opcional (complement).
+  // SEFAZ não tem campo para acompanhamento, então cada opcional precisa
+  // virar um item próprio com seu vUnCom real — caso contrário ele iria
+  // como R$ 0,01 (preço do "produto guarda-chuva" tipo "Refrigerantes").
+  const buildLine = ({ name, qty, unitPrice, prod, fiscal, idxFallback }) => {
     const ncm = fiscal?.ncm ? String(fiscal.ncm).replace(/\D/g, '').padStart(8, '0').slice(0, 8) : '00000000'
     let cfop = '5102'
     let csosn = null
@@ -654,22 +677,19 @@ export async function emitNfeFromOrder(orderId) {
     }
     const ean = fiscal?.ean ? String(fiscal.ean).replace(/\D/g, '') : null
     const cEAN = (ean && ean.length >= 8) ? ean : 'SEM GTIN'
-
-    // cProd: prefere o SKU do produto (8 dígitos legíveis em <cProd> do NFe);
-    // se faltar (produto avulso ou ainda não backfilled), cai no índice do item
-    // — UUIDs poluem a nota e dificultam a conferência do contador.
-    const cProd = prod?.sku || String(idx + 1)
+    const cProd = prod?.sku || String(idxFallback)
+    const safeQty = Number(qty) || 0
+    const safeUnit = Number(unitPrice) || 0
     return {
-      nItem: idx + 1,
       prod: {
-        xProd: item.name,
+        xProd: String(name || 'Item').slice(0, 120),
         cProd,
         NCM: ncm,
         CFOP: cfop,
         uCom: 'UN',
-        qCom: String(Number(item.quantity).toFixed(4)),
-        vUnCom: Number(item.price).toFixed(2),
-        vProd: (Number(item.quantity) * Number(item.price)).toFixed(2),
+        qCom: safeQty.toFixed(4),
+        vUnCom: safeUnit.toFixed(4),
+        vProd: (safeUnit * safeQty).toFixed(2),
         _ean: cEAN,
       },
       imposto: {
@@ -684,7 +704,94 @@ export async function emitNfeFromOrder(orderId) {
         _cstCofins: cstCofins,
       }
     }
+  }
+
+  // Mescla campo-a-campo: product-level prevalece quando preenchido, mas
+  // cai no category-level para cada campo individualmente. Antes o código
+  // pegava o objeto inteiro do produto e descartava silenciosamente o NCM
+  // da categoria quando o produto tinha um DadosFiscais "esqueleto" (sem NCM).
+  const mergeFiscal = (prodFiscal, catFiscal) => {
+    if (!prodFiscal && !catFiscal) return null
+    const p = prodFiscal || {}
+    const c = catFiscal || {}
+    const pick = (k) => (p[k] !== null && p[k] !== undefined && p[k] !== '') ? p[k] : (c[k] ?? null)
+    return {
+      ncm: pick('ncm'),
+      orig: pick('orig'),
+      ean: pick('ean'),
+      cfops: pick('cfops'),
+      cest: pick('cest'),
+      icmsAliq: pick('icmsAliq'),
+      icmsModBC: pick('icmsModBC'),
+      icmsPercBase: pick('icmsPercBase'),
+      icmsFCP: pick('icmsFCP'),
+      icmsEfetAliq: pick('icmsEfetAliq'),
+      icmsEfetPercBase: pick('icmsEfetPercBase'),
+      pPIS: pick('pPIS'),
+      pCOFINS: pick('pCOFINS'),
+      pIPI: pick('pIPI'),
+      codBeneficio: pick('codBeneficio'),
+    }
+  }
+
+  const det = []
+  order.items.forEach((item, idx) => {
+    const prod = productMap.get(item.productId)
+    const fiscal = mergeFiscal(prod?.dadosFiscais, prod?.category?.dadosFiscais)
+    const qty = Number(item.quantity) || 0
+    const basePrice = Number(item.price) || 0
+
+    const hasOptions = Array.isArray(item.options) && item.options.length > 0
+    // Produtos "guarda-chuva" (ex. categoria "Refrigerantes" com base R$ 0,01
+    // usada só para satisfazer o vUnCom>0 da SEFAZ) são suprimidos quando há
+    // opcionais — o que o cliente realmente comprou serão as próximas linhas.
+    const isPlaceholder = hasOptions && basePrice > 0 && basePrice <= 0.10
+    if (basePrice > 0 && qty > 0 && !isPlaceholder) {
+      det.push(buildLine({
+        name: item.name,
+        qty,
+        unitPrice: basePrice,
+        prod,
+        fiscal,
+        idxFallback: det.length + 1,
+      }))
+    }
+
+    if (Array.isArray(item.options)) {
+      for (const opt of item.options) {
+        const optQtyPerParent = Number(opt.quantity ?? opt.qty ?? 1) || 1
+        const optTotalQty = optQtyPerParent * (qty || 1)
+        const optPrice = Number(opt.price) || 0
+        // Opcionais gratuitos (modificadores tipo "sem cebola", "ponto da carne")
+        // não viram <det>: além de não onerarem o cliente, SEFAZ rejeita vUnCom=0.
+        if (optTotalQty <= 0 || optPrice <= 0) continue
+        det.push(buildLine({
+          name: opt.name || 'Opcional',
+          qty: optTotalQty,
+          unitPrice: optPrice,
+          prod,
+          fiscal,
+          idxFallback: det.length + 1,
+        }))
+      }
+    }
+
+    // Fallback: pedido sem preço-base nem opcionais válidos —
+    // mantém uma linha (mesmo que zerada) para preservar o histórico do item.
+    if (basePrice <= 0 && (!Array.isArray(item.options) || item.options.length === 0)) {
+      det.push(buildLine({
+        name: item.name,
+        qty: qty || 1,
+        unitPrice: basePrice,
+        prod,
+        fiscal,
+        idxFallback: det.length + 1,
+      }))
+    }
   })
+
+  // Reatribui nItem sequencial após a expansão
+  det.forEach((d, i) => { d.nItem = i + 1 })
 
   const vProd = det.reduce((s, d) => s + Number(d.prod.vProd), 0)
 
