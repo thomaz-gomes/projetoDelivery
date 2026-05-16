@@ -916,14 +916,7 @@ nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), 
               total: true,
               payload: true,
               items: {
-                select: {
-                  id: true,
-                  name: true,
-                  quantity: true,
-                  price: true,
-                  productId: true,
-                  product: { select: { sku: true } },
-                },
+                select: { id: true, name: true, quantity: true, price: true, productId: true },
               },
             },
           },
@@ -940,6 +933,28 @@ nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), 
         (p.order?.customerName || '').toLowerCase().includes(term) ||
         (p.nProt || '').includes(term)
       )
+    }
+
+    // Hidrata cada item com o SKU do produto. OrderItem.product não é relação
+    // no schema (só guarda productId solto), por isso buscamos os SKUs num
+    // único query e injetamos manualmente em vez de usar nested include.
+    const allProductIds = new Set()
+    for (const p of data) {
+      for (const it of (p.order?.items || [])) {
+        if (it.productId) allProductIds.add(it.productId)
+      }
+    }
+    if (allProductIds.size > 0) {
+      const products = await prisma.product.findMany({
+        where: { id: { in: [...allProductIds] } },
+        select: { id: true, sku: true },
+      })
+      const skuById = new Map(products.map((pr) => [pr.id, pr.sku]))
+      for (const p of data) {
+        for (const it of (p.order?.items || [])) {
+          if (it.productId) it.sku = skuById.get(it.productId) || null
+        }
+      }
     }
 
     // Enrich each protocol with emitente config (CNPJ, IE, endereço, razão,

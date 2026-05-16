@@ -150,9 +150,9 @@ export function buildDanfeText(data, opts = {}) {
   items.forEach((it, idx) => {
     const itemNum = String(idx + 1).padStart(3, '0')
     // Cód do produto na NFC-e: usa o SKU cadastrado quando disponível, com
-    // fallback para um placeholder estável. Requer que agentPrint inclua
-    // `product.sku` ao carregar order.items.
-    const cod = it.product?.sku || it.sku || '123123'
+    // fallback para um placeholder estável. agentPrint.js hidrata it.sku a
+    // partir do Product antes de chamar buildDanfeText.
+    const cod = it.sku || it.product?.sku || '123123'
     const qty = Number(it.quantity || 1)
     const unit = Number(it.price || 0)
     const total = qty * unit

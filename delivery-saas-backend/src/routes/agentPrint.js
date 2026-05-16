@@ -120,18 +120,26 @@ async function formatDanfeText(orderId) {
   const protocol = await prisma.nfeProtocol.findFirst({ where: { orderId }, orderBy: { createdAt: 'desc' } })
   if (!protocol) throw new Error(`NF-e não emitida para o pedido ${orderId}`)
 
-  // include product.sku so each item carries the human-readable code that
-  // appears in the <cProd> of the NFC-e and in the printed cupom (column
-  // "Cód"). Without it the template falls back to a static placeholder.
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: {
-      items: { include: { product: { select: { sku: true } } } },
-      store: true,
-      company: true,
-    },
+    include: { items: true, store: true, company: true },
   })
   if (!order) throw new Error(`Pedido não encontrado: ${orderId}`)
+
+  // Hidrata cada item com o SKU do produto. OrderItem.product não é relação
+  // no schema (só guarda productId solto), por isso buscamos os SKUs num
+  // único query e injetamos para o danfeText.js usar como "Cód" no cupom.
+  try {
+    const ids = [...new Set(order.items.map((i) => i.productId).filter(Boolean))]
+    if (ids.length > 0) {
+      const products = await prisma.product.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, sku: true },
+      })
+      const skuById = new Map(products.map((p) => [p.id, p.sku]))
+      order.items = order.items.map((it) => ({ ...it, sku: it.productId ? (skuById.get(it.productId) || null) : null }))
+    }
+  } catch (e) { console.warn('[formatDanfeText] failed to enrich items with sku:', e?.message) }
 
   let fiscalConfig = {}
   let emitenteConfig = null
