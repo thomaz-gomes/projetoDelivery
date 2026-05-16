@@ -33,6 +33,11 @@ export function buildDanfeText(data, opts = {}) {
   // so the cupom occupies less paper. Used when the printer's effective
   // font can't be reduced (legacy print-agent builds without [FONT:B]).
   const compact = !!opts.compact
+  // QR Code URL exata do XML assinado (infNFeSupl/qrCode). Contém os 5
+  // parâmetros (chave|2|tpAmb|cscId|hashSHA1) que SEFAZ exige — montar
+  // localmente daria apenas a chave e a SEFAZ rejeitaria com "parâmetro
+  // p inválido / faltando" ao escanear.
+  const qrCodeUrlFromXml = opts.qrCodeUrl ? String(opts.qrCodeUrl).trim() : null
   const rawXml = protocol?.rawXml || ''
 
   const extract = (tag, xml) => {
@@ -269,9 +274,11 @@ export function buildDanfeText(data, opts = {}) {
 
   // ── Divisão VII: QR Code ───────────────────────────────────────────
   // O agente de impressão substitui esse placeholder pelo bitmap quando o
-  // template detecta o marcador [QR:...]. Em texto puro mostra a URL para
-  // que o operador possa digitar manualmente em caso de falha.
-  const qrUrl = chNFe ? `${consultaUrl}?p=${chNFe}` : consultaUrl
+  // template detecta o marcador [QR:...]. Preferimos a URL completa
+  // (chave|2|tpAmb|cscId|hashSHA1) extraída do XML assinado — sem ela a
+  // SEFAZ rejeita com "parâmetro p inválido / faltando" ao escanear.
+  // Fallback: URL só com a chave (válido apenas para consulta manual).
+  const qrUrl = qrCodeUrlFromXml || (chNFe ? `${consultaUrl}?p=${chNFe}` : consultaUrl)
   lines.push(`[QR:${qrUrl}]`)
   if (!compact) lines.push('')
 

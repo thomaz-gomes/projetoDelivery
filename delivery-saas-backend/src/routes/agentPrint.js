@@ -157,6 +157,28 @@ async function formatDanfeText(orderId) {
     console.warn('formatDanfeText: failed to load fiscal config:', e && e.message)
   }
 
+  // Extract the FULL QR Code URL (chave|2|tpAmb|cscId|hash) from the signed
+  // NFe XML on disk. danfeText.js can't build this URL by itself — the SHA-1
+  // hash depends on the CSC token. Without it, the cupom prints `?p=<chave>`
+  // alone and SEFAZ rejects with "parâmetro p inválido / faltando".
+  let qrCodeUrl = null
+  try {
+    const chMatch = protocol.rawXml?.match(/<chNFe>(\d{44})<\/chNFe>/)
+    if (chMatch) {
+      const chNFe = chMatch[1]
+      const serie = String(parseInt(chNFe.slice(22, 25), 10))
+      const nNF = String(parseInt(chNFe.slice(25, 34), 10))
+      const emitidasDir = path.join(process.cwd(), 'nfe', 'xmls', 'emitidas')
+      const files = fs.existsSync(emitidasDir) ? fs.readdirSync(emitidasDir) : []
+      const matchFile = files.find((f) => f.startsWith(`nfe-${serie}-${nNF}-`))
+      if (matchFile) {
+        const xml = fs.readFileSync(path.join(emitidasDir, matchFile), 'utf8')
+        const qrMatch = xml.match(/<qrCode><!\[CDATA\[([^\]]+)\]\]><\/qrCode>/) || xml.match(/<qrCode>([^<]+)<\/qrCode>/)
+        if (qrMatch) qrCodeUrl = qrMatch[1].trim()
+      }
+    }
+  } catch (e) { console.warn('[formatDanfeText] failed to read qrCode from signed XML:', e?.message) }
+
   // Match the DANFE width to the company's configured printer so the agent
   // does not have to wrap our pre-formatted columns. PrinterSetting.width
   // stores the effective column count (default 48 = 80mm Font A; 32 for
@@ -174,7 +196,7 @@ async function formatDanfeText(orderId) {
     if (setting && Number(setting.width) > 0) cols = Number(setting.width)
   } catch (e) { /* keep default */ }
 
-  return buildDanfeText({ protocol, order, fiscalConfig, emitenteConfig }, { cols, compact: true })
+  return buildDanfeText({ protocol, order, fiscalConfig, emitenteConfig }, { cols, compact: true, qrCodeUrl })
 }
 
 router.post('/', async (req, res) => {
