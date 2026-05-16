@@ -451,9 +451,39 @@ export async function loadCertConfig(companyId) {
   return result
 }
 
+/**
+ * Atualiza apenas o campo nextNNF do settings.json da loja (ou da empresa,
+ * quando storeId não é informado). Faz merge com o conteúdo existente para
+ * não destruir cnpj/ie/enderEmit/csc/etc.
+ *
+ * Grava nos DOIS caminhos (centralizado + legado) usados pelo
+ * getEmitenteConfig, mantendo paridade com persistStoreSettings (que vive
+ * em routes/stores.js — replicado aqui para evitar acoplamento entre
+ * service e route).
+ */
+export async function persistNextNNF(companyId, storeId, nextNNF) {
+  const base = process.cwd()
+  const value = Number(nextNNF) > 0 ? Math.floor(nextNNF) : null
+
+  const writeMerged = async (settingsPath) => {
+    await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true })
+    let existing = {}
+    try { if (fs.existsSync(settingsPath)) existing = JSON.parse(await fs.promises.readFile(settingsPath, 'utf8') || '{}') } catch { existing = {} }
+    const merged = { ...existing, nextNNF: value }
+    await fs.promises.writeFile(settingsPath, JSON.stringify(merged, null, 2), 'utf8')
+  }
+
+  if (storeId) {
+    await writeMerged(path.join(base, 'settings', 'stores', storeId, 'settings.json')).catch(() => {})
+    await writeMerged(path.join(base, 'public', 'uploads', 'store', storeId, 'settings.json')).catch(() => {})
+  } else {
+    await writeMerged(path.join(base, 'public', 'uploads', 'company', companyId, 'settings.json')).catch(() => {})
+  }
+}
+
 export function getEmitenteConfig(companyId, storeId) {
   const base = process.cwd()
-  const result = { cnpj: null, ie: null, xNome: null, nfeSerie: null, nfeEnvironment: null, enderEmit: null }
+  const result = { cnpj: null, ie: null, xNome: null, nfeSerie: null, nfeEnvironment: null, enderEmit: null, nextNNF: null, infCpl: null }
 
   // Load company-level settings as base
   try {
@@ -466,6 +496,8 @@ export function getEmitenteConfig(companyId, storeId) {
       result.nfeSerie = raw.nfeSerie || null
       result.nfeEnvironment = raw.nfeEnvironment || null
       result.enderEmit = raw.enderEmit || null
+      if (raw.nextNNF != null) result.nextNNF = Number(raw.nextNNF) || null
+      if (raw.infCpl) result.infCpl = raw.infCpl
     }
   } catch { /* ignore */ }
 
@@ -484,6 +516,8 @@ export function getEmitenteConfig(companyId, storeId) {
       if (storeSettings.nfeSerie) result.nfeSerie = storeSettings.nfeSerie
       if (storeSettings.nfeEnvironment) result.nfeEnvironment = storeSettings.nfeEnvironment
       if (storeSettings.enderEmit) result.enderEmit = storeSettings.enderEmit
+      if (storeSettings.nextNNF != null) result.nextNNF = Number(storeSettings.nextNNF) || null
+      if (storeSettings.infCpl) result.infCpl = storeSettings.infCpl
     }
   }
 
@@ -722,12 +756,23 @@ export async function emitNfeFromOrder(orderId) {
     const orderTypeUpper = String(order.orderType || '').toUpperCase()
     const indPres = orderTypeUpper === 'DELIVERY' ? '4' : '1'
 
+    // nNF: em produção, segue o contador manual cadastrado em
+    // settings.json (nextNNF) — SEFAZ exige sequência sem saltos por série.
+    // Em homologação caímos no displayId pra não consumir o contador real
+    // durante testes. Após uma autorização bem-sucedida o nextNNF é
+    // incrementado abaixo, antes de retornar ao caller.
+    const isProduction = tpAmb === '1'
+    const configuredNextNNF = Number(emitenteConfig?.nextNNF) > 0 ? Math.floor(emitenteConfig.nextNNF) : null
+    const nNFForEmission = isProduction && configuredNextNNF
+      ? String(configuredNextNNF)
+      : String(order.displaySimple || order.displayId || Date.now())
+
     const data = {
     ide: {
       natOp: 'VENDA',
       mod: '65',
       serie: fiscalConfig.nfeSerie || '1',
-      nNF: sanitizeNNF(String(order.displaySimple || order.displayId || Date.now())),
+      nNF: sanitizeNNF(nNFForEmission),
       tpAmb,
       indPres,
     },
@@ -761,6 +806,15 @@ export async function emitNfeFromOrder(orderId) {
   }
 
   const infNFe = buildNfePayload(data)
+  // Em produção, injeta o texto livre de "Informação Complementar" cadastrado
+  // pelo operador em /settings/stores/<id>. buildNfePayload já preencheu o
+  // infCpl com o aviso de homologação quando tpAmb=2 — não sobrescreve.
+  if (!isProduction || !emitenteConfig?.infCpl) {
+    // homolog ou produção sem infCpl configurado — mantém o que buildNfePayload definiu
+  } else {
+    infNFe.infAdic = { infCpl: String(emitenteConfig.infCpl).slice(0, 5000) }
+  }
+
   const signed = await signNfeXml(infNFe, certConfig, {
     csc: fiscalConfig.csc,
     cscId: fiscalConfig.cscId,
@@ -789,6 +843,17 @@ export async function emitNfeFromOrder(orderId) {
     xMotivo: result.xMotivo,
     rawXml: result.rawXml
   })
+
+  // Em produção: se a autorização passou e usamos o contador manual, avança
+  // o nextNNF em settings.json. SEFAZ rejeita reuso de nNF na mesma série —
+  // o increment garante a próxima emissão saia com o número seguinte.
+  if (isProduction && configuredNextNNF && result.status === 'autorizado') {
+    try {
+      await persistNextNNF(order.companyId, order.storeId, configuredNextNNF + 1)
+    } catch (e) {
+      console.warn('[NFe] Falha ao avançar nextNNF em settings.json:', e?.message)
+    }
+  }
 
   return {
     success: result.status === 'autorizado',

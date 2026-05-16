@@ -355,6 +355,15 @@ storesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       if (body.cnpj !== undefined) fiscalFields.cnpj = body.cnpj || null
       if (body.infRespTec !== undefined) fiscalFields.infRespTec = body.infRespTec || null
       if (body.nfeDebugMode !== undefined) fiscalFields.nfeDebugMode = Boolean(body.nfeDebugMode)
+      // nextNNF: próximo nNF a usar em produção. Aceita 0/null para limpar.
+      if (body.nextNNF !== undefined) {
+        const n = body.nextNNF === null || body.nextNNF === '' ? null : Number(body.nextNNF)
+        fiscalFields.nextNNF = Number.isFinite(n) && n > 0 ? Math.floor(n) : null
+      }
+      // infCpl: texto livre que vai no <infAdic><infCpl> de toda NFC-e em
+      // produção. Em homologação a SEFAZ exige o aviso de "sem valor fiscal"
+      // e o texto do operador é ignorado.
+      if (body.infCpl !== undefined) fiscalFields.infCpl = body.infCpl ? String(body.infCpl).slice(0, 5000) : null
       if (Object.keys(fiscalFields).length) {
         try { await persistStoreSettings(id, fiscalFields) } catch (e) { console.warn('Failed to persist fiscal settings', e) }
       }

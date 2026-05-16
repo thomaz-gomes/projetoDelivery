@@ -128,6 +128,74 @@
               </div>
             </div>
 
+            <!-- ── Controle de numeração ── -->
+            <div class="card mb-4">
+              <div class="card-header"><h6 class="mb-0"><i class="bi bi-123 me-2"></i>Controle de numeração</h6></div>
+              <div class="card-body">
+                <div class="small text-muted mb-2">
+                  Numeração para o ambiente de <strong>Produção</strong>
+                </div>
+                <div class="row g-3">
+                  <div class="col-md-2">
+                    <TextInput
+                      label="Modelo"
+                      labelClass="form-label fw-semibold"
+                      :modelValue="'65'"
+                      inputClass="form-control"
+                      readonly
+                    />
+                    <div class="small text-muted mt-1">65 = NFC-e</div>
+                  </div>
+                  <div class="col-md-2">
+                    <TextInput
+                      label="Série"
+                      labelClass="form-label fw-semibold"
+                      :modelValue="form.nfeSerie || '1'"
+                      inputClass="form-control"
+                      readonly
+                    />
+                    <div class="small text-muted mt-1">Definida acima</div>
+                  </div>
+                  <div class="col-md-4">
+                    <TextInput
+                      label="Próxima numeração"
+                      labelClass="form-label fw-semibold"
+                      v-model="form.nextNNF"
+                      placeholder="1"
+                      inputClass="form-control"
+                    />
+                    <div class="small text-muted mt-1">
+                      Próximo <code>nNF</code> em produção. SEFAZ exige sequência sem
+                      saltos por série — preencha com o último número emitido + 1
+                      ao migrar de outro emissor.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Informação Complementar NFC-e ── -->
+            <div class="card mb-4">
+              <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-card-text me-2"></i>Informação Complementar NFC-e</h6>
+              </div>
+              <div class="card-body">
+                <label class="form-label fw-semibold">Texto que aparecerá no campo <code>infCpl</code> de toda NFC-e</label>
+                <textarea
+                  v-model="form.infCpl"
+                  class="form-control"
+                  rows="4"
+                  maxlength="5000"
+                  placeholder="Ex: Obrigado pela preferência! Em caso de dúvidas, entre em contato pelo WhatsApp (00) 00000-0000."
+                ></textarea>
+                <div class="small text-muted mt-1">
+                  Limite 5.000 caracteres. Em ambiente de homologação a SEFAZ sempre
+                  adiciona "Documento emitido em ambiente de homologação - sem valor
+                  fiscal"; em produção este texto é usado integralmente.
+                </div>
+              </div>
+            </div>
+
             <!-- ── Certificado Digital ── -->
             <div class="card mb-4">
               <div class="card-header"><h6 class="mb-0"><i class="bi bi-shield-lock me-2"></i>Certificado Digital A1 (PFX)</h6></div>
@@ -378,7 +446,7 @@ const TIMEZONES = [
   'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
   'Asia/Shanghai', 'Australia/Sydney'
 ]
-const form = ref({ name: '', address: '', latitude: null, longitude: null, city: '', state: '', ibgeCode: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true, nfeDebugMode: false })
+const form = ref({ name: '', address: '', latitude: null, longitude: null, city: '', state: '', ibgeCode: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', nextNNF: '', infCpl: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true, nfeDebugMode: false })
 
 // IBGE API: states and cities
 const ibgeStates = ref([])
@@ -607,6 +675,8 @@ async function load() {
       form.value.razaoSocial = s.razaoSocial || s.xNome || ''
       form.value.nfeSerie = s.nfeSerie || '1'
       form.value.nfeEnvironment = s.nfeEnvironment || 'homologation'
+      form.value.nextNNF = (s.nextNNF != null && s.nextNNF !== '') ? String(s.nextNNF) : ''
+      form.value.infCpl = s.infCpl || ''
       form.value.csc = s.csc || ''
       form.value.cscId = s.cscId || ''
       if (s.enderEmit && typeof s.enderEmit === 'object') {
@@ -756,6 +826,9 @@ async function save(){
       razaoSocial: form.value.razaoSocial || undefined,
       nfeSerie: form.value.nfeSerie || undefined,
       nfeEnvironment: form.value.nfeEnvironment || undefined,
+      // nextNNF é inteiro positivo (próximo nNF a usar); string vazia = não tocar
+      nextNNF: form.value.nextNNF !== '' && form.value.nextNNF != null ? Number(form.value.nextNNF) : null,
+      infCpl: form.value.infCpl != null ? String(form.value.infCpl).slice(0, 5000) : null,
       csc: form.value.csc || undefined,
       cscId: form.value.cscId || undefined,
       enderEmit: form.value.enderEmit || undefined,
