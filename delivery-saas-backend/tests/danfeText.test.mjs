@@ -191,3 +191,72 @@ test('DANFE — placeholder QR é preservado', () => {
   const out = buildDanfeText(makeFixture())
   assert.match(out, /\[QR:https:\/\/nfce-homologacao\.svrs\.rs\.gov\.br\/consulta\/consultaPublica\.jsp\?chave=29260400000000000000000000000000000000000123\]/)
 })
+
+test('DANFE — combo expande slots com label do slot e addons indentados', () => {
+  const fixture = makeFixture({
+    order: {
+      total: 43,
+      items: [{
+        name: 'Combo X',
+        quantity: 1,
+        price: 40,
+        productId: 'p-combo',
+        _product: { isCombo: true },
+        options: [
+          { kind: 'combo_slot', slotName: 'Lanche', name: 'X-Tudo', vUnComReferencia: 25 },
+          { kind: 'combo_slot', slotName: 'Bebida', name: 'Coca', vUnComReferencia: 7 },
+          { kind: 'combo_slot', slotName: 'Acomp', name: 'Batata', vUnComReferencia: 11 },
+          { kind: 'addon', name: 'Molho extra', price: 3 },
+        ],
+      }],
+    },
+  })
+  const out = buildDanfeText(fixture)
+  assert.ok(out.includes('Combo X'), 'cupom deve conter "Combo X"')
+  assert.ok(out.includes('Lanche'), 'cupom deve conter label "Lanche"')
+  assert.ok(out.includes('X-Tudo'), 'cupom deve conter "X-Tudo"')
+  assert.ok(out.includes('+ Molho extra'), 'cupom deve conter "+ Molho extra"')
+})
+
+test('DANFE — produto não-combo com guarda-chuva (basePrice <= 0,10) suprime linha principal', () => {
+  const fixture = makeFixture({
+    order: {
+      total: 8,
+      items: [{
+        name: 'Refrigerantes',
+        quantity: 1,
+        price: 0.01,
+        options: [
+          { name: 'Coca lata', price: 5 },
+          { name: 'Guarana lata', price: 3 },
+        ],
+      }],
+    },
+  })
+  const out = buildDanfeText(fixture)
+  // Linha principal "Refrigerantes" suprimida; options renderizadas como sub-linhas
+  assert.ok(!/^001 Refrigerantes/m.test(out), 'linha principal "Refrigerantes" deve ser suprimida')
+  assert.ok(out.includes('+ Coca lata'), 'cupom deve conter "+ Coca lata"')
+  assert.ok(out.includes('+ Guarana lata'), 'cupom deve conter "+ Guarana lata"')
+})
+
+test('DANFE — produto não-combo com options pagas: linha principal + sub-linhas', () => {
+  const fixture = makeFixture({
+    order: {
+      total: 18,
+      items: [{
+        name: 'X-Burguer',
+        quantity: 1,
+        price: 15,
+        options: [
+          { name: 'Bacon', price: 3 },
+          { name: 'Sem cebola', price: 0 }, // free → skip
+        ],
+      }],
+    },
+  })
+  const out = buildDanfeText(fixture)
+  assert.match(out, /^001 X-Burguer/m, 'linha principal deve aparecer')
+  assert.ok(out.includes('+ Bacon'), 'cupom deve conter "+ Bacon"')
+  assert.ok(!out.includes('+ Sem cebola'), 'options gratuitas devem ser ignoradas')
+})

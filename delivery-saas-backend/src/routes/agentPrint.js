@@ -135,6 +135,25 @@ async function formatDanfeText(orderId) {
     console.warn('formatDanfeText: failed to load fiscal config:', e && e.message)
   }
 
+  // Enriquecer items com _product (isCombo) para que o cupom possa renderizar
+  // slots de combo / suprimir guarda-chuva igual à expansão NFe.
+  try {
+    const productIds = [...new Set((order.items || []).filter(i => i.productId).map(i => i.productId))]
+    if (productIds.length) {
+      const products = await prisma.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, isCombo: true },
+      })
+      const productMap = new Map(products.map(p => [p.id, p]))
+      order.items = (order.items || []).map(i => ({
+        ...i,
+        _product: i.productId ? productMap.get(i.productId) || null : null,
+      }))
+    }
+  } catch (e) {
+    console.warn('formatDanfeText: failed to enrich items with _product:', e && e.message)
+  }
+
   return buildDanfeText({ protocol, order, fiscalConfig, emitenteConfig })
 }
 

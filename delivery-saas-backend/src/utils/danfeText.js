@@ -88,24 +88,62 @@ export function buildDanfeText(data) {
   const items = order.items || []
   let totalItens = 0
   let subtotal = 0
-  items.forEach((it, idx) => {
-    const num = String(idx + 1).padStart(3, '0')
+  let itemNum = 0
+  items.forEach((it) => {
     const qty = Number(it.quantity || 1)
     const unit = Number(it.price || 0)
-    const total = qty * unit
-    totalItens += qty
-    subtotal += total
+    const options = Array.isArray(it.options) ? it.options : []
+    const isCombo = it._product && it._product.isCombo === true
+    const hasOptions = options.length > 0
+    // "Guarda-chuva" R$ 0,01 (item pai placeholder com options pagos):
+    // suprime a linha principal para espelhar a expansão NFe. NÃO se aplica
+    // a combo — o preço do combo já é o preço cheio (R$40), nunca placeholder.
+    const isPlaceholder = !isCombo && hasOptions && unit > 0 && unit <= 0.10
 
-    // Linha 1: "001 NOME DO ITEM" (truncado em 44 chars)
-    const nameMax = W - 4 // 4 = "001 "
-    const name = String(it.name || '').slice(0, nameMax)
-    lines.push(`${num} ${name}`)
+    if (!isPlaceholder) {
+      itemNum += 1
+      const num = String(itemNum).padStart(3, '0')
+      const total = qty * unit
+      totalItens += qty
+      subtotal += total
 
-    // Linha 2: "    qty UN x R$ unit ... R$ total" (right-aligned)
-    const left = `    ${qty} UN x ${money(unit)}`
-    const right = money(total)
-    const pad = Math.max(1, W - left.length - right.length)
-    lines.push(left + ' '.repeat(pad) + right)
+      // Linha 1: "001 NOME DO ITEM" (truncado em 44 chars)
+      const nameMax = W - 4 // 4 = "001 "
+      const name = String(it.name || '').slice(0, nameMax)
+      lines.push(`${num} ${name}`)
+
+      // Linha 2: "    qty UN x R$ unit ... R$ total" (right-aligned)
+      const left = `    ${qty} UN x ${money(unit)}`
+      const right = money(total)
+      const pad = Math.max(1, W - left.length - right.length)
+      lines.push(left + ' '.repeat(pad) + right)
+    }
+
+    // Sub-linhas: expansão de options (slots de combo + addons + options legados)
+    if (hasOptions) {
+      for (const opt of options) {
+        const optName = String(opt.name || '').slice(0, W - 8)
+        if (opt.kind === 'combo_slot') {
+          // Slot do combo: label + nome, SEM preço (já incluído no preço do combo)
+          const slotLabel = String(opt.slotName || '').slice(0, 15)
+          const prefix = slotLabel ? `    ${slotLabel}: ` : '    '
+          lines.push((prefix + optName).slice(0, W))
+        } else {
+          // Addon / option legado: skipar gratuitos (consistente com nfeExpansion)
+          const optQtyPerParent = Number(opt.quantity ?? opt.qty ?? 1) || 1
+          const optTotalQty = optQtyPerParent * qty
+          const optPrice = Number(opt.price || 0)
+          if (optTotalQty <= 0 || optPrice <= 0) continue
+          const left = `    + ${optName}`
+          const right = money(optPrice)
+          const pad = Math.max(1, W - left.length - right.length)
+          lines.push(left + ' '.repeat(pad) + right)
+          // Addons / options pagos SOMAM ao subtotal (cliente paga o extra).
+          subtotal += optPrice * optTotalQty
+          totalItens += optTotalQty
+        }
+      }
+    }
   })
   lines.push(sep)
 
