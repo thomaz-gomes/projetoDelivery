@@ -56,12 +56,31 @@
                     <tr>
                       <td>
                         <div class="fw-semibold small">{{ it.name }}</div>
-                        <div v-if="it.options && it.options.length" class="mt-1">
-                          <div v-for="(opt, optIdx) in it.options" :key="optIdx" class="option-line">
-                            <i class="bi bi-plus"></i>
-                            {{ opt.name }}<span v-if="opt.quantity > 1"> ({{ opt.quantity }}x)</span><span v-if="opt.price && Number(opt.price) > 0"> · {{ formatCurrency(opt.price) }}</span>
+                        <template v-if="it.options && it.options.length">
+                          <!-- Slots do combo (indentados, sem preço — já incluso no combo) -->
+                          <div v-if="splitOptions(it).slots.length" class="mt-1">
+                            <div
+                              v-for="(slot, sIdx) in splitOptions(it).slots"
+                              :key="'slot-' + sIdx"
+                              class="option-line option-line--slot"
+                            >
+                              <i class="bi bi-dot"></i>
+                              <span class="option-slot-label" v-if="slot.slotName">{{ slot.slotName }}:</span>
+                              {{ slot.name }}
+                            </div>
                           </div>
-                        </div>
+                          <!-- Addons (com sinal + e preço) -->
+                          <div v-if="splitOptions(it).addons.length" class="mt-1">
+                            <div
+                              v-for="(addon, aIdx) in splitOptions(it).addons"
+                              :key="'addon-' + aIdx"
+                              class="option-line"
+                            >
+                              <i class="bi bi-plus"></i>
+                              {{ addon.name }}<span v-if="addon.quantity > 1"> ({{ addon.quantity }}x)</span><span v-if="addon.price && Number(addon.price) > 0"> · {{ formatCurrency(addon.price) }}</span>
+                            </div>
+                          </div>
+                        </template>
                         <div v-if="it.notes" class="option-line mt-1">
                           <i class="bi bi-chat-left-text me-1"></i>{{ it.notes }}
                         </div>
@@ -362,11 +381,27 @@ function calculateSubtotal() {
     let itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
     if (item.options?.length) {
       for (const opt of item.options) {
+        // Slots do combo já têm preço incluso no combo — não somar novamente
+        if (opt && opt.kind === 'combo_slot') continue;
         itemTotal += Number(opt.price || 0) * Number(opt.quantity || 1) * Number(item.quantity || 1);
       }
     }
     return sum + itemTotal;
   }, 0);
+}
+
+// Separa options em slots de combo e addons.
+// Items legados sem `kind` são tratados como addon (preserva comportamento atual).
+function splitOptions(item) {
+  const opts = Array.isArray(item?.options) ? item.options : [];
+  const slots = [];
+  const addons = [];
+  for (const o of opts) {
+    if (!o) continue;
+    if (o.kind === 'combo_slot') slots.push(o);
+    else addons.push(o);
+  }
+  return { slots, addons };
 }
 
 function getStatusLabel(status) {
@@ -625,6 +660,17 @@ onMounted(() => { load(); });
 .option-line {
   font-size: 0.78rem;
   color: var(--text-secondary);
+}
+
+.option-line--slot {
+  color: var(--text-primary);
+  padding-left: 0.5rem;
+}
+
+.option-slot-label {
+  font-weight: 600;
+  color: var(--primary);
+  margin-right: 0.25rem;
 }
 
 .history-list {

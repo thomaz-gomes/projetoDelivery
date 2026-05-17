@@ -841,14 +841,20 @@ function extractItemOptions(it) {
       // shape: { option: { name, price }, qty }
       if (o.option && (o.option.name || o.option.title || o.option.price !== undefined)) {
         out.push({
+          kind: o.kind || o.option.kind || 'addon',
+          slotId: o.slotId || o.option.slotId || null,
+          slotName: o.slotName || o.option.slotName || null,
           name: o.option.name || o.option.title || '',
           price: Number(o.option.price ?? o.option.unitPrice ?? o.option.amount ?? 0) || 0,
           quantity: Number(o.qty ?? o.quantity ?? o.option.quantity ?? 1) || 1
         });
         continue;
       }
-      // shape: { name, price, quantity }
+      // shape: { name, price, quantity, kind?, slotName? }
       out.push({
+        kind: o.kind || 'addon',
+        slotId: o.slotId || null,
+        slotName: o.slotName || null,
         name: o.name || o.title || '' ,
         price: Number(o.price ?? o.unitPrice ?? o.amount ?? 0) || 0,
         quantity: Number(o.quantity ?? o.qty ?? 1) || 1
@@ -2425,9 +2431,15 @@ async function editItems(openItemIndex = null) {
                   h('div', [h('strong', it.quantity + 'x'), ' ', it.name]),
                   h('div', { class: 'fw-semibold' }, vm.fmt(itemTotal))
                 ]),
-                // Options list
+                // Options list (combo slots indentados sem preço, addons como antes)
                 (it.options && it.options.length) ? h('div', { class: 'small text-muted ms-3 mt-1' },
-                  it.options.map((op, oi) => h('div', { key: oi }, '- ' + (Number(op.quantity || 1) > 1 ? op.quantity + 'x ' : '') + op.name + (Number(op.price) > 0 ? ' (' + vm.fmt(op.price) + ')' : '')))
+                  it.options.map((op, oi) => {
+                    if (op && op.kind === 'combo_slot') {
+                      const label = op.slotName ? (op.slotName + ': ') : '';
+                      return h('div', { key: oi }, '  ' + label + (op.name || ''));
+                    }
+                    return h('div', { key: oi }, '+ ' + (Number(op.quantity || 1) > 1 ? op.quantity + 'x ' : '') + op.name + (Number(op.price) > 0 ? ' (' + vm.fmt(op.price) + ')' : ''));
+                  })
                 ) : null,
                 // Action buttons
                 h('div', { style: 'display:flex;gap:6px;margin-top:6px' }, [
@@ -3861,14 +3873,28 @@ function pulseButton() {
                   {{ formatCurrency(it.unitPrice || it.price || 0) }} /un
                 </div>
                 <div v-if="extractItemOptions(it).length" class="od-item-options">
-                  <div v-for="(opt, i) in extractItemOptions(it)" :key="(opt.name||i)+'opt'" class="od-item-option">
-                    <i class="bi bi-plus-circle od-opt-icon"></i>
+                  <div
+                    v-for="(opt, i) in extractItemOptions(it)"
+                    :key="(opt.name||i)+'opt'"
+                    class="od-item-option"
+                    :class="{ 'od-item-option--slot': opt.kind === 'combo_slot' }"
+                  >
+                    <i
+                      class="od-opt-icon"
+                      :class="opt.kind === 'combo_slot' ? 'bi bi-dot' : 'bi bi-plus-circle'"
+                    ></i>
                     <span class="od-opt-detail">
-                      <span>{{ Number(opt.quantity || 1) }}/un</span>
-                      {{ opt.name }}
-                      <span v-if="(it.quantity || 1) > 1" class="od-opt-total">({{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }} total)</span>
+                      <template v-if="opt.kind === 'combo_slot'">
+                        <span class="od-opt-slot-label" v-if="opt.slotName">{{ opt.slotName }}:</span>
+                        {{ opt.name }}
+                      </template>
+                      <template v-else>
+                        <span>{{ Number(opt.quantity || 1) }}/un</span>
+                        {{ opt.name }}
+                        <span v-if="(it.quantity || 1) > 1" class="od-opt-total">({{ (Number(opt.quantity || 1) * Number(it.quantity || 1)) }} total)</span>
+                      </template>
                     </span>
-                    <span v-if="opt.price" class="od-opt-price">{{ formatCurrency(opt.price) }} /un</span>
+                    <span v-if="opt.kind !== 'combo_slot' && opt.price" class="od-opt-price">{{ formatCurrency(opt.price) }} /un</span>
                   </div>
                 </div>
                 <div v-if="it.notes || it.observations" class="od-item-notes text-muted small fst-italic ps-3">
@@ -4414,9 +4440,11 @@ button.btn.advance {
 .od-item-unit-hint { font-size: 0.75rem; color: var(--text-secondary, #6c757d); padding-left: 36px; margin-top: 1px; }
 .od-item-options { margin-top: 6px; padding-left: 28px; display: flex; flex-direction: column; gap: 3px; }
 .od-item-option { font-size: 0.8rem; color: #495057; display: flex; align-items: baseline; gap: 5px; line-height: 1.4; }
+.od-item-option--slot { color: var(--text-primary, #212529); }
 .od-opt-icon { font-size: 0.65rem; color: var(--text-muted, #adb5bd); flex-shrink: 0; position: relative; top: 1px; }
 .od-opt-detail { flex: 1; }
 .od-opt-detail > span:first-child { font-weight: 600; font-size: 0.75rem; color: #495057; background: #e9ecef; border-radius: 4px; padding: 1px 5px; margin-right: 4px; }
+.od-opt-detail > .od-opt-slot-label:first-child { font-weight: 600; font-size: 0.78rem; color: var(--primary, #105784); background: transparent; padding: 0; margin-right: 4px; border-radius: 0; }
 .od-opt-total { font-size: 0.72rem; color: var(--text-secondary, #6c757d); font-weight: 500; }
 .od-opt-price { color: #198754; font-size: 0.78rem; white-space: nowrap; flex-shrink: 0; }
 .od-notes {
