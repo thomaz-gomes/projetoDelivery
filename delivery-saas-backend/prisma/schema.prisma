@@ -57,6 +57,7 @@ model Company {
   // relations for menu / payments (inverse relation fields required by Prisma)
   menuCategories       MenuCategory[]
   products             Product[]
+  combos               Combo[]
   paymentMethods       PaymentMethod[]
   optionGroups         OptionGroup[]
   // ingredients and technical sheets
@@ -1187,9 +1188,52 @@ model Product {
   linkedOptions       Option[]
   packagingCost         Decimal?
   targetMarginPercent   Decimal?
+  isCombo  Boolean @default(false)
+  combo    Combo?
+  comboSlotLinks ComboSlotOption[] @relation("ComboLinkedProduct")
 
   @@index([companyId, integrationCode], name: "company_product_integration_idx")
   @@index([companyId, name], name: "company_product_name_idx")
+}
+
+model Combo {
+  id        String      @id @default(uuid())
+  productId String      @unique
+  product   Product     @relation(fields: [productId], references: [id])
+  companyId String
+  company   Company     @relation(fields: [companyId], references: [id])
+  slots     ComboSlot[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([companyId])
+}
+
+model ComboSlot {
+  id        String            @id @default(uuid())
+  comboId   String
+  combo     Combo             @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  name      String
+  minSelect Int               @default(1)
+  maxSelect Int               @default(1)
+  position  Int               @default(0)
+  options   ComboSlotOption[]
+
+  @@index([comboId])
+}
+
+model ComboSlotOption {
+  id               String    @id @default(uuid())
+  slotId           String
+  slot             ComboSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  linkedProductId  String
+  linkedProduct    Product   @relation("ComboLinkedProduct", fields: [linkedProductId], references: [id])
+  vUnComReferencia Decimal
+  integrationCode  String?
+  position         Int       @default(0)
+
+  @@index([slotId])
+  @@index([linkedProductId])
 }
 
 model DadosFiscais {
