@@ -137,29 +137,13 @@ export function expandOrderItemsToDet(orderItems, productMap, _opts = {}) {
           vUnComReferencia: Number(s.vUnComReferencia) || 0,
         }))
 
-        let rateios = []
-        try {
-          rateios = rateioCombo({
-            precoCombo: basePrice,
-            slots: slotsForRateio,
-            quantity: qty || 1,
-          })
-        } catch (err) {
-          // Fallback defensivo: se rateio falhar (somaRef=0, etc.),
-          // distribui igualmente. Em prod não deve cair aqui.
-          const fallbackQty = qty || 1
-          const totalTarget = Math.round(basePrice * fallbackQty * 100) / 100
-          const equal = Math.round((totalTarget / slots.length) * 100) / 100
-          rateios = slots.map((s, i) => ({
-            id: s.optionId || s.productId,
-            vUnCom: Math.round((equal / fallbackQty) * 10000) / 10000,
-            qCom: fallbackQty,
-            vProd:
-              i === slots.length - 1
-                ? Math.round((totalTarget - equal * (slots.length - 1)) * 100) / 100
-                : equal,
-          }))
-        }
+        // Cadastro inconsistente (somaRef=0) deve falhar visivelmente:
+        // melhor o emissor abortar do que emitir nota com valores chutados.
+        const rateios = rateioCombo({
+          precoCombo: basePrice,
+          slots: slotsForRateio,
+          quantity: qty || 1,
+        })
 
         slots.forEach((slot, idx) => {
           const rateio = rateios[idx]
