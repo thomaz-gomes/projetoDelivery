@@ -1,11 +1,61 @@
 <template>
   <div class="container py-4">
-    <h2>{{ isEdit ? 'Editar produto' : 'Novo produto' }}</h2>
+    <!-- Type chooser modal — only on create -->
+    <div v-if="!isEdit && !typeConfirmed" class="modal show d-block" tabindex="-1" style="background: rgba(0,0,0,0.4);">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Que tipo de item você quer criar?</h5>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <div
+                  class="card h-100 text-center p-4 type-choice-card"
+                  role="button"
+                  @click="chooseType(false)"
+                >
+                  <i class="bi bi-box-seam fs-1 text-primary"></i>
+                  <h6 class="mt-3 mb-1 fw-semibold">Produto</h6>
+                  <small class="text-muted">Item único com preço próprio</small>
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <div
+                  class="card h-100 text-center p-4 type-choice-card"
+                  role="button"
+                  @click="chooseType(true)"
+                >
+                  <i class="bi bi-collection fs-1 text-primary"></i>
+                  <h6 class="mt-3 mb-1 fw-semibold">Combo</h6>
+                  <small class="text-muted">Vários produtos com preço fechado</small>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" @click="cancel">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>
+      {{ isEdit ? 'Editar' : 'Novo' }} {{ form.isCombo ? 'combo' : 'produto' }}
+      <span v-if="form.isCombo" class="badge bg-primary ms-2" style="font-size:0.65em; vertical-align:middle;">
+        <i class="bi bi-collection me-1"></i>Combo
+      </span>
+    </h2>
     <div class="card p-4 mt-3">
       <form @submit.prevent="save">
         <ul class="nav nav-tabs mb-3" role="tablist">
           <li class="nav-item" role="presentation">
             <button :class="['nav-link', { active: activeTab === 'general' }]" id="tab-general" type="button" @click="activeTab = 'general'">Geral</button>
+          </li>
+          <li v-if="form.isCombo" class="nav-item" role="presentation">
+            <button :class="['nav-link', { active: activeTab === 'combo' }]" id="tab-combo" type="button" @click="activeTab = 'combo'">
+              <i class="bi bi-collection me-1"></i>Componentes do combo
+            </button>
           </li>
           <li class="nav-item" role="presentation">
             <button :class="['nav-link', { active: activeTab === 'marketplace' }]" id="tab-marketplace" type="button" @click="activeTab = 'marketplace'">MARKETPLACE</button>
@@ -180,6 +230,20 @@
 
         </div>
 
+          <div v-if="form.isCombo" :class="['tab-pane', activeTab === 'combo' ? 'show active' : '']" id="combo" role="tabpanel" aria-labelledby="tab-combo">
+            <div class="mb-3">
+              <h5 class="mb-1">Componentes do combo</h5>
+              <p class="text-muted small mb-3">
+                Defina os slots (ex: Lanche, Bebida) e as opções de produto que o cliente poderá escolher em cada um.
+              </p>
+              <ComboSlotsEditor
+                v-model="form.combo.slots"
+                :company-id="companyId"
+                :exclude-product-id="id || null"
+              />
+            </div>
+          </div>
+
           <div :class="['tab-pane', activeTab === 'marketplace' ? 'show active' : '']" id="marketplace" role="tabpanel" aria-labelledby="tab-marketplace">
             <MarketplaceTab :cmv="sheetCost" :store-price="Number(form.price || 0)" :initial="form.marketplace" @change="onMarketplaceChange" />
           </div>
@@ -224,6 +288,7 @@ import SelectInput from '../components/form/select/SelectInput.vue'
 import MarketplaceTab from '../components/MarketplaceTab.vue'
 import AvailabilityScheduler from '../components/AvailabilityScheduler.vue'
 import PricingPanel from '../components/PricingPanel.vue'
+import ComboSlotsEditor from '../components/ComboSlotsEditor.vue'
 import { normalizeToIngredientUnit } from '../utils/unitConversion.js'
 
 const saas = useSaasStore()
@@ -233,8 +298,11 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, specialTakeoutPriceEnabled: false, specialTakeoutPrice: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [] })
+const form = ref({ id: null, name: '', description: '', price: 0, specialTakeoutPriceEnabled: false, specialTakeoutPrice: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [], isCombo: false, combo: { slots: [] } })
 const activeTab = ref('general')
+// In edit mode the type is already known; in create mode it's confirmed via the modal.
+const typeConfirmed = ref(isEdit)
+const companyId = ref(null)
 const cashbackEnabled = ref(false)
 const groups = ref([])
 const categories = ref([])
@@ -249,6 +317,14 @@ const isUploading = ref(false)
 const generatingDesc = ref(false)
 
 const canGenerateDesc = computed(() => !!form.value.name?.trim() && !!form.value.image)
+
+function chooseType(isCombo) {
+  form.value.isCombo = !!isCombo
+  if (form.value.isCombo && !form.value.combo) {
+    form.value.combo = { slots: [] }
+  }
+  typeConfirmed.value = true
+}
 
 async function generateDescription() {
   if (!canGenerateDesc.value || generatingDesc.value) return
@@ -305,7 +381,25 @@ async function load(){
           // price is persisted. Toggling off in the UI sends specialTakeoutPrice=null.
           specialTakeoutPriceEnabled: stp !== null,
           specialTakeoutPrice: stp !== null ? stp : 0,
+          isCombo: !!p.isCombo,
+          combo: p.combo && Array.isArray(p.combo.slots)
+            ? {
+                slots: p.combo.slots.map(s => ({
+                  name: s.name || '',
+                  minSelect: typeof s.minSelect === 'number' ? s.minSelect : 1,
+                  maxSelect: typeof s.maxSelect === 'number' ? s.maxSelect : 1,
+                  options: Array.isArray(s.options)
+                    ? s.options.map(o => ({
+                        linkedProductId: o.linkedProductId || '',
+                        vUnComReferencia: o.vUnComReferencia !== undefined && o.vUnComReferencia !== null ? Number(o.vUnComReferencia) : 0,
+                        integrationCode: o.integrationCode || '',
+                      }))
+                    : [],
+                })),
+              }
+            : { slots: [] },
         }
+        if (p.companyId) companyId.value = p.companyId
       }
       // load attached groups
       try{ const att = await api.get(`/menu/products/${id}/option-groups`); form.value.optionGroupIds = att.data.attachedIds || [] }catch(e){}
@@ -344,13 +438,52 @@ function cancel(){
   router.push({ path: '/menu/admin', query: q })
 }
 
+function buildComboPayload() {
+  const slots = (form.value.combo?.slots || []).map(s => ({
+    name: (s.name || '').trim(),
+    minSelect: typeof s.minSelect === 'number' ? s.minSelect : 1,
+    maxSelect: typeof s.maxSelect === 'number' ? s.maxSelect : 1,
+    options: (s.options || []).map(o => ({
+      linkedProductId: o.linkedProductId,
+      vUnComReferencia: Number(o.vUnComReferencia || 0),
+      integrationCode: o.integrationCode ? String(o.integrationCode).trim() : null,
+    })),
+  }))
+  return { slots }
+}
+
+function validateCombo() {
+  const slots = form.value.combo?.slots || []
+  if (slots.length === 0) return 'Combo precisa ter ao menos um slot.'
+  for (let i = 0; i < slots.length; i++) {
+    const s = slots[i]
+    if (!s.name || !s.name.trim()) return `Slot ${i + 1} sem nome.`
+    const min = Number(s.minSelect)
+    const max = Number(s.maxSelect)
+    if (!Number.isFinite(min) || min < 0) return `Slot ${i + 1}: mínimo inválido.`
+    if (!Number.isFinite(max) || max < 1) return `Slot ${i + 1}: máximo inválido.`
+    if (max < min) return `Slot ${i + 1}: máximo deve ser >= mínimo.`
+    if (!Array.isArray(s.options) || s.options.length === 0) return `Slot ${i + 1} (${s.name}) sem opções.`
+    for (let j = 0; j < s.options.length; j++) {
+      const o = s.options[j]
+      if (!o.linkedProductId) return `Slot ${i + 1} / opção ${j + 1}: selecione um produto.`
+    }
+  }
+  return null
+}
+
 async function save(){
   error.value = ''
   saving.value = true
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
+    if(form.value.isCombo){
+      const comboErr = validateCombo()
+      if(comboErr){ error.value = comboErr; return }
+    }
     if(isEdit){
-      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
+      const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule, isCombo: !!form.value.isCombo }
+      if(form.value.isCombo) payload.combo = buildComboPayload()
       if(form.value.marketplace) payload.marketplace = form.value.marketplace
       // include cashbackPercent when cashback module is enabled (allow null to clear)
       if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
@@ -372,7 +505,8 @@ async function save(){
         else { router.push({ path: '/menu/admin' }) }
       }
     } else {
-  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule }
+  const payload = { name: form.value.name, description: form.value.description, price: form.value.price, position: form.value.position, isActive: form.value.isActive, highlightOnSlip: !!form.value.highlightOnSlip, categoryId: form.value.categoryId, menuId: form.value.menuId, technicalSheetId: form.value.technicalSheetId, stockIngredientId: form.value.stockIngredientId, dadosFiscaisId: form.value.dadosFiscaisId || null, alwaysAvailable: !!form.value.alwaysAvailable, weeklySchedule: form.value.alwaysAvailable ? null : form.value.weeklySchedule, isCombo: !!form.value.isCombo }
+  if(form.value.isCombo) payload.combo = buildComboPayload()
   if(form.value.marketplace) payload.marketplace = form.value.marketplace
   if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
   if(form.value.specialTakeoutPriceEnabled) payload.specialTakeoutPrice = Number(form.value.specialTakeoutPrice || 0)
@@ -442,4 +576,14 @@ const cmvPercent = computed(() => {
 </script>
 
 <style scoped>
+.type-choice-card {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  border: 2px solid var(--border-color, #e6e6e6);
+}
+.type-choice-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover, 0 4px 12px rgba(0,0,0,0.08));
+  border-color: var(--primary, #105784);
+}
 </style>
