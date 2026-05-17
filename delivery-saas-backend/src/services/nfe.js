@@ -4,6 +4,7 @@ import path from 'path'
 import fs from 'fs'
 import { createRequire } from 'module'
 import { decryptText } from '../utils/secretStore.js'
+import { expandOrderItemsToDet } from './nfeExpansion.js'
 
 const require = createRequire(import.meta.url)
 const nfeModule = require('../../nfe-module/dist/index.js')
@@ -550,70 +551,27 @@ export async function emitNfeFromOrder(orderId) {
 
   const tpAmb = fiscalConfig.nfeEnvironment === 'production' ? '1' : '2'
 
-  // Load fiscal data for each product (with category as fallback)
-  const productIds = order.items.filter(i => i.productId).map(i => i.productId)
+  // Load fiscal data for each product (with category as fallback).
+  // Inclui linkedProducts dos slots de combo (option.productId) para que o
+  // rateio fiscal consiga buscar o dadosFiscais real do item-componente.
+  const productIds = [...new Set([
+    ...order.items.filter(i => i.productId).map(i => i.productId),
+    ...order.items.flatMap(i => (i.options || []).map(o => o.productId).filter(Boolean)),
+  ])]
   const products = productIds.length
     ? await prisma.product.findMany({
         where: { id: { in: productIds } },
-        include: { dadosFiscais: true, category: { include: { dadosFiscais: true } } }
+        include: {
+          dadosFiscais: true,
+          category: { include: { dadosFiscais: true } },
+          combo: { include: { slots: { include: { options: true } } } },
+        }
       })
     : []
   const productMap = new Map(products.map(p => [p.id, p]))
 
-  const det = order.items.map((item, idx) => {
-    const prod = productMap.get(item.productId)
-    const fiscal = prod?.dadosFiscais || prod?.category?.dadosFiscais || null
-
-    const ncm = fiscal?.ncm ? String(fiscal.ncm).replace(/\D/g, '').padStart(8, '0').slice(0, 8) : '00000000'
-    let cfop = '5102'
-    let csosn = null
-    let cstPis = null
-    let cstCofins = null
-    if (fiscal?.cfops) {
-      try {
-        const cfopArr = typeof fiscal.cfops === 'string' ? JSON.parse(fiscal.cfops) : fiscal.cfops
-        if (Array.isArray(cfopArr) && cfopArr.length > 0) {
-          const first = cfopArr[0]
-          if (first && typeof first === 'object') {
-            cfop = String(first.code || first.cfop || '5102').replace('.', '')
-            csosn = first.csosn || null
-            cstPis = first.cstPis || null
-            cstCofins = first.cstCofins || null
-          } else {
-            cfop = String(first).replace('.', '')
-          }
-        }
-      } catch { /* keep default */ }
-    }
-    const ean = fiscal?.ean ? String(fiscal.ean).replace(/\D/g, '') : null
-    const cEAN = (ean && ean.length >= 8) ? ean : 'SEM GTIN'
-
-    return {
-      nItem: idx + 1,
-      prod: {
-        xProd: item.name,
-        cProd: String(item.id || idx + 1),
-        NCM: ncm,
-        CFOP: cfop,
-        uCom: 'UN',
-        qCom: String(Number(item.quantity).toFixed(4)),
-        vUnCom: Number(item.price).toFixed(2),
-        vProd: (Number(item.quantity) * Number(item.price)).toFixed(2),
-        _ean: cEAN,
-      },
-      imposto: {
-        pICMS: Number(fiscal?.icmsAliq || 0),
-        _orig: String(fiscal?.orig ?? '0'),
-        _modBC: fiscal?.icmsModBC != null ? String(fiscal.icmsModBC) : null,
-        _pPIS: Number(fiscal?.pPIS || 0),
-        _pCOFINS: Number(fiscal?.pCOFINS || 0),
-        _pIPI: Number(fiscal?.pIPI || 0),
-        _csosn: csosn,
-        _cstPis: cstPis,
-        _cstCofins: cstCofins,
-      }
-    }
-  })
+  // Expansão de combos (rateio fiscal) + options legados.
+  const det = expandOrderItemsToDet(order.items, productMap)
 
   const vProd = det.reduce((s, d) => s + Number(d.prod.vProd), 0)
 
