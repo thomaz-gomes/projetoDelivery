@@ -13,6 +13,9 @@ import { normalizeToIngredientUnit, areUnitsCompatible } from '../utils/unitConv
 import { makeCopyName } from '../utils/copyName.js'
 import { optimizeForWeb } from '../utils/imageOptimizer.js'
 import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
+import { COMBO_INCLUDE, createComboGraph } from '../utils/comboGraph.js'
+
+const truthyBool = v => v === true || v === 'true' || v === 1 || v === '1'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -473,67 +476,6 @@ router.post('/categories/:id/duplicate', requireRole('ADMIN'), async (req, res) 
 })
 
 // ------- Products -------
-// Shared include shape for product responses that need the full combo graph
-const COMBO_INCLUDE = {
-  combo: {
-    include: {
-      slots: {
-        include: {
-          options: {
-            include: {
-              linkedProduct: { select: { id: true, name: true, price: true, integrationCode: true } }
-            },
-            orderBy: { position: 'asc' }
-          }
-        },
-        orderBy: { position: 'asc' }
-      }
-    }
-  }
-}
-
-// Create Combo + Slots + Options for a given product inside a transaction.
-// Validates that every linked product belongs to the same company (multi-tenant
-// safety) and that vUnComReferencia is a positive number.
-async function createComboGraph(tx, productId, companyId, comboInput) {
-  if (!comboInput || !Array.isArray(comboInput.slots)) return
-  const created = await tx.combo.create({ data: { productId, companyId } })
-  for (let sIdx = 0; sIdx < comboInput.slots.length; sIdx++) {
-    const slot = comboInput.slots[sIdx] || {}
-    const createdSlot = await tx.comboSlot.create({
-      data: {
-        comboId: created.id,
-        name: String(slot.name || ('Slot ' + (sIdx + 1))),
-        minSelect: Number(slot.minSelect ?? 1),
-        maxSelect: Number(slot.maxSelect ?? 1),
-        position: sIdx
-      }
-    })
-    const options = Array.isArray(slot.options) ? slot.options : []
-    for (let oIdx = 0; oIdx < options.length; oIdx++) {
-      const opt = options[oIdx] || {}
-      const vUn = Number(opt.vUnComReferencia)
-      if (!opt.linkedProductId || !Number.isFinite(vUn) || vUn <= 0) {
-        throw new Error('Slot ' + (sIdx + 1) + ': opção ' + (oIdx + 1) + ' inválida')
-      }
-      // Multi-tenant safety: linked product must belong to the same company
-      const linked = await tx.product.findFirst({ where: { id: opt.linkedProductId, companyId } })
-      if (!linked) {
-        throw new Error('Slot ' + (sIdx + 1) + ': opção ' + (oIdx + 1) + ' inválida')
-      }
-      await tx.comboSlotOption.create({
-        data: {
-          slotId: createdSlot.id,
-          linkedProductId: opt.linkedProductId,
-          vUnComReferencia: vUn,
-          integrationCode: opt.integrationCode || null,
-          position: oIdx
-        }
-      })
-    }
-  }
-}
-
 router.get('/products', async (req, res) => {
   const companyId = req.user.companyId
   const { categoryId } = req.query
@@ -614,8 +556,8 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
     let created
     try {
       created = await prisma.$transaction(async (tx) => {
-        const product = await tx.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null, isCombo: Boolean(isCombo) } })
-        if (isCombo === true && combo && Array.isArray(combo.slots)) {
+        const product = await tx.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null, isCombo: truthyBool(isCombo) } })
+        if (truthyBool(isCombo) && combo && Array.isArray(combo.slots)) {
           await createComboGraph(tx, product.id, companyId, combo)
         }
         return await tx.product.findUnique({ where: { id: product.id }, include: COMBO_INCLUDE })
@@ -761,57 +703,56 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
     return res.status(400).json({ message: 'Produto não pode ter ficha técnica e ingrediente de estoque ao mesmo tempo' })
   }
 
-  await prisma.product.update({ where: { id }, data: {
-    name: name ?? existing.name,
-    description: description ?? existing.description,
-    price: price !== undefined ? Number(price) : existing.price,
-    // Toggle off (null/empty/undefined) and zero are equivalent here — a 0
-    // special price would zero-out balcão receipts, so we treat it as "no
-    // special price" and clear the column. Only positive numbers persist.
-    specialTakeoutPrice: specialTakeoutPrice === undefined
-      ? existing.specialTakeoutPrice
-      : (specialTakeoutPrice === null || specialTakeoutPrice === '' || !Number.isFinite(Number(specialTakeoutPrice)) || Number(specialTakeoutPrice) <= 0)
-        ? null
-        : Number(specialTakeoutPrice),
-    categoryId: categoryId !== undefined ? categoryId : existing.categoryId,
-    position: position !== undefined ? Number(position) : existing.position,
-    isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
-    image: imageValue,
-    menuId: menuId !== undefined ? menuId : existing.menuId,
-    technicalSheetId: technicalSheetId !== undefined ? technicalSheetId : existing.technicalSheetId,
-    stockIngredientId: stockIngredientId !== undefined ? stockIngredientId : existing.stockIngredientId
-  ,
-    // set cashbackPercent if provided (allow null to clear)
-    cashbackPercent: cashbackPercent !== undefined ? (cashbackPercent === null ? null : Number(cashbackPercent)) : existing.cashbackPercent,
-    dadosFiscaisId: dadosFiscaisId !== undefined ? (dadosFiscaisId || null) : existing.dadosFiscaisId,
-    highlightOnSlip: highlightOnSlip !== undefined ? Boolean(highlightOnSlip) : existing.highlightOnSlip,
-    featured: featured !== undefined ? Boolean(featured) : existing.featured,
-    alwaysAvailable: alwaysAvailable !== undefined ? Boolean(alwaysAvailable) : existing.alwaysAvailable,
-    weeklySchedule: alwaysAvailable !== undefined
-      ? (alwaysAvailable === false ? (weeklySchedule || null) : null)
-      : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule),
-    isCombo: isCombo !== undefined ? Boolean(isCombo) : existing.isCombo
-  } })
-
-  // Combo graph maintenance (delete+recreate or just delete) — runs after the
-  // product update so we don't block normal field edits if combo payload is
-  // absent.
-  const finalIsCombo = isCombo !== undefined ? Boolean(isCombo) : Boolean(existing.isCombo)
   try {
-    if (!finalIsCombo) {
-      // Either explicitly turned off, or never was a combo — ensure no orphan combo remains.
-      await prisma.combo.deleteMany({ where: { productId: id } })
-    } else if (combo && Array.isArray(combo.slots)) {
-      // isCombo === true and a combo payload was provided: delete+recreate slots/options atomically.
-      await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({ where: { id }, data: {
+        name: name ?? existing.name,
+        description: description ?? existing.description,
+        price: price !== undefined ? Number(price) : existing.price,
+        // Toggle off (null/empty/undefined) and zero are equivalent here — a 0
+        // special price would zero-out balcão receipts, so we treat it as "no
+        // special price" and clear the column. Only positive numbers persist.
+        specialTakeoutPrice: specialTakeoutPrice === undefined
+          ? existing.specialTakeoutPrice
+          : (specialTakeoutPrice === null || specialTakeoutPrice === '' || !Number.isFinite(Number(specialTakeoutPrice)) || Number(specialTakeoutPrice) <= 0)
+            ? null
+            : Number(specialTakeoutPrice),
+        categoryId: categoryId !== undefined ? categoryId : existing.categoryId,
+        position: position !== undefined ? Number(position) : existing.position,
+        isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
+        image: imageValue,
+        menuId: menuId !== undefined ? menuId : existing.menuId,
+        technicalSheetId: technicalSheetId !== undefined ? technicalSheetId : existing.technicalSheetId,
+        stockIngredientId: stockIngredientId !== undefined ? stockIngredientId : existing.stockIngredientId
+      ,
+        // set cashbackPercent if provided (allow null to clear)
+        cashbackPercent: cashbackPercent !== undefined ? (cashbackPercent === null ? null : Number(cashbackPercent)) : existing.cashbackPercent,
+        dadosFiscaisId: dadosFiscaisId !== undefined ? (dadosFiscaisId || null) : existing.dadosFiscaisId,
+        highlightOnSlip: highlightOnSlip !== undefined ? Boolean(highlightOnSlip) : existing.highlightOnSlip,
+        featured: featured !== undefined ? Boolean(featured) : existing.featured,
+        alwaysAvailable: alwaysAvailable !== undefined ? Boolean(alwaysAvailable) : existing.alwaysAvailable,
+        weeklySchedule: alwaysAvailable !== undefined
+          ? (alwaysAvailable === false ? (weeklySchedule || null) : null)
+          : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule),
+        isCombo: isCombo !== undefined ? truthyBool(isCombo) : existing.isCombo
+      } })
+
+      // Combo graph maintenance (delete+recreate or just delete) — runs inside the
+      // same transaction as the product update so failures roll back both.
+      const finalIsCombo = isCombo !== undefined ? truthyBool(isCombo) : Boolean(existing.isCombo)
+      if (!finalIsCombo) {
+        // Either explicitly turned off, or never was a combo — ensure no orphan combo remains.
+        await tx.combo.deleteMany({ where: { productId: id } })
+      } else if (combo && Array.isArray(combo.slots)) {
+        // isCombo === true and a combo payload was provided: delete+recreate slots/options.
         await tx.combo.deleteMany({ where: { productId: id } })
         await createComboGraph(tx, id, companyId, combo)
-      })
-    }
-    // If finalIsCombo === true but no combo payload was provided, leave the existing combo untouched.
+      }
+      // else: finalIsCombo=true SEM combo no body → mantém combo existente intacto (comportamento defensivo)
+    })
   } catch (txErr) {
-    console.error('Combo update transaction failed:', txErr?.message || txErr)
-    return res.status(400).json({ message: txErr?.message || 'Falha ao atualizar combo' })
+    console.error('PATCH /products: transaction error', txErr?.message || txErr)
+    return res.status(400).json({ message: txErr?.message || 'Falha ao atualizar produto/combo' })
   }
 
   const fresh = await prisma.product.findUnique({ where: { id }, include: COMBO_INCLUDE })
