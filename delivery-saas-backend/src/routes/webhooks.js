@@ -302,12 +302,32 @@ webhooksRouter.post("/ifood", async (req, res) => {
     createObj.payload = enrichedPayload
 
     createObj.items = {
-      create: matchedItems.map((it) => ({
-        name: it.name || "Item",
-        quantity: Number(it.quantity || 1),
-        price: Number(it.unitPrice || it.price || 0) || (Number(it.totalPrice || 0) / (Number(it.quantity || 1) || 1)),
-        productId: it._matchedProductId || null,
-      })),
+      create: matchedItems.map((it) => {
+        const subs = it.subItems || it.subitems || it.garnishItems || []
+        const options = subs.length > 0 ? subs.map(s => {
+          const kind = s._kind || 'addon'
+          const price = Number(s.unitPrice || s.price || 0) || (Number(s.totalPrice || 0) / (Number(s.quantity || 1) || 1))
+          const opt = {
+            kind,
+            name: s.name,
+            quantity: Number(s.quantity || 1),
+            price,
+            productId: s._matchedProductId || null,
+            _matchedProductId: s._matchedProductId || null,
+          }
+          if (kind === 'combo_slot' && s._vUnComReferencia != null) {
+            opt.vUnComReferencia = Number(s._vUnComReferencia)
+          }
+          return opt
+        }) : null
+        return {
+          name: it.name || "Item",
+          quantity: Number(it.quantity || 1),
+          price: Number(it.unitPrice || it.price || 0) || (Number(it.totalPrice || 0) / (Number(it.quantity || 1) || 1)),
+          productId: it._matchedProductId || null,
+          options,
+        }
+      }),
     };
 
     // update object mirrors previous update but only sets status when transition allowed
@@ -784,7 +804,26 @@ webhooksRouter.get("/generate-test", async (req, res) => {
         deliveryFee: Number(orderPayload.total?.deliveryFee ?? orderPayload.deliveryFee ?? 0),
         payload: orderPayload,
         items: {
-          create: (orderPayload.items || []).map((it) => ({ name: it.name || 'Item', quantity: Number(it.quantity || it.qtd || 1), price: Number(it.unitPrice || it.price || 0) || (Number(it.totalPrice || 0) / (Number(it.quantity || 1) || 1)), productId: it._matchedProductId || null }))
+          create: (orderPayload.items || []).map((it) => {
+            const subs = it.subItems || it.subitems || it.garnishItems || []
+            const options = subs.length > 0 ? subs.map(s => {
+              const kind = s._kind || 'addon'
+              const price = Number(s.unitPrice || s.price || 0) || (Number(s.totalPrice || 0) / (Number(s.quantity || 1) || 1))
+              const opt = {
+                kind,
+                name: s.name,
+                quantity: Number(s.quantity || 1),
+                price,
+                productId: s._matchedProductId || null,
+                _matchedProductId: s._matchedProductId || null,
+              }
+              if (kind === 'combo_slot' && s._vUnComReferencia != null) {
+                opt.vUnComReferencia = Number(s._vUnComReferencia)
+              }
+              return opt
+            }) : null
+            return { name: it.name || 'Item', quantity: Number(it.quantity || it.qtd || 1), price: Number(it.unitPrice || it.price || 0) || (Number(it.totalPrice || 0) / (Number(it.quantity || 1) || 1)), productId: it._matchedProductId || null, options }
+          })
         },
         histories: { create: [{ to: 'EM_PREPARO', reason: 'Teste iFood (generate-test)' }] }
       },

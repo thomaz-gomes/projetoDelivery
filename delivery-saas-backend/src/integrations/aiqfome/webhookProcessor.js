@@ -196,14 +196,33 @@ export async function processAiqfomeWebhook(eventId) {
           orderType,
           payload: order,
           items: {
-            create: items.map(i => ({
-              name: i.name,
-              quantity: i.quantity,
-              price: i.price,
-              notes: i.notes || null,
-              productId: i.productId || null,
-              options: i.options || null,
-            })),
+            create: items.map(i => {
+              const subs = Array.isArray(i.options) ? i.options : []
+              const options = subs.length > 0 ? subs.map(s => {
+                const kind = s._kind || 'addon'
+                const price = Number(s.unitPrice || s.price || 0) || (Number(s.totalPrice || 0) / (Number(s.quantity || 1) || 1))
+                const opt = {
+                  kind,
+                  name: s.name,
+                  quantity: Number(s.quantity || 1),
+                  price,
+                  productId: s._matchedProductId || null,
+                  _matchedProductId: s._matchedProductId || null,
+                }
+                if (kind === 'combo_slot' && s._vUnComReferencia != null) {
+                  opt.vUnComReferencia = Number(s._vUnComReferencia)
+                }
+                return opt
+              }) : null
+              return {
+                name: i.name,
+                quantity: i.quantity,
+                price: i.price,
+                notes: i.notes || null,
+                productId: i.productId || null,
+                options,
+              }
+            }),
           },
           histories: { create: [{ from: null, to: initialStatus, reason: `aiqbridge webhook (${eventType})` }] },
         },

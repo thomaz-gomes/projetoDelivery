@@ -393,12 +393,22 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
         items: {
           create: mapped.items.map((i) => {
             const subs = i.subItems || i.subitems || i.garnishItems || []
-            const options = subs.length > 0 ? subs.map(s => ({
-              name: s.name,
-              quantity: Number(s.quantity || 1),
-              price: Number(s.unitPrice || s.price || 0) || (Number(s.totalPrice || 0) / (Number(s.quantity || 1) || 1)),
-              _matchedProductId: s._matchedProductId || null,
-            })) : null
+            const options = subs.length > 0 ? subs.map(s => {
+              const kind = s._kind || 'addon'
+              const price = Number(s.unitPrice || s.price || 0) || (Number(s.totalPrice || 0) / (Number(s.quantity || 1) || 1))
+              const opt = {
+                kind,
+                name: s.name,
+                quantity: Number(s.quantity || 1),
+                price,
+                productId: s._matchedProductId || null,
+                _matchedProductId: s._matchedProductId || null,
+              }
+              if (kind === 'combo_slot' && s._vUnComReferencia != null) {
+                opt.vUnComReferencia = Number(s._vUnComReferencia)
+              }
+              return opt
+            }) : null
             return {
               name: i.name,
               quantity: i.quantity,
@@ -485,12 +495,22 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
       updateData.items = {
         create: mapped.items.map(i => {
           const subs = i.subItems || i.subitems || i.garnishItems || []
-          const options = subs.length > 0 ? subs.map(s => ({
-            name: s.name,
-            quantity: Number(s.quantity || 1),
-            price: Number(s.unitPrice || s.price || 0) || (Number(s.totalPrice || 0) / (Number(s.quantity || 1) || 1)),
-            _matchedProductId: s._matchedProductId || null,
-          })) : null
+          const options = subs.length > 0 ? subs.map(s => {
+            const kind = s._kind || 'addon'
+            const price = Number(s.unitPrice || s.price || 0) || (Number(s.totalPrice || 0) / (Number(s.quantity || 1) || 1))
+            const opt = {
+              kind,
+              name: s.name,
+              quantity: Number(s.quantity || 1),
+              price,
+              productId: s._matchedProductId || null,
+              _matchedProductId: s._matchedProductId || null,
+            }
+            if (kind === 'combo_slot' && s._vUnComReferencia != null) {
+              opt.vUnComReferencia = Number(s._vUnComReferencia)
+            }
+            return opt
+          }) : null
           return {
             name: i.name,
             quantity: i.quantity,
