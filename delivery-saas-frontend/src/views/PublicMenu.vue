@@ -254,6 +254,7 @@
                     <div class="product-card-body">
                       <div>
                         <!-- <div v-if="p.featured" class="product-tag">Destaque</div> -->
+                        <span v-if="p.isCombo" class="badge bg-info text-uppercase mb-1">Combo</span>
                         <h6 class="product-title">{{ p.name }}</h6>
                         <div class="product-desc">{{ p.description }}</div>
                       </div>
@@ -388,7 +389,13 @@
 
               <!-- Product info -->
               <div class="modal-product-info">
-                <h5 class="modal-product-name">{{ selectedProduct?.name }}</h5>
+                <div v-if="selectedProduct?.isCombo" class="small text-uppercase fw-semibold text-info mb-1">
+                  <i class="bi bi-collection me-1"></i>Monte seu combo
+                </div>
+                <h5 class="modal-product-name">
+                  {{ selectedProduct?.name }}
+                  <span v-if="selectedProduct?.isCombo" class="badge bg-info ms-2">Combo</span>
+                </h5>
                 <div class="modal-product-desc">{{ selectedProduct?.description }}</div>
                 <div class="d-flex align-items-center gap-3 mt-2">
                   <strong class="modal-product-price">{{ formatCurrency(effectiveProductPrice(selectedProduct)) }}</strong>
@@ -407,6 +414,69 @@
                 </div>
               </div>
                 
+
+              <!-- Combo slots (when product is a combo) -->
+              <div v-if="selectedProduct?.isCombo && selectedProduct?.combo?.slots?.length" class="mb-4">
+                <div
+                  v-for="slot in selectedProduct.combo.slots"
+                  :key="slot.id"
+                  :id="'combo-slot-'+slot.id"
+                  :class="['mb-3', 'combo-slot-block', requiredWarnings['combo-slot-'+slot.id] ? 'required-fail' : '']"
+                >
+                  <div class="d-flex justify-content-between align-items-center mb-2 group-header">
+                    <div>
+                      <strong>{{ slot.name }}</strong>
+                      <div class="small" :class="requiredWarnings['combo-slot-'+slot.id] ? 'text-danger' : 'text-muted'">
+                        <template v-if="slot.minSelect === slot.maxSelect">
+                          Escolha {{ slot.minSelect }}
+                        </template>
+                        <template v-else>
+                          Escolha de {{ slot.minSelect }} a {{ slot.maxSelect }}
+                        </template>
+                        <span v-if="slot.minSelect > 0" class="text-danger">*</span>
+                      </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                      <span v-if="(slot.minSelect || 0) > 0" :class="['badge', requiredWarnings['combo-slot-'+slot.id] ? 'bg-danger' : 'bg-secondary']">OBRIGATÓRIO</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div v-for="opt in (slot.options || [])" :key="opt.id" class="mb-2">
+                      <div class="d-flex justify-content-between align-items-center option-row">
+                        <div class="d-flex align-items-center gap-2 option-left">
+                          <div class="option-meta">
+                            <div class="option-name">{{ opt.linkedProduct?.name || 'Opção' }}</div>
+                            <small v-if="opt.linkedProduct && opt.linkedProduct.isActive === false" class="text-danger">Indisponível</small>
+                          </div>
+                        </div>
+                        <div>
+                          <input
+                            v-if="slot.maxSelect === 1"
+                            class="form-check-input"
+                            type="radio"
+                            :name="'combo-slot-'+slot.id"
+                            :id="'combo-opt-'+opt.id"
+                            :value="opt.id"
+                            v-model="comboSelections[slot.id]"
+                            :disabled="opt.linkedProduct && opt.linkedProduct.isActive === false"
+                            @change="onSlotChange(slot)"
+                          />
+                          <input
+                            v-else
+                            class="form-check-input"
+                            type="checkbox"
+                            :id="'combo-opt-'+opt.id"
+                            :value="opt.id"
+                            v-model="comboSelections[slot.id]"
+                            :disabled="opt.linkedProduct && opt.linkedProduct.isActive === false"
+                            @change="onSlotChange(slot)"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <div v-if="selectedProduct?.optionGroups && selectedProduct.optionGroups.length">
                 <div v-for="g in selectedProduct.optionGroups" :key="g.id" :id="'grp-'+g.id" :class="['mb-3', requiredWarnings[g.id] ? 'required-fail' : '']">
@@ -1789,7 +1859,23 @@ try{
         name: item.name,
         price: Number(item.price || 0),
         quantity: Number(item.quantity || 0),
-        options: Array.isArray(item.options) ? item.options.map(o => ({ id: o.id, name: o.name, price: Number(o.price || 0) })) : [],
+        options: Array.isArray(item.options) ? item.options.map(o => {
+          // preserve combo_slot kind and metadata so cart-recovery doesn't drop slot info
+          if (o && o.kind === 'combo_slot') {
+            return {
+              kind: 'combo_slot',
+              slotId: o.slotId || null,
+              slotName: o.slotName || null,
+              optionId: o.optionId || o.id || null,
+              id: o.id || o.optionId || null,
+              productId: o.productId || null,
+              name: o.name || '',
+              price: Number(o.price || 0),
+              vUnComReferencia: Number(o.vUnComReferencia || 0),
+            }
+          }
+          return { kind: 'addon', id: o.id, name: o.name, price: Number(o.price || 0) }
+        }) : [],
         image: item.image || null,
         categoryId: item.categoryId || null
       }))
@@ -2415,6 +2501,17 @@ const requiredMessages = reactive({})
 const _autoTimers = {}
 // index of the cart item being edited (-1 = not editing)
 const editingCartIndex = ref(-1)
+// combo product slot selections — map slotId -> optionId (string for radio/max=1) or array of optionIds (checkbox/max>1)
+const comboSelections = ref({})
+
+// Clear required warning for a combo slot when its selection changes.
+function onSlotChange(slot){
+  try{
+    const key = 'combo-slot-' + slot.id
+    delete requiredWarnings[key]
+    delete requiredMessages[key]
+  }catch(e){}
+}
 
 function showTip(key, msg, ms = 1400){
   try{
@@ -2700,9 +2797,15 @@ function validatePersistedCart(){
       let optionDropped = false
       if(Array.isArray(it.options)){
         for(const oo of it.options){
-          const oid = oo && (oo.id || oo)
+          if(!oo) continue
+          // Combo slot options are managed separately from optionGroups; preserve them as-is.
+          if(oo.kind === 'combo_slot'){
+            validatedOptions.push({ ...oo, price: Number(oo.price || 0) })
+            continue
+          }
+          const oid = oo.id || oo
           if(oid && optMap[oid]){
-            validatedOptions.push({ id: optMap[oid].id, name: optMap[oid].name, price: Number(optMap[oid].price) })
+            validatedOptions.push({ kind: 'addon', id: optMap[oid].id, name: optMap[oid].name, price: Number(optMap[oid].price) })
             optionsTotal += Number(optMap[oid].price)
           } else {
             // option missing -> drop it
@@ -2782,20 +2885,22 @@ function addToCart(p, options = [], observation = ''){
   }
 }
 
-function addToCartWithOptions(p, selections, qty=1, observation=''){
+function addToCartWithOptions(p, selections, qty=1, observation='', comboOptions=[]){
   // selections: { groupId: [optionIds] }
-  // compute options total price
+  // comboOptions: array of pre-built { kind: 'combo_slot', slotId, optionId, name, productId, ... } entries
+  // compute options total price (only addons contribute to subtotal — slots are part of product.price)
   let optionsTotal = 0
-  const selectedOptions = []
+  const addonOptions = []
   if(p.optionGroups && p.optionGroups.length){
     for(const g of p.optionGroups){
       const sel = selections[g.id] || []
       for(const oid of sel){
         const opt = (g.options||[]).find(o=>o.id===oid)
-        if(opt){ optionsTotal += Number(opt.price||0); selectedOptions.push({ id: opt.id, name: opt.name, price: Number(opt.price||0) }) }
+        if(opt){ optionsTotal += Number(opt.price||0); addonOptions.push({ kind: 'addon', id: opt.id, name: opt.name, price: Number(opt.price||0) }) }
       }
     }
   }
+  const selectedOptions = [...(Array.isArray(comboOptions) ? comboOptions : []), ...addonOptions]
   const unitPrice = effectiveProductPrice(p) + optionsTotal
   const obs = (observation || '').trim() || null
   // try to merge with existing line that has same productId+options+observation
@@ -2809,8 +2914,10 @@ function addToCartWithOptions(p, selections, qty=1, observation=''){
 
 function openProductModal(p, force = false){
   // In catalog mode always open the modal — never quick-add to cart.
-  // Outside catalog mode: if no option groups and not forcing, quick-add directly.
-  if(!isCatalogMode.value && !force && (!p.optionGroups || !p.optionGroups.length)){
+  // Outside catalog mode: if product is a combo OR has option groups, always open modal.
+  const isCombo = !!(p && p.isCombo)
+  const hasOptionGroups = p && Array.isArray(p.optionGroups) && p.optionGroups.length > 0
+  if(!isCatalogMode.value && !force && !isCombo && !hasOptionGroups){
     addToCartWithOptions(p, {}, 1)
     return
   }
@@ -2835,6 +2942,15 @@ function openProductModal(p, force = false){
     }
   }
   optionSelections.value = map
+  // reset combo slot selections — initialize per slot based on maxSelect (radio=string, checkbox=array)
+  const slotMap = {}
+  if(isCombo && p.combo && Array.isArray(p.combo.slots)){
+    for(const slot of p.combo.slots){
+      slotMap[slot.id] = (slot.maxSelect === 1) ? '' : []
+      try{ delete requiredWarnings['combo-slot-' + slot.id]; delete requiredMessages['combo-slot-' + slot.id] }catch(e){}
+    }
+  }
+  comboSelections.value = slotMap
   modalOpen.value = true
 }
 
@@ -2998,6 +3114,44 @@ function confirmAddFromModal(){
   modalError.value = ''
   const p = selectedProduct.value
   const selectionsForCart = {}
+  // Validate combo slots first when product is a combo
+  const comboOptions = []
+  if(p && p.isCombo && p.combo && Array.isArray(p.combo.slots)){
+    for(const slot of p.combo.slots){
+      const raw = comboSelections.value[slot.id]
+      const selectedIds = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : [])
+      const total = selectedIds.length
+      const minSel = Number(slot.minSelect || 0)
+      const maxSel = Number(slot.maxSelect || 0)
+      const key = 'combo-slot-' + slot.id
+      if(total < minSel){
+        requiredWarnings[key] = true
+        requiredMessages[key] = minSel === maxSel ? `Escolha ${minSel} opção(ões)` : `Escolha ao menos ${minSel} opção(ões)`
+      } else {
+        try{ delete requiredWarnings[key]; delete requiredMessages[key] }catch(e){}
+      }
+      if(maxSel > 0 && total > maxSel){
+        modalError.value = `Máximo ${maxSel} opção(ões) permitido para "${slot.name}"`
+        return
+      }
+      // collect chosen options (only when valid count) to build payload later
+      for(const oid of selectedIds){
+        const opt = (slot.options || []).find(o => o.id === oid)
+        if(!opt) continue
+        comboOptions.push({
+          kind: 'combo_slot',
+          slotId: slot.id,
+          slotName: slot.name,
+          optionId: opt.id,
+          id: opt.id, // kept for backward-compatible findCartIndex/_optionsKey
+          productId: opt.linkedProductId || (opt.linkedProduct && opt.linkedProduct.id) || null,
+          name: (opt.linkedProduct && opt.linkedProduct.name) || 'Opção',
+          price: 0, // slots do not add to subtotal
+          vUnComReferencia: Number(opt.vUnComReferencia || 0),
+        })
+      }
+    }
+  }
   if(p && p.optionGroups){
     for(const g of p.optionGroups){
       const raw = optionSelections.value[g.id]
@@ -3015,7 +3169,7 @@ function confirmAddFromModal(){
         }
         selectionsForCart[g.id] = arr
       }
-      if((g.min || 0) > total){ 
+      if((g.min || 0) > total){
         // mark warning for this group and keep checking others
         requiredWarnings[g.id] = true
         requiredMessages[g.id] = `Escolha ${g.min || 0} opção(s)`
@@ -3023,9 +3177,9 @@ function confirmAddFromModal(){
         // clear any previous warning for this group
         try{ delete requiredWarnings[g.id]; delete requiredMessages[g.id] }catch(e){}
       }
-      if(g.max && total > g.max){ 
+      if(g.max && total > g.max){
         // max violation - keep using modalError for this case
-        modalError.value = `Máximo ${g.max} opção(ões) permitido para "${g.name}"`; return 
+        modalError.value = `Máximo ${g.max} opção(ões) permitido para "${g.name}"`; return
       }
     }
     }
@@ -3034,7 +3188,10 @@ function confirmAddFromModal(){
     if(failing){
       try{
         const first = Object.keys(requiredWarnings)[0]
-        const el = document.getElementById('grp-' + first)
+        // combo slot warning keys are prefixed with 'combo-slot-' and elements use the same id;
+        // option group warning keys are plain group ids and elements use 'grp-<id>'
+        const elementId = String(first).startsWith('combo-slot-') ? String(first) : ('grp-' + first)
+        const el = document.getElementById(elementId)
         if(el){
           // prefer scrolling inside the modal options column when available
           const modalCol = el.closest('.modal-options-scroll') || document.querySelector('.modal-options-scroll')
@@ -3073,19 +3230,21 @@ function confirmAddFromModal(){
             const sel = selectionsForCart[g.id] || []
             for(const oid of sel){
               const opt = (g.options||[]).find(o=>o.id===oid)
-              if(opt){ optionsTotal += Number(opt.price||0); selectedOptions.push({ id: opt.id, name: opt.name, price: Number(opt.price||0) }) }
+              if(opt){ optionsTotal += Number(opt.price||0); selectedOptions.push({ kind: 'addon', id: opt.id, name: opt.name, price: Number(opt.price||0) }) }
             }
           }
         }
-        const unitPrice = Number(p.price||0) + optionsTotal
+        // Combo slots come before addons; their price contribution is 0 (already in product.price).
+        const finalOptions = [...comboOptions, ...selectedOptions]
+        const unitPrice = effectiveProductPrice(p) + optionsTotal
         const obs = (modalObservation.value || '').trim() || null
-        cart.value[editingCartIndex.value] = { ...existingItem, price: unitPrice, quantity: modalQty.value, options: selectedOptions, observation: obs }
+        cart.value[editingCartIndex.value] = { ...existingItem, price: unitPrice, quantity: modalQty.value, options: finalOptions, observation: obs }
       }
       editingCartIndex.value = -1
       modalOpen.value = false
       return
     }
-    addToCartWithOptions(p, selectionsForCart, modalQty.value, modalObservation.value)
+    addToCartWithOptions(p, selectionsForCart, modalQty.value, modalObservation.value, comboOptions)
     modalOpen.value = false
 }
 
@@ -3383,20 +3542,44 @@ function editCartItem(i){
         else map[g.id] = {}
       }
     }
+    // initialize combo selections (radio -> '', checkbox -> [])
+    const slotMap = {}
+    if(p.isCombo && p.combo && Array.isArray(p.combo.slots)){
+      for(const slot of p.combo.slots){
+        slotMap[slot.id] = (slot.maxSelect === 1) ? '' : []
+      }
+    }
     // apply options from cart item
-    if(it.options && it.options.length && p.optionGroups){
+    if(it.options && it.options.length){
       for(const opt of it.options){
-        for(const g of p.optionGroups){
-          const found = (g.options||[]).find(o=>o.id === opt.id)
-          if(found){
-            if(Array.isArray(map[g.id])) map[g.id].push(opt.id)
-            else map[g.id][opt.id] = (map[g.id][opt.id] || 0) + 1
-            break
+        if(!opt) continue
+        if(opt.kind === 'combo_slot' && opt.slotId){
+          // restore combo slot selection
+          const slot = p.combo && Array.isArray(p.combo.slots) ? p.combo.slots.find(s => s.id === opt.slotId) : null
+          if(!slot) continue
+          if(slot.maxSelect === 1){
+            slotMap[slot.id] = opt.optionId || opt.id
+          } else {
+            if(!Array.isArray(slotMap[slot.id])) slotMap[slot.id] = []
+            const oid = opt.optionId || opt.id
+            if(oid && !slotMap[slot.id].includes(oid)) slotMap[slot.id].push(oid)
+          }
+          continue
+        }
+        if(p.optionGroups){
+          for(const g of p.optionGroups){
+            const found = (g.options||[]).find(o=>o.id === opt.id)
+            if(found){
+              if(Array.isArray(map[g.id])) map[g.id].push(opt.id)
+              else map[g.id][opt.id] = (map[g.id][opt.id] || 0) + 1
+              break
+            }
           }
         }
       }
     }
     optionSelections.value = map
+    comboSelections.value = slotMap
     editingCartIndex.value = i
     modalOpen.value = true
   }catch(e){ console.error('editCartItem', e) }
