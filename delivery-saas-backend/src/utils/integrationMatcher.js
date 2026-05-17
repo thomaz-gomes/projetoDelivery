@@ -37,7 +37,7 @@ export async function matchItemsToLocalProducts(items, companyId) {
   if (allCodes.length > 0) {
     const products = await prisma.product.findMany({
       where: { companyId, integrationCode: { in: allCodes } },
-      select: { id: true, name: true, integrationCode: true }
+      select: { id: true, name: true, integrationCode: true, isCombo: true }
     })
     console.log('[IntegrationMatcher] found', products.length, 'matching products:', products.map(p => `${p.integrationCode}=${p.name}`))
     for (const p of products) {
@@ -67,6 +67,27 @@ export async function matchItemsToLocalProducts(items, companyId) {
     }
   }
 
+  // Batch fetch matching combo slot options (for subitems of combo products)
+  // Match by ComboSlotOption.integrationCode OR by linkedProduct.integrationCode
+  const comboSlotOptionMap = {}
+  if (subCodes.length > 0) {
+    const uniqueSubCodes = [...new Set(subCodes)]
+    const slotOpts = await prisma.comboSlotOption.findMany({
+      where: {
+        slot: { combo: { companyId } },
+        OR: [
+          { integrationCode: { in: uniqueSubCodes } },
+          { linkedProduct: { integrationCode: { in: uniqueSubCodes } } },
+        ],
+      },
+      include: { linkedProduct: { select: { id: true, name: true, integrationCode: true } } },
+    })
+    for (const s of slotOpts) {
+      const codes = [s.integrationCode, s.linkedProduct?.integrationCode].filter(Boolean)
+      for (const c of codes) comboSlotOptionMap[String(c)] = s
+    }
+  }
+
   // Apply matches
   return items.map(it => {
     const code = it.externalCode || it.externalId || it.sku || it.productId || null
@@ -77,14 +98,29 @@ export async function matchItemsToLocalProducts(items, companyId) {
     if (matched) {
       result.name = matched.name
       result._matchedProductId = matched.id
+      if (matched.isCombo) result._isCombo = true
     }
 
-    // Match subitems/options — check Option table first, then Product table
+    // Match subitems/options — check ComboSlotOption (if combo), then Option, then Product
     const subs = it.subItems || it.subitems || it.garnishItems || it.options || []
     if (subs.length > 0) {
       const subKey = it.subItems ? 'subItems' : it.subitems ? 'subitems' : it.garnishItems ? 'garnishItems' : 'options'
       result[subKey] = subs.map(sub => {
         const subCode = sub.externalCode || sub.externalId || sub.sku || null
+
+        // Combo-aware: if main item is a combo, try ComboSlotOption first
+        const slotMatch = result._isCombo && subCode ? comboSlotOptionMap[String(subCode)] : null
+        if (slotMatch) {
+          console.log('[IntegrationMatcher] sub:', sub.name, 'code:', subCode, 'matched:', slotMatch.linkedProduct?.name || '(no name)', '(combo_slot)')
+          return {
+            ...sub,
+            name: slotMatch.linkedProduct?.name || sub.name,
+            _matchedProductId: slotMatch.linkedProductId,
+            _kind: 'combo_slot',
+            _vUnComReferencia: Number(slotMatch.vUnComReferencia),
+          }
+        }
+
         const matchedOpt = subCode ? optionMap[String(subCode)] : null
         const matchedProd = subCode ? productMap[String(subCode)] : null
         const match = matchedOpt || matchedProd
@@ -92,9 +128,9 @@ export async function matchItemsToLocalProducts(items, companyId) {
         console.log('[IntegrationMatcher] sub:', sub.name, 'code:', subCode, 'matched:', match ? match.name : 'NO MATCH', matchedOpt ? '(option)' : matchedProd ? '(product)' : '')
 
         if (match) {
-          return { ...sub, name: match.name, _matchedProductId: match.id }
+          return { ...sub, name: match.name, _matchedProductId: match.id, _kind: 'addon' }
         }
-        return sub
+        return { ...sub, _kind: 'addon' }
       })
     }
 
