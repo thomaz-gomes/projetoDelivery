@@ -328,6 +328,8 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
                 name:     s.name || s.description || '',
                 price:    Number(s.unitPrice || s.price || 0),
                 quantity: s.quantity != null ? Number(s.quantity) : null,
+                kind:     s.kind || null,
+                slotName: s.slotName || null,
               })),
             }))
           : (order.items || []);
@@ -379,17 +381,47 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
             const maxOpt    = optCols - optIndent;
             for (const opt of item.options) {
               const optName  = opt.name || '';
-              const oqty     = Number(opt.quantity || 1);
-              const optText = `${oqty}x ${optName}`;
+              // Combo slot: "SlotName: name" (sem `+`, sem preço; já incluído no combo)
+              // Addon pago: "+ name" + preço right-aligned em R$
+              // Addon legacy/grátis: "{qty}x name"
+              let optText;
+              let optRight = '';
+              if (opt && opt.kind === 'combo_slot') {
+                const slotLabel = String(opt.slotName || '').trim();
+                optText = slotLabel ? `${slotLabel}: ${optName}` : optName;
+              } else {
+                const oprice = _toNum(opt && opt.price);
+                const oqty = Number((opt && opt.quantity) || 1);
+                if (oprice > 0) {
+                  optText = `+ ${optName}`;
+                  optRight = `R$ ${oprice.toFixed(2).replace('.', ',')}`;
+                } else {
+                  optText = `${oqty}x ${optName}`;
+                }
+              }
               // Quebra por palavras, cada linha padded a optCols exatos
+              // Para addon pago: imprime preço right-aligned na primeira linha
               let rest = optText;
+              let firstLine = true;
               while (rest.length > 0) {
-                const part = _wordBreak(rest, maxOpt);
+                const widthForName = firstLine && optRight
+                  ? Math.max(1, maxOpt - optRight.length - 1)
+                  : maxOpt;
+                const part = _wordBreak(rest, widthForName);
                 rest = rest.slice(part.length).trimStart();
                 const raw = optPrefix + part;
-                const padded = raw.length < optCols ? raw + ' '.repeat(optCols - raw.length) : raw.slice(0, optCols);
+                let padded;
+                if (firstLine && optRight) {
+                  const padCount = optCols - raw.length - optRight.length;
+                  padded = padCount > 0
+                    ? raw + ' '.repeat(padCount) + optRight
+                    : (raw + ' ' + optRight).slice(0, optCols);
+                } else {
+                  padded = raw.length < optCols ? raw + ' '.repeat(optCols - raw.length) : raw.slice(0, optCols);
+                }
                 if (margin > 0) parts.push(ESCPos.marginLeft(margin));
                 parts.push(ESCPos.text(padded, charset));
+                firstLine = false;
               }
             }
           }
@@ -893,10 +925,24 @@ function buildContext(order, printer) {
         ? item.options.reduce((s, o) => s + _toNum(o.price || 0) * Number(o.quantity || 1), 0)
         : 0;
       const itemTotal = (base * qty) + (optsSum * qty);
+      // Render options distinguishing combo slot vs addon:
+      // - combo_slot: "   SlotName: ItemName" (no `+`, no price; included in combo price)
+      // - addon/legacy: "   {qty}x {name}" with optional price suffix when paid
+      //   - free addons (price=0) without kind keep current "{qty}x {name}" form
+      //   - paid addons get "   + {name}  R$ X,YY"
       const optLines = Array.isArray(item.options) && item.options.length > 0
         ? item.options.map(o => {
-            const oqty = Number(o.quantity || 1);
-            return `   ${oqty}x ${o.name || ''}`;
+            const name = o && o.name ? o.name : '';
+            if (o && o.kind === 'combo_slot') {
+              const slotLabel = String(o.slotName || '').trim();
+              return slotLabel ? `   ${slotLabel}: ${name}` : `   ${name}`;
+            }
+            const oprice = _toNum(o && o.price);
+            const oqty = Number((o && o.quantity) || 1);
+            if (oprice > 0) {
+              return `   + ${name}  R$ ${oprice.toFixed(2).replace('.', ',')}`;
+            }
+            return `   ${oqty}x ${name}`;
           }).join('\n')
         : '';
       return {
