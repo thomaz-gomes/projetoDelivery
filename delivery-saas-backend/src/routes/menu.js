@@ -473,6 +473,67 @@ router.post('/categories/:id/duplicate', requireRole('ADMIN'), async (req, res) 
 })
 
 // ------- Products -------
+// Shared include shape for product responses that need the full combo graph
+const COMBO_INCLUDE = {
+  combo: {
+    include: {
+      slots: {
+        include: {
+          options: {
+            include: {
+              linkedProduct: { select: { id: true, name: true, price: true, integrationCode: true } }
+            },
+            orderBy: { position: 'asc' }
+          }
+        },
+        orderBy: { position: 'asc' }
+      }
+    }
+  }
+}
+
+// Create Combo + Slots + Options for a given product inside a transaction.
+// Validates that every linked product belongs to the same company (multi-tenant
+// safety) and that vUnComReferencia is a positive number.
+async function createComboGraph(tx, productId, companyId, comboInput) {
+  if (!comboInput || !Array.isArray(comboInput.slots)) return
+  const created = await tx.combo.create({ data: { productId, companyId } })
+  for (let sIdx = 0; sIdx < comboInput.slots.length; sIdx++) {
+    const slot = comboInput.slots[sIdx] || {}
+    const createdSlot = await tx.comboSlot.create({
+      data: {
+        comboId: created.id,
+        name: String(slot.name || ('Slot ' + (sIdx + 1))),
+        minSelect: Number(slot.minSelect ?? 1),
+        maxSelect: Number(slot.maxSelect ?? 1),
+        position: sIdx
+      }
+    })
+    const options = Array.isArray(slot.options) ? slot.options : []
+    for (let oIdx = 0; oIdx < options.length; oIdx++) {
+      const opt = options[oIdx] || {}
+      const vUn = Number(opt.vUnComReferencia)
+      if (!opt.linkedProductId || !Number.isFinite(vUn) || vUn <= 0) {
+        throw new Error('Slot ' + (sIdx + 1) + ': opção ' + (oIdx + 1) + ' inválida')
+      }
+      // Multi-tenant safety: linked product must belong to the same company
+      const linked = await tx.product.findFirst({ where: { id: opt.linkedProductId, companyId } })
+      if (!linked) {
+        throw new Error('Slot ' + (sIdx + 1) + ': opção ' + (oIdx + 1) + ' inválida')
+      }
+      await tx.comboSlotOption.create({
+        data: {
+          slotId: createdSlot.id,
+          linkedProductId: opt.linkedProductId,
+          vUnComReferencia: vUn,
+          integrationCode: opt.integrationCode || null,
+          position: oIdx
+        }
+      })
+    }
+  }
+}
+
 router.get('/products', async (req, res) => {
   const companyId = req.user.companyId
   const { categoryId } = req.query
@@ -486,7 +547,17 @@ router.get('/products', async (req, res) => {
       { category: { menuLinks: { some: { menuId } } } }
     ]
   }
-  const rows = await prisma.product.findMany({ where, orderBy: { position: 'asc' }, include: { menu: { select: { name: true } }, category: { select: { name: true } }, technicalSheet: { select: { id: true, name: true } }, stockIngredient: { select: { id: true, description: true } } } })
+  const rows = await prisma.product.findMany({
+    where,
+    orderBy: { position: 'asc' },
+    include: {
+      menu: { select: { name: true } },
+      category: { select: { name: true } },
+      technicalSheet: { select: { id: true, name: true } },
+      stockIngredient: { select: { id: true, description: true } },
+      ...COMBO_INCLUDE
+    }
+  })
 
   // Enrich products with aiEnhanced flag from Media table
   const imageUrls = rows.filter(r => r.image).map(r => r.image)
@@ -507,7 +578,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-  const { name, description, price = 0, specialTakeoutPrice = undefined, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, stockIngredientId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, featured = false, alwaysAvailable = true, weeklySchedule = null } = body
+  const { name, description, price = 0, specialTakeoutPrice = undefined, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, stockIngredientId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, featured = false, alwaysAvailable = true, weeklySchedule = null, isCombo = false, combo = null } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -540,7 +611,19 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
     // receipts from being printed with total 0 when the field was left blank.
     const stoNum = (specialTakeoutPrice === undefined || specialTakeoutPrice === null || specialTakeoutPrice === '') ? null : Number(specialTakeoutPrice)
     const stoFinal = (stoNum !== null && Number.isFinite(stoNum) && stoNum > 0) ? stoNum : null
-    const created = await prisma.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null } })
+    let created
+    try {
+      created = await prisma.$transaction(async (tx) => {
+        const product = await tx.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null, isCombo: Boolean(isCombo) } })
+        if (isCombo === true && combo && Array.isArray(combo.slots)) {
+          await createComboGraph(tx, product.id, companyId, combo)
+        }
+        return await tx.product.findUnique({ where: { id: product.id }, include: COMBO_INCLUDE })
+      })
+    } catch (txErr) {
+      console.error('Combo/product transaction failed:', txErr?.message || txErr)
+      return res.status(400).json({ message: txErr?.message || 'Falha ao criar produto/combo' })
+    }
     console.log('Product created successfully', { id: created.id, companyId: created.companyId })
 
     // If client included image as base64 in the payload, decode and persist as file, then update product.image to public URL
@@ -606,7 +689,7 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, description, price, specialTakeoutPrice, categoryId, position, isActive, image, menuId, technicalSheetId, stockIngredientId, cashbackPercent, dadosFiscaisId, highlightOnSlip, featured, alwaysAvailable, weeklySchedule } = req.body || {}
+  const { name, description, price, specialTakeoutPrice, categoryId, position, isActive, image, menuId, technicalSheetId, stockIngredientId, cashbackPercent, dadosFiscaisId, highlightOnSlip, featured, alwaysAvailable, weeklySchedule, isCombo, combo } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -678,7 +761,7 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
     return res.status(400).json({ message: 'Produto não pode ter ficha técnica e ingrediente de estoque ao mesmo tempo' })
   }
 
-  const updated = await prisma.product.update({ where: { id }, data: {
+  await prisma.product.update({ where: { id }, data: {
     name: name ?? existing.name,
     description: description ?? existing.description,
     price: price !== undefined ? Number(price) : existing.price,
@@ -706,9 +789,33 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
     alwaysAvailable: alwaysAvailable !== undefined ? Boolean(alwaysAvailable) : existing.alwaysAvailable,
     weeklySchedule: alwaysAvailable !== undefined
       ? (alwaysAvailable === false ? (weeklySchedule || null) : null)
-      : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule)
+      : (weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule),
+    isCombo: isCombo !== undefined ? Boolean(isCombo) : existing.isCombo
   } })
-  res.json(updated)
+
+  // Combo graph maintenance (delete+recreate or just delete) — runs after the
+  // product update so we don't block normal field edits if combo payload is
+  // absent.
+  const finalIsCombo = isCombo !== undefined ? Boolean(isCombo) : Boolean(existing.isCombo)
+  try {
+    if (!finalIsCombo) {
+      // Either explicitly turned off, or never was a combo — ensure no orphan combo remains.
+      await prisma.combo.deleteMany({ where: { productId: id } })
+    } else if (combo && Array.isArray(combo.slots)) {
+      // isCombo === true and a combo payload was provided: delete+recreate slots/options atomically.
+      await prisma.$transaction(async (tx) => {
+        await tx.combo.deleteMany({ where: { productId: id } })
+        await createComboGraph(tx, id, companyId, combo)
+      })
+    }
+    // If finalIsCombo === true but no combo payload was provided, leave the existing combo untouched.
+  } catch (txErr) {
+    console.error('Combo update transaction failed:', txErr?.message || txErr)
+    return res.status(400).json({ message: txErr?.message || 'Falha ao atualizar combo' })
+  }
+
+  const fresh = await prisma.product.findUnique({ where: { id }, include: COMBO_INCLUDE })
+  res.json(fresh)
 })
 
 // Upload product image via base64 payload
