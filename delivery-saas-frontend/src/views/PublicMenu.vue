@@ -1864,7 +1864,7 @@ try{
               productId: o.productId || null,
               name: o.name || '',
               price: Number(o.price || 0),
-              vUnComReferencia: Number(o.vUnComReferencia || 0),
+              vUnComDeclarado: Number(o.vUnComDeclarado ?? o.vUnComReferencia ?? 0),
             }
           }
           return { kind: 'addon', id: o.id, name: o.name, price: Number(o.price || 0) }
@@ -3128,6 +3128,7 @@ function confirmAddFromModal(){
         return
       }
       // collect chosen options (only when valid count) to build payload later
+      const slotDeclarado = Number(slot.vUnComDeclarado || 0)
       for(const oid of selectedIds){
         const opt = (slot.options || []).find(o => o.id === oid)
         if(!opt) continue
@@ -3140,7 +3141,7 @@ function confirmAddFromModal(){
           productId: opt.linkedProductId || (opt.linkedProduct && opt.linkedProduct.id) || null,
           name: (opt.linkedProduct && opt.linkedProduct.name) || 'Opção',
           price: 0, // slots do not add to subtotal
-          vUnComReferencia: Number(opt.vUnComReferencia || 0),
+          vUnComDeclarado: slotDeclarado,
         })
       }
     }

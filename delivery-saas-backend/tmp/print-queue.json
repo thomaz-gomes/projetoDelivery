@@ -2949,5 +2949,199 @@
       ]
     },
     "storeId": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25"
+  },
+  {
+    "id": "1779055159126-37035",
+    "createdAt": 1779055159126,
+    "order": {
+      "id": "5de70489-f5ac-4910-91e1-6ee66845bbd2",
+      "companyId": "bd6a5381-6b90-4cc9-bc8f-24890c491693",
+      "storeId": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25",
+      "menuId": "e1cebb27-486f-4bbf-b0ce-a842ddaba377",
+      "externalId": null,
+      "displayId": null,
+      "displaySimple": 1,
+      "orderType": "DELIVERY",
+      "status": "EM_PREPARO",
+      "customerName": "thomaz",
+      "customerPhone": "(73) 9 9142-9676",
+      "customerSource": "PUBLIC",
+      "customerId": "f87d98c9-2c0b-4714-bcc3-f6080e15e372",
+      "address": "av rui barbosa, Bairro Demo",
+      "latitude": null,
+      "longitude": null,
+      "total": "66.48999999999999",
+      "deliveryNeighborhood": "Bairro Demo",
+      "couponCode": null,
+      "couponDiscount": "0",
+      "paymentDiscount": null,
+      "discountIfood": null,
+      "discountMerchant": null,
+      "deliveryFee": "6.5",
+      "additionalFees": null,
+      "payload": {
+        "total": 66.49,
+        "payment": {
+          "raw": null,
+          "amount": 66.49,
+          "method": "Pix",
+          "changeFor": null,
+          "methodCode": "Pix"
+        },
+        "delivery": {
+          "deliveryAddress": {
+            "city": null,
+            "state": null,
+            "country": "BR",
+            "latitude": null,
+            "longitude": null,
+            "reference": null,
+            "complement": null,
+            "postalCode": null,
+            "streetName": null,
+            "observation": null,
+            "neighborhood": "Bairro Demo",
+            "streetNumber": "118",
+            "formattedAddress": "av rui barbosa"
+          }
+        },
+        "orderType": "DELIVERY",
+        "rawPayload": {
+          "items": [
+            {
+              "name": "Strogonoff de frango",
+              "notes": null,
+              "price": 19.99,
+              "options": [],
+              "quantity": 1,
+              "productId": "09835bba-6bd9-46a0-aff8-9d2410166bf5"
+            },
+            {
+              "name": "Combo teste",
+              "notes": null,
+              "price": 40,
+              "options": [
+                {
+                  "id": "8e37030d-3333-44a0-90df-19e5397ba27b",
+                  "name": "Tropeiro com carne",
+                  "price": 0
+                },
+                {
+                  "id": "0420fe0c-78f4-44e6-8852-c968bca2749c",
+                  "name": "Parmegiana De Frango",
+                  "price": 0
+                },
+                {
+                  "id": "f80435a9-f59c-4e61-bfc6-709413f9fc91",
+                  "name": "Pequeno",
+                  "price": 0
+                }
+              ],
+              "quantity": 1,
+              "productId": "bafb65df-e1f8-4934-b51f-42e0505e94cf"
+            }
+          ],
+          "store": {
+            "id": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25",
+            "name": "Minha Loja de Testes - Loja 1",
+            "slug": "minha-loja-de-testes-store"
+          },
+          "address": {
+            "city": null,
+            "state": null,
+            "reference": null,
+            "complement": null,
+            "postalCode": null,
+            "streetName": null,
+            "coordinates": null,
+            "observation": null,
+            "neighborhood": "Bairro Demo",
+            "streetNumber": "118",
+            "formattedAddress": "av rui barbosa"
+          },
+          "payment": {
+            "raw": null,
+            "amount": 66.49,
+            "method": "Pix",
+            "changeFor": null,
+            "methodCode": "Pix"
+          },
+          "customer": {
+            "name": "thomaz",
+            "contact": "(73) 9 9142-9676"
+          },
+          "orderType": "DELIVERY",
+          "neighborhood": "Bairro Demo"
+        },
+        "publicOrder": true,
+        "computedTotal": 66.49,
+        "appliedCashback": 0
+      },
+      "createdAt": "2026-05-17T21:59:19.100Z",
+      "updatedAt": "2026-05-17T21:59:19.100Z",
+      "riderId": null,
+      "closedByIfoodCode": false,
+      "cashSessionId": null,
+      "outOfSession": false,
+      "items": [
+        {
+          "id": "7a216fe9-d48b-4f4b-b785-f94c6351e322",
+          "orderId": "5de70489-f5ac-4910-91e1-6ee66845bbd2",
+          "productId": "09835bba-6bd9-46a0-aff8-9d2410166bf5",
+          "name": "Strogonoff de frango",
+          "quantity": 1,
+          "price": "19.99",
+          "notes": null,
+          "options": []
+        },
+        {
+          "id": "a935b654-1c78-4274-a933-595165481657",
+          "orderId": "5de70489-f5ac-4910-91e1-6ee66845bbd2",
+          "productId": "bafb65df-e1f8-4934-b51f-42e0505e94cf",
+          "name": "Combo teste",
+          "quantity": 1,
+          "price": "40",
+          "notes": null,
+          "options": [
+            {
+              "id": "8e37030d-3333-44a0-90df-19e5397ba27b",
+              "name": "Tropeiro com carne",
+              "price": 0
+            },
+            {
+              "id": "0420fe0c-78f4-44e6-8852-c968bca2749c",
+              "name": "Parmegiana De Frango",
+              "price": 0
+            },
+            {
+              "id": "f80435a9-f59c-4e61-bfc6-709413f9fc91",
+              "name": "Pequeno",
+              "price": 0
+            }
+          ]
+        }
+      ]
+    },
+    "storeId": "35c47f67-effe-41fa-a7e2-ebcddd2e8c25"
+  },
+  {
+    "id": "1779073584468-748307",
+    "createdAt": 1779073584468,
+    "order": {
+      "id": "ord-1",
+      "companyId": "AAA",
+      "displayId": "#001"
+    },
+    "storeId": null
+  },
+  {
+    "id": "1779073584499-618031",
+    "createdAt": 1779073584499,
+    "order": {
+      "id": "ord-2",
+      "companyId": "AAA",
+      "displayId": "#002"
+    },
+    "storeId": null
   }
 ]

@@ -80,7 +80,10 @@ export async function matchItemsToLocalProducts(items, companyId) {
           { linkedProduct: { integrationCode: { in: uniqueSubCodes } } },
         ],
       },
-      include: { linkedProduct: { select: { id: true, name: true, integrationCode: true } } },
+      include: {
+        linkedProduct: { select: { id: true, name: true, integrationCode: true } },
+        slot: { select: { id: true, name: true, vUnComDeclarado: true } },
+      },
     })
     for (const s of slotOpts) {
       const codes = [s.integrationCode, s.linkedProduct?.integrationCode].filter(Boolean)
@@ -117,7 +120,9 @@ export async function matchItemsToLocalProducts(items, companyId) {
             name: slotMatch.linkedProduct?.name || sub.name,
             _matchedProductId: slotMatch.linkedProductId,
             _kind: 'combo_slot',
-            _vUnComReferencia: Number(slotMatch.vUnComReferencia),
+            _slotId: slotMatch.slot?.id || slotMatch.slotId,
+            _slotName: slotMatch.slot?.name || null,
+            _vUnComDeclarado: Number(slotMatch.slot?.vUnComDeclarado || 0),
           }
         }
 

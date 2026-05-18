@@ -1210,27 +1210,29 @@ model Combo {
 }
 
 model ComboSlot {
-  id        String            @id @default(uuid())
-  comboId   String
-  combo     Combo             @relation(fields: [comboId], references: [id], onDelete: Cascade)
-  name      String
-  minSelect Int               @default(1)
-  maxSelect Int               @default(1)
-  position  Int               @default(0)
-  options   ComboSlotOption[]
+  id              String            @id @default(uuid())
+  comboId         String
+  combo           Combo             @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  name            String
+  minSelect       Int               @default(1)
+  maxSelect       Int               @default(1)
+  position        Int               @default(0)
+  // Valor declarado (vUnCom) que cada componente deste slot terá na NFC-e.
+  // Aplicado igualmente a qualquer opção escolhida dentro deste slot.
+  vUnComDeclarado Decimal
+  options         ComboSlotOption[]
 
   @@index([comboId])
 }
 
 model ComboSlotOption {
-  id               String    @id @default(uuid())
-  slotId           String
-  slot             ComboSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  linkedProductId  String
-  linkedProduct    Product   @relation("ComboLinkedProduct", fields: [linkedProductId], references: [id])
-  vUnComReferencia Decimal
-  integrationCode  String?
-  position         Int       @default(0)
+  id              String    @id @default(uuid())
+  slotId          String
+  slot            ComboSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  linkedProductId String
+  linkedProduct   Product   @relation("ComboLinkedProduct", fields: [linkedProductId], references: [id])
+  integrationCode String?
+  position        Int       @default(0)
 
   @@index([slotId])
   @@index([linkedProductId])

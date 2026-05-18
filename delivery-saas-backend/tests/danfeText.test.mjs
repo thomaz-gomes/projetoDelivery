@@ -203,9 +203,9 @@ test('DANFE — combo expande slots com label do slot e addons indentados', () =
         productId: 'p-combo',
         _product: { isCombo: true },
         options: [
-          { kind: 'combo_slot', slotName: 'Lanche', name: 'X-Tudo', vUnComReferencia: 25 },
-          { kind: 'combo_slot', slotName: 'Bebida', name: 'Coca', vUnComReferencia: 7 },
-          { kind: 'combo_slot', slotName: 'Acomp', name: 'Batata', vUnComReferencia: 11 },
+          { kind: 'combo_slot', slotName: 'Lanche', name: 'X-Tudo', vUnComDeclarado: 25 },
+          { kind: 'combo_slot', slotName: 'Bebida', name: 'Coca', vUnComDeclarado: 7 },
+          { kind: 'combo_slot', slotName: 'Acomp', name: 'Batata', vUnComDeclarado: 11 },
           { kind: 'addon', name: 'Molho extra', price: 3 },
         ],
       }],

@@ -131,10 +131,10 @@ export function expandOrderItemsToDet(orderItems, productMap, _opts = {}) {
 
       if (slots.length > 0) {
         // Rateio fiscal: distribui o preço do combo proporcionalmente
-        // ao vUnComReferencia de cada slot.
+        // ao vUnComDeclarado de cada slot.
         const slotsForRateio = slots.map((s) => ({
           id: s.optionId || s.productId,
-          vUnComReferencia: Number(s.vUnComReferencia) || 0,
+          vUnComReferencia: Number(s.vUnComDeclarado ?? s.vUnComReferencia) || 0,
         }))
 
         // Cadastro inconsistente (somaRef=0) deve falhar visivelmente:

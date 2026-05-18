@@ -87,10 +87,10 @@
           <TextareaInput v-model="form.description" placeholder="Descrição" rows="4" maxlength="1000" />
         </div>
         <div class="row mb-3">
-          <div class="col-md-4">
+          <div v-if="!form.isCombo" class="col-md-4">
             <CurrencyInput label="Preço" labelClass="form-label" v-model="form.price" inputClass="form-control" placeholder="0,00" />
           </div>
-          <div class="col-md-4">
+          <div v-if="!form.isCombo" class="col-md-4">
             <label class="form-label d-block">Preço especial para o balcão</label>
             <div class="form-check form-switch mb-2">
               <input
@@ -231,6 +231,40 @@
         </div>
 
           <div v-if="form.isCombo" :class="['tab-pane', activeTab === 'combo' ? 'show active' : '']" id="combo" role="tabpanel" aria-labelledby="tab-combo">
+            <div class="mb-4">
+              <h6 class="text-uppercase text-muted small mb-2" style="letter-spacing:0.04em;">Precificação</h6>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <CurrencyInput label="Preço do combo" labelClass="form-label" v-model="form.price" inputClass="form-control" placeholder="0,00" />
+                  <small class="text-muted">Valor fixo pago pelo cliente, independente das escolhas.</small>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label d-block">Preço especial para o balcão</label>
+                  <div class="form-check form-switch mb-2">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="comboSpecialTakeoutEnabled"
+                      v-model="form.specialTakeoutPriceEnabled"
+                      role="switch"
+                    />
+                    <label class="form-check-label small" for="comboSpecialTakeoutEnabled">
+                      {{ form.specialTakeoutPriceEnabled ? 'Ativado' : 'Desativado' }}
+                    </label>
+                  </div>
+                  <CurrencyInput
+                    v-if="form.specialTakeoutPriceEnabled"
+                    v-model="form.specialTakeoutPrice"
+                    inputClass="form-control"
+                    placeholder="0,00"
+                  />
+                  <div v-if="form.specialTakeoutPriceEnabled" class="small text-muted mt-1">
+                    Aplicado em pedidos do tipo <strong>balcão / retirada</strong>.
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="mb-3">
               <h5 class="mb-1">Componentes do combo</h5>
               <p class="text-muted small mb-3">
@@ -388,10 +422,10 @@ async function load(){
                   name: s.name || '',
                   minSelect: typeof s.minSelect === 'number' ? s.minSelect : 1,
                   maxSelect: typeof s.maxSelect === 'number' ? s.maxSelect : 1,
+                  vUnComDeclarado: s.vUnComDeclarado !== undefined && s.vUnComDeclarado !== null ? Number(s.vUnComDeclarado) : 0,
                   options: Array.isArray(s.options)
                     ? s.options.map(o => ({
                         linkedProductId: o.linkedProductId || '',
-                        vUnComReferencia: o.vUnComReferencia !== undefined && o.vUnComReferencia !== null ? Number(o.vUnComReferencia) : 0,
                         integrationCode: o.integrationCode || '',
                       }))
                     : [],
@@ -443,9 +477,9 @@ function buildComboPayload() {
     name: (s.name || '').trim(),
     minSelect: typeof s.minSelect === 'number' ? s.minSelect : 1,
     maxSelect: typeof s.maxSelect === 'number' ? s.maxSelect : 1,
+    vUnComDeclarado: Number(s.vUnComDeclarado || 0),
     options: (s.options || []).map(o => ({
       linkedProductId: o.linkedProductId,
-      vUnComReferencia: Number(o.vUnComReferencia || 0),
       integrationCode: o.integrationCode ? String(o.integrationCode).trim() : null,
     })),
   }))
@@ -463,6 +497,8 @@ function validateCombo() {
     if (!Number.isFinite(min) || min < 0) return `Slot ${i + 1}: mínimo inválido.`
     if (!Number.isFinite(max) || max < 1) return `Slot ${i + 1}: máximo inválido.`
     if (max < min) return `Slot ${i + 1}: máximo deve ser >= mínimo.`
+    const v = Number(s.vUnComDeclarado)
+    if (!Number.isFinite(v) || v <= 0) return `Slot ${i + 1}: informe o valor declarado.`
     if (!Array.isArray(s.options) || s.options.length === 0) return `Slot ${i + 1} (${s.name}) sem opções.`
     for (let j = 0; j < s.options.length; j++) {
       const o = s.options[j]

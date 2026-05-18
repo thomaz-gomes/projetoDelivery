@@ -315,9 +315,11 @@ webhooksRouter.post("/ifood", async (req, res) => {
             productId: s._matchedProductId || null,
             _matchedProductId: s._matchedProductId || null,
           }
-          if (kind === 'combo_slot' && s._vUnComReferencia != null) {
-            opt.vUnComReferencia = Number(s._vUnComReferencia)
-          }
+          if (kind === 'combo_slot') {
+                if (s._vUnComDeclarado != null) opt.vUnComDeclarado = Number(s._vUnComDeclarado)
+                if (s._slotId) opt.slotId = s._slotId
+                if (s._slotName) opt.slotName = s._slotName
+              }
           return opt
         }) : null
         return {
@@ -817,8 +819,10 @@ webhooksRouter.get("/generate-test", async (req, res) => {
                 productId: s._matchedProductId || null,
                 _matchedProductId: s._matchedProductId || null,
               }
-              if (kind === 'combo_slot' && s._vUnComReferencia != null) {
-                opt.vUnComReferencia = Number(s._vUnComReferencia)
+              if (kind === 'combo_slot') {
+                if (s._vUnComDeclarado != null) opt.vUnComDeclarado = Number(s._vUnComDeclarado)
+                if (s._slotId) opt.slotId = s._slotId
+                if (s._slotName) opt.slotName = s._slotName
               }
               return opt
             }) : null

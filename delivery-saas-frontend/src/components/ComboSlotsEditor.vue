@@ -56,6 +56,17 @@
               v-model.number="slot.maxSelect"
             />
           </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label small mb-1">Valor declarado (NFC-e)</label>
+            <CurrencyInput
+              v-model="slot.vUnComDeclarado"
+              inputClass="form-control form-control-sm"
+              placeholder="0,00"
+            />
+            <small class="text-muted">
+              Valor que cada opção deste slot terá no `&lt;vUnCom&gt;` da nota fiscal.
+            </small>
+          </div>
         </div>
 
         <div class="combo-options-section">
@@ -78,12 +89,12 @@
             class="combo-option-row mb-2"
           >
             <div class="row g-2 align-items-end">
-              <div class="col-12 col-md-5">
+              <div class="col-12 col-md-8">
                 <label class="form-label small mb-1">Produto</label>
                 <SelectInput
                   :model-value="opt.linkedProductId"
                   class="form-control"
-                  @update:model-value="(v) => onProductChange(slot, opt, v)"
+                  @update:model-value="(v) => (opt.linkedProductId = v)"
                 >
                   <option value="">— Selecione um produto —</option>
                   <option
@@ -95,15 +106,7 @@
                   </option>
                 </SelectInput>
               </div>
-              <div class="col-6 col-md-3">
-                <label class="form-label small mb-1">vUnCom Referência</label>
-                <CurrencyInput
-                  v-model="opt.vUnComReferencia"
-                  inputClass="form-control form-control-sm"
-                  placeholder="0,00"
-                />
-              </div>
-              <div class="col-6 col-md-3">
+              <div class="col-9 col-md-3">
                 <label class="form-label small mb-1">Cód. integração</label>
                 <input
                   type="text"
@@ -113,7 +116,7 @@
                   maxlength="60"
                 />
               </div>
-              <div class="col-12 col-md-1 d-flex justify-content-end">
+              <div class="col-3 col-md-1 d-flex justify-content-end">
                 <BaseIconButton
                   color="danger"
                   title="Remover opção"
@@ -167,8 +170,6 @@ const emit = defineEmits(['update:modelValue'])
 const slots = ref([])
 const products = ref([])
 const loading = ref(false)
-// Tracks whether the last modelValue assignment came from this component
-// (so we can ignore the echoed prop and avoid clobbering local edits).
 let lastEmittedSnapshot = null
 
 function normalizeSlots(arr) {
@@ -177,13 +178,13 @@ function normalizeSlots(arr) {
         name: s?.name || '',
         minSelect: typeof s?.minSelect === 'number' ? s.minSelect : 1,
         maxSelect: typeof s?.maxSelect === 'number' ? s.maxSelect : 1,
+        vUnComDeclarado:
+          s?.vUnComDeclarado !== undefined && s?.vUnComDeclarado !== null
+            ? Number(s.vUnComDeclarado)
+            : 0,
         options: Array.isArray(s?.options)
           ? s.options.map(o => ({
               linkedProductId: o?.linkedProductId || '',
-              vUnComReferencia:
-                o?.vUnComReferencia !== undefined && o?.vUnComReferencia !== null
-                  ? Number(o.vUnComReferencia)
-                  : 0,
               integrationCode: o?.integrationCode || '',
             }))
           : [],
@@ -198,8 +199,6 @@ function hydrate() {
 watch(
   () => props.modelValue,
   (val) => {
-    // Ignore the echo of our own emit; only re-hydrate when the parent really
-    // assigned a fresh array (e.g. on initial load in edit mode).
     const incomingSnapshot = JSON.stringify(val)
     if (incomingSnapshot === lastEmittedSnapshot) return
     hydrate()
@@ -207,7 +206,6 @@ watch(
   { deep: false }
 )
 
-// Emit a deep-cloned plain payload whenever local state changes
 watch(
   slots,
   (val) => {
@@ -242,6 +240,7 @@ function addSlot() {
     name: '',
     minSelect: 1,
     maxSelect: 1,
+    vUnComDeclarado: 0,
     options: [],
   })
 }
@@ -254,7 +253,6 @@ function addOption(slot) {
   if (!Array.isArray(slot.options)) slot.options = []
   slot.options.push({
     linkedProductId: '',
-    vUnComReferencia: 0,
     integrationCode: '',
   })
 }
@@ -262,17 +260,6 @@ function addOption(slot) {
 function removeOption(slot, idx) {
   if (!Array.isArray(slot.options)) return
   slot.options.splice(idx, 1)
-}
-
-function onProductChange(slot, opt, newId) {
-  opt.linkedProductId = newId
-  const product = (products.value || []).find(p => p.id === newId)
-  if (!product) return
-  // Auto-fill vUnComReferencia only when empty/zero so we don't clobber edits
-  const current = Number(opt.vUnComReferencia || 0)
-  if (!current) {
-    opt.vUnComReferencia = Number(product.price || 0)
-  }
 }
 
 onMounted(() => {

@@ -10,9 +10,9 @@ test('expandOrderItemsToDet: combo expande slots com rateio e suprime guarda-chu
     quantity: 1,
     price: 40,
     options: [
-      { kind: 'combo_slot', productId: 'p-lanche', name: 'X-Tudo', vUnComReferencia: 25 },
-      { kind: 'combo_slot', productId: 'p-bebida', name: 'Coca lata', vUnComReferencia: 7 },
-      { kind: 'combo_slot', productId: 'p-batata', name: 'Batata G', vUnComReferencia: 11 },
+      { kind: 'combo_slot', productId: 'p-lanche', name: 'X-Tudo', vUnComDeclarado: 25 },
+      { kind: 'combo_slot', productId: 'p-bebida', name: 'Coca lata', vUnComDeclarado: 7 },
+      { kind: 'combo_slot', productId: 'p-batata', name: 'Batata G', vUnComDeclarado: 11 },
       { kind: 'addon', name: 'Molho extra', price: 3 },
     ],
   }]
