@@ -558,7 +558,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
       created = await prisma.$transaction(async (tx) => {
         const product = await tx.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null, isCombo: truthyBool(isCombo) } })
         if (truthyBool(isCombo) && combo && Array.isArray(combo.slots)) {
-          await createComboGraph(tx, product.id, companyId, combo)
+          await createComboGraph(tx, product.id, companyId, combo, Number(price))
         }
         return await tx.product.findUnique({ where: { id: product.id }, include: COMBO_INCLUDE })
       })
@@ -746,7 +746,9 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
       } else if (combo && Array.isArray(combo.slots)) {
         // isCombo === true and a combo payload was provided: delete+recreate slots/options.
         await tx.combo.deleteMany({ where: { productId: id } })
-        await createComboGraph(tx, id, companyId, combo)
+        // resolve preço efetivo: usa o que veio no body, ou o que persistiu no update.
+        const precoFinal = price !== undefined ? Number(price) : Number(existing.price)
+        await createComboGraph(tx, id, companyId, combo, precoFinal)
       }
       // else: finalIsCombo=true SEM combo no body → mantém combo existente intacto (comportamento defensivo)
     })

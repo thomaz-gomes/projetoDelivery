@@ -489,6 +489,11 @@ function buildComboPayload() {
 function validateCombo() {
   const slots = form.value.combo?.slots || []
   if (slots.length === 0) return 'Combo precisa ter ao menos um slot.'
+  const precoCombo = Number(form.value.price || 0)
+  if (!Number.isFinite(precoCombo) || precoCombo <= 0) {
+    return 'Informe o preço do combo antes de validar os slots.'
+  }
+  let somaDeclarada = 0
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i]
     if (!s.name || !s.name.trim()) return `Slot ${i + 1} sem nome.`
@@ -499,11 +504,19 @@ function validateCombo() {
     if (max < min) return `Slot ${i + 1}: máximo deve ser >= mínimo.`
     const v = Number(s.vUnComDeclarado)
     if (!Number.isFinite(v) || v <= 0) return `Slot ${i + 1}: informe o valor declarado.`
+    somaDeclarada += v
     if (!Array.isArray(s.options) || s.options.length === 0) return `Slot ${i + 1} (${s.name}) sem opções.`
     for (let j = 0; j < s.options.length; j++) {
       const o = s.options[j]
       if (!o.linkedProductId) return `Slot ${i + 1} / opção ${j + 1}: selecione um produto.`
     }
+  }
+  // soma dos valores declarados não pode ultrapassar o preço pago pelo cliente
+  // (a NFC-e não pode declarar mais do que entrou no caixa).
+  const somaArred = Math.round(somaDeclarada * 100) / 100
+  const precoArred = Math.round(precoCombo * 100) / 100
+  if (somaArred > precoArred) {
+    return `Soma dos valores declarados (R$ ${somaArred.toFixed(2)}) excede o preço do combo (R$ ${precoArred.toFixed(2)}).`
   }
   return null
 }

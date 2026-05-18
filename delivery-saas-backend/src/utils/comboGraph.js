@@ -26,13 +26,28 @@ export const COMBO_INCLUDE = {
  * Cria Combo + ComboSlot[] + ComboSlotOption[] para um produto dentro de uma transação Prisma.
  * O valor declarado fiscal (vUnComDeclarado) é por SLOT, não por opção: qualquer opção
  * escolhida dentro de um slot recebe o mesmo vUnCom no rateio fiscal.
- * Valida slot.vUnComDeclarado finito > 0 e cada opção: linkedProductId presente e
- * pertencente à mesma companyId (multi-tenant). Lança erro descritivo em falha,
- * forçando rollback da transação.
+ * Valida slot.vUnComDeclarado finito > 0, soma <= precoCombo (NFC-e não pode declarar
+ * mais do que o cliente pagou) e cada opção: linkedProductId presente e pertencente
+ * à mesma companyId (multi-tenant). Lança erro descritivo em falha, forçando rollback.
+ *
+ * @param {number} [precoCombo] Preço pago pelo cliente (Product.price). Quando informado,
+ *                              valida que a soma dos vUnComDeclarado dos slots não ultrapassa.
  */
-export async function createComboGraph(tx, productId, companyId, comboInput) {
+export async function createComboGraph(tx, productId, companyId, comboInput, precoCombo) {
+  const slotsInput = comboInput.slots || []
+  // valida soma total antes de criar qualquer registro
+  if (typeof precoCombo === 'number' && Number.isFinite(precoCombo) && precoCombo > 0) {
+    const somaDeclarada = slotsInput.reduce((acc, s) => acc + (Number(s.vUnComDeclarado) || 0), 0)
+    const somaArred = Math.round(somaDeclarada * 100) / 100
+    const precoArred = Math.round(precoCombo * 100) / 100
+    if (somaArred > precoArred) {
+      throw new Error(
+        `Soma dos valores declarados dos slots (R$ ${somaArred.toFixed(2)}) excede o preço do combo (R$ ${precoArred.toFixed(2)})`
+      )
+    }
+  }
   const combo = await tx.combo.create({ data: { productId, companyId } })
-  for (const [sIdx, slot] of (comboInput.slots || []).entries()) {
+  for (const [sIdx, slot] of slotsInput.entries()) {
     const vUn = Number(slot.vUnComDeclarado)
     if (!Number.isFinite(vUn) || vUn <= 0) {
       throw new Error(`Slot ${sIdx + 1}: valor declarado inválido`)
