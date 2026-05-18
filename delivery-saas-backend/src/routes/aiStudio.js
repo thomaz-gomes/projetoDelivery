@@ -30,6 +30,7 @@ import path from 'path'
 import fs from 'fs'
 import { randomUUID } from 'crypto'
 import { optimizeForWeb, preserveHighQuality } from '../utils/imageOptimizer.js'
+import { resolveTheme, buildThemeBlock, buildLessonsBlock } from '../utils/brandTheme.js'
 
 const router = Router()
 router.use(authMiddleware)
@@ -604,6 +605,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const userId = req.user.id
   const { photoBase64, quantity = 3, aspectRatio = '1:1' } = req.body || {}
+  const { themeId = null, storeId = null } = req.body || {}
 
   // ── Validação ──
   if (!photoBase64 || typeof photoBase64 !== 'string') {
@@ -708,6 +710,18 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
 
     console.log('[AI Studio] generate-pack: product="%s", cuisine="%s"', productName, cuisineType)
 
+    // Carrega tema (se houver) e lições aprendidas
+    const [themesAll, companyRec] = await Promise.all([
+      prisma.brandVisualTheme.findMany({ where: { companyId, isActive: true } }),
+      prisma.company.findUnique({ where: { id: companyId }, select: { aiLessonsCache: true } }),
+    ])
+    const theme = resolveTheme(themesAll, themeId, storeId)
+    const lessonsText = companyRec?.aiLessonsCache?.text || ''
+    const themeBlock = buildThemeBlock(theme)
+    const lessonsBlock = buildLessonsBlock(lessonsText)
+    if (theme) console.log('[AI Studio] generate-pack: applying theme "%s"', theme.name)
+    if (lessonsText) console.log('[AI Studio] generate-pack: applying %d chars of lessons', lessonsText.length)
+
     // 3. Gemini Flash text — gera N descrições de cena coerentes com o segmento
     console.log('[AI Studio] generate-pack: generating %d scene descriptions...', qty)
     const sceneRes = await fetchWithRetry(
@@ -720,6 +734,10 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
             parts: [{
               text:
                 `Generate ${qty} SHORT and VARIED social media photo concepts for "${cuisineType}" — "${productName}".\n\n` +
+                `CONTEXT:\n- Product: ${productName}\n- Cuisine type: ${cuisineType}\n- Product details: ${productDescription.slice(0, 300)}\n\n` +
+                (themeBlock ? themeBlock + '\n\n' : '') +
+                (lessonsBlock ? lessonsBlock + '\n\n' : '') +
+                `Generate exactly ${qty} different scene/setting descriptions.\n` +
                 `Each concept must be VERY DIFFERENT from the others. Mix these categories:\n` +
                 `- Classic product shot (different surface/lighting/props)\n` +
                 `- Human interaction (hand holding the food, person about to bite, hand dipping sauce)\n` +
@@ -784,10 +802,20 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
     const slug = (productName || 'pack').slice(0, 30).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase()
 
     const imagePromises = scenes.map(async (scene, index) => {
+      const brandStyleBlock = theme
+        ? `\nBRAND STYLE (apply to background, surface, lighting, props — NOT the food):\n` +
+          [theme.palette && `- Palette: ${theme.palette}`,
+           theme.mood && `- Mood: ${theme.mood}`,
+           theme.lighting && `- Lighting: ${theme.lighting}`,
+           theme.surface && `- Surface: ${theme.surface}`,
+           theme.props && `- Props: ${theme.props}`].filter(Boolean).join('\n')
+        : ''
+
       const imagenPrompt =
         `You are a professional food photographer creating social media content.\n` +
         `The attached photo shows the EXACT product to feature. Keep this product visually faithful — same ingredients, same textures, same colors.\n\n` +
         `SCENE CONCEPT: ${scene}\n` +
+        brandStyleBlock +
         `\nIMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.\n` +
         `\nRULES:\n` +
         `- The food/product must look IDENTICAL to the attached photo — do not add, remove, or change any ingredient\n` +
@@ -840,7 +868,29 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
       const filename = `ai_pack_${slug}_${index + 1}.webp`
 
       const mediaRecord = await prisma.media.create({
-        data: { id: newId, companyId, filename, mimeType: 'image/webp', size: optimized.length, url: newUrl, aiEnhanced: true },
+        data: {
+          id: newId,
+          companyId,
+          filename,
+          mimeType: 'image/webp',
+          size: optimized.length,
+          url: newUrl,
+          aiEnhanced: true,
+          aiThemeId: theme?.id || null,
+          aiPromptSnapshot: {
+            scene,
+            themeSnapshot: theme ? {
+              name: theme.name,
+              palette: theme.palette || null,
+              mood: theme.mood || null,
+              props: theme.props || null,
+              surface: theme.surface || null,
+              lighting: theme.lighting || null,
+            } : null,
+            lessonsApplied: lessonsText || null,
+            imagenPrompt: imagenPrompt.slice(0, 2000),
+          },
+        },
       })
 
       return mediaRecord
