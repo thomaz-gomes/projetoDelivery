@@ -89,7 +89,7 @@
             class="combo-option-row mb-2"
           >
             <div class="row g-2 align-items-end">
-              <div class="col-12 col-md-8">
+              <div class="col-10 col-md-11">
                 <label class="form-label small mb-1">Produto</label>
                 <SelectInput
                   :model-value="opt.linkedProductId"
@@ -106,17 +106,7 @@
                   </option>
                 </SelectInput>
               </div>
-              <div class="col-9 col-md-3">
-                <label class="form-label small mb-1">Cód. integração</label>
-                <input
-                  type="text"
-                  class="form-control form-control-sm"
-                  v-model="opt.integrationCode"
-                  placeholder="Opcional"
-                  maxlength="60"
-                />
-              </div>
-              <div class="col-3 col-md-1 d-flex justify-content-end">
+              <div class="col-2 col-md-1 d-flex justify-content-end">
                 <BaseIconButton
                   color="danger"
                   title="Remover opção"
