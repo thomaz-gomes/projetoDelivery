@@ -118,6 +118,8 @@ model Company {
   aiCreditsLastReset   DateTime              @default(now())
   aiCreditTransactions AiCreditTransaction[]
   aiTokenUsages        AiTokenUsage[]
+  aiLessonsCache       Json?
+  brandThemes          BrandVisualTheme[]
 
   // ---- Billing revamp ----
   moduleSubscriptions SaasModuleSubscription[]
@@ -646,6 +648,8 @@ model Store {
   cashFlowEntries       CashFlowEntry[]
   ifoodChatMessages     IfoodChatMessage[]
   pricingDefaults       StorePricingDefaults?
+
+  brandThemes BrandVisualTheme[]
 }
 
 model Menu {
@@ -2378,7 +2382,56 @@ model Media {
   aiEnhanced Boolean  @default(false)
   createdAt  DateTime @default(now())
 
+  aiPromptSnapshot Json?
+  aiThemeId        String?
+  aiTheme          BrandVisualTheme? @relation(fields: [aiThemeId], references: [id])
+  feedbacks        MediaFeedback[]
+
   @@index([companyId, createdAt], name: "idx_media_company_created")
+}
+
+enum MediaFeedbackReason {
+  LIKED
+  FOOD_DEFORMED
+  SCENE_REPETITIVE
+  OFF_BRAND
+  WRONG_COLOR
+  OTHER
+}
+
+model BrandVisualTheme {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id])
+  name      String
+  palette   String?
+  mood      String?
+  props     String?
+  surface   String?
+  lighting  String?
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  medias    Media[]
+
+  @@index([companyId])
+  @@index([storeId])
+}
+
+model MediaFeedback {
+  id        String              @id @default(uuid())
+  mediaId   String
+  media     Media               @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  userId    String?
+  reason    MediaFeedbackReason
+  note      String?
+  createdAt DateTime            @default(now())
+
+  @@index([mediaId])
+  @@unique([mediaId, userId, reason], name: "uniq_media_user_reason")
 }
 
 // Email verification codes for user registration
