@@ -77,6 +77,7 @@ import ridersDashboardRouter from './routes/reports/ridersDashboard.js'
 import revenueReportRouter from './routes/reports/revenue.js'
 import aiCreditsRouter from './routes/aiCredits.js'
 import aiStudioRouter from './routes/aiStudio.js'
+import brandThemesRouter from './routes/brandThemes.js'
 import { paymentRouter } from './routes/payment.js'
 import leadsRouter from './routes/leads.js'
 import customDomainRouter from './routes/customDomain.js'
@@ -301,6 +302,7 @@ app.use(metaOauthRouter);
 // AI Credits: saldo, histórico e gestão de créditos de IA por empresa
 app.use('/ai-credits', aiCreditsRouter);
 app.use('/ai-studio', aiStudioRouter);
+app.use('/brand-themes', brandThemesRouter);
 // Payment webhook (gateway-agnostic, no auth — validated by paymentId)
 app.use('/payment', paymentRouter);
 app.use('/custom-domains', customDomainRouter);
