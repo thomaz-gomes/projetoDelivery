@@ -11,9 +11,24 @@
     </div>
 
     <div
+      v-if="slots.length > 0 && precoComboNum > 0"
+      :class="['alert', 'py-2', 'small', 'mb-3', somaExcede ? 'alert-danger' : 'alert-secondary']"
+    >
+      <i :class="['bi', somaExcede ? 'bi-exclamation-triangle-fill' : 'bi-info-circle', 'me-1']"></i>
+      <strong>Soma dos valores declarados:</strong>
+      R$ {{ somaDeclarada.toFixed(2) }} de R$ {{ precoComboNum.toFixed(2) }}
+      <span v-if="somaExcede">
+        — excede o preço do combo em R$ {{ (somaDeclarada - precoComboNum).toFixed(2) }}.
+      </span>
+      <span v-else-if="restanteDisponivel > 0">
+        — resta R$ {{ restanteDisponivel.toFixed(2) }} para distribuir.
+      </span>
+    </div>
+
+    <div
       v-for="(slot, sIdx) in slots"
       :key="sIdx"
-      class="card mb-3 combo-slot-card"
+      :class="['card', 'mb-3', 'combo-slot-card', somaExcede ? 'combo-slot-card--invalid' : '']"
     >
       <div class="card-body">
         <div class="d-flex align-items-center mb-3 gap-2">
@@ -60,10 +75,10 @@
             <label class="form-label small mb-1">Valor declarado (NFC-e)</label>
             <CurrencyInput
               v-model="slot.vUnComDeclarado"
-              inputClass="form-control form-control-sm"
+              :inputClass="'form-control form-control-sm' + (somaExcede ? ' is-invalid' : '')"
               placeholder="0,00"
             />
-            <small class="text-muted">
+            <small :class="somaExcede ? 'text-danger' : 'text-muted'">
               Valor que cada opção deste slot terá no `&lt;vUnCom&gt;` da nota fiscal.
             </small>
           </div>
@@ -153,6 +168,7 @@ const props = defineProps({
   modelValue: { type: Array, default: () => [] },
   companyId: { type: String, default: null },
   excludeProductId: { type: String, default: null },
+  precoCombo: { type: [Number, String], default: 0 },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -212,6 +228,25 @@ const availableProducts = computed(() => {
     .filter(p => !props.excludeProductId || p.id !== props.excludeProductId)
 })
 
+const precoComboNum = computed(() => {
+  const n = Number(props.precoCombo)
+  return Number.isFinite(n) && n > 0 ? n : 0
+})
+
+const somaDeclarada = computed(() => {
+  return (slots.value || []).reduce((acc, s) => acc + (Number(s.vUnComDeclarado) || 0), 0)
+})
+
+const somaExcede = computed(() => {
+  if (precoComboNum.value <= 0) return false
+  // tolera 1 centavo de arredondamento
+  return Math.round(somaDeclarada.value * 100) > Math.round(precoComboNum.value * 100)
+})
+
+const restanteDisponivel = computed(() => {
+  return Math.max(0, precoComboNum.value - somaDeclarada.value)
+})
+
 async function loadProducts() {
   loading.value = true
   try {
@@ -263,6 +298,11 @@ onMounted(() => {
   border: 1px solid var(--border-color, #e6e6e6);
   border-radius: var(--border-radius, 1rem);
   background: var(--bg-card, #fff);
+}
+
+.combo-slot-card--invalid {
+  border-color: var(--danger, #dc3545);
+  box-shadow: 0 0 0 1px var(--danger, #dc3545) inset;
 }
 
 .combo-slot-badge {

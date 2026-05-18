@@ -274,6 +274,7 @@
                 v-model="form.combo.slots"
                 :company-id="companyId"
                 :exclude-product-id="id || null"
+                :preco-combo="Number(form.price || 0)"
               />
             </div>
           </div>
