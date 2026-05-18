@@ -153,4 +153,60 @@ router.delete('/:id', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+const VALID_REASONS = ['LIKED', 'FOOD_DEFORMED', 'SCENE_REPETITIVE', 'OFF_BRAND', 'WRONG_COLOR', 'OTHER']
+
+router.post('/:id/feedback', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const userId = req.user.id
+  const { id } = req.params
+  const { reason, note } = req.body || {}
+
+  if (!VALID_REASONS.includes(reason)) {
+    return res.status(400).json({ message: 'Razão inválida' })
+  }
+  if (reason === 'OTHER' && (!note || !String(note).trim())) {
+    return res.status(400).json({ message: 'Observação é obrigatória quando o motivo é "Outro"' })
+  }
+
+  const media = await prisma.media.findFirst({ where: { id, companyId } })
+  if (!media) return res.status(404).json({ message: 'Imagem não encontrada' })
+
+  try {
+    const created = await prisma.mediaFeedback.create({
+      data: { mediaId: id, userId, reason, note: note ? String(note).slice(0, 500) : null },
+    })
+    res.status(201).json(created)
+  } catch (e) {
+    if (e?.code === 'P2002') {
+      return res.status(409).json({ message: 'Você já marcou este motivo nesta imagem' })
+    }
+    console.error('[media/feedback] POST error:', e?.message || e)
+    res.status(500).json({ message: e?.message || 'Falha ao salvar feedback' })
+  }
+})
+
+router.delete('/:id/feedback/:feedbackId', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const userId = req.user.id
+  const { id, feedbackId } = req.params
+  const fb = await prisma.mediaFeedback.findFirst({
+    where: { id: feedbackId, mediaId: id, userId, media: { companyId } },
+  })
+  if (!fb) return res.status(404).json({ message: 'Feedback não encontrado' })
+  await prisma.mediaFeedback.delete({ where: { id: feedbackId } })
+  res.status(204).end()
+})
+
+router.get('/:id/feedbacks', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const { id } = req.params
+  const media = await prisma.media.findFirst({ where: { id, companyId } })
+  if (!media) return res.status(404).json({ message: 'Imagem não encontrada' })
+  const rows = await prisma.mediaFeedback.findMany({
+    where: { mediaId: id },
+    orderBy: { createdAt: 'desc' },
+  })
+  res.json(rows)
+})
+
 export default router
