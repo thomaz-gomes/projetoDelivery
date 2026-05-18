@@ -254,7 +254,6 @@
                     <div class="product-card-body">
                       <div>
                         <!-- <div v-if="p.featured" class="product-tag">Destaque</div> -->
-                        <span v-if="p.isCombo" class="badge bg-info text-uppercase mb-1">Combo</span>
                         <h6 class="product-title">{{ p.name }}</h6>
                         <div class="product-desc">{{ p.description }}</div>
                       </div>
@@ -389,13 +388,7 @@
 
               <!-- Product info -->
               <div class="modal-product-info">
-                <div v-if="selectedProduct?.isCombo" class="small text-uppercase fw-semibold text-info mb-1">
-                  <i class="bi bi-collection me-1"></i>Monte seu combo
-                </div>
-                <h5 class="modal-product-name">
-                  {{ selectedProduct?.name }}
-                  <span v-if="selectedProduct?.isCombo" class="badge bg-info ms-2">Combo</span>
-                </h5>
+                <h5 class="modal-product-name">{{ selectedProduct?.name }}</h5>
                 <div class="modal-product-desc">{{ selectedProduct?.description }}</div>
                 <div class="d-flex align-items-center gap-3 mt-2">
                   <strong class="modal-product-price">{{ formatCurrency(effectiveProductPrice(selectedProduct)) }}</strong>
