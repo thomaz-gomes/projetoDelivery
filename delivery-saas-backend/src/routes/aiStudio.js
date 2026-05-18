@@ -885,4 +885,83 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+router.post('/lessons/refresh', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+  const feedbacks = await prisma.mediaFeedback.findMany({
+    where: { media: { companyId }, createdAt: { gte: since } },
+    orderBy: { createdAt: 'desc' },
+    take: 30,
+    include: { media: { select: { aiPromptSnapshot: true } } },
+  })
+
+  if (feedbacks.length === 0) {
+    return res.status(400).json({ message: 'Sem feedback nos últimos 90 dias. Dê feedback nas imagens primeiro.' })
+  }
+
+  // Agrupa por reason
+  const groups = {}
+  for (const f of feedbacks) {
+    const key = f.reason
+    if (!groups[key]) groups[key] = []
+    const scene = f.media?.aiPromptSnapshot?.scene || '(sem contexto)'
+    groups[key].push({ scene, note: f.note || '' })
+  }
+
+  const sections = Object.entries(groups).map(([reason, items]) => {
+    const lines = items.slice(0, 10).map(it => `- "${String(it.scene).slice(0, 120)}"${it.note ? ` — note: "${String(it.note).slice(0, 120)}"` : ''}`)
+    return `${reason} (count: ${items.length}):\n${lines.join('\n')}`
+  }).join('\n\n')
+
+  const prompt =
+    `You are auditing AI-generated food photos for a Brazilian restaurant.\n` +
+    `Below are pieces of feedback from operators about images.\n\n` +
+    `FEEDBACK (last 90 days):\n${sections}\n\n` +
+    `TASK: Summarize the patterns into actionable lessons for the next image generation.\n` +
+    `Max 5 bullet points, each under 25 words. Mix avoid (based on negative reasons) and prefer (based on LIKED).\n` +
+    `Be specific. No platitudes. Output plain text, one lesson per line, no markdown.`
+
+  try {
+    const apiKey = await getGoogleAIKey()
+    const r = await fetch(
+      `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 400, temperature: 0.4 },
+          thinkingConfig: { thinkingBudget: 0 },
+        }),
+        signal: AbortSignal.timeout(20_000),
+      }
+    )
+    if (!r.ok) {
+      const errText = await r.text().catch(() => '')
+      throw new Error(`Gemini Flash error ${r.status}: ${errText.slice(0, 200)}`)
+    }
+    const data = await r.json()
+    const text = data.candidates?.[0]?.content?.parts?.find(p => p.text)?.text?.trim()
+    if (!text) throw new Error('Resumo vazio da IA')
+
+    const cache = {
+      text,
+      updatedAt: new Date().toISOString(),
+      feedbacksConsidered: feedbacks.length,
+    }
+    await prisma.company.update({ where: { id: companyId }, data: { aiLessonsCache: cache } })
+    res.json(cache)
+  } catch (e) {
+    console.error('[AI Studio] lessons/refresh failed:', e?.message || e)
+    res.status(500).json({ message: e?.message || 'Falha ao atualizar lições' })
+  }
+})
+
+router.get('/lessons', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const c = await prisma.company.findUnique({ where: { id: companyId }, select: { aiLessonsCache: true } })
+  res.json(c?.aiLessonsCache || null)
+})
+
 export default router
