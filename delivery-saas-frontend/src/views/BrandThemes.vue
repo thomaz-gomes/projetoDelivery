@@ -31,7 +31,7 @@
                   <span v-if="t.isDefault" class="badge bg-primary ms-1">Padrão</span>
                 </h5>
                 <div class="small text-muted">
-                  <i class="bi bi-shop me-1"></i>{{ t.store ? t.store.name : 'Todas as lojas' }}
+                  <i class="bi bi-journal-text me-1"></i>{{ t.menu ? t.menu.name : 'Todos os cardápios' }}
                 </div>
               </div>
               <div class="d-flex gap-1 flex-shrink-0">
@@ -87,9 +87,9 @@
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Aplicar a</label>
-                <SelectInput v-model="form.storeId">
-                  <option :value="null">Todas as lojas</option>
-                  <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+                <SelectInput v-model="form.menuId">
+                  <option :value="null">Todos os cardápios</option>
+                  <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </SelectInput>
               </div>
               <div class="col-12 col-md-6">
@@ -172,7 +172,7 @@ import {
 } from '../config/brandThemePresets.js'
 
 const themes = ref([])
-const stores = ref([])
+const menus = ref([])
 const loading = ref(false)
 const modalOpen = ref(false)
 const editing = ref(null)
@@ -187,7 +187,7 @@ const emptyForm = () => ({
   surface: '',
   lighting: '',
   isDefault: false,
-  storeId: null,
+  menuId: null,
 })
 
 const form = ref(emptyForm())
@@ -195,9 +195,9 @@ const form = ref(emptyForm())
 async function load() {
   loading.value = true
   try {
-    const [tr, sr] = await Promise.all([api.get('/brand-themes'), api.get('/stores')])
+    const [tr, mr] = await Promise.all([api.get('/brand-themes'), api.get('/menu/menus')])
     themes.value = Array.isArray(tr.data) ? tr.data : tr.data?.items || []
-    stores.value = Array.isArray(sr.data) ? sr.data : sr.data?.items || []
+    menus.value = Array.isArray(mr.data) ? mr.data : mr.data?.items || []
   } catch (e) {
     console.error('Failed to load brand themes', e)
   } finally {
@@ -223,7 +223,7 @@ function openEdit(t) {
     surface: t.surface || '',
     lighting: t.lighting || '',
     isDefault: !!t.isDefault,
-    storeId: t.storeId || null,
+    menuId: t.menuId || null,
   }
   modalOpen.value = true
 }

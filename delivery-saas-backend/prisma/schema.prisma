@@ -648,8 +648,6 @@ model Store {
   cashFlowEntries       CashFlowEntry[]
   ifoodChatMessages     IfoodChatMessage[]
   pricingDefaults       StorePricingDefaults?
-
-  brandThemes BrandVisualTheme[]
 }
 
 model Menu {
@@ -679,6 +677,7 @@ model Menu {
   categoryLinks  MenuCategoryMenu[]
   // products optionally assigned to this menu
   products       Product[]
+  brandThemes    BrandVisualTheme[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   customDomain   CustomDomain?
@@ -2407,8 +2406,11 @@ model BrandVisualTheme {
   id        String   @id @default(uuid())
   companyId String
   company   Company  @relation(fields: [companyId], references: [id])
-  storeId   String?
-  store     Store?   @relation(fields: [storeId], references: [id])
+  // O tema visual é vinculado a um cardápio (Menu) — que carrega a identidade
+  // de marca (nome comercial, culinária, descrição). Lojas (Store) só carregam
+  // dados fiscais/empresariais e por isso não fazem sentido aqui.
+  menuId    String?
+  menu      Menu?    @relation(fields: [menuId], references: [id])
   name      String
   palette   String?
   mood      String?
@@ -2422,7 +2424,7 @@ model BrandVisualTheme {
   medias    Media[]
 
   @@index([companyId])
-  @@index([storeId])
+  @@index([menuId])
 }
 
 model MediaFeedback {

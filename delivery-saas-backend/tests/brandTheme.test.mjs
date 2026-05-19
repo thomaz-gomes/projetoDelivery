@@ -4,28 +4,28 @@ import { resolveTheme, buildThemeBlock, buildLessonsBlock } from '../src/utils/b
 
 test('resolveTheme: themeId explícito tem prioridade', () => {
   const themes = [
-    { id: 't1', isDefault: true, storeId: null },
-    { id: 't2', isDefault: false, storeId: 's1' },
-    { id: 't3', isDefault: false, storeId: null },
+    { id: 't1', isDefault: true, menuId: null },
+    { id: 't2', isDefault: false, menuId: 'm1' },
+    { id: 't3', isDefault: false, menuId: null },
   ]
-  assert.equal(resolveTheme(themes, 't3', 's1')?.id, 't3')
+  assert.equal(resolveTheme(themes, 't3', 'm1')?.id, 't3')
 })
 
-test('resolveTheme: usa tema da loja quando não há themeId', () => {
+test('resolveTheme: usa tema do cardápio quando não há themeId', () => {
   const themes = [
-    { id: 't1', isDefault: true, storeId: null },
-    { id: 't2', isDefault: false, storeId: 's1' },
+    { id: 't1', isDefault: true, menuId: null },
+    { id: 't2', isDefault: false, menuId: 'm1' },
   ]
-  assert.equal(resolveTheme(themes, null, 's1')?.id, 't2')
+  assert.equal(resolveTheme(themes, null, 'm1')?.id, 't2')
 })
 
-test('resolveTheme: usa default da empresa quando loja sem tema', () => {
-  const themes = [{ id: 't1', isDefault: true, storeId: null }]
-  assert.equal(resolveTheme(themes, null, 'sX')?.id, 't1')
+test('resolveTheme: usa default da empresa quando cardápio sem tema', () => {
+  const themes = [{ id: 't1', isDefault: true, menuId: null }]
+  assert.equal(resolveTheme(themes, null, 'mX')?.id, 't1')
 })
 
 test('resolveTheme: null quando sem temas', () => {
-  assert.equal(resolveTheme([], null, 's1'), null)
+  assert.equal(resolveTheme([], null, 'm1'), null)
 })
 
 test('buildThemeBlock: omite linhas vazias', () => {

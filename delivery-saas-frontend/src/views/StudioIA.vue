@@ -273,7 +273,7 @@
               <SelectInput v-model="selectedThemeId" class="form-control" :disabled="packLoading">
                 <option :value="null">— Sem tema (genérico) —</option>
                 <option v-for="t in brandThemes" :key="t.id" :value="t.id">
-                  {{ t.name }}{{ t.isDefault ? ' (padrão)' : '' }}{{ t.store ? ` · ${t.store.name}` : '' }}
+                  {{ t.name }}{{ t.isDefault ? ' (padrão)' : '' }}{{ t.menu ? ` · ${t.menu.name}` : '' }}
                 </option>
               </SelectInput>
               <div v-if="brandThemes.length === 0" class="small text-muted mt-1">
@@ -681,7 +681,7 @@ async function loadThemesAndLessons() {
     brandThemes.value = tr.data || []
     lessons.value = lr.data || null
     // pré-seleciona tema padrão se houver
-    const def = brandThemes.value.find(t => t.isDefault && !t.storeId)
+    const def = brandThemes.value.find(t => t.isDefault && !t.menuId)
     if (def) selectedThemeId.value = def.id
   } catch (e) {
     console.warn('Failed to load themes/lessons', e)

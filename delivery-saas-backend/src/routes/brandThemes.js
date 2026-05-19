@@ -5,7 +5,7 @@ import { authMiddleware, requireRole } from '../auth.js'
 const router = Router()
 router.use(authMiddleware)
 
-const ALLOWED_FIELDS = ['name', 'palette', 'mood', 'props', 'surface', 'lighting', 'isDefault', 'isActive', 'storeId']
+const ALLOWED_FIELDS = ['name', 'palette', 'mood', 'props', 'surface', 'lighting', 'isDefault', 'isActive', 'menuId']
 
 function pickAllowed(body) {
   const out = {}
@@ -20,10 +20,20 @@ function hasAnyVisualField(data) {
 }
 
 async function ensureSingleDefault(tx, companyId, themeId) {
+  // Apenas 1 tema padrão por companyId entre os company-wide (menuId null).
   await tx.brandVisualTheme.updateMany({
-    where: { companyId, storeId: null, isDefault: true, NOT: { id: themeId } },
+    where: { companyId, menuId: null, isDefault: true, NOT: { id: themeId } },
     data: { isDefault: false },
   })
+}
+
+async function validateMenuBelongsToCompany(menuId, companyId) {
+  // Menu pertence a uma Store, que pertence a uma Company. Subir 2 níveis.
+  const menu = await prisma.menu.findFirst({
+    where: { id: menuId, store: { companyId } },
+    select: { id: true },
+  })
+  return !!menu
 }
 
 router.get('/', async (req, res) => {
@@ -31,7 +41,7 @@ router.get('/', async (req, res) => {
   const rows = await prisma.brandVisualTheme.findMany({
     where: { companyId },
     orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
-    include: { store: { select: { id: true, name: true } } },
+    include: { menu: { select: { id: true, name: true } } },
   })
   res.json(rows)
 })
@@ -45,16 +55,16 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
   if (!hasAnyVisualField(data)) {
     return res.status(400).json({ message: 'Preencha pelo menos um campo visual (paleta, mood, props, superfície ou iluminação)' })
   }
-  if (data.storeId) {
-    const store = await prisma.store.findFirst({ where: { id: data.storeId, companyId } })
-    if (!store) return res.status(400).json({ message: 'Loja inválida' })
+  if (data.menuId) {
+    const ok = await validateMenuBelongsToCompany(data.menuId, companyId)
+    if (!ok) return res.status(400).json({ message: 'Cardápio inválido' })
   } else {
-    data.storeId = null
+    data.menuId = null
   }
   try {
     const created = await prisma.$transaction(async (tx) => {
       const t = await tx.brandVisualTheme.create({ data: { ...data, companyId } })
-      if (data.isDefault === true && !data.storeId) {
+      if (data.isDefault === true && !data.menuId) {
         await ensureSingleDefault(tx, companyId, t.id)
       }
       return t
@@ -72,9 +82,9 @@ router.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   const existing = await prisma.brandVisualTheme.findFirst({ where: { id, companyId } })
   if (!existing) return res.status(404).json({ message: 'Tema não encontrado' })
   const data = pickAllowed(req.body || {})
-  if (data.storeId) {
-    const store = await prisma.store.findFirst({ where: { id: data.storeId, companyId } })
-    if (!store) return res.status(400).json({ message: 'Loja inválida' })
+  if (data.menuId) {
+    const ok = await validateMenuBelongsToCompany(data.menuId, companyId)
+    if (!ok) return res.status(400).json({ message: 'Cardápio inválido' })
   }
   const merged = { ...existing, ...data }
   if (!hasAnyVisualField(merged)) {
@@ -83,7 +93,7 @@ router.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   try {
     const updated = await prisma.$transaction(async (tx) => {
       const u = await tx.brandVisualTheme.update({ where: { id }, data })
-      if (data.isDefault === true && u.storeId === null) {
+      if (data.isDefault === true && u.menuId === null) {
         await ensureSingleDefault(tx, companyId, id)
       }
       return u

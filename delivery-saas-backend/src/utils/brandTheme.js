@@ -1,14 +1,14 @@
-export function resolveTheme(themes, themeId, storeId) {
+export function resolveTheme(themes, themeId, menuId) {
   if (!Array.isArray(themes) || themes.length === 0) return null
   if (themeId) {
     const t = themes.find(x => x.id === themeId)
     if (t) return t
   }
-  if (storeId) {
-    const t = themes.find(x => x.storeId === storeId && x.isActive !== false)
+  if (menuId) {
+    const t = themes.find(x => x.menuId === menuId && x.isActive !== false)
     if (t) return t
   }
-  const def = themes.find(x => x.isDefault === true && x.storeId === null && x.isActive !== false)
+  const def = themes.find(x => x.isDefault === true && x.menuId === null && x.isActive !== false)
   return def || null
 }
 

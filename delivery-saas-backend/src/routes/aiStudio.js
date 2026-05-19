@@ -605,7 +605,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const userId = req.user.id
   const { photoBase64, quantity = 3, aspectRatio = '1:1' } = req.body || {}
-  const { themeId = null, storeId = null } = req.body || {}
+  const { themeId = null, menuId = null } = req.body || {}
 
   // ── Validação ──
   if (!photoBase64 || typeof photoBase64 !== 'string') {
@@ -715,7 +715,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
       prisma.brandVisualTheme.findMany({ where: { companyId, isActive: true } }),
       prisma.company.findUnique({ where: { id: companyId }, select: { aiLessonsCache: true } }),
     ])
-    const theme = resolveTheme(themesAll, themeId, storeId)
+    const theme = resolveTheme(themesAll, themeId, menuId)
     const lessonsText = companyRec?.aiLessonsCache?.text || ''
     const themeBlock = buildThemeBlock(theme)
     const lessonsBlock = buildLessonsBlock(lessonsText)
