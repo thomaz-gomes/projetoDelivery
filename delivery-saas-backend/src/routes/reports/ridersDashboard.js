@@ -104,8 +104,12 @@ router.get('/', async (req, res) => {
 
     // Absolute count of completed orders with riders (includes orders without timing data)
     const totalCompletedWithRider = await prisma.order.count({ where: orderWhere });
+    // "Concluído com código": apenas pedidos cujo motoboy digitou o código de
+    // entrega no app do iFood (evento DDCS). A flag closedByIfoodCode é setada
+    // exclusivamente em DELIVERY_DROP_CODE_VALIDATION_SUCCESS; CONCLUDED/CON
+    // genéricos (auto-finalização do iFood, takeout, etc.) NÃO marcam a flag.
     const completedWithCode = await prisma.order.count({
-      where: { ...orderWhere, displaySimple: { not: null } },
+      where: { ...orderWhere, closedByIfoodCode: true },
     });
     const completedWithCodePct = totalCompletedWithRider > 0
       ? Math.round((completedWithCode / totalCompletedWithRider) * 1000) / 10
