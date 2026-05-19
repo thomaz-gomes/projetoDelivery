@@ -36,6 +36,7 @@ function detectImageType(buf) {
 router.get('/', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId
+    const userId = req.user.id
     const page = Math.max(1, Number(req.query.page) || 1)
     const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize) || 24))
     const skip = (page - 1) * pageSize
@@ -45,6 +46,12 @@ router.get('/', requireRole('ADMIN'), async (req, res) => {
         orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
+        include: {
+          feedbacks: {
+            where: { userId },
+            select: { id: true, reason: true, note: true, createdAt: true },
+          },
+        },
       }),
       prisma.media.count({ where: { companyId } }),
     ])

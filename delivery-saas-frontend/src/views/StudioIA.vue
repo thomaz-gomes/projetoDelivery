@@ -512,6 +512,12 @@
             <span v-if="item.aiEnhanced" class="sia-gallery-ai-badge" title="Gerada/Otimizada por IA">
               <i class="bi bi-stars"></i>
             </span>
+            <MediaFeedbackButtons
+              v-if="item.aiEnhanced"
+              :media-id="item.id"
+              :existing-feedbacks="item.feedbacks || []"
+              @update="loadGallery"
+            />
           </div>
         </div>
         <div v-else class="text-center py-5 text-muted">
@@ -530,6 +536,7 @@ import { useAiCreditsStore } from '../stores/aiCredits.js'
 import { assetUrl } from '../utils/assetUrl.js'
 import api from '../api.js'
 import Swal from 'sweetalert2'
+import MediaFeedbackButtons from '../components/MediaFeedbackButtons.vue'
 
 const creditsStore = useAiCreditsStore()
 

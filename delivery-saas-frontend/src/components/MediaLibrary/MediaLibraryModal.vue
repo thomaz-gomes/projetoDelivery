@@ -43,6 +43,13 @@
                 <span v-if="item.aiEnhanced" class="ai-badge" title="Editada por IA">
                   <i class="bi bi-stars"></i>
                 </span>
+                <MediaFeedbackButtons
+                  v-if="item.aiEnhanced"
+                  class="media-library-feedback"
+                  :media-id="item.id"
+                  :existing-feedbacks="item.feedbacks || []"
+                  @update="loadLibrary(currentPage)"
+                />
                 <button
                   type="button"
                   class="ai-studio-trigger"
@@ -305,6 +312,7 @@ import { useMediaLibrary } from '../../composables/useMediaLibrary.js'
 import { useAiStudio } from '../../composables/useAiStudio.js'
 import { assetUrl } from '../../utils/assetUrl.js'
 import ImageLightbox from '../../views/inbox/ImageLightbox.vue'
+import MediaFeedbackButtons from '../MediaFeedbackButtons.vue'
 import api from '../../api.js'
 import Swal from 'sweetalert2'
 

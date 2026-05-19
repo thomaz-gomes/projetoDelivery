@@ -593,3 +593,9 @@
   justify-content: center;
   z-index: 2;
 }
+
+/* Reposiciona feedback (👍/👎) acima do botão de excluir dentro da grade da biblioteca */
+.media-library-grid__item .media-library-feedback {
+  bottom: 42px;
+  right: 6px;
+}
