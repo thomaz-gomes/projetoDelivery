@@ -981,8 +981,11 @@ router.post('/lessons/refresh', requireRole('ADMIN'), async (req, res) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 400, temperature: 0.4 },
-          thinkingConfig: { thinkingBudget: 0 },
+          generationConfig: {
+            maxOutputTokens: 400,
+            temperature: 0.4,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
         signal: AbortSignal.timeout(20_000),
       }
