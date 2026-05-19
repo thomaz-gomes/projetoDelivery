@@ -107,13 +107,13 @@
       <div v-else-if="step===3" class="products-step">
         <h6 class="fw-semibold mb-3">Produtos</h6>
         <div class="mb-3">
-          <label class="form-label small">Loja atribuída</label>
-          <div v-if="storesLoading" class="small text-muted">Carregando lojas...</div>
+          <label class="form-label small">Cardápio atribuído</label>
+          <div v-if="menusLoading" class="small text-muted">Carregando cardápios...</div>
           <div v-else>
-            <SelectInput   v-model="selectedStoreId"  class="form-select">
-              <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+            <SelectInput   v-model="selectedMenuId"  class="form-select">
+              <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
             </SelectInput>
-            <div v-if="stores.length===0" class="small text-muted mt-1">Nenhuma loja disponível para atribuir.</div>
+            <div v-if="menus.length===0" class="small text-muted mt-1">Nenhum cardápio disponível para atribuir.</div>
           </div>
         </div>
         <div v-if="menuLoading" class="small">Carregando menu...</div>
@@ -451,6 +451,9 @@ const filteredProducts = computed(() => {
 const stores = ref([]);
 const storesLoading = ref(false);
 const selectedStoreId = ref(null);
+const menus = ref([]);
+const menusLoading = ref(false);
+const selectedMenuId = ref(null);
 const paymentMethods = ref([]);
 const cart = ref([]);
 const paymentMethodCode = ref('');
@@ -1099,7 +1102,9 @@ async function loadMenu(){
     }
     paymentMethods.value = data.company?.paymentMethods || [];
     nextTick(() => { recalcPaymentDiscount(); });
-    // ensure stores are loaded so the user can assign a store before finalizing
+    // ensure menus are loaded so the user can assign a menu before finalizing
+    if(!menus.value || menus.value.length===0) await loadMenus();
+    // stores ainda são carregadas como fallback (compat com fluxos antigos)
     if(!stores.value || stores.value.length===0) await loadStores();
   } catch(e){ console.error('Falha ao carregar menu público para PDV', e); }
   finally{ menuLoading.value=false; }
@@ -1115,6 +1120,17 @@ async function loadStores(){
     if(!selectedStoreId.value && stores.value.length>0) selectedStoreId.value = stores.value[0].id;
   }catch(e){ console.error('PDV: falha ao carregar lojas', e); }
   finally{ storesLoading.value = false; }
+}
+
+async function loadMenus(){
+  if(menusLoading.value) return;
+  menusLoading.value = true;
+  try{
+    const { data } = await api.get('/menu/menus');
+    menus.value = Array.isArray(data) ? data : (data?.items || []);
+    if(!selectedMenuId.value && menus.value.length>0) selectedMenuId.value = menus.value[0].id;
+  }catch(e){ console.error('PDV: falha ao carregar cardápios', e); }
+  finally{ menusLoading.value = false; }
 }
 
 async function loadNeighborhoods(){
@@ -1187,7 +1203,7 @@ async function finalize(){
     const itemsPayload = cart.value.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes||null, options: it.options||null }));
     // Para pedido balcão sem identificação, usa nome genérico
     const customerNameFinal = newCustomerName.value.trim() || (orderType.value === 'BALCAO' ? 'Cliente Balcão' : '');
-    const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, storeId: selectedStoreId.value, discountMerchant: manualDiscount.value > 0 ? manualDiscount.value : undefined, additionalFees: surcharge.value > 0 ? surcharge.value : undefined, appliedCashback: appliedCashback.value > 0 ? appliedCashback.value : undefined };
+    const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, menuId: selectedMenuId.value || undefined, storeId: selectedStoreId.value || undefined, discountMerchant: manualDiscount.value > 0 ? manualDiscount.value : undefined, additionalFees: surcharge.value > 0 ? surcharge.value : undefined, appliedCashback: appliedCashback.value > 0 ? appliedCashback.value : undefined };
     // Always send customerId when we already know who the customer is. The
     // backend's findOrCreateCustomer would otherwise fall back to matching
     // by name when phone is blank — and pick a different customer with the

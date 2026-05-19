@@ -1122,7 +1122,7 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
   const companyId = req.user.companyId;
   try {
     // Aceitar tanto `type` (legado) quanto `orderType` (frontend atual)
-    const { items = [], address: _rawAddress = {}, coupon, payment, type: _type, orderType: _orderType, customerPhone, customerName, requestedStoreId, discountMerchant: _discountMerchant, additionalFees: _additionalFees, appliedCashback: _appliedCashback } = req.body || {};
+    const { items = [], address: _rawAddress = {}, coupon, payment, type: _type, orderType: _orderType, customerPhone, customerName, requestedStoreId, menuId: requestedMenuId, discountMerchant: _discountMerchant, additionalFees: _additionalFees, appliedCashback: _appliedCashback } = req.body || {};
     const appliedCashbackAmt = Math.max(0, Number(_appliedCashback || 0));
     const type = _type || _orderType;
     // address pode chegar como objeto {street,number,...} ou como string formatada (finalize envia string quando persiste no cliente)
@@ -1282,23 +1282,50 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       }
     } catch (e) { console.warn('PDV: falha ao criar/achar cliente', e?.message || e); }
 
-    // resolve store: prefer explicit `storeId` from request (validate belongs to company),
-    // otherwise fallback to single-store companies like the public route
+    // resolve menu/store: prefer explicit `menuId` from request (validate belongs to
+    // company via menu.store.companyId) and derive `storeId` from menu.store.
+    // Falls back to legacy `requestedStoreId` for backwards-compat, and to the
+    // company's first menu/store if nothing was sent.
     let resolvedStore = null;
+    let resolvedMenuId = null;
     try {
-      if (requestedStoreId) {
+      if (requestedMenuId) {
+        const m = await prisma.menu.findFirst({
+          where: { id: requestedMenuId, store: { companyId } },
+          select: { id: true, storeId: true },
+        });
+        if (m) {
+          resolvedMenuId = m.id;
+          resolvedStore = { id: m.storeId };
+          console.log('PDV: using requested menuId for order creation:', requestedMenuId);
+        } else {
+          console.warn('PDV: requested menuId does not belong to company, ignoring:', requestedMenuId);
+        }
+      }
+      if (!resolvedStore && requestedStoreId) {
         const s = await prisma.store.findFirst({ where: { id: requestedStoreId, companyId }, select: { id: true } });
         if (s) {
           resolvedStore = s;
-          console.log('PDV: using requested storeId for order creation:', requestedStoreId);
+          console.log('PDV: using legacy requested storeId for order creation:', requestedStoreId);
         } else {
           console.warn('PDV: requested storeId does not belong to company, ignoring:', requestedStoreId);
         }
       }
       if (!resolvedStore) {
-        // Fallback: use first store of the company (all orders must have a storeId)
-        resolvedStore = await prisma.store.findFirst({ where: { companyId }, orderBy: { createdAt: 'asc' } });
-        if (resolvedStore) console.log('PDV: storeId não informado, usando primeira loja:', resolvedStore.id);
+        // Fallback: first menu of the company; derive store from it.
+        const firstMenu = await prisma.menu.findFirst({
+          where: { store: { companyId } },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, storeId: true },
+        });
+        if (firstMenu) {
+          resolvedMenuId = firstMenu.id;
+          resolvedStore = { id: firstMenu.storeId };
+          console.log('PDV: menu/store não informados, usando primeiro menu:', firstMenu.id);
+        } else {
+          resolvedStore = await prisma.store.findFirst({ where: { companyId }, orderBy: { createdAt: 'asc' } });
+          if (resolvedStore) console.log('PDV: sem menus, usando primeira loja:', resolvedStore.id);
+        }
       }
     } catch (e) { /* ignore */ }
 
@@ -1327,6 +1354,7 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
         deliveryFee,
         status: 'EM_PREPARO',
         ...(resolvedStore ? { storeId: resolvedStore.id } : {}),
+        ...(resolvedMenuId ? { menuId: resolvedMenuId } : {}),
         payload: {
           payment: paymentPayload,
           orderType: type,
