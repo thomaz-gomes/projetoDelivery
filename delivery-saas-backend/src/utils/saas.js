@@ -40,7 +40,7 @@ export async function assertModuleEnabled(companyId, key) {
 }
 
 export async function assertLimit(companyId, type) {
-  // type: 'stores' | 'menus'
+  // type: 'stores' | 'menus' | 'whatsapps'
   const sub = await getSubscription(companyId)
   if (!sub || !sub.plan) return // no plan => no limits
   const p = sub.plan
@@ -58,6 +58,14 @@ export async function assertLimit(companyId, type) {
     const count = await prisma.menu.count({ where: { store: { companyId } } })
     if (count >= p.menuLimit) {
       const err = new Error('Limite de cardápios atingido para seu plano')
+      err.statusCode = 403
+      throw err
+    }
+  } else if (type === 'whatsapps') {
+    if (p.unlimitedWhatsapps || p.whatsappLimit == null) return
+    const count = await prisma.whatsAppInstance.count({ where: { companyId } })
+    if (count >= p.whatsappLimit) {
+      const err = new Error('Limite de números de WhatsApp atingido para seu plano')
       err.statusCode = 403
       throw err
     }

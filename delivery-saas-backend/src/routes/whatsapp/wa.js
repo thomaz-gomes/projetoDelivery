@@ -3,6 +3,7 @@ import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { evoCreateInstance, evoGetStatus, evoGetQr, evoSendText, evoSetWebhook, evoDeleteInstance } from '../../wa.js';
+import { assertLimit } from '../../utils/saas.js';
 
 export const waRouter = express.Router();
 waRouter.use(authMiddleware);
@@ -40,6 +41,17 @@ waRouter.post('/instances', requireRole('ADMIN'), async (req, res) => {
 	} = req.body || {};
 
 	if (!instanceName) return res.status(400).json({ message: 'instanceName é obrigatório' });
+
+	// SaaS limit: ensure WhatsApp instance count does not exceed plan.
+	// Apenas valida em CRIAÇÃO nova — quando o nome já existe (upsert abaixo) é
+	// reconexão de instância existente, sem aumentar a contagem.
+	const existingByName = await prisma.whatsAppInstance.findUnique({ where: { instanceName } });
+	if (!existingByName) {
+		try { await assertLimit(companyId, 'whatsapps') } catch (e) {
+			const status = e && e.statusCode ? e.statusCode : 403;
+			return res.status(status).json({ message: e?.message || 'Limite de números de WhatsApp atingido para seu plano' });
+		}
+	}
 
 	try {
 		const evo = await evoCreateInstance({

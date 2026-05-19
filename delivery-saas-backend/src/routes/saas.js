@@ -73,10 +73,10 @@ saasRouter.get('/plans', requireRole('SUPER_ADMIN'), async (_req, res) => {
 })
 
 saasRouter.post('/plans', requireRole('SUPER_ADMIN'), async (req, res) => {
-  const { name, price = 0, menuLimit = null, storeLimit = null, unlimitedMenus = false, unlimitedStores = false, aiCreditsMonthlyLimit = 100, unlimitedAiCredits = false, moduleIds = [], isTrial, trialDurationDays } = req.body || {}
+  const { name, price = 0, menuLimit = null, storeLimit = null, whatsappLimit = null, unlimitedMenus = false, unlimitedStores = false, unlimitedWhatsapps = false, aiCreditsMonthlyLimit = 100, unlimitedAiCredits = false, moduleIds = [], isTrial, trialDurationDays } = req.body || {}
   if (!name) return res.status(400).json({ message: 'name é obrigatório' })
   try {
-    const plan = await prisma.saasPlan.create({ data: { name, price: Number(price || 0), menuLimit, storeLimit, unlimitedMenus: Boolean(unlimitedMenus), unlimitedStores: Boolean(unlimitedStores), aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit || 100), unlimitedAiCredits: Boolean(unlimitedAiCredits), isTrial: Boolean(isTrial), ...(trialDurationDays != null && { trialDurationDays: Number(trialDurationDays) }) } })
+    const plan = await prisma.saasPlan.create({ data: { name, price: Number(price || 0), menuLimit, storeLimit, whatsappLimit, unlimitedMenus: Boolean(unlimitedMenus), unlimitedStores: Boolean(unlimitedStores), unlimitedWhatsapps: Boolean(unlimitedWhatsapps), aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit || 100), unlimitedAiCredits: Boolean(unlimitedAiCredits), isTrial: Boolean(isTrial), ...(trialDurationDays != null && { trialDurationDays: Number(trialDurationDays) }) } })
     if (Array.isArray(moduleIds) && moduleIds.length) {
       const effectiveModuleIds = await ensureCardapioSimplesIncluded(moduleIds)
       const data = effectiveModuleIds.map(mid => ({ planId: plan.id, moduleId: String(mid) }))
@@ -96,13 +96,13 @@ saasRouter.post('/plans', requireRole('SUPER_ADMIN'), async (req, res) => {
 
 saasRouter.put('/plans/:id', requireRole('SUPER_ADMIN'), async (req, res) => {
   const { id } = req.params
-  const { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, aiCreditsMonthlyLimit, unlimitedAiCredits, moduleIds, isDefault, trialDurationDays } = req.body || {}
+  const { name, price, menuLimit, storeLimit, whatsappLimit, unlimitedMenus, unlimitedStores, unlimitedWhatsapps, aiCreditsMonthlyLimit, unlimitedAiCredits, moduleIds, isDefault, trialDurationDays } = req.body || {}
   try {
     // Se marcando como padrão, desmarcar o anterior
     if (isDefault === true) {
       await prisma.saasPlan.updateMany({ where: { isDefault: true, NOT: { id } }, data: { isDefault: false } })
     }
-    const updated = await prisma.saasPlan.update({ where: { id }, data: { name, price, menuLimit, storeLimit, unlimitedMenus, unlimitedStores, ...(aiCreditsMonthlyLimit !== undefined && { aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit) }), ...(unlimitedAiCredits !== undefined && { unlimitedAiCredits: Boolean(unlimitedAiCredits) }), ...(isDefault !== undefined && { isDefault: Boolean(isDefault) }), ...(trialDurationDays !== undefined && { trialDurationDays: Number(trialDurationDays) }) } })
+    const updated = await prisma.saasPlan.update({ where: { id }, data: { name, price, menuLimit, storeLimit, ...(whatsappLimit !== undefined && { whatsappLimit }), unlimitedMenus, unlimitedStores, ...(unlimitedWhatsapps !== undefined && { unlimitedWhatsapps: Boolean(unlimitedWhatsapps) }), ...(aiCreditsMonthlyLimit !== undefined && { aiCreditsMonthlyLimit: Number(aiCreditsMonthlyLimit) }), ...(unlimitedAiCredits !== undefined && { unlimitedAiCredits: Boolean(unlimitedAiCredits) }), ...(isDefault !== undefined && { isDefault: Boolean(isDefault) }), ...(trialDurationDays !== undefined && { trialDurationDays: Number(trialDurationDays) }) } })
     if (Array.isArray(moduleIds)) {
       // replace module assignments
       await prisma.saasPlanModule.deleteMany({ where: { planId: id } })

@@ -30,7 +30,7 @@ const loading = ref(true)
 const showPlanForm = ref(false)
 const editingPlanId = ref(null)
 
-const emptyPlanForm = () => ({ name: '', price: 0, menuLimit: null, storeLimit: null, unlimitedMenus: false, unlimitedStores: false, aiCreditsMonthlyLimit: 100, unlimitedAiCredits: false, prices: [], trialDurationDays: null, moduleIds: [] })
+const emptyPlanForm = () => ({ name: '', price: 0, menuLimit: null, storeLimit: null, whatsappLimit: null, unlimitedMenus: false, unlimitedStores: false, unlimitedWhatsapps: false, aiCreditsMonthlyLimit: 100, unlimitedAiCredits: false, prices: [], trialDurationDays: null, moduleIds: [] })
 const planForm = ref(emptyPlanForm())
 
 // --- Modules ---
@@ -72,8 +72,10 @@ function openEditPlan(p) {
     price: Number(p.price || 0),
     menuLimit: p.menuLimit,
     storeLimit: p.storeLimit,
+    whatsappLimit: p.whatsappLimit,
     unlimitedMenus: p.unlimitedMenus || false,
     unlimitedStores: p.unlimitedStores || false,
+    unlimitedWhatsapps: p.unlimitedWhatsapps || false,
     aiCreditsMonthlyLimit: p.aiCreditsMonthlyLimit ?? 100,
     unlimitedAiCredits: p.unlimitedAiCredits || false,
     prices: (p.prices || []).map(pr => ({ period: pr.period, price: String(Number(pr.price || 0)) })),
@@ -350,7 +352,13 @@ async function saveMpConfig() {
                 <label class="form-label">Limite de lojas</label>
                 <input v-model.number="planForm.storeLimit" type="number" min="0" class="form-control" :disabled="planForm.unlimitedStores" />
               </div>
-              <div class="col-md-6 d-flex align-items-end gap-3">
+              <div class="col-md-3">
+                <label class="form-label">Limite de WhatsApp</label>
+                <input v-model.number="planForm.whatsappLimit" type="number" min="0" class="form-control" :disabled="planForm.unlimitedWhatsapps" />
+              </div>
+            </div>
+            <div class="row g-3 mt-1">
+              <div class="col-12 d-flex flex-wrap align-items-center gap-3">
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" v-model="planForm.unlimitedMenus" id="chkMenus" />
                   <label class="form-check-label" for="chkMenus">Cardápios ilimitados</label>
@@ -358,6 +366,10 @@ async function saveMpConfig() {
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" v-model="planForm.unlimitedStores" id="chkStores" />
                   <label class="form-check-label" for="chkStores">Lojas ilimitadas</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" v-model="planForm.unlimitedWhatsapps" id="chkWhatsapps" />
+                  <label class="form-check-label" for="chkWhatsapps">WhatsApp ilimitados</label>
                 </div>
               </div>
             </div>
@@ -418,6 +430,7 @@ async function saveMpConfig() {
                   <div class="small text-muted mb-2">
                     <div><i class="bi bi-journal-text me-1"></i>Cardapios: {{ p.unlimitedMenus ? 'Ilimitado' : (p.menuLimit ?? '--') }}</div>
                     <div><i class="bi bi-shop me-1"></i>Lojas: {{ p.unlimitedStores ? 'Ilimitado' : (p.storeLimit ?? '--') }}</div>
+                    <div><i class="bi bi-whatsapp me-1"></i>WhatsApp: {{ p.unlimitedWhatsapps ? 'Ilimitado' : (p.whatsappLimit ?? '--') }}</div>
                     <div><i class="bi bi-stars me-1"></i>IA: {{ p.unlimitedAiCredits ? 'Ilimitado' : ((p.aiCreditsMonthlyLimit ?? 100) + ' creditos/mes') }}</div>
                     <div v-if="p.isTrial && p.trialDurationDays"><i class="bi bi-clock-history me-1"></i>Trial: {{ p.trialDurationDays }} dias</div>
                   </div>

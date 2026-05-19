@@ -1390,8 +1390,10 @@ model SaasPlan {
   // Limits: when null -> unlimited (or use flags below)
   menuLimit             Int?
   storeLimit            Int?
+  whatsappLimit         Int?
   unlimitedMenus        Boolean  @default(false)
   unlimitedStores       Boolean  @default(false)
+  unlimitedWhatsapps    Boolean  @default(false)
   aiCreditsMonthlyLimit Int      @default(100)
   unlimitedAiCredits    Boolean  @default(false)
   isActive              Boolean  @default(true)
