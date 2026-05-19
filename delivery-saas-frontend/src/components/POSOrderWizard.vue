@@ -159,6 +159,7 @@
                       :src="assetUrl(thumbUrl(p.image))"
                       :alt="p.name"
                       loading="lazy"
+                      @error="onThumbError($event, p.image)"
                     />
                     <i v-else class="bi bi-image"></i>
                   </div>
@@ -645,6 +646,16 @@ function next(){ step.value++; if(step.value===3) loadMenu(); }
 function prev(){ step.value--; }
 
 function selectProduct(p){ activeProduct.value = p; showOptions.value = true; optionQty.value=1; chosenOptions.value=[]; optionNote.value=''; }
+
+// Fallback: alguns produtos antigos só têm o arquivo original (.jpg/.png),
+// sem a variante _thumb.webp. Quando o thumb falha, troca para a URL bruta.
+function onThumbError(evt, originalUrl){
+  try{
+    if(!evt || !evt.target || !originalUrl) return
+    try{ evt.target.onerror = null }catch(e){}
+    evt.target.src = assetUrl(originalUrl)
+  }catch(e){ /* ignore */ }
+}
 function addToCart(payload){
   // persist product id when available so future edits can locate full product
   if(activeProduct.value && activeProduct.value.id) payload.productId = activeProduct.value.id;
