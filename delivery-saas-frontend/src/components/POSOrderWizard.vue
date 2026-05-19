@@ -145,7 +145,7 @@
             <div v-if="filteredProducts.length === 0" class="small text-muted py-2 text-center">Nenhum produto encontrado.</div>
             <div v-for="cat in filteredProducts" :key="cat.id" class="mb-3">
               <div class="category-header">{{ cat.name }}</div>
-              <div class="product-grid">
+              <div :class="['product-grid', { 'product-grid--compact': embedded }]">
                 <button
                   v-for="p in cat.products"
                   :key="p.id"
@@ -1467,6 +1467,10 @@ watch(() => props.preset, async (val) => {
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
   gap:10px;
+}
+/* Inbox embed: cards menores (mais largura ocupada pela sidebar do chat) */
+.product-grid--compact{
+  grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));
 }
 .product-card{
   display:flex;
