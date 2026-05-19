@@ -202,11 +202,14 @@ async function submitNegative() {
   } finally {
     submitting.value = false
   }
-  // Após salvar o feedback negativo, oferece apagar a imagem. A IA já registrou
-  // o motivo da rejeição (continua aprendendo); deletar é opcional para o op.
+  // Após salvar o feedback negativo, oferece apagar a imagem.
+  // Atenção: apagar a Media remove o feedback associado (cascade). Para a IA
+  // aprender com esse sinal, clique em "Atualizar agora" no card de lições
+  // antes de apagar — depois disso o aprendizado fica no cache mesmo sem a Media.
   const shouldDelete = window.confirm(
     'Feedback enviado. Deseja apagar esta imagem da galeria?\n\n' +
-    'O feedback fica registrado para a IA aprender; apagar só remove a imagem da sua biblioteca.'
+    'Dica: se quiser que a IA aprenda com este feedback, clique em ' +
+    '"Atualizar agora" no card de lições antes de apagar.'
   )
   if (!shouldDelete) return
   try {
