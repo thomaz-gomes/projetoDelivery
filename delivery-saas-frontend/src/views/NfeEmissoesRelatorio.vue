@@ -54,7 +54,19 @@
     <!-- Tabela -->
     <ListCard title="Notas Fiscais Emitidas" icon="bi bi-receipt">
       <template #actions>
-        <span class="text-muted small">{{ total }} nota(s)</span>
+        <div class="d-flex align-items-center gap-2">
+          <button
+            class="btn btn-sm btn-outline-success"
+            @click="downloadXmls"
+            :disabled="exporting || rows.length === 0"
+            title="Baixa um ZIP com todos os XMLs no formato nfeProc (NFe assinada + protocolo) + relacao.csv, padrão para envio ao contador"
+          >
+            <span v-if="exporting" class="spinner-border spinner-border-sm me-1"></span>
+            <i v-else class="bi bi-file-earmark-zip me-1"></i>
+            {{ exporting ? 'Gerando...' : 'Baixar XMLs do período' }}
+          </button>
+          <span class="text-muted small">{{ total }} nota(s)</span>
+        </div>
       </template>
 
       <div class="table-responsive">
@@ -235,68 +247,139 @@
           <div class="modal-header d-print-none">
             <h5 class="modal-title"><i class="bi bi-receipt me-2"></i>DANFE NFC-e</h5>
             <div class="ms-auto d-flex gap-2">
-              <button class="btn btn-sm btn-primary" @click="printDanfe">
-                <i class="bi bi-printer me-1"></i>Imprimir
+              <button class="btn btn-sm btn-primary" @click="printDanfe" :disabled="printing">
+                <span v-if="printing" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="bi bi-printer me-1"></i>
+                {{ printing ? 'Enviando...' : 'Imprimir no agente' }}
               </button>
               <button class="btn-close" @click="danfeModal.show = false"></button>
             </div>
           </div>
           <div class="modal-body" id="danfe-print-area">
             <div v-if="danfeModal.row" class="danfe-cupom mx-auto">
-              <div class="text-center mb-2">
-                <div class="fw-bold fs-6">{{ danfeModal.emitNome }}</div>
-                <div class="small text-muted">CNPJ: {{ fmtCnpj(danfeModal.emitCnpj) }}</div>
-                <div class="small text-muted">{{ danfeModal.emitEnder }}</div>
-                <hr class="my-1">
-                <div class="fw-semibold">DANFE NFC-e</div>
-                <div class="small text-muted">Documento Auxiliar da Nota Fiscal de Consumidor Eletrônica</div>
-                <hr class="my-1">
+              <!-- ── Cabeçalho ────────────────────────────────────────── -->
+              <div class="text-center">
+                <div class="danfe-store-name">{{ danfeData.storeName }}</div>
+                <div class="danfe-small">
+                  CNPJ: {{ fmtCnpj(danfeData.cnpj) }}<span v-if="danfeData.razao"> {{ danfeData.razao }}</span>
+                </div>
+                <div class="danfe-small">{{ danfeData.fullAddress }}</div>
+                <div class="danfe-small">
+                  <span v-if="danfeData.fone">Fone: {{ danfeData.fone }}</span>
+                  <span v-if="danfeData.fone && danfeData.ie"> &nbsp;</span>
+                  <span v-if="danfeData.ie">I.E.: {{ danfeData.ie }}</span>
+                </div>
+                <div class="danfe-small mt-1">DOCUMENTO AUXILIAR DA NOTA FISCAL DE CONSUMIDOR ELETRONICA</div>
               </div>
 
-              <!-- Itens -->
-              <table class="table table-sm table-borderless mb-1" style="font-size:0.78rem">
-                <thead><tr><th>#</th><th>Produto</th><th class="text-end">Qtd</th><th class="text-end">Unit</th><th class="text-end">Total</th></tr></thead>
+              <!-- ── Itens ────────────────────────────────────────────── -->
+              <table class="danfe-items-table mt-2">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Cód</th>
+                    <th>Descrição</th>
+                    <th class="text-end">Qtd</th>
+                    <th class="text-end">Un</th>
+                    <th class="text-end">Vl Unit.</th>
+                    <th class="text-end">Vl Total</th>
+                  </tr>
+                </thead>
                 <tbody>
+                  <tr v-if="danfeModal.items.length === 0">
+                    <td colspan="7" class="text-center text-muted py-2 danfe-small">Sem itens</td>
+                  </tr>
                   <tr v-for="(it, i) in danfeModal.items" :key="i">
-                    <td>{{ i+1 }}</td>
+                    <td>{{ String(i + 1).padStart(3, '0') }}</td>
+                    <td>{{ it.sku || '—' }}</td>
                     <td>{{ it.name }}</td>
                     <td class="text-end">{{ it.qty }}</td>
+                    <td class="text-end">UN</td>
                     <td class="text-end">{{ fmtCurrency(it.price) }}</td>
                     <td class="text-end">{{ fmtCurrency(it.total) }}</td>
                   </tr>
                 </tbody>
               </table>
-              <hr class="my-1">
 
-              <!-- Totais -->
-              <div class="d-flex justify-content-between small"><span>Subtotal</span><span>{{ fmtCurrency(danfeModal.row.order?.total) }}</span></div>
-              <div class="d-flex justify-content-between fw-bold"><span>TOTAL</span><span>{{ fmtCurrency(danfeModal.row.order?.total) }}</span></div>
-              <hr class="my-1">
-
-              <!-- Consumidor -->
-              <div class="small text-muted mb-1">
-                <span v-if="danfeModal.row.order?.customerName">Consumidor: {{ danfeModal.row.order.customerName }}</span>
-                <span v-else>Consumidor: Não identificado</span>
+              <!-- ── Totais ──────────────────────────────────────────── -->
+              <div class="danfe-totals mt-2">
+                <div class="d-flex justify-content-between">
+                  <span class="fw-bold">QTD. TOTAL DE ITENS</span>
+                  <span class="fw-bold">{{ String(danfeData.totalItens).padStart(3, '0') }}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <span class="fw-bold">VALOR TOTAL R$</span>
+                  <span class="fw-bold">{{ fmtNumber(danfeData.subtotal) }}</span>
+                </div>
+                <div v-if="danfeData.desconto > 0" class="d-flex justify-content-between danfe-small">
+                  <span>Descontos R$</span>
+                  <span>- {{ fmtNumber(danfeData.desconto) }}</span>
+                </div>
+                <div v-if="danfeData.acrescimo > 0" class="d-flex justify-content-between danfe-small">
+                  <span>Acréscimos R$</span>
+                  <span>+ {{ fmtNumber(danfeData.acrescimo) }}</span>
+                </div>
+                <div class="d-flex justify-content-between mt-1">
+                  <span class="fw-bold">VALOR A PAGAR R$</span>
+                  <span class="fw-bold">{{ fmtNumber(danfeData.valorPagar) }}</span>
+                </div>
               </div>
 
-              <!-- NF-e info -->
-              <hr class="my-1">
-              <div class="small text-muted text-center">
-                <div>NF-e nº {{ extractNNF(danfeModal.row) || '—' }}</div>
-                <div v-if="danfeModal.row.nProt">Protocolo: {{ danfeModal.row.nProt }}</div>
-                <div>Emissão: {{ formatDt(danfeModal.row.createdAt) }}</div>
+              <!-- ── Formas de Pagamento ─────────────────────────────── -->
+              <div class="danfe-payments mt-2">
+                <div class="d-flex justify-content-between">
+                  <span class="fw-bold">FORMA DE PAGAMENTO</span>
+                  <span class="fw-bold danfe-small">Valor Pago</span>
+                </div>
+                <div v-for="(pay, i) in danfeData.payments" :key="i" class="d-flex justify-content-between danfe-small">
+                  <span>{{ pay.label }}</span>
+                  <span>{{ fmtNumber(pay.value) }}</span>
+                </div>
+                <div v-if="danfeData.troco > 0" class="d-flex justify-content-between danfe-small">
+                  <span>Troco</span>
+                  <span>{{ fmtNumber(danfeData.troco) }}</span>
+                </div>
               </div>
 
-              <!-- QR Code placeholder -->
-              <div class="text-center mt-2 small text-muted">
-                <i class="bi bi-qr-code" style="font-size:2rem"></i>
-                <div class="mt-1">Consulte a NF-e pelo QR Code ou chave de acesso</div>
+              <!-- ── Chave de Acesso ─────────────────────────────────── -->
+              <div class="mt-3 text-center danfe-small">
+                <div>Consulte pela Chave de Acesso em</div>
+                <div class="danfe-url">{{ danfeData.consultaUrl }}</div>
+                <div class="danfe-chave mt-1">{{ fmtChave(danfeModal.row.chNFe) }}</div>
               </div>
 
-              <div class="text-center mt-2 small fw-semibold">
-                <span v-if="danfeModal.row.order?.payload?.nfe?.tpAmb === '2'" class="text-warning">
-                  EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO — SEM VALOR FISCAL
-                </span>
+              <!-- ── QR Code + Info NFC-e ────────────────────────────── -->
+              <div class="d-flex justify-content-between align-items-start mt-2 gap-2">
+                <div class="danfe-qr">
+                  <canvas ref="qrCanvas" width="180" height="180"></canvas>
+                </div>
+                <div class="danfe-nfe-info danfe-small text-end">
+                  <div class="fw-semibold">
+                    <span v-if="danfeData.consumerName">{{ danfeData.consumerName }}</span>
+                    <span v-else>CONSUMIDOR NÃO IDENTIFICADO</span>
+                  </div>
+                  <div class="mt-1">NFC-e nº {{ danfeData.nNF }}</div>
+                  <div>Série {{ danfeData.serie }}</div>
+                  <div>{{ formatDt(danfeModal.row.dhRecbto || danfeModal.row.createdAt) }}</div>
+                  <div class="mt-1">Protocolo de Autorização:</div>
+                  <div>{{ danfeModal.row.nProt || '—' }}</div>
+                </div>
+              </div>
+
+              <!-- ── Tributos (IBPT) ─────────────────────────────────── -->
+              <div class="mt-3 danfe-small text-center">
+                <div v-if="danfeData.deliveryFee > 0">Taxa de entrega: {{ fmtCurrency(danfeData.deliveryFee) }}.</div>
+                <div>
+                  Tributos Aproximados — Total {{ fmtCurrency(danfeData.tributos.total) }}.
+                  Federal {{ fmtCurrency(danfeData.tributos.federal) }}.
+                  Estadual {{ fmtCurrency(danfeData.tributos.estadual) }}.
+                  Municipal {{ fmtCurrency(danfeData.tributos.municipal) }}.
+                  Fonte IBPT
+                </div>
+              </div>
+
+              <div v-if="danfeData.isHomolog" class="text-center mt-2 fw-bold danfe-small text-danger">
+                EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO — SEM VALOR FISCAL
               </div>
             </div>
           </div>
@@ -308,8 +391,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import api from '../api'
+import QRCode from 'qrcode'
 import ListCard from '../components/ListCard.vue'
 import DateInput from '../components/form/date/DateInput.vue'
 import SelectInput from '../components/form/select/SelectInput.vue'
@@ -330,6 +414,116 @@ const alert = ref({ show: false, type: 'success', msg: '' })
 const cancelModal = ref({ show: false, row: null, motivo: '', loading: false })
 const emailModal  = ref({ show: false, row: null, email: '',  loading: false })
 const danfeModal  = ref({ show: false, row: null, items: [], emitNome: '', emitCnpj: '', emitEnder: '' })
+const qrCanvas = ref(null)
+
+// Aggregated view model for the DANFE modal — keeps the template readable
+// and centralizes the source-of-truth lookups (Store, OrderItem, payload).
+const danfeData = computed(() => {
+  const row = danfeModal.value.row || {}
+  const order = row.order || {}
+  const emit = row.emit || {}
+  const payload = order.payload || {}
+  const items = danfeModal.value.items || []
+
+  const subtotal = items.reduce((s, it) => s + Number(it.total || 0), 0)
+  const desconto = Number(order.couponDiscount || payload.couponDiscount || 0)
+    + Number(payload.discountMerchant || 0)
+    + Number(payload.paymentDiscount || 0)
+  const acrescimo = Number(order.deliveryFee || payload.deliveryFee || 0)
+    + Number(payload.surcharge || 0)
+  const valorPagar = Number(order.total != null ? order.total : (subtotal - desconto + acrescimo))
+
+  // Payments — accept payload.payments[] (multi), payload.payment{} (legacy)
+  // or fall back to a single "Dinheiro" row equal to the total.
+  const rawPayments = Array.isArray(payload.payments)
+    ? payload.payments
+    : (payload.payment ? [payload.payment] : [])
+  const payments = rawPayments.map((p) => ({
+    label: p.label || p.methodName || p.method || p.methodCode || 'Pagamento',
+    value: Number(p.amount || p.value || valorPagar || 0),
+  }))
+  if (!payments.length) payments.push({ label: 'Dinheiro', value: valorPagar })
+  const changeFor = Number(payload.payment?.changeFor || payload.changeFor || 0)
+  const troco = changeFor > 0 ? Math.max(0, changeFor - valorPagar) : 0
+
+  // Tributos aproximados (Lei 12.741) — IBPT fornece tabelas por NCM, mas
+  // sem essa integração usamos uma estimativa simples baseada em alíquotas
+  // médias para alimentos prontos no Simples Nacional.
+  const baseTrib = subtotal
+  const tributos = {
+    federal: baseTrib * 0.063,
+    estadual: baseTrib * 0.0961,
+    municipal: 0,
+    total: 0,
+  }
+  tributos.total = tributos.federal + tributos.estadual + tributos.municipal
+
+  const chNFe = row.chNFe || ''
+  const serie = chNFe ? String(parseInt(chNFe.slice(22, 25), 10)).padStart(3, '0') : '—'
+  const nNF = chNFe ? String(parseInt(chNFe.slice(25, 34), 10)).padStart(9, '0') : '—'
+
+  const ende = emit.enderEmit || {}
+  const fullAddress = [
+    [ende.xLgr, ende.nro].filter(Boolean).join(', '),
+    ende.xBairro,
+    [ende.xMun, ende.UF].filter(Boolean).join(' - '),
+    ende.CEP ? String(ende.CEP).replace(/^(\d{5})(\d{3})$/, '$1-$2') : '',
+  ].filter(Boolean).join(' ')
+
+  // Detect homologação either from rawXml or from the qrCode URL (the |2|
+  // segment encodes tpAmb).
+  const isHomolog = /<tpAmb>2<\/tpAmb>/.test(row.rawXml || '')
+    || /\|2\|2\|/.test(row.qrCodeUrl || '')
+
+  return {
+    storeName: row.store?.name || emit.xNome || '—',
+    cnpj: emit.cnpj || '',
+    razao: emit.xNome || '',
+    ie: emit.ie || '',
+    fone: emit.fone || ende.fone || '',
+    fullAddress,
+    consumerName: order.customerName || '',
+    totalItens: items.length,
+    subtotal,
+    desconto,
+    acrescimo,
+    valorPagar,
+    payments,
+    troco,
+    tributos,
+    deliveryFee: Number(order.deliveryFee || payload.deliveryFee || 0),
+    consultaUrl: 'http://nfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx',
+    nNF,
+    serie,
+    isHomolog,
+  }
+})
+
+function fmtNumber(v) {
+  return Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function fmtChave(ch) {
+  if (!ch) return ''
+  return String(ch).replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim()
+}
+
+// Render the QR code into the canvas as soon as the modal mounts. The URL
+// comes from infNFeSupl in the signed XML (resolved server-side); falling
+// back to the consultaUrl + chave gives the operator something to scan even
+// when the signed XML is missing.
+watch(() => danfeModal.value.show, async (show) => {
+  if (!show) return
+  await nextTick()
+  if (!qrCanvas.value) return
+  const url = danfeModal.value.row?.qrCodeUrl
+    || (danfeModal.value.row?.chNFe
+      ? `${danfeData.value.consultaUrl}?chNFe=${danfeModal.value.row.chNFe}`
+      : '')
+  if (!url) return
+  try { await QRCode.toCanvas(qrCanvas.value, url, { width: 180, margin: 1 }) }
+  catch (e) { console.warn('QRCode render failed', e?.message) }
+})
 
 const statusOptions = [
   { value: '', label: 'Todos' },
@@ -447,6 +641,44 @@ async function downloadXml(row) {
   }
 }
 
+// Download bundle (ZIP) with every NFC-e in the current filter period in
+// nfeProc format + relacao.csv summary — what contadores ask for monthly.
+const exporting = ref(false)
+async function downloadXmls() {
+  exporting.value = true
+  try {
+    const params = {}
+    if (filters.value.from)   params.from   = filters.value.from
+    if (filters.value.to)     params.to     = filters.value.to
+    if (filters.value.status) params.status = filters.value.status
+    const resp = await api.get('/nfe/export', { params, responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/zip' }))
+    const a = document.createElement('a')
+    a.href = url
+    const fromTag = (filters.value.from || 'inicio').replace(/[^0-9-]/g, '')
+    const toTag = (filters.value.to || 'hoje').replace(/[^0-9-]/g, '')
+    a.download = `nfes-${fromTag}_${toTag}.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+    showAlert('success', 'Arquivo gerado — verifique a pasta de Downloads.')
+  } catch (e) {
+    // 404 chega como blob — converter pra JSON pra ler a mensagem
+    let msg = 'Erro ao gerar ZIP'
+    try {
+      if (e?.response?.data instanceof Blob) {
+        const txt = await e.response.data.text()
+        const parsed = JSON.parse(txt)
+        msg = parsed?.error || msg
+      } else {
+        msg = e?.response?.data?.error || e?.message || msg
+      }
+    } catch { /* keep default */ }
+    showAlert('warning', msg)
+  } finally {
+    exporting.value = false
+  }
+}
+
 async function reemitir(row) {
   if (!row.orderId) return showAlert('warning', 'Esta nota não está vinculada a um pedido.')
   if (!confirm(`Re-emitir NF-e para o pedido ${row.orderId}?`)) return
@@ -510,17 +742,30 @@ async function sendEmail() {
 }
 
 function openDanfe(row) {
-  // Build items list from order payload
+  // Build items list. Prefer the OrderItem relation (canonical for POS and
+  // public-menu orders); fall back to payload.items for legacy/imported
+  // orders that store items inside the JSON payload instead.
   const items = []
   try {
+    const relItems = Array.isArray(row.order?.items) ? row.order.items : []
     const payload = row.order?.payload || {}
-    const rawItems = payload.items || payload.rawPayload?.items || []
+    const payloadItems = Array.isArray(payload.items)
+      ? payload.items
+      : (Array.isArray(payload.rawPayload?.items) ? payload.rawPayload.items : [])
+    const rawItems = relItems.length ? relItems : payloadItems
     for (const it of rawItems) {
+      const qty = Number(it.quantity || it.qCom || 1)
+      const price = Number(it.price || it.vUnCom || 0)
       items.push({
+        id: it.productId || it.id || '',
+        // SKU vem do product (relacionado via productId). Fallback para o
+        // próprio it.sku quando vier de payload legado, depois '—' para o
+        // placeholder não confundir com SKU real.
+        sku: it.product?.sku || it.sku || '',
         name: it.name || it.xProd || 'Produto',
-        qty: Number(it.quantity || it.qCom || 1),
-        price: Number(it.price || it.vUnCom || 0),
-        total: Number(it.quantity || 1) * Number(it.price || 0)
+        qty,
+        price,
+        total: qty * price,
       })
     }
   } catch { /* ignore */ }
@@ -541,27 +786,100 @@ function openDanfe(row) {
   danfeModal.value = { show: true, row, items, emitNome, emitCnpj, emitEnder }
 }
 
-function printDanfe() {
-  const el = document.getElementById('danfe-print-area')
-  if (!el) return
-  const w = window.open('', '_blank', 'width=400,height=700')
-  w.document.write(`<html><head><title>DANFE NFC-e</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <style>body{font-size:12px;} .danfe-cupom{max-width:300px;margin:0 auto;}</style>
-    </head><body>`)
-  w.document.write(el.innerHTML)
-  w.document.write('</body></html>')
-  w.document.close()
-  w.focus()
-  setTimeout(() => { w.print(); w.close() }, 400)
+// Sends the DANFE to the connected print agent via POST /agent-print
+// (fiscal: true). Backend pulls the protocol + order + emit config and
+// formats the thermal text via buildDanfeText. Same path used by
+// SaleDetails.vue#imprimirDanfe — keeps the print pipeline centralized
+// instead of relying on the browser's window.print() dialog.
+const printing = ref(false)
+async function printDanfe() {
+  const row = danfeModal.value.row
+  const orderId = row?.order?.id || row?.orderId
+  if (!orderId) {
+    showAlert('warning', 'Pedido não identificado — não foi possível enviar para impressão.')
+    return
+  }
+  printing.value = true
+  try {
+    const { data } = await api.post('/agent-print', {
+      id: orderId,
+      storeId: row.order?.storeId || row.storeId || null,
+      fiscal: true,
+    })
+    if (data?.ok) {
+      showAlert('success', data.printed ? 'DANFE enviada ao agente de impressão.' : 'DANFE enfileirada para o próximo agente conectado.')
+    } else {
+      throw new Error(data?.error || 'Falha ao enviar para o agente')
+    }
+  } catch (e) {
+    showAlert('warning', e?.response?.data?.error || e?.message || 'Falha ao enviar DANFE ao agente.')
+  } finally {
+    printing.value = false
+  }
 }
 
 onMounted(load)
 </script>
 
 <style scoped>
+/* Cupom DANFE NFC-e — proporções de impressora térmica 80mm. */
 .danfe-cupom {
   max-width: 320px;
-  font-size: 0.82rem;
+  font-size: 10px;
+  font-family: "Courier New", monospace;
+  color: #000;
+  background: #fff;
+  padding: 8px;
+  line-height: 1.2;
+}
+.danfe-store-name {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: none;
+}
+.danfe-small { font-size: 9px; }
+.danfe-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+}
+.danfe-items-table th {
+  border-bottom: 1px solid #000;
+  border-top: 1px solid #000;
+  padding: 2px 1px;
+  font-weight: 600;
+  text-align: left;
+}
+.danfe-items-table th.text-end,
+.danfe-items-table td.text-end { text-align: right; }
+.danfe-items-table td {
+  padding: 1px;
+  vertical-align: top;
+}
+.danfe-items-table tbody tr:last-child td {
+  border-bottom: 1px solid #000;
+  padding-bottom: 4px;
+}
+.danfe-totals,
+.danfe-payments {
+  font-size: 11px;
+  border-bottom: 1px solid #000;
+  padding-bottom: 4px;
+}
+.danfe-chave {
+  font-family: "Courier New", monospace;
+  font-size: 10px;
+  word-break: break-all;
+  letter-spacing: 0.5px;
+}
+.danfe-url {
+  font-size: 9px;
+  word-break: break-all;
+}
+.danfe-qr canvas { display: block; }
+.danfe-nfe-info { line-height: 1.3; }
+
+@media print {
+  .danfe-cupom { max-width: 80mm; padding: 0; }
 }
 </style>

@@ -709,10 +709,19 @@ ridersRouter.get('/checkins', async (req, res) => {
 
   const where = { companyId };
   if (riderId) where.riderId = riderId;
+  // Resolve from/to as BRT calendar days. `new Date('2026-05-11')` on the
+  // UTC container parses to 00:00 UTC = 21:00 BRT of the previous day, which
+  // is why narrow ranges seemed to "leak" earlier check-ins.
   if (from || to) {
     where.checkinAt = {};
-    if (from) where.checkinAt.gte = new Date(from);
-    if (to) where.checkinAt.lte = new Date(to);
+    if (from) {
+      try { where.checkinAt.gte = startOfDayInTz(String(from).slice(0, 10)); }
+      catch (e) { where.checkinAt.gte = new Date(from); }
+    }
+    if (to) {
+      try { where.checkinAt.lte = endOfDayInTz(String(to).slice(0, 10)); }
+      catch (e) { where.checkinAt.lte = new Date(to); }
+    }
   }
 
   const checkins = await prisma.riderCheckin.findMany({

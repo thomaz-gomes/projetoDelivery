@@ -907,7 +907,19 @@ nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), 
         where, skip, take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          order: { select: { id: true, displayId: true, displaySimple: true, customerName: true, total: true, payload: true } },
+          order: {
+            select: {
+              id: true,
+              displayId: true,
+              displaySimple: true,
+              customerName: true,
+              total: true,
+              payload: true,
+              items: {
+                select: { id: true, name: true, quantity: true, price: true, productId: true },
+              },
+            },
+          },
           store: { select: { id: true, name: true } }
         }
       }),
@@ -923,9 +935,231 @@ nfeRouter.get('/emitidas', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), 
       )
     }
 
+    // Hidrata cada item com o SKU do produto. OrderItem.product não é relação
+    // no schema (só guarda productId solto), por isso buscamos os SKUs num
+    // único query e injetamos manualmente em vez de usar nested include.
+    const allProductIds = new Set()
+    for (const p of data) {
+      for (const it of (p.order?.items || [])) {
+        if (it.productId) allProductIds.add(it.productId)
+      }
+    }
+    if (allProductIds.size > 0) {
+      const products = await prisma.product.findMany({
+        where: { id: { in: [...allProductIds] } },
+        select: { id: true, sku: true },
+      })
+      const skuById = new Map(products.map((pr) => [pr.id, pr.sku]))
+      for (const p of data) {
+        for (const it of (p.order?.items || [])) {
+          if (it.productId) it.sku = skuById.get(it.productId) || null
+        }
+      }
+    }
+
+    // Enrich each protocol with emitente config (CNPJ, IE, endereço, razão,
+    // fone) loaded from the per-store settings.json. Also extract the 44-digit
+    // chNFe + dhRecbto + qrCode so the DANFE renderer has everything it needs
+    // without re-fetching anything. SEFAZ response doesn't carry the qrCode —
+    // it lives in the signed NFe XML at /app/nfe/xmls/emitidas/ (relative
+    // path "./nfe/xmls/emitidas" from cwd /app, matching nfe-module/config.json
+    // xmlDirs.emitidas). The "nfe-module/" prefix that previously appeared in
+    // this path was wrong — the module writes the files to cwd-relative paths,
+    // not module-relative.
+    const emitCache = new Map()
+    const emitidasDir = path.join(process.cwd(), 'nfe', 'xmls', 'emitidas')
+    let emitidasFiles = []
+    try { emitidasFiles = fs.readdirSync(emitidasDir) } catch { /* dir may not exist yet */ }
+
+    data = data.map((p) => {
+      const cacheKey = `${p.companyId}::${p.storeId || ''}`
+      if (!emitCache.has(cacheKey)) {
+        try { emitCache.set(cacheKey, getEmitenteConfig(p.companyId, p.storeId)) }
+        catch { emitCache.set(cacheKey, null) }
+      }
+      const emit = emitCache.get(cacheKey)
+
+      const chMatch = p.rawXml?.match(/<chNFe>(\d{44})<\/chNFe>/)
+      const chNFe = chMatch ? chMatch[1] : null
+      const protoMatch = p.rawXml?.match(/<protNFe[\s\S]*?<\/protNFe>/)
+      const protoBlock = protoMatch ? protoMatch[0] : ''
+      const dhMatch = protoBlock.match(/<dhRecbto>([^<]+)<\/dhRecbto>/)
+      const digValMatch = protoBlock.match(/<digVal>([^<]+)<\/digVal>/)
+
+      // chNFe positions 22-24 = serie, 25-33 = nNF — match the signed XML
+      // file pattern `nfe-<serie>-<nNF>-<timestamp>.xml` to pull out the
+      // CDATA-wrapped qrCode that the spec mandates on every DANFE NFC-e.
+      let qrCodeUrl = null
+      if (chNFe && emitidasFiles.length) {
+        const serie = String(parseInt(chNFe.slice(22, 25), 10))
+        const nNF = String(parseInt(chNFe.slice(25, 34), 10))
+        const prefix = `nfe-${serie}-${nNF}-`
+        const match = emitidasFiles.find((f) => f.startsWith(prefix))
+        if (match) {
+          try {
+            const xml = fs.readFileSync(path.join(emitidasDir, match), 'utf8')
+            const qrMatch = xml.match(/<qrCode><!\[CDATA\[([^\]]+)\]\]><\/qrCode>/) || xml.match(/<qrCode>([^<]+)<\/qrCode>/)
+            if (qrMatch) qrCodeUrl = qrMatch[1]
+          } catch { /* ignore */ }
+        }
+      }
+
+      return {
+        ...p,
+        emit,
+        chNFe,
+        dhRecbto: dhMatch ? dhMatch[1] : null,
+        digVal: digValMatch ? digValMatch[1] : null,
+        qrCodeUrl,
+      }
+    })
+
     return res.json({ data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } })
   } catch (err) {
     return res.status(500).json({ error: err?.message || String(err) })
+  }
+})
+
+// GET /nfe/export?from=YYYY-MM-DD&to=YYYY-MM-DD&status=100
+//
+// Downloads a ZIP with every NFC-e emitted in the period, formatted the way
+// contadores expect for monthly accounting / SPED fiscal:
+//   - One file per nota named <chave44>-procNFe.xml
+//   - Content is the nfeProc wrapper (signed NFe + protNFe in a single XML)
+//   - Plus a relacao.csv summary with chave, data, nProt, vNF, cStat, cliente
+//
+// Mandatory legal retention is 5 years; this endpoint lets the operator
+// dispatch a clean monthly bundle to the contador without SSH'ing into the
+// container or piecing files together by hand.
+nfeRouter.get('/export', authMiddleware, requireRole('ADMIN', 'SUPER_ADMIN'), requireFiscalModule, async (req, res) => {
+  try {
+    const companyId = req.user?.companyId
+    if (!companyId) return res.status(400).json({ error: 'companyId not found in token' })
+
+    const where = { companyId }
+    if (req.query.from || req.query.to) {
+      where.createdAt = {}
+      if (req.query.from) where.createdAt.gte = new Date(req.query.from)
+      if (req.query.to) { const to = new Date(req.query.to); to.setHours(23, 59, 59, 999); where.createdAt.lte = to }
+    }
+    if (req.query.status) where.cStat = req.query.status
+
+    const protocols = await prisma.nfeProtocol.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      include: { order: { select: { customerName: true, total: true, displayId: true, displaySimple: true } } },
+    })
+
+    if (protocols.length === 0) return res.status(404).json({ error: 'Nenhuma nota emitida no período' })
+
+    const archiverMod = await import('archiver')
+    const archiver = archiverMod.default || archiverMod
+    const emitidasDir = path.join(process.cwd(), 'nfe', 'xmls', 'emitidas')
+
+    // Build a lookup of signed XML files by serie + nNF parsed from chNFe.
+    // The nfe-module filename pattern is `nfe-<serie>-<nNF>-<timestamp>.xml`.
+    let emitidasFiles = []
+    try { emitidasFiles = fs.readdirSync(emitidasDir) } catch { /* dir may not exist */ }
+
+    // Filename: nfes-<companyId-short>-<from>_<to>.zip
+    const fromTag = (req.query.from || 'inicio').replace(/[^0-9-]/g, '')
+    const toTag = (req.query.to || 'hoje').replace(/[^0-9-]/g, '')
+    const zipName = `nfes-${fromTag}_${toTag}.zip`
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`)
+
+    const archive = archiver('zip', { zlib: { level: 6 } })
+    archive.on('warning', (err) => { if (err.code !== 'ENOENT') console.warn('[nfe/export] archive warning', err) })
+    archive.on('error', (err) => { console.error('[nfe/export] archive error', err); res.status(500).end() })
+    archive.pipe(res)
+
+    const csvRows = [['chave', 'serie', 'nNF', 'dataEmissao', 'nProt', 'cStat', 'xMotivo', 'cliente', 'valor', 'arquivo']]
+    let included = 0
+    let missingSignedXml = 0
+
+    for (const p of protocols) {
+      const chMatch = p.rawXml?.match(/<chNFe>(\d{44})<\/chNFe>/)
+      const chNFe = chMatch ? chMatch[1] : null
+      const serie = chNFe ? String(parseInt(chNFe.slice(22, 25), 10)) : ''
+      const nNF = chNFe ? String(parseInt(chNFe.slice(25, 34), 10)) : ''
+      const dhMatch = p.rawXml?.match(/<dhRecbto>([^<]+)<\/dhRecbto>/)
+      const dhRecbto = dhMatch ? dhMatch[1] : p.createdAt?.toISOString() || ''
+
+      // Locate the signed XML on disk. Filename pattern: nfe-<serie>-<nNF>-*.xml
+      let signedXml = null
+      let signedFilename = null
+      if (chNFe && emitidasFiles.length) {
+        const prefix = `nfe-${serie}-${nNF}-`
+        const matchFile = emitidasFiles.find((f) => f.startsWith(prefix))
+        if (matchFile) {
+          signedFilename = matchFile
+          try { signedXml = fs.readFileSync(path.join(emitidasDir, matchFile), 'utf8') } catch { /* skip */ }
+        }
+      }
+
+      // Build nfeProc when we have the signed XML; otherwise include just the
+      // protNFe wrapper so the contador at least has the authorization record.
+      let xmlOut = ''
+      if (signedXml) {
+        // Strip the XML declaration from signed XML to avoid duplicates inside
+        // nfeProc. The protocol XML comes from rawXml — extract just the
+        // <protNFe>...</protNFe> block.
+        const nfeBody = signedXml.replace(/^<\?xml[^?]*\?>\s*/, '').trim()
+        const protMatch = p.rawXml?.match(/<protNFe[\s\S]*?<\/protNFe>/)
+        const protNode = protMatch ? protMatch[0] : ''
+        xmlOut = `<?xml version="1.0" encoding="UTF-8"?>\n`
+          + `<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">`
+          + nfeBody
+          + protNode
+          + `</nfeProc>`
+      } else {
+        missingSignedXml++
+        // Fallback: protocolo apenas. O contador vai precisar do XML completo
+        // depois — sinalizamos isso na linha do CSV.
+        xmlOut = p.rawXml || ''
+      }
+
+      const filename = chNFe ? `${chNFe}-procNFe.xml` : `protocolo-${p.id}.xml`
+      archive.append(xmlOut, { name: filename })
+      included++
+
+      csvRows.push([
+        chNFe || '',
+        serie,
+        nNF,
+        dhRecbto,
+        p.nProt || '',
+        p.cStat || '',
+        (p.xMotivo || '').replace(/[",\n]/g, ' '),
+        (p.order?.customerName || '').replace(/[",\n]/g, ' '),
+        Number(p.order?.total || 0).toFixed(2).replace('.', ','),
+        signedXml ? filename : `${filename} (somente protocolo — XML assinado não disponível)`,
+      ])
+    }
+
+    // CSV de acompanhamento (separator ; — padrão Excel BR; valor com vírgula
+    // não conflita; encoding UTF-8 com BOM para o Excel abrir com acentos).
+    const csv = '﻿' + csvRows.map((row) => row.map((v) => {
+      const s = String(v == null ? '' : v)
+      return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }).join(';')).join('\r\n')
+    archive.append(csv, { name: 'relacao.csv' })
+
+    archive.append(
+      `Pacote de NFC-e gerado em ${new Date().toISOString()}\n`
+      + `Período: ${req.query.from || '(início)'} → ${req.query.to || '(hoje)'}\n`
+      + `Total: ${included} notas\n`
+      + (missingSignedXml > 0 ? `${missingSignedXml} sem XML assinado no disco (apenas protocolo)\n` : '')
+      + '\nFormato: <chave>-procNFe.xml (NFe + protNFe combinados em nfeProc)\n'
+      + 'Use o relacao.csv para conferência rápida.\n',
+      { name: 'LEIA-ME.txt' },
+    )
+
+    await archive.finalize()
+  } catch (err) {
+    console.error('GET /nfe/export failed', err)
+    if (!res.headersSent) return res.status(500).json({ error: err?.message || String(err) })
   }
 })
 

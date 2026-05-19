@@ -62,8 +62,9 @@ function buildLine({ name, qty, unitPrice, prod, fiscal, idxFallback }) {
   }
   const ean = fiscal?.ean ? String(fiscal.ean).replace(/\D/g, '') : null
   const cEAN = ean && ean.length >= 8 ? ean : 'SEM GTIN'
-  // Product.sku NÃO existe no schema atual — usa idxFallback diretamente.
-  const cProd = String(idxFallback)
+  // Prefer Product.sku (8-digit, human-readable) over the row index — keeps
+  // <cProd> consistent across emissions for the same product.
+  const cProd = prod?.sku || String(idxFallback)
   const safeQty = Number(qty) || 0
   const safeUnit = Number(unitPrice) || 0
   return {

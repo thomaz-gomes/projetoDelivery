@@ -203,13 +203,14 @@ export function buildNfePayload(data) {
       }
     },
     transp: { modFrete: '9' },
-    pag: {
-      detPag: {
+    pag: (() => {
+      const detPag = {
         tPag: pag?.tPag || '99',
-        vPag: fmtDec2(pag?.vPag || total.vNF || total.vProd || '0')
-      },
-      vTroco: fmtDec2(pag?.vTroco || '0')
-    }
+        vPag: fmtDec2(pag?.vPag || total.vNF || total.vProd || '0'),
+      }
+      if (pag?.card) detPag.card = pag.card
+      return { detPag, vTroco: fmtDec2(pag?.vTroco || '0') }
+    })()
   }
 
   // NFC-e (mod 65): <dest> is optional — omit entirely for anonymous sales (no CPF/CNPJ).
@@ -334,7 +335,8 @@ export async function signNfeXml(infNFe, certConfig, fiscalOpts = {}) {
     pag: {
       tPag: infNFe.pag?.detPag?.tPag || '99',
       vPag: infNFe.pag?.detPag?.vPag || '0.00',
-      vTroco: infNFe.pag?.vTroco || '0.00'
+      vTroco: infNFe.pag?.vTroco || '0.00',
+      card: infNFe.pag?.detPag?.card || null,
     },
     csc: fiscalOpts.csc || null,
     cscId: fiscalOpts.cscId || null
@@ -450,9 +452,39 @@ export async function loadCertConfig(companyId) {
   return result
 }
 
+/**
+ * Atualiza apenas o campo nextNNF do settings.json da loja (ou da empresa,
+ * quando storeId não é informado). Faz merge com o conteúdo existente para
+ * não destruir cnpj/ie/enderEmit/csc/etc.
+ *
+ * Grava nos DOIS caminhos (centralizado + legado) usados pelo
+ * getEmitenteConfig, mantendo paridade com persistStoreSettings (que vive
+ * em routes/stores.js — replicado aqui para evitar acoplamento entre
+ * service e route).
+ */
+export async function persistNextNNF(companyId, storeId, nextNNF) {
+  const base = process.cwd()
+  const value = Number(nextNNF) > 0 ? Math.floor(nextNNF) : null
+
+  const writeMerged = async (settingsPath) => {
+    await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true })
+    let existing = {}
+    try { if (fs.existsSync(settingsPath)) existing = JSON.parse(await fs.promises.readFile(settingsPath, 'utf8') || '{}') } catch { existing = {} }
+    const merged = { ...existing, nextNNF: value }
+    await fs.promises.writeFile(settingsPath, JSON.stringify(merged, null, 2), 'utf8')
+  }
+
+  if (storeId) {
+    await writeMerged(path.join(base, 'settings', 'stores', storeId, 'settings.json')).catch(() => {})
+    await writeMerged(path.join(base, 'public', 'uploads', 'store', storeId, 'settings.json')).catch(() => {})
+  } else {
+    await writeMerged(path.join(base, 'public', 'uploads', 'company', companyId, 'settings.json')).catch(() => {})
+  }
+}
+
 export function getEmitenteConfig(companyId, storeId) {
   const base = process.cwd()
-  const result = { cnpj: null, ie: null, xNome: null, nfeSerie: null, nfeEnvironment: null, enderEmit: null }
+  const result = { cnpj: null, ie: null, xNome: null, nfeSerie: null, nfeEnvironment: null, enderEmit: null, nextNNF: null, infCpl: null }
 
   // Load company-level settings as base
   try {
@@ -465,6 +497,8 @@ export function getEmitenteConfig(companyId, storeId) {
       result.nfeSerie = raw.nfeSerie || null
       result.nfeEnvironment = raw.nfeEnvironment || null
       result.enderEmit = raw.enderEmit || null
+      if (raw.nextNNF != null) result.nextNNF = Number(raw.nextNNF) || null
+      if (raw.infCpl) result.infCpl = raw.infCpl
     }
   } catch { /* ignore */ }
 
@@ -483,6 +517,8 @@ export function getEmitenteConfig(companyId, storeId) {
       if (storeSettings.nfeSerie) result.nfeSerie = storeSettings.nfeSerie
       if (storeSettings.nfeEnvironment) result.nfeEnvironment = storeSettings.nfeEnvironment
       if (storeSettings.enderEmit) result.enderEmit = storeSettings.enderEmit
+      if (storeSettings.nextNNF != null) result.nextNNF = Number(storeSettings.nextNNF) || null
+      if (storeSettings.infCpl) result.infCpl = storeSettings.infCpl
     }
   }
 
@@ -497,6 +533,37 @@ const PAYMENT_MAP = {
   VOUCHER: '05',
   // ONLINE/unknown → 01 (dinheiro): tPag=99 causes SVRS schema conflicts
   ONLINE: '01',
+}
+
+// SEFAZ NFC-e card brand codes for <tBand>. Falls back to '99' (Outros) when
+// the configured brand is unknown — accepted by SVRS for tpIntegra=2.
+function brandToTBand(brand) {
+  if (!brand) return '99'
+  const b = String(brand).toLowerCase().trim()
+  if (/visa/.test(b)) return '01'
+  if (/master/.test(b)) return '02'
+  if (/amex|american/.test(b)) return '03'
+  if (/sorocred/.test(b)) return '04'
+  if (/diners/.test(b)) return '05'
+  if (/elo/.test(b)) return '06'
+  if (/hiper/.test(b)) return '07'
+  if (/aura/.test(b)) return '08'
+  if (/cabal/.test(b)) return '09'
+  if (/banricompras/.test(b)) return '10'
+  return '99'
+}
+
+// Maps PaymentMethod.paymentType to NFC-e tPag codes. Returns null when the
+// type is unrecognized so the caller can fall back to PAYMENT_MAP/'01'.
+function paymentTypeToTPag(type) {
+  if (!type) return null
+  const t = String(type).toLowerCase().trim()
+  if (/credit|cr[eé]dito/.test(t)) return '03'
+  if (/debit|d[eé]bito/.test(t)) return '04'
+  if (/pix/.test(t)) return '17'
+  if (/cash|dinheiro|money/.test(t)) return '01'
+  if (/voucher|vale|ticket/.test(t)) return '05'
+  return null
 }
 
 export async function emitNfeFromOrder(orderId) {
@@ -569,15 +636,80 @@ export async function emitNfeFromOrder(orderId) {
       })
     : []
   const productMap = new Map(products.map(p => [p.id, p]))
+  try {
+    console.log('[NFe] fiscal resolution debug:', {
+      orderItemsCount: order.items.length,
+      productIdsRequested: productIds.length,
+      productsLoaded: products.length,
+      breakdown: products.map(p => ({
+        id: p.id.slice(0, 8),
+        name: p.name?.slice(0, 30),
+        hasProductFiscal: !!p.dadosFiscais,
+        productNcm: p.dadosFiscais?.ncm || null,
+        productCfops: p.dadosFiscais?.cfops || null,
+        categoryId: p.categoryId ? p.categoryId.slice(0, 8) : null,
+        hasCategoryFiscal: !!p.category?.dadosFiscais,
+        categoryNcm: p.category?.dadosFiscais?.ncm || null,
+        categoryCfops: p.category?.dadosFiscais?.cfops || null,
+      })),
+      missingProductIds: productIds
+        .filter(id => !productMap.has(id))
+        .map(id => id.slice(0, 8)),
+    })
+  } catch (e) { /* non-blocking */ }
 
   // Expansão de combos (rateio fiscal) + options legados.
   const det = expandOrderItemsToDet(order.items, productMap)
+
+  // Reatribui nItem sequencial após a expansão
+  det.forEach((d, i) => { d.nItem = i + 1 })
 
   const vProd = det.reduce((s, d) => s + Number(d.prod.vProd), 0)
 
   const paymentRaw = order.payload?.payment || order.payload?.rawPayload?.payment || {}
   const methodKey = paymentRaw.method || paymentRaw.methodCode || paymentRaw.type || ''
-  const tPag = PAYMENT_MAP[methodKey] || '99'
+
+  // Resolve the company's PaymentMethod by code/name to pick up the
+  // accurate tPag, card brand and intermediary CNPJ. The static PAYMENT_MAP
+  // remains as a fallback when no PaymentMethod row is configured.
+  let paymentMethodRow = null
+  if (methodKey) {
+    try {
+      paymentMethodRow = await prisma.paymentMethod.findFirst({
+        where: {
+          companyId: order.companyId,
+          OR: [{ code: String(methodKey) }, { name: String(methodKey) }],
+        },
+      })
+    } catch (e) { /* non-blocking */ }
+  }
+
+  let tPag = PAYMENT_MAP[methodKey] || '99'
+  if (paymentMethodRow?.paymentType) {
+    const fromType = paymentTypeToTPag(paymentMethodRow.paymentType)
+    if (fromType) tPag = fromType
+  }
+
+  // <card> group:
+  // - tPag=03/04 (credit/debit): required by SEFAZ-BA. Without it cStat 391
+  //   ("Nao informados os dados do cartao de credito/debito") fires.
+  // - tPag=17 (PIX): SVRS reuses the same cStat 391 rule even for PIX rows
+  //   when the integration data is missing, so we emit <card> here too.
+  // tpIntegra=1 (integrado) when PaymentMethod is online AND has a 14-digit
+  // intermediary CNPJ; otherwise tpIntegra=2 (não integrado). PIX has no
+  // bandeira — '99' is the convention for "não se aplica".
+  let cardData = null
+  const isCardOrPix = tPag === '03' || tPag === '04' || tPag === '17'
+  if (isCardOrPix) {
+    const intermediaryCnpjDigits = String(paymentMethodRow?.intermediaryCnpj || '').replace(/\D/g, '')
+    const isOnlineIntegrated = !!paymentMethodRow?.isOnline && intermediaryCnpjDigits.length === 14
+    cardData = {
+      tpIntegra: isOnlineIntegrated ? '1' : '2',
+      tBand: tPag === '17' ? '99' : (brandToTBand(paymentMethodRow?.cardBrand) || '99'),
+    }
+    if (isOnlineIntegrated) cardData.CNPJ = intermediaryCnpjDigits
+    if (paymentRaw.authCode || paymentRaw.cAut) cardData.cAut = String(paymentRaw.authCode || paymentRaw.cAut)
+  }
 
     // Resolve customer CPF from multiple possible sources
     const customerCpf = order.customer?.cpf
@@ -602,12 +734,25 @@ export async function emitNfeFromOrder(orderId) {
     const orderTypeUpper = String(order.orderType || '').toUpperCase()
     const indPres = orderTypeUpper === 'DELIVERY' ? '4' : '1'
 
+    // nNF: usa o contador manual cadastrado em settings.json (nextNNF) sempre
+    // que ele estiver presente — tanto em produção (onde SEFAZ exige sequência
+    // sem saltos por série) quanto em homologação (para o operador testar o
+    // comportamento de incremento antes de migrar). Quando o contador não
+    // estiver configurado, cai no displayId/timestamp para não bloquear a
+    // emissão. Após uma autorização bem-sucedida o nextNNF é incrementado
+    // abaixo, antes de retornar ao caller.
+    const isProduction = tpAmb === '1'
+    const configuredNextNNF = Number(emitenteConfig?.nextNNF) > 0 ? Math.floor(emitenteConfig.nextNNF) : null
+    const nNFForEmission = configuredNextNNF
+      ? String(configuredNextNNF)
+      : String(order.displaySimple || order.displayId || Date.now())
+
     const data = {
     ide: {
       natOp: 'VENDA',
       mod: '65',
       serie: fiscalConfig.nfeSerie || '1',
-      nNF: sanitizeNNF(String(order.displaySimple || order.displayId || Date.now())),
+      nNF: sanitizeNNF(nNFForEmission),
       tpAmb,
       indPres,
     },
@@ -637,10 +782,19 @@ export async function emitNfeFromOrder(orderId) {
       vICMS: '0.00',
       vNF: vProd.toFixed(2)
     },
-    pag: { tPag, vPag: vProd.toFixed(2), vTroco: '0.00' }
+    pag: { tPag, vPag: vProd.toFixed(2), vTroco: '0.00', card: cardData }
   }
 
   const infNFe = buildNfePayload(data)
+  // Em produção, injeta o texto livre de "Informação Complementar" cadastrado
+  // pelo operador em /settings/stores/<id>. buildNfePayload já preencheu o
+  // infCpl com o aviso de homologação quando tpAmb=2 — não sobrescreve.
+  if (!isProduction || !emitenteConfig?.infCpl) {
+    // homolog ou produção sem infCpl configurado — mantém o que buildNfePayload definiu
+  } else {
+    infNFe.infAdic = { infCpl: String(emitenteConfig.infCpl).slice(0, 5000) }
+  }
+
   const signed = await signNfeXml(infNFe, certConfig, {
     csc: fiscalConfig.csc,
     cscId: fiscalConfig.cscId,
@@ -669,6 +823,18 @@ export async function emitNfeFromOrder(orderId) {
     xMotivo: result.xMotivo,
     rawXml: result.rawXml
   })
+
+  // Se a autorização passou e usamos o contador manual, avança o nextNNF em
+  // settings.json. SEFAZ rejeita reuso de nNF na mesma série em produção —
+  // o increment garante a próxima emissão saia com o número seguinte. Em
+  // homologação o increment também roda para o operador validar o fluxo.
+  if (configuredNextNNF && result.status === 'autorizado') {
+    try {
+      await persistNextNNF(order.companyId, order.storeId, configuredNextNNF + 1)
+    } catch (e) {
+      console.warn('[NFe] Falha ao avançar nextNNF em settings.json:', e?.message)
+    }
+  }
 
   return {
     success: result.status === 'autorizado',

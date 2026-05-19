@@ -29,7 +29,7 @@ export async function generateAndSignSimpleNFCe(example: {
     csosn?: string; orig?: string; icmsAliq?: number; modBC?: string
     cstPis?: string; pPIS?: number; cstCofins?: string; pCOFINS?: number; pIPI?: number
   }>
-  pag?: { tPag?: string; vPag?: string; vTroco?: string }
+  pag?: { tPag?: string; vPag?: string; vTroco?: string; card?: { tpIntegra?: string; tBand?: string; CNPJ?: string; cAut?: string } }
   infRespTec?: { CNPJ: string; xContato: string; email: string; fone: string }
   csc?: string
   cscId?: string

@@ -255,6 +255,20 @@ function startServer(port = DEFAULT_PORT, retries = 3) {
       // Run once at startup (after a 1-min grace) and then every 24h.
       setTimeout(purgeOldResolvedErrorLogs, 60 * 1000);
       setInterval(purgeOldResolvedErrorLogs, 24 * 60 * 60 * 1000);
+
+      // One-shot backfill: assign 8-digit SKUs (starting with "1") to any
+      // Product still missing the sku column. Idempotent — products that
+      // already have a SKU are ignored. Runs after a short delay so the
+      // server is fully responsive first.
+      setTimeout(async () => {
+        try {
+          const { backfillProductSku } = await import('../scripts/backfill-product-sku.js')
+          const result = await backfillProductSku()
+          if (result.updated > 0) console.log(`[startup] backfill-product-sku: ${result.updated} produto(s) atualizados`)
+        } catch (e) {
+          console.error('[startup] backfill-product-sku failed:', e?.message || e)
+        }
+      }, 30 * 1000);
     } catch (e) {
       console.error('❌ Falha ao anexar Socket.IO:', e.message || e);
     }

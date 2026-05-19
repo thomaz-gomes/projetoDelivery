@@ -277,9 +277,23 @@ async function generateNFCeXml(payload) {
                 tPag: safeTpag,
                 vPag: fmtDec2(payload.pag?.vPag || vNF),
             };
-            // cStat 391: tPag=03/04 (credit/debit) requires <card> with tpIntegra=2 (não integrado)
-            if (safeTpag === '03' || safeTpag === '04')
-                detPag.card = { tpIntegra: '2' };
+            // cStat 391/SEFAZ-BA: tPag=03/04 (credit/debit) requires <card> with at
+            // least tpIntegra + tBand. SVRS also fires the same 391 rule for tPag=17
+            // (PIX) when the operator dispatches integrated PIX without the card
+            // group — even though the spec marks it optional. So we emit <card> for
+            // PIX rows as well when the caller provided card data.
+            const needsCardGroup = safeTpag === '03' || safeTpag === '04' || (safeTpag === '17' && !!payload.pag?.card);
+            if (needsCardGroup) {
+                const card = {
+                    tpIntegra: payload.pag?.card?.tpIntegra || '2',
+                    tBand: payload.pag?.card?.tBand || '99',
+                };
+                if (payload.pag?.card?.CNPJ)
+                    card.CNPJ = payload.pag.card.CNPJ.replace(/\D/g, '').padStart(14, '0');
+                if (payload.pag?.card?.cAut)
+                    card.cAut = payload.pag.card.cAut;
+                detPag.card = card;
+            }
             return { detPag, vTroco: fmtDec2(payload.pag?.vTroco || '0') };
         })()
     };

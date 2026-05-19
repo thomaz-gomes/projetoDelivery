@@ -85,6 +85,11 @@ services:
       - backend_uploads:/app/public/uploads
       - backend_certs:/app/secure/certs
       - backend_settings:/app/settings
+      # NFC-e XML archive — signed XMLs (emitidas), SEFAZ responses (retorno),
+      # cancellations (inutilizadas) and event files (eventos). Persisting
+      # across rebuilds is mandatory for fiscal audit (5 years per legislation)
+      # and so the DANFE viewer can fetch the qrCode + chNFe later.
+      - backend_nfe_xmls:/app/nfe/xmls
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -119,4 +124,6 @@ volumes:
   backend_certs:
     driver: local
   backend_settings:
+    driver: local
+  backend_nfe_xmls:
     driver: local

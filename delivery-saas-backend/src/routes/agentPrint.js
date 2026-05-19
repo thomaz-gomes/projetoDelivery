@@ -120,8 +120,30 @@ async function formatDanfeText(orderId) {
   const protocol = await prisma.nfeProtocol.findFirst({ where: { orderId }, orderBy: { createdAt: 'desc' } })
   if (!protocol) throw new Error(`NF-e não emitida para o pedido ${orderId}`)
 
-  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, store: true, company: true } })
+  // `customer: true` é obrigatório para o danfeText.js conseguir imprimir o
+  // CPF (e o nome) no rodapé do cupom. Sem o include, order.customer fica
+  // undefined e o template cai em "CONSUMIDOR NAO IDENTIFICADO" mesmo quando
+  // o pedido tem cliente vinculado com CPF cadastrado.
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true, store: true, company: true, customer: true },
+  })
   if (!order) throw new Error(`Pedido não encontrado: ${orderId}`)
+
+  // Hidrata cada item com o SKU do produto. OrderItem.product não é relação
+  // no schema (só guarda productId solto), por isso buscamos os SKUs num
+  // único query e injetamos para o danfeText.js usar como "Cód" no cupom.
+  try {
+    const ids = [...new Set(order.items.map((i) => i.productId).filter(Boolean))]
+    if (ids.length > 0) {
+      const products = await prisma.product.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, sku: true },
+      })
+      const skuById = new Map(products.map((p) => [p.id, p.sku]))
+      order.items = order.items.map((it) => ({ ...it, sku: it.productId ? (skuById.get(it.productId) || null) : null }))
+    }
+  } catch (e) { console.warn('[formatDanfeText] failed to enrich items with sku:', e?.message) }
 
   let fiscalConfig = {}
   let emitenteConfig = null
@@ -154,7 +176,36 @@ async function formatDanfeText(orderId) {
     console.warn('formatDanfeText: failed to enrich items with _product:', e && e.message)
   }
 
-  return buildDanfeText({ protocol, order, fiscalConfig, emitenteConfig })
+  // Extract the FULL QR Code URL (chave|2|tpAmb|cscId|hash) from the signed
+  // NFe XML on disk. danfeText.js can't build this URL by itself — the SHA-1
+  // hash depends on the CSC token. Without it, the cupom prints `?p=<chave>`
+  // alone and SEFAZ rejects with "parâmetro p inválido / faltando".
+  let qrCodeUrl = null
+  try {
+    const chMatch = protocol.rawXml?.match(/<chNFe>(\d{44})<\/chNFe>/)
+    if (chMatch) {
+      const chNFe = chMatch[1]
+      const serie = String(parseInt(chNFe.slice(22, 25), 10))
+      const nNF = String(parseInt(chNFe.slice(25, 34), 10))
+      const emitidasDir = path.join(process.cwd(), 'nfe', 'xmls', 'emitidas')
+      const files = fs.existsSync(emitidasDir) ? fs.readdirSync(emitidasDir) : []
+      const matchFile = files.find((f) => f.startsWith(`nfe-${serie}-${nNF}-`))
+      if (matchFile) {
+        const xml = fs.readFileSync(path.join(emitidasDir, matchFile), 'utf8')
+        const qrMatch = xml.match(/<qrCode><!\[CDATA\[([^\]]+)\]\]><\/qrCode>/) || xml.match(/<qrCode>([^<]+)<\/qrCode>/)
+        if (qrMatch) qrCodeUrl = qrMatch[1].trim()
+      }
+    }
+  } catch (e) { console.warn('[formatDanfeText] failed to read qrCode from signed XML:', e?.message) }
+
+  // Match the DANFE width to the company's configured printer.
+  let cols = 48
+  try {
+    const setting = await prisma.printerSetting.findUnique({ where: { companyId: order.companyId } })
+    if (setting && Number(setting.width) > 0) cols = Number(setting.width)
+  } catch (e) { /* keep default */ }
+
+  return buildDanfeText({ protocol, order, fiscalConfig, emitenteConfig }, { cols, compact: true, qrCodeUrl })
 }
 
 router.post('/', async (req, res) => {
