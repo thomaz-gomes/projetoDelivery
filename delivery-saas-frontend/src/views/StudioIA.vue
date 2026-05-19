@@ -320,7 +320,7 @@
               <div class="sia-pack-grid" :class="{ 'pack-single': packResults.length === 1 }">
                 <div
                   v-for="(item, idx) in packResults"
-                  :key="idx"
+                  :key="item.id || idx"
                   class="sia-pack-item"
                 >
                   <img :src="assetUrl(item.url)" :alt="item.filename" />
@@ -330,6 +330,12 @@
                     </button>
                   </div>
                   <span class="sia-pack-badge">{{ idx + 1 }}</span>
+                  <MediaFeedbackButtons
+                    v-if="item.id"
+                    :media-id="item.id"
+                    :existing-feedbacks="[]"
+                    @deleted="removePackResult"
+                  />
                 </div>
               </div>
               <div class="sia-preview-actions mt-3">
@@ -562,6 +568,7 @@
               :media-id="item.id"
               :existing-feedbacks="item.feedbacks || []"
               @update="loadGallery"
+              @deleted="loadGallery"
             />
           </div>
         </div>
@@ -826,6 +833,12 @@ async function generatePack() {
 
 function downloadAllPack() {
   packResults.value.forEach(item => downloadMedia(item))
+}
+
+function removePackResult(mediaId) {
+  packResults.value = packResults.value.filter(item => item.id !== mediaId)
+  // Mantém a galeria geral consistente caso o item já tenha sido sincronizado.
+  loadGallery()
 }
 
 // ── Generate from text (+ optional reference) ──

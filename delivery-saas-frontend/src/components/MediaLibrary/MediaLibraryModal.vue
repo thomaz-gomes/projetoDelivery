@@ -49,6 +49,7 @@
                   :media-id="item.id"
                   :existing-feedbacks="item.feedbacks || []"
                   @update="loadLibrary(currentPage)"
+                  @deleted="loadLibrary(currentPage)"
                 />
                 <button
                   type="button"

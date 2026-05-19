@@ -124,7 +124,7 @@ const props = defineProps({
   mediaId: { type: String, required: true },
   existingFeedbacks: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['update'])
+const emit = defineEmits(['update', 'deleted'])
 
 const localFeedbacks = ref([...props.existingFeedbacks])
 
@@ -198,8 +198,23 @@ async function submitNegative() {
     emit('update')
   } catch (e) {
     error.value = e?.response?.data?.message || 'Falha ao enviar feedback.'
+    return
   } finally {
     submitting.value = false
+  }
+  // Após salvar o feedback negativo, oferece apagar a imagem. A IA já registrou
+  // o motivo da rejeição (continua aprendendo); deletar é opcional para o op.
+  const shouldDelete = window.confirm(
+    'Feedback enviado. Deseja apagar esta imagem da galeria?\n\n' +
+    'O feedback fica registrado para a IA aprender; apagar só remove a imagem da sua biblioteca.'
+  )
+  if (!shouldDelete) return
+  try {
+    await api.delete(`/media/${props.mediaId}`)
+    emit('deleted', props.mediaId)
+  } catch (e) {
+    console.error('Failed to delete media after negative feedback', e)
+    window.alert(e?.response?.data?.message || 'Falha ao apagar a imagem.')
   }
 }
 </script>
