@@ -353,11 +353,13 @@ async function partialSummary() {
     const inRegisterByMethod = (summary && summary.inRegisterByMethod) ? summary.inRegisterByMethod : {};
     const totalWithdrawals = Number((summary && summary.totalWithdrawals) ? summary.totalWithdrawals : 0);
     const totalReinforcements = Number((summary && summary.totalReinforcements) ? summary.totalReinforcements : 0);
-    const expected = (summary && summary.expectedBalance) ? Number(summary.expectedBalance) : null;
-    const storedBalance = Number(session.currentBalance ?? session.balance ?? 0);
-    const diff = expected != null ? (Number(expected || 0) - storedBalance) : 0;
-    const hasDiff = diff && Math.abs(diff) > 0.0001;
     const openingAmount = Number(summary?.openingAmount ?? session?.openingAmount ?? 0);
+    // NOTA: aqui NÃO calculamos diferença esperado vs registrado. O
+    // `session.currentBalance` reflete apenas abertura + reforços − sangrias
+    // (não inclui as vendas em dinheiro, que vivem nos pedidos). Comparar com
+    // `expectedBalance` (que inclui as vendas) produz um número sem sentido
+    // operacional. Diferença real só existe no FECHAMENTO, quando o operador
+    // declara o que físicamente tem na gaveta vs o esperado pelo sistema.
 
     const row = (label, value, isNegative = false, sublabel = '') => {
       const amount = Number(value || 0);
@@ -392,17 +394,10 @@ async function partialSummary() {
         }).join('')
       : `<div style="color:#adb5bd;padding:10px 12px;font-size:0.875rem">Nenhum movimento registrado</div>`;
 
-    const diffBanner = hasDiff ? `
-      <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:0.85rem;font-weight:600;color:#856404">Diferença encontrada</span>
-        <span style="font-weight:700;color:#dc3545;white-space:nowrap">${formatCurrency(diff)}</span>
-      </div>` : '';
-
     const sectionTitle = (label) =>
       `<div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#adb5bd;padding:0 2px;margin-bottom:4px">${label}</div>`;
 
     const html = `<div style="text-align:left">
-      ${diffBanner}
       <div style="margin-bottom:14px">
         ${sectionTitle('Abertura de caixa')}
         <div style="background:#f8f9fa;border-radius:8px;overflow:hidden">
@@ -430,21 +425,12 @@ async function partialSummary() {
     </div>`;
 
     Swal.close();
-    const swalResult = await Swal.fire({
+    await Swal.fire({
       title: 'Resumo parcial',
       html,
       width: 460,
       confirmButtonText: 'Fechar',
-      showDenyButton: hasDiff,
-      denyButtonText: 'Reconciliar',
-      denyButtonColor: '#6c757d',
     });
-
-    if (swalResult && swalResult.isDenied && hasDiff) {
-      await reconcileBalance(Math.round(diff * 100));
-      await loadCurrentSession();
-      await partialSummary();
-    }
   } catch (e) { console.error(e); Swal.fire('Erro', 'Falha ao buscar resumo parcial', 'error'); }
 }
 
