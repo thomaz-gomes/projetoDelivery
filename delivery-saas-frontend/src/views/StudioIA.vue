@@ -265,6 +265,22 @@
               </div>
             </div>
 
+            <!-- Tema visual da marca -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">
+                <i class="bi bi-palette2 me-1"></i>Tema visual da marca
+              </label>
+              <SelectInput v-model="selectedThemeId" class="form-control" :disabled="packLoading">
+                <option :value="null">— Sem tema (genérico) —</option>
+                <option v-for="t in brandThemes" :key="t.id" :value="t.id">
+                  {{ t.name }}{{ t.isDefault ? ' (padrão)' : '' }}{{ t.store ? ` · ${t.store.name}` : '' }}
+                </option>
+              </SelectInput>
+              <div v-if="brandThemes.length === 0" class="small text-muted mt-1">
+                Crie temas em <RouterLink to="/marketing/brand-themes">Temas Visuais</RouterLink> para a IA aplicar a identidade da sua marca.
+              </div>
+            </div>
+
             <div v-if="packError" class="alert alert-danger py-2 small mt-3 mb-0">
               <i class="bi bi-exclamation-triangle me-1"></i>{{ packError }}
             </div>
@@ -328,6 +344,35 @@
             <div v-else class="sia-preview-placeholder">
               <i class="bi bi-grid-3x3-gap" style="font-size:3rem;opacity:.2"></i>
               <p class="text-muted small mt-2 mb-0">Envie uma foto e gere seu pack de imagens</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lições aprendidas pela IA -->
+        <div class="card mt-4">
+          <div class="card-body">
+            <div class="d-flex align-items-start justify-content-between mb-2 gap-2 flex-wrap">
+              <div>
+                <h6 class="mb-1"><i class="bi bi-mortarboard me-2"></i>Lições aprendidas pela IA</h6>
+                <p class="small text-muted mb-0">
+                  Resumo do que funcionou (e do que não funcionou) com base no feedback que você deu nas imagens.
+                </p>
+              </div>
+              <button class="btn btn-sm btn-outline-primary" :disabled="lessonsLoading" @click="refreshLessons">
+                <i class="bi bi-arrow-clockwise me-1"></i>
+                {{ lessonsLoading ? 'Atualizando...' : 'Atualizar agora' }}
+              </button>
+            </div>
+            <div v-if="lessonsError" class="alert alert-warning py-2 small mb-2">{{ lessonsError }}</div>
+            <div v-if="lessons && lessons.text" class="lessons-text">
+              <pre class="mb-2" style="white-space:pre-wrap;font-family:inherit;font-size:0.95em">{{ lessons.text }}</pre>
+              <div class="small text-muted">
+                Última atualização: {{ formatLessonsDate(lessons.updatedAt) }} ·
+                {{ lessons.feedbacksConsidered }} feedbacks analisados
+              </div>
+            </div>
+            <div v-else class="text-muted small">
+              Ainda sem lições. Dê feedback nas imagens geradas (👍/👎) e clique em "Atualizar agora" para a IA aprender com seu gosto.
             </div>
           </div>
         </div>
@@ -532,11 +577,13 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useAiCreditsStore } from '../stores/aiCredits.js'
 import { assetUrl } from '../utils/assetUrl.js'
 import api from '../api.js'
 import Swal from 'sweetalert2'
 import MediaFeedbackButtons from '../components/MediaFeedbackButtons.vue'
+import SelectInput from '../components/form/select/SelectInput.vue'
 
 const creditsStore = useAiCreditsStore()
 
@@ -589,6 +636,13 @@ const packResults = ref([])
 const packAnalysis = ref(null)
 const packDragOver = ref(false)
 
+// Brand themes + IA lessons
+const brandThemes = ref([])
+const selectedThemeId = ref(null)
+const lessons = ref(null)         // { text, updatedAt, feedbacksConsidered } | null
+const lessonsLoading = ref(false)
+const lessonsError = ref('')
+
 // Enhance tab
 const enhanceStyle = ref('minimal')
 const enhanceAngle = ref('standard')
@@ -615,7 +669,51 @@ onMounted(async () => {
     const res = await api.get('/ai-studio/cost')
     creditCost.value = res.data.cost
   } catch {}
+  loadThemesAndLessons()
 })
+
+async function loadThemesAndLessons() {
+  try {
+    const [tr, lr] = await Promise.all([
+      api.get('/brand-themes'),
+      api.get('/ai-studio/lessons'),
+    ])
+    brandThemes.value = tr.data || []
+    lessons.value = lr.data || null
+    // pré-seleciona tema padrão se houver
+    const def = brandThemes.value.find(t => t.isDefault && !t.storeId)
+    if (def) selectedThemeId.value = def.id
+  } catch (e) {
+    console.warn('Failed to load themes/lessons', e)
+  }
+}
+
+function formatLessonsDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const diffMs = Date.now() - d.getTime()
+  const days = Math.floor(diffMs / 86400000)
+  if (days === 0) {
+    const hours = Math.floor(diffMs / 3600000)
+    if (hours === 0) return 'há poucos minutos'
+    return `há ${hours} hora${hours > 1 ? 's' : ''}`
+  }
+  if (days === 1) return 'há 1 dia'
+  return `há ${days} dias`
+}
+
+async function refreshLessons() {
+  lessonsError.value = ''
+  lessonsLoading.value = true
+  try {
+    const r = await api.post('/ai-studio/lessons/refresh')
+    lessons.value = r.data
+  } catch (e) {
+    lessonsError.value = e?.response?.data?.message || 'Falha ao atualizar lições.'
+  } finally {
+    lessonsLoading.value = false
+  }
+}
 
 // ── Reference image (create tab) ──
 function onRefFileChange(e) {
@@ -714,6 +812,7 @@ async function generatePack() {
       photoBase64: packBase64.value,
       quantity: packQuantity.value,
       aspectRatio: packRatio.value,
+      themeId: selectedThemeId.value || null,
     }, { timeout: 300000 })
     packResults.value = res.data.media || []
     packAnalysis.value = res.data.analysis || null
