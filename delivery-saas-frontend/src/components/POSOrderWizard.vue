@@ -145,11 +145,26 @@
             <div v-if="filteredProducts.length === 0" class="small text-muted py-2 text-center">Nenhum produto encontrado.</div>
             <div v-for="cat in filteredProducts" :key="cat.id" class="mb-3">
               <div class="category-header">{{ cat.name }}</div>
-              <div class="d-flex flex-column gap-1">
-                <button v-for="p in cat.products" :key="p.id" class="btn btn-light text-start product-btn" @click="selectProduct(p)">
-                  <div class="d-flex justify-content-between align-items-center">
-                    <span>{{ p.name }}</span>
-                    <span class="small text-muted ms-2 flex-shrink-0">{{ formatCurrency(effectiveProductPrice(p)) }}</span>
+              <div class="product-grid">
+                <button
+                  v-for="p in cat.products"
+                  :key="p.id"
+                  type="button"
+                  class="product-card"
+                  @click="selectProduct(p)"
+                >
+                  <div class="product-card-thumb">
+                    <img
+                      v-if="p.image"
+                      :src="assetUrl(thumbUrl(p.image))"
+                      :alt="p.name"
+                      loading="lazy"
+                    />
+                    <i v-else class="bi bi-image"></i>
+                  </div>
+                  <div class="product-card-body">
+                    <div class="product-card-name">{{ p.name }}</div>
+                    <div class="product-card-price">{{ formatCurrency(effectiveProductPrice(p)) }}</div>
                   </div>
                 </button>
               </div>
@@ -392,6 +407,7 @@ import api from '../api';
 import Swal from 'sweetalert2';
 import { useAuthStore } from '../stores/auth';
 import { formatCurrency } from '../utils/formatters.js';
+import { assetUrl, thumbUrl } from '../utils/assetUrl.js';
 
 const auth = useAuthStore();
 async function resolveCompanyId(){
@@ -1428,12 +1444,82 @@ watch(() => props.preset, async (val) => {
 <style scoped>
 .pos-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; justify-content:center; align-items:flex-start; padding:40px 20px; z-index:1050; overflow:auto; }
 .pos-panel{ background:#fff; width:100%; max-width:760px; border-radius:14px; padding:20px 22px; box-shadow:0 6px 18px rgba(0,0,0,.15); }
-.menu-scroll{ max-height:380px; overflow-y:auto; border:1px solid #eee; padding:8px 10px; border-radius:8px; }
+.menu-scroll{ max-height:480px; overflow-y:auto; border:1px solid #eee; padding:10px 12px; border-radius:8px; }
 .category-pills{ display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none; }
 .category-pills::-webkit-scrollbar{ display:none; }
 .pill-btn{ white-space:nowrap; flex-shrink:0; font-size:0.75rem; padding:2px 10px; border-radius:20px; }
-.category-header{ font-weight:600; font-size:0.8rem; padding:4px 0 2px; border-bottom:1px solid #eee; margin-bottom:4px; color:#555; }
+.category-header{ font-weight:600; font-size:0.85rem; padding:6px 0 4px; border-bottom:1px solid #eee; margin-bottom:8px; color:#555; text-transform:uppercase; letter-spacing:0.04em; }
 .product-btn{ font-size:0.85rem; padding:5px 8px; }
+
+/* PDV product grid */
+.product-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
+  gap:10px;
+}
+.product-card{
+  display:flex;
+  flex-direction:column;
+  background:#fff;
+  border:1px solid #e6e6e6;
+  border-radius:10px;
+  padding:0;
+  overflow:hidden;
+  cursor:pointer;
+  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  text-align:left;
+}
+.product-card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 4px 10px rgba(0,0,0,.08);
+  border-color:#cfd6dd;
+}
+.product-card:active{
+  transform:translateY(0);
+}
+.product-card-thumb{
+  width:100%;
+  aspect-ratio:1;
+  background:#f5f6f7;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+.product-card-thumb img{
+  width:100%; height:100%; object-fit:cover; display:block;
+}
+.product-card-thumb .bi-image{
+  font-size:2rem;
+  color:#c8cdd2;
+}
+.product-card-body{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  padding:8px 10px 10px;
+  flex:1;
+}
+.product-card-name{
+  font-size:0.82rem;
+  font-weight:500;
+  line-height:1.2;
+  color:#222;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.product-card-price{
+  font-size:0.8rem;
+  font-weight:600;
+  color:var(--primary, #105784);
+  margin-top:2px;
+}
+@media (max-width: 480px) {
+  .product-grid{ grid-template-columns:repeat(2, 1fr); gap:8px; }
+  .product-card-name{ font-size:0.78rem; }
+}
 .cart-box{ background:#f9fafb; border:1px solid #eceff3; border-radius:12px; padding:12px 14px; }
 .cart-item{ border-bottom:1px solid #eceff3; padding:6px 0; }
 .cart-item:last-child{ border-bottom:none; }
