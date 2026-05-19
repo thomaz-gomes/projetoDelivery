@@ -94,43 +94,38 @@
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Paleta de cores</label>
-                <TextInput
-                  v-model="form.palette"
-                  placeholder="tons quentes, dourado, madeira escura"
-                  maxlength="200"
-                />
+                <SelectInput v-model="form.palette">
+                  <option value="">— Não definir —</option>
+                  <option v-for="o in PALETTE_PRESETS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </SelectInput>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Mood / atmosfera</label>
-                <TextInput
-                  v-model="form.mood"
-                  placeholder="aconchegante, caseiro"
-                  maxlength="200"
-                />
+                <SelectInput v-model="form.mood">
+                  <option value="">— Não definir —</option>
+                  <option v-for="o in MOOD_PRESETS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </SelectInput>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Superfície</label>
-                <TextInput
-                  v-model="form.surface"
-                  placeholder="balcão de madeira escura"
-                  maxlength="200"
-                />
+                <SelectInput v-model="form.surface">
+                  <option value="">— Não definir —</option>
+                  <option v-for="o in SURFACE_PRESETS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </SelectInput>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Iluminação</label>
-                <TextInput
-                  v-model="form.lighting"
-                  placeholder="luz amarela quente, pendente tungstênio"
-                  maxlength="200"
-                />
+                <SelectInput v-model="form.lighting">
+                  <option value="">— Não definir —</option>
+                  <option v-for="o in LIGHTING_PRESETS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </SelectInput>
               </div>
               <div class="col-12">
                 <label class="form-label">Props / objetos</label>
-                <TextInput
-                  v-model="form.props"
-                  placeholder="tábua de madeira, papel kraft, cerveja artesanal"
-                  maxlength="300"
-                />
+                <SelectInput v-model="form.props">
+                  <option value="">— Não definir —</option>
+                  <option v-for="o in PROPS_PRESETS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </SelectInput>
               </div>
               <div class="col-12">
                 <div class="form-check">
@@ -168,6 +163,13 @@ import { ref, onMounted } from 'vue'
 import api from '../api'
 import TextInput from '../components/form/input/TextInput.vue'
 import SelectInput from '../components/form/select/SelectInput.vue'
+import {
+  PALETTE_PRESETS,
+  MOOD_PRESETS,
+  SURFACE_PRESETS,
+  LIGHTING_PRESETS,
+  PROPS_PRESETS,
+} from '../config/brandThemePresets.js'
 
 const themes = ref([])
 const stores = ref([])
