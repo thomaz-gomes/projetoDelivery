@@ -1,8 +1,13 @@
 'use strict'
 const { app, BrowserWindow, ipcMain, session } = require('electron')
 const path = require('path')
+const config = require('./src/config')
 
 let mainWindow = null
+
+// ── IPC: config storage ───────────────────────────────────────────────
+ipcMain.handle('config:get', () => config.load())
+ipcMain.handle('config:save', (_evt, cfg) => config.save(cfg))
 
 function createWindow() {
   mainWindow = new BrowserWindow({
