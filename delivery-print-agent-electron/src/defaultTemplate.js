@@ -87,7 +87,7 @@ Forma de pagamento
 {{#each pagamentos}}[ROW:{{metodo}}|{{valor_num}}]
 {{/each}}
 {{#if tem_troco}}[BOLD:on]
-Troco para R$ {{troco}}
+Troco para R$ {{troco}}{{#if tem_troco_devido}} (R$ {{troco_devido}}){{/if}}
 [BOLD:off]
 {{/if}}[INV:off]
 [SEP]
@@ -155,7 +155,7 @@ Pagamento
 {{#each pagamentos}}[ROW:{{metodo}}|{{valor_num}}]
 {{/each}}
 {{#if tem_troco}}[BOLD:on]
-Troco p/ R$ {{troco}}
+Troco p/ R$ {{troco}}{{#if tem_troco_devido}} (R$ {{troco_devido}}){{/if}}
 [BOLD:off]
 {{/if}}[INV:off]
 [SEP]

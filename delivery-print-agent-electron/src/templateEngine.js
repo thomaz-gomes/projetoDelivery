@@ -460,7 +460,9 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         if (trocoVal > 0) {
           if (margin > 0) parts.push(ESCPos.marginLeft(margin));
           parts.push(ESCPos.bold(true));
-          parts.push(ESCPos.text(`Troco para R$ ${_fmtN(trocoVal)}`, charset));
+          const trocoDevido = _toNum(ctx.troco_devido_raw);
+          const suffix = trocoDevido > 0 ? ` (R$ ${_fmtN(trocoDevido)})` : '';
+          parts.push(ESCPos.text(`Troco para R$ ${_fmtN(trocoVal)}${suffix}`, charset));
           parts.push(ESCPos.bold(false));
         }
         break;
@@ -666,6 +668,10 @@ function buildBlockContext(order) {
     // Troco (changeFor) — extraído pelo enrichOrderForAgent
     troco_raw:         _toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0),
     troco:             _fmtN(_toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0)),
+    // Troco DEVIDO ao cliente (changeFor − total). 0 quando não há troco.
+    troco_devido_raw:  Math.max(0, _toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal),
+    troco_devido:      _fmtN(Math.max(0, _toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal)),
+    tem_troco_devido:  (_toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal) > 0,
   };
 }
 
@@ -982,6 +988,10 @@ function buildContext(order, printer) {
     troco_raw:  _toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0),
     troco:      _fmtN(_toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0)),
     tem_troco:  _toNum(order.payment?.changeFor || order.changeFor || 0) > 0,
+    // Troco DEVIDO ao cliente (changeFor − total). 0 quando não há troco.
+    troco_devido_raw: Math.max(0, _toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal),
+    troco_devido:     _fmtN(Math.max(0, _toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal)),
+    tem_troco_devido: (_toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal) > 0,
 
     // Tamanhos configuráveis — resolvem para diretivas [SIZE:WxH] no template
     // printer.itemNameSize / printer.itemOptionSize: "1x2", "2", "1" etc.

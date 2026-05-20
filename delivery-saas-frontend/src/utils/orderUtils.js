@@ -116,4 +116,35 @@ export function storeRevenue(order) {
   return orderTotal + v.discountIfood - addFees;
 }
 
-export default { normalizeOrderItems, splitVoucherDiscounts, storeRevenue };
+/**
+ * Calcula o troco que o entregador deve devolver ao cliente.
+ * `changeFor` (= paymentChange) é o valor com que o cliente vai pagar
+ * (ex.: cliente paga com R$ 50 num pedido de R$ 38).
+ * Troco devido = changeFor − total. Retorna 0 se não houver troco.
+ */
+export function changeDue(order) {
+  if (!order) return 0
+  const total = Number(order.total || 0)
+  let changeFor = 0
+  const pickChange = (o) => Number(o?.changeFor ?? o?.change_for ?? o?.change ?? 0) || 0
+  // Try several payload shapes (mirrors Orders.vue normalizeOrder logic)
+  changeFor = pickChange(order.payment)
+    || pickChange(order.payload?.payment)
+    || pickChange(order.payload?.payments?.[0])
+  // iFood: payments.methods[].changeFor (cash method)
+  if (!changeFor) {
+    const methods = order.payload?.order?.payments?.methods
+      || order.payload?.payments?.methods
+    if (Array.isArray(methods)) {
+      const cashMethod = methods.find(m => {
+        const s = String(m?.method || m?.type || '').toLowerCase()
+        return s.includes('cash') || s.includes('dinheiro')
+      })
+      if (cashMethod?.changeFor) changeFor = Number(cashMethod.changeFor) || 0
+    }
+  }
+  const diff = changeFor - total
+  return diff > 0 ? Math.round(diff * 100) / 100 : 0
+}
+
+export default { normalizeOrderItems, splitVoucherDiscounts, storeRevenue, changeDue };

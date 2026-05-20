@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref, computed, onUnmounted, nextTick, watch } from 'vue';
-import { normalizeOrderItems, storeRevenue } from '../utils/orderUtils.js';
+import { normalizeOrderItems, storeRevenue, changeDue } from '../utils/orderUtils.js';
 import { useOrdersStore } from '../stores/orders';
 import { useAuthStore } from '../stores/auth';
 import { useCustomersStore } from '../stores/customers';
@@ -3651,7 +3651,7 @@ function pulseButton() {
                   <span v-if="o.customerPhone" class="oc-chip"><i class="bi bi-telephone"></i> {{ o.customerPhone }}</span>
                   <span v-if="normalizeOrder(o).phoneLocalizer" class="oc-chip oc-chip--ifood" title="Localizador do pedido iFood"><i class="bi bi-hash"></i> {{ normalizeOrder(o).phoneLocalizer }}</span>
                   <span v-if="normalizeOrder(o).ifoodConfirmationCode" class="oc-chip oc-chip--ifood" title="Código de confirmação iFood"><i class="bi bi-key"></i> {{ normalizeOrder(o).ifoodConfirmationCode }}</span>
-                  <span class="oc-chip"><i class="bi bi-credit-card"></i> {{ normalizeOrder(o).paymentMethod }}<template v-if="normalizeOrder(o).paymentChange"> · Troco: {{ formatCurrency(normalizeOrder(o).paymentChange) }}</template></span>
+                  <span class="oc-chip"><i class="bi bi-credit-card"></i> {{ normalizeOrder(o).paymentMethod }}<template v-if="normalizeOrder(o).paymentChange"> · Troco para: {{ formatCurrency(normalizeOrder(o).paymentChange) }}<template v-if="changeDue(o) > 0"> ({{ formatCurrency(changeDue(o)) }})</template></template></span>
                   <template v-if="ridersEnabled">
                     <span class="oc-chip">
                       <i class="bi bi-person-badge"></i> {{ o.rider ? o.rider.name : '—' }}
@@ -3719,7 +3719,7 @@ function pulseButton() {
                   -{{ formatCurrency(normalizeOrder(o).couponDiscount) }}
                 </div>
                 <div v-if="normalizeOrder(o).paymentChange" class="mt-2 small">
-                  <strong>Troco:</strong> {{ formatCurrency(normalizeOrder(o).paymentChange) }}
+                  <strong>Troco para:</strong> {{ formatCurrency(normalizeOrder(o).paymentChange) }}<template v-if="changeDue(o) > 0"> ({{ formatCurrency(changeDue(o)) }})</template>
                 </div>
                 <div v-if="getOrderNotes(o)" class="text-muted mt-2">{{ getOrderNotes(o) }}</div>
               </div>
@@ -3944,8 +3944,10 @@ function pulseButton() {
                 <span class="od-pay-value">{{ formatCurrency(selectedNormalized.additionalFees) }}</span>
               </div>
               <div class="od-pay-row" v-if="selectedNormalized?.paymentChange">
-                <span class="od-pay-label">Troco</span>
-                <span class="od-pay-value">{{ formatCurrency(selectedNormalized.paymentChange) }}</span>
+                <span class="od-pay-label">Troco para</span>
+                <span class="od-pay-value">
+                  {{ formatCurrency(selectedNormalized.paymentChange) }}<template v-if="changeDue(selectedOrder) > 0"> ({{ formatCurrency(changeDue(selectedOrder)) }})</template>
+                </span>
               </div>
               <div class="od-pay-row od-pay-total">
                 <span class="od-pay-label">Total faturado</span>

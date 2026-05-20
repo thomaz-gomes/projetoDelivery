@@ -140,13 +140,11 @@
                 <span class="detail-label">Valor pago</span>
                 <span class="detail-value">{{ formatCurrency(getPaymentAmount(order)) }}</span>
               </div>
-              <div v-if="getChangeFor(order)" class="col-6">
+              <div v-if="getChangeFor(order)" class="col-12">
                 <span class="detail-label">Troco para</span>
-                <span class="detail-value">{{ formatCurrency(getChangeFor(order)) }}</span>
-              </div>
-              <div v-if="getChangeFor(order) && getPaymentAmount(order)" class="col-6">
-                <span class="detail-label">Troco</span>
-                <span class="detail-value">{{ formatCurrency(Number(getChangeFor(order)) - Number(getPaymentAmount(order))) }}</span>
+                <span class="detail-value">
+                  {{ formatCurrency(getChangeFor(order)) }}<template v-if="changeDue(order) > 0"> ({{ formatCurrency(changeDue(order)) }})</template>
+                </span>
               </div>
             </div>
             <div v-if="vouchers.voucherPayments.length > 0" class="border-top pt-3 mt-3">
@@ -353,7 +351,7 @@ import { useRoute } from 'vue-router';
 import Swal from 'sweetalert2';
 import api from '../api';
 import { formatDateTime } from '../utils/dates.js';
-import { splitVoucherDiscounts, storeRevenue } from '../utils/orderUtils.js';
+import { splitVoucherDiscounts, storeRevenue, changeDue } from '../utils/orderUtils.js';
 
 const route = useRoute();
 const id = route.params.id;
