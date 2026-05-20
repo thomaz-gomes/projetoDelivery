@@ -17,6 +17,7 @@ import { buildAndPersistStockMovementFromOrderItems, reverseStockMovementForOrde
 import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
 import { tryEmitIfoodChat } from '../services/ifoodChatEmitter.js';
 import { nextDisplaySimple, startOfDayForDateInTz } from '../utils/displaySimple.js';
+import { startOfDayInTz as dayStartTz, endOfDayInTz as dayEndTz } from '../utils/dateTz.js';
 import { geocodeOrderIfNeeded } from '../utils/geocode.js';
 import { evaluateDiscountRule } from '../utils/paymentDiscount.js';
 import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js';
@@ -33,13 +34,32 @@ ordersRouter.get('/', async (req, res) => {
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' });
 
   const status = req.query.status;
+  const { from, to, riderId } = req.query;
   const where = { companyId };
   if (status) where.status = status;
+  if (riderId) where.riderId = String(riderId);
+
+  // Date filter — sales history and other admin tabs send `from`/`to` as
+  // YYYY-MM-DD; resolve them as start/end of day in the company timezone so
+  // the range is the BRT calendar day the operator actually selected
+  // (raw new Date('YYYY-MM-DD') on a UTC container shifts ~3h into the
+  // previous day's afternoon and was effectively ignored by the SQL filter).
+  if (from || to) {
+    where.createdAt = {};
+    try {
+      const tz = (await prisma.company.findUnique({ where: { id: companyId }, select: { timezone: true } }))?.timezone;
+      if (from) where.createdAt.gte = dayStartTz(String(from).slice(0, 10), tz || undefined);
+      if (to)   where.createdAt.lte = dayEndTz(String(to).slice(0, 10),   tz || undefined);
+    } catch (e) {
+      if (from) where.createdAt.gte = new Date(from);
+      if (to)   where.createdAt.lte = new Date(to);
+    }
+  }
 
   const orders = await prisma.order.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: { items: true, rider: true, histories: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } }, company: true, customer: { include: { addresses: true } } }
+    include: { items: true, rider: true, histories: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } }, company: true, customer: { include: { addresses: true } }, menu: { select: { id: true, name: true } } }
   });
 
   // compute a daily sequential visual id (displaySimple) per order date
@@ -529,7 +549,7 @@ ordersRouter.patch('/:id', requireRole('ADMIN', 'ATTENDANT', 'STORE'), async (re
   const updated = await prisma.order.update({
     where: { id },
     data,
-    include: { items: true, rider: true, histories: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } }, company: true, customer: { include: { addresses: true } } }
+    include: { items: true, rider: true, histories: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } }, company: true, customer: { include: { addresses: true } }, menu: { select: { id: true, name: true } } }
   });
 
   return res.json(updated);

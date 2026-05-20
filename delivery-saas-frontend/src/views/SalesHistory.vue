@@ -361,12 +361,13 @@ function _normalizeOrderType(o) {
   return 'DELIVERY' // default conservador (maioria dos pedidos)
 }
 
-// Identifica o canal de origem do pedido (iFood, Aiqfome, WhatsApp, etc.).
-// Agrupa variações conhecidas; tudo que não bate em uma label específica
-// vira "Outro".
+// Identifica o canal de origem do pedido. Integrações (iFood, Aiqfome, etc.)
+// vencem a relação ao cardápio porque o pedido nasce nelas — só depois é
+// roteado para um Menu interno. Para pedidos sem integração, usa o nome do
+// cardápio (cada cardápio digital é um canal). "Cardápio Web" só sobra como
+// rótulo de último recurso quando nada conhecido bateu.
 function _normalizeChannel(o) {
   const raw = String(o?.canal || o?.source || o?.channel || o?.payload?.source || o?.payload?.salesChannel || '').toLowerCase()
-  if (!raw) return 'Cardápio Web'
   if (raw.includes('ifood')) return 'iFood'
   if (raw.includes('aiqfome') || raw.includes('aiq')) return 'Aiqfome'
   if (raw.includes('whatsapp') || raw.includes('wpp') || raw === 'wa') return 'WhatsApp'
@@ -374,10 +375,16 @@ function _normalizeChannel(o) {
   if (raw.includes('saipos')) return 'Site Delivery (SAIPOS)'
   if (raw.includes('facebook')) return 'Facebook'
   if (raw.includes('telefone') || raw.includes('phone')) return 'Telefone'
-  if (raw.includes('site') || raw.includes('próprio') || raw.includes('proprio')) return 'Site Próprio'
   if (raw.includes('delivery direto')) return 'Delivery Direto'
   if (raw === 'pdv' || raw.includes('pdv')) return 'PDV / Balcão'
-  if (raw.includes('cardapio') || raw.includes('cardápio') || raw.includes('menu') || raw === 'web') return 'Cardápio Web'
+
+  // Pedidos sem integração: cada cardápio digital é um canal próprio.
+  const menuName = o?.menu?.name || o?.menuName
+  if (menuName) return String(menuName)
+
+  if (raw.includes('site') || raw.includes('próprio') || raw.includes('proprio')) return 'Site Próprio'
+  if (raw.includes('cardapio') || raw.includes('cardápio') || raw.includes('menu') || raw === 'web') return 'Cardápio Digital'
+  if (!raw) return 'Outro'
   return raw.charAt(0).toUpperCase() + raw.slice(1)
 }
 
