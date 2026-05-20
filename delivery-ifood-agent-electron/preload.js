@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('agentApi', {
   reportSendResult: (result) => ipcRenderer.invoke('chat:result', result),
   getFailures: () => ipcRenderer.invoke('failures:list'),
   clearFailures: () => ipcRenderer.invoke('failures:clear'),
+  getWebviewPreloadUrl: () => ipcRenderer.invoke('webview:get-preload-url'),
 
   // Main → Renderer (subscribe)
   onChatMessage: (cb) => {

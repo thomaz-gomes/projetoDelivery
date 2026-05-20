@@ -30,6 +30,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "webview-preload.js",
       "src/**/*.js",
       "!src/**/*.test.js",
       "renderer/dist/**/*",

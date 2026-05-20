@@ -10,6 +10,7 @@ const emit = defineEmits(['queue-change'])
 
 const webviewRef = ref(null)
 const ready = ref(false)
+const webviewPreloadUrl = ref('')
 
 const queue = []
 let processing = false
@@ -156,17 +157,38 @@ function onConsoleMessage(e) {
   console[level](`[ifood-webview]`, msg)
 }
 
-onMounted(() => {
-  const wv = webviewRef.value
-  if (wv) {
-    wv.addEventListener('dom-ready', onDomReady)
-    wv.addEventListener('did-fail-load', (e) => {
-      ready.value = false
-      console.warn('[ifood-webview] did-fail-load:', e.errorCode, e.errorDescription, e.validatedURL)
-    })
-    wv.addEventListener('did-finish-load', () => { ready.value = true; drain() })
-    wv.addEventListener('console-message', onConsoleMessage)
+onMounted(async () => {
+  // Busca o caminho do preload (file://) antes de montar o webview. O <webview>
+  // só aparece depois que temos esse caminho — assim o stealth roda antes da
+  // página do iFood. Se a API não existir (cenários de dev sem electron),
+  // monta sem preload (vai fallback pro UA hack apenas).
+  if (window.agentApi && window.agentApi.getWebviewPreloadUrl) {
+    try {
+      webviewPreloadUrl.value = await window.agentApi.getWebviewPreloadUrl()
+    } catch (e) {
+      console.warn('[ifood-frame] falha ao obter webview preload URL:', e && e.message)
+    }
   }
+  // Após o próximo tick, o <webview> está no DOM (graças ao v-if abaixo).
+  // O attachListeners observa via watch.
+  attachListeners()
+})
+
+function attachListeners() {
+  const wv = webviewRef.value
+  if (!wv) return
+  wv.addEventListener('dom-ready', onDomReady)
+  wv.addEventListener('did-fail-load', (e) => {
+    ready.value = false
+    console.warn('[ifood-webview] did-fail-load:', e.errorCode, e.errorDescription, e.validatedURL)
+  })
+  wv.addEventListener('did-finish-load', () => { ready.value = true; drain() })
+  wv.addEventListener('console-message', onConsoleMessage)
+}
+
+// Quando o <webview> aparece (depois que temos preloadUrl), re-anexa listeners.
+watch(() => webviewRef.value, (wv) => {
+  if (wv) attachListeners()
 })
 
 watch(() => props.reloadKey, (newVal, oldVal) => {
@@ -176,21 +198,32 @@ watch(() => props.reloadKey, (newVal, oldVal) => {
 
 <template>
   <!--
-    useragent: o iFood detecta UA "Electron/..." e quebra o WebSocket do chat
-    (fica em loading infinito). Passamos um UA de Chrome estável pra parecer
-    um Chromium normal. A versão do Chrome aqui deve ficar próxima da versão
-    do Chromium embarcado no Electron usado (Electron 28 = Chromium 120).
+    useragent: o iFood detecta UA "Electron/..." e quebra o WebSocket do chat.
+    Passamos UA de Chrome estável (E28 = Chromium 120).
+
+    preload: webview-preload.js aplica stealth (navigator.webdriver=false,
+    window.chrome.runtime, fake plugins) ANTES da página do iFood carregar,
+    pra não disparar CAPTCHA / desafio de bot.
+
+    v-if espera o preload URL chegar via IPC antes de criar o <webview>.
   -->
   <webview
+    v-if="webviewPreloadUrl"
     ref="webviewRef"
     src="https://gestordepedidos.ifood.com.br/"
     partition="persist:ifood"
+    :preload="webviewPreloadUrl"
     useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     allowpopups
     class="ifood-webview"
   />
+  <div v-else class="loading-shell">Inicializando…</div>
 </template>
 
 <style scoped>
 .ifood-webview { flex: 1; width: 100%; height: 100%; border: 0; }
+.loading-shell {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--fg); opacity: 0.7;
+}
 </style>

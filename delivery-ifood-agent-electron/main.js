@@ -58,6 +58,16 @@ ipcMain.handle('chat:result', (_evt, result) => router.handleSendResult(result))
 ipcMain.handle('failures:list', () => router.getFailures())
 ipcMain.handle('failures:clear', () => router.clearFailures())
 
+// ── IPC: webview preload URL ──────────────────────────────────────────
+// Retorna o file:// absoluto do webview-preload.js. O renderer usa esse
+// caminho no atributo `preload` do <webview> pra carregar stealth overrides
+// ANTES da página do iFood rodar, evitando bot-detection / CAPTCHA.
+ipcMain.handle('webview:get-preload-url', () => {
+  const abs = path.join(__dirname, 'webview-preload.js')
+  // url.pathToFileURL não está em escopo aqui — montamos manualmente.
+  return 'file:///' + abs.replace(/\\/g, '/')
+})
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
