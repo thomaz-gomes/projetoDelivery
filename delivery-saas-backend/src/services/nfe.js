@@ -427,7 +427,11 @@ export async function loadCertConfig(companyId) {
   }
 
   const settings = loadSettings('company', companyId)
-  const result = { certPath: null, certPassword: null, certBuffer: null }
+  // certPasswordError carries the decryption failure reason so downstream
+  // consumers (e.g. MDe sync) can abort with a clear message instead of
+  // attempting TLS with a null password and cascading into the much less
+  // helpful "PKCS#12 MAC could not be verified" / "mac verify failure".
+  const result = { certPath: null, certPassword: null, certBuffer: null, certPasswordError: null }
 
   if (settings.certFilename) {
     const cp = path.join(base, 'secure', 'certs', String(settings.certFilename))
@@ -443,6 +447,7 @@ export async function loadCertConfig(companyId) {
     } catch (e) {
       console.warn(`[NFe] Falha ao descriptografar senha do certificado da empresa ${companyId} — provavelmente criptografada com CERT_STORE_KEY antiga. Re-salve a senha na edição da loja. Erro: ${e?.message}`)
       result.certPassword = null
+      result.certPasswordError = `Senha do certificado da empresa ${companyId} não pôde ser decriptada (CERT_STORE_KEY incompatível). Re-salve a senha na edição da loja.`
     }
   } else if (process.env.NFE_CERT_PASSWORD) {
     result.certPassword = process.env.NFE_CERT_PASSWORD

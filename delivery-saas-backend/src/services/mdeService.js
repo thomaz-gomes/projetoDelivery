@@ -409,8 +409,14 @@ export async function syncMde(storeId, companyId) {
           try {
             const { decryptText } = await import('../utils/secretStore.js');
             certConfig.certPassword = decryptText(settings.certPasswordEnc);
+            // Store-level password worked: clear any company-level decryption error.
+            certConfig.certPasswordError = null;
           } catch (e) {
             console.warn('[MDe] Failed to decrypt store cert password:', e?.message);
+            // Don't overwrite an existing company-level error message; only set if absent.
+            if (!certConfig.certPasswordError) {
+              certConfig.certPasswordError = `Senha do certificado da loja ${storeId} não pôde ser decriptada (CERT_STORE_KEY incompatível). Re-salve a senha na edição da loja.`;
+            }
           }
         }
         if (certConfig.certPath) break;
@@ -420,6 +426,11 @@ export async function syncMde(storeId, companyId) {
 
   if (!certConfig.certPath && !certConfig.certBuffer) {
     throw new Error('Certificado digital A1 (.pfx) nao encontrado. Configure o certificado nas configuracoes fiscais.');
+  }
+  // Abort early when the password could not be decrypted — the alternative
+  // is a downstream "mac verify failure" that's harder to diagnose.
+  if (certConfig.certPasswordError && !certConfig.certPassword) {
+    throw new Error(certConfig.certPasswordError);
   }
 
   // 3. Create HTTPS agent
@@ -679,8 +690,14 @@ export async function fetchFullNFe(importId, companyId) {
           try {
             const { decryptText } = await import('../utils/secretStore.js');
             certConfig.certPassword = decryptText(settings.certPasswordEnc);
+            // Store-level password worked: clear any company-level decryption error.
+            certConfig.certPasswordError = null;
           } catch (e) {
             console.warn('[MDe] Failed to decrypt store cert password:', e?.message);
+            // Don't overwrite an existing company-level error message; only set if absent.
+            if (!certConfig.certPasswordError) {
+              certConfig.certPasswordError = `Senha do certificado da loja ${storeId} não pôde ser decriptada (CERT_STORE_KEY incompatível). Re-salve a senha na edição da loja.`;
+            }
           }
         }
         if (certConfig.certPath) break;
@@ -690,6 +707,9 @@ export async function fetchFullNFe(importId, companyId) {
 
   if (!certConfig.certPath && !certConfig.certBuffer) {
     throw new Error('Certificado digital nao encontrado');
+  }
+  if (certConfig.certPasswordError && !certConfig.certPassword) {
+    throw new Error(certConfig.certPasswordError);
   }
 
   const httpsAgent = loadCertAndCreateAgent(certConfig);

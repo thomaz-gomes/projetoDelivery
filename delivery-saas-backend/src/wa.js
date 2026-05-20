@@ -16,6 +16,42 @@ const http = axios.create({
   headers: { apikey: apiKey || '', 'Content-Type': 'application/json' },
 });
 
+// Evolution exposes 3-4 endpoint variants for each send operation; only one
+// works per deployment. We cache the winning attempt index per (operation,
+// instance) so subsequent sends skip the 404s. The cache self-heals: on
+// failure we drop the entry and re-probe from the top.
+const winningAttemptCache = new Map();
+function cacheKey(op, instanceName) { return `${op}:${instanceName || ''}`; }
+
+async function trySendWithCache(op, instanceName, attempts) {
+  const key = cacheKey(op, instanceName);
+  const cachedIdx = winningAttemptCache.get(key);
+  const order = cachedIdx != null
+    ? [attempts[cachedIdx], ...attempts.filter((_, i) => i !== cachedIdx)]
+    : attempts;
+  let last;
+  for (let i = 0; i < order.length; i++) {
+    const a = order[i];
+    try {
+      console.log(`${op} -> trying ${a.url} instance=${instanceName} ${a.logExtra || ''}`);
+      const { data } = await http.post(a.url, a.body);
+      console.log(`${op} -> success ${a.url} instance=${instanceName}`);
+      // Cache the original index (not the reordered index) so future calls
+      // skip the failed variants entirely.
+      const winnerOriginalIdx = attempts.indexOf(a);
+      winningAttemptCache.set(key, winnerOriginalIdx);
+      return data;
+    } catch (e) {
+      last = e;
+      console.warn(`${op} -> attempt failed ${a.url} instance=${instanceName} status=${e.response?.status || 'no-status'} error=${e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : e.message}`);
+    }
+  }
+  // Every variant failed — drop the cached winner (if any) so a future
+  // Evolution upgrade can be re-probed cleanly.
+  winningAttemptCache.delete(key);
+  throw last || new Error(`${op}: all variants failed`);
+}
+
 function normalizeStatus(input) {
   const v = String(input || 'UNKNOWN').toUpperCase();
   // mapeia estados comuns da Evolution
@@ -150,26 +186,13 @@ export async function evoSendText({ instanceName, to, text, quoted }) {
   if (!number) throw new Error('Telefone inválido');
 
   const attempts = [
-    { url: '/message/sendText', body: { instanceName, to: number, text, ...(quoted ? { quoted } : {}) } },
-    { url: '/message/send',     body: { instanceName, number, message: text, ...(quoted ? { quoted } : {}) } },
+    { url: '/message/sendText', body: { instanceName, to: number, text, ...(quoted ? { quoted } : {}) }, logExtra: `to=${number} text=${String(text).slice(0,120)}` },
+    { url: '/message/send',     body: { instanceName, number, message: text, ...(quoted ? { quoted } : {}) }, logExtra: `to=${number}` },
     // alguns builds aceitam rota por path da instância:
-    { url: `/message/sendText/${encodeURIComponent(instanceName)}`, body: { number, text, ...(quoted ? { quoted } : {}) } },
+    { url: `/message/sendText/${encodeURIComponent(instanceName)}`, body: { number, text, ...(quoted ? { quoted } : {}) }, logExtra: `to=${number}` },
   ];
 
-  let last;
-  for (const a of attempts) {
-    try {
-      console.log(`evoSendText -> trying ${a.url} instance=${instanceName} to=${number} text=${String(text).slice(0,120)}`);
-      const { data } = await http.post(a.url, a.body);
-      console.log(`evoSendText -> success ${a.url} instance=${instanceName} to=${number}`);
-      return data;
-    } catch (e) {
-      last = e;
-      console.warn(`evoSendText -> attempt failed ${a.url} instance=${instanceName} to=${number} status=${e.response?.status || 'no-status'} error=${e.response?.data ? JSON.stringify(e.response.data).slice(0,500) : e.message}`);
-      continue;
-    }
-  }
-  throw last || new Error('Falha ao enviar mensagem (Evolution)');
+  return trySendWithCache('evoSendText', instanceName, attempts);
 }
 
 export { normalizePhone, isBrServiceNumber };
@@ -186,21 +209,12 @@ export async function evoSendLocation({ instanceName, to, latitude, longitude, a
   const lng = Number(longitude);
 
   const attempts = [
-    { url: '/message/sendLocation', body: { instanceName, to: number, latitude: lat, longitude: lng, address } },
-    { url: '/message/location',     body: { instanceName, number, latitude: lat, longitude: lng, address } },
-    { url: `/message/sendLocation/${encodeURIComponent(instanceName)}`, body: { number, latitude: lat, longitude: lng, address } },
+    { url: '/message/sendLocation', body: { instanceName, to: number, latitude: lat, longitude: lng, address }, logExtra: `to=${number} lat=${lat} lng=${lng}` },
+    { url: '/message/location',     body: { instanceName, number, latitude: lat, longitude: lng, address }, logExtra: `to=${number}` },
+    { url: `/message/sendLocation/${encodeURIComponent(instanceName)}`, body: { number, latitude: lat, longitude: lng, address }, logExtra: `to=${number}` },
   ];
 
-  let last;
-  for (const a of attempts) {
-    try {
-      console.log(`evoSendLocation -> trying ${a.url} instance=${instanceName} to=${number} lat=${lat} lng=${lng}`);
-      const { data } = await http.post(a.url, a.body);
-      console.log(`evoSendLocation -> success ${a.url} instance=${instanceName} to=${number}`);
-      return data;
-    } catch (e) { last = e; console.warn(`evoSendLocation -> failed ${a.url} ${e.response?.status || e.message}`); }
-  }
-  throw last || new Error('Falha ao enviar localização (Evolution)');
+  return trySendWithCache('evoSendLocation', instanceName, attempts);
 }
 
 // enviar arquivo/documento (base64) - tenta endpoints conhecidos
@@ -209,24 +223,14 @@ export async function evoSendDocument({ instanceName, to, base64, filename = 'fi
   if (!number) throw new Error('Telefone inválido');
 
   const attempts = [
-    { url: '/message/sendFile', body: { instanceName, to: number, fileBase64: base64, filename, mimeType, caption } },
-    { url: '/message/sendDocument', body: { instanceName, to: number, base64, filename, mimeType, caption } },
-    { url: '/message/sendMedia', body: { instanceName, to: number, base64, filename, mimeType, caption } },
+    { url: '/message/sendFile', body: { instanceName, to: number, fileBase64: base64, filename, mimeType, caption }, logExtra: `to=${number} filename=${filename}` },
+    { url: '/message/sendDocument', body: { instanceName, to: number, base64, filename, mimeType, caption }, logExtra: `to=${number} filename=${filename}` },
+    { url: '/message/sendMedia', body: { instanceName, to: number, base64, filename, mimeType, caption }, logExtra: `to=${number} filename=${filename}` },
     // some builds expect number key instead of to
-    { url: `/message/sendFile/${encodeURIComponent(instanceName)}`, body: { number, fileBase64: base64, filename, mimeType, caption } },
+    { url: `/message/sendFile/${encodeURIComponent(instanceName)}`, body: { number, fileBase64: base64, filename, mimeType, caption }, logExtra: `to=${number} filename=${filename}` },
   ];
 
-  let last;
-  for (const a of attempts) {
-    try {
-      // try endpoint
-      console.log(`evoSendDocument -> trying ${a.url} instance=${instanceName} to=${number} filename=${filename}`);
-      const { data } = await http.post(a.url, a.body);
-      console.log(`evoSendDocument -> success ${a.url} instance=${instanceName} to=${number}`);
-      return data;
-    } catch (e) { last = e; console.warn(`evoSendDocument -> failed ${a.url} ${e.response?.status || e.message}`); }
-  }
-  throw last || new Error('Falha ao enviar documento (Evolution)');
+  return trySendWithCache('evoSendDocument', instanceName, attempts);
 }
 
 /**
@@ -256,30 +260,21 @@ export async function evoSendButtons({ instanceName, to, title = '', description
     {
       url: `/message/sendButtons/${encodeURIComponent(instanceName)}`,
       body: { number, title, description, footer, buttons: buttonsPayload },
+      logExtra: `to=${number} buttons=${buttonsPayload.length}`,
     },
     {
       url: `/message/sendButtons`,
       body: { instanceName, to: number, title, description, footer, buttons: buttonsPayload },
+      logExtra: `to=${number} buttons=${buttonsPayload.length}`,
     },
     {
       url: `/message/sendButtons/${encodeURIComponent(instanceName)}`,
       body: { number, buttonsMessage: { title, description, footer, buttons: buttonsPayload } },
+      logExtra: `to=${number} buttons=${buttonsPayload.length}`,
     },
   ];
 
-  let last;
-  for (const a of attempts) {
-    try {
-      console.log(`evoSendButtons -> trying ${a.url} instance=${instanceName} to=${number} buttons=${buttonsPayload.length}`);
-      const { data } = await http.post(a.url, a.body);
-      console.log(`evoSendButtons -> success ${a.url} instance=${instanceName} to=${number}`);
-      return data;
-    } catch (e) {
-      last = e;
-      console.warn(`evoSendButtons -> attempt failed ${a.url} status=${e.response?.status || 'no-status'} error=${e.response?.data ? JSON.stringify(e.response.data).slice(0, 500) : e.message}`);
-    }
-  }
-  throw last || new Error('Falha ao enviar botões (Evolution)');
+  return trySendWithCache('evoSendButtons', instanceName, attempts);
 }
 
 // send media by public URL (preferred for larger files). Tries known endpoints.
@@ -295,20 +290,15 @@ export async function evoSendMediaUrl({ instanceName, to, mediaUrl, filename = '
 
   const attempts = [
     // instance in path, media property is public url
-    { url: `/message/sendMedia/${encodeURIComponent(instanceName)}`, body: { number, mediatype, mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
-    { url: `/message/sendMedia`, body: { instanceName, to: number, mediatype, mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
+    { url: `/message/sendMedia/${encodeURIComponent(instanceName)}`, body: { number, mediatype, mimetype: mimeType, caption, media: mediaUrl, fileName: filename }, logExtra: `to=${number} media=${String(mediaUrl).slice(0,120)}` },
+    { url: `/message/sendMedia`, body: { instanceName, to: number, mediatype, mimetype: mimeType, caption, media: mediaUrl, fileName: filename }, logExtra: `to=${number}` },
     // alternative keys/names
-    { url: `/message/sendMedia/${encodeURIComponent(instanceName)}`, body: { number, mediatype: 'document', mimetype: mimeType, caption, media: mediaUrl, fileName: filename } },
+    { url: `/message/sendMedia/${encodeURIComponent(instanceName)}`, body: { number, mediatype: 'document', mimetype: mimeType, caption, media: mediaUrl, fileName: filename }, logExtra: `to=${number}` },
   ];
 
-  let last;
-  for (const a of attempts) {
-    try {
-      console.log(`evoSendMediaUrl -> trying ${a.url} instance=${instanceName} to=${number} media=${String(mediaUrl).slice(0,120)}`);
-      const { data } = await http.post(a.url, a.body);
-      console.log(`evoSendMediaUrl -> success ${a.url} instance=${instanceName} to=${number}`);
-      return data;
-    } catch (e) { last = e; console.warn(`evoSendMediaUrl -> failed ${a.url} ${e.response?.status || e.message}`); }
-  }
-  throw last || new Error('Falha ao enviar mídia por URL (Evolution)');
+  // Note: cache scope is per (op, instance) — different mediatypes share a
+  // cached endpoint variant because Evolution dispatches by URL/keys, not by
+  // mediatype value. The doc-fallback attempt is preserved for the
+  // unhappy path; if the cached variant starts failing, we re-probe all.
+  return trySendWithCache('evoSendMediaUrl', instanceName, attempts);
 }
