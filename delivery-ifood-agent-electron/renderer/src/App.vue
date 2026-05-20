@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppHeader from './components/AppHeader.vue'
+import IfoodFrame from './components/IfoodFrame.vue'
 
 const status = ref({ status: 'disconnected', reason: 'boot' })
 const queueCount = ref(0)
@@ -8,6 +9,7 @@ const failureCount = ref(0)
 const showSettings = ref(false)
 const showFailures = ref(false)
 const reloadKey = ref(0)   // bumped to force iframe reload (C3 will use it)
+const ifoodFrameRef = ref(null)
 
 let unsubStatus = null
 let unsubChat = null
@@ -31,6 +33,10 @@ function onOpenFailures() {
   showFailures.value = true
 }
 
+function onQueueChange(n) {
+  queueCount.value = n
+}
+
 async function onCloseSettings() {
   showSettings.value = false
   // settings might have changed config — refresh failures, status updates come via subscription
@@ -50,9 +56,10 @@ onMounted(async () => {
       })
     }
     if (window.agentApi.onChatMessage) {
-      // For now we just count messages received from main. C3 will consume them.
-      unsubChat = window.agentApi.onChatMessage(() => {
-        queueCount.value++
+      unsubChat = window.agentApi.onChatMessage((payload) => {
+        if (ifoodFrameRef.value && payload) {
+          ifoodFrameRef.value.pushMessage(payload)
+        }
       })
     }
 
@@ -84,11 +91,11 @@ onUnmounted(() => {
     />
 
     <main class="app-main">
-      <!-- IfoodFrame goes here in C3. Placeholder for now. -->
-      <div class="ifood-placeholder">
-        <p>O painel do iFood Gestor de Pedidos aparecerá aqui (C3).</p>
-        <p>Recarregar atual: <code>{{ reloadKey }}</code></p>
-      </div>
+      <IfoodFrame
+        ref="ifoodFrameRef"
+        :reload-key="reloadKey"
+        @queue-change="onQueueChange"
+      />
     </main>
 
     <!-- SettingsModal goes here in C4. Placeholder. -->
@@ -116,10 +123,6 @@ onUnmounted(() => {
 <style scoped>
 .app { display: flex; flex-direction: column; height: 100vh; }
 .app-main { flex: 1; min-height: 0; display: flex; }
-.ifood-placeholder {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  color: var(--fg); opacity: 0.7; gap: 0.5rem;
-}
 
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,0.45);
