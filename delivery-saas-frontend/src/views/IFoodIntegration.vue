@@ -2,6 +2,10 @@
 import { ref, onMounted, computed, onUnmounted } from 'vue';
 import Swal from 'sweetalert2';
 import api from '../api';
+import { useAgentStatus } from '../composables/useAgentStatus';
+
+// Aviso: cliente iFood Chat (extensão OU agent) offline há 24h+.
+const agentStatus = useAgentStatus();
 
 // ── All integrations ──
 const integrations = ref([]);
@@ -374,6 +378,8 @@ async function copyToClipboard(text) {
 onMounted(async () => {
   await loadStores();
   await load();
+  // Fetch agent status banner (independent — não bloquear UI)
+  agentStatus.fetch();
   // Sync merchant names in background (no-op if already up-to-date)
   api.post('/integrations/ifood/sync-merchant-names').then(async ({ data }) => {
     if (data?.results?.some(r => r.ok && r.name)) await load();
@@ -679,6 +685,28 @@ onUnmounted(() => { clearRefreshTimers(); });
 
     <!-- ═══ TAB: CHAT AUTOMÁTICO ═══ -->
     <div v-if="activeTab === 'chat'">
+      <!-- Banner: cliente offline há 24h+ -->
+      <div v-if="agentStatus.banner.value === 'never-connected'" class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+        <div>
+          <div class="fw-semibold">Nenhum cliente do iFood Chat conectou ainda</div>
+          <div class="small mb-0">
+            Nem a extensão Chrome nem o app Agente iFood se conectaram. Mensagens automáticas não serão enviadas. Instale o app e abra-o para começar.
+          </div>
+        </div>
+      </div>
+      <div v-else-if="agentStatus.banner.value === 'stale'" class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+        <div>
+          <div class="fw-semibold">Agente iFood offline há {{ agentStatus.hoursSinceLastSeen.value }} h</div>
+          <div class="small mb-0">
+            A última conexão da extensão Chrome ou do app Agente iFood foi há
+            <strong>{{ agentStatus.hoursSinceLastSeen.value }}h</strong>
+            (em {{ agentStatus.formatLastSeen() }}). Reabra o app para retomar os envios automáticos.
+          </div>
+        </div>
+      </div>
+
       <div class="alert alert-info small">
         <i class="bi bi-info-circle me-1"></i>
         Configure as mensagens enviadas automaticamente no chat do iFood quando o status do pedido mudar.

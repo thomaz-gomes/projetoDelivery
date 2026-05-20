@@ -116,6 +116,29 @@ router.post('/generate-token', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+// GET /ifood-chat/agent-status — retorna o último timestamp de conexão de
+// qualquer cliente de automação do chat (extensão Chrome OU app Electron).
+// Usado pelo frontend para exibir aviso quando o cliente está offline >= 24h.
+router.get('/agent-status', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    if (!companyId) return res.status(400).json({ ok: false, message: 'No company' })
+    const setting = await prisma.printerSetting.findUnique({
+      where: { companyId },
+      select: { ifoodAgentLastSeenAt: true, extensionTokenHash: true, ifoodAgentTokenHash: true },
+    })
+    const lastSeenAt = setting?.ifoodAgentLastSeenAt || null
+    const hasAnyToken = !!(setting?.extensionTokenHash || setting?.ifoodAgentTokenHash)
+    const hoursSinceLastSeen = lastSeenAt
+      ? Math.floor((Date.now() - new Date(lastSeenAt).getTime()) / (1000 * 60 * 60))
+      : null
+    res.json({ ok: true, lastSeenAt, hoursSinceLastSeen, hasAnyToken })
+  } catch (e) {
+    console.error('GET /ifood-chat/agent-status failed', e)
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
 // POST /ifood-chat/generate-agent-token — token do app Electron (Delivery iFood Agent)
 // Separado do extensionToken para permitir migração paralela (até 2 meses)
 // e revogação independente entre extensão Chrome e app desktop.

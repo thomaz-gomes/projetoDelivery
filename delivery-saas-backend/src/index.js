@@ -696,6 +696,26 @@ export function attachSocket(server) {
       console.log(`Socket ${socket.id} connected — agent=${hasAgent} address=${hs.address || '?'}`);
     } catch (e) { /* ignore */ }
 
+    // Track last-seen for iFood-chat automation clients (Chrome extension OR
+    // Electron agent). Field `ifoodAgentLastSeenAt` covers both — semantic is
+    // "last time any iFood-chat client was online for this company". Touch on
+    // connect + re-touch every 10 min while session stays open.
+    if (socket.extension || socket.ifoodAgent) {
+      let lastSeenIntervalId = null;
+      const touchLastSeen = () => {
+        if (!socket.companyId) return;
+        prisma.printerSetting.update({
+          where: { companyId: socket.companyId },
+          data: { ifoodAgentLastSeenAt: new Date() },
+        }).catch((e) => console.warn('Failed to update ifoodAgentLastSeenAt', e.message));
+      };
+      touchLastSeen();
+      lastSeenIntervalId = setInterval(touchLastSeen, 10 * 60 * 1000);
+      socket.on('disconnect', () => {
+        if (lastSeenIntervalId) { clearInterval(lastSeenIntervalId); lastSeenIntervalId = null; }
+      });
+    }
+
     // Allow agents to request a freshly generated agent token for their stores
     socket.on('request-agent-token', async (payload, cb) => {
       try {

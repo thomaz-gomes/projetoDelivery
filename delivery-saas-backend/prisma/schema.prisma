@@ -757,6 +757,8 @@ model PrinterSetting {
   // iFood Agent token (hashed) used by iFood Agent Electron app for authentication
   ifoodAgentTokenHash       String?
   ifoodAgentTokenCreatedAt  DateTime?
+  // Last time any iFood-chat automation client (extension OR agent) was online
+  ifoodAgentLastSeenAt      DateTime?
   // Pairing code for simplified agent setup (short-lived, single-use)
   pairingCode             String?
   pairingCodeExpiresAt    DateTime?
