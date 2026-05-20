@@ -38,6 +38,10 @@ ordersRouter.get('/', async (req, res) => {
   const where = { companyId };
   if (status) where.status = status;
   if (riderId) where.riderId = String(riderId);
+  // Diagnostic — verify the date filter is actually applied. Remove once
+  // the sales-history "returns everything regardless of filter" report is
+  // resolved on production.
+  console.log('[orders.GET] companyId=%s from=%s to=%s riderId=%s status=%s light=%s', companyId, from, to, riderId, status, req.query.light);
 
   // Date filter — sales history and other admin tabs send `from`/`to` as
   // YYYY-MM-DD; resolve them as start/end of day in the company timezone so
