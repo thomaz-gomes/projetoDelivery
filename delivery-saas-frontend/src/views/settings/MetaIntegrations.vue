@@ -19,8 +19,26 @@ const tempKey = ref(null)
 const accounts = ref({ pages: [], igAccounts: [], waNumbers: [] })
 const menus = ref([])
 
+// Already-connected accounts for this tenant, grouped for display.
+const connected = ref([])
+const loadingConnected = ref(false)
+
 // selections keyed by `${provider}:${externalId}` → { selected, menuId }
 const selectionState = ref({})
+
+const connectedByProvider = computed(() => {
+  const groups = { META_FB: [], META_IG: [], META_WA: [] }
+  for (const c of connected.value) {
+    if (groups[c.provider]) groups[c.provider].push(c)
+  }
+  return groups
+})
+
+const providerLabel = {
+  META_FB: { name: 'Facebook', icon: 'bi-facebook' },
+  META_IG: { name: 'Instagram', icon: 'bi-instagram' },
+  META_WA: { name: 'WhatsApp Cloud', icon: 'bi-whatsapp' },
+}
 
 const hasResults = computed(() =>
   (accounts.value.pages?.length || 0) +
@@ -60,6 +78,40 @@ async function loadMenus() {
   } catch (e) {
     console.warn('Falha ao carregar cardápios', e)
     menus.value = []
+  }
+}
+
+async function loadConnected() {
+  loadingConnected.value = true
+  try {
+    const { data } = await api.get('/auth/meta/connected')
+    connected.value = Array.isArray(data?.accounts) ? data.accounts : []
+  } catch (e) {
+    console.warn('Falha ao carregar integrações conectadas', e)
+    connected.value = []
+  } finally {
+    loadingConnected.value = false
+  }
+}
+
+async function disconnect(account) {
+  const label = account.displayName || account.externalId
+  const result = await Swal.fire({
+    title: 'Desconectar integração?',
+    text: `Remover ${label}. Os cardápios vinculados perderão o acesso a essa conta.`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Desconectar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#dc3545',
+  })
+  if (!result.isConfirmed) return
+  try {
+    await api.delete(`/auth/meta/connected/${account.id}`)
+    await loadConnected()
+    Swal.fire({ icon: 'success', text: 'Integração removida', timer: 1500, showConfirmButton: false })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao desconectar' })
   }
 }
 
@@ -182,7 +234,7 @@ async function submitSelections() {
     tempKey.value = null
     accounts.value = { pages: [], igAccounts: [], waNumbers: [] }
     selectionState.value = {}
-    await loadMenus()
+    await Promise.all([loadMenus(), loadConnected()])
   } catch (e) {
     const status = e?.response?.status
     if (status === 400 && e?.response?.data?.error === 'expired') {
@@ -209,7 +261,7 @@ function cancelSelection() {
 }
 
 onMounted(async () => {
-  await loadMenus()
+  await Promise.all([loadMenus(), loadConnected()])
 
   // Handle OAuth callback error from URL.
   const err = route.query.error
@@ -242,6 +294,60 @@ onMounted(async () => {
       <i class="bi bi-exclamation-triangle-fill mt-1"></i>
       <div class="flex-grow-1">{{ errorMsg }}</div>
       <button type="button" class="btn-close" aria-label="Fechar" @click="errorMsg = ''"></button>
+    </div>
+
+    <!-- Connected integrations: visible whenever something is linked, so the
+         user always sees current status without re-running OAuth. -->
+    <div v-if="!tempKey && (connected.length || loadingConnected)" class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h6 class="card-title mb-0">
+            <i class="bi bi-link-45deg me-1"></i> Integrações ativas
+            <span class="badge bg-light text-dark ms-1">{{ connected.length }}</span>
+          </h6>
+          <small v-if="loadingConnected" class="text-muted">Carregando...</small>
+        </div>
+
+        <div v-if="!connected.length && !loadingConnected" class="text-muted small">
+          Nenhuma integração conectada ainda.
+        </div>
+
+        <template v-for="provider in ['META_FB', 'META_IG', 'META_WA']" :key="provider">
+          <div v-if="connectedByProvider[provider].length" class="mb-3">
+            <div class="text-muted small text-uppercase mb-2" style="letter-spacing: 0.04em;">
+              <i :class="['bi', providerLabel[provider].icon, 'me-1']"></i>
+              {{ providerLabel[provider].name }}
+            </div>
+            <div class="d-flex flex-column gap-2">
+              <div v-for="c in connectedByProvider[provider]" :key="c.id" class="border rounded p-2 d-flex align-items-center gap-2">
+                <div class="flex-grow-1">
+                  <div class="fw-semibold">
+                    {{ provider === 'META_IG' ? '@' + (c.displayName || c.externalId) : (c.displayName || c.externalId) }}
+                    <span
+                      class="badge ms-1"
+                      :class="c.status === 'ACTIVE' && !c.lastError ? 'bg-success' : 'bg-warning text-dark'"
+                    >
+                      {{ c.status === 'ACTIVE' && !c.lastError ? 'Ativo' : 'Atenção' }}
+                    </span>
+                  </div>
+                  <div class="text-muted small">
+                    <span>ID: {{ c.externalId }}</span>
+                    <span v-if="provider === 'META_WA' && c.wabaId"> · WABA: {{ c.wabaId }}</span>
+                    <span v-if="c.menus && c.menus.length"> · Cardápio: {{ c.menus.map(m => m.name).join(', ') }}</span>
+                    <span v-else> · Sem cardápio vinculado</span>
+                  </div>
+                  <div v-if="c.lastError" class="small text-danger mt-1">
+                    <i class="bi bi-exclamation-triangle me-1"></i>{{ c.lastError }}
+                  </div>
+                </div>
+                <BaseButton variant="outline" size="sm" @click="disconnect(c)">
+                  <i class="bi bi-x-lg me-1"></i> Desconectar
+                </BaseButton>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </div>
 
     <!-- Loading -->

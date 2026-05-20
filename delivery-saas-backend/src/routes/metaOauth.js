@@ -331,6 +331,76 @@ router.post('/auth/meta/connect', authMiddleware, async (req, res) => {
 })
 
 // ---------------------------------------------------------------------------
+// GET /auth/meta/connected
+// Lists MetaMessagingAccount rows for the current tenant plus the menus each
+// is linked to, so the settings page can show "what's active" without
+// re-running the OAuth flow. accessToken is never returned.
+// ---------------------------------------------------------------------------
+router.get('/auth/meta/connected', authMiddleware, async (req, res) => {
+  try {
+    const rows = await prisma.metaMessagingAccount.findMany({
+      where: { companyId: req.user.companyId },
+      orderBy: [{ provider: 'asc' }, { createdAt: 'asc' }],
+      include: {
+        menusAsMetaWa: { select: { id: true, name: true } },
+        menusAsFb:     { select: { id: true, name: true } },
+        menusAsIg:     { select: { id: true, name: true } },
+      },
+    })
+    const accounts = rows.map((r) => {
+      const menus = (
+        r.provider === 'META_WA' ? r.menusAsMetaWa :
+        r.provider === 'META_FB' ? r.menusAsFb :
+        r.provider === 'META_IG' ? r.menusAsIg : []
+      ) || []
+      return {
+        id: r.id,
+        provider: r.provider,
+        externalId: r.externalId,
+        displayName: r.displayName,
+        wabaId: r.wabaId,
+        fbPageId: r.fbPageId,
+        status: r.status,
+        lastError: r.lastError,
+        tokenExpiresAt: r.tokenExpiresAt,
+        createdAt: r.createdAt,
+        menus,
+      }
+    })
+    return res.json({ accounts })
+  } catch (e) {
+    console.error('[auth/meta/connected] failed', e?.message || e)
+    return res.status(500).json({ message: 'Falha ao listar integrações Meta' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// DELETE /auth/meta/connected/:id
+// Disconnects a MetaMessagingAccount. Nulls out any Menu FK first so the
+// FK constraint allows the row delete, then removes the account row.
+// ---------------------------------------------------------------------------
+router.delete('/auth/meta/connected/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    const acc = await prisma.metaMessagingAccount.findFirst({
+      where: { id, companyId: req.user.companyId },
+      select: { id: true, provider: true },
+    })
+    if (!acc) return res.status(404).json({ message: 'Integração não encontrada' })
+
+    const field = MENU_FK_BY_PROVIDER[acc.provider]
+    await prisma.$transaction([
+      prisma.menu.updateMany({ where: { [field]: acc.id }, data: { [field]: null } }),
+      prisma.metaMessagingAccount.delete({ where: { id: acc.id } }),
+    ])
+    return res.json({ ok: true })
+  } catch (e) {
+    console.error('[auth/meta/connected DELETE] failed', e?.message || e)
+    return res.status(500).json({ message: 'Falha ao desconectar' })
+  }
+})
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -421,12 +491,16 @@ async function subscribeWebhook(account, token) {
   }
 
   if (account.provider === 'META_WA') {
-    // Register the phone number with the Cloud API. The pin is the 2FA pin
-    // configured for the phone number; v1 hardcodes '000000' (known
-    // limitation — user prompt to be added in a follow-up).
+    // Subscribe the WABA (not the phone number) to our app. This is the
+    // actual inbound-webhook subscription for WhatsApp Cloud API and is
+    // distinct from /register, which is about acquiring outbound control
+    // of the phone number with the 2FA pin. /register was being called
+    // here with a hardcoded '000000' pin and failed for every number whose
+    // owner had set a real 2FA pin — surfaced to operators as "subscribe_failed".
+    if (!account.wabaId) throw new Error('missing_wabaId_for_subscription')
     await axios.post(
-      `https://graph.facebook.com/${graphVersion}/${account.externalId}/register`,
-      { messaging_product: 'whatsapp', pin: '000000' },
+      `https://graph.facebook.com/${graphVersion}/${account.wabaId}/subscribed_apps`,
+      null,
       { headers: { Authorization: `Bearer ${token}` }, timeout: 15000 },
     )
     return
