@@ -6,19 +6,23 @@
         <div class="row g-2 align-items-end">
           <div class="col-12"><h3>Histórico de Vendas</h3>
 </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label">Data início</label>
             <DateInput v-model="filters.from" inputClass="form-control" />
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label">Data fim</label>
             <DateInput v-model="filters.to" inputClass="form-control" />
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label">Entregador</label>
             <SelectInput v-model="filters.riderId" :options="riderOptions" optionValueKey="id" optionLabelKey="name" placeholder="Todos" />
           </div>
-          <div class="col-md-3 text-end">
+          <div class="col-md-2">
+            <label class="form-label">Forma de pagamento</label>
+            <SelectInput v-model="filters.paymentMethod" :options="paymentMethodOptions" placeholder="Todas" />
+          </div>
+          <div class="col-md-4 text-end">
             <button class="btn btn-primary me-2" @click="load">Buscar</button>
             <button class="btn btn-outline-secondary me-2" @click="reset">Limpar</button>
             <button class="btn btn-outline-primary" @click="showImportModal = true" title="Importar vendas de planilha">
@@ -165,7 +169,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import Swal from 'sweetalert2';
 import api from '../api';
@@ -181,14 +185,21 @@ const currentPage = ref(1);
 const itemsPerPage = ref(20);
 
 const displayed = computed(() => {
-  if(!q.value) return orders.value || []
-  const term = q.value.toLowerCase()
-  return (orders.value || []).filter(o => {
-    const addr = formatAddress(o) || ''
-    const customer = o.customerName || (o.customer && (o.customer.fullName || o.customer.name || o.customer.contact)) || ''
-    const num = formatOrderNumber(o) || ''
-    return (addr + ' ' + customer + ' ' + num).toLowerCase().includes(term)
-  })
+  const term = (q.value || '').toLowerCase()
+  const pm = (filters.value.paymentMethod || '').toLowerCase()
+  let list = orders.value || []
+  if (pm) {
+    list = list.filter(o => (getPaymentMethod(o) || '').toLowerCase() === pm)
+  }
+  if (term) {
+    list = list.filter(o => {
+      const addr = formatAddress(o) || ''
+      const customer = o.customerName || (o.customer && (o.customer.fullName || o.customer.name || o.customer.contact)) || ''
+      const num = formatOrderNumber(o) || ''
+      return (addr + ' ' + customer + ' ' + num).toLowerCase().includes(term)
+    })
+  }
+  return list
 })
 
 const totalPages = computed(() => {
@@ -212,9 +223,20 @@ const today = (() => {
   return `${yyyy}-${mm}-${dd}`;
 })();
 
-const filters = ref({ from: today, to: today, riderId: '' });
+const filters = ref({ from: today, to: today, riderId: '', paymentMethod: '' });
 
 const riderOptions = ref([]);
+
+// Fixed list keeps the dropdown predictable before orders load. The labels
+// mirror what getPaymentMethod() emits so client-side comparison is exact.
+const paymentMethodOptions = [
+  { value: 'PIX', label: 'PIX' },
+  { value: 'Dinheiro', label: 'Dinheiro' },
+  { value: 'Cartão de Crédito', label: 'Cartão de Crédito' },
+  { value: 'Cartão de Débito', label: 'Cartão de Débito' },
+  { value: 'Vale', label: 'Vale' },
+  { value: 'Online', label: 'Online' },
+];
 
 // use shared formatDateTime from utils/dates.js
 
@@ -286,9 +308,9 @@ async function loadRiders(){
   }
 }
 
-function reset(){ 
-  filters.value = { from: today, to: today, riderId: '' }; 
-  orders.value = []; 
+function reset(){
+  filters.value = { from: today, to: today, riderId: '', paymentMethod: '' };
+  orders.value = [];
   currentPage.value = 1;
 }
 
@@ -365,6 +387,8 @@ async function doImport() {
 }
 
 onMounted(()=>{ loadRiders(); load(); });
+
+watch(() => filters.value.paymentMethod, () => { currentPage.value = 1; });
 
 function onQuickSearch(val){ 
   q.value = val;
