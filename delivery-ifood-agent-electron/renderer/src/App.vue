@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import IfoodFrame from './components/IfoodFrame.vue'
+import SettingsModal from './components/SettingsModal.vue'
 
 const status = ref({ status: 'disconnected', reason: 'boot' })
 const queueCount = ref(0)
@@ -98,12 +99,9 @@ onUnmounted(() => {
       />
     </main>
 
-    <!-- SettingsModal goes here in C4. Placeholder. -->
     <div v-if="showSettings" class="modal-backdrop" @click.self="onCloseSettings">
       <div class="modal-card">
-        <h2>Configurações</h2>
-        <p>SettingsModal será implementado em C4.</p>
-        <button class="btn" @click="onCloseSettings">Fechar</button>
+        <SettingsModal @close="onCloseSettings" />
       </div>
     </div>
 
