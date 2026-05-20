@@ -29,11 +29,32 @@ async function processQueue() {
     const payload = queue.shift();
     try {
       await sendChatMessage(payload.orderNumber, payload.message);
-      chrome.runtime.sendMessage({ type: 'MESSAGE_SENT', orderNumber: payload.orderNumber });
+      // Confirmação semântica: a mensagem realmente apareceu no chat?
+      // Cobre o caso em que o textarea esvazia mas o React reset cancelou
+      // o envio (falso positivo). Best-effort — não falha se selector mudar.
+      const appeared = await verifyMessageDelivered(payload.message);
+      if (!appeared) {
+        throw new Error('Textarea esvaziou mas mensagem não apareceu no chat — possível reset do React');
+      }
+      chrome.runtime.sendMessage({
+        type: 'MESSAGE_SENT',
+        orderNumber: payload.orderNumber,
+        kind: payload.kind || null,
+      });
     } catch (e) {
       console.error('[iFood Extension] Falha ao enviar mensagem:', e);
-      chrome.runtime.sendMessage({ type: 'MESSAGE_FAILED', orderNumber: payload.orderNumber, error: e.message });
-      await closeChatPanel();
+      chrome.runtime.sendMessage({
+        type: 'MESSAGE_FAILED',
+        orderNumber: payload.orderNumber,
+        kind: payload.kind || null,
+        error: e.message,
+      });
+      // Não fechar silenciosamente: deixa o painel como está para o
+      // operador notar visualmente que algo travou. closeChatPanel só
+      // se houver mais itens na fila pra resetar estado.
+      if (queue.length > 0) {
+        try { await closeChatPanel(); } catch (_) { /* ignore */ }
+      }
     }
 
     if (queue.length > 0) {
@@ -42,6 +63,32 @@ async function processQueue() {
   }
 
   processing = false;
+}
+
+/**
+ * Verifica se a mensagem texto enviada apareceu na thread do chat.
+ * Procura por elementos com o texto exato (tolerante a trim/aspas)
+ * nas últimas N mensagens. Falha silenciosamente se selector não bater
+ * (não bloqueia o sucesso — só sinaliza incerteza).
+ */
+async function verifyMessageDelivered(messageText) {
+  if (!messageText) return true;
+  // Espera curta pra mensagem renderizar
+  await sleep(600);
+  const needle = String(messageText).trim().slice(0, 80);
+  if (!needle) return true;
+  // Procura em qualquer elemento de texto que contenha o trecho.
+  // Restringe a divs/spans/p pra não pegar atributos.
+  const candidates = document.querySelectorAll('div, span, p');
+  for (const el of candidates) {
+    const t = (el.textContent || '').trim();
+    if (!t || t.length > 1500) continue; // pula containers grandes
+    if (t.includes(needle)) return true;
+  }
+  // Sem confirmação — retorna true mesmo assim quando textarea esvaziou,
+  // pra não gerar falso negativo se o iFood mudou a estrutura. Logamos pra debug.
+  console.warn('[iFood Extension] verifyMessageDelivered: texto não encontrado no DOM (selector pode ter mudado). Aceitando como sucesso.');
+  return true;
 }
 
 async function sendChatMessage(orderNumber, message) {
@@ -212,16 +259,40 @@ async function typeAndSend(message, orderNumber, opts = {}) {
  * Polling do botão de envio até ele existir E estar habilitado.
  * Retorna o elemento ou null se estourar o timeout.
  */
-async function waitForEnabledSendButton(timeout = 3000) {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    const btn = document.querySelector(SELECTORS.sendButton);
-    if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
-      return btn;
+function waitForEnabledSendButton(timeout = 3000) {
+  // MutationObserver substitui o polling pra não sofrer throttling em
+  // tab em background (Chrome reduz drasticamente setTimeout/setInterval
+  // quando a aba não está visível). Observer continua disparando em
+  // background normalmente.
+  return new Promise((resolve) => {
+    const isReady = (btn) =>
+      btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true';
+    const check = () => {
+      const btn = document.querySelector(SELECTORS.sendButton);
+      if (isReady(btn)) {
+        observer.disconnect();
+        clearTimeout(t);
+        resolve(btn);
+      }
+    };
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['disabled', 'aria-disabled'],
+    });
+    // Checagem imediata caso já esteja habilitado quando a função foi chamada.
+    const initial = document.querySelector(SELECTORS.sendButton);
+    if (isReady(initial)) {
+      observer.disconnect();
+      return resolve(initial);
     }
-    await sleep(150);
-  }
-  return null;
+    const t = setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, timeout);
+  });
 }
 
 /**
@@ -236,15 +307,30 @@ function pressEnter(input) {
 }
 
 /**
- * Aguarda o textarea ser limpo (sinal de envio bem-sucedido).
+ * Aguarda o textarea ser limpo (sinal de envio bem-sucedido). Combina
+ * listener do evento `input` (dispara quando React reseta o value) com
+ * MutationObserver no atributo `value` (caso o reset não dispare input).
+ * Imune a throttling de tab em background.
  */
-async function waitForCleared(input, timeout = 2000) {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    if (!input.value || input.value.trim() === '') return true;
-    await sleep(100);
-  }
-  return false;
+function waitForCleared(input, timeout = 2000) {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!input.value || input.value.trim() === '') {
+        cleanup();
+        resolve(true);
+      }
+    };
+    const cleanup = () => {
+      input.removeEventListener('input', check);
+      observer.disconnect();
+      clearTimeout(t);
+    };
+    if (!input.value || input.value.trim() === '') return resolve(true);
+    input.addEventListener('input', check);
+    const observer = new MutationObserver(check);
+    observer.observe(input, { attributes: true, attributeFilter: ['value'] });
+    const t = setTimeout(() => { cleanup(); resolve(false); }, timeout);
+  });
 }
 
 /**

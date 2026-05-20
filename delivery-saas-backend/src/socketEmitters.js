@@ -258,7 +258,10 @@ export function emitirInboxNewMessage({ companyId, conversation, message }) {
 }
 
 // ---- emit: ifood:chat (to extension sockets only, scoped by company) ----
-export function emitirIfoodChat({ orderNumber, message, storeId, companyId }) {
+// `kind` identifica o tipo de mensagem (CONFIRMED, DISPATCHED, DELIVERED, MANUAL)
+// — usado pela extensão pra TTL e dedup. `createdAt` permite descarte de
+// mensagens antigas no backlog quando a aba reativa após horas inativa.
+export function emitirIfoodChat({ orderNumber, message, storeId, companyId, kind = null, orderId = null }) {
   if (!io) {
     console.warn('⚠️ Socket.IO não inicializado — ifood:chat não emitido.');
     return;
@@ -268,14 +271,21 @@ export function emitirIfoodChat({ orderNumber, message, storeId, companyId }) {
     return;
   }
   try {
-    const payload = { orderNumber, message, storeId };
+    const payload = {
+      orderNumber,
+      orderId,
+      message,
+      storeId,
+      kind,
+      createdAt: Date.now(),
+    };
     const sockets = socketsInRoom(companyRoom(companyId));
     let sent = 0;
     for (const s of sockets) {
       if (!s.extension) continue;
       try { s.emit('ifood:chat', payload); sent++; } catch (e) { /* ignore */ }
     }
-    console.log(`📨 ifood:chat emitido para ${sent} extensões — pedido: ${orderNumber}`);
+    console.log(`📨 ifood:chat emitido para ${sent} extensões — pedido: ${orderNumber} kind: ${kind || 'manual'}`);
   } catch (e) {
     console.warn('Falha ao emitir ifood:chat:', e?.message || e);
   }

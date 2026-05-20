@@ -8,6 +8,71 @@ let messageQueue = [];
 let activeTabId = null;
 let activeTabUrl = '';
 
+// ── TTL por tipo de mensagem ─────────────────────────────────────────────
+// Pedido tem ciclo de vida curto — mensagens antigas no backlog não fazem
+// mais sentido (ex.: aviso de preparo de pedido que já foi entregue).
+// Quando a aba reativa após N min, descartamos itens vencidos antes de
+// despachar. `null` = sem TTL.
+const KIND_TTL_MS = {
+  CONFIRMED: 10 * 60 * 1000,   // 10 min — pedido confirmado, ainda relevante por pouco
+  DISPATCHED: 30 * 60 * 1000,  // 30 min — saiu pra entrega
+  DELIVERED: 2 * 60 * 60 * 1000, // 2h — agradecimento/avaliação
+  MANUAL: 2 * 60 * 60 * 1000,  // manual: trata como DELIVERED
+};
+const DEFAULT_TTL_MS = 30 * 60 * 1000; // fallback genérico
+
+function isPayloadStale(payload) {
+  if (!payload || typeof payload.createdAt !== 'number') return false;
+  const ttl = (payload.kind && KIND_TTL_MS[payload.kind]) || DEFAULT_TTL_MS;
+  const age = Date.now() - payload.createdAt;
+  return age > ttl;
+}
+
+// ── Dedupe ────────────────────────────────────────────────────────────────
+// Evita enviar a mesma (orderId, kind) duas vezes. Persistido em
+// chrome.storage.local com janela rolante de 24h.
+const SENT_KEYS_STORAGE = 'sentChatKeys_v1';
+const SENT_KEYS_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+function payloadDedupKey(payload) {
+  if (!payload) return null;
+  // Prefere orderId+kind; falls back para orderNumber+kind quando orderId
+  // não vem (mensagens manuais antigas).
+  const id = payload.orderId || payload.orderNumber;
+  const kind = payload.kind || 'manual';
+  if (!id) return null;
+  return `${id}:${kind}`;
+}
+
+async function loadSentKeys() {
+  try {
+    const { [SENT_KEYS_STORAGE]: raw } = await chrome.storage.local.get(SENT_KEYS_STORAGE);
+    if (!raw || typeof raw !== 'object') return {};
+    // Limpa entradas expiradas
+    const now = Date.now();
+    const cleaned = {};
+    for (const [k, ts] of Object.entries(raw)) {
+      if (typeof ts === 'number' && (now - ts) < SENT_KEYS_RETENTION_MS) cleaned[k] = ts;
+    }
+    return cleaned;
+  } catch (e) {
+    return {};
+  }
+}
+
+async function markSent(key) {
+  if (!key) return;
+  const map = await loadSentKeys();
+  map[key] = Date.now();
+  try { await chrome.storage.local.set({ [SENT_KEYS_STORAGE]: map }); } catch (e) { /* ignore */ }
+}
+
+async function isAlreadySent(key) {
+  if (!key) return false;
+  const map = await loadSentKeys();
+  return !!map[key];
+}
+
 function connect(config) {
   if (socket) {
     try { socket.disconnect(); } catch (e) { /* ignore */ }
@@ -93,6 +158,22 @@ async function sendMessageToTab(tabId, message, retries = 3) {
 }
 
 async function forwardToContentScript(payload) {
+  // Descarte 1: stale (TTL excedido). Evita enviar "saiu pra entrega" muito
+  // depois quando o pedido já foi concluído.
+  if (isPayloadStale(payload)) {
+    const age = payload?.createdAt ? Math.round((Date.now() - payload.createdAt) / 1000) : '?';
+    console.warn(`[iFood Extension] DESCARTADO (TTL): pedido ${payload?.orderNumber} kind=${payload?.kind} age=${age}s`);
+    return;
+  }
+
+  // Descarte 2: já enviado (dedup). Cobre re-emissão do backend e backlog
+  // duplicado entre reativações.
+  const dedupKey = payloadDedupKey(payload);
+  if (dedupKey && await isAlreadySent(dedupKey)) {
+    console.log(`[iFood Extension] DESCARTADO (dedup): ${dedupKey} já enviado anteriormente.`);
+    return;
+  }
+
   if (!activeTabId) {
     console.warn('[iFood Extension] Nenhuma aba ativada. Enfileirando mensagem.');
     messageQueue.push(payload);
@@ -111,14 +192,28 @@ async function forwardToContentScript(payload) {
     }
 
     await sendMessageToTab(activeTabId, { type: 'SEND_CHAT_MESSAGE', payload });
+    // Sucesso: marca como enviado. (Confirmação semântica vem em
+    // MESSAGE_SENT do content script — mas o ack do tabs.sendMessage
+    // já garante que chegou no content. Marcar aqui é suficiente.)
+    if (dedupKey) markSent(dedupKey);
   } catch (e) {
     console.error('[iFood Extension] Falha ao enviar após retries:', e.message);
     messageQueue.push(payload);
   }
 }
 
+// Contador de mensagens que falharam — exposto no badge pra operador
+// notar imediatamente em vez do "dry-run mágico" antigo.
+let failedCount = 0;
+
 function updateBadge() {
   try {
+    if (failedCount > 0) {
+      // Falhas pendentes têm prioridade visual — operador precisa abrir popup.
+      chrome.action.setBadgeText({ text: String(failedCount) });
+      chrome.action.setBadgeBackgroundColor({ color: '#dc3545' });
+      return;
+    }
     if (connected && activeTabId) {
       // Connected + tab active = all good
       chrome.action.setBadgeText({ text: '' });
@@ -199,11 +294,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'MESSAGE_SENT') {
     console.log('[iFood Extension] Mensagem enviada:', msg.orderNumber);
+    // Decrementa badge de falhas se houvera retry com sucesso
+    if (failedCount > 0) { failedCount = Math.max(0, failedCount - 1); updateBadge(); }
     sendResponse({ ok: true });
     return false;
   }
   if (msg.type === 'MESSAGE_FAILED') {
     console.error('[iFood Extension] Mensagem falhou:', msg.orderNumber, msg.error);
+    failedCount += 1;
+    updateBadge();
+    // Persiste a falha para o popup exibir histórico/contexto.
+    chrome.storage.local.get(['failedMessages']).then(({ failedMessages = [] }) => {
+      const list = Array.isArray(failedMessages) ? failedMessages : [];
+      list.unshift({
+        orderNumber: msg.orderNumber,
+        kind: msg.kind || null,
+        error: msg.error || 'desconhecido',
+        at: Date.now(),
+      });
+      // mantém apenas 50 falhas mais recentes
+      chrome.storage.local.set({ failedMessages: list.slice(0, 50) });
+    });
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg.type === 'CLEAR_FAILURES') {
+    failedCount = 0;
+    chrome.storage.local.set({ failedMessages: [] });
+    updateBadge();
     sendResponse({ ok: true });
     return false;
   }

@@ -46,7 +46,14 @@ export async function tryEmitIfoodChat(order, newStatus) {
       .replace(/\{numero\}/g, orderNumber)
 
     const { emitirIfoodChat } = await import('../index.js')
-    emitirIfoodChat({ orderNumber, message: finalMessage, storeId, companyId: order.companyId })
+    emitirIfoodChat({
+      orderNumber,
+      orderId: order.id,
+      message: finalMessage,
+      storeId,
+      companyId: order.companyId,
+      kind: chatKey,
+    })
   } catch (e) {
     console.warn('[ifoodChatEmitter] tryEmitIfoodChat failed:', e?.message || e)
   }
