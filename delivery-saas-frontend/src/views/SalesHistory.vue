@@ -562,12 +562,14 @@ function getPaymentMethod(o){
 async function load(){
   loading.value = true;
   try{
-    const params = {};
+    const params = { light: true };
     if(filters.value.from) params.from = filters.value.from;
     if(filters.value.to) params.to = filters.value.to;
     if(filters.value.riderId) params.riderId = filters.value.riderId;
     console.log('[sales] GET /orders', params);
-    const { data } = await api.get('/orders', { params });
+    // Per-call 60s timeout — the heavy include + wide date ranges can
+    // exceed the global 15s default even with `light=true`.
+    const { data } = await api.get('/orders', { params, timeout: 60000 });
     orders.value = Array.isArray(data) ? data : (data?.orders || []);
     currentPage.value = 1;
     console.log('[sales] received', orders.value.length, 'orders');

@@ -56,10 +56,33 @@ ordersRouter.get('/', async (req, res) => {
     }
   }
 
+  // Light variant strips include scope that list views like SalesHistory
+  // never read (histories, full company, customer.addresses). On large
+  // ranges the heavy variant was timing out at the 15s client cap.
+  const light = String(req.query.light || '').toLowerCase() === 'true';
+  const include = light
+    ? {
+        items: true,
+        rider: true,
+        store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } },
+        company: { select: { id: true, name: true, timezone: true } },
+        customer: { select: { id: true, fullName: true, contact: true } },
+        menu: { select: { id: true, name: true } },
+      }
+    : {
+        items: true,
+        rider: true,
+        histories: true,
+        store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } },
+        company: true,
+        customer: { include: { addresses: true } },
+        menu: { select: { id: true, name: true } },
+      };
+
   const orders = await prisma.order.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: { items: true, rider: true, histories: true, store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } }, company: true, customer: { include: { addresses: true } }, menu: { select: { id: true, name: true } } }
+    include,
   });
 
   // compute a daily sequential visual id (displaySimple) per order date
