@@ -116,4 +116,28 @@ router.post('/generate-token', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+// POST /ifood-chat/generate-agent-token — token do app Electron (Delivery iFood Agent)
+// Separado do extensionToken para permitir migração paralela (até 2 meses)
+// e revogação independente entre extensão Chrome e app desktop.
+router.post('/generate-agent-token', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    if (!companyId) return res.status(400).json({ ok: false, message: 'No company' })
+
+    const token = randomToken(24)
+    const tokenHash = sha256(token)
+
+    await prisma.printerSetting.upsert({
+      where: { companyId },
+      update: { ifoodAgentTokenHash: tokenHash, ifoodAgentTokenCreatedAt: new Date() },
+      create: { companyId, ifoodAgentTokenHash: tokenHash, ifoodAgentTokenCreatedAt: new Date() },
+    })
+
+    res.json({ ok: true, token, companyId })
+  } catch (e) {
+    console.error('POST /ifood-chat/generate-agent-token failed', e)
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
 export default router
