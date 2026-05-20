@@ -70,7 +70,7 @@ ordersRouter.get('/', async (req, res) => {
         rider: true,
         store: { include: { apiIntegrations: { select: { provider: true, merchantName: true, merchantId: true, merchantUuid: true } } } },
         company: { select: { id: true, name: true, timezone: true } },
-        customer: { select: { id: true, fullName: true, contact: true } },
+        customer: { select: { id: true, fullName: true, whatsapp: true, phone: true } },
         menu: { select: { id: true, name: true } },
       }
     : {
