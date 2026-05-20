@@ -55,9 +55,76 @@ async function drain() {
   }
 }
 
+// Watcher injetado na página do iFood pra detectar o modal "Ação necessária"
+// que aparece quando a sessão do chat expira. Tenta clicar em "Reiniciar
+// sistema" automaticamente; se o botão não funcionar, loga um sentinel que
+// o host captura via console-message e dá reload no webview inteiro.
+//
+// Self-contained — sem imports nem chrome.* APIs. Roda em escopo da página.
+const REINIT_WATCHER_SCRIPT = `
+(() => {
+  if (window.__ifoodAgentReinitWatcher) return
+  window.__ifoodAgentReinitWatcher = true
+
+  let lastClickAt = 0
+  function maybeAct() {
+    const now = Date.now()
+    // throttle: no máx. 1 ação a cada 15s pra evitar loop
+    if (now - lastClickAt < 15000) return
+
+    const bodyText = document.body && document.body.innerText || ''
+    if (!/Ação necessária/i.test(bodyText)) return
+    if (!/Reiniciar sistema/i.test(bodyText)) return
+
+    // Procura o botão "Reiniciar sistema" — varre <button> e <a> visíveis
+    const candidates = Array.from(document.querySelectorAll('button, a, [role="button"]'))
+    const target = candidates.find((el) => {
+      const t = (el.innerText || el.textContent || '').trim()
+      return /Reiniciar sistema/i.test(t)
+    })
+
+    if (target) {
+      lastClickAt = now
+      console.log('[ifood-agent-reinit] clicando em "Reiniciar sistema"')
+      try { target.click() } catch (e) {
+        console.warn('[ifood-agent-reinit] falha ao clicar:', e && e.message)
+        console.log('[ifood-agent-needs-reload]')
+      }
+      return
+    }
+
+    // Detectou o texto mas não achou o botão — pede reload via host
+    lastClickAt = now
+    console.log('[ifood-agent-needs-reload]')
+  }
+
+  // Observa mudanças no DOM (o modal entra dinamicamente). Throttle via debounce.
+  let debounce = null
+  const observer = new MutationObserver(() => {
+    if (debounce) return
+    debounce = setTimeout(() => { debounce = null; maybeAct() }, 400)
+  })
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+
+  // Fallback: polling a cada 30s caso o observer não pegue algum caso de borda
+  setInterval(maybeAct, 30000)
+
+  // Primeira checagem imediata (caso o modal já esteja na tela ao carregar)
+  setTimeout(maybeAct, 1000)
+})()
+`
+
+let lastAutoReloadAt = 0
+
 function onDomReady() {
   ready.value = true
   drain()
+  // (Re-)injeta o watcher após cada dom-ready (navegação interna, reload, etc.)
+  if (webviewRef.value) {
+    webviewRef.value.executeJavaScript(REINIT_WATCHER_SCRIPT, true).catch((e) => {
+      console.warn('[ifood-webview] falha ao injetar reinit watcher:', e && e.message)
+    })
+  }
 }
 
 function reload() {
@@ -67,12 +134,26 @@ function reload() {
 }
 
 function onConsoleMessage(e) {
+  const msg = e.message || ''
+
+  // Sentinel do watcher: detectou "Ação necessária" mas o botão "Reiniciar
+  // sistema" não está disponível ou não funcionou. Reloda o webview inteiro,
+  // com throttle de 60s pra evitar loop.
+  if (msg.includes('[ifood-agent-needs-reload]')) {
+    const now = Date.now()
+    if (now - lastAutoReloadAt > 60000) {
+      lastAutoReloadAt = now
+      console.log('[ifood-webview] auto-reload disparado pelo watcher de "Ação necessária"')
+      reload()
+    }
+    return
+  }
+
   // Repassa o console do webview pro DevTools do app (Ctrl+Shift+I) com prefixo
-  // pra ficar fácil filtrar. Útil pra diagnosticar quando o chat do iFood não
-  // carrega (loading infinito) e queremos ver as mensagens da página.
+  // pra ficar fácil filtrar.
   const level = e.level === 2 ? 'error' : e.level === 1 ? 'warn' : 'log'
   // eslint-disable-next-line no-console
-  console[level](`[ifood-webview]`, e.message)
+  console[level](`[ifood-webview]`, msg)
 }
 
 onMounted(() => {
