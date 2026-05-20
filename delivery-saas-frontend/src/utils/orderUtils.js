@@ -104,16 +104,49 @@ export function splitVoucherDiscounts(order) {
 }
 
 /**
+ * Detecta se o pedido foi pago de forma online/prepaga (gateway iFood, PIX
+ * online, link de pagamento). Nesses casos a `additionalFees` é retida pelo
+ * marketplace antes do repasse. Em pagamentos "cobrar do cliente"
+ * (dinheiro/cartão na entrega), o cliente paga o total cheio ao motoboy e a
+ * loja recebe inclusive a taxa de serviço — não devemos descontar.
+ */
+function isPrepaidOrOnlineOrder(order) {
+  if (!order) return false;
+  const pl = order.payload || {};
+  if (pl?.payments?.prepaid === true) return true;
+  if (pl?.order?.payments?.prepaid === true) return true;
+  if (pl?.payment?.prepaid === true) return true;
+  if (pl?.payment?.isOnline === true) return true;
+  const checkOne = (p) => {
+    if (!p || typeof p !== 'object') return false;
+    if (p.prepaid === true || p.isOnline === true) return true;
+    const raw = String(p.method || p.methodCode || p.name || '').toLowerCase();
+    if (raw === 'online' || raw.startsWith('online')) return true;
+    if (raw === 'prepaid' || raw === 'prepago') return true;
+    if (typeof p.paymentType === 'string' && p.paymentType.toUpperCase().includes('PREPAID')) return true;
+    return false;
+  };
+  if (checkOne(order.payment)) return true;
+  if (checkOne(pl.payment)) return true;
+  const methods = pl?.order?.payments?.methods || pl?.payments?.methods;
+  if (Array.isArray(methods) && methods.some(checkOne)) return true;
+  return false;
+}
+
+/**
  * Calcula o total real faturado pela loja.
- * total (o que o cliente pagou) + discountIfood (o que o marketplace repassa)
- * - additionalFees (taxa de serviço retida pelo iFood).
+ * total (o que o cliente pagou) + discountIfood (o que o marketplace repassa).
+ * Subtrai `additionalFees` (taxa de serviço retida pelo iFood) APENAS quando
+ * o pagamento é online/prepaid — pra cash-on-delivery o cliente paga o total
+ * cheio ao motoboy, então a loja recebe a taxa também.
  * O desconto da loja (discountMerchant) NÃO entra — a loja absorve.
  */
 export function storeRevenue(order) {
   const v = splitVoucherDiscounts(order);
   const orderTotal = Number(order?.total || 0);
   const addFees = Number(order?.additionalFees || 0);
-  return orderTotal + v.discountIfood - addFees;
+  const feeDeduction = isPrepaidOrOnlineOrder(order) ? addFees : 0;
+  return orderTotal + v.discountIfood - feeDeduction;
 }
 
 /**
