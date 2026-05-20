@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
-    "build:renderer": "cd renderer && vite build",
+    "build:renderer": "cd renderer && npm run build",
     "build:win": "npm run build:renderer && electron-builder --win --x64",
     "build:mac": "npm run build:renderer && electron-builder --mac",
     "dist": "npm run build:renderer && electron-builder",

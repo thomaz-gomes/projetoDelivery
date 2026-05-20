@@ -1,0 +1,8 @@
+*.exe
+*.exe.blockmap
+*.dmg
+*.dmg.blockmap
+*.zip
+latest.yml
+latest-mac.yml
+latest-linux.yml
