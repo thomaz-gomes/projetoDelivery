@@ -73,6 +73,13 @@ async function isAlreadySent(key) {
   return !!map[key];
 }
 
+// In-flight: chaves em processamento mas ainda não confirmadas no chrome.storage.
+// Fecha a race window entre `isAlreadySent()` (lê do disco) e `markSent()` (grava
+// depois do send). Sem isso, 5 eventos do mesmo pedido chegando em rajada
+// (DISPATCHED é o mais afetado) leem "ainda não enviado" antes do primeiro
+// marcar e disparam 5 vezes.
+const inFlightKeys = new Set();
+
 function connect(config) {
   if (socket) {
     try { socket.disconnect(); } catch (e) { /* ignore */ }
@@ -166,21 +173,29 @@ async function forwardToContentScript(payload) {
     return;
   }
 
-  // Descarte 2: já enviado (dedup). Cobre re-emissão do backend e backlog
-  // duplicado entre reativações.
+  // Descarte 2: já enviado (dedup) OU em processamento agora. Cobre
+  // re-emissão do backend, backlog duplicado entre reativações, e a race
+  // window onde 5 eventos chegam antes do markSent gravar no disco.
   const dedupKey = payloadDedupKey(payload);
-  if (dedupKey && await isAlreadySent(dedupKey)) {
-    console.log(`[iFood Extension] DESCARTADO (dedup): ${dedupKey} já enviado anteriormente.`);
-    return;
-  }
-
-  if (!activeTabId) {
-    console.warn('[iFood Extension] Nenhuma aba ativada. Enfileirando mensagem.');
-    messageQueue.push(payload);
-    return;
+  if (dedupKey) {
+    if (inFlightKeys.has(dedupKey)) {
+      console.log(`[iFood Extension] DESCARTADO (in-flight): ${dedupKey} já em processamento.`);
+      return;
+    }
+    if (await isAlreadySent(dedupKey)) {
+      console.log(`[iFood Extension] DESCARTADO (dedup): ${dedupKey} já enviado anteriormente.`);
+      return;
+    }
+    inFlightKeys.add(dedupKey);
   }
 
   try {
+    if (!activeTabId) {
+      console.warn('[iFood Extension] Nenhuma aba ativada. Enfileirando mensagem.');
+      messageQueue.push(payload);
+      return;
+    }
+
     const tab = await chrome.tabs.get(activeTabId).catch(() => null);
     if (!tab) {
       console.warn('[iFood Extension] Aba ativada não existe mais. Desativando.');
@@ -191,14 +206,17 @@ async function forwardToContentScript(payload) {
       return;
     }
 
-    await sendMessageToTab(activeTabId, { type: 'SEND_CHAT_MESSAGE', payload });
-    // Sucesso: marca como enviado. (Confirmação semântica vem em
-    // MESSAGE_SENT do content script — mas o ack do tabs.sendMessage
-    // já garante que chegou no content. Marcar aqui é suficiente.)
-    if (dedupKey) markSent(dedupKey);
-  } catch (e) {
-    console.error('[iFood Extension] Falha ao enviar após retries:', e.message);
-    messageQueue.push(payload);
+    try {
+      await sendMessageToTab(activeTabId, { type: 'SEND_CHAT_MESSAGE', payload });
+      // Sucesso: marca como enviado.
+      if (dedupKey) await markSent(dedupKey);
+    } catch (e) {
+      console.error('[iFood Extension] Falha ao enviar após retries:', e.message);
+      messageQueue.push(payload);
+      // NÃO marca como enviado, MAS sai do in-flight pra permitir retry.
+    }
+  } finally {
+    if (dedupKey) inFlightKeys.delete(dedupKey);
   }
 }
 

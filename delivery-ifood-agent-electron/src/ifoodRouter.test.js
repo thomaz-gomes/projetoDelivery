@@ -64,3 +64,57 @@ test('handleSendResult records failure on success=false', () => {
   assert.strictEqual(fails.length, 1)
   assert.strictEqual(fails[0].error, 'iframe missing')
 })
+
+test('drops in-flight duplicate before handleSendResult is called', () => {
+  router._resetSentForTests()
+  router.clearFailures()
+  const payload = makePayload({ orderNumber: 'B1', kind: 'DISPATCHED' })
+
+  // Primeira emissão: vai pra fila do renderer e fica in-flight.
+  let forwardCount = 0
+  const r1 = router.handleIncomingChat(payload, {
+    forwardToRenderer: () => { forwardCount++ },
+  })
+  assert.strictEqual(r1.action, 'forward')
+  assert.strictEqual(forwardCount, 1)
+
+  // Segunda emissão CHEGA antes do handleSendResult — deve cair como in-flight,
+  // sem chamar forwardToRenderer de novo.
+  const r2 = router.handleIncomingChat(payload, {
+    forwardToRenderer: () => { forwardCount++ },
+  })
+  assert.strictEqual(r2.action, 'drop')
+  assert.strictEqual(r2.reason, 'in-flight')
+  assert.strictEqual(forwardCount, 1)
+
+  // Após handleSendResult com sucesso, vira already-sent.
+  router.handleSendResult({ key: r1.key, success: true })
+  const r3 = router.handleIncomingChat(payload, {
+    forwardToRenderer: () => { forwardCount++ },
+  })
+  assert.strictEqual(r3.action, 'drop')
+  assert.strictEqual(r3.reason, 'already-sent')
+  assert.strictEqual(forwardCount, 1)
+})
+
+test('in-flight is cleared on failure so retry is allowed', () => {
+  router._resetSentForTests()
+  router.clearFailures()
+  const payload = makePayload({ orderNumber: 'C1', kind: 'DISPATCHED' })
+
+  let forwardCount = 0
+  const r1 = router.handleIncomingChat(payload, {
+    forwardToRenderer: () => { forwardCount++ },
+  })
+  assert.strictEqual(r1.action, 'forward')
+
+  // Falha no envio → in-flight liberado, sent NÃO marcado.
+  router.handleSendResult({ key: r1.key, success: false, error: 'tab missing' })
+
+  // Próxima emissão deve passar normalmente — não é dedup nem in-flight.
+  const r2 = router.handleIncomingChat(payload, {
+    forwardToRenderer: () => { forwardCount++ },
+  })
+  assert.strictEqual(r2.action, 'forward')
+  assert.strictEqual(forwardCount, 2)
+})

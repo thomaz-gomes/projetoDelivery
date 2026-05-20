@@ -261,6 +261,30 @@ export function emitirInboxNewMessage({ companyId, conversation, message }) {
 // `kind` identifica o tipo de mensagem (CONFIRMED, DISPATCHED, DELIVERED, MANUAL)
 // — usado pela extensão pra TTL e dedup. `createdAt` permite descarte de
 // mensagens antigas no backlog quando a aba reativa após horas inativa.
+//
+// Dedup server-side: várias rotas chamam tryEmitIfoodChat para o mesmo pedido
+// quase ao mesmo tempo (ex. SAIU_PARA_ENTREGA é disparado pelo ticket de
+// check-in do entregador, pelo PATCH /orders/:id/status e às vezes pelo
+// webhook do iFood). Sem dedup centralizado, o cliente recebe a mesma
+// mensagem 3-5x. Janela de 90s cobre transições legítimas (ex. CONFIRMED →
+// DISPATCHED não compartilham chave porque o kind muda).
+const RECENT_EMIT_WINDOW_MS = 90 * 1000;
+const recentEmits = new Map(); // key → expireAt epoch ms
+
+function shouldSkipDuplicateEmit({ companyId, orderId, orderNumber, kind }) {
+  const id = orderId || orderNumber;
+  if (!id || !kind || !companyId) return false; // sem chave segura, não dedup
+  const key = `${companyId}:${id}:${kind}`;
+  const now = Date.now();
+  // GC oportunístico — limpa entradas vencidas a cada chamada
+  for (const [k, exp] of recentEmits) {
+    if (exp <= now) recentEmits.delete(k);
+  }
+  if (recentEmits.has(key)) return true;
+  recentEmits.set(key, now + RECENT_EMIT_WINDOW_MS);
+  return false;
+}
+
 export function emitirIfoodChat({ orderNumber, message, storeId, companyId, kind = null, orderId = null }) {
   if (!io) {
     console.warn('⚠️ Socket.IO não inicializado — ifood:chat não emitido.');
@@ -268,6 +292,10 @@ export function emitirIfoodChat({ orderNumber, message, storeId, companyId, kind
   }
   if (!companyId) {
     console.warn('⚠️ emitirIfoodChat: companyId ausente — abortando');
+    return;
+  }
+  if (shouldSkipDuplicateEmit({ companyId, orderId, orderNumber, kind })) {
+    console.log(`🔁 ifood:chat DEDUP server-side — pedido: ${orderNumber} kind: ${kind || 'manual'} (janela ${RECENT_EMIT_WINDOW_MS/1000}s)`);
     return;
   }
   try {

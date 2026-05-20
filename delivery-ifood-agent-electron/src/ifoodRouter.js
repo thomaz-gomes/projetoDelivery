@@ -31,6 +31,12 @@ function safeSave(map) {
 
 let sent = safeLoad()
 
+// In-flight: chaves enviadas para o renderer mas ainda sem handleSendResult.
+// Sem isso, várias emissões do backend pra mesma (orderId, kind) — comum
+// principalmente em DISPATCHED — passam todas pelo dedup porque nenhuma
+// marcou sent ainda. handleSendResult limpa o in-flight no sucesso/erro.
+const inFlight = new Set()
+
 function handleIncomingChat(payload, { forwardToRenderer } = {}) {
   if (!payload) return { action: 'drop', reason: 'no-payload' }
 
@@ -45,8 +51,14 @@ function handleIncomingChat(payload, { forwardToRenderer } = {}) {
   }
 
   const key = ttlDedupe.dedupKey(payload)
-  if (key && sent[key]) {
-    return { action: 'drop', reason: 'already-sent' }
+  if (key) {
+    if (inFlight.has(key)) {
+      return { action: 'drop', reason: 'in-flight' }
+    }
+    if (sent[key]) {
+      return { action: 'drop', reason: 'already-sent' }
+    }
+    inFlight.add(key)
   }
 
   if (typeof forwardToRenderer === 'function') {
@@ -59,6 +71,8 @@ function handleSendResult(result) {
   if (!result || typeof result !== 'object') {
     return { recorded: false, reason: 'invalid-result' }
   }
+  // Libera o in-flight em qualquer caso (sucesso, erro ou shape inválido).
+  if (result.key) inFlight.delete(result.key)
   if (result.success === true && result.key) {
     sent[result.key] = Date.now()
     safeSave(sent)
@@ -87,6 +101,7 @@ function clearFailures() {
 
 function _resetSentForTests() {
   sent = {}
+  inFlight.clear()
   safeSave({})
 }
 
