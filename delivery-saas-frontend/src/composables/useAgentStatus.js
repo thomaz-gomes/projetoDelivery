@@ -19,6 +19,9 @@ export function useAgentStatus() {
   const lastSeenAt = ref(null);
   const hoursSinceLastSeen = ref(null);
   const hasAnyToken = ref(false);
+  const hasAgentToken = ref(false);
+  const hasExtensionToken = ref(false);
+  const isOnline = ref(false);
   const banner = ref(null); // null | 'never-connected' | 'stale'
   const loading = ref(false);
   const error = ref('');
@@ -47,6 +50,9 @@ export function useAgentStatus() {
       lastSeenAt.value = data?.lastSeenAt || null;
       hoursSinceLastSeen.value = (typeof data?.hoursSinceLastSeen === 'number') ? data.hoursSinceLastSeen : null;
       hasAnyToken.value = !!data?.hasAnyToken;
+      hasAgentToken.value = !!data?.hasAgentToken;
+      hasExtensionToken.value = !!data?.hasExtensionToken;
+      isOnline.value = !!data?.isOnline;
       computeBanner();
     } catch (e) {
       error.value = e?.response?.data?.message || e?.message || 'Erro ao consultar status do agente';
@@ -75,6 +81,9 @@ export function useAgentStatus() {
     lastSeenAt,
     hoursSinceLastSeen,
     hasAnyToken,
+    hasAgentToken,
+    hasExtensionToken,
+    isOnline,
     banner,
     loading,
     error,

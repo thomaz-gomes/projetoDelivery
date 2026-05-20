@@ -128,11 +128,15 @@ router.get('/agent-status', requireRole('ADMIN'), async (req, res) => {
       select: { ifoodAgentLastSeenAt: true, extensionTokenHash: true, ifoodAgentTokenHash: true },
     })
     const lastSeenAt = setting?.ifoodAgentLastSeenAt || null
-    const hasAnyToken = !!(setting?.extensionTokenHash || setting?.ifoodAgentTokenHash)
+    const hasExtensionToken = !!setting?.extensionTokenHash
+    const hasAgentToken = !!setting?.ifoodAgentTokenHash
+    const hasAnyToken = hasExtensionToken || hasAgentToken
     const hoursSinceLastSeen = lastSeenAt
       ? Math.floor((Date.now() - new Date(lastSeenAt).getTime()) / (1000 * 60 * 60))
       : null
-    res.json({ ok: true, lastSeenAt, hoursSinceLastSeen, hasAnyToken })
+    // Consideramos a integração "ativa" se foi visto online nas últimas 24h.
+    const isOnline = lastSeenAt && hoursSinceLastSeen !== null && hoursSinceLastSeen < 24
+    res.json({ ok: true, lastSeenAt, hoursSinceLastSeen, hasAnyToken, hasExtensionToken, hasAgentToken, isOnline })
   } catch (e) {
     console.error('GET /ifood-chat/agent-status failed', e)
     res.status(500).json({ ok: false, error: e.message })
@@ -159,6 +163,36 @@ router.post('/generate-agent-token', requireRole('ADMIN'), async (req, res) => {
     res.json({ ok: true, token, companyId })
   } catch (e) {
     console.error('POST /ifood-chat/generate-agent-token failed', e)
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+// POST /ifood-chat/deactivate-agent — revoga o token do app Electron.
+// Body opcional: { alsoRevokeExtension: true } revoga também o token da
+// extensão Chrome (encerrando completamente a integração).
+router.post('/deactivate-agent', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    if (!companyId) return res.status(400).json({ ok: false, message: 'No company' })
+    const alsoRevokeExtension = req.body?.alsoRevokeExtension === true
+
+    const data = {
+      ifoodAgentTokenHash: null,
+      ifoodAgentTokenCreatedAt: null,
+    }
+    if (alsoRevokeExtension) {
+      data.extensionTokenHash = null
+      data.extensionTokenCreatedAt = null
+    }
+
+    await prisma.printerSetting.update({
+      where: { companyId },
+      data,
+    })
+
+    res.json({ ok: true, deactivated: true, alsoRevokeExtension })
+  } catch (e) {
+    console.error('POST /ifood-chat/deactivate-agent failed', e)
     res.status(500).json({ ok: false, error: e.message })
   }
 })

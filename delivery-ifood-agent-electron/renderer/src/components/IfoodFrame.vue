@@ -66,12 +66,25 @@ function reload() {
   }
 }
 
+function onConsoleMessage(e) {
+  // Repassa o console do webview pro DevTools do app (Ctrl+Shift+I) com prefixo
+  // pra ficar fácil filtrar. Útil pra diagnosticar quando o chat do iFood não
+  // carrega (loading infinito) e queremos ver as mensagens da página.
+  const level = e.level === 2 ? 'error' : e.level === 1 ? 'warn' : 'log'
+  // eslint-disable-next-line no-console
+  console[level](`[ifood-webview]`, e.message)
+}
+
 onMounted(() => {
   const wv = webviewRef.value
   if (wv) {
     wv.addEventListener('dom-ready', onDomReady)
-    wv.addEventListener('did-fail-load', () => { ready.value = false })
+    wv.addEventListener('did-fail-load', (e) => {
+      ready.value = false
+      console.warn('[ifood-webview] did-fail-load:', e.errorCode, e.errorDescription, e.validatedURL)
+    })
     wv.addEventListener('did-finish-load', () => { ready.value = true; drain() })
+    wv.addEventListener('console-message', onConsoleMessage)
   }
 })
 
@@ -81,10 +94,17 @@ watch(() => props.reloadKey, (newVal, oldVal) => {
 </script>
 
 <template>
+  <!--
+    useragent: o iFood detecta UA "Electron/..." e quebra o WebSocket do chat
+    (fica em loading infinito). Passamos um UA de Chrome estável pra parecer
+    um Chromium normal. A versão do Chrome aqui deve ficar próxima da versão
+    do Chromium embarcado no Electron usado (Electron 28 = Chromium 120).
+  -->
   <webview
     ref="webviewRef"
     src="https://gestordepedidos.ifood.com.br/"
     partition="persist:ifood"
+    useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     allowpopups
     class="ifood-webview"
   />

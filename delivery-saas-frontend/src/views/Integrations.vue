@@ -22,6 +22,7 @@ const integrations = ref([])
 const metaPixels = ref([])
 const stores = ref([])
 const menus = ref([])
+const ifoodAgentStatus = ref(null) // { hasAgentToken, hasExtensionToken, isOnline, lastSeenAt }
 
 // modal for choosing integration type
 const showTypeModal = ref(false)
@@ -76,6 +77,10 @@ async function load() {
       const { data: pxs } = await api.get('/meta-pixel')
       metaPixels.value = pxs || []
     } catch (e) { metaPixels.value = [] }
+    try {
+      const { data: ag } = await api.get('/ifood-chat/agent-status')
+      ifoodAgentStatus.value = ag || null
+    } catch (e) { ifoodAgentStatus.value = null }
     total.value = allItems.value.length
   } catch (e) {
     console.error(e);
@@ -97,6 +102,8 @@ function selectType(type) {
 function goEdit(item) {
   if (item._type === 'META_PIXEL') {
     router.push('/settings/meta-pixel')
+  } else if (item._type === 'IFOOD_AGENT') {
+    router.push('/settings/ifood-agent')
   } else if ((item.provider || '').toUpperCase() === 'AIQFOME') {
     router.push('/settings/integrations/aiqfome')
   } else {
@@ -109,6 +116,10 @@ const remove = async (it) => {
     const res = await Swal.fire({ title: 'Remover Meta Pixel?', text: `Remover pixel do cardápio ${menuName(it.menuId)}?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Remover', cancelButtonText: 'Cancelar' })
     if(!res.isConfirmed) return
     try{ await api.delete(`/meta-pixel/${it.id}`); await load(); Swal.fire({ icon:'success', text:'Pixel removido' }) }catch(e){ console.error(e); Swal.fire({ icon:'error', text: e.response?.data?.message || 'Erro ao remover' }) }
+  } else if (it._type === 'IFOOD_AGENT') {
+    const res = await Swal.fire({ title: 'Desativar Agente iFood?', text: 'Isso revoga os tokens do app desktop e da extensão Chrome. Continuar?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Desativar', cancelButtonText: 'Cancelar' })
+    if(!res.isConfirmed) return
+    try{ await api.post('/ifood-chat/deactivate-agent', { alsoRevokeExtension: true }); await load(); Swal.fire({ icon:'success', text:'Integração desativada' }) }catch(e){ console.error(e); Swal.fire({ icon:'error', text: e.response?.data?.message || 'Erro ao desativar' }) }
   } else {
     const res = await Swal.fire({ title: 'Remover integração?', text: `Remover ${it.provider} vinculado à loja ${storeName(it.storeId)}?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Remover', cancelButtonText: 'Cancelar' })
     if(!res.isConfirmed) return
@@ -129,7 +140,27 @@ const allItems = computed(() => {
     return { ...i, _type: 'API', _label: i.provider || 'API', _sublabel: sublabel };
   })
   const pxInts = (metaPixels.value || []).map(p => ({ ...p, _type: 'META_PIXEL', _label: 'Meta Pixel', _sublabel: menuName(p.menuId), enabled: p.enabled }))
-  return [...apiInts, ...pxInts]
+
+  // Linha sintética para a integração "Agente iFood" — não é uma row da tabela
+  // `Integration`, mas sim um par de tokens em `PrinterSetting`. Listamos aqui
+  // para que o operador veja o status junto com as demais integrações.
+  const agentRows = []
+  const ag = ifoodAgentStatus.value
+  if (ag && (ag.hasAgentToken || ag.hasExtensionToken)) {
+    const channels = []
+    if (ag.hasAgentToken) channels.push('App Desktop')
+    if (ag.hasExtensionToken) channels.push('Extensão Chrome')
+    agentRows.push({
+      id: '__ifood_agent__',
+      _type: 'IFOOD_AGENT',
+      _label: 'Agente iFood (Chat Automático)',
+      _sublabel: channels.join(' + '),
+      enabled: !!ag.isOnline,
+      createdAt: ag.lastSeenAt,
+    })
+  }
+
+  return [...apiInts, ...pxInts, ...agentRows]
 })
 
 const displayed = computed(() => {
@@ -221,11 +252,13 @@ function showToggleHelp() {
                   <div class="d-flex align-items-center gap-2">
                     <img v-if="it._type === 'API' && (it.provider||'').toUpperCase() === 'IFOOD'" src="https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png" alt="iFood" style="height:20px" />
                     <img v-else-if="it._type === 'API' && (it.provider||'').toUpperCase() === 'AIQFOME'" src="https://aiqfome.com/favicon.ico" alt="aiqfome" style="height:20px" />
+                    <img v-else-if="it._type === 'IFOOD_AGENT'" src="https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png" alt="iFood Agent" style="height:20px" />
                     <svg v-else-if="it._type === 'META_PIXEL'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                     <i v-else class="bi bi-plug"></i>
                     <strong>{{ it._label }}</strong>
                   </div>
                   <div v-if="it._type === 'META_PIXEL'" class="small text-muted">Pixel ID: {{ it.pixelId }}</div>
+                  <div v-else-if="it._type === 'IFOOD_AGENT'" class="small text-muted">Chat automático</div>
                   <div v-else class="small text-muted">ClientId: {{ it.clientId ? '●●●' : '-' }}</div>
                 </td>
                 <td>{{ it._sublabel }}</td>
