@@ -5,6 +5,7 @@ const config = require('./src/config')
 const socketClient = require('./src/socketClient')
 const router = require('./src/ifoodRouter')
 const { dedupKey } = require('./src/ttlDedupe')
+const updater = require('./src/updater')
 
 let mainWindow = null
 
@@ -38,6 +39,11 @@ ipcMain.handle('config:get', () => config.load())
 ipcMain.handle('config:save', (_evt, cfg) => {
   const ok = config.save(cfg)
   attemptConnect()
+  if (app.isPackaged) {
+    // backendUrl may have changed → re-point updater feed and check again.
+    // updater.start() is idempotent and safe to call repeatedly.
+    updater.start()
+  }
   return ok
 })
 
@@ -82,6 +88,11 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow()
   attemptConnect()
+  // Only run the auto-updater in packaged builds — in `npm start` dev mode,
+  // the build-time placeholder URL would noisy-error.
+  if (app.isPackaged) {
+    updater.start()
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

@@ -76,7 +76,13 @@ A extensão atual continua funcionando em paralelo por dois meses (até `2026-07
 
 - DevTools Protocol não é usado (último recurso). Os seletores do iFood Gestor estão em `injectedScript.js` e podem quebrar quando o iFood atualiza o frontend — basta atualizar o arquivo.
 - Se a sessão do iFood expirou, o app não tenta re-login automaticamente; o operador precisa abrir a janela e logar de novo.
-- Auto-update ainda não está habilitado (tarefa D3 pendente). Atualizações por enquanto são manuais via novo instalador.
+
+## Auto-update
+
+- O app consulta `<backendUrl>/downloads/ifood-agent/latest.yml` no boot e a cada 60 min (apenas em builds empacotados).
+- Usa `electron-updater` com provider `generic`; o `backendUrl` vem da config do operador (modal de onboarding).
+- Updates baixam em background e instalam silenciosamente no próximo `quit` do app — sem prompt.
+- Para publicar uma nova versão, siga `delivery-saas-backend/downloads/ifood-agent/README.md` (build, copiar `.exe` + `latest.yml` + `.blockmap`, commit, deploy).
 
 ## Troubleshooting
 
