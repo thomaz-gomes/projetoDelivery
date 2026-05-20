@@ -282,10 +282,11 @@ export function emitirIfoodChat({ orderNumber, message, storeId, companyId, kind
     const sockets = socketsInRoom(companyRoom(companyId));
     let sent = 0;
     for (const s of sockets) {
-      if (!s.extension) continue;
+      // Coexistência: aceita extensão Chrome E agente Electron até deprecação.
+      if (!s.extension && !s.ifoodAgent) continue;
       try { s.emit('ifood:chat', payload); sent++; } catch (e) { /* ignore */ }
     }
-    console.log(`📨 ifood:chat emitido para ${sent} extensões — pedido: ${orderNumber} kind: ${kind || 'manual'}`);
+    console.log(`📨 ifood:chat emitido para ${sent} clientes — pedido: ${orderNumber} kind: ${kind || 'manual'}`);
   } catch (e) {
     console.warn('Falha ao emitir ifood:chat:', e?.message || e);
   }

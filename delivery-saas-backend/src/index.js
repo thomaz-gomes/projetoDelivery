@@ -658,6 +658,33 @@ export function attachSocket(server) {
     return next();
   });
 
+  // iFood Agent (Electron) authentication — espelha extensionToken mas usa
+  // ifoodAgentTokenHash. Permite coexistência durante a migração paralela
+  // (2 meses) e revogação independente de cada um.
+  io.use(async (socket, next) => {
+    const ifoodAgentToken = socket.handshake.auth.ifoodAgentToken;
+    if (ifoodAgentToken) {
+      try {
+        const companyId = socket.handshake.auth.companyId;
+        if (!companyId) return next(new Error('ifood-agent-missing-companyId'));
+        const setting = await prisma.printerSetting.findUnique({
+          where: { companyId },
+          select: { ifoodAgentTokenHash: true },
+        });
+        if (!setting || !setting.ifoodAgentTokenHash) return next(new Error('ifood-agent-not-configured'));
+        const incomingHash = sha256(ifoodAgentToken);
+        if (incomingHash !== setting.ifoodAgentTokenHash) return next(new Error('invalid-ifood-agent-token'));
+        socket.ifoodAgent = { companyId };
+        socket.companyId = companyId;
+        console.log(`📦 Agente iFood Electron autenticado — company: ${companyId}`);
+      } catch (e) {
+        return next(new Error('ifood-agent-auth-error'));
+      }
+      return next();
+    }
+    return next();
+  });
+
   io.on("connection", (socket) => {
     const origin = socket.handshake && socket.handshake.headers && socket.handshake.headers.origin;
     console.log(`📡 Painel conectado: ${socket.id} (origin: ${origin})`);
