@@ -196,6 +196,43 @@
               </div>
             </div>
 
+            <!-- ── Padrões fiscais (fallback) ── -->
+            <div class="card mb-4">
+              <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>Padrões fiscais (fallback)</h6>
+              </div>
+              <div class="card-body">
+                <p class="text-muted small mb-3">
+                  Aplicados quando o produto ou a categoria do pedido <strong>não tem NCM/CFOP cadastrado</strong>.
+                  Evita NCM inválido (<code>00000000</code>) na NFC-e. Quando o produto possui dados fiscais próprios, eles têm prioridade.
+                </p>
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <TextInput
+                      label="NCM padrão"
+                      labelClass="form-label fw-semibold"
+                      v-model="form.nfeDefaultNcm"
+                      placeholder="21069090"
+                      inputClass="form-control"
+                      maxlength="8"
+                    />
+                    <div class="small text-muted mt-1">8 dígitos. Ex.: 21069090 (preparações alimentícias diversas).</div>
+                  </div>
+                  <div class="col-md-4">
+                    <TextInput
+                      label="CFOP padrão"
+                      labelClass="form-label fw-semibold"
+                      v-model="form.nfeDefaultCfop"
+                      placeholder="5102"
+                      inputClass="form-control"
+                      maxlength="4"
+                    />
+                    <div class="small text-muted mt-1">4 dígitos. Ex.: 5102 (venda mercadoria adquirida/recebida de terceiros).</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- ── Certificado Digital ── -->
             <div class="card mb-4">
               <div class="card-header"><h6 class="mb-0"><i class="bi bi-shield-lock me-2"></i>Certificado Digital A1 (PFX)</h6></div>
@@ -446,7 +483,7 @@ const TIMEZONES = [
   'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo',
   'Asia/Shanghai', 'Australia/Sydney'
 ]
-const form = ref({ name: '', address: '', latitude: null, longitude: null, city: '', state: '', ibgeCode: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', nextNNF: '', infCpl: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true, nfeDebugMode: false })
+const form = ref({ name: '', address: '', latitude: null, longitude: null, city: '', state: '', ibgeCode: '', phone: '', whatsapp: '', bannerUrl: '', logoUrl: '', bannerBase64: null, logoBase64: null, timezone: DEFAULT_TZ, cnpj: '', ie: '', razaoSocial: '', nfeSerie: '1', nfeEnvironment: 'homologation', csc: '', cscId: '', nextNNF: '', infCpl: '', nfeDefaultNcm: '', nfeDefaultCfop: '', enderEmit: { xLgr: '', nro: '', xBairro: '', cMun: '', xMun: '', UF: '', CEP: '' }, certBase64: null, certFileName: '', certPassword: '', clearCert: false, storedCertExists: false, storedCertFilename: null, storedCertPasswordStored: false, isActive: true, nfeDebugMode: false })
 
 // IBGE API: states and cities
 const ibgeStates = ref([])
@@ -679,6 +716,8 @@ async function load() {
       form.value.infCpl = s.infCpl || ''
       form.value.csc = s.csc || ''
       form.value.cscId = s.cscId || ''
+      form.value.nfeDefaultNcm = s.nfeDefaultNcm || ''
+      form.value.nfeDefaultCfop = s.nfeDefaultCfop || ''
       if (s.enderEmit && typeof s.enderEmit === 'object') {
         form.value.enderEmit = { xLgr: s.enderEmit.xLgr || '', nro: s.enderEmit.nro || '', xBairro: s.enderEmit.xBairro || '', cMun: s.enderEmit.cMun || '', xMun: s.enderEmit.xMun || '', UF: s.enderEmit.UF || '', CEP: s.enderEmit.CEP || '' }
       }
@@ -831,6 +870,8 @@ async function save(){
       infCpl: form.value.infCpl != null ? String(form.value.infCpl).slice(0, 5000) : null,
       csc: form.value.csc || undefined,
       cscId: form.value.cscId || undefined,
+      nfeDefaultNcm: form.value.nfeDefaultNcm ? String(form.value.nfeDefaultNcm).replace(/\D/g, '').slice(0, 8) : undefined,
+      nfeDefaultCfop: form.value.nfeDefaultCfop ? String(form.value.nfeDefaultCfop).replace(/\D/g, '').slice(0, 4) : undefined,
       enderEmit: form.value.enderEmit || undefined,
       nfeDebugMode: form.value.nfeDebugMode,
     }

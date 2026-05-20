@@ -315,9 +315,17 @@
                   <span>Descontos R$</span>
                   <span>- {{ fmtNumber(danfeData.desconto) }}</span>
                 </div>
-                <div v-if="danfeData.acrescimo > 0" class="d-flex justify-content-between danfe-small">
-                  <span>Acréscimos R$</span>
-                  <span>+ {{ fmtNumber(danfeData.acrescimo) }}</span>
+                <div v-if="danfeData.deliveryFee > 0" class="d-flex justify-content-between danfe-small">
+                  <span>Taxa entrega R$</span>
+                  <span>+ {{ fmtNumber(danfeData.deliveryFee) }}</span>
+                </div>
+                <div v-if="danfeData.additionalFees > 0" class="d-flex justify-content-between danfe-small">
+                  <span>Valor adicional R$</span>
+                  <span>+ {{ fmtNumber(danfeData.additionalFees) }}</span>
+                </div>
+                <div v-if="danfeData.surcharge > 0" class="d-flex justify-content-between danfe-small">
+                  <span>Outros acréscimos R$</span>
+                  <span>+ {{ fmtNumber(danfeData.surcharge) }}</span>
                 </div>
                 <div class="d-flex justify-content-between mt-1">
                   <span class="fw-bold">VALOR A PAGAR R$</span>
@@ -368,7 +376,6 @@
 
               <!-- ── Tributos (IBPT) ─────────────────────────────────── -->
               <div class="mt-3 danfe-small text-center">
-                <div v-if="danfeData.deliveryFee > 0">Taxa de entrega: {{ fmtCurrency(danfeData.deliveryFee) }}.</div>
                 <div>
                   Tributos Aproximados — Total {{ fmtCurrency(danfeData.tributos.total) }}.
                   Federal {{ fmtCurrency(danfeData.tributos.federal) }}.
@@ -429,8 +436,10 @@ const danfeData = computed(() => {
   const desconto = Number(order.couponDiscount || payload.couponDiscount || 0)
     + Number(payload.discountMerchant || 0)
     + Number(payload.paymentDiscount || 0)
-  const acrescimo = Number(order.deliveryFee || payload.deliveryFee || 0)
-    + Number(payload.surcharge || 0)
+  const deliveryFee = Number(order.deliveryFee || payload.deliveryFee || 0)
+  const additionalFees = Number(order.additionalFees || payload.additionalFees || 0)
+  const surcharge = Number(payload.surcharge || 0)
+  const acrescimo = deliveryFee + additionalFees + surcharge
   const valorPagar = Number(order.total != null ? order.total : (subtotal - desconto + acrescimo))
 
   // Payments — accept payload.payments[] (multi), payload.payment{} (legacy)
@@ -487,11 +496,13 @@ const danfeData = computed(() => {
     subtotal,
     desconto,
     acrescimo,
+    deliveryFee,
+    additionalFees,
+    surcharge,
     valorPagar,
     payments,
     troco,
     tributos,
-    deliveryFee: Number(order.deliveryFee || payload.deliveryFee || 0),
     consultaUrl: 'http://nfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx',
     nNF,
     serie,

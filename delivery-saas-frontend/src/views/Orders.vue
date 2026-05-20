@@ -1761,7 +1761,11 @@ async function emitirNfeOrder(order) {
       const idx = store.orders.findIndex(o => o && o.id === order.id)
       if (idx !== -1) store.orders.splice(idx, 1, patchOrder(store.orders[idx]))
       if (selectedOrder.value?.id === order.id) selectedOrder.value = patchOrder(selectedOrder.value)
-      Swal.fire({ icon: 'success', title: 'NF-e Autorizada', text: `Protocolo: ${data.nProt}`, toast: true, timer: 4000, position: 'top-end', showConfirmButton: false })
+      Swal.fire({ icon: 'success', title: 'NF-e Autorizada', text: `Protocolo: ${data.nProt} — enviando DANFE para impressão...`, toast: true, timer: 3000, position: 'top-end', showConfirmButton: false })
+      // Auto-imprime a DANFE no agente fiscal logo após emissão bem-sucedida.
+      // Operador faz "emitir + imprimir" em um único clique. Se falhar, o botão
+      // do card permanece como "imprimir DANFE" para retry manual.
+      try { await imprimirDanfe(patchOrder(order)) } catch (_) { /* erro já reportado por imprimirDanfe */ }
     } else {
       Swal.fire({ icon: 'error', title: 'Erro NF-e', text: data.xMotivo || data.error })
     }

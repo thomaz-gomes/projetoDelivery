@@ -19,39 +19,12 @@ const ESCPos = require('./printing/escpos');
 const { DEFAULT_TEMPLATE_80, DEFAULT_TEMPLATE_58 } = require('./defaultTemplate');
 const logger = require('./logger');
 
-// Espelha src/utils/orderUtils.js#isPrepaidOrOnlineOrder no frontend.
-// Em pedidos cash/card-on-delivery o cliente paga o total cheio ao motoboy
-// (taxa de serviço inclusa); só em pedidos online/prepaid o marketplace
-// retém a taxa antes do repasse. Usar pra decidir se totalVal deve descontar
-// `additionalFees`.
-function _isPrepaidOrOnlineOrder(order) {
-  if (!order) return false;
-  const pl = order.payload || {};
-  if (pl?.payments?.prepaid === true) return true;
-  if (pl?.order?.payments?.prepaid === true) return true;
-  if (pl?.payment?.prepaid === true) return true;
-  if (pl?.payment?.isOnline === true) return true;
-  const checkOne = (p) => {
-    if (!p || typeof p !== 'object') return false;
-    if (p.prepaid === true || p.isOnline === true) return true;
-    const raw = String(p.method || p.methodCode || p.name || '').toLowerCase();
-    if (raw === 'online' || raw.startsWith('online')) return true;
-    if (raw === 'prepaid' || raw === 'prepago') return true;
-    if (typeof p.paymentType === 'string' && p.paymentType.toUpperCase().includes('PREPAID')) return true;
-    return false;
-  };
-  if (checkOne(order.payment)) return true;
-  if (checkOne(pl.payment)) return true;
-  const methods = pl?.order?.payments?.methods || pl?.payments?.methods;
-  if (Array.isArray(methods) && methods.some(checkOne)) return true;
-  return false;
-}
-
 // ─── Ponto de entrada ─────────────────────────────────────────────────────────
 function render(order, printer) {
   const charset = printer.characterSet || 'PC850';
   const widthMm = printer.width || 80;
-  const cols    = printer.columns || ESCPos.columnsForWidth(widthMm);
+  const colsA   = printer.columns || ESCPos.columnsForWidth(widthMm);
+  const colsB   = printer.fontBColumns || ESCPos.columnsForFont(widthMm, 'B');
   const margin  = printer.marginLeft || 0;
 
   const header = [
@@ -59,7 +32,7 @@ function render(order, printer) {
     ESCPos.codepage(charset),
     ESCPos.density(printer.density ?? 8),
     ESCPos.lineSpacingDefault(),
-    ESCPos.printMode({ bold: false, doubleH: false, doubleW: false, smallFont: false }), // Font A padrão
+    ESCPos.font('A'), // garante reset para Font A no início
     ESCPos.charSize(1, 1),
   ];
 
@@ -69,7 +42,7 @@ function render(order, printer) {
     try {
       const parsed = JSON.parse(printer.template);
       if (parsed && parsed.v === 2 && Array.isArray(parsed.blocks)) {
-        return _renderBlocks(parsed.blocks, order, printer, header, cols, margin, charset);
+        return _renderBlocks(parsed.blocks, order, printer, header, colsA, margin, charset);
       }
     } catch (_) { /* não é JSON — continuar */ }
   }
@@ -84,37 +57,46 @@ function render(order, printer) {
   const lines      = processTemplate(template, context);
   const parts      = [...header];
 
-  let curWidthMult = 1; // rastreia multiplicador de largura ativo
+  let curWidthMult = 1;  // multiplicador de LARGURA ativo (altura NÃO afeta colunas)
+  let curFont      = 'A'; // fonte ativa: A=base, B=mais estreita
+
+  /** Colunas úteis no momento atual, considerando font e size. */
+  const effectiveCols = () => {
+    const base = curFont === 'B' ? colsB : colsA;
+    return Math.floor((base - margin) / curWidthMult);
+  };
 
   for (const line of lines) {
     if (line.type === 'text') {
-      const textCols = Math.floor((cols - margin) / curWidthMult);
+      const textCols = effectiveCols();
       const textLines = line.content.split('\n');
       for (const tl of textLines) {
         if (tl.length <= textCols) {
           if (margin > 0) parts.push(ESCPos.marginLeft(margin));
           parts.push(ESCPos.text(tl, charset));
         } else {
-          let rest = tl;
-          while (rest.length > 0) {
-            const part = _wordBreak(rest, textCols);
-            rest = rest.slice(part.length).trimStart();
+          const indent = _autoIndentForLine(tl);
+          const wrapped = _wrapLinesWithIndent(tl, textCols, indent);
+          for (const wl of wrapped) {
             if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-            parts.push(ESCPos.text(part, charset));
+            parts.push(ESCPos.text(wl, charset));
           }
         }
       }
     } else if (line.type === 'sep') {
-      const effCols = Math.floor((cols - margin) / curWidthMult);
       parts.push(ESCPos.align('left'));
-      parts.push(ESCPos.separator(effCols, line.char || '-'));
+      parts.push(ESCPos.separator(effectiveCols(), line.char || '-'));
     } else if (line.type === 'bold') {
       parts.push(ESCPos.bold(line.on));
     } else if (line.type === 'size') {
       const w = line.w || line.mult || 1;
       const h = line.h || line.mult || 1;
-      curWidthMult = h >= 2 ? Math.max(w, 2) : w;
+      // Apenas a LARGURA dobrada reduz colunas. Altura dupla (h>=2, w=1) NÃO reduz.
+      curWidthMult = Math.max(1, w);
       parts.push(ESCPos.charSize(w, h));
+    } else if (line.type === 'font') {
+      curFont = String(line.value || 'A').toUpperCase() === 'B' ? 'B' : 'A';
+      parts.push(ESCPos.font(curFont));
     } else if (line.type === 'align') {
       parts.push(ESCPos.align(line.value));
     } else if (line.type === 'feed') {
@@ -122,8 +104,8 @@ function render(order, printer) {
     } else if (line.type === 'invert') {
       parts.push(ESCPos.invert(line.on));
     } else if (line.type === 'row') {
-      const effCols = Math.floor((cols - margin) / curWidthMult);
-      parts.push(..._rowWithWrap(line.left, line.right, effCols, margin, charset));
+      const rowIndent = _autoIndentForRowLeft(line.left);
+      parts.push(..._rowWithWrap(line.left, line.right, effectiveCols(), margin, charset, rowIndent));
     } else if (line.type === 'qr') {
       parts.push(ESCPos.align('center'));
       parts.push(ESCPos.qrCode(line.data, 4, 1));
@@ -153,7 +135,7 @@ function _rowWithWrap(left, right, effCols, margin, charset, indent) {
   const minGap = 1;
   const indentN  = indent || 0;
   const maxFirst = effCols - right.length - minGap;
-  const contMax  = effCols - indentN;
+  const contMax  = Math.max(1, effCols - indentN);
   const indentStr = indentN > 0 ? ' '.repeat(indentN) : '';
 
   /** Emite uma linha com EXATAMENTE effCols chars (pad com espaços). */
@@ -164,8 +146,13 @@ function _rowWithWrap(left, right, effCols, margin, charset, indent) {
   }
 
   if (maxFirst <= 0) {
-    // Não cabe de jeito nenhum: preço sozinho na linha
-    emit(left.slice(0, effCols));
+    // Não cabe de jeito nenhum: emite o `left` em múltiplas linhas e o `right` sozinho no fim
+    let rest = left;
+    while (rest.length > 0) {
+      const { chunk, consumed } = _wordBreakSmart(rest, effCols);
+      rest = rest.slice(consumed).trimStart();
+      emit(chunk);
+    }
     emit(' '.repeat(effCols - right.length) + right);
   } else if (left.length <= maxFirst) {
     // Cabe numa linha
@@ -173,16 +160,16 @@ function _rowWithWrap(left, right, effCols, margin, charset, indent) {
     emit(left + ' '.repeat(padN) + right);
   } else {
     // Trunca por palavras — preço fixo na 1ª linha
-    const firstPart = _wordBreak(left, maxFirst);
-    let rest = left.slice(firstPart.length).trimStart();
-    const firstPad = effCols - firstPart.length - right.length;
-    emit(firstPart + ' '.repeat(firstPad) + right);
+    const first = _wordBreakSmart(left, maxFirst);
+    let rest = left.slice(first.consumed).trimStart();
+    const firstPad = effCols - first.chunk.length - right.length;
+    emit(first.chunk + ' '.repeat(firstPad) + right);
 
     // Linhas de continuação (indentadas, sem preço, cada uma exatamente effCols)
     while (rest.length > 0) {
-      const part = _wordBreak(rest, contMax);
-      rest = rest.slice(part.length).trimStart();
-      emit(indentStr + part);
+      const { chunk, consumed } = _wordBreakSmart(rest, contMax);
+      rest = rest.slice(consumed).trimStart();
+      emit(indentStr + chunk);
     }
   }
   return bufs;
@@ -193,6 +180,105 @@ function _wordBreak(text, maxWidth) {
   if (text.length <= maxWidth) return text;
   const breakAt = text.lastIndexOf(' ', maxWidth);
   return breakAt > 0 ? text.slice(0, breakAt) : text.slice(0, maxWidth);
+}
+
+/**
+ * Versão "smart" do word-break: retorna { chunk, consumed }.
+ *  - chunk    = string a ser impressa (pode incluir '-' final em quebra forçada)
+ *  - consumed = quantos chars do texto original foram consumidos (sem contar o '-' adicionado)
+ *
+ * Regras:
+ *   - Se cabe inteiro: chunk = texto, consumed = texto.length
+ *   - Se há espaço antes de maxWidth: corta no espaço, consumed = posição do espaço
+ *   - Senão (palavra única > maxWidth): corta em maxWidth-1 e adiciona '-' como sinal de continuação
+ */
+function _wordBreakSmart(text, maxWidth) {
+  if (!text) return { chunk: '', consumed: 0 };
+  if (text.length <= maxWidth) return { chunk: text, consumed: text.length };
+  const breakAt = text.lastIndexOf(' ', maxWidth);
+  if (breakAt > 0) return { chunk: text.slice(0, breakAt), consumed: breakAt };
+  if (maxWidth > 3) {
+    const cutAt = maxWidth - 1;
+    return { chunk: text.slice(0, cutAt) + '-', consumed: cutAt };
+  }
+  return { chunk: text.slice(0, maxWidth), consumed: maxWidth };
+}
+
+/**
+ * Quebra texto em múltiplas linhas respeitando largura, com indent opcional
+ * nas linhas a partir da 2ª. Força quebra com hífen quando palavra única excede.
+ *
+ * @param {string} text
+ * @param {number} maxWidth   largura da 1ª linha
+ * @param {number} indent     número de espaços de indent para 2ª linha em diante (0 = sem indent)
+ * @returns {string[]} array de linhas (cada uma <= maxWidth chars)
+ */
+function _wrapLinesWithIndent(text, maxWidth, indent) {
+  if (!text) return [''];
+  if (text.length <= maxWidth) return [text];
+  const indentN  = indent || 0;
+  const contMax  = Math.max(1, maxWidth - indentN);
+  const indentStr = indentN > 0 ? ' '.repeat(indentN) : '';
+  const lines = [];
+  let rest = text;
+  let first = true;
+  while (rest.length > 0) {
+    const width = first ? maxWidth : contMax;
+    const { chunk, consumed } = _wordBreakSmart(rest, width);
+    lines.push(first ? chunk : indentStr + chunk);
+    rest = rest.slice(consumed).trimStart();
+    first = false;
+  }
+  return lines;
+}
+
+/**
+ * Detecta o indent ideal para continuação da linha, em ordem:
+ *   1) "Label: " → posição depois do ": "
+ *   2) "  Nx Item" ou "1  Item" → posição depois do prefixo de quantidade
+ *   3) "   ** obs **" → posição depois dos asteriscos
+ *   4) Espaços iniciais → preservar como indent mínimo
+ * Limitado a 16 chars para evitar indents absurdos.
+ */
+function _autoIndentForLine(line) {
+  if (!line) return 0;
+  const cap = (n) => (n > 0 && n <= 16) ? n : 0;
+
+  // 1) "CLIENTE: " / "Obs: " / "Ref: " — com até ~14 chars antes do ":"
+  const labelM = line.match(/^( *)([A-Za-zÀ-ÿ.()][A-Za-zÀ-ÿ.() ]{0,14}:)\s/);
+  if (labelM) {
+    const n = labelM[1].length + labelM[2].length + 1;
+    if (n > 0 && n <= 16) return n;
+  }
+
+  // 2) "2  Item" / "1x Item" / "   3x Item"
+  const qtyM = line.match(/^( *)(\d+x?\s+)/);
+  if (qtyM) {
+    const n = qtyM[1].length + qtyM[2].length;
+    if (n > 0 && n <= 16) return n;
+  }
+
+  // 3) "   ** obs **"
+  const astM = line.match(/^( *)(\*\*\s+)/);
+  if (astM) {
+    const n = astM[1].length + astM[2].length;
+    if (n > 0 && n <= 16) return n;
+  }
+
+  // 4) Espaços iniciais
+  const leading = line.match(/^ */)[0].length;
+  return cap(leading);
+}
+
+/** Versão de `_autoIndentForLine` para o lado esquerdo de uma row (sem labels). */
+function _autoIndentForRowLeft(left) {
+  if (!left) return 0;
+  const m = left.match(/^( *)(\d+x?\s+)/);
+  if (m) {
+    const n = m[1].length + m[2].length;
+    if (n > 0 && n <= 16) return n;
+  }
+  return 0;
 }
 
 // ─── Renderizador de blocos JSON (formato do painel) ──────────────────────────
@@ -315,23 +401,23 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         else                       parts.push(ESCPos.charSize(1, 1));
 
         const content = substituteVars(block.c || '', ctx);
-        const wMult = (block.s === 'xl' || block.s === 'lg') ? 2 : 1;
+        // Apenas 'xl' (largura+altura dobradas) reduz colunas. 'lg' é só altura — colunas inalteradas.
+        const wMult = (block.s === 'xl') ? 2 : 1;
         const textCols = Math.floor((cols - margin) / wMult);
 
-        // Quebrar conteúdo em linhas que cabem na largura da impressora
+        // Quebrar conteúdo em linhas que cabem na largura da impressora,
+        // detectando prefixo de label para indentar continuação ("CLIENTE: João da Silva...")
         const rawLines = content.split('\n');
         for (const rawLine of rawLines) {
           if (rawLine.length <= textCols) {
             if (margin > 0) parts.push(ESCPos.marginLeft(margin));
             parts.push(ESCPos.text(rawLine, charset));
           } else {
-            // Word-wrap por palavras
-            let rest = rawLine;
-            while (rest.length > 0) {
-              const part = _wordBreak(rest, textCols);
-              rest = rest.slice(part.length).trimStart();
+            const indent = _autoIndentForLine(rawLine);
+            const wrapped = _wrapLinesWithIndent(rawLine, textCols, indent);
+            for (const wl of wrapped) {
               if (margin > 0) parts.push(ESCPos.marginLeft(margin));
-              parts.push(ESCPos.text(part, charset));
+              parts.push(ESCPos.text(wl, charset));
             }
           }
         }
@@ -356,8 +442,6 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
                 name:     s.name || s.description || '',
                 price:    Number(s.unitPrice || s.price || 0),
                 quantity: s.quantity != null ? Number(s.quantity) : null,
-                kind:     s.kind || null,
-                slotName: s.slotName || null,
               })),
             }))
           : (order.items || []);
@@ -381,10 +465,10 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
           const itemTotal  = (basePrice * qty) + (optsTotal * qty);
           const priceVal   = _fmtN(itemTotal);
 
-          // SIZE do nome (se configurado) — altura dobrada (h>=2) também reduz colunas efetivas
+          // SIZE do nome (se configurado) — apenas LARGURA dobrada reduz colunas (altura não)
           if (nameSize) {
             parts.push(ESCPos.charSize(nameSize.w, nameSize.h));
-            curItemW = nameSize.h >= 2 ? Math.max(nameSize.w, 2) : nameSize.w;
+            curItemW = Math.max(1, nameSize.w);
           }
           parts.push(ESCPos.bold(true));
           const nameCols = Math.floor((cols - margin) / curItemW);
@@ -395,7 +479,7 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
           // SIZE dos opcionais — se configurado usa o valor, senão reseta para normal
           if (optSize) {
             parts.push(ESCPos.charSize(optSize.w, optSize.h));
-            curItemW = optSize.h >= 2 ? Math.max(optSize.w, 2) : optSize.w;
+            curItemW = Math.max(1, optSize.w);
           } else if (nameSize) {
             // Nome tinha tamanho custom, opcionais não — resetar para normal
             parts.push(ESCPos.charSize(1, 1));
@@ -406,25 +490,17 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
           if (Array.isArray(item.options) && item.options.length > 0) {
             const optIndent = 3;
             const optPrefix = ' '.repeat(optIndent);
-            const maxOpt    = optCols - optIndent;
+            const maxOpt    = Math.max(1, optCols - optIndent);
             for (const opt of item.options) {
-              const optName = opt.name || '';
-              // Combo slot: "SlotName: name" (sem `+`, sem preço; já incluído no combo).
-              // Demais options: mantém comportamento histórico "{qty}x {name}".
-              let optText;
-              if (opt && opt.kind === 'combo_slot') {
-                const slotLabel = String(opt.slotName || '').trim();
-                optText = slotLabel ? `${slotLabel}: ${optName}` : optName;
-              } else {
-                const oqty = Number((opt && opt.quantity) || 1);
-                optText = `${oqty}x ${optName}`;
-              }
-              // Quebra por palavras, cada linha padded a optCols exatos
+              const optName  = opt.name || '';
+              const oqty     = Number(opt.quantity || 1);
+              const optText = `${oqty}x ${optName}`;
+              // Quebra por palavras (com hífen forçado quando palavra única excede)
               let rest = optText;
               while (rest.length > 0) {
-                const part = _wordBreak(rest, maxOpt);
-                rest = rest.slice(part.length).trimStart();
-                const raw = optPrefix + part;
+                const { chunk, consumed } = _wordBreakSmart(rest, maxOpt);
+                rest = rest.slice(consumed).trimStart();
+                const raw = optPrefix + chunk;
                 const padded = raw.length < optCols ? raw + ' '.repeat(optCols - raw.length) : raw.slice(0, optCols);
                 if (margin > 0) parts.push(ESCPos.marginLeft(margin));
                 parts.push(ESCPos.text(padded, charset));
@@ -453,24 +529,34 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         else if (pSize === 'lg') parts.push(ESCPos.charSize(1, 2));
         else                     parts.push(ESCPos.charSize(1, 1));
 
-        // Colunas efetivas: xl=metade, lg=metade (altura dobrada usa mais espaço horizontal)
-        const payCols = (pSize === 'xl' || pSize === 'lg') ? Math.floor((cols - margin) / 2) : (cols - margin);
+        // Colunas efetivas: apenas 'xl' (largura+altura) reduz cols. 'lg' é só altura.
+        const payCols = (pSize === 'xl') ? Math.floor((cols - margin) / 2) : (cols - margin);
 
         parts.push(ESCPos.invert(true));
         for (const p of rawPayments) {
           const method = _paymentLabel(p);
           const value  = _fmtN(_toNum(p.value || p.amount || p.valor || 0));
           const inner = payCols - 2;
-          const maxMethod = inner - value.length - 1;
-          const truncMethod = method.length > maxMethod ? _wordBreak(method, maxMethod) : method;
-          const rest = method.length > maxMethod ? method.slice(truncMethod.length).trimStart() : '';
+          const maxMethod = Math.max(1, inner - value.length - 1);
+          let truncMethod, rest;
+          if (method.length > maxMethod) {
+            const sb = _wordBreakSmart(method, maxMethod);
+            truncMethod = sb.chunk;
+            rest = method.slice(sb.consumed).trimStart();
+          } else {
+            truncMethod = method;
+            rest = '';
+          }
           const pad1 = inner - truncMethod.length - value.length;
           const line1 = ' ' + truncMethod + ' '.repeat(Math.max(pad1, 1)) + value + ' ';
           const padded1 = line1.length < payCols ? line1 + ' '.repeat(payCols - line1.length) : line1.slice(0, payCols);
           if (margin > 0) parts.push(ESCPos.marginLeft(margin));
           parts.push(ESCPos.text(padded1, charset));
-          if (rest) {
-            const line2 = ' ' + rest;
+          // Linhas de continuação para method com várias quebras (cont máxima = inner - 1 char indent)
+          while (rest.length > 0) {
+            const { chunk, consumed } = _wordBreakSmart(rest, Math.max(1, inner - 1));
+            rest = rest.slice(consumed).trimStart();
+            const line2 = '  ' + chunk; // 1 char de invert margin + 1 char indent
             const padded2 = line2.length < payCols ? line2 + ' '.repeat(payCols - line2.length) : line2.slice(0, payCols);
             if (margin > 0) parts.push(ESCPos.marginLeft(margin));
             parts.push(ESCPos.text(padded2, charset));
@@ -488,9 +574,7 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
         if (trocoVal > 0) {
           if (margin > 0) parts.push(ESCPos.marginLeft(margin));
           parts.push(ESCPos.bold(true));
-          const trocoDevido = _toNum(ctx.troco_devido_raw);
-          const suffix = trocoDevido > 0 ? ` (R$ ${_fmtN(trocoDevido)})` : '';
-          parts.push(ESCPos.text(`Troco para R$ ${_fmtN(trocoVal)}${suffix}`, charset));
+          parts.push(ESCPos.text(`Troco para R$ ${_fmtN(trocoVal)}`, charset));
           parts.push(ESCPos.bold(false));
         }
         break;
@@ -647,11 +731,9 @@ function buildBlockContext(order) {
 
   // Taxas adicionais (taxa de serviço iFood, etc.)
   const acrescimoVal = _toNum(order.additionalFees ?? _ifBc.total?.additionalFees ?? 0);
-  // Total faturado = cliente pagou + iFood repassa - taxa serviço (só quando
-  // o pedido é online/prepaid; em cash-on-delivery a loja recebe a taxa cheia).
+  // Total faturado = cliente pagou + iFood repassa - taxa serviço retida pelo iFood
   const discIfoodValBc = _toNum(order.discountIfood || 0);
-  const feeDeductionBc = _isPrepaidOrOnlineOrder(order) ? acrescimoVal : 0;
-  const totalVal    = _toNum(order.total) + discIfoodValBc - feeDeductionBc;
+  const totalVal    = _toNum(order.total) + discIfoodValBc - acrescimoVal;
   const localizadorBc   = _ifBc.customer?.phones?.[0]?.localizer || _ifBc.customer?.phone?.localizer || '';
   const codigo_coleta = _ifBc.delivery?.pickupCode || '';
 
@@ -698,10 +780,6 @@ function buildBlockContext(order) {
     // Troco (changeFor) — extraído pelo enrichOrderForAgent
     troco_raw:         _toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0),
     troco:             _fmtN(_toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0)),
-    // Troco DEVIDO ao cliente (changeFor − total). 0 quando não há troco.
-    troco_devido_raw:  Math.max(0, _toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal),
-    troco_devido:      _fmtN(Math.max(0, _toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal)),
-    tem_troco_devido:  (_toNum(order.payment?.changeFor || order.changeFor || _ifBc.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal) > 0,
   };
 }
 
@@ -786,6 +864,9 @@ function parseLine(line) {
     result.push({ type: 'feed', lines: n });
   } else if (/^\[INV:(on|off)\]$/i.test(trimmed)) {
     result.push({ type: 'invert', on: trimmed.toLowerCase().includes('on') });
+  } else if (/^\[FONT:([AB])\]$/i.test(trimmed)) {
+    const v = trimmed.match(/\[FONT:([AB])\]/i)[1].toUpperCase();
+    result.push({ type: 'font', value: v });
   } else if (/^\[ROW:(.+)\]$/.test(trimmed)) {
     const content = trimmed.match(/^\[ROW:(.+)\]$/)[1];
     const lastPipe = content.lastIndexOf('|');
@@ -903,11 +984,9 @@ function buildContext(order, printer) {
   if (descontoVal <= 0 && Array.isArray(ifoodPl.benefits) && ifoodPl.benefits.length > 0) {
     for (const b of ifoodPl.benefits) descontoVal += _toNum(b.value || 0);
   }
-  // Total faturado = cliente pagou + iFood repassa - taxa serviço (só quando
-  // o pedido é online/prepaid; em cash-on-delivery a loja recebe a taxa cheia).
+  // Total faturado = cliente pagou + iFood repassa - taxa serviço retida pelo iFood
   const discIfoodVal = _toNum(order.discountIfood || 0);
-  const feeDeduction = _isPrepaidOrOnlineOrder(order) ? acrescimoVal : 0;
-  const totalVal    = _toNum(order.total) + discIfoodVal - feeDeduction;
+  const totalVal    = _toNum(order.total) + discIfoodVal - acrescimoVal;
 
   return {
     loja_nome,
@@ -941,17 +1020,10 @@ function buildContext(order, printer) {
         ? item.options.reduce((s, o) => s + _toNum(o.price || 0) * Number(o.quantity || 1), 0)
         : 0;
       const itemTotal = (base * qty) + (optsSum * qty);
-      // Combo slot vira "   SlotName: ItemName" (sem `+`, sem preço — já incluído no combo).
-      // Demais options mantêm "   {qty}x {name}" para preservar o layout histórico.
       const optLines = Array.isArray(item.options) && item.options.length > 0
         ? item.options.map(o => {
-            const name = o && o.name ? o.name : '';
-            if (o && o.kind === 'combo_slot') {
-              const slotLabel = String(o.slotName || '').trim();
-              return slotLabel ? `   ${slotLabel}: ${name}` : `   ${name}`;
-            }
-            const oqty = Number((o && o.quantity) || 1);
-            return `   ${oqty}x ${name}`;
+            const oqty = Number(o.quantity || 1);
+            return `   ${oqty}x ${o.name || ''}`;
           }).join('\n')
         : '';
       return {
@@ -1020,10 +1092,6 @@ function buildContext(order, printer) {
     troco_raw:  _toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0),
     troco:      _fmtN(_toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0)),
     tem_troco:  _toNum(order.payment?.changeFor || order.changeFor || 0) > 0,
-    // Troco DEVIDO ao cliente (changeFor − total). 0 quando não há troco.
-    troco_devido_raw: Math.max(0, _toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal),
-    troco_devido:     _fmtN(Math.max(0, _toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal)),
-    tem_troco_devido: (_toNum(order.payment?.changeFor || order.changeFor || ifoodPl.payments?.methods?.find(m => m.cash)?.cash?.changeFor || 0) - totalVal) > 0,
 
     // Tamanhos configuráveis — resolvem para diretivas [SIZE:WxH] no template
     // printer.itemNameSize / printer.itemOptionSize: "1x2", "2", "1" etc.

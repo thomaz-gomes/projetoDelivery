@@ -37,11 +37,17 @@
  *  size_item_opcao           → [SIZE:WxH] configurável (printer.itemOptionSize, padrão "1x2")
  */
 
-// ─── 80mm (48 colunas) ── Estilo SAIPOS ──────────────────────────────────────
+// ─── 80mm — Font A header / Font B corpo (64 cols com altura dupla) ─────────
+// Header destacado em Font A SIZE 2x (48 cols). Corpo em Font B + altura dupla,
+// que mantém visual "grande" verticalmente mas usa 9 dots de largura → 64 cols
+// úteis: nomes longos cabem, menos quebras feias.
 const DEFAULT_TEMPLATE_80 = `[ALIGN:center]
+[FONT:A]
 [BOLD:on]
 [SIZE:2]
 {{tipo}} #{{display_id}}
+[SIZE:1]
+[FONT:B]
 [SIZE:1x2]
 [BOLD:off]
 [ALIGN:right]
@@ -97,6 +103,7 @@ Troco para R$ {{troco}}{{#if tem_troco_devido}} (R$ {{troco_devido}}){{/if}}
 {{loja_nome}}
 [BOLD:off]
 [SIZE:1]
+[FONT:A]
 {{#if sales_channel}}
 {{sales_channel}}
 {{/if}}[ALIGN:left]
@@ -107,11 +114,14 @@ Rastreie seu pedido:
 {{/if}}[FEED:3]
 [CUT]`.trim();
 
-// ─── 58mm (32 colunas) ── Estilo SAIPOS ──────────────────────────────────────
+// ─── 58mm — Font A header / Font B corpo (42 cols com altura dupla) ─────────
 const DEFAULT_TEMPLATE_58 = `[ALIGN:center]
+[FONT:A]
 [BOLD:on]
 [SIZE:2]
 {{tipo}} #{{display_id}}
+[SIZE:1]
+[FONT:B]
 [SIZE:1x2]
 [BOLD:off]
 [ALIGN:right]
@@ -165,6 +175,7 @@ Troco p/ R$ {{troco}}{{#if tem_troco_devido}} (R$ {{troco_devido}}){{/if}}
 {{loja_nome}}
 [BOLD:off]
 [SIZE:1]
+[FONT:A]
 {{#if sales_channel}}
 {{sales_channel}}
 {{/if}}[ALIGN:left]

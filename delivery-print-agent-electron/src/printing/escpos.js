@@ -107,6 +107,17 @@ const ESCPos = {
   },
 
   /**
+   * ESC M n — Seleciona a fonte do caractere.
+   *   n=0 → Font A (12x24 dots ≈ 48 cols em 80mm)
+   *   n=1 → Font B (9x17 dots ≈ 64 cols em 80mm, mais legível com altura dupla)
+   * Font B é ideal para corpo de texto onde nomes longos não cabem em Font A.
+   */
+  font(name) {
+    const n = String(name).toUpperCase() === 'B' ? 1 : 0;
+    return buf([ESC, 0x4D, n]);
+  },
+
+  /**
    * ESC ! n — Modo de impressão combinado.
    * Bit 3: bold, Bit 4: double height, Bit 5: double width
    * Bit 0: fonte B (menor)
@@ -235,10 +246,21 @@ const ESCPos = {
   },
 
   /**
-   * Largura em colunas para um papel.
+   * Largura em colunas para um papel em Font A (12 dots por char).
    */
   columnsForWidth(widthMm) {
     return widthMm === 58 ? 32 : 48;
+  },
+
+  /**
+   * Largura em colunas para uma fonte específica.
+   *   Font A: 12 dots → 80mm=48, 58mm=32
+   *   Font B:  9 dots → 80mm=64, 58mm=42
+   */
+  columnsForFont(widthMm, font) {
+    const isB = String(font || 'A').toUpperCase() === 'B';
+    if (widthMm === 58) return isB ? 42 : 32;
+    return isB ? 64 : 48;
   },
 };
 

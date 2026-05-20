@@ -364,6 +364,16 @@ storesRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       // produção. Em homologação a SEFAZ exige o aviso de "sem valor fiscal"
       // e o texto do operador é ignorado.
       if (body.infCpl !== undefined) fiscalFields.infCpl = body.infCpl ? String(body.infCpl).slice(0, 5000) : null
+      // Padrões fiscais aplicados quando o produto/categoria não têm NCM/CFOP.
+      // NCM normalizado para 8 dígitos numéricos; CFOP para 4 dígitos numéricos.
+      if (body.nfeDefaultNcm !== undefined) {
+        const v = body.nfeDefaultNcm ? String(body.nfeDefaultNcm).replace(/\D/g, '').slice(0, 8) : ''
+        fiscalFields.nfeDefaultNcm = v && v.length === 8 ? v : null
+      }
+      if (body.nfeDefaultCfop !== undefined) {
+        const v = body.nfeDefaultCfop ? String(body.nfeDefaultCfop).replace(/\D/g, '').slice(0, 4) : ''
+        fiscalFields.nfeDefaultCfop = v && v.length === 4 ? v : null
+      }
       if (Object.keys(fiscalFields).length) {
         try { await persistStoreSettings(id, fiscalFields) } catch (e) { console.warn('Failed to persist fiscal settings', e) }
       }

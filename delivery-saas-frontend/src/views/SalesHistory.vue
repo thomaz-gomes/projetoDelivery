@@ -33,6 +33,147 @@
       </div>
     </div>
 
+    <!-- ── KPIs do período (recorte filtrado) ─────────────────────────────── -->
+    <div v-if="displayed.length > 0" class="card mb-3 kpi-card">
+      <div class="card-body">
+        <div class="row g-3">
+          <!-- Coluna 1: Volume + Tickets médios -->
+          <div class="col-lg-3 col-md-6">
+            <div class="kpi-section-title">Volume</div>
+            <div class="kpi-row">
+              <span class="kpi-label" title="Inclui pedidos cancelados">Qtde total de pedidos</span>
+              <span class="kpi-value">{{ summary.qtdTotal }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Qtde de pedidos cancelados</span>
+              <span class="kpi-value text-danger">{{ summary.qtdCancelado }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label" title="Soma do valor de todos os pedidos">Total dos pedidos</span>
+              <span class="kpi-value">{{ fmtBRL(summary.valorTotal) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Total dos pedidos cancelados</span>
+              <span class="kpi-value text-danger">{{ fmtBRL(summary.valorCancelado) }}</span>
+            </div>
+            <hr class="kpi-divider" />
+            <div class="kpi-row">
+              <span class="kpi-label">Ticket médio - Entrega</span>
+              <span class="kpi-value">{{ fmtBRL(summary.ticketEntrega) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Ticket médio - Balcão</span>
+              <span class="kpi-value">{{ fmtBRL(summary.ticketBalcao) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Ticket médio - Mesa</span>
+              <span class="kpi-value">{{ fmtBRL(summary.ticketMesa) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Ticket médio - Ficha</span>
+              <span class="kpi-value">{{ fmtBRL(summary.ticketFicha) }}</span>
+            </div>
+          </div>
+
+          <!-- Coluna 2: Composição por tipo -->
+          <div class="col-lg-2 col-md-6">
+            <div class="kpi-section-title">Composição</div>
+            <div class="kpi-row">
+              <span class="kpi-label">Qtde Entrega</span>
+              <span class="kpi-value">{{ summary.porTipo.DELIVERY.qty }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Qtde Balcão</span>
+              <span class="kpi-value">{{ summary.porTipo.BALCAO.qty }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Qtde Ficha</span>
+              <span class="kpi-value">{{ summary.porTipo.FICHA.qty }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label" title="Qtd de pedidos no salão / Total de clientes atendidos">Qtde Salão / Clientes</span>
+              <span class="kpi-value">{{ summary.salao.qty }} / {{ summary.salao.clientes }}</span>
+            </div>
+          </div>
+
+          <!-- Coluna 3: Valores agregados -->
+          <div class="col-lg-3 col-md-6">
+            <div class="kpi-section-title">Valores</div>
+            <div class="kpi-row">
+              <span class="kpi-label">Total dos itens</span>
+              <span class="kpi-value">{{ fmtBRL(summary.totalItens) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Total das taxas de entrega</span>
+              <span class="kpi-value">{{ fmtBRL(summary.totalTaxaEntrega) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Total das taxas de serviço</span>
+              <span class="kpi-value">{{ fmtBRL(summary.totalTaxaServico) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Total de acréscimos</span>
+              <span class="kpi-value">{{ fmtBRL(summary.totalAcrescimos) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Total de descontos</span>
+              <span class="kpi-value text-danger">{{ fmtBRL(summary.totalDescontos) }}</span>
+            </div>
+          </div>
+
+          <!-- Coluna 4: Cupons fiscais (NFC-e) -->
+          <div class="col-lg-4 col-md-6">
+            <div class="kpi-section-title">Cupons fiscais (NFC-e)</div>
+            <div class="kpi-row">
+              <span class="kpi-label">Quantidade de cupons emitidos</span>
+              <span class="kpi-value">{{ summary.cuponsEmitidos }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label" title="Pedidos não-cancelados sem NFC-e emitida">Cupons a emitir</span>
+              <span class="kpi-value text-warning">{{ summary.cuponsAEmitir }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Valor total dos cupons emitidos</span>
+              <span class="kpi-value">{{ fmtBRL(summary.valorCuponsEmitidos) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Valor total dos cupons em vendas canceladas</span>
+              <span class="kpi-value text-danger">{{ fmtBRL(summary.valorCuponsCancelados) }}</span>
+            </div>
+            <div class="kpi-row">
+              <span class="kpi-label">Quantidade de cupons em vendas canceladas</span>
+              <span class="kpi-value text-danger">{{ summary.qtdCuponsCancelados }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canais — tabela compacta, ordenada por valor -->
+        <div v-if="summary.canais.length > 0" class="row mt-3 pt-3 border-top">
+          <div class="col-12">
+            <div class="kpi-section-title">Vendas por canal</div>
+            <div class="table-responsive">
+              <table class="table table-sm kpi-channels mb-0">
+                <thead>
+                  <tr>
+                    <th>Canal</th>
+                    <th class="text-end" style="width:90px">Qtde</th>
+                    <th class="text-end" style="width:130px">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="c in summary.canais" :key="c.nome">
+                    <td>{{ c.nome }}</td>
+                    <td class="text-end">{{ c.qty }}</td>
+                    <td class="text-end">{{ fmtBRL(c.sum) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <ListCard :title="`Pedidos (${orders.length})`" :subtitle="orders.length ? `${orders.length} itens` : ''" :quickSearch="true" quickSearchPlaceholder="Buscar por pedido, endereço ou cliente" @quick-search="onQuickSearch" @quick-clear="onQuickClear">
       <template #default>
         <div class="table-responsive">
@@ -205,6 +346,129 @@ const displayed = computed(() => {
 const totalPages = computed(() => {
   return Math.ceil(displayed.value.length / itemsPerPage.value);
 });
+
+// ─── KPIs do período ─────────────────────────────────────────────────────────
+// Calcula resumo a partir da lista FILTRADA (displayed) — assim o operador vê o
+// total do recorte que ele escolheu (data, entregador, forma de pagamento etc.).
+// Tipos de pedido normalizados:
+//   DELIVERY → entrega; PICKUP/BALCAO/TAKEOUT → balcão; MESA → mesa; FICHA → ficha
+function _normalizeOrderType(o) {
+  const t = String(o?.orderType || o?.type || '').toUpperCase()
+  if (t === 'DELIVERY') return 'DELIVERY'
+  if (t === 'PICKUP' || t === 'BALCAO' || t === 'BALCÃO' || t === 'TAKEOUT' || t === 'TAKE-OUT' || t === 'PICK-UP' || t === 'INDOOR') return 'BALCAO'
+  if (t === 'MESA' || t === 'TABLE') return 'MESA'
+  if (t === 'FICHA') return 'FICHA'
+  return 'DELIVERY' // default conservador (maioria dos pedidos)
+}
+
+// Identifica o canal de origem do pedido (iFood, Aiqfome, WhatsApp, etc.).
+// Agrupa variações conhecidas; tudo que não bate em uma label específica
+// vira "Outro".
+function _normalizeChannel(o) {
+  const raw = String(o?.canal || o?.source || o?.channel || o?.payload?.source || o?.payload?.salesChannel || '').toLowerCase()
+  if (!raw) return 'Cardápio Web'
+  if (raw.includes('ifood')) return 'iFood'
+  if (raw.includes('aiqfome') || raw.includes('aiq')) return 'Aiqfome'
+  if (raw.includes('whatsapp') || raw.includes('wpp') || raw === 'wa') return 'WhatsApp'
+  if (raw.includes('deeliv')) return 'Deeliv'
+  if (raw.includes('saipos')) return 'Site Delivery (SAIPOS)'
+  if (raw.includes('facebook')) return 'Facebook'
+  if (raw.includes('telefone') || raw.includes('phone')) return 'Telefone'
+  if (raw.includes('site') || raw.includes('próprio') || raw.includes('proprio')) return 'Site Próprio'
+  if (raw.includes('delivery direto')) return 'Delivery Direto'
+  if (raw === 'pdv' || raw.includes('pdv')) return 'PDV / Balcão'
+  if (raw.includes('cardapio') || raw.includes('cardápio') || raw.includes('menu') || raw === 'web') return 'Cardápio Web'
+  return raw.charAt(0).toUpperCase() + raw.slice(1)
+}
+
+const summary = computed(() => {
+  const list = displayed.value || []
+  const totals = {
+    qtdTotal: 0,
+    qtdCancelado: 0,
+    valorTotal: 0,
+    valorCancelado: 0,
+    totalItens: 0,
+    totalTaxaEntrega: 0,
+    totalTaxaServico: 0,
+    totalAcrescimos: 0,
+    totalDescontos: 0,
+    porTipo: { DELIVERY: { qty: 0, sum: 0 }, BALCAO: { qty: 0, sum: 0 }, MESA: { qty: 0, sum: 0 }, FICHA: { qty: 0, sum: 0 } },
+    salao: { qty: 0, clientes: 0 },
+    canais: new Map(),
+    cuponsEmitidos: 0,
+    cuponsAEmitir: 0,
+    valorCuponsEmitidos: 0,
+    valorCuponsCancelados: 0,
+    qtdCuponsCancelados: 0,
+  }
+
+  for (const o of list) {
+    const total = Number(o?.total || 0) || 0
+    const isCanceled = String(o?.status || '').toUpperCase() === 'CANCELADO'
+    const tipo = _normalizeOrderType(o)
+    const tEntrega = Number(o?.deliveryFee || 0) || 0
+    const tServico = Number(o?.additionalFees || 0) || 0
+    const desconto = Number(o?.couponDiscount ?? o?.discount ?? 0) || 0
+    const subtotal = Number(o?.subtotal || 0) || Math.max(0, total - tEntrega - tServico + desconto)
+    const temNfe = !!(o?.payload?.nfe?.nProt)
+
+    totals.qtdTotal += 1
+    totals.valorTotal += total
+    if (isCanceled) {
+      totals.qtdCancelado += 1
+      totals.valorCancelado += total
+      if (temNfe) {
+        totals.qtdCuponsCancelados += 1
+        totals.valorCuponsCancelados += total
+      }
+    } else {
+      // Métricas operacionais (itens/taxas/descontos) só somam pedidos válidos.
+      totals.totalItens += subtotal
+      totals.totalTaxaEntrega += tEntrega
+      totals.totalTaxaServico += tServico
+      totals.totalAcrescimos += tServico
+      totals.totalDescontos += desconto
+      totals.porTipo[tipo].qty += 1
+      totals.porTipo[tipo].sum += total
+      if (tipo === 'MESA') {
+        totals.salao.qty += 1
+        totals.salao.clientes += Number(o?.peopleCount || o?.numCustomers || 0) || 0
+      }
+
+      const canal = _normalizeChannel(o)
+      const cur = totals.canais.get(canal) || { qty: 0, sum: 0 }
+      cur.qty += 1
+      cur.sum += total
+      totals.canais.set(canal, cur)
+    }
+
+    if (temNfe) {
+      totals.cuponsEmitidos += 1
+      if (!isCanceled) totals.valorCuponsEmitidos += total
+    } else if (!isCanceled) {
+      totals.cuponsAEmitir += 1
+    }
+  }
+
+  const ticket = (k) => totals.porTipo[k].qty > 0 ? totals.porTipo[k].sum / totals.porTipo[k].qty : 0
+
+  // Canais ordenados pelo valor descendente — mais relevante na operação
+  const canais = [...totals.canais.entries()]
+    .map(([nome, v]) => ({ nome, qty: v.qty, sum: v.sum }))
+    .sort((a, b) => b.sum - a.sum)
+
+  return {
+    ...totals,
+    ticketEntrega: ticket('DELIVERY'),
+    ticketBalcao: ticket('BALCAO'),
+    ticketMesa: ticket('MESA'),
+    ticketFicha: ticket('FICHA'),
+    canais,
+  }
+})
+
+const fmtBRL = (v) => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
 
 const paginatedOrders = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value;
@@ -488,4 +752,69 @@ async function bulkEmitNfe() {
 
 <style scoped>
 .card { overflow: hidden; }
+
+/* ── KPI card (resumo do período) ───────────────────────────────────── */
+.kpi-card .card-body { padding: 1.25rem; }
+
+.kpi-section-title {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-color-soft);
+}
+
+.kpi-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+}
+
+.kpi-label {
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.kpi-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-divider {
+  margin: 0.6rem 0;
+  border: 0;
+  border-top: 1px dashed var(--border-color);
+}
+
+/* tabela de canais — compactar e usar mesma tipografia das demais tabelas */
+.kpi-channels th {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.5rem 0.75rem;
+}
+.kpi-channels td {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--border-color-soft);
+}
+.kpi-channels tbody tr:last-child td { border-bottom: 0; }
+.kpi-channels tbody tr:hover td { background: var(--bg-hover); }
+
+@media (max-width: 768px) {
+  .kpi-section-title { margin-bottom: 0.5rem; }
+  .kpi-row { font-size: 0.8rem; }
+}
 </style>

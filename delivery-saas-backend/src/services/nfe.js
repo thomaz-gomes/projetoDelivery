@@ -4,7 +4,6 @@ import path from 'path'
 import fs from 'fs'
 import { createRequire } from 'module'
 import { decryptText } from '../utils/secretStore.js'
-import { expandOrderItemsToDet } from './nfeExpansion.js'
 
 const require = createRequire(import.meta.url)
 const nfeModule = require('../../nfe-module/dist/index.js')
@@ -618,21 +617,12 @@ export async function emitNfeFromOrder(orderId) {
 
   const tpAmb = fiscalConfig.nfeEnvironment === 'production' ? '1' : '2'
 
-  // Load fiscal data for each product (with category as fallback).
-  // Inclui linkedProducts dos slots de combo (option.productId) para que o
-  // rateio fiscal consiga buscar o dadosFiscais real do item-componente.
-  const productIds = [...new Set([
-    ...order.items.filter(i => i.productId).map(i => i.productId),
-    ...order.items.flatMap(i => (i.options || []).map(o => o.productId).filter(Boolean)),
-  ])]
+  // Load fiscal data for each product (with category as fallback)
+  const productIds = order.items.filter(i => i.productId).map(i => i.productId)
   const products = productIds.length
     ? await prisma.product.findMany({
         where: { id: { in: productIds } },
-        include: {
-          dadosFiscais: true,
-          category: { include: { dadosFiscais: true } },
-          combo: { include: { slots: { include: { options: true } } } },
-        }
+        include: { dadosFiscais: true, category: { include: { dadosFiscais: true } } }
       })
     : []
   const productMap = new Map(products.map(p => [p.id, p]))
@@ -658,8 +648,155 @@ export async function emitNfeFromOrder(orderId) {
     })
   } catch (e) { /* non-blocking */ }
 
-  // Expansão de combos (rateio fiscal) + options legados.
-  const det = expandOrderItemsToDet(order.items, productMap)
+  // Resolve fiscal data for each OrderItem and expand the line: a parent
+  // <det> (when basePrice > 0) plus one <det> per opcional (complement).
+  // SEFAZ não tem campo para acompanhamento, então cada opcional precisa
+  // virar um item próprio com seu vUnCom real — caso contrário ele iria
+  // como R$ 0,01 (preço do "produto guarda-chuva" tipo "Refrigerantes").
+  // Fallbacks gerais quando produto/categoria não têm dados fiscais cadastrados.
+  // Permite emitir NFC-e válida mesmo para itens sem `dadosFiscais` (ex.: produtos
+  // importados de planilhas ou cadastrados rapidamente). Configuráveis em
+  // settings/<scope>/settings.json (chaves `nfeDefaultNcm` / `nfeDefaultCfop`).
+  const normalizeNcm = (v) => String(v || '').replace(/\D/g, '').padStart(8, '0').slice(0, 8)
+  const fallbackNcm = fiscalConfig.nfeDefaultNcm ? normalizeNcm(fiscalConfig.nfeDefaultNcm) : '00000000'
+  const fallbackCfop = fiscalConfig.nfeDefaultCfop ? String(fiscalConfig.nfeDefaultCfop).replace(/\D/g, '') : '5102'
+
+  const buildLine = ({ name, qty, unitPrice, prod, fiscal, idxFallback }) => {
+    const ncm = fiscal?.ncm ? normalizeNcm(fiscal.ncm) : fallbackNcm
+    let cfop = fallbackCfop
+    let csosn = null
+    let cstPis = null
+    let cstCofins = null
+    if (fiscal?.cfops) {
+      try {
+        const cfopArr = typeof fiscal.cfops === 'string' ? JSON.parse(fiscal.cfops) : fiscal.cfops
+        if (Array.isArray(cfopArr) && cfopArr.length > 0) {
+          const first = cfopArr[0]
+          if (first && typeof first === 'object') {
+            cfop = String(first.code || first.cfop || '5102').replace('.', '')
+            csosn = first.csosn || null
+            cstPis = first.cstPis || null
+            cstCofins = first.cstCofins || null
+          } else {
+            cfop = String(first).replace('.', '')
+          }
+        }
+      } catch { /* keep default */ }
+    }
+    const ean = fiscal?.ean ? String(fiscal.ean).replace(/\D/g, '') : null
+    const cEAN = (ean && ean.length >= 8) ? ean : 'SEM GTIN'
+    const cProd = prod?.sku || String(idxFallback)
+    const safeQty = Number(qty) || 0
+    const safeUnit = Number(unitPrice) || 0
+    return {
+      prod: {
+        xProd: String(name || 'Item').slice(0, 120),
+        cProd,
+        NCM: ncm,
+        CFOP: cfop,
+        uCom: 'UN',
+        qCom: safeQty.toFixed(4),
+        vUnCom: safeUnit.toFixed(4),
+        vProd: (safeUnit * safeQty).toFixed(2),
+        _ean: cEAN,
+      },
+      imposto: {
+        pICMS: Number(fiscal?.icmsAliq || 0),
+        _orig: String(fiscal?.orig ?? '0'),
+        _modBC: fiscal?.icmsModBC != null ? String(fiscal.icmsModBC) : null,
+        _pPIS: Number(fiscal?.pPIS || 0),
+        _pCOFINS: Number(fiscal?.pCOFINS || 0),
+        _pIPI: Number(fiscal?.pIPI || 0),
+        _csosn: csosn,
+        _cstPis: cstPis,
+        _cstCofins: cstCofins,
+      }
+    }
+  }
+
+  // Mescla campo-a-campo: product-level prevalece quando preenchido, mas
+  // cai no category-level para cada campo individualmente. Antes o código
+  // pegava o objeto inteiro do produto e descartava silenciosamente o NCM
+  // da categoria quando o produto tinha um DadosFiscais "esqueleto" (sem NCM).
+  const mergeFiscal = (prodFiscal, catFiscal) => {
+    if (!prodFiscal && !catFiscal) return null
+    const p = prodFiscal || {}
+    const c = catFiscal || {}
+    const pick = (k) => (p[k] !== null && p[k] !== undefined && p[k] !== '') ? p[k] : (c[k] ?? null)
+    return {
+      ncm: pick('ncm'),
+      orig: pick('orig'),
+      ean: pick('ean'),
+      cfops: pick('cfops'),
+      cest: pick('cest'),
+      icmsAliq: pick('icmsAliq'),
+      icmsModBC: pick('icmsModBC'),
+      icmsPercBase: pick('icmsPercBase'),
+      icmsFCP: pick('icmsFCP'),
+      icmsEfetAliq: pick('icmsEfetAliq'),
+      icmsEfetPercBase: pick('icmsEfetPercBase'),
+      pPIS: pick('pPIS'),
+      pCOFINS: pick('pCOFINS'),
+      pIPI: pick('pIPI'),
+      codBeneficio: pick('codBeneficio'),
+    }
+  }
+
+  const det = []
+  order.items.forEach((item, idx) => {
+    const prod = productMap.get(item.productId)
+    const fiscal = mergeFiscal(prod?.dadosFiscais, prod?.category?.dadosFiscais)
+    const qty = Number(item.quantity) || 0
+    const basePrice = Number(item.price) || 0
+
+    const hasOptions = Array.isArray(item.options) && item.options.length > 0
+    // Produtos "guarda-chuva" (ex. categoria "Refrigerantes" com base R$ 0,01
+    // usada só para satisfazer o vUnCom>0 da SEFAZ) são suprimidos quando há
+    // opcionais — o que o cliente realmente comprou serão as próximas linhas.
+    const isPlaceholder = hasOptions && basePrice > 0 && basePrice <= 0.10
+    if (basePrice > 0 && qty > 0 && !isPlaceholder) {
+      det.push(buildLine({
+        name: item.name,
+        qty,
+        unitPrice: basePrice,
+        prod,
+        fiscal,
+        idxFallback: det.length + 1,
+      }))
+    }
+
+    if (Array.isArray(item.options)) {
+      for (const opt of item.options) {
+        const optQtyPerParent = Number(opt.quantity ?? opt.qty ?? 1) || 1
+        const optTotalQty = optQtyPerParent * (qty || 1)
+        const optPrice = Number(opt.price) || 0
+        // Opcionais gratuitos (modificadores tipo "sem cebola", "ponto da carne")
+        // não viram <det>: além de não onerarem o cliente, SEFAZ rejeita vUnCom=0.
+        if (optTotalQty <= 0 || optPrice <= 0) continue
+        det.push(buildLine({
+          name: opt.name || 'Opcional',
+          qty: optTotalQty,
+          unitPrice: optPrice,
+          prod,
+          fiscal,
+          idxFallback: det.length + 1,
+        }))
+      }
+    }
+
+    // Fallback: pedido sem preço-base nem opcionais válidos —
+    // mantém uma linha (mesmo que zerada) para preservar o histórico do item.
+    if (basePrice <= 0 && (!Array.isArray(item.options) || item.options.length === 0)) {
+      det.push(buildLine({
+        name: item.name,
+        qty: qty || 1,
+        unitPrice: basePrice,
+        prod,
+        fiscal,
+        idxFallback: det.length + 1,
+      }))
+    }
+  })
 
   // Reatribui nItem sequencial após a expansão
   det.forEach((d, i) => { d.nItem = i + 1 })
@@ -925,6 +1062,10 @@ export async function getFiscalConfigForOrder(orderId) {
     cscId: companyExtra.cscId || null,
     infRespTec: companyExtra.infRespTec || null,
     nfeDebugMode: Boolean(companyExtra.nfeDebugMode),
+    // Defaults aplicados quando produto/categoria não têm NCM/CFOP cadastrado.
+    // Evita NCM '00000000' inválido em pedidos sem dados fiscais configurados.
+    nfeDefaultNcm: companyExtra.nfeDefaultNcm || null,
+    nfeDefaultCfop: companyExtra.nfeDefaultCfop || null,
     certPath: null,
     certExists: false,
     source: 'company',
@@ -948,6 +1089,8 @@ export async function getFiscalConfigForOrder(orderId) {
     if (storeExtra.cscId) result.cscId = storeExtra.cscId
     if (storeExtra.infRespTec) result.infRespTec = storeExtra.infRespTec
     if (storeExtra.nfeDebugMode !== undefined) result.nfeDebugMode = Boolean(storeExtra.nfeDebugMode)
+    if (storeExtra.nfeDefaultNcm) result.nfeDefaultNcm = storeExtra.nfeDefaultNcm
+    if (storeExtra.nfeDefaultCfop) result.nfeDefaultCfop = storeExtra.nfeDefaultCfop
 
     // store-specified certificate filename (preferred)
     if (storeExtra.certFilename) {

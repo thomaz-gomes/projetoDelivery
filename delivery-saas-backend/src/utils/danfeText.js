@@ -226,7 +226,11 @@ export function buildDanfeText(data, opts = {}) {
     + Number(order.discountMerchant || payload.discountMerchant || 0)
     + Number(order.paymentDiscount || payload.paymentDiscount || 0)
   const deliveryFee = Number(order.deliveryFee || payload.deliveryFee || 0)
-  const acrescimo = deliveryFee + Number(payload.surcharge || 0)
+  // additionalFees: taxa de serviço cobrada pelo marketplace (iFood etc.) — exibida
+  // separadamente como "Valor adicional" no rodapé, padrão Saipos.
+  const additionalFees = Number(order.additionalFees || payload.additionalFees || 0)
+  const surcharge = Number(payload.surcharge || 0)
+  const acrescimo = deliveryFee + additionalFees + surcharge
   const vNF = Number(order.total != null ? order.total : (subtotal - desconto + acrescimo))
 
   const totalLine = (label, amount, prefix = '') => {
@@ -239,7 +243,11 @@ export function buildDanfeText(data, opts = {}) {
   lines.push(labelRight('QTD. TOTAL DE ITENS', String(expandedItems.length).padStart(3, '0')))
   lines.push(totalLine('VALOR TOTAL R$', subtotal))
   if (desconto > 0) lines.push(totalLine('Descontos R$', desconto, '- '))
-  if (acrescimo > 0) lines.push(totalLine('Acrescimos R$', acrescimo, '+ '))
+  // Acréscimos discriminados (padrão Saipos): cada taxa em linha própria.
+  // Quando há mais de um tipo, o operador vê de onde veio cada valor.
+  if (deliveryFee > 0) lines.push(totalLine('Taxa entrega R$', deliveryFee, '+ '))
+  if (additionalFees > 0) lines.push(totalLine('Valor adicional R$', additionalFees, '+ '))
+  if (surcharge > 0) lines.push(totalLine('Outros acrescimos R$', surcharge, '+ '))
   lines.push(totalLine('VALOR A PAGAR R$', vNF))
   if (!compact) lines.push('')
 
@@ -370,9 +378,8 @@ export function buildDanfeText(data, opts = {}) {
   const tributosEstadual = subtotal * 0.0961
   const tributosMunicipal = 0
   const tributosTotal = tributosFederal + tributosEstadual + tributosMunicipal
-  if (deliveryFee > 0) {
-    lines.push(`Taxa de entrega: ${money(deliveryFee)}`)
-  }
+  // Taxa de entrega e Valor adicional agora aparecem discriminados na seção IV (Totais)
+  // — removida a duplicação aqui na seção X (Tributos IBPT).
   if (compact) {
     lines.push(`Trib. Aprox. IBPT: ${money(tributosTotal)}`)
   } else if (W >= 38) {

@@ -1,6 +1,6 @@
 {
   "name": "delivery-print-agent",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Agente de Impressão Térmica para Sistema de Delivery",
   "main": "main.js",
   "author": "Delivery SaaS",

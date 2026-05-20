@@ -128,6 +128,16 @@ companiesRouter.patch('/company', requireRole('ADMIN'), async (req, res) => {
       for (const k of fiscalKeys) {
         if (req.body[k] !== undefined) toSave[k] = req.body[k]
       }
+      // Padrões fiscais (fallback) — aplicados quando produto/categoria não têm
+      // NCM/CFOP cadastrado. NCM = 8 dígitos, CFOP = 4 dígitos.
+      if (req.body.nfeDefaultNcm !== undefined) {
+        const v = req.body.nfeDefaultNcm ? String(req.body.nfeDefaultNcm).replace(/\D/g, '').slice(0, 8) : ''
+        toSave.nfeDefaultNcm = v && v.length === 8 ? v : null
+      }
+      if (req.body.nfeDefaultCfop !== undefined) {
+        const v = req.body.nfeDefaultCfop ? String(req.body.nfeDefaultCfop).replace(/\D/g, '').slice(0, 4) : ''
+        toSave.nfeDefaultCfop = v && v.length === 4 ? v : null
+      }
 
       // certificate password - encrypt before saving
       // Accept explicit undefined (not provided) to mean "leave as-is".

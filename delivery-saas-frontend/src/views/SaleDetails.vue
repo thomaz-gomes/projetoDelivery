@@ -16,8 +16,11 @@
         </div>
         <h4 v-else class="mb-0 fw-bold">Detalhes do Pedido</h4>
       </div>
-      <div v-if="order && !order.payload?.nfe?.nProt">
-        <BaseButton variant="outline" :loading="emitindoNfe" @click="emitirNfe">
+      <div v-if="order" class="d-flex gap-2">
+        <BaseButton variant="outline" :loading="changingStatus" @click="changeStatus">
+          <i class="bi bi-arrow-repeat me-1"></i>Alterar status
+        </BaseButton>
+        <BaseButton v-if="!order.payload?.nfe?.nProt" variant="outline" :loading="emitindoNfe" @click="emitirNfe">
           <i class="bi bi-receipt me-1"></i>Emitir NF-e
         </BaseButton>
       </div>
@@ -114,7 +117,11 @@
               </div>
               <div class="d-flex justify-content-between pt-2 border-top mt-1">
                 <span class="fw-semibold">Total faturado</span>
-                <span class="fw-bold" style="font-size:1.05rem; color:var(--primary)">{{ formatCurrency(storeRevenue(order)) }}</span>
+                <span class="fw-bold" style="font-size:1.05rem; color:var(--primary)">{{ formatCurrency(order.total) }}</span>
+              </div>
+              <div v-if="Number(order.additionalFees || 0) > 0 || vouchers.discountIfood > 0" class="d-flex justify-content-between mt-1">
+                <span class="text-muted small">Loja recebe (líquido)</span>
+                <span class="text-muted small">{{ formatCurrency(storeRevenue(order)) }}</span>
               </div>
               <div v-if="vouchers.discountIfood > 0" class="d-flex justify-content-between mt-2">
                 <span class="text-muted" style="font-size:0.78rem">Cliente pagou: {{ formatCurrency(order.total) }}</span>
@@ -358,6 +365,33 @@ const id = route.params.id;
 const order = ref(null);
 const vouchers = ref({ discountIfood: 0, discountMerchant: 0, voucherPayments: [], storeDiscount: 0 });
 const emitindoNfe = ref(false);
+const changingStatus = ref(false);
+
+// Status options the operator can move an order TO from this page. Mirrors
+// the labels used in getStatusLabel() so the modal reads consistently.
+const STATUS_OPTIONS = [
+  { value: 'PENDENTE_ACEITE',        label: 'Pendente' },
+  { value: 'EM_PREPARO',             label: 'Em preparo' },
+  { value: 'PRONTO',                 label: 'Pronto' },
+  { value: 'SAIU_PARA_ENTREGA',      label: 'Saiu para entrega' },
+  { value: 'CONFIRMACAO_PAGAMENTO',  label: 'Confirmação de pagamento' },
+  { value: 'CONCLUIDO',              label: 'Concluído' },
+  { value: 'CANCELADO',              label: 'Cancelado' },
+];
+
+let _paymentMethodsCache = null;
+async function loadCompanyPaymentMethods() {
+  if (_paymentMethodsCache) return _paymentMethodsCache;
+  try {
+    const companyId = order.value?.companyId;
+    const url = companyId ? `/menu/payment-methods?companyId=${companyId}` : '/menu/payment-methods';
+    const { data } = await api.get(url);
+    _paymentMethodsCache = Array.isArray(data) && data.length ? data : [{ code: 'CASH', name: 'Dinheiro' }];
+  } catch (e) {
+    _paymentMethodsCache = [{ code: 'CASH', name: 'Dinheiro' }];
+  }
+  return _paymentMethodsCache;
+}
 
 function padNumber(n){ if (n == null || n === '') return null; return String(n).toString().padStart(2, '0'); }
 function formatOrderNumber(o){
@@ -510,6 +544,73 @@ function getChangeFor(o) {
          o.payload?.payment?.changeFor ||
          o.payload?.rawPayload?.payment?.changeFor ||
          null;
+}
+
+async function changeStatus() {
+  if (!order.value) return;
+  const current = order.value.status;
+  const optionsHtml = STATUS_OPTIONS
+    .filter(s => s.value !== current)
+    .map(s => `<option value="${s.value}">${s.label}</option>`)
+    .join('');
+
+  const { value: target } = await Swal.fire({
+    title: 'Alterar status do pedido',
+    html: `
+      <p class="mb-2 small text-muted">Status atual: <strong>${getStatusLabel(current)}</strong></p>
+      <label class="form-label small mb-1">Novo status</label>
+      <select id="swal-status" class="swal2-select" style="display:block;width:100%">${optionsHtml}</select>
+    `,
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonText: 'Continuar',
+    cancelButtonText: 'Cancelar',
+    preConfirm: () => {
+      const sel = document.getElementById('swal-status');
+      return sel?.value || null;
+    },
+  });
+  if (!target) return;
+
+  // Special case CONFIRMACAO_PAGAMENTO -> CONCLUIDO: prompt for the payment
+  // method so the backend can record it in payload.paymentConfirmed and the
+  // rider delivery transaction is credited in the same handler.
+  let payments = null;
+  if (current === 'CONFIRMACAO_PAGAMENTO' && target === 'CONCLUIDO' && Number(order.value.total || 0) > 0) {
+    const methods = await loadCompanyPaymentMethods();
+    const pmHtml = methods.map(m => `<option value="${m.code || m.name}">${m.name || m.code}</option>`).join('');
+    const { value: chosenMethod, isConfirmed } = await Swal.fire({
+      title: 'Confirmar pagamento',
+      html: `
+        <p class="mb-2 small text-muted">Total: <strong>${formatCurrency(order.value.total)}</strong></p>
+        <label class="form-label small mb-1">Forma de pagamento</label>
+        <select id="swal-pm" class="swal2-select" style="display:block;width:100%">${pmHtml}</select>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Confirmar',
+      cancelButtonText: 'Cancelar',
+      preConfirm: () => {
+        const sel = document.getElementById('swal-pm');
+        return sel?.value || null;
+      },
+    });
+    if (!isConfirmed || !chosenMethod) return;
+    payments = [{ method: chosenMethod, amount: Number(order.value.total || 0) }];
+  }
+
+  changingStatus.value = true;
+  try {
+    const body = { status: target };
+    if (payments) body.payments = payments;
+    await api.patch(`/orders/${id}/status`, body);
+    Swal.fire({ icon: 'success', text: 'Status atualizado', timer: 1500, showConfirmButton: false });
+    await load();
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao alterar status' });
+  } finally {
+    changingStatus.value = false;
+  }
 }
 
 async function emitirNfe() {
