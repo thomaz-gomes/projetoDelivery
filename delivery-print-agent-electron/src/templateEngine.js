@@ -19,6 +19,34 @@ const ESCPos = require('./printing/escpos');
 const { DEFAULT_TEMPLATE_80, DEFAULT_TEMPLATE_58 } = require('./defaultTemplate');
 const logger = require('./logger');
 
+// Espelha src/utils/orderUtils.js#isPrepaidOrOnlineOrder no frontend.
+// Em pedidos cash/card-on-delivery o cliente paga o total cheio ao motoboy
+// (taxa de serviço inclusa); só em pedidos online/prepaid o marketplace
+// retém a taxa antes do repasse. Usar pra decidir se totalVal deve descontar
+// `additionalFees`.
+function _isPrepaidOrOnlineOrder(order) {
+  if (!order) return false;
+  const pl = order.payload || {};
+  if (pl?.payments?.prepaid === true) return true;
+  if (pl?.order?.payments?.prepaid === true) return true;
+  if (pl?.payment?.prepaid === true) return true;
+  if (pl?.payment?.isOnline === true) return true;
+  const checkOne = (p) => {
+    if (!p || typeof p !== 'object') return false;
+    if (p.prepaid === true || p.isOnline === true) return true;
+    const raw = String(p.method || p.methodCode || p.name || '').toLowerCase();
+    if (raw === 'online' || raw.startsWith('online')) return true;
+    if (raw === 'prepaid' || raw === 'prepago') return true;
+    if (typeof p.paymentType === 'string' && p.paymentType.toUpperCase().includes('PREPAID')) return true;
+    return false;
+  };
+  if (checkOne(order.payment)) return true;
+  if (checkOne(pl.payment)) return true;
+  const methods = pl?.order?.payments?.methods || pl?.payments?.methods;
+  if (Array.isArray(methods) && methods.some(checkOne)) return true;
+  return false;
+}
+
 // ─── Ponto de entrada ─────────────────────────────────────────────────────────
 function render(order, printer) {
   const charset = printer.characterSet || 'PC850';
@@ -619,9 +647,11 @@ function buildBlockContext(order) {
 
   // Taxas adicionais (taxa de serviço iFood, etc.)
   const acrescimoVal = _toNum(order.additionalFees ?? _ifBc.total?.additionalFees ?? 0);
-  // Total faturado = cliente pagou + iFood repassa - taxa serviço retida pelo iFood
+  // Total faturado = cliente pagou + iFood repassa - taxa serviço (só quando
+  // o pedido é online/prepaid; em cash-on-delivery a loja recebe a taxa cheia).
   const discIfoodValBc = _toNum(order.discountIfood || 0);
-  const totalVal    = _toNum(order.total) + discIfoodValBc - acrescimoVal;
+  const feeDeductionBc = _isPrepaidOrOnlineOrder(order) ? acrescimoVal : 0;
+  const totalVal    = _toNum(order.total) + discIfoodValBc - feeDeductionBc;
   const localizadorBc   = _ifBc.customer?.phones?.[0]?.localizer || _ifBc.customer?.phone?.localizer || '';
   const codigo_coleta = _ifBc.delivery?.pickupCode || '';
 
@@ -873,9 +903,11 @@ function buildContext(order, printer) {
   if (descontoVal <= 0 && Array.isArray(ifoodPl.benefits) && ifoodPl.benefits.length > 0) {
     for (const b of ifoodPl.benefits) descontoVal += _toNum(b.value || 0);
   }
-  // Total faturado = cliente pagou + iFood repassa - taxa serviço retida pelo iFood
+  // Total faturado = cliente pagou + iFood repassa - taxa serviço (só quando
+  // o pedido é online/prepaid; em cash-on-delivery a loja recebe a taxa cheia).
   const discIfoodVal = _toNum(order.discountIfood || 0);
-  const totalVal    = _toNum(order.total) + discIfoodVal - acrescimoVal;
+  const feeDeduction = _isPrepaidOrOnlineOrder(order) ? acrescimoVal : 0;
+  const totalVal    = _toNum(order.total) + discIfoodVal - feeDeduction;
 
   return {
     loja_nome,
