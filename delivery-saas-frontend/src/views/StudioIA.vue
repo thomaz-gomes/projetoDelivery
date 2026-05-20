@@ -545,31 +545,53 @@
           <div class="spinner-border text-primary" role="status"></div>
           <p class="text-muted small mt-2">Carregando biblioteca...</p>
         </div>
-        <div v-else-if="galleryItems.length" class="sia-gallery-grid">
-          <div
-            v-for="item in galleryItems"
-            :key="item.id"
-            class="sia-gallery-item"
-          >
-            <img :src="assetUrl(item.url)" :alt="item.filename" />
-            <div class="sia-gallery-item-overlay">
-              <button class="btn btn-sm btn-light" @click="downloadMedia(item)" title="Download">
-                <i class="bi bi-download"></i>
+        <div v-else-if="galleryItems.length">
+          <div class="sia-gallery-grid">
+            <div
+              v-for="item in galleryItems"
+              :key="item.id"
+              class="sia-gallery-item"
+            >
+              <img :src="assetUrl(item.url)" :alt="item.filename" />
+              <div class="sia-gallery-item-overlay">
+                <button class="btn btn-sm btn-light" @click="downloadMedia(item)" title="Download">
+                  <i class="bi bi-download"></i>
+                </button>
+                <button class="btn btn-sm btn-light" @click="deleteMedia(item)" title="Apagar">
+                  <i class="bi bi-trash text-danger"></i>
+                </button>
+              </div>
+              <span v-if="item.aiEnhanced" class="sia-gallery-ai-badge" title="Gerada/Otimizada por IA">
+                <i class="bi bi-stars"></i>
+              </span>
+              <MediaFeedbackButtons
+                v-if="item.aiEnhanced"
+                :media-id="item.id"
+                :existing-feedbacks="item.feedbacks || []"
+                @update="loadGallery"
+                @deleted="loadGallery"
+              />
+            </div>
+          </div>
+          <div v-if="galleryTotalPages > 1" class="d-flex align-items-center justify-content-between mt-3">
+            <small class="text-muted">
+              Mostrando {{ (galleryPage - 1) * galleryPageSize + 1 }}–{{ Math.min(galleryPage * galleryPageSize, galleryTotal) }} de {{ galleryTotal }}
+            </small>
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm btn-outline-secondary" :disabled="galleryPage === 1" @click="goToGalleryPage(1)" title="Primeira">
+                <i class="bi bi-chevron-double-left"></i>
               </button>
-              <button class="btn btn-sm btn-light" @click="deleteMedia(item)" title="Apagar">
-                <i class="bi bi-trash text-danger"></i>
+              <button class="btn btn-sm btn-outline-secondary" :disabled="galleryPage === 1" @click="goToGalleryPage(galleryPage - 1)" title="Anterior">
+                <i class="bi bi-chevron-left"></i>
+              </button>
+              <span class="btn btn-sm btn-light disabled">{{ galleryPage }} / {{ galleryTotalPages }}</span>
+              <button class="btn btn-sm btn-outline-secondary" :disabled="galleryPage >= galleryTotalPages" @click="goToGalleryPage(galleryPage + 1)" title="Próxima">
+                <i class="bi bi-chevron-right"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" :disabled="galleryPage >= galleryTotalPages" @click="goToGalleryPage(galleryTotalPages)" title="Última">
+                <i class="bi bi-chevron-double-right"></i>
               </button>
             </div>
-            <span v-if="item.aiEnhanced" class="sia-gallery-ai-badge" title="Gerada/Otimizada por IA">
-              <i class="bi bi-stars"></i>
-            </span>
-            <MediaFeedbackButtons
-              v-if="item.aiEnhanced"
-              :media-id="item.id"
-              :existing-feedbacks="item.feedbacks || []"
-              @update="loadGallery"
-              @deleted="loadGallery"
-            />
           </div>
         </div>
         <div v-else class="text-center py-5 text-muted">
@@ -667,6 +689,10 @@ const sliderPct = ref(50)
 // Gallery tab
 const galleryItems = ref([])
 const galleryLoading = ref(false)
+const galleryPage = ref(1)
+const galleryPageSize = ref(24)
+const galleryTotal = ref(0)
+const galleryTotalPages = ref(1)
 
 // ── Lifecycle ──
 onMounted(async () => {
@@ -955,17 +981,37 @@ async function enhanceImage() {
 }
 
 // ── Gallery ──
-async function loadGallery() {
+async function loadGallery(page = galleryPage.value) {
   galleryLoading.value = true
   try {
-    const res = await api.get('/media', { params: { pageSize: 100 } })
+    const res = await api.get('/media', { params: { page, pageSize: galleryPageSize.value } })
     const data = res.data || {}
-    galleryItems.value = Array.isArray(data) ? data : (data.items || [])
+    if (Array.isArray(data)) {
+      // Legacy shape (no pagination metadata) — assume single page.
+      galleryItems.value = data
+      galleryTotal.value = data.length
+      galleryTotalPages.value = 1
+      galleryPage.value = 1
+    } else {
+      galleryItems.value = Array.isArray(data.items) ? data.items : []
+      galleryTotal.value = Number(data.total || galleryItems.value.length)
+      galleryTotalPages.value = Math.max(1, Number(data.totalPages || 1))
+      galleryPage.value = Number(data.page || page)
+    }
   } catch {
     galleryItems.value = []
+    galleryTotal.value = 0
+    galleryTotalPages.value = 1
   } finally {
     galleryLoading.value = false
   }
+}
+
+function goToGalleryPage(p) {
+  const target = Math.min(Math.max(1, Number(p) || 1), galleryTotalPages.value)
+  if (target === galleryPage.value) return
+  galleryPage.value = target
+  loadGallery(target)
 }
 
 async function deleteMedia(item) {
