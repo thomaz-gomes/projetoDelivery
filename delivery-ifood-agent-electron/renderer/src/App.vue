@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import IfoodFrame from './components/IfoodFrame.vue'
 import SettingsModal from './components/SettingsModal.vue'
+import FailuresPanel from './components/FailuresPanel.vue'
 
 const status = ref({ status: 'disconnected', reason: 'boot' })
 const queueCount = ref(0)
@@ -105,14 +106,9 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- FailuresPanel goes here in C5. Placeholder. -->
     <div v-if="showFailures" class="panel-backdrop" @click.self="onCloseFailures">
       <aside class="panel-card">
-        <header>
-          <h2>Falhas</h2>
-          <button class="btn ghost" @click="onCloseFailures">×</button>
-        </header>
-        <p>FailuresPanel será implementado em C5.</p>
+        <FailuresPanel @close="onCloseFailures" />
       </aside>
     </div>
   </div>
