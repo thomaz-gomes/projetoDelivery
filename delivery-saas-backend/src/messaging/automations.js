@@ -237,32 +237,44 @@ async function resolveMenuFromAccount(conversation) {
   if (conversation?.menuId) {
     return loadMenu(conversation.menuId)
   }
-  if (!conversation?.providerAccountId) return null
 
-  const where = (() => {
-    switch (conversation.provider) {
-      case 'EVOLUTION_WA':
-        return { whatsappInstanceId: conversation.providerAccountId }
-      case 'META_WA':
-        return { metaWaAccountId: conversation.providerAccountId }
-      case 'META_FB':
-        return { facebookAccountId: conversation.providerAccountId }
-      case 'META_IG':
-        return { instagramAccountId: conversation.providerAccountId }
-      default:
-        return null
+  // Provider-specific account lookup: the instance/account may be linked
+  // directly to a Menu via one of the four FKs.
+  if (conversation?.providerAccountId) {
+    const where = (() => {
+      switch (conversation.provider) {
+        case 'EVOLUTION_WA':
+          return { whatsappInstanceId: conversation.providerAccountId }
+        case 'META_WA':
+          return { metaWaAccountId: conversation.providerAccountId }
+        case 'META_FB':
+          return { facebookAccountId: conversation.providerAccountId }
+        case 'META_IG':
+          return { instagramAccountId: conversation.providerAccountId }
+        default:
+          return null
+      }
+    })()
+    if (where) {
+      const menu = await prisma.menu.findFirst({ where, select: { id: true } })
+      if (menu) return loadMenu(menu.id)
     }
-  })()
-  if (!where) return null
+  }
 
-  // Menu.storeId is non-nullable in the schema, so no extra filter is needed
-  // here — the provider-specific account-id match above is sufficient.
-  const menu = await prisma.menu.findFirst({
-    where,
-    select: { id: true },
-  })
-  if (!menu) return null
-  return loadMenu(menu.id)
+  // Final fallback: instance assigned only to a Store (no direct Menu link).
+  // Pick the first active menu of the conversation's store so per-menu
+  // automations still fire. Covers legacy conversations created before the
+  // adapter started persisting a fallback menuId.
+  if (conversation?.storeId) {
+    const menu = await prisma.menu.findFirst({
+      where: { storeId: conversation.storeId, isActive: true },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true },
+    })
+    if (menu) return loadMenu(menu.id)
+  }
+
+  return null
 }
 
 function loadMenu(menuId) {

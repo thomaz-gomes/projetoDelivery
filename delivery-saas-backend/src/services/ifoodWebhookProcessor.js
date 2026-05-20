@@ -10,6 +10,7 @@ import { canTransition } from '../stateMachine.js';
 import printQueue from '../printQueue.js'
 import { matchItemsToLocalProducts } from '../utils/integrationMatcher.js'
 import { nextDisplaySimple } from '../utils/displaySimple.js'
+import { resolveMenuForStore } from '../utils/resolveMenuForStore.js'
 
 /**
  * Extrai companyId a partir do merchantId do payload
@@ -383,12 +384,18 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
 
     const displaySimple = await nextDisplaySimple(companyId);
 
+    // Every order should carry a menuId so per-menu features (WhatsApp
+    // routing, {{loja}} placeholder, automations) resolve correctly.
+    // iFood payloads don't include one, so derive it from the store.
+    const resolvedMenuId = await resolveMenuForStore(storeId);
+
     const initialStatus = mapped.status || 'EM_PREPARO';
     const created = await prisma.order.create({
       data: {
         ...baseData,
         status: initialStatus,
         storeId: storeId || null,
+        menuId: resolvedMenuId,
         displaySimple,
         items: {
           create: mapped.items.map((i) => {

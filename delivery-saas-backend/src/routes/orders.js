@@ -1353,7 +1353,16 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
         const s = await prisma.store.findFirst({ where: { id: requestedStoreId, companyId }, select: { id: true } });
         if (s) {
           resolvedStore = s;
-          console.log('PDV: using legacy requested storeId for order creation:', requestedStoreId);
+          // Even when only storeId is requested, derive a menuId so every
+          // order has one (downstream {{loja}} placeholder + WhatsApp
+          // routing depend on it).
+          const fallbackMenu = await prisma.menu.findFirst({
+            where: { storeId: s.id, isActive: true },
+            orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+            select: { id: true },
+          });
+          if (fallbackMenu) resolvedMenuId = fallbackMenu.id;
+          console.log('PDV: using legacy requested storeId for order creation:', requestedStoreId, '→ menu:', resolvedMenuId);
         } else {
           console.warn('PDV: requested storeId does not belong to company, ignoring:', requestedStoreId);
         }

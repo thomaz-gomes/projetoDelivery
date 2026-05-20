@@ -6,6 +6,7 @@ import { canTransition } from '../../stateMachine.js';
 import { findOrCreateCustomer, normalizePhone, buildConcatenatedAddress, normalizeDeliveryAddressFromPayload } from '../../services/customers.js';
 import { matchItemsToLocalProducts } from '../../utils/integrationMatcher.js';
 import { nextDisplaySimple } from '../../utils/displaySimple.js';
+import { resolveMenuForStore } from '../../utils/resolveMenuForStore.js';
 import { aiqfomeGet, aiqfomePost } from './client.js';
 import { reverseStockMovementForOrder } from '../../services/stockFromOrder.js';
 
@@ -176,10 +177,16 @@ export async function processAiqfomeWebhook(eventId) {
       const initialStatus = status || 'PENDENTE_ACEITE';
       const displaySimple = await nextDisplaySimple(companyId);
 
+      // Aiqfome payloads don't carry a menuId — derive it from the store so
+      // every order ends up with menuId set (per-menu WhatsApp routing and
+      // {{loja}} placeholder depend on it).
+      const resolvedMenuId = await resolveMenuForStore(storeId);
+
       const savedOrder = await prisma.order.create({
         data: {
           companyId,
           storeId: storeId || null,
+          menuId: resolvedMenuId,
           externalId,
           displaySimple,
           status: initialStatus,

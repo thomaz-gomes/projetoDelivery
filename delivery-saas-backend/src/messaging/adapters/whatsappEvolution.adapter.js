@@ -41,10 +41,16 @@ const adapter = {
 
     const accountId = account?.id || null
     const instanceName = account?.instanceName || payload?.instance || payload?.instanceName || null
-    const menuId = account?.menus?.[0]?.id || null
-    const storeIdFromMenu = account?.menus?.[0]?.storeId || null
-    const storeIdFromStores = account?.stores?.[0]?.id || null
-    const storeId = menuId ? storeIdFromMenu : storeIdFromStores
+    // Prefer a direct menu link on the instance. If only stores are linked,
+    // fall back to the first active menu under the first store so the
+    // conversation always carries a menuId — per-menu automations and
+    // template placeholders depend on it.
+    const directMenuId = account?.menus?.[0]?.id || null
+    const directMenuStoreId = account?.menus?.[0]?.storeId || null
+    const firstStore = account?.stores?.[0] || null
+    const storeFallbackMenuId = firstStore?.menus?.[0]?.id || null
+    const menuId = directMenuId || storeFallbackMenuId
+    const storeId = directMenuId ? directMenuStoreId : (firstStore?.id || null)
 
     const out = []
     const seen = new Set()
@@ -192,7 +198,20 @@ const adapter = {
       where: { instanceName: externalId },
       include: {
         menus: { select: { id: true, storeId: true }, take: 1 },
-        stores: { select: { id: true }, take: 1 },
+        // Eager-load the first active menu of the first store so parseInbound
+        // can fall back to menu-via-store when no direct menu link exists.
+        stores: {
+          select: {
+            id: true,
+            menus: {
+              where: { isActive: true },
+              select: { id: true },
+              orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+              take: 1,
+            },
+          },
+          take: 1,
+        },
       },
     })
   },

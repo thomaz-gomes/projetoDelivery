@@ -249,7 +249,7 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { rider: true, company: true, customer: true },
+      include: { rider: true, company: true, customer: true, menu: { select: { name: true } }, store: { select: { name: true } } },
     });
     if (!order) return;
 
@@ -302,7 +302,10 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
 
     const orderLabel = (await formatDisplayNumber(order)) || (order.displayId || order.id.slice(0, 6));
     const customerName = order.customerName || order.customerFullName || '-';
-    const shopName = (order.company && order.company.name) || (order.store && order.store.name) || 'sua loja';
+    // {{loja}} resolves to the menu (cardápio) name first — that's the brand
+    // customers know from the public site. Store and company names are
+    // fallbacks for legacy orders without a menu link.
+    const shopName = order.menu?.name || order.store?.name || order.company?.name || 'sua loja';
 
     const DEFAULT_RIDER_TEMPLATE =
 `*🚨 Nova entrega atribuída* 🚀
@@ -375,7 +378,7 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
 
 export async function notifyCustomerStatus(orderId, newStatus) {
   try {
-    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { company: true, store: true } });
+    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { company: true, store: true, menu: { select: { name: true } } } });
     if (!order) return;
 
     // Respect company-level evolution toggle: if disabled, do not send notifications
@@ -414,7 +417,9 @@ export async function notifyCustomerStatus(orderId, newStatus) {
     }[newStatus] || newStatus;
 
     const customerName = order.customerName || order.customerFullName || '';
-    const shopName = (order.company && order.company.name) || (order.store && order.store.name) || 'sua loja';
+    // {{loja}} prefers the menu (cardápio) name — that's the brand the
+    // customer associates with this order. Store/company are fallbacks.
+    const shopName = order.menu?.name || order.store?.name || order.company?.name || 'sua loja';
     const shortId = (await formatDisplayNumber(order)) || order.displayId || String(order.id).slice(0, 8);
 
     const { lat, lng } = extractCoords(order);
@@ -474,7 +479,7 @@ export async function notifyCustomerOrderSummary(orderId) {
   // to send order summaries when a WhatsApp instance is available and the
   // order includes a customer phone number.
   try {
-    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, company: true, store: true } });
+    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, company: true, store: true, menu: { select: { name: true } } } });
     if (!order) return;
 
     // Respect company-level evolution toggle: if disabled, do not send notifications
@@ -505,7 +510,9 @@ export async function notifyCustomerOrderSummary(orderId) {
     }
 
     const customerName = order.customerName || order.customerFullName || '';
-    const shopName = (order.company && order.company.name) || (order.store && order.store.name) || 'sua loja';
+    // Prefer the menu (cardápio) name — matches the brand the customer
+    // ordered from. Falls back to store, then company for legacy orders.
+    const shopName = order.menu?.name || order.store?.name || order.company?.name || 'sua loja';
       const shortId = (await formatDisplayNumber(order)) || order.displayId || String(order.id).slice(0,8);
 
     const lines = [];
@@ -615,9 +622,22 @@ Use seu cashback no próximo pedido. 😊`;
 
     if (!raw.trim()) return;
 
+    // Cashback isn't tied to a specific order, but the customer's most
+    // recent order tells us which cardápio they associate this credit with.
+    // Fall back to the company name only when no order context exists.
+    let menuName = null;
+    try {
+      const lastOrder = await prisma.order.findFirst({
+        where: { customerId: clientId, companyId },
+        orderBy: { createdAt: 'desc' },
+        select: { menu: { select: { name: true } }, store: { select: { name: true } } },
+      });
+      menuName = lastOrder?.menu?.name || lastOrder?.store?.name || null;
+    } catch (e) { /* best-effort; fall through to company name */ }
+
     const text = raw
       .replace(/\{\{nome\}\}/g, customer?.fullName || '')
-      .replace(/\{\{loja\}\}/g, company?.name || 'sua loja')
+      .replace(/\{\{loja\}\}/g, menuName || company?.name || 'sua loja')
       .replace(/\{\{ganhou\}\}/g, fmtCurrency(amount))
       .replace(/\{\{saldo\}\}/g, fmtCurrency(newBalance));
 

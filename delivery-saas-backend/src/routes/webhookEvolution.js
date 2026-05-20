@@ -66,7 +66,22 @@ async function handleMessagesUpsert(body, instanceName) {
     where: { instanceName },
     include: {
       menus: { select: { id: true, storeId: true }, take: 1 },
-      stores: { select: { id: true }, take: 1 },
+      // Also eager-load the first active menu of the first store so the
+      // adapter can fall back to menu-via-store when the instance is linked
+      // only to a Store (no direct Menu link). Without this, conversations
+      // get menuId=null and per-menu automations never resolve.
+      stores: {
+        select: {
+          id: true,
+          menus: {
+            where: { isActive: true },
+            select: { id: true },
+            orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+            take: 1,
+          },
+        },
+        take: 1,
+      },
     },
   })
   if (!account) {

@@ -1670,6 +1670,23 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
       // compute denormalized neighborhood for quick queries/displays
       const denormNeighborhood = (payloadToPersist.delivery && payloadToPersist.delivery.deliveryAddress && payloadToPersist.delivery.deliveryAddress.neighborhood) || neighborhoodFromPayload || (address && (address.neighborhood || address.neigh)) || null
 
+      // If no menuId came in the payload, derive one from the resolved store
+      // so every order carries a menuId (downstream WhatsApp routing and the
+      // {{loja}} placeholder both depend on it).
+      let effectiveMenuId = menuId || null
+      if (!effectiveMenuId && resolvedStore?.id) {
+        try {
+          const fallbackMenu = await prisma.menu.findFirst({
+            where: { storeId: resolvedStore.id, isActive: true },
+            orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+            select: { id: true },
+          })
+          if (fallbackMenu) effectiveMenuId = fallbackMenu.id
+        } catch (e) {
+          console.warn('Failed to resolve fallback menuId from store:', e?.message || e)
+        }
+      }
+
       const displaySimple = await nextDisplaySimple(companyId);
       const created = await prisma.order.create({
         data: {
@@ -1693,7 +1710,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
           deliveryFee: deliveryFee,
           // attach resolved storeId and menuId so downstream consumers (e.g. WhatsApp routing) can rely on them
           ...(resolvedStore ? { storeId: resolvedStore.id } : {}),
-          ...(menuId ? { menuId } : {}),
+          ...(effectiveMenuId ? { menuId: effectiveMenuId } : {}),
           payload: payloadToPersist,
           items: {
             // persist provided options (if any) into the OrderItem.options JSON column
