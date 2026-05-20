@@ -3,6 +3,8 @@ const { app, BrowserWindow, ipcMain, session } = require('electron')
 const path = require('path')
 const config = require('./src/config')
 const socketClient = require('./src/socketClient')
+const router = require('./src/ifoodRouter')
+const { dedupKey } = require('./src/ttlDedupe')
 
 let mainWindow = null
 
@@ -20,7 +22,14 @@ function attemptConnect() {
   }
   socketClient.connect(cfg, {
     onStatus: (payload) => emitToRenderer('socket:status', payload),
-    onChat: (payload) => emitToRenderer('ifood:chat', payload),
+    onChat: (payload) => {
+      router.handleIncomingChat(payload, {
+        forwardToRenderer: (p) => {
+          const key = dedupKey(p)
+          emitToRenderer('chat:message', { ...p, _routeKey: key })
+        },
+      })
+    },
   })
 }
 
@@ -37,6 +46,11 @@ ipcMain.handle('socket:reconnect', () => {
   attemptConnect()
   return true
 })
+
+// ── IPC: chat result + failures ───────────────────────────────────────
+ipcMain.handle('chat:result', (_evt, result) => router.handleSendResult(result))
+ipcMain.handle('failures:list', () => router.getFailures())
+ipcMain.handle('failures:clear', () => router.clearFailures())
 
 function createWindow() {
   mainWindow = new BrowserWindow({
