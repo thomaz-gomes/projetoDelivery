@@ -36,6 +36,7 @@ import CustomerProfile from './views/CustomerProfile.vue';
 import CustomerGroupsList from './views/CustomerGroupsList.vue';
 import CustomerGroupForm from './views/CustomerGroupForm.vue';
 import IFoodIntegration from './views/IFoodIntegration.vue';
+import IfoodAgentApp from './views/IfoodAgentApp.vue';
 import MetaPixelIntegration from './views/MetaPixelIntegration.vue';
 import Integrations from './views/Integrations.vue';
 import IntegrationForm from './views/IntegrationForm.vue';
@@ -190,6 +191,7 @@ const router = createRouter({
     { path: '/inbox/automation', component: InboxAutomation, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'WHATSAPP' } },
     { path: '/settings/whatsapp', component: WhatsAppConnect, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'WHATSAPP' } },
   { path: '/settings/ifood', component: IFoodIntegration, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
+  { path: '/settings/ifood-agent', component: IfoodAgentApp, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/settings/integrations/aiqfome', component: () => import('./components/AiqfomeConfig.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/meta-pixel', component: MetaPixelIntegration, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/settings/meta-integrations', component: () => import('./views/settings/MetaIntegrations.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
@@ -502,6 +504,7 @@ const PAGE_TITLES = [
   ['/settings/rider-shifts', 'Turnos'],
   ['/settings/rider-bonus-rules', 'Regras de Bônus'],
   ['/settings/rider-goals', 'Gestão de Metas'],
+  ['/settings/ifood-agent', 'Agente iFood (App Desktop)'],
   ['/settings/ifood', 'iFood'],
   ['/settings/integrations', 'Integrações'],
   ['/settings', 'Configurações'],

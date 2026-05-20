@@ -36,6 +36,14 @@ const integrationTypes = [
     route: '/settings/ifood',
   },
   {
+    key: 'IFOOD_AGENT',
+    name: 'Agente iFood (App Desktop)',
+    description: 'App desktop para enviar mensagens automáticas no chat do iFood (substitui a extensão Chrome).',
+    icon: 'https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png',
+    iconType: 'img',
+    route: '/settings/ifood-agent',
+  },
+  {
     key: 'AIQFOME',
     name: 'aiqfome',
     description: 'Receba pedidos do aiqfome, sincronize cardápio e gerencie sua loja.',
