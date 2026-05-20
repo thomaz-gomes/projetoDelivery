@@ -64,13 +64,19 @@ function createWindow() {
     },
   })
 
-  const indexHtml = app.isPackaged
-    ? path.join(__dirname, 'renderer', 'dist', 'index.html')
-    : path.join(__dirname, 'renderer', 'index.html')
-
-  mainWindow.loadFile(indexHtml).catch((err) => {
-    console.warn('[main] loadFile failed (renderer not built yet?):', err.message)
-  })
+  // Em dev: se a env VITE_DEV_SERVER_URL existir, carrega do Vite (HMR).
+  // Caso contrário, sempre carrega o build estático em renderer/dist (vale para dev e produção).
+  const devUrl = process.env.VITE_DEV_SERVER_URL
+  if (devUrl) {
+    mainWindow.loadURL(devUrl).catch((err) => {
+      console.warn('[main] loadURL failed:', err.message)
+    })
+  } else {
+    const indexHtml = path.join(__dirname, 'renderer', 'dist', 'index.html')
+    mainWindow.loadFile(indexHtml).catch((err) => {
+      console.warn('[main] loadFile failed (rode `cd renderer && npm run build` primeiro):', err.message)
+    })
+  }
 }
 
 app.whenReady().then(() => {
