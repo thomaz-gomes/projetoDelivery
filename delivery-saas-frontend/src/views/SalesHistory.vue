@@ -23,9 +23,12 @@
             <SelectInput v-model="filters.paymentMethod" :options="paymentMethodOptions" placeholder="Todas" />
           </div>
           <div class="col-md-4 text-end">
-            <button class="btn btn-primary me-2" @click="load">Buscar</button>
-            <button class="btn btn-outline-secondary me-2" @click="reset">Limpar</button>
-            <button class="btn btn-outline-primary" @click="showImportModal = true" title="Importar vendas de planilha">
+            <button class="btn btn-primary me-2" :disabled="loading" @click="load">
+              <span v-if="loading" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              {{ loading ? 'Buscando...' : 'Buscar' }}
+            </button>
+            <button class="btn btn-outline-secondary me-2" :disabled="loading" @click="reset">Limpar</button>
+            <button class="btn btn-outline-primary" :disabled="loading" @click="showImportModal = true" title="Importar vendas de planilha">
               <i class="bi bi-upload me-1"></i> Importar
             </button>
           </div>
@@ -324,6 +327,7 @@ const orders = ref([]);
 const q = ref('');
 const currentPage = ref(1);
 const itemsPerPage = ref(20);
+const loading = ref(false);
 
 const displayed = computed(() => {
   const term = (q.value || '').toLowerCase()
@@ -556,16 +560,22 @@ function getPaymentMethod(o){
 }
 
 async function load(){
+  loading.value = true;
   try{
     const params = {};
     if(filters.value.from) params.from = filters.value.from;
     if(filters.value.to) params.to = filters.value.to;
     if(filters.value.riderId) params.riderId = filters.value.riderId;
+    console.log('[sales] GET /orders', params);
     const { data } = await api.get('/orders', { params });
     orders.value = Array.isArray(data) ? data : (data?.orders || []);
+    currentPage.value = 1;
+    console.log('[sales] received', orders.value.length, 'orders');
   }catch(e){
-    console.error('load orders failed', e?.message || e);
+    console.error('load orders failed', e?.response?.status, e?.response?.data, e?.message || e);
     orders.value = [];
+  } finally {
+    loading.value = false;
   }
 }
 
