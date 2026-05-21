@@ -268,8 +268,8 @@ export function emitirInboxNewMessage({ companyId, conversation, message }) {
 // webhook do iFood). Sem dedup centralizado, o cliente recebe a mesma
 // mensagem 3-5x. Janela de 90s cobre transições legítimas (ex. CONFIRMED →
 // DISPATCHED não compartilham chave porque o kind muda).
-const RECENT_EMIT_WINDOW_MS = 90 * 1000;
-const recentEmits = new Map(); // key → expireAt epoch ms
+const RECENT_CHAT_EMIT_WINDOW_MS = 90 * 1000;
+const recentChatEmits = new Map(); // key → expireAt epoch ms
 
 function shouldSkipDuplicateEmit({ companyId, orderId, orderNumber, kind }) {
   const id = orderId || orderNumber;
@@ -277,11 +277,11 @@ function shouldSkipDuplicateEmit({ companyId, orderId, orderNumber, kind }) {
   const key = `${companyId}:${id}:${kind}`;
   const now = Date.now();
   // GC oportunístico — limpa entradas vencidas a cada chamada
-  for (const [k, exp] of recentEmits) {
-    if (exp <= now) recentEmits.delete(k);
+  for (const [k, exp] of recentChatEmits) {
+    if (exp <= now) recentChatEmits.delete(k);
   }
-  if (recentEmits.has(key)) return true;
-  recentEmits.set(key, now + RECENT_EMIT_WINDOW_MS);
+  if (recentChatEmits.has(key)) return true;
+  recentChatEmits.set(key, now + RECENT_CHAT_EMIT_WINDOW_MS);
   return false;
 }
 
@@ -295,7 +295,7 @@ export function emitirIfoodChat({ orderNumber, message, storeId, companyId, kind
     return;
   }
   if (shouldSkipDuplicateEmit({ companyId, orderId, orderNumber, kind })) {
-    console.log(`🔁 ifood:chat DEDUP server-side — pedido: ${orderNumber} kind: ${kind || 'manual'} (janela ${RECENT_EMIT_WINDOW_MS/1000}s)`);
+    console.log(`🔁 ifood:chat DEDUP server-side — pedido: ${orderNumber} kind: ${kind || 'manual'} (janela ${RECENT_CHAT_EMIT_WINDOW_MS/1000}s)`);
     return;
   }
   try {
