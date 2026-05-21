@@ -207,13 +207,17 @@ async function resolveConversation(msg, customer) {
     ? phoneVariants(msg.channelContactId)
     : [msg.channelContactId]
 
-  // Fast path: existing conversation. Preserves the provider-backfill for
-  // legacy rows that were created before MessagingProvider was tracked.
+  // Fast path: existing conversation. The lookup includes providerAccountId
+  // so that the same phone messaging two different accounts (e.g. Evolution
+  // instance for store A vs Meta Cloud account for store B) yields two
+  // distinct conversations instead of merging into one.
+  const providerAccountId = msg.providerAccountId ?? null
   let conversation = await prisma.conversation.findFirst({
     where: {
       companyId: msg.companyId,
       channel: msg.channel,
       channelContactId: { in: contactIds },
+      providerAccountId,
     },
   })
   if (conversation) {
@@ -234,15 +238,15 @@ async function resolveConversation(msg, customer) {
 
   // Race-safe create: two concurrent webhooks for the same brand-new contact
   // can both pass findFirst and both reach create, with the second throwing
-  // P2002 on @@unique([companyId, channel, channelContactId]). On conflict,
-  // re-query and return the winning row.
+  // P2002 on @@unique([companyId, channel, channelContactId, providerAccountId]).
+  // On conflict, re-query and return the winning row.
   try {
     return await prisma.conversation.create({
       data: {
         companyId: msg.companyId,
         channel: msg.channel,
         provider: msg.provider,
-        providerAccountId: msg.providerAccountId || null,
+        providerAccountId,
         instanceName: msg.instanceName || null,
         storeId: msg.storeId || null,
         menuId: msg.menuId || null,
@@ -260,6 +264,7 @@ async function resolveConversation(msg, customer) {
           companyId: msg.companyId,
           channel: msg.channel,
           channelContactId: { in: contactIds },
+          providerAccountId,
         },
       })
       if (conversation) return conversation

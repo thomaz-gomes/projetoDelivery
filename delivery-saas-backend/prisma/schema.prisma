@@ -2763,7 +2763,7 @@ model Conversation {
   updatedAt        DateTime           @updatedAt
   messages         Message[]
 
-  @@unique([companyId, channel, channelContactId], name: "company_channel_contact")
+  @@unique([companyId, channel, channelContactId, providerAccountId], name: "company_channel_contact_account")
   @@index([companyId, status, lastMessageAt])
   @@index([storeId, status])
   @@index([companyId, channel, provider])
