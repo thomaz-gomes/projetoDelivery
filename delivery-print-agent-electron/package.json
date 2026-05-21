@@ -38,6 +38,7 @@
       "!node_modules/.cache/**"
     ],
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -54,6 +55,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Delivery Print Agent",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false
     },
