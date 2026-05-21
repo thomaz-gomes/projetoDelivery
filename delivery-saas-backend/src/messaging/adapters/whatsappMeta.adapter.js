@@ -6,15 +6,17 @@
 // to a MessagingProvider, resolves the MetaMessagingAccount row, and then
 // hands ONE entry at a time to router.routeInbound → parseInbound.
 //
-// Why two-step media: unlike Evolution (which embeds base64 / has its own
-// decryption endpoint), Meta only exposes media via short-lived URLs that
-// require the Bearer access token to fetch. To keep the webhook fast and
-// idempotent, parseInbound never fetches media inline — it leaves
-// `mediaUrl: null` and stores the Meta media id on the normalised message.
-// downloadMedia(mediaId, account) does the real two-step fetch when needed
-// (operator-facing UI or a background job can call it lazily).
+// Media fetch: Meta only exposes media via short-lived URLs guarded by a
+// Bearer token. parseInbound downloads inline (mirrors the Evolution adapter)
+// and persists the bytes under /public/uploads/inbox/... so that the operator
+// UI, audio transcription and other downstream consumers can read the file by
+// URL without needing the Meta access token. downloadMedia() remains exported
+// for callers that need a fresh fetch (e.g. retry after a failed save).
 
 import axios from 'axios'
+import fs from 'fs'
+import path from 'path'
+import crypto from 'crypto'
 import { normalizedMessage, MetaWindowExpiredError } from './base.adapter.js'
 import { normalizePhone } from '../phoneVariants.js'
 import { decrypt } from '../crypto.js'
@@ -93,6 +95,20 @@ const adapter = {
 
         const reorderButton = extractReorderButton(msg)
 
+        // Download media inline (audio/image/video/document/sticker). Meta
+        // exposes media only via short-lived URLs guarded by Bearer token,
+        // so we fetch + persist now and store the local public URL on the
+        // message. Failures are logged but never block message persistence
+        // — the message still arrives, just without playable media.
+        let localMediaUrl = null
+        if (info.mediaId && info.type !== 'TEXT' && info.type !== 'LOCATION') {
+          try {
+            localMediaUrl = await downloadAndSaveMetaMedia(info.mediaId, account, info.mimeType)
+          } catch (err) {
+            console.error('[whatsappMeta.adapter] media download failed:', err?.response?.data || err?.message || err)
+          }
+        }
+
         out.push(normalizedMessage({
           externalId,
           channel: CHANNEL,
@@ -105,7 +121,7 @@ const adapter = {
           contactName: contactsByWaId.get(from) || null,
           type: info.type,
           body: info.body,
-          mediaUrl: null, // resolved later via downloadMedia (Meta exige token)
+          mediaUrl: localMediaUrl,
           mimeType: info.mimeType,
           mediaFileName: info.mediaFileName,
           mediaId: info.mediaId,
@@ -474,6 +490,74 @@ function throwMappedError(err, ctx) {
   wrapped.metaCode = code || null
   wrapped.metaError = errorObj || null
   throw wrapped
+}
+
+// ─── Media storage helpers ─────────────────────────────────────────────────
+// Mirror the Evolution adapter layout (public/uploads/inbox/<companyId>/<YYYY-MM>/)
+// so downstream consumers (audio transcription, gallery, etc.) read media the
+// same way regardless of origin.
+
+function mimeToExtension(mime) {
+  if (!mime) return 'bin'
+  const m = String(mime).toLowerCase()
+  if (m.includes('jpeg') || m.includes('jpg')) return 'jpg'
+  if (m.includes('png')) return 'png'
+  if (m.includes('webp')) return 'webp'
+  if (m.includes('gif')) return 'gif'
+  if (m.includes('mp4')) return 'mp4'
+  if (m.includes('quicktime') || m.includes('mov')) return 'mov'
+  if (m.includes('ogg')) return 'ogg'
+  if (m.includes('mpeg') && m.startsWith('audio')) return 'mp3'
+  if (m.includes('mp3')) return 'mp3'
+  if (m.includes('wav')) return 'wav'
+  if (m.includes('pdf')) return 'pdf'
+  return 'bin'
+}
+
+function buildMediaTarget(companyId, mimeType) {
+  const now = new Date()
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const ext = mimeToExtension(mimeType)
+  const filename = `${crypto.randomUUID()}.${ext}`
+  const relDir = `uploads/inbox/${companyId}/${yearMonth}`
+  const absDir = path.join(process.cwd(), 'public', relDir)
+  fs.mkdirSync(absDir, { recursive: true })
+  return {
+    filePath: path.join(absDir, filename),
+    publicUrl: `/public/${relDir}/${filename}`,
+  }
+}
+
+// Two-step Meta media fetch:
+//   1) GET /<media_id>          → { url, mime_type, sha256, file_size, ... }
+//   2) GET <url>                → bytes (Bearer auth required on BOTH calls)
+// Returns the public URL of the saved file, or null on any failure.
+async function downloadAndSaveMetaMedia(mediaId, account, fallbackMime) {
+  if (!mediaId) return null
+  if (!account?.accessToken) return null
+  if (!account?.companyId) return null
+
+  const token = safeDecrypt(account.accessToken)
+  const { graphVersion } = await getMetaConfig()
+
+  const metaUrl = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(mediaId)}`
+  const { data: meta } = await axios.get(metaUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+    timeout: 30000,
+  })
+
+  const downloadUrl = meta?.url
+  if (!downloadUrl) return null
+
+  const { data: bytes } = await axios.get(downloadUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+    responseType: 'arraybuffer',
+    timeout: 60000,
+  })
+
+  const { filePath, publicUrl } = buildMediaTarget(account.companyId, meta?.mime_type || fallbackMime)
+  fs.writeFileSync(filePath, Buffer.from(bytes))
+  return publicUrl
 }
 
 export default adapter

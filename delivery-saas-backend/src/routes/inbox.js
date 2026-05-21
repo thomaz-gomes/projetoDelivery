@@ -544,11 +544,81 @@ router.post('/conversations/:id/send-quick-reply', async (req, res) => {
       return res.status(400).json({ message: 'Resposta rápida vazia' });
     }
 
-    const instanceName = conversation.instanceName;
     const to = conversation.channelContactId;
 
     // Resolve {{nome}} / {{cashback}} / {{endereco}} against this conversation's customer
     const resolvedBody = await renderQuickReplyVariables(reply.body || '', { conversation, companyId });
+
+    // ─── Meta WhatsApp Cloud branch (early return) ────────────────────────
+    if (conversation.provider === 'META_WA') {
+      if (!conversation.providerAccountId) {
+        return res.status(400).json({ message: 'Conversa Meta sem account associada' });
+      }
+      const metaAccount = await prisma.metaMessagingAccount.findUnique({
+        where: { id: conversation.providerAccountId },
+      });
+      if (!metaAccount) {
+        return res.status(400).json({ message: 'MetaMessagingAccount não encontrada' });
+      }
+
+      let content;
+      if (reply.mediaUrl) {
+        const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+        content = {
+          type: detectMessageType(reply.mediaMimeType),
+          mediaUrl: `${baseUrl}${reply.mediaUrl}`,
+          text: resolvedBody || undefined,
+          mediaFileName: reply.mediaFileName || undefined,
+        };
+      } else {
+        content = { type: 'TEXT', text: resolvedBody };
+      }
+
+      let sendResult;
+      try {
+        sendResult = await whatsappMetaAdapter.sendMessage(metaAccount, to, content);
+      } catch (err) {
+        if (err instanceof MetaWindowExpiredError) {
+          return res.status(400).json({
+            message: 'Janela de 24h expirada — Meta exige envio de template aprovado',
+            code: 'META_WINDOW_EXPIRED',
+          });
+        }
+        console.error('[inbox] Meta WA quick-reply send failed:', err);
+        return res.status(500).json({ message: 'Falha ao enviar via Meta', error: err.message });
+      }
+
+      const message = await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: 'OUTBOUND',
+          type: reply.mediaUrl ? detectMessageType(reply.mediaMimeType) : 'TEXT',
+          body: resolvedBody || null,
+          mediaUrl: reply.mediaUrl || null,
+          mediaMimeType: reply.mediaMimeType || null,
+          mediaFileName: reply.mediaFileName || null,
+          externalId: sendResult.externalId || null,
+          status: sendResult.status || 'SENT',
+        },
+      });
+
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: new Date() },
+      });
+
+      const io = req.app.get('io');
+      if (io) {
+        const payload = { conversationId: conversation.id, message, companyId };
+        io.to(`company_${companyId}`).emit('inbox:new-message', payload);
+        io.emit('inbox:new-message:broadcast', payload);
+      }
+
+      return res.status(201).json(message);
+    }
+
+    // ─── Evolution branch (existing) ──────────────────────────────────────
+    const instanceName = conversation.instanceName;
 
     // Send via Evolution (media + caption, or text-only)
     if (reply.mediaUrl) {
