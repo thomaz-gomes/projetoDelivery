@@ -126,8 +126,9 @@ async function onSubmit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  max-width: 80%;
 }
+
+.login-logo img {max-width:80%;}
 .form-label {
   font-weight: 600;
   font-size: 0.85rem;
