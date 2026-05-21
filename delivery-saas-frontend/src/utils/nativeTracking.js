@@ -47,7 +47,7 @@ export async function startNativeTracking(onPosition) {
     watcherId = await plugin.addWatcher(
       {
         backgroundMessage: 'Rastreamento de entrega ativo',
-        backgroundTitle: 'Core Delivery',
+        backgroundTitle: 'Chefiz',
         requestPermissions: true,
         stale: false,
         distanceFilter: 10,

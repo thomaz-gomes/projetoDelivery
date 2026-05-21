@@ -4,7 +4,7 @@
 
       <!-- Brand -->
       <div class="text-center mb-4">
-        <img src="/core.png" alt="Logo" style="max-width:130px" />
+        <img src="/chefiz.png" alt="Logo" style="max-width:130px" />
       </div>
 
       <!-- Step indicator: 2 passos -->

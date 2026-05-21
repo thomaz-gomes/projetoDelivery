@@ -4,7 +4,7 @@
       <div class="card border-0 shadow-sm">
         <div class="card-body p-4 p-md-5">
           <div class="text-center mb-4">
-            <img src="/core.png" alt="Logo" class="logo mb-3" style="height:48px">
+            <img src="/chefiz.png" alt="Logo" class="logo mb-3" style="height:48px">
             <h2 class="fw-bold">Termos de Servico</h2>
             <p class="text-muted">Ultima atualizacao: 20 de marco de 2026</p>
           </div>

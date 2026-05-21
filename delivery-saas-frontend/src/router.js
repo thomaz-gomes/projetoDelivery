@@ -544,7 +544,7 @@ const PAGE_TITLES = [
 
 router.afterEach((to) => {
   const match = PAGE_TITLES.find(([prefix]) => to.path === prefix || to.path.startsWith(prefix + '/'));
-  document.title = match ? `${match[1]} — Core Delivery` : 'Core Delivery — Painel';
+  document.title = match ? `${match[1]} — Chefiz` : 'Chefiz — Painel';
 });
 
 export default router;

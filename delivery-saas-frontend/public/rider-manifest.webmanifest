@@ -1,7 +1,7 @@
 {
-  "name": "Core Delivery — Entregador",
+  "name": "Chefiz — Entregador",
   "short_name": "Entregador",
-  "description": "App do entregador Core Delivery",
+  "description": "App do entregador Chefiz",
   "start_url": "/rider/orders",
   "scope": "/",
   "display": "standalone",
@@ -16,8 +16,8 @@
       "purpose": "any"
     },
     {
-      "src": "/favico.png",
-      "sizes": "24x24",
+      "src": "/favicon-512x512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     }

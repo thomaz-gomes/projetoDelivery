@@ -236,11 +236,11 @@
     <footer class="footer">
       <div class="container footer-inner">
         <div class="footer-brand">
-          <strong>Core Delivery</strong>
+          <strong>Chefiz</strong>
           <span>Cardápio digital inteligente para seu negócio</span>
         </div>
         <div class="footer-copy">
-          © 2026 Core Delivery. Todos os direitos reservados.
+          © 2026 Chefiz. Todos os direitos reservados.
         </div>
       </div>
     </footer>

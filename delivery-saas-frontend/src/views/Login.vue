@@ -61,7 +61,7 @@ async function onSubmit() {
     <div class="card login-card">
       <div class="card-body">
         <div class="text-center mb-4">
-          <div class="login-logo mb-2"><img src="/core.png" alt="Logo" class="logo"></div>
+          <div class="login-logo mb-2"><img src="/chefiz.png" alt="Logo" class="logo"></div>
           <p class="text-muted small mb-0">Acesso do Operador</p>
         </div>
 

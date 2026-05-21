@@ -179,7 +179,7 @@ watch(() => route.path, (newPath, oldPath) => {
   const isRider = newPath === '/rider' || newPath.startsWith('/rider/')
   const wasRider = !oldPath || oldPath === '/rider' || oldPath.startsWith('/rider/')
   if (isRider && !wasRider) {
-    document.title = 'Core Delivery — Entregador'
+    document.title = 'Chefiz — Entregador'
     const meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.content = '#198754'
     injectRiderPwaMeta()
@@ -201,7 +201,7 @@ onMounted(() => {
   }
   // Inject rider PWA meta on initial load if already on a rider route
   if (route.path === '/rider' || route.path.startsWith('/rider/')) {
-    document.title = 'Core Delivery — Entregador';
+    document.title = 'Chefiz — Entregador';
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = '#198754';
     injectRiderPwaMeta()
@@ -213,7 +213,7 @@ onMounted(() => {
 onUnmounted(() => { scanner.stop() })
 
 // ── Inbox unread: browser tab title + favicon badge ─────────────────────────
-const BASE_TITLE = 'Core Delivery';
+const BASE_TITLE = 'Chefiz';
 let _originalFaviconHref = null;
 
 function applyFaviconBadge(show) {
@@ -324,7 +324,7 @@ function goToRiderQr(){
         >
           <i class="bi bi-list" style="font-size:1.5rem"></i>
         </button>
-        <span class="mobile-topbar-title"><img src="/core.png" alt="" class="log" style="max-width:125px"></span>
+        <span class="mobile-topbar-title"><img src="/chefiz.png" alt="" class="log" style="max-width:125px"></span>
 
         <router-link v-if="inboxStore.unreadTotal > 0" to="/inbox" class="btn btn-link text-dark p-1 position-relative ms-auto me-1" title="Mensagens não lidas" aria-label="Mensagens não lidas">
           <i class="bi bi-chat-dots" style="font-size:1.3rem"></i>
@@ -387,7 +387,7 @@ function goToRiderQr(){
         >
           <div class="offcanvas-header border-bottom border-secondary py-2">
             
-        <img src="/core-neg.png" alt="" class="logo-neg" style="max-width: 125px; margin:8px;">
+        <img src="/chefiz-neg.png" alt="" class="logo-neg" style="max-width: 125px; margin:8px;">
             <button
               type="button"
               class="btn-close btn-close-white"

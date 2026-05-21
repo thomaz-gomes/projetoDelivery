@@ -35,7 +35,7 @@ const gpsDotClass = computed(() => {
       <span v-if="gpsLabel" class="rider-header__gps-text">{{ gpsLabel }}</span>
     </div>
     <div class="rider-header__center">
-      Core Delivery
+      Chefiz
     </div>
     <div class="rider-header__right">
       <div class="rider-header__avatar">{{ initials }}</div>

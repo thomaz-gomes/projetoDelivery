@@ -218,7 +218,7 @@ async function generateDescription() {
 
       <!-- Brand -->
       <div class="text-center mb-4">
-        <img src="/core.png" alt="Logo" style="max-width:120px" />
+        <img src="/chefiz.png" alt="Logo" style="max-width:120px" />
       </div>
 
       <!-- Step indicator -->
