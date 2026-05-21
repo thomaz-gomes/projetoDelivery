@@ -3583,7 +3583,7 @@ function pulseButton() {
             <span v-if="normalizeOrder(o).channelLabel" class="ms-2 badge bg-light text-dark">{{ normalizeOrder(o).channelLabel }}</span>
           </div>
           <div class="small text-muted">
-            {{ normalizeOrder(o).items?.length || 0 }} item(ns) · {{ formatCurrency(Number(o.total || 0)) }}
+            {{ normalizeOrder(o).items?.length || 0 }} item(ns) · {{ formatCurrency(storeRevenue(o)) }}
           </div>
         </div>
         <div class="pending-card-actions">
@@ -3613,7 +3613,7 @@ function pulseButton() {
           </div>
         </div>
         <div class="no-cash-card-total fw-bold">
-          {{ formatCurrency(Number(o.total || 0)) }}
+          {{ formatCurrency(storeRevenue(o)) }}
         </div>
       </div>
     </div>
@@ -3679,7 +3679,7 @@ function pulseButton() {
                  <div class="d-flex justify-content-between">
                   <span class="oc-time">{{ getCreatedDurationDisplay(o) }}</span>
                   <span class="text-end">
-                    <span class="oc-total">{{ formatCurrency(Number(o.total || 0)) }}</span>
+                    <span class="oc-total">{{ formatCurrency(storeRevenue(o)) }}</span>
                   </span></div>
                 <div class="oc-footer">
                   <span v-if="isIfoodOrder(o)" title="Pedido iFood">
