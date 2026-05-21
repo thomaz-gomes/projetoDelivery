@@ -381,35 +381,30 @@ function buildOutboundBody(to, content) {
   const recipient = String(to).replace(/\D/g, '')
   const type = String(content?.type || 'TEXT').toUpperCase()
 
+  let body
   if (type === 'IMAGE' && content?.mediaUrl) {
-    return {
+    body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'image',
       image: { link: content.mediaUrl, caption: content.text || undefined },
     }
-  }
-
-  if (type === 'VIDEO' && content?.mediaUrl) {
-    return {
+  } else if (type === 'VIDEO' && content?.mediaUrl) {
+    body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'video',
       video: { link: content.mediaUrl, caption: content.text || undefined },
     }
-  }
-
-  if (type === 'AUDIO' && content?.mediaUrl) {
-    return {
+  } else if (type === 'AUDIO' && content?.mediaUrl) {
+    body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'audio',
       audio: { link: content.mediaUrl },
     }
-  }
-
-  if (type === 'DOCUMENT' && content?.mediaUrl) {
-    return {
+  } else if (type === 'DOCUMENT' && content?.mediaUrl) {
+    body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'document',
@@ -419,25 +414,48 @@ function buildOutboundBody(to, content) {
         filename: content.mediaFileName || undefined,
       },
     }
-  }
-
-  if (type === 'STICKER' && content?.mediaUrl) {
-    return {
+  } else if (type === 'STICKER' && content?.mediaUrl) {
+    body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'sticker',
       sticker: { link: content.mediaUrl },
     }
+  } else if (type === 'LOCATION') {
+    const lat = Number(content?.latitude)
+    const lng = Number(content?.longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new Error('Meta WA adapter: latitude/longitude obrigatórios para LOCATION')
+    }
+    body = {
+      messaging_product: 'whatsapp',
+      to: recipient,
+      type: 'location',
+      location: {
+        latitude: lat,
+        longitude: lng,
+        name: content?.name || undefined,
+        address: content?.address || undefined,
+      },
+    }
+  } else {
+    // Default: TEXT
+    const text = content?.text ?? content?.body ?? ''
+    body = {
+      messaging_product: 'whatsapp',
+      to: recipient,
+      type: 'text',
+      text: { body: text, preview_url: !!content?.preview_url },
+    }
   }
 
-  // Default: TEXT
-  const body = content?.text ?? content?.body ?? ''
-  return {
-    messaging_product: 'whatsapp',
-    to: recipient,
-    type: 'text',
-    text: { body, preview_url: !!content?.preview_url },
+  // Reply-to (quoted): Meta uses context.message_id pointing to the wamid
+  // of the original inbound. The route resolves quotedMessageId → externalId
+  // and passes it here as replyToExternalId.
+  if (content?.replyToExternalId) {
+    body.context = { message_id: String(content.replyToExternalId) }
   }
+  return body
 }
 
 function throwMappedError(err, ctx) {

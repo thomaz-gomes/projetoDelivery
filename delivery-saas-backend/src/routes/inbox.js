@@ -9,6 +9,8 @@ import { evoSendText, evoSendMediaUrl, evoSendLocation } from '../wa.js';
 import { renderQuickReplyVariables } from '../utils/quickReplyVars.js';
 import { transcribeAudio } from '../services/aiProvider.js';
 import { buildReorderSuggestionBody } from '../services/reorderHelpers.js';
+import whatsappMetaAdapter from '../messaging/adapters/whatsappMeta.adapter.js';
+import { MetaWindowExpiredError } from '../messaging/adapters/base.adapter.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -217,6 +219,135 @@ router.post('/conversations/:id/send', upload.single('media'), async (req, res) 
     if (conversation.channel !== 'WHATSAPP') {
       return res.status(400).json({ message: 'Apenas canal WHATSAPP é suportado no momento' });
     }
+
+    // ─── Meta WhatsApp Cloud branch ────────────────────────────────────────
+    // Different from Evolution: no instanceName; resolves via providerAccountId.
+    // Media is sent by URL (Meta fetches the file from our public uploads dir).
+    if (conversation.provider === 'META_WA') {
+      if (!conversation.providerAccountId) {
+        return res.status(400).json({ message: 'Conversa Meta sem account associada' });
+      }
+      const metaAccount = await prisma.metaMessagingAccount.findUnique({
+        where: { id: conversation.providerAccountId },
+      });
+      if (!metaAccount) {
+        return res.status(400).json({ message: 'MetaMessagingAccount não encontrada' });
+      }
+
+      const to = conversation.channelContactId;
+      let mediaUrl = null;
+      let mediaMimeType = null;
+      let mediaFileName = null;
+      let absoluteMediaUrl = null;
+
+      if (req.file) {
+        const ext = path.extname(req.file.originalname) || '';
+        const filename = `${uuidv4()}${ext}`;
+        const dir = path.join(process.cwd(), 'public', 'uploads', 'inbox', companyId, monthDir());
+        fs.mkdirSync(dir, { recursive: true });
+        const filePath = path.join(dir, filename);
+        fs.writeFileSync(filePath, req.file.buffer);
+        mediaUrl = `/public/uploads/inbox/${companyId}/${monthDir()}/${filename}`;
+        mediaMimeType = req.file.mimetype;
+        mediaFileName = req.file.originalname;
+        const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+        absoluteMediaUrl = `${baseUrl}${mediaUrl}`;
+      }
+
+      // Resolve quoted externalId — Meta uses context.message_id (wamid).
+      let replyToExternalId = null;
+      if (quotedMessageId) {
+        const quotedMsg = await prisma.message.findFirst({
+          where: { id: quotedMessageId, conversation: { companyId } },
+          select: { externalId: true },
+        });
+        replyToExternalId = quotedMsg?.externalId || null;
+      }
+
+      let content;
+      let persistedType;
+      if (req.file) {
+        persistedType = detectMessageType(mediaMimeType);
+        content = {
+          type: persistedType,
+          mediaUrl: absoluteMediaUrl,
+          text: textBody || undefined,
+          mediaFileName,
+          replyToExternalId,
+        };
+      } else if (type === 'LOCATION') {
+        persistedType = 'LOCATION';
+        content = {
+          type: 'LOCATION',
+          latitude: parseFloat(latitude),
+          longitude: parseFloat(longitude),
+          replyToExternalId,
+        };
+      } else {
+        if (!textBody) {
+          return res.status(400).json({ message: 'Corpo da mensagem é obrigatório para tipo TEXT' });
+        }
+        persistedType = 'TEXT';
+        content = { type: 'TEXT', text: textBody, replyToExternalId };
+      }
+
+      let sendResult;
+      try {
+        sendResult = await whatsappMetaAdapter.sendMessage(metaAccount, to, content);
+      } catch (err) {
+        if (err instanceof MetaWindowExpiredError) {
+          return res.status(400).json({
+            message: 'Janela de 24h expirada — Meta exige envio de template aprovado',
+            code: 'META_WINDOW_EXPIRED',
+          });
+        }
+        console.error('[inbox] Meta WA send failed:', err);
+        return res.status(500).json({ message: 'Falha ao enviar via Meta', error: err.message });
+      }
+
+      const message = await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: 'OUTBOUND',
+          type: persistedType,
+          body: textBody || null,
+          mediaUrl,
+          mediaMimeType,
+          mediaFileName,
+          latitude: persistedType === 'LOCATION' ? parseFloat(latitude) : null,
+          longitude: persistedType === 'LOCATION' ? parseFloat(longitude) : null,
+          quotedMessageId: quotedMessageId || null,
+          externalId: sendResult.externalId || null,
+          status: sendResult.status || 'SENT',
+        },
+      });
+
+      const updatedConversation = await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: new Date() },
+        include: {
+          customer: { select: { id: true, fullName: true, whatsapp: true } },
+          assignedUser: { select: { id: true, name: true } },
+          store: { select: { id: true, name: true } },
+        },
+      });
+
+      const io = req.app.get('io');
+      if (io) {
+        const payload = {
+          conversationId: conversation.id,
+          conversation: updatedConversation,
+          message,
+          companyId,
+        };
+        io.to(`company_${companyId}`).emit('inbox:new-message', payload);
+        io.emit('inbox:new-message:broadcast', payload);
+      }
+
+      return res.status(201).json(message);
+    }
+
+    // ─── Evolution branch (existing) ──────────────────────────────────────
     if (!conversation.instanceName) {
       return res.status(400).json({ message: 'Conversa sem instância WhatsApp associada' });
     }
