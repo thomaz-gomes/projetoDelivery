@@ -94,7 +94,7 @@ function onWhatsappInput(e) {
     <div class="card login-card">
       <div class="card-body">
         <div class="text-center mb-4">
-          <div class="login-logo mb-2"><img src="/chefiz.png" alt="Logo" class="logo"></div>
+          <div class="login-logo mb-2"><img src="/chefiz.png" alt="Logo"></div>
           <p class="text-muted small mb-0"><i class="bi bi-bicycle me-1"></i>Acesso do Motoboy</p>
         </div>
 
@@ -181,6 +181,7 @@ function onWhatsappInput(e) {
   display: flex;
   align-items: center;
   justify-content: center;
+  max-width: 80%;
 }
 .form-label {
   font-weight: 600;

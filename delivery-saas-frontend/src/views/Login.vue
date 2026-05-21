@@ -61,7 +61,7 @@ async function onSubmit() {
     <div class="card login-card">
       <div class="card-body">
         <div class="text-center mb-4">
-          <div class="login-logo mb-2"><img src="/chefiz.png" alt="Logo" class="logo"></div>
+          <div class="login-logo mb-2"><img src="/chefiz.png" alt="Logo"></div>
           <p class="text-muted small mb-0">Acesso do Operador</p>
         </div>
 
@@ -112,6 +112,7 @@ async function onSubmit() {
   background: linear-gradient(135deg, #8cbe1f 0%, #89d136 60%, #8cbe1f 100%);
   min-height: 100vh;
 }
+
 .login-card {
   width: 380px;
   border: none;
@@ -119,11 +120,13 @@ async function onSubmit() {
   padding: 2rem 1.5rem;
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.2);
 }
+
 .login-logo {
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  max-width: 80%;
 }
 .form-label {
   font-weight: 600;
@@ -136,4 +139,5 @@ async function onSubmit() {
   font-weight: 600;
   font-size: 0.95rem;
 }
+
 </style>
