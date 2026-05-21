@@ -3618,8 +3618,17 @@ function pulseButton() {
       </div>
     </div>
 
+    <!-- Loading state: only during the initial fetch (no orders yet) so a
+         refresh later doesn't blank the kanban. -->
+    <div v-if="store.loading && (!store.orders || store.orders.length === 0)" class="text-center text-secondary py-5">
+      <div class="spinner-border text-primary mb-2" role="status">
+        <span class="visually-hidden">Carregando...</span>
+      </div>
+      <p class="mb-0">Carregando pedidos...</p>
+    </div>
+
     <!-- Orders board: columns with drag & drop -->
-    <div v-if="store.orders && store.orders.length > 0" class="orders-board">
+    <div v-else-if="store.orders && store.orders.length > 0" class="orders-board">
       <div class="boards d-flex gap-3 overflow-auto justify-content-between">
         <div class="orders-column card" v-for="col in (isMobile ? COLUMNS.filter(c => c.key === selectedStatus) : COLUMNS)" :key="col.key" :data-status="col.key">
           <div class="card-header d-flex align-items-center justify-content-between">
