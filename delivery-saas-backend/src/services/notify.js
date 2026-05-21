@@ -329,9 +329,18 @@ async function pickNotificationChannel({ companyId, menuId, storeId, customerId 
   if (menuEvo) return { provider: 'EVOLUTION_WA', account: menuEvo, fallbackEvolution: null };
   if (menuMeta) return { provider: 'META_WA', account: menuMeta, fallbackEvolution: null };
 
-  // 4. Legacy company-wide Evolution fallback (covers cashback w/o menuId)
-  const legacy = await pickConnectedInstance(companyId, { menuId, storeId });
-  if (legacy) return { provider: 'EVOLUTION_WA', account: legacy, fallbackEvolution: null };
+  // 4. Legacy company-wide Evolution fallback — só roda quando NÃO há menuId.
+  // Quando o pedido está vinculado a um cardápio específico (caso de orders
+  // do iFood / cardápio próprio), enviar pela instância de OUTRO cardápio
+  // ou loja gera atribuição errada da conversa no inbox (a conversa fica
+  // ligada ao providerAccount usado, que pertence ao outro cardápio). Se
+  // o cardápio do pedido não tem nenhuma instância vinculada (Evolution
+  // nem Meta), preferimos NÃO enviar a recair em outro canal — operador
+  // precisa configurar WhatsApp para o cardápio em questão.
+  if (!menuId) {
+    const legacy = await pickConnectedInstance(companyId, { storeId });
+    if (legacy) return { provider: 'EVOLUTION_WA', account: legacy, fallbackEvolution: null };
+  }
 
   return null;
 }
