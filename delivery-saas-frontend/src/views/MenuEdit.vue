@@ -67,6 +67,20 @@
               <div class="form-text">Pedidos deste cardápio usarão esta instância para notificações e bot.</div>
             </div>
 
+            <div class="mb-3" v-if="form.whatsappInstanceId && form.metaWaAccountId">
+              <label class="form-label">Canal preferido para notificações</label>
+              <select class="form-select" v-model="form.primaryChannel">
+                <option :value="null">— Automático (espelha o canal do cliente, fallback Evolution) —</option>
+                <option value="EVOLUTION_WA">Evolution API</option>
+                <option value="META_WA">WhatsApp Cloud (Meta)</option>
+              </select>
+              <div class="form-text">
+                Quando o cardápio tem ambos os canais vinculados, este campo decide qual envia notificações de
+                pedido, cashback, etc. Se uma conversa Meta exceder a janela de 24h, o sistema cai automaticamente
+                para Evolution.
+              </div>
+            </div>
+
             <div class="mb-3 border rounded p-3">
               <label class="form-label">Horário de Funcionamento (opcional)</label>
               <div class="form-check mb-2">
@@ -326,7 +340,7 @@ const isEdit = Boolean(id)
 const saas = useSaasStore()
 const isCatalogOnly = computed(() => saas.isCardapioSimplesOnly)
 
-const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', whatsappInstanceId: null, bannerUrl: '', logoUrl: '', open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
+const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', whatsappInstanceId: null, metaWaAccountId: null, primaryChannel: null, bannerUrl: '', logoUrl: '', open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
 const waInstances = ref([])
 // When catalogMode is enabled, disable delivery and pickup (and vice-versa)
 watch(() => form.value.catalogMode, (val) => {
@@ -385,7 +399,7 @@ async function load(){
     if(isEdit){
       const res = await api.get(`/menu/menus/${id}`)
       const d = res.data || {}
-      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: d.address || '', phone: d.phone || '', whatsapp: d.whatsapp || '', whatsappInstanceId: d.whatsappInstanceId || null, bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null, open24Hours: !!d.open24Hours, timezone: d.timezone || '', allowDelivery: typeof d.allowDelivery !== 'undefined' ? !!d.allowDelivery : true, allowPickup: typeof d.allowPickup !== 'undefined' ? !!d.allowPickup : true, catalogMode: !!d.catalogMode }
+      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: d.address || '', phone: d.phone || '', whatsapp: d.whatsapp || '', whatsappInstanceId: d.whatsappInstanceId || null, metaWaAccountId: d.metaWaAccountId || null, primaryChannel: d.primaryChannel || null, bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null, open24Hours: !!d.open24Hours, timezone: d.timezone || '', allowDelivery: typeof d.allowDelivery !== 'undefined' ? !!d.allowDelivery : true, allowPickup: typeof d.allowPickup !== 'undefined' ? !!d.allowPickup : true, catalogMode: !!d.catalogMode }
       // Try to fetch store settings to prefill menu-specific metadata (menus map)
       try {
         if (d.storeId) {
@@ -507,6 +521,7 @@ async function save(){
           if (form.value.phone !== undefined) menuPayload.phone = form.value.phone || null
           if (form.value.whatsapp !== undefined) menuPayload.whatsapp = form.value.whatsapp || null
           if (form.value.whatsappInstanceId !== undefined) menuPayload.whatsappInstanceId = form.value.whatsappInstanceId || null
+          if (form.value.primaryChannel !== undefined) menuPayload.primaryChannel = form.value.primaryChannel || null
           if (form.value.timezone !== undefined) menuPayload.timezone = form.value.timezone || null
           if (form.value.open24Hours !== undefined) menuPayload.open24Hours = !!form.value.open24Hours
           if (form.value.open24Hours) {

@@ -693,6 +693,9 @@ model Menu {
   facebookAccount    MetaMessagingAccount? @relation("MenuFb", fields: [facebookAccountId], references: [id])
   instagramAccountId String?
   instagramAccount   MetaMessagingAccount? @relation("MenuIg", fields: [instagramAccountId], references: [id])
+  // Canal preferencial p/ notificações transacionais (status, cashback).
+  // Quando null, notify.js usa fallback Evolution-first.
+  primaryChannel     NotificationChannel?
   outOfHoursReplyId  String?
   outOfHoursReply    QuickReply?       @relation("MenuOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
   greetingReplyId    String?
@@ -2702,6 +2705,16 @@ enum MessagingProvider {
   META_WA
   META_FB
   META_IG
+}
+
+// Canal preferencial para notificações transacionais (status de pedido,
+// cashback, etc). Quando um Menu tem múltiplos vínculos WhatsApp ativos
+// (Evolution + Meta Cloud), notify.js usa este campo para decidir qual
+// adapter despachar. Restringido a providers WhatsApp; FB/IG nunca são
+// usados para notificação transacional.
+enum NotificationChannel {
+  EVOLUTION_WA
+  META_WA
 }
 
 enum ConversationStatus {

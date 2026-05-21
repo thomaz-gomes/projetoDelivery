@@ -2,6 +2,8 @@ import { prisma } from '../prisma.js';
 import { evoSendText, evoSendLocation, normalizePhone, isBrServiceNumber } from '../wa.js';
 import { emitirInboxNewMessage } from '../socketEmitters.js';
 import { evoGetStatus } from '../wa.js';
+import whatsappMetaAdapter from '../messaging/adapters/whatsappMeta.adapter.js';
+import { MetaWindowExpiredError } from '../messaging/adapters/base.adapter.js';
 
 // Previously we gated customer notifications behind ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS.
 // To ensure customers reliably receive messages for created/updated orders,
@@ -131,15 +133,35 @@ function buildPhoneVariants(normalized) {
   return [...variants];
 }
 
-async function persistOutboundWhatsappMessage({ companyId, instanceName, phone, text, customerId = null, contactName = null, menuId = null, storeId = null }) {
+async function persistOutboundWhatsappMessage({
+  companyId,
+  provider = 'EVOLUTION_WA',
+  providerAccountId = null,
+  instanceName = null,
+  phone,
+  text,
+  externalId = null,
+  customerId = null,
+  contactName = null,
+  menuId = null,
+  storeId = null,
+}) {
   if (!companyId || !phone || !text) return null;
   const normalized = String(phone).startsWith('55') ? String(phone) : normalizePhone(phone);
   if (!normalized) return null;
   const variants = buildPhoneVariants(normalized);
 
   try {
+    // Match the (companyId, channel, channelContactId, providerAccountId)
+    // unique key so the outbound lands in the same conversation as the
+    // corresponding inbound — same channel and same WhatsApp account.
     let conversation = await prisma.conversation.findFirst({
-      where: { companyId, channel: 'WHATSAPP', channelContactId: { in: variants } },
+      where: {
+        companyId,
+        channel: 'WHATSAPP',
+        channelContactId: { in: variants },
+        providerAccountId,
+      },
     });
 
     if (!conversation) {
@@ -152,6 +174,8 @@ async function persistOutboundWhatsappMessage({ companyId, instanceName, phone, 
             channel: 'WHATSAPP',
             channelContactId: normalized,
             instanceName,
+            provider,
+            providerAccountId,
             customerId,
             contactName,
             status: 'OPEN',
@@ -163,7 +187,12 @@ async function persistOutboundWhatsappMessage({ companyId, instanceName, phone, 
         if (e?.code === 'P2002') {
           // Race: another concurrent notify created the conversation; re-fetch.
           conversation = await prisma.conversation.findFirst({
-            where: { companyId, channel: 'WHATSAPP', channelContactId: { in: variants } },
+            where: {
+              companyId,
+              channel: 'WHATSAPP',
+              channelContactId: { in: variants },
+              providerAccountId,
+            },
           });
         } else {
           throw e;
@@ -179,6 +208,7 @@ async function persistOutboundWhatsappMessage({ companyId, instanceName, phone, 
         direction: 'OUTBOUND',
         type: 'TEXT',
         body: text,
+        externalId,
         status: 'SENT',
       },
     });
@@ -245,6 +275,108 @@ export async function pickConnectedInstance(companyId, { menuId, storeId } = {})
   return inst;
 }
 
+// Resolve which WhatsApp channel (Evolution or Meta) should send a notification.
+// Order of preference:
+//   1. Mirror the channel the customer most recently used (Conversation.provider).
+//   2. Menu.primaryChannel (manual config when both Evolution and Meta linked).
+//   3. Evolution-first default (backward compatibility).
+//   4. Company-level fallback via legacy pickConnectedInstance.
+//
+// Returns { provider, account, fallbackEvolution } or null. The
+// fallbackEvolution is set whenever the chosen provider is Meta AND an
+// Evolution instance is also available on the same menu — used by
+// sendNotificationText to recover when Meta hits the 24h window error.
+async function pickNotificationChannel({ companyId, menuId, storeId, customerId }) {
+  let menu = null;
+  if (menuId) {
+    menu = await prisma.menu.findUnique({
+      where: { id: menuId },
+      include: { whatsappInstance: true, metaWaAccount: true },
+    });
+  }
+  const menuEvo = menu?.whatsappInstance?.status === 'CONNECTED' ? menu.whatsappInstance : null;
+  const menuMeta = menu?.metaWaAccount || null;
+
+  // 1. Mirror origin
+  if (customerId) {
+    const conv = await prisma.conversation.findFirst({
+      where: {
+        companyId,
+        customerId,
+        channel: 'WHATSAPP',
+        ...(menuId ? { menuId } : storeId ? { storeId } : {}),
+      },
+      orderBy: { lastMessageAt: 'desc' },
+      select: { provider: true },
+    });
+    if (conv?.provider === 'META_WA' && menuMeta) {
+      return { provider: 'META_WA', account: menuMeta, fallbackEvolution: menuEvo };
+    }
+    if (conv?.provider === 'EVOLUTION_WA' && menuEvo) {
+      return { provider: 'EVOLUTION_WA', account: menuEvo, fallbackEvolution: null };
+    }
+  }
+
+  // 2. Manual preference
+  if (menu?.primaryChannel === 'META_WA' && menuMeta) {
+    return { provider: 'META_WA', account: menuMeta, fallbackEvolution: menuEvo };
+  }
+  if (menu?.primaryChannel === 'EVOLUTION_WA' && menuEvo) {
+    return { provider: 'EVOLUTION_WA', account: menuEvo, fallbackEvolution: null };
+  }
+
+  // 3. Evolution-first default
+  if (menuEvo) return { provider: 'EVOLUTION_WA', account: menuEvo, fallbackEvolution: null };
+  if (menuMeta) return { provider: 'META_WA', account: menuMeta, fallbackEvolution: null };
+
+  // 4. Legacy company-wide Evolution fallback (covers cashback w/o menuId)
+  const legacy = await pickConnectedInstance(companyId, { menuId, storeId });
+  if (legacy) return { provider: 'EVOLUTION_WA', account: legacy, fallbackEvolution: null };
+
+  return null;
+}
+
+// Send a TEXT notification via the provider chosen by pickNotificationChannel.
+// If Meta returns MetaWindowExpiredError and a fallback Evolution instance is
+// available, automatically retry via Evolution so the customer still gets the
+// message. Returns { provider, providerAccountId, instanceName, externalId,
+// fallbackUsed? } describing what actually went out — caller uses this to
+// persist the OUTBOUND Message in the right Conversation.
+async function sendNotificationText({ provider, account, to, text, fallbackEvolution = null }) {
+  if (provider === 'META_WA') {
+    try {
+      const result = await whatsappMetaAdapter.sendMessage(account, to, { type: 'TEXT', text });
+      return {
+        provider: 'META_WA',
+        providerAccountId: account.id,
+        instanceName: null,
+        externalId: result?.externalId || null,
+      };
+    } catch (err) {
+      if (err instanceof MetaWindowExpiredError && fallbackEvolution) {
+        console.warn('[notify] Meta 24h window expired — falling back to Evolution', { to });
+        await evoSendText({ instanceName: fallbackEvolution.instanceName, to, text });
+        return {
+          provider: 'EVOLUTION_WA',
+          providerAccountId: fallbackEvolution.id,
+          instanceName: fallbackEvolution.instanceName,
+          externalId: null,
+          fallbackUsed: true,
+        };
+      }
+      throw err;
+    }
+  }
+  // EVOLUTION_WA
+  await evoSendText({ instanceName: account.instanceName, to, text });
+  return {
+    provider: 'EVOLUTION_WA',
+    providerAccountId: account.id,
+    instanceName: account.instanceName,
+    externalId: null,
+  };
+}
+
 export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
   try {
     const order = await prisma.order.findUnique({
@@ -264,9 +396,15 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
       return;
     }
 
-    const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
-    if (!inst) {
-      console.warn('[notifyRiderAssigned] Sem instância CONNECTED para company', order.companyId);
+    // Rider notification goes to the rider's phone, so no customerId is
+    // passed: mirror-origin doesn't apply for a third-party recipient.
+    const channel = await pickNotificationChannel({
+      companyId: order.companyId,
+      menuId: order.menuId,
+      storeId: order.storeId,
+    });
+    if (!channel) {
+      console.warn('[notifyRiderAssigned] Sem canal WhatsApp configurado para company', order.companyId);
       return;
     }
 
@@ -337,15 +475,25 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
       .replace(/\{\{pagamento\}\}/g, paymentMethod || '-')
       .replace(/\{\{contato\}\}/g, contactToShow);
 
-    console.log('[notifyRiderAssigned] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0,120) });
+    console.log('[notifyRiderAssigned] sending text', { provider: channel.provider, to: phone, snippet: String(text).slice(0,120) });
+    let sent = null;
     try {
-      const r = await evoSendText({ instanceName: inst.instanceName, to: phone, text });
-      console.log('[notifyRiderAssigned] evoSendText result', { instance: inst.instanceName, to: phone, result: (r && typeof r === 'object') ? JSON.stringify(r).slice(0,500) : String(r) });
+      sent = await sendNotificationText({
+        provider: channel.provider,
+        account: channel.account,
+        to: phone,
+        text,
+        fallbackEvolution: channel.fallbackEvolution,
+      });
+      console.log('[notifyRiderAssigned] send result', { provider: sent.provider, fallbackUsed: !!sent.fallbackUsed });
       await persistOutboundWhatsappMessage({
         companyId: order.companyId,
-        instanceName: inst.instanceName,
+        provider: sent.provider,
+        providerAccountId: sent.providerAccountId,
+        instanceName: sent.instanceName,
         phone,
         text,
+        externalId: sent.externalId,
         customerId: order.customerId || null,
         contactName: order.customerName || null,
         menuId: order.menuId || null,
@@ -355,21 +503,29 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
       console.error('[notifyRiderAssigned] sendText erro:', e.response?.data || e.message || String(e));
     }
 
-    // Tenta enviar um PIN de localização (se coords válidas)
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      console.log('[notifyRiderAssigned] calling evoSendLocation', { instance: inst.instanceName, to: phone, lat, lng });
-      await evoSendLocation({
-        instanceName: inst.instanceName,
-        to: phone,
-        latitude: lat,
-        longitude: lng,
-        address: addressText,
-      }).then(r => {
-        console.log('[notifyRiderAssigned] evoSendLocation result', { instance: inst.instanceName, to: phone, result: (r && typeof r === 'object') ? JSON.stringify(r).slice(0,500) : String(r) });
-      }).catch(e => {
-        // nem toda build suporta; log e segue
+    // PIN de localização (se coords válidas). Usa o mesmo canal do envio do texto.
+    if (sent && Number.isFinite(lat) && Number.isFinite(lng)) {
+      try {
+        if (sent.provider === 'META_WA') {
+          await whatsappMetaAdapter.sendMessage(channel.account, phone, {
+            type: 'LOCATION',
+            latitude: lat,
+            longitude: lng,
+            address: addressText,
+          });
+        } else {
+          await evoSendLocation({
+            instanceName: sent.instanceName,
+            to: phone,
+            latitude: lat,
+            longitude: lng,
+            address: addressText,
+          });
+        }
+      } catch (e) {
+        // Nem toda build / adapter suporta location; log e segue.
         console.warn('[notifyRiderAssigned] sendLocation falhou (ok se não suportar):', e.response?.data || e.message || String(e));
-      });
+      }
     }
   } catch (e) {
     console.error('[notifyRiderAssigned] erro:', e.response?.data || e.message || e);
@@ -402,9 +558,14 @@ export async function notifyCustomerStatus(orderId, newStatus) {
       return;
     }
 
-    const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
-    if (!inst) {
-      console.warn('[notifyCustomerStatus] Sem instância CONNECTED para company', order.companyId);
+    const channel = await pickNotificationChannel({
+      companyId: order.companyId,
+      menuId: order.menuId,
+      storeId: order.storeId,
+      customerId: order.customerId || null,
+    });
+    if (!channel) {
+      console.warn('[notifyCustomerStatus] Sem canal WhatsApp configurado para company', order.companyId);
       return;
     }
 
@@ -450,15 +611,24 @@ Fique tranquilo(a) que vou enviar as atualizações do status do seu pedido por 
       .replace(/\{\{status\}\}/g, statusPt)
       .replace(/\{\{pedido\}\}/g, shortId);
 
-    console.log('[notifyCustomerStatus] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0,120) });
+    console.log('[notifyCustomerStatus] sending text', { provider: channel.provider, to: phone, snippet: String(text).slice(0,120) });
     try {
-      const r = await evoSendText({ instanceName: inst.instanceName, to: phone, text });
-      console.log('[notifyCustomerStatus] evoSendText result', { instance: inst.instanceName, to: phone, result: (r && typeof r === 'object') ? JSON.stringify(r).slice(0,500) : String(r) });
+      const sent = await sendNotificationText({
+        provider: channel.provider,
+        account: channel.account,
+        to: phone,
+        text,
+        fallbackEvolution: channel.fallbackEvolution,
+      });
+      console.log('[notifyCustomerStatus] send result', { provider: sent.provider, fallbackUsed: !!sent.fallbackUsed });
       await persistOutboundWhatsappMessage({
         companyId: order.companyId,
-        instanceName: inst.instanceName,
+        provider: sent.provider,
+        providerAccountId: sent.providerAccountId,
+        instanceName: sent.instanceName,
         phone,
         text,
+        externalId: sent.externalId,
         customerId: order.customerId || null,
         contactName: order.customerName || null,
         menuId: order.menuId || null,
@@ -503,9 +673,14 @@ export async function notifyCustomerOrderSummary(orderId) {
       return;
     }
 
-    const inst = await pickConnectedInstance(order.companyId, { menuId: order.menuId, storeId: order.storeId });
-    if (!inst) {
-      console.warn('[notifyCustomerOrderSummary] Sem instância CONNECTED para company', order.companyId);
+    const channel = await pickNotificationChannel({
+      companyId: order.companyId,
+      menuId: order.menuId,
+      storeId: order.storeId,
+      customerId: order.customerId || null,
+    });
+    if (!channel) {
+      console.warn('[notifyCustomerOrderSummary] Sem canal WhatsApp configurado para company', order.companyId);
       return;
     }
 
@@ -561,15 +736,24 @@ export async function notifyCustomerOrderSummary(orderId) {
 
     const text = lines.join('\n');
 
-    console.log('[notifyCustomerOrderSummary] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0,140) });
+    console.log('[notifyCustomerOrderSummary] sending text', { provider: channel.provider, to: phone, snippet: String(text).slice(0,140) });
     try {
-      const r = await evoSendText({ instanceName: inst.instanceName, to: phone, text });
-      console.log('[notifyCustomerOrderSummary] evoSendText result', { instance: inst.instanceName, to: phone, result: (r && typeof r === 'object') ? JSON.stringify(r).slice(0,500) : String(r) });
+      const sent = await sendNotificationText({
+        provider: channel.provider,
+        account: channel.account,
+        to: phone,
+        text,
+        fallbackEvolution: channel.fallbackEvolution,
+      });
+      console.log('[notifyCustomerOrderSummary] send result', { provider: sent.provider, fallbackUsed: !!sent.fallbackUsed });
       await persistOutboundWhatsappMessage({
         companyId: order.companyId,
-        instanceName: inst.instanceName,
+        provider: sent.provider,
+        providerAccountId: sent.providerAccountId,
+        instanceName: sent.instanceName,
         phone,
         text,
+        externalId: sent.externalId,
         customerId: order.customerId || null,
         contactName: order.customerName || null,
         menuId: order.menuId || null,
@@ -600,8 +784,32 @@ export async function notifyCashbackCredit(clientId, companyId, amount, newBalan
       console.log('[notifyCashbackCredit] skipping non-WhatsApp service number', phone);
       return;
     }
-    const inst = await pickConnectedInstance(companyId);
-    if (!inst) return;
+    // Try to resolve menuId/storeId from the customer's last order — this
+    // lets pickNotificationChannel mirror the channel the customer used and
+    // respect the menu's primaryChannel preference. Falls back to company-
+    // wide selection if no prior order context.
+    let lastOrderMenuId = null;
+    let lastOrderStoreId = null;
+    try {
+      const lastOrder = await prisma.order.findFirst({
+        where: { customerId: clientId, companyId },
+        orderBy: { createdAt: 'desc' },
+        select: { menuId: true, storeId: true },
+      });
+      lastOrderMenuId = lastOrder?.menuId || null;
+      lastOrderStoreId = lastOrder?.storeId || null;
+    } catch (_) { /* best-effort */ }
+
+    const channel = await pickNotificationChannel({
+      companyId,
+      menuId: lastOrderMenuId,
+      storeId: lastOrderStoreId,
+      customerId: clientId,
+    });
+    if (!channel) {
+      console.warn('[notifyCashbackCredit] Sem canal WhatsApp configurado para company', companyId);
+      return;
+    }
 
     const DEFAULT_CASHBACK_TEMPLATE =
 `Olá {{nome}}, aqui é o atendente virtual do *{{loja}}* 👋
@@ -622,18 +830,20 @@ Use seu cashback no próximo pedido. 😊`;
 
     if (!raw.trim()) return;
 
-    // Cashback isn't tied to a specific order, but the customer's most
-    // recent order tells us which cardápio they associate this credit with.
-    // Fall back to the company name only when no order context exists.
+    // Display name for the {{loja}} placeholder: prefer the cardápio from
+    // the customer's last order (matches the brand they remember), fall
+    // back to company name when no order context exists.
     let menuName = null;
-    try {
-      const lastOrder = await prisma.order.findFirst({
-        where: { customerId: clientId, companyId },
-        orderBy: { createdAt: 'desc' },
-        select: { menu: { select: { name: true } }, store: { select: { name: true } } },
-      });
-      menuName = lastOrder?.menu?.name || lastOrder?.store?.name || null;
-    } catch (e) { /* best-effort; fall through to company name */ }
+    if (lastOrderMenuId || lastOrderStoreId) {
+      try {
+        const orderCtx = await prisma.order.findFirst({
+          where: { customerId: clientId, companyId },
+          orderBy: { createdAt: 'desc' },
+          select: { menu: { select: { name: true } }, store: { select: { name: true } } },
+        });
+        menuName = orderCtx?.menu?.name || orderCtx?.store?.name || null;
+      } catch (_) { /* best-effort */ }
+    }
 
     const text = raw
       .replace(/\{\{nome\}\}/g, customer?.fullName || '')
@@ -641,16 +851,27 @@ Use seu cashback no próximo pedido. 😊`;
       .replace(/\{\{ganhou\}\}/g, fmtCurrency(amount))
       .replace(/\{\{saldo\}\}/g, fmtCurrency(newBalance));
 
-    console.log('[notifyCashbackCredit] calling evoSendText', { instance: inst.instanceName, to: phone, snippet: String(text).slice(0, 120) });
+    console.log('[notifyCashbackCredit] sending text', { provider: channel.provider, to: phone, snippet: String(text).slice(0, 120) });
     try {
-      await evoSendText({ instanceName: inst.instanceName, to: phone, text });
+      const sent = await sendNotificationText({
+        provider: channel.provider,
+        account: channel.account,
+        to: phone,
+        text,
+        fallbackEvolution: channel.fallbackEvolution,
+      });
       await persistOutboundWhatsappMessage({
         companyId,
-        instanceName: inst.instanceName,
+        provider: sent.provider,
+        providerAccountId: sent.providerAccountId,
+        instanceName: sent.instanceName,
         phone,
         text,
+        externalId: sent.externalId,
         customerId: customer?.id || null,
         contactName: customer?.fullName || null,
+        menuId: lastOrderMenuId,
+        storeId: lastOrderStoreId,
       });
     } catch (e) {
       console.error('[notifyCashbackCredit] sendText erro:', e.response?.data || e.message || String(e));
