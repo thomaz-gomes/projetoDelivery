@@ -17,13 +17,14 @@
               <tr>
                 <th>Atalho</th>
                 <th>Título</th>
+                <th>Cardápios</th>
                 <th>Mensagem</th>
                 <th style="width: 90px;"></th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!inboxStore.quickReplies.length">
-                <td colspan="4" class="text-center text-muted py-4">
+                <td colspan="5" class="text-center text-muted py-4">
                   Nenhuma resposta rápida cadastrada.
                 </td>
               </tr>
@@ -33,6 +34,12 @@
                   <span v-else class="text-muted small">—</span>
                 </td>
                 <td>{{ reply.title }}</td>
+                <td>
+                  <span v-if="!reply.menus || reply.menus.length === 0" class="badge bg-secondary">Todos</span>
+                  <span v-else class="d-inline-flex flex-wrap gap-1">
+                    <span v-for="m in reply.menus" :key="m.id" class="badge bg-info text-dark">{{ m.name }}</span>
+                  </span>
+                </td>
                 <td>
                   <i v-if="reply.mediaUrl" class="bi bi-paperclip me-1 text-primary" :title="reply.mediaFileName || 'anexo'"></i>
                   <span class="d-inline-block text-truncate" style="max-width: 260px; vertical-align: middle;">
@@ -88,6 +95,29 @@
                 <div>
                   <label class="form-label">Título</label>
                   <input v-model="form.title" type="text" class="form-control" placeholder="ex: Saudação" required />
+                </div>
+
+                <div>
+                  <label class="form-label d-flex align-items-center justify-content-between">
+                    <span>Cardápios</span>
+                    <small class="text-muted">deixe vazio para aparecer em todas as conversas</small>
+                  </label>
+                  <div v-if="!menus.length" class="text-muted small">Nenhum cardápio cadastrado.</div>
+                  <div v-else class="d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
+                    <div v-for="m in menus" :key="m.id" class="form-check">
+                      <input
+                        :id="'menu-' + m.id"
+                        v-model="form.menuIds"
+                        :value="m.id"
+                        class="form-check-input"
+                        type="checkbox"
+                      />
+                      <label class="form-check-label" :for="'menu-' + m.id">
+                        {{ m.name }}
+                        <span v-if="m.storeName" class="text-muted small">({{ m.storeName }})</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label class="form-label d-flex align-items-center justify-content-between">
@@ -155,6 +185,7 @@
 import { ref, onMounted, nextTick } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import { API_URL } from '@/config';
+import api from '@/api';
 import Swal from 'sweetalert2';
 
 const inboxStore = useInboxStore();
@@ -165,6 +196,7 @@ const editingId = ref(null);
 const selectedFile = ref(null);
 const assetBase = API_URL;
 const bodyTextarea = ref(null);
+const menus = ref([]); // [{ id, name, storeName }]
 
 // Variables that the backend resolves before sending (see utils/quickReplyVars.js).
 // `display` is precomputed in JS to avoid Vue's template parser closing the
@@ -201,10 +233,30 @@ const form = ref({
   existingMediaUrl: null,
   existingMediaFileName: null,
   removeMedia: false,
+  menuIds: [],
 });
+
+async function loadMenus() {
+  try {
+    const [{ data: mns }, { data: sts }] = await Promise.all([
+      api.get('/menu/menus'),
+      api.get('/stores'),
+    ]);
+    const storesById = {};
+    (sts || []).forEach((s) => { storesById[s.id] = s.name; });
+    menus.value = (mns || []).map((m) => ({
+      id: m.id,
+      name: m.name,
+      storeName: storesById[m.storeId] || null,
+    }));
+  } catch (e) {
+    menus.value = [];
+  }
+}
 
 onMounted(() => {
   inboxStore.fetchQuickReplies();
+  loadMenus();
 });
 
 function resetForm() {
@@ -216,6 +268,7 @@ function resetForm() {
     existingMediaUrl: null,
     existingMediaFileName: null,
     removeMedia: false,
+    menuIds: [],
   };
   selectedFile.value = null;
 }
@@ -236,6 +289,7 @@ function openEdit(reply) {
     existingMediaUrl: reply.mediaUrl || null,
     existingMediaFileName: reply.mediaFileName || null,
     removeMedia: false,
+    menuIds: (reply.menus || []).map((m) => m.id),
   };
   selectedFile.value = null;
   showForm.value = true;
@@ -289,6 +343,8 @@ async function save() {
     if (hasBody) fd.append('body', form.value.body.trim());
     if (selectedFile.value) fd.append('file', selectedFile.value);
     if (form.value.removeMedia) fd.append('removeMedia', 'true');
+    // Sempre envia menuIds (mesmo vazio) pra permitir limpar a lista no PUT.
+    fd.append('menuIds', JSON.stringify(form.value.menuIds || []));
 
     if (editingId.value) {
       await inboxStore.updateQuickReply(editingId.value, fd);

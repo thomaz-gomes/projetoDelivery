@@ -892,6 +892,7 @@ router.get('/quick-replies', async (req, res) => {
     const { companyId } = req.user;
     const replies = await prisma.quickReply.findMany({
       where: { companyId },
+      include: { menus: { select: { id: true, name: true } } },
       orderBy: { shortcut: 'asc' },
     });
     return res.json(replies);
@@ -903,10 +904,32 @@ router.get('/quick-replies', async (req, res) => {
 
 // ─── 9. POST /quick-replies — Create quick reply ───────────────────────────
 
+// Aceita menuIds como array nativo (JSON) OU como string CSV/JSON (multipart).
+// Filtra IDs vazios e valida que pertencem à empresa.
+async function parseAndValidateMenuIds(rawMenuIds, companyId) {
+  let ids = rawMenuIds;
+  if (typeof ids === 'string') {
+    try {
+      const parsed = JSON.parse(ids);
+      ids = Array.isArray(parsed) ? parsed : ids.split(',');
+    } catch {
+      ids = ids.split(',');
+    }
+  }
+  if (!Array.isArray(ids)) return [];
+  ids = ids.map((v) => String(v || '').trim()).filter(Boolean);
+  if (ids.length === 0) return [];
+  const owned = await prisma.menu.findMany({
+    where: { id: { in: ids }, store: { companyId } },
+    select: { id: true },
+  });
+  return owned.map((m) => m.id);
+}
+
 router.post('/quick-replies', requireRole('ADMIN'), upload.single('file'), async (req, res) => {
   try {
     const { companyId } = req.user;
-    let { shortcut, title, body } = req.body;
+    let { shortcut, title, body, menuIds } = req.body;
 
     if (!title) {
       return res.status(400).json({ message: 'title é obrigatório' });
@@ -925,6 +948,7 @@ router.post('/quick-replies', requireRole('ADMIN'), upload.single('file'), async
     }
 
     const media = saveQuickReplyMedia(req.file, companyId);
+    const validMenuIds = await parseAndValidateMenuIds(menuIds, companyId);
 
     const reply = await prisma.quickReply.create({
       data: {
@@ -935,7 +959,11 @@ router.post('/quick-replies', requireRole('ADMIN'), upload.single('file'), async
         mediaUrl: media?.mediaUrl || null,
         mediaMimeType: media?.mediaMimeType || null,
         mediaFileName: media?.mediaFileName || null,
+        menus: validMenuIds.length > 0
+          ? { connect: validMenuIds.map((id) => ({ id })) }
+          : undefined,
       },
+      include: { menus: { select: { id: true, name: true } } },
     });
 
     return res.status(201).json(reply);
@@ -953,7 +981,7 @@ router.post('/quick-replies', requireRole('ADMIN'), upload.single('file'), async
 router.put('/quick-replies/:id', requireRole('ADMIN'), upload.single('file'), async (req, res) => {
   try {
     const { companyId } = req.user;
-    let { shortcut, title, body, removeMedia } = req.body;
+    let { shortcut, title, body, removeMedia, menuIds } = req.body;
 
     // Verify ownership + load current media info
     const existing = await prisma.quickReply.findUnique({
@@ -992,10 +1020,17 @@ router.put('/quick-replies/:id', requireRole('ADMIN'), upload.single('file'), as
       data.mediaFileName = null;
     }
 
+    // Vínculo com cardápios — `set` substitui a lista atual (passar [] = global)
+    if (menuIds !== undefined) {
+      const validMenuIds = await parseAndValidateMenuIds(menuIds, companyId);
+      data.menus = { set: validMenuIds.map((id) => ({ id })) };
+    }
+
     // Validate: after changes, at least one of body or mediaUrl must be present
     const updated = await prisma.quickReply.update({
       where: { id: req.params.id },
       data,
+      include: { menus: { select: { id: true, name: true } } },
     });
     if (!updated.body && !updated.mediaUrl) {
       // Roll back by rejecting — no undo of file save but at least DB consistent

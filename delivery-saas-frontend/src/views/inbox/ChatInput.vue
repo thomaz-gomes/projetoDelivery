@@ -17,10 +17,10 @@
       <button class="btn btn-sm btn-close ms-auto" @click="clearFile"></button>
     </div>
 
-    <!-- Quick reply chips -->
-    <div v-if="quickReplies.length && !inboxStore.internalMode && !disabled" class="d-flex gap-1 mb-2 overflow-auto pb-1" style="scrollbar-width: thin;">
+    <!-- Quick reply chips (filtradas pelo cardapio da conversa) -->
+    <div v-if="visibleQuickReplies.length && !inboxStore.internalMode && !disabled" class="d-flex gap-1 mb-2 overflow-auto pb-1" style="scrollbar-width: thin;">
       <button
-        v-for="reply in quickReplies"
+        v-for="reply in visibleQuickReplies"
         :key="reply.id"
         class="btn btn-sm btn-outline-secondary text-nowrap"
         style="font-size: 0.75rem; flex-shrink: 0;"
@@ -34,7 +34,7 @@
     </div>
 
     <!-- Quick reply picker (typing /) -->
-    <QuickReplyPicker v-if="showQuickReplies" :filter="quickReplyFilter" @select="onQuickReplySelect" />
+    <QuickReplyPicker v-if="showQuickReplies" :filter="quickReplyFilter" :replies="visibleQuickReplies" @select="onQuickReplySelect" />
 
     <!-- Input row -->
     <div class="d-flex align-items-end gap-2">
@@ -103,6 +103,21 @@ const textareaRef = ref(null);
 const showQuickReplies = computed(() => text.value.startsWith('/') && text.value.length > 0);
 const quickReplyFilter = computed(() => text.value.slice(1));
 const quickReplies = computed(() => inboxStore.quickReplies || []);
+
+// Filtra pelo cardápio da conversa ativa:
+//  - reply.menus vazio = global → sempre visível
+//  - reply.menus.length > 0 → só visível se o menuId da conversa estiver na lista
+//  - conversa sem menuId → só mostra os globais (não dá pra inferir escopo)
+const visibleQuickReplies = computed(() => {
+  const conv = inboxStore.activeConversation;
+  const menuId = conv?.menuId || conv?.menu?.id || null;
+  return quickReplies.value.filter((r) => {
+    const scoped = Array.isArray(r.menus) && r.menus.length > 0;
+    if (!scoped) return true;
+    if (!menuId) return false;
+    return r.menus.some((m) => m.id === menuId);
+  });
+});
 
 const replyToMessage = computed(() => {
   if (!inboxStore.replyToMessageId) return null;

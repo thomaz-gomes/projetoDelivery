@@ -713,6 +713,9 @@ model Menu {
   conversations      Conversation[]
   greetingTimeRules  GreetingTimeRule[]
   orders             Order[]
+  // Respostas rápidas com visibilidade restrita a este cardápio. Vazio em
+  // QuickReply.menus = global (aparece em todas as conversas).
+  scopedQuickReplies QuickReply[]      @relation("QuickReplyMenus")
 }
 
 model CustomDomain {
@@ -2826,6 +2829,10 @@ model QuickReply {
   menusOutOfHours   Menu[]             @relation("MenuOutOfHoursReply")
   menusGreeting     Menu[]             @relation("MenuGreetingReply")
   menusRegisteredGreeting Menu[]       @relation("MenuRegisteredGreetingReply")
+  // Escopo de visibilidade: se vazio, a resposta rápida aparece em todas as
+  // conversas da empresa. Se preenchido, só aparece quando a conversa estiver
+  // vinculada a um desses cardápios. Many-to-many via _QuickReplyMenus.
+  menus             Menu[]             @relation("QuickReplyMenus")
   greetingTimeRules GreetingTimeRule[]
 
   @@unique([companyId, shortcut])

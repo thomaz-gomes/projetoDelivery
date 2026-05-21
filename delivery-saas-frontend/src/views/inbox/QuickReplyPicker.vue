@@ -30,6 +30,9 @@ import { useInboxStore } from '@/stores/inbox';
 
 const props = defineProps({
   filter: { type: String, default: '' },
+  // Opcional: lista já filtrada pelo chamador (ex.: ChatInput passa só as
+  // replies visíveis no cardápio da conversa ativa). Se vazia, cai no store.
+  replies: { type: Array, default: null },
 });
 
 defineEmits(['select']);
@@ -37,7 +40,8 @@ defineEmits(['select']);
 const inboxStore = useInboxStore();
 
 const filtered = computed(() => {
-  const withShortcut = inboxStore.quickReplies.filter(r => r.shortcut);
+  const source = props.replies != null ? props.replies : inboxStore.quickReplies;
+  const withShortcut = (source || []).filter(r => r.shortcut);
   const q = (props.filter || '').toLowerCase();
   if (!q) return withShortcut;
   return withShortcut.filter(r =>
