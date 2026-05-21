@@ -171,6 +171,11 @@ async function dispatchMeta(payload) {
     try {
       account = await prisma.metaMessagingAccount.findFirst({
         where: { provider, externalId },
+        include: {
+          menusAsMetaWa: { select: { id: true, storeId: true } },
+          menusAsFb: { select: { id: true, storeId: true } },
+          menusAsIg: { select: { id: true, storeId: true } },
+        },
       })
     } catch (err) {
       console.error('[webhook/meta] account lookup failed', { provider, externalId, err: err?.message || err })

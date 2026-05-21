@@ -50,6 +50,11 @@ const adapter = {
     const changes = Array.isArray(entry?.changes) ? entry.changes : []
     const accountId = account?.id || null
     const companyId = account?.companyId || null
+    // Derive store/menu from the first Menu linked to this Meta WA account
+    // (mirrors whatsappEvolution.adapter.js). Requires webhookMeta.js to
+    // eager-load `menusAsMetaWa` when resolving the account.
+    const menuId = account?.menusAsMetaWa?.[0]?.id || null
+    const storeId = account?.menusAsMetaWa?.[0]?.storeId || null
 
     const out = []
     const seen = new Set()
@@ -95,6 +100,8 @@ const adapter = {
           companyId,
           channelContactId: phone,
           providerAccountId: accountId,
+          menuId,
+          storeId,
           contactName: contactsByWaId.get(from) || null,
           type: info.type,
           body: info.body,
