@@ -61,8 +61,25 @@
       </div>
 
       <!-- LOCATION -->
-      <div v-else-if="message.type === 'LOCATION'">
-        <i class="bi bi-geo-alt me-1"></i>{{ message.body || 'Localização' }}
+      <div v-else-if="message.type === 'LOCATION'" class="location-msg">
+        <a
+          v-if="locationMapsUrl"
+          :href="locationMapsUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="d-block text-decoration-none"
+        >
+          <div class="d-flex align-items-center gap-1 fw-semibold">
+            <i class="bi bi-geo-alt-fill"></i>
+            <span>Ver no mapa</span>
+            <i class="bi bi-box-arrow-up-right small ms-1"></i>
+          </div>
+          <div class="small text-muted mt-1" style="word-break: break-all;">{{ locationLabel }}</div>
+        </a>
+        <div v-else class="d-flex align-items-center gap-1">
+          <i class="bi bi-geo-alt"></i>
+          <span>{{ message.body || 'Localização' }}</span>
+        </div>
       </div>
 
       <!-- STICKER -->
@@ -133,6 +150,36 @@ const quotedPreview = computed(() => {
 const formattedTime = computed(() => {
   const d = new Date(props.message.createdAt);
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+});
+
+// Localização: usa primeiro lat/lng das colunas do banco. Como fallback,
+// tenta extrair "lat,lng" do body (mensagens antigas que não preencheram
+// as colunas separadas).
+const locationCoords = computed(() => {
+  const m = props.message;
+  let lat = m.latitude;
+  let lng = m.longitude;
+  if ((lat == null || lng == null) && typeof m.body === 'string') {
+    const match = m.body.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+    if (match) {
+      lat = Number(match[1]);
+      lng = Number(match[2]);
+    }
+  }
+  if (lat == null || lng == null || Number.isNaN(Number(lat)) || Number.isNaN(Number(lng))) return null;
+  return { lat: Number(lat), lng: Number(lng) };
+});
+
+const locationMapsUrl = computed(() => {
+  const c = locationCoords.value;
+  if (!c) return null;
+  return `https://www.google.com/maps?q=${c.lat},${c.lng}`;
+});
+
+const locationLabel = computed(() => {
+  const c = locationCoords.value;
+  if (c) return `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`;
+  return props.message.body || '';
 });
 
 const statusIcon = computed(() => {
