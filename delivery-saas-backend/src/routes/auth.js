@@ -298,6 +298,18 @@ function generateCode() {
   return String(crypto.randomInt(100000, 999999));
 }
 
+// GET /auth/check-email?email=... — async availability probe used by the trial onboarding.
+// Light rate-limit (60/min/IP) is plenty: the front debounces 600ms per keystroke.
+const checkEmailLimiter = rateLimit({ windowMs: 60_000, max: 60, message: 'Muitas verificações. Aguarde 1 minuto.' });
+authRouter.get('/check-email', checkEmailLimiter, async (req, res) => {
+  const raw = String(req.query.email || '').toLowerCase().trim();
+  if (!raw || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+    return res.json({ valid: false, available: false });
+  }
+  const existing = await prisma.user.findUnique({ where: { email: raw }, select: { id: true } });
+  return res.json({ valid: true, available: !existing });
+});
+
 // POST /auth/register — create a new ADMIN user (no company yet)
 authRouter.post('/register', registerLimiter, async (req, res) => {
   const { name, email, password } = req.body || {};
