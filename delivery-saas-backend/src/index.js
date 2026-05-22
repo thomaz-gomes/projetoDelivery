@@ -80,6 +80,7 @@ import aiStudioRouter from './routes/aiStudio.js'
 import brandThemesRouter from './routes/brandThemes.js'
 import { paymentRouter } from './routes/payment.js'
 import leadsRouter from './routes/leads.js'
+import { publicOnboardingRouter } from './routes/publicOnboarding.js'
 import customDomainRouter from './routes/customDomain.js'
 import webhookEvolutionRouter from './routes/webhookEvolution.js'
 import webhookMetaRouter from './routes/webhookMeta.js'
@@ -263,6 +264,7 @@ app.use("/affiliates", affiliatesRouter);
 app.use('/coupons', requireModule('COUPONS'), couponsRouter);
 app.use('/public', publicMenuRouter);
 app.use('/public', leadsRouter);
+app.use('/public', publicOnboardingRouter);
 // Public cart endpoints (evaluations) for a given companyId
 app.use('/public/:companyId/cart', publicCartRouter);
 app.use('/public/tracking', publicTrackingRouter);
