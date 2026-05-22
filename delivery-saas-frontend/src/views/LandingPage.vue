@@ -632,13 +632,13 @@ onUnmounted(() => {
             <div class="cfz-testimonial-quote">"</div>
             <blockquote>{{ t.q }}</blockquote>
             <div class="cfz-testimonial-spacer"></div>
-            <div class="cfz-testimonial-meta">
+            <figcaption class="cfz-testimonial-meta">
               <div class="cfz-testimonial-avatar">{{ t.a.charAt(0) }}</div>
-              <figcaption>
+              <div>
                 <div class="cfz-testimonial-name">{{ t.a }}</div>
                 <div class="cfz-testimonial-tag">{{ t.tag }}</div>
-              </figcaption>
-            </div>
+              </div>
+            </figcaption>
           </figure>
         </div>
       </div>
