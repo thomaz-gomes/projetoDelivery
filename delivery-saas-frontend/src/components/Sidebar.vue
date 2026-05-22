@@ -934,7 +934,7 @@ function selectMenuOption(opt){
   transition: all 0.3s ease;
 }
 .log, .logo-neg {
-    max-width: 180px;
+    max-width: 120px;
 }
 .nav-link {
   transition: background-color 0.12s, color 0.12s;
