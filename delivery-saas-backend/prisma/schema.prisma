@@ -155,6 +155,7 @@ model Company {
 
   // ---- Meta Messaging (WhatsApp Cloud / Facebook / Instagram) ----
   metaMessagingAccounts MetaMessagingAccount[]
+  metaTemplates         MetaTemplate[]
 
   // ---- Error monitoring ----
   errorLogs ErrorLog[]
@@ -383,10 +384,36 @@ model MetaMessagingAccount {
   menusAsMetaWa Menu[]  @relation("MenuMetaWa")
   menusAsFb     Menu[]  @relation("MenuFb")
   menusAsIg     Menu[]  @relation("MenuIg")
+  templates     MetaTemplate[]
 
   @@unique([companyId, provider, externalId])
   @@index([companyId])
   @@index([provider, externalId])
+}
+
+// Cache local dos templates de mensagem aprovados na WABA. Sincronizado sob
+// demanda via Graph API (GET /<waba_id>/message_templates). Permite a UI
+// listar e usar os templates sem fazer round-trip pra Meta a cada exibição.
+// `components` armazena o array completo (HEADER / BODY / FOOTER / BUTTONS)
+// pra renderizar preview e descobrir quantos placeholders cada template tem.
+model MetaTemplate {
+  id              String   @id @default(uuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id])
+  metaWaAccountId String
+  metaWaAccount   MetaMessagingAccount @relation(fields: [metaWaAccountId], references: [id], onDelete: Cascade)
+  externalId      String   // ID do template na Meta
+  name            String
+  language        String   // ex: "pt_BR", "en_US"
+  category        String   // UTILITY | MARKETING | AUTHENTICATION
+  status          String   // APPROVED | PENDING | REJECTED | PAUSED | DISABLED
+  components      Json
+  syncedAt        DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([metaWaAccountId, name, language])
+  @@index([companyId])
+  @@index([metaWaAccountId, status])
 }
 
 model Customer {

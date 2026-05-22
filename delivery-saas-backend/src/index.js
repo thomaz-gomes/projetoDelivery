@@ -84,6 +84,7 @@ import customDomainRouter from './routes/customDomain.js'
 import webhookEvolutionRouter from './routes/webhookEvolution.js'
 import webhookMetaRouter from './routes/webhookMeta.js'
 import metaOauthRouter from './routes/metaOauth.js'
+import metaTemplatesRouter from './routes/metaTemplates.js'
 import inboxRouter from './routes/inbox.js'
 import { luccaRouter } from './routes/lucca.js'
 import ifoodChatRouter from './routes/ifoodChat.js'
@@ -299,6 +300,8 @@ app.use('/saas', saasRouter);
 app.use('/admin', adminMetaConfigRouter);
 // Tenant Meta OAuth flow (Pages / Instagram / WhatsApp WABA)
 app.use(metaOauthRouter);
+// Templates Meta WA: cache + sync (UI gerencia, /meta/templates*)
+app.use('/meta', metaTemplatesRouter);
 // AI Credits: saldo, histórico e gestão de créditos de IA por empresa
 app.use('/ai-credits', aiCreditsRouter);
 app.use('/ai-studio', aiStudioRouter);

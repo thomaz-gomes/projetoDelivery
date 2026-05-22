@@ -183,6 +183,73 @@ const adapter = {
     })
   },
 
+  // Envia uma mensagem via template aprovado pela Meta. Funciona fora da
+  // janela de 24h. O caller passa o nome do template, código do idioma
+  // (ex: 'pt_BR') e o array `components` no formato Graph API:
+  //   [{ type: 'body', parameters: [{ type: 'text', text: 'Maria' }, ...] }]
+  // Se o template não tem placeholders, `components` pode ser omitido.
+  async sendTemplate(account, to, { name, languageCode, components = [] }) {
+    if (!account?.externalId) {
+      throw new Error('Meta WA adapter: account.externalId (phone_number_id) is required')
+    }
+    if (!account?.accessToken) {
+      throw new Error('Meta WA adapter: account.accessToken is required')
+    }
+    if (!name) {
+      throw new Error('Meta WA adapter: template name is required')
+    }
+
+    const token = safeDecrypt(account.accessToken)
+    const { graphVersion } = await getMetaConfig()
+    const url = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(account.externalId)}/messages`
+
+    const body = {
+      messaging_product: 'whatsapp',
+      to: String(to).replace(/\D/g, ''),
+      type: 'template',
+      template: {
+        name,
+        language: { code: languageCode || 'pt_BR' },
+        ...(Array.isArray(components) && components.length ? { components } : {}),
+      },
+    }
+
+    try {
+      const { data } = await axios.post(url, body, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      })
+      const externalId = data?.messages?.[0]?.id || null
+      return { externalId, status: 'SENT' }
+    } catch (err) {
+      throwMappedError(err, { channelContactId: to, accountId: account.id })
+    }
+  },
+
+  // Lista templates de mensagem aprovados na WABA do account. Retorna o
+  // array bruto da Graph API (sem paginação automática; chama 1 página
+  // de até 100 templates). O caller é responsável por mapear/persistir.
+  async listTemplates(account, { limit = 100 } = {}) {
+    if (!account?.accessToken) {
+      throw new Error('Meta WA adapter: account.accessToken is required')
+    }
+    if (!account?.wabaId) {
+      throw new Error('Meta WA adapter: account.wabaId is required to list templates')
+    }
+    const token = safeDecrypt(account.accessToken)
+    const { graphVersion } = await getMetaConfig()
+    const url = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(account.wabaId)}/message_templates`
+    const { data } = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { limit, fields: 'id,name,language,category,status,components,quality_score' },
+      timeout: 30000,
+    })
+    return Array.isArray(data?.data) ? data.data : []
+  },
+
   // externalId here is the WhatsApp phone_number_id (matches the value
   // webhookMeta.js extracts from changes[].value.metadata.phone_number_id).
   async resolveAccount(externalId) {
