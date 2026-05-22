@@ -155,6 +155,7 @@ const router = createRouter({
         return { path: isSimples ? '/menu/menus' : '/orders' }
       }
     },
+    { path: '/onboarding', component: () => import('./views/Onboarding.vue') },
     { path: '/orders', component: Orders, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
     { path: '/orders/:id/receipt', component: Receipt, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/customers', component: CustomersList, meta: { requiresAuth: true, requiresModule: 'CARDAPIO_COMPLETO' } },

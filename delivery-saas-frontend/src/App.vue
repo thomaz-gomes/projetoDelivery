@@ -273,6 +273,7 @@ const showLayout = computed(() => {
   if(route.path === '/register') return false
   if(route.path === '/verify-email') return false
   if(route.path === '/setup') return false
+  if(route.path === '/onboarding') return false
   if(route.path.startsWith && route.path.startsWith('/public')) return false
   if(route.path.startsWith('/trial')) return false
   if(route.path === '/termos-de-servico') return false
