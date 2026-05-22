@@ -59,9 +59,10 @@ const placeholderCount = (components) => {
 async function load() {
   loading.value = true
   try {
-    // Conta de canais conectadas (apenas META_WA)
+    // Conta de canais conectadas (apenas META_WA).
+    // O endpoint retorna { accounts: [...] }, não um array puro.
     const accResp = await api.get('/auth/meta/connected')
-    const allConnected = Array.isArray(accResp.data) ? accResp.data : []
+    const allConnected = Array.isArray(accResp.data?.accounts) ? accResp.data.accounts : []
     accounts.value = allConnected.filter(a => a.provider === 'META_WA')
     if (accounts.value.length && !selectedAccountId.value) {
       selectedAccountId.value = accounts.value[0].id
