@@ -130,9 +130,55 @@ router.patch('/menus/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) =
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, description, storeId, logoUrl, bannerUrl, isActive, position, slug = undefined, address, phone, whatsapp, whatsappInstanceId, primaryChannel, timezone, weeklySchedule, open24Hours, allowDelivery, allowPickup, catalogMode } = req.body || {}
+  const { name, description, storeId, logoUrl, bannerUrl, isActive, position, slug = undefined, address, phone, whatsapp, whatsappInstanceId, metaWaAccountId, primaryChannel, timezone, weeklySchedule, open24Hours, allowDelivery, allowPickup, catalogMode } = req.body || {}
   if (primaryChannel !== undefined && primaryChannel !== null && !['EVOLUTION_WA', 'META_WA'].includes(primaryChannel)) {
     return res.status(400).json({ message: 'primaryChannel inválido' })
+  }
+
+  // Exclusividade: cardápio só pode ter UM WhatsApp (Evolution OU Meta).
+  // Quando um dos dois é fornecido como valor não-null, zera o outro
+  // automaticamente e deriva primaryChannel pra refletir a escolha.
+  // Quando NENHUM dos dois é fornecido na requisição, mantém o que estiver
+  // no banco. Quando ambos vêm null, ambos vão pra null (cardápio sem
+  // WhatsApp vinculado).
+  let finalWhatsappInstanceId = existing.whatsappInstanceId
+  let finalMetaWaAccountId = existing.metaWaAccountId
+  let finalPrimaryChannel = existing.primaryChannel
+  const waProvided = whatsappInstanceId !== undefined
+  const metaProvided = metaWaAccountId !== undefined
+  if (waProvided || metaProvided) {
+    const newWa = waProvided ? (whatsappInstanceId || null) : finalWhatsappInstanceId
+    const newMeta = metaProvided ? (metaWaAccountId || null) : finalMetaWaAccountId
+    // Se o caller mandou um dos dois como "ativo", desativa o outro.
+    if (newWa && newMeta) {
+      // Resolve preferindo o que veio explicitamente nesta requisição
+      if (waProvided && whatsappInstanceId) {
+        finalWhatsappInstanceId = whatsappInstanceId
+        finalMetaWaAccountId = null
+      } else if (metaProvided && metaWaAccountId) {
+        finalMetaWaAccountId = metaWaAccountId
+        finalWhatsappInstanceId = null
+      }
+    } else {
+      finalWhatsappInstanceId = newWa
+      finalMetaWaAccountId = newMeta
+    }
+    // Valida ownership do metaWaAccount quando setado
+    if (finalMetaWaAccountId) {
+      const acc = await prisma.metaMessagingAccount.findUnique({
+        where: { id: finalMetaWaAccountId },
+        select: { companyId: true, provider: true },
+      })
+      if (!acc || acc.companyId !== companyId || acc.provider !== 'META_WA') {
+        return res.status(400).json({ message: 'Conta Meta WA inválida' })
+      }
+    }
+    // Deriva primaryChannel automaticamente — não há ambiguidade com 1 canal.
+    finalPrimaryChannel = finalMetaWaAccountId ? 'META_WA' : (finalWhatsappInstanceId ? 'EVOLUTION_WA' : null)
+  } else if (primaryChannel !== undefined) {
+    // Caller sem alterar canais, mas tentando mexer no primaryChannel:
+    // ignoramos pois agora derivamos automaticamente do que está vinculado.
+    finalPrimaryChannel = finalMetaWaAccountId ? 'META_WA' : (finalWhatsappInstanceId ? 'EVOLUTION_WA' : null)
   }
   if (storeId) {
     const st = await prisma.store.findUnique({ where: { id: storeId } })
@@ -163,7 +209,7 @@ router.patch('/menus/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) =
   let finalWeeklySchedule = weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule
   if (finalOpen24Hours) finalWeeklySchedule = null
 
-  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, bannerUrl: bannerUrl ?? existing.bannerUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, whatsappInstanceId: whatsappInstanceId !== undefined ? (whatsappInstanceId || null) : existing.whatsappInstanceId, primaryChannel: primaryChannel !== undefined ? (primaryChannel || null) : existing.primaryChannel, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: finalWeeklySchedule, open24Hours: finalOpen24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
+  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, bannerUrl: bannerUrl ?? existing.bannerUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, whatsappInstanceId: finalWhatsappInstanceId, metaWaAccountId: finalMetaWaAccountId, primaryChannel: finalPrimaryChannel, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: finalWeeklySchedule, open24Hours: finalOpen24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
 
   // Emit real-time socket event so public menus react immediately when a menu is toggled
   try {

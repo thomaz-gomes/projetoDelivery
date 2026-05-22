@@ -56,28 +56,24 @@
               <div class="form-text">Número exibido no botão "Pedir pelo WhatsApp" deste cardápio.</div>
             </div>
 
-            <div class="mb-3" v-if="waInstances.length">
-              <label class="form-label">Instância WhatsApp / Bot (opcional)</label>
-              <select class="form-select" v-model="form.whatsappInstanceId">
-                <option :value="null">— Usar padrão da empresa —</option>
-                <option v-for="inst in waInstances" :key="inst.id" :value="inst.id">
-                  {{ inst.instanceName }} <span v-if="inst.status !== 'CONNECTED'">({{ inst.status }})</span>
-                </option>
-              </select>
-              <div class="form-text">Pedidos deste cardápio usarão esta instância para notificações e bot.</div>
-            </div>
-
-            <div class="mb-3" v-if="form.whatsappInstanceId && form.metaWaAccountId">
-              <label class="form-label">Canal preferido para notificações</label>
-              <select class="form-select" v-model="form.primaryChannel">
-                <option :value="null">— Automático (espelha o canal do cliente, fallback Evolution) —</option>
-                <option value="EVOLUTION_WA">Evolution API</option>
-                <option value="META_WA">WhatsApp Cloud (Meta)</option>
+            <div class="mb-3" v-if="waChannelOptions.length">
+              <label class="form-label">WhatsApp do cardápio (opcional)</label>
+              <select class="form-select" v-model="form.whatsappChannel">
+                <option :value="null">— Sem WhatsApp vinculado —</option>
+                <optgroup v-if="waInstances.length" label="Evolution API (não-oficial)">
+                  <option v-for="inst in waInstances" :key="'evo-' + inst.id" :value="'EVO:' + inst.id">
+                    {{ inst.instanceName }}<span v-if="inst.status !== 'CONNECTED'"> ({{ inst.status }})</span>
+                  </option>
+                </optgroup>
+                <optgroup v-if="metaWaAccounts.length" label="WhatsApp Cloud (Meta — oficial)">
+                  <option v-for="acc in metaWaAccounts" :key="'meta-' + acc.id" :value="'META:' + acc.id">
+                    {{ acc.displayName || acc.externalId }}
+                  </option>
+                </optgroup>
               </select>
               <div class="form-text">
-                Quando o cardápio tem ambos os canais vinculados, este campo decide qual envia notificações de
-                pedido, cashback, etc. Se uma conversa Meta exceder a janela de 24h, o sistema cai automaticamente
-                para Evolution.
+                Cada cardápio só pode ter UM número de WhatsApp vinculado. Notificações de pedido,
+                cashback e bot deste cardápio passam por ele.
               </div>
             </div>
 
@@ -340,8 +336,13 @@ const isEdit = Boolean(id)
 const saas = useSaasStore()
 const isCatalogOnly = computed(() => saas.isCardapioSimplesOnly)
 
-const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', whatsappInstanceId: null, metaWaAccountId: null, primaryChannel: null, bannerUrl: '', logoUrl: '', open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
+const form = ref({ id: null, name: '', storeId: null, description: '', slug: '', address: '', phone: '', whatsapp: '', whatsappInstanceId: null, metaWaAccountId: null, primaryChannel: null, whatsappChannel: null, bannerUrl: '', logoUrl: '', open24Hours: false, timezone: '', allowDelivery: true, allowPickup: true, catalogMode: false })
 const waInstances = ref([])
+const metaWaAccounts = ref([])
+const waChannelOptions = computed(() => [
+  ...waInstances.value.map(i => ({ kind: 'EVO', id: i.id })),
+  ...metaWaAccounts.value.map(a => ({ kind: 'META', id: a.id })),
+])
 // When catalogMode is enabled, disable delivery and pickup (and vice-versa)
 watch(() => form.value.catalogMode, (val) => {
   if (val && !isCatalogOnly.value) {
@@ -388,18 +389,28 @@ const domainLoading = ref(false)
 const domainError = ref('')
 const dnsResult = ref(null)
 
+// Codifica/decodifica a escolha do select unificado ("EVO:<id>" ou "META:<id>").
+function encodeWhatsappChannel(d) {
+  if (d?.metaWaAccountId) return 'META:' + d.metaWaAccountId
+  if (d?.whatsappInstanceId) return 'EVO:' + d.whatsappInstanceId
+  return null
+}
+
 async function load(){
   try{
-    const [stRes, instRes] = await Promise.all([
+    const [stRes, instRes, metaRes] = await Promise.all([
       api.get('/stores'),
       api.get('/wa/instances').catch(() => ({ data: [] })),
+      api.get('/auth/meta/connected').catch(() => ({ data: { accounts: [] } })),
     ])
     stores.value = stRes.data || []
     waInstances.value = Array.isArray(instRes.data) ? instRes.data : []
+    const metaAccounts = Array.isArray(metaRes.data?.accounts) ? metaRes.data.accounts : []
+    metaWaAccounts.value = metaAccounts.filter(a => a.provider === 'META_WA')
     if(isEdit){
       const res = await api.get(`/menu/menus/${id}`)
       const d = res.data || {}
-      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: d.address || '', phone: d.phone || '', whatsapp: d.whatsapp || '', whatsappInstanceId: d.whatsappInstanceId || null, metaWaAccountId: d.metaWaAccountId || null, primaryChannel: d.primaryChannel || null, bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null, open24Hours: !!d.open24Hours, timezone: d.timezone || '', allowDelivery: typeof d.allowDelivery !== 'undefined' ? !!d.allowDelivery : true, allowPickup: typeof d.allowPickup !== 'undefined' ? !!d.allowPickup : true, catalogMode: !!d.catalogMode }
+      form.value = { id: d.id, name: d.name || '', storeId: d.storeId || null, description: d.description || '', slug: d.slug || '', address: d.address || '', phone: d.phone || '', whatsapp: d.whatsapp || '', whatsappInstanceId: d.whatsappInstanceId || null, metaWaAccountId: d.metaWaAccountId || null, primaryChannel: d.primaryChannel || null, whatsappChannel: encodeWhatsappChannel(d), bannerUrl: d.banner || d.bannerUrl || '', logoUrl: d.logo || d.logoUrl || '', bannerBase64: null, logoBase64: null, open24Hours: !!d.open24Hours, timezone: d.timezone || '', allowDelivery: typeof d.allowDelivery !== 'undefined' ? !!d.allowDelivery : true, allowPickup: typeof d.allowPickup !== 'undefined' ? !!d.allowPickup : true, catalogMode: !!d.catalogMode }
       // Try to fetch store settings to prefill menu-specific metadata (menus map)
       try {
         if (d.storeId) {
@@ -520,8 +531,22 @@ async function save(){
           if (form.value.address !== undefined) menuPayload.address = form.value.address || null
           if (form.value.phone !== undefined) menuPayload.phone = form.value.phone || null
           if (form.value.whatsapp !== undefined) menuPayload.whatsapp = form.value.whatsapp || null
-          if (form.value.whatsappInstanceId !== undefined) menuPayload.whatsappInstanceId = form.value.whatsappInstanceId || null
-          if (form.value.primaryChannel !== undefined) menuPayload.primaryChannel = form.value.primaryChannel || null
+          // Decodifica a escolha do seletor unificado e envia AMBOS os campos
+          // (um deles é null, garantindo exclusividade). Backend ignora
+          // primaryChannel — derivado automaticamente do canal escolhido.
+          {
+            const ch = form.value.whatsappChannel || null
+            if (ch && ch.startsWith('EVO:')) {
+              menuPayload.whatsappInstanceId = ch.slice(4)
+              menuPayload.metaWaAccountId = null
+            } else if (ch && ch.startsWith('META:')) {
+              menuPayload.whatsappInstanceId = null
+              menuPayload.metaWaAccountId = ch.slice(5)
+            } else {
+              menuPayload.whatsappInstanceId = null
+              menuPayload.metaWaAccountId = null
+            }
+          }
           if (form.value.timezone !== undefined) menuPayload.timezone = form.value.timezone || null
           if (form.value.open24Hours !== undefined) menuPayload.open24Hours = !!form.value.open24Hours
           if (form.value.open24Hours) {
