@@ -1,291 +1,512 @@
-# Landing Page — Core Delivery — Implementation Plan
+# Landing Page — Chefiz — Refresh Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Create a conversion-focused landing page at `/` that captures leads (name + WhatsApp), redirects to Kiwify checkout, and promotes the R$ 47/year digital menu plan.
+**Goal:** Atualizar a landing page existente (`/`) para a marca **Chefiz** (leia-se "Chef Easy") e para o novo modelo comercial: **3 planos mensais** (Básico, Pro, Premium) começando em **R$ 110/mês**, com captura de lead vinculada ao plano escolhido antes do redirect ao checkout.
 
-**Architecture:** Vue SPA component (`LandingPage.vue`) as lazy-loaded route at `/`. Backend endpoint `POST /public/leads` saves lead data. No new dependencies — CSS scoped, mobile-first.
+**Architecture:** A landing já existe (`LandingPage.vue`, ~1120 linhas) e o backend já suporta lead-por-plano (`Lead.planId/period/paymentStatus/gatewayRef`). O foco aqui é **refresh de copy, marca e UI de pricing**, não criação. Sem novas dependências.
 
-**Tech Stack:** Vue 3, Express.js, Prisma (PostgreSQL)
+**Tech Stack:** Vue 3, Express.js, Prisma (PostgreSQL), Kiwify (ou gateway interno via billing-revamp).
 
 **Design doc:** `docs/plans/2026-03-12-landing-page-design.md`
 
+**O que JÁ está pronto (não tocar):**
+
+- Schema: `model Lead` com `planId`, `period`, `paymentStatus`, `gatewayRef`, `gatewayProvider`, `preferenceId`, `amount`, `paidAt`.
+- Backend `POST /public/leads` aceita `{ name, phone, planKey?, period? }` e resolve `planId` a partir do `SaasPlan` no banco.
+- Backend `GET /public/leads/:id/status` faz polling de status de pagamento.
+- Rota `/` aponta para `LandingPage.vue` e o sidebar já está escondido nessa rota.
+- Logo `chefiz.png` / `chefiz-neg.png` e favicon `favicon-512x512.png` já em `public/`.
+
 ---
 
-### Task 1: Add Lead model to Prisma schema
+### Task 1: Seed dos 3 planos no `SaasPlan` (se ainda não houver)
 
 **Files:**
-- Modify: `delivery-saas-backend/prisma/schema.prisma` (append at end)
+- Inspect: `delivery-saas-backend/prisma/schema.prisma` (model `SaasPlan` + `SaasPlanPrice`)
+- Modify ou Create: `delivery-saas-backend/src/seeds/seedPlans.js`
 
-**Step 1: Add the Lead model**
-
-Add at the end of `schema.prisma`:
-
-```prisma
-model Lead {
-  id        Int      @id @default(autoincrement())
-  name      String
-  phone     String
-  source    String   @default("landing")
-  createdAt DateTime @default(now())
-}
-```
-
-**Step 2: Push schema to dev DB**
-
-Run inside backend container:
-```bash
-docker compose exec backend npx prisma db push
-```
-Expected: "Your database is now in sync with your Prisma schema."
-
-**Step 3: Regenerate Prisma client**
+**Step 1: Verificar estado atual**
 
 ```bash
-docker compose exec backend npx prisma generate
+docker compose exec backend npx prisma studio
+# Abrir tabela SaasPlan, conferir se BÁSICO/PRO/PREMIUM já existem.
 ```
+
+Se já existirem com preços diferentes, **atualizar** em vez de criar. Se não existirem, prosseguir.
+
+**Step 2: Garantir os 3 planos no seed**
+
+Em `seedPlans.js` (criar se não existir) ou no painel admin SaaS:
+
+```javascript
+const PLANS = [
+  {
+    key: 'BASICO',
+    name: 'Básico',
+    description: 'Cardápio digital + atendimento automatizado no WhatsApp',
+    modules: ['CARDAPIO_SIMPLES', 'CARDAPIO_COMPLETO', 'WHATSAPP', 'COUPONS', 'CUSTOM_DOMAIN'],
+    prices: { MONTHLY: 110.00 },
+  },
+  {
+    key: 'PRO',
+    name: 'Pro',
+    description: 'Tudo do Básico + entregadores, cashback e afiliados',
+    modules: ['CARDAPIO_SIMPLES', 'CARDAPIO_COMPLETO', 'WHATSAPP', 'COUPONS', 'CUSTOM_DOMAIN', 'RIDERS', 'CASHBACK', 'AFFILIATES'],
+    prices: { MONTHLY: 200.00 }, // CONFIRMAR
+  },
+  {
+    key: 'PREMIUM',
+    name: 'Premium',
+    description: 'Tudo do Pro + NFC-e e controle de estoque',
+    modules: ['CARDAPIO_SIMPLES', 'CARDAPIO_COMPLETO', 'WHATSAPP', 'COUPONS', 'CUSTOM_DOMAIN', 'RIDERS', 'CASHBACK', 'AFFILIATES', 'FISCAL', 'STOCK'],
+    prices: { MONTHLY: 350.00 }, // CONFIRMAR
+  },
+]
+```
+
+> **A confirmar antes:** preços de Pro e Premium. Os R$ 200/R$ 350 são propostas, não definitivos.
+
+**Step 3: Rodar o seed e validar**
+
+```bash
+docker compose exec backend node src/seeds/seedPlans.js
+```
+
+Conferir via `GET /saas/plans` (rota admin) que retorna os 3 planos com `key`, `prices.MONTHLY` e `modules`.
 
 **Step 4: Commit**
 
 ```bash
-git add delivery-saas-backend/prisma/schema.prisma
-git commit -m "feat(schema): add Lead model for landing page capture"
+git add delivery-saas-backend/src/seeds/seedPlans.js
+git commit -m "feat(plans): seed BASICO/PRO/PREMIUM with monthly pricing"
 ```
 
 ---
 
-### Task 2: Create backend leads route
+### Task 2: Expor planos publicamente para a landing
 
 **Files:**
-- Create: `delivery-saas-backend/src/routes/leads.js`
-- Modify: `delivery-saas-backend/src/index.js:182` (add route mount after `app.use('/public', publicMenuRouter)`)
+- Create: `delivery-saas-backend/src/routes/publicPlans.js` (se não existir já dentro de outro arquivo)
+- Modify: `delivery-saas-backend/src/index.js` (mount da rota)
 
-**Step 1: Create the leads route file**
+**Step 1: Conferir se a rota já existe**
 
-Create `delivery-saas-backend/src/routes/leads.js`:
+```bash
+grep -rn "GET.*plans\|/plans" delivery-saas-backend/src/routes/ | grep -i public
+```
+
+Se existir um endpoint público de planos, pular para Task 3.
+
+**Step 2: Criar `GET /public/plans`**
+
+Endpoint sem auth que retorna só o necessário pra landing montar a tabela:
 
 ```javascript
-import { Router } from 'express';
-import { prisma } from '../prisma.js';
+// delivery-saas-backend/src/routes/publicPlans.js
+import { Router } from 'express'
+import { prisma } from '../prisma.js'
 
-const router = Router();
+const router = Router()
 
-router.post('/leads', async (req, res) => {
+// GET /public/plans — list active plans with monthly price + modules
+router.get('/plans', async (_req, res) => {
   try {
-    const { name, phone } = req.body;
-    if (!name || !phone) {
-      return res.status(400).json({ error: 'name and phone are required' });
-    }
-    const cleanPhone = String(phone).replace(/\D/g, '');
-    if (cleanPhone.length < 10 || cleanPhone.length > 13) {
-      return res.status(400).json({ error: 'Invalid phone number' });
-    }
-    const lead = await prisma.lead.create({
-      data: { name: String(name).trim(), phone: cleanPhone, source: 'landing' }
-    });
-    return res.json({ ok: true, id: lead.id });
+    const plans = await prisma.saasPlan.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        prices: { where: { period: 'MONTHLY' }, select: { amount: true, period: true } },
+        modules: { include: { module: { select: { key: true, name: true } } } },
+      },
+    })
+    const out = plans.map(p => ({
+      key: p.key,
+      name: p.name,
+      description: p.description,
+      monthlyPrice: p.prices?.[0]?.amount ?? null,
+      modules: p.modules.map(m => m.module.key),
+    }))
+    res.json(out)
   } catch (err) {
-    console.error('POST /public/leads error:', err);
-    return res.status(500).json({ error: 'Failed to save lead' });
+    console.error('GET /public/plans error:', err)
+    res.status(500).json({ error: 'Failed to load plans' })
   }
-});
+})
 
-export default router;
+export default router
 ```
 
-**Step 2: Mount the route in index.js**
-
-In `delivery-saas-backend/src/index.js`, after line 182 (`app.use('/public', publicMenuRouter);`), add:
+Mount em `index.js` ao lado do `/public/leads`:
 
 ```javascript
-import leadsRouter from './routes/leads.js'
+import publicPlansRouter from './routes/publicPlans.js'
+app.use('/public', publicPlansRouter)
 ```
-(at the imports section, around line 27)
 
-And mount it:
-```javascript
-app.use('/public', leadsRouter);
-```
-(after line 182)
-
-**Step 3: Test the endpoint**
+**Step 3: Testar**
 
 ```bash
-curl -X POST http://localhost:3000/public/leads \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test","phone":"71999999999"}'
+curl http://localhost:3000/public/plans
+# Expected: array com 3 planos (BASICO/PRO/PREMIUM), cada um com monthlyPrice e modules
 ```
-Expected: `{"ok":true,"id":1}`
 
 **Step 4: Commit**
 
 ```bash
-git add delivery-saas-backend/src/routes/leads.js delivery-saas-backend/src/index.js
-git commit -m "feat(api): add POST /public/leads endpoint for landing page"
+git add delivery-saas-backend/src/routes/publicPlans.js delivery-saas-backend/src/index.js
+git commit -m "feat(api): add GET /public/plans for landing pricing table"
 ```
 
 ---
 
-### Task 3: Create LandingPage.vue component
+### Task 3: Mapa de URLs de checkout Kiwify por plano
 
 **Files:**
-- Create: `delivery-saas-frontend/src/views/LandingPage.vue`
+- Decide: Kiwify (3 URLs) vs gateway interno (`/checkout`/Mercado Pago)?
 
-**Step 1: Create the full landing page component**
+**Step 1: Decidir o gateway**
 
-Create `delivery-saas-frontend/src/views/LandingPage.vue` with:
+Duas opções:
 
-- **Template:** All 8 sections from design doc (Hero, Dor, Como Funciona, Showcase, Preço+Form, Upsell, FAQ, Footer)
-- **Script:** Reactive form (name, phone), phone mask (xx) xxxxx-xxxx, form validation, POST to `/public/leads` via `api`, redirect to `https://pay.kiwify.com.br/YmuEZ57`
-- **Style:** Scoped CSS using admin palette colors (#105784, #89D136, #EEFFED, etc.), mobile-first responsive, smooth scroll, Appzen-inspired layout with alternating white/gray sections
+- **A — Kiwify (mais rápido)**: criar 3 produtos no Kiwify, cada um com sua URL pública. Mapear no front:
+  ```javascript
+  const KIWIFY_URLS = {
+    BASICO:  'https://pay.kiwify.com.br/AAA',
+    PRO:     'https://pay.kiwify.com.br/BBB',
+    PREMIUM: 'https://pay.kiwify.com.br/CCC',
+  }
+  ```
+- **B — Gateway interno (alinhado ao billing-revamp)**: enviar lead pra `POST /public/leads/{id}/checkout` que cria preference no Mercado Pago e retorna `init_point` pra redirecionar. Usa `SaasGatewayConfig` (já no schema).
 
-Key implementation details:
+Recomendação: **A** para validar o funil agora, migrar pra **B** depois (sem mexer na UX do usuário — só troca o destino do redirect).
+
+**Step 2 (se A): Configurar URLs**
+
+Criar `delivery-saas-frontend/src/config/kiwifyPlans.js`:
 
 ```javascript
-// Script
-import { ref } from 'vue'
-import api from '../api'
-
-const name = ref('')
-const phone = ref('')
-const loading = ref(false)
-const error = ref('')
-
-function formatPhone(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 11)
-  if (digits.length <= 2) return `(${digits}`
-  if (digits.length <= 7) return `(${digits.slice(0,2)}) ${digits.slice(2)}`
-  return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`
+export const KIWIFY_URLS = {
+  BASICO:  import.meta.env.VITE_KIWIFY_BASICO  || '',
+  PRO:     import.meta.env.VITE_KIWIFY_PRO     || '',
+  PREMIUM: import.meta.env.VITE_KIWIFY_PREMIUM || '',
 }
+```
 
-function onPhoneInput(e) {
-  phone.value = formatPhone(e.target.value)
+Adicionar no `.env` do frontend:
+
+```
+VITE_KIWIFY_BASICO=https://pay.kiwify.com.br/...
+VITE_KIWIFY_PRO=https://pay.kiwify.com.br/...
+VITE_KIWIFY_PREMIUM=https://pay.kiwify.com.br/...
+```
+
+**Step 3 (se B): Implementar checkout interno**
+
+Fora do escopo deste plan — abrir um plan separado referenciando o `billing-revamp-plan.md` e o `multi-gateway-billing-plan.md`.
+
+**Step 4: Commit (caso A)**
+
+```bash
+git add delivery-saas-frontend/src/config/kiwifyPlans.js
+git commit -m "feat(landing): map plan keys to Kiwify checkout URLs"
+```
+
+---
+
+### Task 4: Reescrita do `LandingPage.vue` — copy + UI de 3 planos
+
+**Files:**
+- Modify: `delivery-saas-frontend/src/views/LandingPage.vue` (~1120 linhas)
+
+A landing existe e funciona, mas está com a copy do plano antigo (Core Delivery, R$ 47/ano). Refresh em 4 frentes:
+
+**Step 1: Hero**
+
+Trocar:
+- Badge `"R$ 47/ano — menos de R$ 4 por mês"` → `"+1.000 restaurantes vendendo no WhatsApp"` (ou outra social-proof real).
+- Headline antiga → `"O jeito Chef Easy de vender pelo WhatsApp"`.
+- Subtítulo → `"Cardápio digital + atendimento automatizado no WhatsApp. A partir de R$ 110/mês."`
+- CTA `"Garantir meu cardápio"` → `"Ver planos"` (ancora em `#pricing`).
+- Esconder qualquer ref a `Core Delivery` no JSX/CSS.
+
+**Step 2: Seção "Problema/Dor"**
+
+Reescrever os 3 cards com foco em WhatsApp, não em fotos:
+
+```text
+"Cliente pede cardápio e demora pra receber"
+"Pedido vem confuso e você anota errado"
+"Difícil saber quem é cliente recorrente"
+```
+
+(O texto antigo "Fotos ruins afastam clientes" pode ir pra um upsell de AI Studio.)
+
+**Step 3: Seção `#pricing` — substituir card único por grid de 3**
+
+Estrutura HTML (esqueleto):
+
+```vue
+<section id="pricing" class="pricing">
+  <h2>Planos para todo restaurante</h2>
+  <div class="pricing-grid">
+    <article
+      v-for="plan in plans"
+      :key="plan.key"
+      class="pricing-card"
+      :class="{ recommended: plan.key === 'PRO' }"
+    >
+      <span v-if="plan.key === 'PRO'" class="recommended-badge">⭐ Recomendado</span>
+      <h3>{{ plan.name }}</h3>
+      <div class="pricing-price">
+        <span class="currency">R$</span>
+        <span class="amount">{{ formatPrice(plan.monthlyPrice) }}</span>
+        <span class="pricing-period">/mês</span>
+      </div>
+      <p class="pricing-description">{{ plan.description }}</p>
+      <ul class="pricing-features">
+        <li v-for="m in plan.modules" :key="m">
+          <i class="bi bi-check2"></i> {{ moduleLabel(m) }}
+        </li>
+      </ul>
+      <button class="btn-cta" @click="selectPlan(plan)">
+        Quero o {{ plan.name }}
+      </button>
+    </article>
+  </div>
+</section>
+```
+
+Lista de planos vinda do `GET /public/plans` (Task 2), com fallback hardcoded pro caso da API falhar:
+
+```javascript
+import { ref, onMounted } from 'vue'
+import api from '../api'
+import { KIWIFY_URLS } from '../config/kiwifyPlans'
+
+const plans = ref([])
+const FALLBACK_PLANS = [
+  { key: 'BASICO',  name: 'Básico',  monthlyPrice: 110, description: '...', modules: ['CARDAPIO_COMPLETO','WHATSAPP','COUPONS','CUSTOM_DOMAIN'] },
+  { key: 'PRO',     name: 'Pro',     monthlyPrice: 200, description: '...', modules: [...] },
+  { key: 'PREMIUM', name: 'Premium', monthlyPrice: 350, description: '...', modules: [...] },
+]
+
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/public/plans')
+    plans.value = Array.isArray(data) && data.length ? data : FALLBACK_PLANS
+  } catch {
+    plans.value = FALLBACK_PLANS
+  }
+})
+
+const MODULE_LABELS = {
+  CARDAPIO_SIMPLES:  'Cardápio digital',
+  CARDAPIO_COMPLETO: 'Gestor de pedidos',
+  WHATSAPP:          'WhatsApp API',
+  COUPONS:           'Cupons',
+  CUSTOM_DOMAIN:     'Domínio próprio',
+  RIDERS:            'App do motoboy',
+  CASHBACK:          'Cashback',
+  AFFILIATES:        'Afiliados',
+  FISCAL:            'NFC-e / NF-e',
+  STOCK:             'Controle de estoque',
+}
+function moduleLabel(key) { return MODULE_LABELS[key] || key }
+function formatPrice(v) { return Number(v).toFixed(0).replace('.', ',') }
+```
+
+**Step 4: Formulário + redirect plan-aware**
+
+```javascript
+const selectedPlan = ref(null)
+
+function selectPlan(plan) {
+  selectedPlan.value = plan
+  document.getElementById('lead-form')?.scrollIntoView({ behavior: 'smooth' })
 }
 
 async function submitLead() {
-  error.value = ''
-  if (!name.value.trim()) { error.value = 'Preencha seu nome'; return }
-  const digits = phone.value.replace(/\D/g, '')
-  if (digits.length < 10) { error.value = 'WhatsApp inválido'; return }
+  if (!selectedPlan.value) { error.value = 'Escolha um plano'; return }
+  // validação de name/phone (mantém o que já existe)
   loading.value = true
   try {
-    await api.post('/public/leads', { name: name.value.trim(), phone: digits })
-    window.location.href = 'https://pay.kiwify.com.br/YmuEZ57'
-  } catch {
-    error.value = 'Erro ao enviar. Tente novamente.'
+    const { data } = await api.post('/public/leads', {
+      name: name.value.trim(),
+      phone: digits,
+      planKey: selectedPlan.value.key,
+      period: 'MONTHLY',
+    })
+    const url = KIWIFY_URLS[selectedPlan.value.key]
+    if (!url) throw new Error('Plan checkout URL not configured')
+    window.location.href = url
+  } catch (e) {
+    error.value = e?.message || 'Erro ao enviar. Tente novamente.'
     loading.value = false
   }
 }
-
-function scrollToForm() {
-  document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })
-}
 ```
 
-CSS structure (scoped):
-- `.landing` — wrapper, font-family system stack
-- `.hero` — gradient bg (#105784 → #1A6FA8), white text, centered
-- `.section` — max-width 1140px, padding, alternating bg
-- `.card` — white bg, border-radius 1rem, shadow
-- `.btn-cta` — bg #89D136, white text, border-radius 2rem, hover #6DAE1E
-- `.btn-hero` — white bg, color #105784, bold
-- `.badge-ai` — bg #7C3AED, white text, small pill
-- `.form-group` — input with border-radius 0.625rem, bg #F8F9FA
-- `.faq-item` — collapsible with details/summary HTML
-- All responsive via `@media (max-width: 768px)`
+O backend já aceita `planKey` (Task 2 do plano antigo era `name/phone` só; o `leads.js` atual resolve o plano por chave). Confirmar com `git log src/routes/leads.js` que essa assinatura está mesmo lá; se não, atualizar o endpoint (rotina trivial).
 
-**Step 2: Commit**
+**Step 5: Footer + brand global**
+
+- Logo: trocar para `/chefiz.png` no header e `/chefiz-neg.png` no footer (se o footer for escuro).
+- "© 2026 Core Delivery" → "© 2026 Chefiz".
+- Page title (`document.title`) → "Chefiz — Vender pelo WhatsApp ficou fácil".
+
+**Step 6: Buscar "Core Delivery"/"R$ 47" no arquivo todo e eliminar**
 
 ```bash
-git add delivery-saas-frontend/src/views/LandingPage.vue
-git commit -m "feat(frontend): add LandingPage.vue with copywriting and lead capture"
+grep -nE "Core Delivery|R\\\$ ?47|/ano|cardápio digital ilimitado" \
+  delivery-saas-frontend/src/views/LandingPage.vue
+```
+
+Deve retornar zero matches no fim.
+
+**Step 7: Commit**
+
+```bash
+git add delivery-saas-frontend/src/views/LandingPage.vue \
+        delivery-saas-frontend/src/config/kiwifyPlans.js
+git commit -m "feat(landing): rebrand to Chefiz with 3-tier pricing (BASICO/PRO/PREMIUM)"
 ```
 
 ---
 
-### Task 4: Wire up the Vue Router
+### Task 5: Estilos — verde Chefiz como cor de marca
 
 **Files:**
-- Modify: `delivery-saas-frontend/src/router.js:123-134` (replace root route)
-- Modify: `delivery-saas-frontend/src/App.vue:124-132` (hide sidebar for `/`)
+- Modify: `delivery-saas-frontend/src/views/LandingPage.vue` (CSS scoped)
 
-**Step 1: Update router.js — replace root route**
+**Step 1: Inverter hierarquia azul/verde**
 
-Replace lines 123-134 in `delivery-saas-frontend/src/router.js`:
+Hoje a landing usa azul (#105784) como cor principal. Trocar para verde Chefiz (#89D136) nas seguintes classes:
 
-```javascript
-// OLD:
-{ path: '/', beforeEnter: async () => {
-    const token = localStorage.getItem('token')
-    if (!token) return { path: '/login' }
-    ...
-  }
-},
+- `.hero` — gradiente `#8cbe1f → #89D136` (igual ao das login pages).
+- `.btn-cta` — fundo `#89D136`, hover `#6DAE1E` (já está, conferir).
+- `.btn-hero` — texto `#3F3F3F` (cinza do logo), fundo branco.
+- `.badge-pill` — fundo branco semi-transparente, texto cinza do logo.
 
-// NEW:
-{ path: '/', component: () => import('./views/LandingPage.vue'), beforeEnter: async () => {
-    const token = localStorage.getItem('token')
-    if (!token) return true  // show landing page
-    const { useModulesStore } = await import('./stores/modules')
-    const modules = useModulesStore()
-    if (!modules.enabled.length) {
-      try { await modules.fetchEnabled() } catch {}
-    }
-    const isSimples = modules.has('CARDAPIO_SIMPLES') && !modules.has('CARDAPIO_COMPLETO')
-    return { path: isSimples ? '/menu/menus' : '/orders' }
-  }
-},
+**Step 2: Card "Pro" destacado**
+
+```css
+.pricing-card.recommended {
+  border: 2px solid var(--chefiz-green, #89D136);
+  transform: scale(1.05);
+  box-shadow: 0 1rem 2rem rgba(137, 209, 54, 0.15);
+}
+.recommended-badge {
+  position: absolute;
+  top: -0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #89D136;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+  border-radius: 2rem;
+  font-size: 0.78rem;
+}
 ```
 
-Logic: authenticated users still redirect to dashboard; unauthenticated see landing page.
+**Step 3: Responsivo**
 
-**Step 2: Update App.vue — hide sidebar for root**
+Grid de 3 colunas vira coluna única abaixo de 768px:
 
-In `delivery-saas-frontend/src/App.vue`, in the `showLayout` computed (line 124-133), add after line 127:
-
-```javascript
-if(route.path === '/') return false
+```css
+.pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+@media (max-width: 768px) {
+  .pricing-grid { grid-template-columns: 1fr; }
+  .pricing-card.recommended { transform: none; }
+}
 ```
-
-**Step 3: Verify in browser**
-
-- Open `http://localhost:5173/` without being logged in → should see landing page
-- Login → navigate to `/` → should redirect to dashboard
 
 **Step 4: Commit**
 
 ```bash
-git add delivery-saas-frontend/src/router.js delivery-saas-frontend/src/App.vue
-git commit -m "feat(router): wire LandingPage as root route for unauthenticated users"
+git add delivery-saas-frontend/src/views/LandingPage.vue
+git commit -m "style(landing): switch primary accent to Chefiz green + Pro card emphasis"
 ```
 
 ---
 
-### Task 5: Polish and responsive testing
+### Task 6: FAQ atualizado
 
 **Files:**
-- Modify: `delivery-saas-frontend/src/views/LandingPage.vue` (if adjustments needed)
+- Modify: `delivery-saas-frontend/src/views/LandingPage.vue` (seção `.faq`)
 
-**Step 1: Test mobile layout**
+Substituir as 4-5 perguntas antigas por 5-6 alinhadas ao novo posicionamento (ver `2026-03-12-landing-page-design.md` seção 7):
 
-Open browser DevTools, test at:
-- 375px (iPhone SE)
-- 414px (iPhone 12)
-- 768px (iPad)
-- 1440px (desktop)
+1. "Preciso ter um número novo do WhatsApp ou uso o meu?"
+2. "O que acontece se eu cancelar?"
+3. "A IA das fotos custa à parte?"
+4. "Funciona com iFood?"
+5. "Posso emitir NFC-e?"
+6. "Já tenho cardápio em outro lugar — dá pra importar?"
 
-Verify: hero text readable, form usable, sections stack properly, CTAs visible.
+Cada resposta em 1-3 linhas, sem jargão técnico.
 
-**Step 2: Test the full flow**
+**Commit:**
 
-1. Visit `/` (not logged in) → landing page renders
-2. Fill name + WhatsApp → click CTA
-3. Check backend logs for lead created
-4. Browser redirects to Kiwify checkout
+```bash
+git add delivery-saas-frontend/src/views/LandingPage.vue
+git commit -m "docs(landing): refresh FAQ for WhatsApp-first positioning"
+```
 
-**Step 3: Final commit**
+---
+
+### Task 7: Polish + teste manual
+
+**Step 1: Teste cross-device**
+
+DevTools → testar em 375px, 414px, 768px, 1440px:
+
+- Hero legível, CTAs visíveis, gradiente sem corte estranho.
+- Grid de planos: 3 colunas no desktop, 1 coluna no mobile, card Pro continua destacado mas sem `scale(1.05)` no mobile.
+- Formulário utilizável, máscara de telefone funcional.
+
+**Step 2: Teste do funil completo**
+
+1. Visitar `/` deslogado → landing renderiza.
+2. Clicar "Quero o Básico" → form scrolla, plano marcado.
+3. Preencher nome + WhatsApp → submit.
+4. Logs do backend mostram lead criado com `planId` correto.
+5. Browser redireciona pro Kiwify URL específica do Básico.
+6. (Manual) finalizar pagamento → Kiwify redireciona pra `/setup`.
+
+Repetir o ciclo para Pro e Premium.
+
+**Step 3: Smoke test "Core Delivery" zerado**
+
+```bash
+grep -rni "core delivery" delivery-saas-frontend/src/views/LandingPage.vue
+# Esperado: zero linhas
+```
+
+**Step 4: Commit final**
 
 ```bash
 git add -A
-git commit -m "feat(landing): polish responsive layout and final adjustments"
+git commit -m "feat(landing): final polish for Chefiz multi-tier launch"
 ```
+
+---
+
+## Checklist de aceite
+
+- [ ] `GET /public/plans` retorna 3 planos com preço mensal e módulos.
+- [ ] `POST /public/leads` aceita `{ planKey, period }` e persiste `planId`/`period`.
+- [ ] Landing exibe 3 cards (Básico/Pro/Premium) com Pro destacado.
+- [ ] Clicar em cada CTA pré-seleciona o plano no form, e o redirect leva à URL Kiwify correta daquele plano.
+- [ ] Nenhuma menção a "Core Delivery" ou "R$ 47/ano" sobrou.
+- [ ] Logo Chefiz aparece no topo e no footer.
+- [ ] Mobile (375px) tem 1 coluna, CTAs visíveis sem scroll horizontal.
+- [ ] FAQ atualizada com perguntas WhatsApp-first.
+
+## Pendências antes de publicar
+
+1. Preços definitivos de **Pro** e **Premium** (atualizar Task 1 e fallback do front).
+2. URLs Kiwify dos 3 planos (ou decisão de migrar pro gateway interno via billing-revamp).
+3. Decidir se Pro tem direito a Custom Domain (hoje no Básico) ou se isso vai pro Premium.
+4. Confirmar que `CARDAPIO_COMPLETO` (gestor de pedidos) faz parte do Básico — caso contrário, o WhatsApp não fecha pedido e o pacote perde sentido.
