@@ -20,6 +20,8 @@ const total = ref(0)
 
 const integrations = ref([])
 const metaPixels = ref([])
+const waCloudAccounts = ref([]) // WhatsApp Cloud API connections (provider === 'META_WA')
+const waEvolutionInstances = ref([]) // legacy WhatsApp Evolution (Baileys) instances
 const stores = ref([])
 const menus = ref([])
 const ifoodAgentStatus = ref(null) // { hasAgentToken, hasExtensionToken, isOnline, lastSeenAt }
@@ -60,6 +62,13 @@ const integrationTypes = [
     route: '/settings/whatsapp-cloud',
   },
   {
+    key: 'WHATSAPP_EVOLUTION',
+    name: 'WhatsApp (Evolution)',
+    description: 'Conecte um WhatsApp pessoal via QR Code (Baileys/Evolution). Indicado para testes e estoque baixo de mensagens.',
+    iconType: 'svg-wa',
+    route: '/settings/whatsapp',
+  },
+  {
     key: 'META_PIXEL',
     name: 'Meta Pixel (Facebook)',
     description: 'Rastreie eventos de conversão no seu cardápio online para otimizar campanhas.',
@@ -88,6 +97,17 @@ async function load() {
       const { data: ag } = await api.get('/ifood-chat/agent-status')
       ifoodAgentStatus.value = ag || null
     } catch (e) { ifoodAgentStatus.value = null }
+    try {
+      const { data: meta } = await api.get('/auth/meta/connected')
+      const all = Array.isArray(meta?.accounts) ? meta.accounts : []
+      // Only WhatsApp Cloud accounts surface here; FB/IG would have their own
+      // lines on this page when those channels enter scope.
+      waCloudAccounts.value = all.filter(a => a.provider === 'META_WA')
+    } catch (e) { waCloudAccounts.value = [] }
+    try {
+      const { data: insts } = await api.get('/wa/instances')
+      waEvolutionInstances.value = Array.isArray(insts) ? insts : []
+    } catch (e) { waEvolutionInstances.value = [] }
     total.value = allItems.value.length
   } catch (e) {
     console.error(e);
@@ -111,6 +131,10 @@ function goEdit(item) {
     router.push('/settings/meta-pixel')
   } else if (item._type === 'IFOOD_AGENT') {
     router.push('/settings/ifood-agent')
+  } else if (item._type === 'WHATSAPP_CLOUD') {
+    router.push('/settings/whatsapp-cloud')
+  } else if (item._type === 'WHATSAPP_EVOLUTION') {
+    router.push('/settings/whatsapp')
   } else if ((item.provider || '').toUpperCase() === 'AIQFOME') {
     router.push('/settings/integrations/aiqfome')
   } else {
@@ -127,6 +151,14 @@ const remove = async (it) => {
     const res = await Swal.fire({ title: 'Desativar Agente iFood?', text: 'Isso revoga os tokens do app desktop e da extensão Chrome. Continuar?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Desativar', cancelButtonText: 'Cancelar' })
     if(!res.isConfirmed) return
     try{ await api.post('/ifood-chat/deactivate-agent', { alsoRevokeExtension: true }); await load(); Swal.fire({ icon:'success', text:'Integração desativada' }) }catch(e){ console.error(e); Swal.fire({ icon:'error', text: e.response?.data?.message || 'Erro ao desativar' }) }
+  } else if (it._type === 'WHATSAPP_CLOUD') {
+    const res = await Swal.fire({ title: 'Desconectar número WhatsApp Cloud?', text: `Remover ${it._label}. Os cardápios vinculados perderão o acesso a esse WhatsApp.`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Desconectar', cancelButtonText: 'Cancelar' })
+    if(!res.isConfirmed) return
+    try{ await api.delete(`/auth/meta/connected/${it.id}`); await load(); Swal.fire({ icon:'success', text:'WhatsApp desconectado' }) }catch(e){ console.error(e); Swal.fire({ icon:'error', text: e.response?.data?.message || 'Erro ao desconectar' }) }
+  } else if (it._type === 'WHATSAPP_EVOLUTION') {
+    const res = await Swal.fire({ title: 'Remover instância WhatsApp (Evolution)?', text: `Apaga a instância "${it.instanceName}" e desfaz o pareamento. Vai precisar escanear o QR Code de novo se quiser usar esse número.`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Remover', cancelButtonText: 'Cancelar' })
+    if(!res.isConfirmed) return
+    try{ await api.delete(`/wa/instances/${encodeURIComponent(it.instanceName)}`); await load(); Swal.fire({ icon:'success', text:'Instância removida' }) }catch(e){ console.error(e); Swal.fire({ icon:'error', text: e.response?.data?.message || 'Erro ao remover' }) }
   } else {
     const res = await Swal.fire({ title: 'Remover integração?', text: `Remover ${it.provider} vinculado à loja ${storeName(it.storeId)}?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Remover', cancelButtonText: 'Cancelar' })
     if(!res.isConfirmed) return
@@ -167,7 +199,25 @@ const allItems = computed(() => {
     })
   }
 
-  return [...apiInts, ...pxInts, ...agentRows]
+  // WhatsApp Cloud API — uma linha por número conectado.
+  const waCloudRows = (waCloudAccounts.value || []).map(a => ({
+    ...a,
+    _type: 'WHATSAPP_CLOUD',
+    _label: 'WhatsApp Cloud API',
+    _sublabel: a.displayName || a.externalId,
+    enabled: a.status === 'ACTIVE' && !a.lastError,
+  }))
+
+  // WhatsApp Evolution — uma linha por instância pareada via QR.
+  const waEvoRows = (waEvolutionInstances.value || []).map(i => ({
+    ...i,
+    _type: 'WHATSAPP_EVOLUTION',
+    _label: 'WhatsApp (Evolution)',
+    _sublabel: i.displayName || i.instanceName,
+    enabled: String(i.status || '').toUpperCase() === 'CONNECTED',
+  }))
+
+  return [...apiInts, ...pxInts, ...agentRows, ...waCloudRows, ...waEvoRows]
 })
 
 const displayed = computed(() => {
@@ -194,30 +244,12 @@ function menuName(id){
 
 onMounted(()=> load())
 
-const whatsappEnabled = (import.meta.env.VITE_ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS === 'true' || import.meta.env.VITE_ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS === '1');
-
-function showToggleHelp() {
-  Swal.fire({
-    title: 'Ativar notificações WhatsApp',
-    html: `Para ativar as notificações WhatsApp para eventos do iFood você deve habilitar a variável de ambiente <b>ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS</b> no backend e reiniciar o serviço.<br><br>Exemplo (PowerShell):<br><code>cd delivery-saas-backend\n$env:ENABLE_IFOOD_WHATSAPP_NOTIFICATIONS=1\nnpm run dev:local</code>`,
-    icon: 'info',
-    confirmButtonText: 'Ok',
-  });
-}
-
 </script>
 
 <template>
   <ListCard title="Integrações" icon="bi bi-plug" :subtitle="total ? `${total} itens` : ''">
     <template #actions>
-      <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Nova integração</button>
-        <div class="d-flex align-items-center">
-          <small class="me-2 text-muted">WhatsApp (iFood):</small>
-          <span :class="['badge', whatsappEnabled ? 'bg-success' : 'bg-secondary']">{{ whatsappEnabled ? 'Ativado' : 'Desativado' }}</span>
-        </div>
-        <button class="btn btn-outline-secondary btn-sm" @click="showToggleHelp">Como ativar</button>
-      </div>
+      <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Nova integração</button>
     </template>
 
     <template #filters>
@@ -261,11 +293,14 @@ function showToggleHelp() {
                     <img v-else-if="it._type === 'API' && (it.provider||'').toUpperCase() === 'AIQFOME'" src="https://aiqfome.com/favicon.ico" alt="aiqfome" style="height:20px" />
                     <img v-else-if="it._type === 'IFOOD_AGENT'" src="https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png" alt="iFood Agent" style="height:20px" />
                     <svg v-else-if="it._type === 'META_PIXEL'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                    <svg v-else-if="it._type === 'WHATSAPP_CLOUD' || it._type === 'WHATSAPP_EVOLUTION'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#25D366"><path d="M12 2a10 10 0 0 0-8.6 15.07L2 22l5.07-1.33A10 10 0 1 0 12 2zm5.43 14.13c-.23.65-1.36 1.24-1.86 1.3-.5.06-1.1.09-1.78-.11-.4-.13-.93-.31-1.6-.6-2.8-1.21-4.62-4.03-4.76-4.22-.14-.18-1.13-1.5-1.13-2.86 0-1.37.72-2.04.97-2.32.26-.28.56-.35.74-.35.18 0 .37 0 .53.01.17.01.4-.07.62.47.23.55.78 1.91.85 2.05.07.14.12.31.02.5-.1.18-.14.3-.28.46-.14.16-.3.36-.43.49-.14.14-.29.29-.13.57.16.28.7 1.15 1.5 1.86 1.04.93 1.92 1.21 2.2 1.36.27.14.43.12.59-.07.16-.2.68-.79.86-1.06.18-.27.36-.23.6-.14.25.09 1.57.74 1.83.88.27.13.45.2.51.31.07.12.07.66-.16 1.31z" /></svg>
                     <i v-else class="bi bi-plug"></i>
                     <strong>{{ it._label }}</strong>
                   </div>
                   <div v-if="it._type === 'META_PIXEL'" class="small text-muted">Pixel ID: {{ it.pixelId }}</div>
                   <div v-else-if="it._type === 'IFOOD_AGENT'" class="small text-muted">Chat automático</div>
+                  <div v-else-if="it._type === 'WHATSAPP_CLOUD'" class="small text-muted">Phone ID: {{ it.externalId }}<span v-if="it.wabaId"> · WABA: {{ it.wabaId }}</span></div>
+                  <div v-else-if="it._type === 'WHATSAPP_EVOLUTION'" class="small text-muted">Instância: {{ it.instanceName }} · Status: {{ it.status || '—' }}</div>
                   <div v-else class="small text-muted">ClientId: {{ it.clientId ? '●●●' : '-' }}</div>
                 </td>
                 <td>{{ it._sublabel }}</td>
