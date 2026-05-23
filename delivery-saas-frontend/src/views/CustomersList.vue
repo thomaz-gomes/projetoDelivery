@@ -212,6 +212,7 @@ async function performMerge(){
           <input ref="fileInputRef" type="file" accept=".csv,.xlsx,.xls" class="d-none" @change="onImport" :disabled="importing" />
         </label>
         <a class="btn btn-link btn-sm p-0" href="/templates/customers-template.csv" download>Baixar planilha modelo</a>
+        <router-link class="btn btn-outline-secondary" to="/customer-groups"><i class="bi bi-people-fill me-1"></i> Grupos</router-link>
         <button class="btn btn-primary" @click="goNew"><i class="bi bi-plus-lg me-1"></i> Novo cliente</button>
         <button class="btn btn-outline-secondary" @click.stop="openMergeModal"><i class="bi bi-git-merge me-1"></i> Combinar</button>
       </div>
