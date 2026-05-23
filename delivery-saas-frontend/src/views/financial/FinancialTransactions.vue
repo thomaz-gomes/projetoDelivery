@@ -291,7 +291,9 @@ export default {
       showPayModal: false,
       payingSaving: false,
       payForm: { id: '', type: '', description: '', grossAmount: 0, dueDate: '', accountId: '', payAmount: 0, paidDate: '', notes: '' },
-      filters: { type: '', status: '', dueDateFrom: '', dueDateTo: '', sourceType: '', accountId: '', search: '' },
+      // Default the date range to "today" (local TZ) so the page lands on
+      // the current day's movements instead of the entire history.
+      filters: { type: '', status: '', dueDateFrom: localDateKey(), dueDateTo: localDateKey(), sourceType: '', accountId: '', search: '' },
       form: { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d', supplierId: '' },
       installmentPreview: [],
       installmentOptions: Array.from({ length: 24 }, (_, i) => ({ value: i + 1, label: `${i + 1}x` })),
@@ -387,7 +389,8 @@ export default {
       }
     },
     resetFilters() {
-      this.filters = { type: '', status: '', dueDateFrom: '', dueDateTo: '', sourceType: '', accountId: '', search: '' };
+      // Match the initial state — reset returns to "today only".
+      this.filters = { type: '', status: '', dueDateFrom: localDateKey(), dueDateTo: localDateKey(), sourceType: '', accountId: '', search: '' };
       this.page = 1;
       this.load();
     },
