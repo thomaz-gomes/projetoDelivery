@@ -129,12 +129,12 @@ router.get('/auth/meta/callback', async (req, res) => {
   const frontend = frontendBaseUrl()
 
   if (!code || !state) {
-    return res.redirect(`${frontend}/settings/meta-integrations?error=missing_code_or_state`)
+    return res.redirect(`${frontend}/settings/whatsapp-cloud?error=missing_code_or_state`)
   }
 
   const cached = stateCache.get(state)
   if (!cached || cached.kind !== 'csrf' || (Date.now() - cached.ts) > STATE_TTL_MS) {
-    return res.redirect(`${frontend}/settings/meta-integrations?error=invalid_state`)
+    return res.redirect(`${frontend}/settings/whatsapp-cloud?error=invalid_state`)
   }
   stateCache.delete(state)
 
@@ -177,11 +177,11 @@ router.get('/auth/meta/callback', async (req, res) => {
       ts: Date.now(),
     })
 
-    return res.redirect(`${frontend}/settings/meta-integrations?temp=${tempKey}`)
+    return res.redirect(`${frontend}/settings/whatsapp-cloud?temp=${tempKey}`)
   } catch (e) {
     console.error('[auth/meta/callback] failed', e?.response?.data || e?.message)
     const msg = encodeURIComponent(e?.response?.data?.error?.message || e?.message || 'oauth_failed')
-    return res.redirect(`${frontend}/settings/meta-integrations?error=${msg}`)
+    return res.redirect(`${frontend}/settings/whatsapp-cloud?error=${msg}`)
   }
 })
 

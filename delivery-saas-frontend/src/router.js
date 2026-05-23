@@ -195,8 +195,14 @@ const router = createRouter({
   { path: '/settings/ifood-agent', component: IfoodAgentApp, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/settings/integrations/aiqfome', component: () => import('./components/AiqfomeConfig.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/meta-pixel', component: MetaPixelIntegration, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
-  { path: '/settings/meta-integrations', component: () => import('./views/settings/MetaIntegrations.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
-  { path: '/settings/meta-templates', component: () => import('./views/settings/MetaTemplates.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
+  { path: '/settings/whatsapp-cloud', component: () => import('./views/settings/WhatsAppCloud.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
+  // Old path is referenced inside OAuth callback flows that the backend
+  // (metaOauth.js#callback) hardcoded — keep a function-redirect that
+  // preserves the ?temp=...&error=... query so authorizations mid-deploy
+  // don't 404 and don't lose the temp token.
+  { path: '/settings/meta-integrations', redirect: (to) => ({ path: '/settings/whatsapp-cloud', query: to.query, hash: to.hash }) },
+  { path: '/settings/whatsapp-templates', component: () => import('./views/settings/MetaTemplates.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
+  { path: '/settings/meta-templates', redirect: (to) => ({ path: '/settings/whatsapp-templates', query: to.query, hash: to.hash }) },
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/integrations/new', component: IntegrationForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/integrations/:id', component: IntegrationForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
@@ -500,8 +506,8 @@ const PAGE_TITLES = [
   ['/settings/users', 'Usuários'],
   ['/settings/cashback', 'Cashback'],
   ['/settings/meta-pixel', 'Meta Pixel'],
-  ['/settings/meta-integrations', 'Integrações Meta'],
-  ['/settings/meta-templates', 'Templates Meta'],
+  ['/settings/whatsapp-cloud', 'WhatsApp Cloud API'],
+  ['/settings/whatsapp-templates', 'Templates WhatsApp'],
   ['/settings/printer-setup', 'Impressão'],
   ['/settings/rider-tracking', 'Rastreamento de Entregadores'],
   ['/settings/rider-shifts', 'Turnos'],

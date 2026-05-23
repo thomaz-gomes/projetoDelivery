@@ -53,6 +53,13 @@ const integrationTypes = [
     route: '/settings/integrations/aiqfome',
   },
   {
+    key: 'WHATSAPP_CLOUD',
+    name: 'WhatsApp Cloud API',
+    description: 'Conecte os números oficiais da sua WhatsApp Business Account para receber e enviar mensagens no Inbox.',
+    iconType: 'svg-wa',
+    route: '/settings/whatsapp-cloud',
+  },
+  {
     key: 'META_PIXEL',
     name: 'Meta Pixel (Facebook)',
     description: 'Rastreie eventos de conversão no seu cardápio online para otimizar campanhas.',
@@ -305,6 +312,7 @@ function showToggleHelp() {
           <div class="type-option-card" @click="selectType(t)">
             <div class="d-flex align-items-center gap-3 mb-2">
               <img v-if="t.iconType === 'img'" :src="t.icon" :alt="t.name" style="height:32px" />
+              <svg v-else-if="t.iconType === 'svg-wa'" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="#25D366"><path d="M12 2a10 10 0 0 0-8.6 15.07L2 22l5.07-1.33A10 10 0 1 0 12 2zm5.43 14.13c-.23.65-1.36 1.24-1.86 1.3-.5.06-1.1.09-1.78-.11-.4-.13-.93-.31-1.6-.6-2.8-1.21-4.62-4.03-4.76-4.22-.14-.18-1.13-1.5-1.13-2.86 0-1.37.72-2.04.97-2.32.26-.28.56-.35.74-.35.18 0 .37 0 .53.01.17.01.4-.07.62.47.23.55.78 1.91.85 2.05.07.14.12.31.02.5-.1.18-.14.3-.28.46-.14.16-.3.36-.43.49-.14.14-.29.29-.13.57.16.28.7 1.15 1.5 1.86 1.04.93 1.92 1.21 2.2 1.36.27.14.43.12.59-.07.16-.2.68-.79.86-1.06.18-.27.36-.23.6-.14.25.09 1.57.74 1.83.88.27.13.45.2.51.31.07.12.07.66-.16 1.31z" /></svg>
               <svg v-else xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
               <strong>{{ t.name }}</strong>
             </div>

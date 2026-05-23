@@ -80,7 +80,7 @@ async function load() {
 
 async function syncTemplates() {
   if (!selectedAccountId.value) {
-    await Swal.fire({ icon: 'warning', title: 'Selecione uma conta', text: 'Escolha qual conta Meta WA sincronizar.' })
+    await Swal.fire({ icon: 'warning', title: 'Selecione um número', text: 'Escolha qual número WhatsApp sincronizar.' })
     return
   }
   syncing.value = true
@@ -111,22 +111,22 @@ onMounted(load)
 <template>
   <div class="container py-4">
     <div class="d-flex align-items-center justify-content-between mb-3">
-      <h2 class="mb-0">Templates Meta WhatsApp</h2>
+      <h2 class="mb-0">Templates WhatsApp</h2>
       <BaseButton @click="syncTemplates" :loading="syncing" :disabled="loading || !selectedAccountId">
-        <i class="bi bi-arrow-repeat me-1"></i> Sincronizar com Meta
+        <i class="bi bi-arrow-repeat me-1"></i> Sincronizar
       </BaseButton>
     </div>
 
     <div class="alert alert-info small mb-3">
       <i class="bi bi-info-circle me-1"></i>
-      Templates são criados e aprovados no <a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business Manager</a>.
+      Templates são criados e aprovados no <a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business Manager</a> (WhatsApp Manager → Modelos de mensagem).
       Esta página apenas lista o que já está cadastrado lá e permite usá-lo via API. Use o botão "Sincronizar" depois de criar ou alterar templates.
     </div>
 
     <div class="card p-3 mb-3" v-if="accounts.length">
       <div class="row g-3">
         <div class="col-md-6">
-          <label class="form-label">Conta Meta WA</label>
+          <label class="form-label">Número WhatsApp</label>
           <select class="form-select" v-model="selectedAccountId">
             <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
               {{ acc.displayName || acc.externalId }}
@@ -154,14 +154,14 @@ onMounted(load)
     </div>
 
     <div v-else-if="!accounts.length" class="alert alert-warning">
-      Nenhuma conta WhatsApp Cloud (Meta) conectada. Conecte uma em
-      <router-link to="/settings/meta-integrations">Integrações Meta</router-link> antes.
+      Nenhum número WhatsApp Cloud conectado. Conecte um em
+      <router-link to="/settings/whatsapp-cloud">WhatsApp Cloud API</router-link> antes.
     </div>
 
     <div v-else-if="!filteredTemplates.length" class="alert alert-light border text-center py-4">
       <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-      <div class="mt-2">Nenhum template encontrado para esta conta.</div>
-      <div class="small text-muted mt-1">Clique em "Sincronizar com Meta" para puxar os templates aprovados.</div>
+      <div class="mt-2">Nenhum template encontrado para este número.</div>
+      <div class="small text-muted mt-1">Clique em "Sincronizar" para puxar os templates aprovados do Meta Business Manager.</div>
     </div>
 
     <div v-else class="table-responsive">

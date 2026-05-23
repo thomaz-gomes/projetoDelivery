@@ -71,8 +71,8 @@ export const nav = [
     { name: 'Formas de Pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card' },
     { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
     { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp', lockable: true },
-    { name: 'Integrações Meta', to: '/settings/meta-integrations', icon: 'bi bi-meta' },
-    { name: 'Templates Meta WA', to: '/settings/meta-templates', icon: 'bi bi-file-earmark-text' },
+    // "Integrações Meta" foi consolidado em /integrations → modal "WhatsApp Cloud API".
+    { name: 'Templates WhatsApp', to: '/settings/whatsapp-templates', icon: 'bi bi-file-earmark-text', moduleKey: 'whatsapp', lockable: true },
     { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' }
   ] },
   { name: 'SaaS', to: '/saas', icon: 'bi bi-grid-3x3-gap', role: 'SUPER_ADMIN', children: [
