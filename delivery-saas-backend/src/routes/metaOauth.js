@@ -84,21 +84,24 @@ router.get('/auth/meta/start', authMiddleware, async (req, res) => {
       ts: Date.now(),
     })
 
-    // Only the WhatsApp Cloud API scopes are enabled while the app's
-    // Facebook Messenger and Instagram integrations are still pending review.
-    // Facebook returns "Invalid Scopes" on the OAuth dialog if a scope listed
-    // here is not approved on the App Dashboard, blocking the whole flow.
+    // WhatsApp Cloud API scopes only. Facebook Messenger and Instagram are
+    // out of scope and ship as separate Meta Apps — their scopes stay
+    // commented here so the OAuth dialog doesn't return "Invalid Scopes"
+    // for permissions this App doesn't have approved.
     //
-    // Re-enable when the FB Messenger + Instagram features are ready:
-    //   'pages_messaging',          // FB Messenger inbound/outbound
-    //   'pages_show_list',          // list Pages owned by the user
-    //   'pages_manage_metadata',    // page subscription webhooks
-    //   'instagram_basic',          // discover IG accounts linked to Pages
-    //   'instagram_manage_messages',// IG Direct inbound/outbound
-    //   'business_management',      // owned_whatsapp_business_accounts probe
+    // Re-enable when each respective channel ships as its own Meta App:
+    //   'pages_messaging',           // FB Messenger inbound/outbound
+    //   'pages_show_list',           // list Pages owned by the user
+    //   'pages_manage_metadata',     // page subscription webhooks
+    //   'instagram_basic',           // discover IG accounts linked to Pages
+    //   'instagram_manage_messages', // IG Direct inbound/outbound
     const scopes = [
       'whatsapp_business_messaging',
       'whatsapp_business_management',
+      // Needed for the /me/businesses → owned_whatsapp_business_accounts →
+      // phone_numbers chain that auto-discovers WABAs after OAuth. Approved
+      // on the WhatsApp-dedicated Meta App.
+      'business_management',
     ].join(',')
 
     const redirectUri = callbackUrl(webhookBaseUrl)

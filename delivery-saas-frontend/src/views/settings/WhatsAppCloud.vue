@@ -376,9 +376,9 @@ onMounted(async () => {
         <div class="d-flex align-items-start gap-2">
           <i class="bi bi-exclamation-triangle mt-1"></i>
           <div>
-            <strong>Não encontramos números automaticamente.</strong>
+            <strong>Não encontramos números na sua conta.</strong>
             <div class="small mt-1">
-              A descoberta automática precisa da permissão <code>business_management</code> do Facebook, que ainda não foi liberada na revisão do app. Por enquanto você pode conectar manualmente — pegue o <strong>Phone Number ID</strong> e o <strong>WABA ID</strong> no Meta Business Suite e cole abaixo.
+              Verifique se a conta Facebook usada no login tem permissão de administrador em alguma WhatsApp Business Account. Você também pode conectar manualmente abaixo — pegue o <strong>Phone Number ID</strong> e o <strong>WABA ID</strong> no Meta Business Suite.
             </div>
           </div>
         </div>
