@@ -1426,8 +1426,21 @@ watch(() => props.preset, async (val) => {
         addr.value = { street: a.street || '', number: a.number || '', complement: a.complement || '', neighborhood: a.neighborhood || '', reference: a.reference || '', observation: a.observation || '', city: a.city || '', state: a.state || '' };
         if (a.id) selectedAddressId.value = a.id;
       }
+      // Pre-select the menu/store that owns the conversation BEFORE loadMenu()
+      // runs, so loadStores/loadMenus see a populated selectedXId and skip the
+      // "fall back to first item" default. In the inbox this lands the operator
+      // on the same cardápio the customer is chatting from.
+      if (val.menuId) selectedMenuId.value = val.menuId;
+      if (val.storeId) selectedStoreId.value = val.storeId;
       // Go directly to products
       await loadMenu();
+      // After loadMenu() the menus list is hydrated. If the preset's menuId
+      // isn't in the result (e.g. operator no longer has access), gracefully
+      // fall back to the first available menu — otherwise the dropdown would
+      // show nothing selected.
+      if (val.menuId && (menus.value || []).every(m => String(m.id) !== String(val.menuId))) {
+        selectedMenuId.value = (menus.value || [])[0]?.id || null;
+      }
       step.value = 3;
       embeddedInitialized = true;
     }

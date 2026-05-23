@@ -276,6 +276,10 @@ const wizardPreset = computed(() => ({
   customerName: customerName.value,
   address: activeAddress.value,
   orderType: orderType.value,
+  // Pre-select the menu/store that owns this conversation so the operator
+  // doesn't have to switch from the company's first store every time.
+  menuId: conversation.value?.menuId || null,
+  storeId: conversation.value?.storeId || null,
   skipCustomer: true,
   skipAddress: true,
   items: draft.value?.items || null,
