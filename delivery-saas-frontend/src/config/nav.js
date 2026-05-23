@@ -79,7 +79,11 @@ export const nav = [
     { name: 'Planos', to: '/saas/plans', icon: 'bi bi-list-check' },
     { name: 'Módulos', to: '/saas/modules', icon: 'bi bi-box-seam' },
     { name: 'Empresas', to: '/saas/companies', icon: 'bi bi-building' },
-    { name: 'Gateway', to: '/saas/gateway', icon: 'bi bi-credit-card-2-front' }
+    { name: 'Gateway', to: '/saas/gateway', icon: 'bi bi-credit-card-2-front' },
+    // Cada canal (WhatsApp, Messenger, Instagram) é uma App Meta independente
+    // — credenciais e configuração próprias. Por ora só WhatsApp Cloud está
+    // em escopo; novas entradas surgem aqui conforme outros canais entrarem.
+    { name: 'WhatsApp Cloud', to: '/saas/whatsapp-config', icon: 'bi bi-whatsapp' }
   ] }
 ];
 

@@ -8,6 +8,27 @@ import {
   regenerateVerifyToken,
 } from '../services/metaConfig.js'
 
+// ─── ARCHITECTURE NOTE — channel-per-Meta-App split (pending) ──────────────
+// Today this single endpoint stores the credentials of ONE Meta App. While we
+// only operate WhatsApp Cloud, that's fine — the App ID/Secret/Verify Token
+// here belong to the WhatsApp-dedicated Meta App.
+//
+// Decision (confirmed by product 2026-05-23): each future channel — Facebook
+// Messenger and Instagram Direct — will be a SEPARATE Meta App with its own
+// credentials, NOT a shared App with channel-specific scopes. When those
+// channels enter scope, the migration looks like:
+//
+//   (a) Rename this file/route → /admin/whatsapp-cloud-config (data migration:
+//       SaasSetting.key 'meta_config' → 'whatsapp_cloud_config'), AND
+//   (b) Add sibling routes /admin/messenger-config and /admin/instagram-config
+//       backed by their own storage rows.
+//
+// Frontend route /saas/meta-config already redirects to /saas/whatsapp-config
+// and the WhatsAppPlatformConfig.vue page is WhatsApp-labelled. Backend
+// endpoint rename is deferred to keep the migration small until the second
+// channel actually enters scope.
+// ───────────────────────────────────────────────────────────────────────────
+
 const router = express.Router()
 
 // All admin Meta config routes require an authenticated SUPER_ADMIN (MASTER inherits).

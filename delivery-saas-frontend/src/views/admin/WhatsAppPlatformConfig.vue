@@ -2,9 +2,9 @@
   <div class="container-fluid py-4">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
       <div>
-        <h4 class="mb-1">Configuração Meta (Plataforma)</h4>
+        <h4 class="mb-1">WhatsApp Cloud · Plataforma</h4>
         <small class="text-muted">
-          Credenciais do Meta App usadas por toda a plataforma para WhatsApp Cloud, Messenger e Instagram Direct.
+          Credenciais do Meta App <strong>dedicado ao WhatsApp Cloud API</strong>. Messenger e Instagram serão Apps Meta separados, cada um com sua própria configuração.
         </small>
       </div>
       <div class="d-flex align-items-center gap-2">
@@ -44,6 +44,9 @@
                 placeholder="123456789012345"
                 autocomplete="off"
               />
+              <small class="text-muted d-block mt-1">
+                ID do Meta App configurado em <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com/apps</a>.
+              </small>
             </div>
 
             <div class="mb-3">
@@ -95,7 +98,7 @@
               />
               <small class="text-muted d-block mt-1">
                 <i class="bi bi-info-circle me-1"></i>
-                Cole esta URL no painel Meta App &gt; Webhooks (Callback URL).
+                Cole esta URL no painel Meta App &gt; Webhooks &gt; WhatsApp Business Account (Callback URL).
               </small>
             </div>
 
@@ -270,7 +273,7 @@ async function load() {
       }
     }
   } catch (e) {
-    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao carregar configuração Meta' })
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao carregar configuração' })
   } finally {
     loading.value = false
   }
@@ -293,13 +296,13 @@ async function save() {
     await api.put('/admin/meta-config', payload)
     Swal.fire({
       icon: 'success',
-      text: 'Configuração Meta salva com sucesso',
+      text: 'Configuração salva com sucesso',
       timer: 1500,
       showConfirmButton: false,
     })
     await load()
   } catch (e) {
-    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao salvar configuração Meta' })
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao salvar configuração' })
   } finally {
     saving.value = false
   }
