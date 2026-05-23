@@ -286,6 +286,9 @@ onMounted(async () => {
           Conecte os números oficiais da sua conta WhatsApp Business para receber e enviar mensagens diretamente no Inbox.
         </small>
       </div>
+      <router-link to="/settings/whatsapp-templates" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-file-earmark-text me-1"></i> Templates de mensagem
+      </router-link>
     </div>
 
     <div v-if="errorMsg" class="alert alert-danger d-flex align-items-start gap-2">

@@ -70,9 +70,9 @@ export const nav = [
     { name: 'Integrações', to: '/integrations', icon: 'bi bi-plug', moduleKey: 'cardapio_completo', lockable: true },
     { name: 'Formas de Pagamento', to: '/settings/payment-methods', icon: 'bi bi-credit-card' },
     { name: 'Lojas', to: '/settings/stores', icon: 'bi bi-shop-window' },
-    { name: 'WhatsApp', to: '/settings/whatsapp', icon: 'bi bi-whatsapp', moduleKey: 'whatsapp', lockable: true },
-    // "Integrações Meta" foi consolidado em /integrations → modal "WhatsApp Cloud API".
-    { name: 'Templates WhatsApp', to: '/settings/whatsapp-templates', icon: 'bi bi-file-earmark-text', moduleKey: 'whatsapp', lockable: true },
+    // WhatsApp (Evolution/Cloud) e Templates foram consolidados em /integrations
+    // — conexões aparecem na lista e linkam para /settings/whatsapp ou
+    // /settings/whatsapp-cloud (que por sua vez tem atalho para templates).
     { name: 'Usuários', to: '/settings/users', icon: 'bi bi-people' }
   ] },
   { name: 'SaaS', to: '/saas', icon: 'bi bi-grid-3x3-gap', role: 'SUPER_ADMIN', children: [
