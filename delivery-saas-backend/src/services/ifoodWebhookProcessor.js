@@ -42,7 +42,7 @@ async function resolveCompanyIdFromPayload(payload) {
         { merchantUuid: { in: candidates } }
       ]
     },
-    select: { id: true, companyId: true, storeId: true, merchantId: true, merchantUuid: true, autoAccept: true },
+    select: { id: true, companyId: true, storeId: true, merchantId: true, merchantUuid: true, merchantName: true, autoAccept: true },
   });
 
   if (integ) {
@@ -297,7 +297,7 @@ export function determineStatusFromIFoodEvent(payload, orderObj) {
  */
 import { buildConcatenatedAddress, normalizeDeliveryAddressFromPayload } from './customers.js';
 
-async function upsertOrder({ companyId, mapped, storeId = null }) {
+async function upsertOrder({ companyId, mapped, storeId = null, merchantHint = null }) {
   const exists = mapped.externalId
     ? await prisma.order.findUnique({ where: { externalId: mapped.externalId } })
     : null;
@@ -387,7 +387,11 @@ async function upsertOrder({ companyId, mapped, storeId = null }) {
     // Every order should carry a menuId so per-menu features (WhatsApp
     // routing, {{loja}} placeholder, automations) resolve correctly.
     // iFood payloads don't include one, so derive it from the store.
-    const resolvedMenuId = await resolveMenuForStore(storeId);
+    // When the store hosts multiple menus (e.g. Almoçaí + Burguer73), pass
+    // the iFood merchant name so we don't cross-tag the order with the
+    // wrong cardápio (which would then route the customer's WhatsApp to
+    // the wrong brand's Cloud API / Evolution instance).
+    const resolvedMenuId = await resolveMenuForStore(storeId, { merchantHint });
 
     const initialStatus = mapped.status || 'EM_PREPARO';
     const created = await prisma.order.create({
@@ -798,7 +802,11 @@ export async function processIFoodWebhook(eventId) {
       // PLACED always maps to PENDENTE_ACEITE (order not yet accepted on iFood).
       // The status stays PENDENTE_ACEITE for upsert — auto-accept will promote to EM_PREPARO after confirming on iFood.
 
-      const res = await upsertOrder({ companyId, mapped, storeId });
+      const merchantHint = cachedInteg?.merchantName
+        || payload?.order?.merchant?.name
+        || payload?.merchant?.name
+        || null;
+      const res = await upsertOrder({ companyId, mapped, storeId, merchantHint });
       const savedOrder = res && res.order ? res.order : res;
 
       // If upsertOrder skipped creation (e.g. terminal status for non-existing order), mark as processed and return

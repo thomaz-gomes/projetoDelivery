@@ -329,17 +329,23 @@ async function pickNotificationChannel({ companyId, menuId, storeId, customerId 
   if (menuEvo) return { provider: 'EVOLUTION_WA', account: menuEvo, fallbackEvolution: null };
   if (menuMeta) return { provider: 'META_WA', account: menuMeta, fallbackEvolution: null };
 
-  // 4. Legacy company-wide Evolution fallback — só roda quando NÃO há menuId.
-  // Quando o pedido está vinculado a um cardápio específico (caso de orders
-  // do iFood / cardápio próprio), enviar pela instância de OUTRO cardápio
-  // ou loja gera atribuição errada da conversa no inbox (a conversa fica
-  // ligada ao providerAccount usado, que pertence ao outro cardápio). Se
-  // o cardápio do pedido não tem nenhuma instância vinculada (Evolution
-  // nem Meta), preferimos NÃO enviar a recair em outro canal — operador
-  // precisa configurar WhatsApp para o cardápio em questão.
-  if (!menuId) {
-    const legacy = await pickConnectedInstance(companyId, { storeId });
-    if (legacy) return { provider: 'EVOLUTION_WA', account: legacy, fallbackEvolution: null };
+  // 4. Store-specific fallback (no cross-cardápio bleed).
+  //
+  // Why: enviar pela instância de OUTRO cardápio gera duas confusões para o
+  // cliente (1) o `{{loja}}` exibe o nome da marca errada e (2) a conversa
+  // de resposta aparece no inbox do outro cardápio. Por isso só
+  // consideramos um WhatsApp vinculado à própria loja do pedido — nunca
+  // a "primeira instância CONNECTED da empresa". Sem WA na loja → não envia.
+  if (storeId) {
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: {
+        whatsappInstance: { select: { id: true, instanceName: true, status: true } },
+      },
+    });
+    if (store?.whatsappInstance?.status === 'CONNECTED') {
+      return { provider: 'EVOLUTION_WA', account: store.whatsappInstance, fallbackEvolution: null };
+    }
   }
 
   return null;
