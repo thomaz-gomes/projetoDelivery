@@ -212,6 +212,9 @@
                   <span v-if="o.payload?.nfe?.nProt" class="badge bg-success" title="NF-e emitida">
                     <i class="bi bi-check-circle"></i>
                   </span>
+                  <span v-else-if="o.status === 'CANCELADO'" class="badge bg-light text-muted" title="Pedido cancelado">
+                    <i class="bi bi-x-circle"></i>
+                  </span>
                   <button v-else class="btn btn-sm btn-outline-success" @click="emitirNfeOrder(o)" title="Emitir NF-e">
                     <i class="bi bi-receipt"></i>
                   </button>

@@ -20,7 +20,7 @@
         <BaseButton variant="outline" :loading="changingStatus" @click="changeStatus">
           <i class="bi bi-arrow-repeat me-1"></i>Alterar status
         </BaseButton>
-        <BaseButton v-if="!order.payload?.nfe?.nProt" variant="outline" :loading="emitindoNfe" @click="emitirNfe">
+        <BaseButton v-if="!order.payload?.nfe?.nProt && order.status !== 'CANCELADO'" variant="outline" :loading="emitindoNfe" @click="emitirNfe">
           <i class="bi bi-receipt me-1"></i>Emitir NF-e
         </BaseButton>
       </div>

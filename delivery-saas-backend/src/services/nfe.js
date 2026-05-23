@@ -577,6 +577,10 @@ export async function emitNfeFromOrder(orderId) {
   })
   if (!order) throw new Error('Pedido não encontrado')
 
+  if (order.status === 'CANCELADO') {
+    return { success: false, error: 'Pedido cancelado — emissão de NF-e bloqueada' }
+  }
+
   // If order has no linked customer but has phone, try to find the customer by phone
   if (!order.customer && order.customerPhone) {
     const phoneClean = String(order.customerPhone).replace(/\D/g, '')
