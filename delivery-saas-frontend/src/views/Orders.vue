@@ -1157,11 +1157,19 @@ function normalizeOrder(o){
   // Detect prepaid/online payment (iFood "PAGO")
   const isPrepaid = (function() {
     try {
+      // iFood shape: payload.{order?.}payments = { methods, prepaid }
       const pay = resolveIfoodPayments(o);
-      if (!pay) return false;
-      if (pay.prepaid === true) return true;
-      const methods = pay.methods || [];
-      return methods.length > 0 && methods.every(m => m.prepaid === true);
+      if (pay) {
+        if (pay.prepaid === true) return true;
+        const methods = pay.methods || [];
+        if (methods.length > 0 && methods.every(m => m.prepaid === true || m.isOnline === true)) return true;
+      }
+      // POS / public shape: payload.payment = { methodCode, prepaid?, isOnline? }
+      // Without this fallback, takeout orders paid online were getting routed
+      // through CONFIRMACAO_PAGAMENTO instead of going straight to CONCLUIDO.
+      const direct = o.payload?.payment;
+      if (direct && (direct.prepaid === true || direct.isOnline === true)) return true;
+      return false;
     } catch (e) { return false; }
   })();
 
@@ -1432,9 +1440,12 @@ function getNextStatus(current, order) {
 async function advanceStatus(order) {
   let next = getNextStatus(order.status, order);
   if (!next) return;
-  // For takeout in PRONTO, skip SAIU_PARA_ENTREGA ("aguardando retirada") and go straight to payment
+  // Takeout in PRONTO skips SAIU_PARA_ENTREGA (there's no rider on the way).
+  // Prepaid takeout (pagamento online) also skips CONFIRMACAO_PAGAMENTO —
+  // there's no in-person money to confirm, so close the order directly.
   if (isTakeoutOrder(order) && order.status === 'PRONTO' && next === 'SAIU_PARA_ENTREGA') {
-    next = 'CONFIRMACAO_PAGAMENTO';
+    const norm = normalizeOrder(order);
+    next = norm?.isPrepaid ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
   }
   await changeStatus(order, next);
 }
