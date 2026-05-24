@@ -101,9 +101,14 @@
               <input :value="login.email" @input="onLoginPhoneInput" class="form-control pp-input" type="text" placeholder="(00) 9 0000-0000" />
               <div class="pp-hint">Formato: (DD) 9 0000-0000 — inclua o DDD</div>
             </div>
-            <div class="mb-3">
+            <div class="mb-2">
               <label class="form-label pp-label">Senha</label>
               <input v-model="login.password" class="form-control pp-input" type="password" />
+            </div>
+            <div class="mb-3 text-end">
+              <a href="#" class="pp-link small" @click.prevent="doForgot" :class="{ 'pe-none opacity-50': loading }">
+                <i class="bi bi-key me-1"></i>Esqueci minha senha
+              </a>
             </div>
             <div class="d-flex align-items-center gap-3 flex-wrap">
               <button class="btn pp-btn-primary" @click="doLogin" :disabled="loading">
@@ -278,6 +283,27 @@ async function doRegister(){
     if (status === 400) setMsg(e.response?.data?.message || 'Dados inválidos', 'alert-danger')
     else setMsg(e.response?.data?.message || 'Erro ao criar conta', 'alert-danger')
   }finally{ loading.value = false }
+}
+
+async function doForgot(){
+  msg.value = ''
+  const raw = login.value.email || ''
+  // Only accepts WhatsApp here — the reset flow rotates the password and
+  // delivers the new one via WhatsApp, so an email-only login can't recover.
+  if (raw.includes('@')) { setMsg('Para recuperar a senha, informe seu WhatsApp (DDD + número) no campo acima.', 'alert-danger'); return }
+  const digits = removePhoneMask(raw)
+  if (!digits || String(digits).length < 10) { setMsg('Informe seu WhatsApp (DDD + número) antes de pedir uma nova senha.', 'alert-danger'); return }
+  if (!window.confirm('Enviar nova senha pelo WhatsApp? Sua senha atual será substituída por uma nova.')) return
+  loading.value = true
+  try {
+    await api.post(`/public/${companyId}/forgot-password`, { whatsapp: digits })
+    setMsg('Se houver conta para este número, enviamos a nova senha pelo WhatsApp. Verifique suas mensagens.', 'alert-success')
+  } catch(err) {
+    const status = err?.response?.status
+    if (status === 503) setMsg(err?.response?.data?.message || 'WhatsApp da loja indisponível. Entre em contato com a loja.', 'alert-danger')
+    else if (status === 502) setMsg(err?.response?.data?.message || 'Senha redefinida, mas falhou o envio pelo WhatsApp. Entre em contato com a loja.', 'alert-danger')
+    else setMsg(err?.response?.data?.message || 'Não foi possível enviar a nova senha. Tente novamente.', 'alert-danger')
+  } finally { loading.value = false }
 }
 
 async function doLogin(){

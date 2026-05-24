@@ -1,5 +1,6 @@
 import { prisma } from '../prisma.js'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 
 export async function createCustomerAccount({ companyId, customerId, email, password }){
   const hashed = await bcrypt.hash(String(password || ''), 10)
@@ -30,4 +31,74 @@ export async function verifyPassword(account, password){
 export async function resetCustomerAccountPassword({ accountId, plainPassword }){
   const hashed = await bcrypt.hash(String(plainPassword || ''), 10)
   return prisma.customerAccount.update({ where: { id: accountId }, data: { password: hashed } })
+}
+
+// 8-char alphanumeric, excluding confusable glyphs (0/O, 1/l/I) so the
+// customer can re-type without guessing.
+const PWD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+export function generateAccountPassword(){
+  return Array.from(crypto.randomBytes(8)).map(b => PWD_ALPHABET[b % PWD_ALPHABET.length]).join('')
+}
+
+// Pick a connected WhatsApp channel for the given company (Evolution
+// preferred, Meta Cloud as fallback) and use it to deliver a plaintext
+// password to the customer. Used by forgot-password and by manual customer
+// creation when the operator opts in to notify the new account holder.
+//
+// Returns one of:
+//   { status: 'sent', provider: 'EVOLUTION_WA' | 'META_WA' }
+//   { status: 'no-channel' }   — company has no connected WhatsApp at all
+//   { status: 'failed', error } — channel exists but the send threw
+export async function sendCustomerPasswordViaWhatsApp({ companyId, customer, plainPassword, lastConversation = null }){
+  if (!companyId || !customer?.whatsapp || !plainPassword) return { status: 'failed', error: 'missing-args' }
+
+  let evoInstance = null
+  let metaAccount = null
+
+  if (lastConversation?.provider === 'EVOLUTION_WA' && lastConversation.instanceName) {
+    evoInstance = await prisma.whatsAppInstance.findUnique({
+      where: { instanceName: lastConversation.instanceName },
+      select: { instanceName: true, status: true },
+    })
+    if (evoInstance && evoInstance.status !== 'CONNECTED') evoInstance = null
+  } else if (lastConversation?.provider === 'META_WA' && lastConversation.providerAccountId) {
+    metaAccount = await prisma.metaMessagingAccount.findFirst({
+      where: { id: lastConversation.providerAccountId, status: 'ACTIVE' },
+    })
+  }
+
+  if (!evoInstance && !metaAccount) {
+    evoInstance = await prisma.whatsAppInstance.findFirst({
+      where: { companyId, status: 'CONNECTED' },
+      orderBy: { createdAt: 'desc' },
+      select: { instanceName: true, status: true },
+    })
+  }
+  if (!evoInstance && !metaAccount) {
+    metaAccount = await prisma.metaMessagingAccount.findFirst({
+      where: { companyId, provider: 'META_WA', status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' },
+    })
+  }
+
+  if (!evoInstance && !metaAccount) return { status: 'no-channel' }
+
+  const { normalizePhone, evoSendText } = await import('../wa.js')
+  const to = normalizePhone(customer.whatsapp)
+  const firstName = (customer.fullName || '').split(/\s+/)[0] || ''
+  const greeting = firstName ? `Olá, ${firstName}!` : 'Olá!'
+  const text = `${greeting} 🔐\n\nSua conta foi criada. Use a senha abaixo para entrar e troque-a depois nas configurações da sua conta:\n\n*${plainPassword}*\n\nSe não foi você quem solicitou, ignore esta mensagem.`
+
+  try {
+    if (evoInstance) {
+      await evoSendText({ instanceName: evoInstance.instanceName, to, text })
+      return { status: 'sent', provider: 'EVOLUTION_WA' }
+    }
+    const adapter = (await import('../messaging/adapters/whatsappMeta.adapter.js')).default
+    await adapter.sendMessage(metaAccount, to, { type: 'TEXT', text })
+    return { status: 'sent', provider: 'META_WA' }
+  } catch (e) {
+    console.error('[sendCustomerPasswordViaWhatsApp] send failed', e?.response?.data || e?.message || e)
+    return { status: 'failed', error: e?.message || 'send-error' }
+  }
 }

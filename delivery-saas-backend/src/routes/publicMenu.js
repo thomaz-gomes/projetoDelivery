@@ -1,7 +1,7 @@
 import express from 'express'
 import { prisma } from '../prisma.js'
 import { signToken, authMiddleware } from '../auth.js'
-import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId, resetCustomerAccountPassword } from '../services/customerAccounts.js'
+import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId, resetCustomerAccountPassword, generateAccountPassword, sendCustomerPasswordViaWhatsApp } from '../services/customerAccounts.js'
 import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js'
 import jwt from 'jsonwebtoken'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
@@ -1876,48 +1876,84 @@ publicMenuRouter.post('/:companyId/forgot-password', async (req, res) => {
     const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true } });
     if (!company) return res.status(404).json({ message: 'Empresa não encontrada' });
 
-    const cust = await prisma.customer.findFirst({ where: { companyId, whatsapp: String(whatsapp) }, select: { id: true, fullName: true, whatsapp: true } });
+    // Customer.whatsapp may have been persisted with or without the BR DDI
+    // (55) and with/without the 9th digit, depending on whether the row
+    // came from public checkout, manual cadastro, or an iFood/Evolution
+    // webhook. Build the canonical variants of the requested phone and
+    // match by `in:` so we don't silently miss valid accounts.
+    const phoneDigits = String(whatsapp || '').replace(/\D/g, '');
+    const variants = new Set();
+    if (phoneDigits) {
+      variants.add(phoneDigits);
+      if (phoneDigits.startsWith('55')) {
+        const rest = phoneDigits.slice(2);
+        variants.add(rest);
+        if (rest.length === 11 && rest[2] === '9') {
+          const ddd = rest.slice(0, 2);
+          variants.add(`55${ddd}${rest.slice(3)}`);
+          variants.add(`${ddd}${rest.slice(3)}`);
+        } else if (rest.length === 10) {
+          const ddd = rest.slice(0, 2);
+          variants.add(`55${ddd}9${rest.slice(2)}`);
+          variants.add(`${ddd}9${rest.slice(2)}`);
+        }
+      } else {
+        variants.add(`55${phoneDigits}`);
+        if (phoneDigits.length === 11 && phoneDigits[2] === '9') {
+          const ddd = phoneDigits.slice(0, 2);
+          variants.add(`55${ddd}${phoneDigits.slice(3)}`);
+          variants.add(`${ddd}${phoneDigits.slice(3)}`);
+        } else if (phoneDigits.length === 10) {
+          const ddd = phoneDigits.slice(0, 2);
+          variants.add(`55${ddd}9${phoneDigits.slice(2)}`);
+          variants.add(`${ddd}9${phoneDigits.slice(2)}`);
+        }
+      }
+    }
+
+    const cust = await prisma.customer.findFirst({
+      where: { companyId, whatsapp: { in: [...variants] } },
+      select: { id: true, fullName: true, whatsapp: true },
+    });
     // Generic 200 when account is missing — keeps the endpoint from confirming
     // whether a number is registered, which would let an attacker harvest
     // customer phone numbers by polling.
-    if (!cust) return res.json({ ok: true });
+    if (!cust) {
+      console.log('[forgot-password] no customer match', { companyId, phoneDigits, variantCount: variants.size });
+      return res.json({ ok: true });
+    }
 
     const account = await findAccountByCustomerId({ companyId, customerId: cust.id });
     if (!account) return res.json({ ok: true });
 
-    // Resolve the connected WhatsApp instance up front. If the company
-    // doesn't have one we surface an error instead of resetting silently —
-    // otherwise the customer's password would change without them ever
-    // receiving the new value.
-    const { pickConnectedInstance } = await import('../services/notify.js');
-    const inst = await pickConnectedInstance(companyId);
-    if (!inst || inst.status !== 'CONNECTED' || !inst.instanceName) {
-      return res.status(503).json({ message: 'WhatsApp da loja indisponível no momento. Entre em contato com a loja para redefinir sua senha.' });
-    }
+    // Resolve a connected WhatsApp channel up front (Evolution OR Meta
+    // Cloud). If the company has none we surface 503 instead of resetting
+    // silently — otherwise the customer's password would change without
+    // them ever receiving the new value.
+    const lastConv = await prisma.conversation.findFirst({
+      where: { companyId, customerId: cust.id, channel: 'WHATSAPP' },
+      orderBy: { lastMessageAt: 'desc' },
+      select: { provider: true, providerAccountId: true, instanceName: true },
+    });
 
-    // 8-char alphanumeric, excluding confusable glyphs (0/O, 1/l/I) so the
-    // customer can re-type without guessing.
-    const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    const cryptoMod = await import('crypto');
-    const newPassword = Array.from(cryptoMod.randomBytes(8)).map(b => ALPHABET[b % ALPHABET.length]).join('');
-
+    const newPassword = generateAccountPassword();
     await resetCustomerAccountPassword({ accountId: account.id, plainPassword: newPassword });
 
-    const { evoSendText, normalizePhone } = await import('../wa.js');
-    const to = normalizePhone(cust.whatsapp || whatsapp);
-    const firstName = (cust.fullName || '').split(/\s+/)[0] || '';
-    const greeting = firstName ? `Olá, ${firstName}!` : 'Olá!';
-    const text = `${greeting} 🔐\n\nVocê pediu para lembrar sua senha. Geramos uma nova:\n\n*${newPassword}*\n\nUse para entrar e troque pela senha que preferir nas configurações da sua conta.\n\nSe não foi você quem solicitou, ignore esta mensagem e troque a senha em seguida.`;
-
-    try {
-      await evoSendText({ instanceName: inst.instanceName, to, text });
-    } catch (e) {
-      console.error('[forgot-password] evoSendText failed', e);
-      // We already rotated the password — failing the request would leave
-      // the customer locked out without telling them. Better to surface a
-      // soft error so the operator can resend or contact them directly.
+    const delivery = await sendCustomerPasswordViaWhatsApp({
+      companyId,
+      customer: cust,
+      plainPassword: newPassword,
+      lastConversation: lastConv,
+    });
+    if (delivery.status === 'no-channel') {
+      return res.status(503).json({ message: 'WhatsApp da loja indisponível no momento. Entre em contato com a loja para redefinir sua senha.' });
+    }
+    if (delivery.status === 'failed') {
+      // Password already rotated; surface 502 so the operator can resend or
+      // contact the customer directly.
       return res.status(502).json({ message: 'Senha redefinida, mas falhou o envio pelo WhatsApp. Entre em contato com a loja.' });
     }
+    console.log('[forgot-password] sent', { provider: delivery.provider, customerId: cust.id });
 
     return res.json({ ok: true });
   } catch (e) {
