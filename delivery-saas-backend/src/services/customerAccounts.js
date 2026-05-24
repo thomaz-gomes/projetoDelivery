@@ -87,7 +87,12 @@ export async function sendCustomerPasswordViaWhatsApp({ companyId, customer, pla
   const to = normalizePhone(customer.whatsapp)
   const firstName = (customer.fullName || '').split(/\s+/)[0] || ''
   const greeting = firstName ? `Olá, ${firstName}!` : 'Olá!'
-  const text = `${greeting} 🔐\n\nSua conta foi criada. Use a senha abaixo para entrar e troque-a depois nas configurações da sua conta:\n\n*${plainPassword}*\n\nSe não foi você quem solicitou, ignore esta mensagem.`
+  // Important: leave the password on its own line with no surrounding
+  // markdown (asterisks, backticks) — when the customer long-presses to
+  // copy on WhatsApp, those decorators come along with the text and break
+  // the subsequent login. Double-tap on the bare line selects just the
+  // password.
+  const text = `${greeting} 🔐\n\nSua conta foi criada. Use a senha abaixo para entrar e troque-a depois nas configurações da sua conta:\n\nSenha:\n${plainPassword}\n\nSe não foi você quem solicitou, ignore esta mensagem.`
 
   try {
     if (evoInstance) {
