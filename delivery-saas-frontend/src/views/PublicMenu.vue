@@ -1011,7 +1011,13 @@
                 <div v-if="couponApplied" class="d-flex justify-content-between text-success"><div>Cupom</div><div>-{{ formatCurrency(couponDiscount) }}</div></div>
                 <div v-if="discountsTotal > 0" class="d-flex justify-content-between text-success"><div>Descontos</div><div>-{{ formatCurrency(discountsTotal) }}</div></div>
                 <div v-if="orderType==='DELIVERY'">
-                  <div class="d-flex justify-content-between"><div class="text-muted">Taxa de entrega</div><div>{{ Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee) }}</div></div>
+                  <div class="d-flex justify-content-between">
+                    <div class="text-muted">Taxa de entrega</div>
+                    <div>
+                      <template v-if="neighborhood && String(neighborhood).trim() !== ''">{{ Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee) }}</template>
+                      <span v-else class="small fst-italic text-muted">Após informar o endereço, o valor será calculado</span>
+                    </div>
+                  </div>
                 </div>
                 <div v-if="useCashback && Number(useCashbackAmount) > 0" class="d-flex justify-content-between text-success"><div>Cashback usado</div><div>-{{ formatCurrency(useCashbackAmount) }}</div></div>
                 <div v-if="paymentDiscount > 0" class="d-flex justify-content-between text-success"><div>Desconto pagamento</div><div>−{{ formatCurrency(paymentDiscount) }}</div></div>
@@ -1091,7 +1097,7 @@
               <div class="d-flex justify-content-between mb-1"><span class="text-muted">Entrega</span><span>
                 <template v-if="orderType==='DELIVERY'">
                   <template v-if="neighborhood && String(neighborhood).trim() !== ''">{{ Number(currentDeliveryFee) === 0 ? 'Grátis' : formatCurrency(currentDeliveryFee) }}</template>
-                  <template v-else>—</template>
+                  <template v-else><span class="small fst-italic text-muted">A calcular após endereço</span></template>
                 </template>
                 <template v-else>—</template>
               </span></div>
