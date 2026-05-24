@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
+import Swal from 'sweetalert2';
 import { useCustomersStore } from '../stores/customers';
 import { useRouter, useRoute } from 'vue-router';
 import { applyPhoneMask } from '../utils/phoneMask';
@@ -17,6 +18,11 @@ const customer = ref({
   phone: '',
   addresses: [{ street: '', number: '', complement: '', neighborhood: '', reference: '', observation: '', city: '', state: '', postalCode: '' }]
 });
+
+// Optional account-creation toggles (create-mode only).
+const createAccount = ref(false);
+const notifyPassword = ref(true);
+const accountEmail = ref('');
 
 const loading = ref(false);
 const error = ref('');
@@ -83,8 +89,37 @@ async function save() {
   try {
     if (isEdit) {
       await store.update(route.params.id, customer.value);
-    } else {
-      await store.create(customer.value);
+      router.push('/customers');
+      return;
+    }
+    const payload = { ...customer.value };
+    if (createAccount.value) {
+      payload.createAccount = true;
+      payload.notifyPasswordViaWhatsApp = !!notifyPassword.value;
+      if (accountEmail.value) payload.accountEmail = accountEmail.value.trim().toLowerCase();
+    }
+    const data = await store.create(payload);
+    const acc = data && data.account;
+    if (acc && acc.created) {
+      const lines = [
+        `<p class="mb-2">Conta criada com sucesso.</p>`,
+        `<p class="mb-2"><strong>Senha provisória:</strong></p>`,
+        `<p class="mb-3"><code style="font-size:1.2rem;background:#f4f4f4;padding:4px 10px;border-radius:6px;">${acc.password}</code></p>`,
+      ];
+      if (acc.notification === 'sent') {
+        lines.push(`<p class="text-success mb-0"><i class="bi bi-whatsapp"></i> Senha enviada por WhatsApp.</p>`);
+      } else if (acc.notification === 'no-channel') {
+        lines.push(`<p class="text-warning mb-0"><i class="bi bi-exclamation-triangle"></i> Nenhum WhatsApp da loja conectado — repasse a senha manualmente.</p>`);
+      } else if (acc.notification === 'failed') {
+        lines.push(`<p class="text-danger mb-0"><i class="bi bi-x-circle"></i> Envio pelo WhatsApp falhou — repasse a senha manualmente.</p>`);
+      } else if (acc.notification === 'skipped') {
+        lines.push(`<p class="text-muted mb-0"><i class="bi bi-info-circle"></i> Notificação por WhatsApp não foi selecionada — repasse a senha manualmente.</p>`);
+      }
+      await Swal.fire({ icon: 'success', title: 'Cliente cadastrado', html: lines.join(''), confirmButtonText: 'OK' });
+    } else if (acc && acc.alreadyExisted) {
+      await Swal.fire({ icon: 'info', text: 'O cliente já possuía uma conta de acesso — nada foi alterado.' });
+    } else if (acc && acc.error) {
+      await Swal.fire({ icon: 'warning', title: 'Cliente cadastrado, mas falhou criar conta', text: acc.error });
     }
     router.push('/customers');
   } catch (err) {
@@ -191,6 +226,32 @@ function handlePhoneInput(e) {
             <button type="button" class="btn btn-outline-primary btn-sm" @click="addAddress">
               ➕ Adicionar endereço
             </button>
+          </div>
+
+          <div v-if="!isEdit" class="col-12 mt-4">
+            <div class="border rounded p-3" style="background:#f8f9fa;">
+              <div class="form-check">
+                <input id="createAccountCheck" v-model="createAccount" type="checkbox" class="form-check-input" />
+                <label for="createAccountCheck" class="form-check-label fw-semibold">
+                  <i class="bi bi-person-lock me-1"></i> Criar conta de acesso ao cardápio
+                </label>
+                <div class="form-text">O cliente poderá entrar no cardápio público com WhatsApp + senha. Uma senha provisória será gerada automaticamente.</div>
+              </div>
+              <div v-if="createAccount" class="mt-3 ps-4">
+                <div class="row g-2">
+                  <div class="col-md-6">
+                    <TextInput label="E-mail (opcional)" labelClass="form-label" v-model="accountEmail" type="email" placeholder="cliente@exemplo.com" inputClass="form-control" />
+                  </div>
+                </div>
+                <div class="form-check mt-2">
+                  <input id="notifyPasswordCheck" v-model="notifyPassword" type="checkbox" class="form-check-input" :disabled="!customer.whatsapp" />
+                  <label for="notifyPasswordCheck" class="form-check-label">
+                    <i class="bi bi-whatsapp text-success me-1"></i> Notificar a senha pelo WhatsApp do cliente
+                  </label>
+                  <div v-if="!customer.whatsapp" class="form-text text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Informe um WhatsApp acima para habilitar a notificação.</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div v-if="error" class="alert alert-danger mt-3">{{ error }}</div>

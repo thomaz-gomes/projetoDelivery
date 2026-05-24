@@ -7,6 +7,7 @@ import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { requireModuleStrict } from '../modules.js';
 import { normalizePhone, findOrCreateCustomer } from '../services/customers.js';
+import { createCustomerAccount, findAccountByCustomerId, generateAccountPassword, sendCustomerPasswordViaWhatsApp } from '../services/customerAccounts.js';
 
 export const customersRouter = express.Router();
 customersRouter.use(authMiddleware);
@@ -196,7 +197,18 @@ customersRouter.get('/:id', async (req, res) => {
 // Cadastro/edição
 customersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
-  const { fullName, cpf, whatsapp, phone, addresses = [] } = req.body || {};
+  const {
+    fullName, cpf, whatsapp, phone, addresses = [],
+    // Optional account-creation block (used when operator opts in on the form):
+    //   createAccount: true → after the Customer row, create a CustomerAccount
+    //     with an auto-generated password.
+    //   notifyPasswordViaWhatsApp: true → also deliver the plaintext via the
+    //     company's connected WhatsApp (Evolution preferred, Meta fallback).
+    //   accountEmail: optional email tied to the account.
+    createAccount = false,
+    notifyPasswordViaWhatsApp = false,
+    accountEmail = null,
+  } = req.body || {};
   if (!fullName) return res.status(400).json({ message: 'Nome é obrigatório' });
 
   const existsCpf = cpf ? await prisma.customer.findFirst({ where: { companyId, cpf: cpf.replace(/\D+/g, '') } }) : null;
@@ -242,7 +254,42 @@ customersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
     });
   }
 
-  res.status(201).json(customer);
+  // Optional: create login account and (optionally) deliver the password
+  // via the company's WhatsApp. Surface the result on the response so the
+  // panel can show the password (and the delivery status) even if the
+  // WhatsApp send fell back to "no-channel"/"failed".
+  let accountResult = null;
+  if (createAccount) {
+    try {
+      const existing = await findAccountByCustomerId({ companyId, customerId: customer.id });
+      if (existing) {
+        accountResult = { created: false, alreadyExisted: true };
+      } else {
+        const plainPassword = generateAccountPassword();
+        await createCustomerAccount({
+          companyId,
+          customerId: customer.id,
+          email: accountEmail || null,
+          password: plainPassword,
+        });
+        let notification = 'skipped';
+        if (notifyPasswordViaWhatsApp && customer.whatsapp) {
+          const delivery = await sendCustomerPasswordViaWhatsApp({
+            companyId,
+            customer,
+            plainPassword,
+          });
+          notification = delivery.status; // 'sent' | 'no-channel' | 'failed'
+        }
+        accountResult = { created: true, password: plainPassword, notification };
+      }
+    } catch (e) {
+      console.error('[customers.POST] account creation failed', e?.message || e);
+      accountResult = { created: false, error: e?.message || 'account-error' };
+    }
+  }
+
+  res.status(201).json({ ...customer, account: accountResult });
 });
 
 customersRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
