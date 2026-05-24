@@ -1143,9 +1143,21 @@
               </div>
 
               <div v-show="infoTab === 'contacts'">
-                <div v-if="company?.phone" class="info-contact-row">
+                <!-- Menu-level contacts take precedence over company-level — the menu
+                     fields (Configurações → Cardápio → Geral) are the brand the
+                     customer is actually buying from. Company is the fallback for
+                     legacy menus without per-menu contact data. -->
+                <div v-if="menu?.phone || company?.phone" class="info-contact-row">
                   <div class="info-contact-icon"><i class="bi bi-telephone"></i></div>
-                  <div><div class="small fw-semibold">Telefone</div><div class="small" style="color:var(--pm-text-muted)">{{ company.phone }}</div></div>
+                  <div><div class="small fw-semibold">Telefone</div><div class="small" style="color:var(--pm-text-muted)">{{ menu?.phone || company.phone }}</div></div>
+                </div>
+                <div v-if="menu?.whatsapp" class="info-contact-row">
+                  <div class="info-contact-icon"><i class="bi bi-whatsapp text-success"></i></div>
+                  <div><div class="small fw-semibold">WhatsApp</div><div class="small" style="color:var(--pm-text-muted)">{{ menu.whatsapp }}</div></div>
+                </div>
+                <div v-if="menu?.address || company?.address" class="info-contact-row">
+                  <div class="info-contact-icon"><i class="bi bi-geo-alt"></i></div>
+                  <div><div class="small fw-semibold">Endereço</div><div class="small" style="color:var(--pm-text-muted)">{{ menu?.address || company.address }}</div></div>
                 </div>
                 <div v-if="company?.email" class="info-contact-row">
                   <div class="info-contact-icon"><i class="bi bi-envelope"></i></div>
@@ -1157,7 +1169,7 @@
                     <div><div class="small fw-semibold">{{ c.type }}</div><div class="small" style="color:var(--pm-text-muted)">{{ c.value }}</div></div>
                   </div>
                 </div>
-                <div v-if="!company?.phone && !company?.email && !(company?.contacts && company.contacts.length)" class="text-center py-3 small" style="color:var(--pm-text-muted)">Nenhum contato disponível</div>
+                <div v-if="!menu?.phone && !menu?.whatsapp && !menu?.address && !company?.phone && !company?.address && !company?.email && !(company?.contacts && company.contacts.length)" class="text-center py-3 small" style="color:var(--pm-text-muted)">Nenhum contato disponível</div>
               </div>
 
               <div v-show="infoTab === 'payments'">
