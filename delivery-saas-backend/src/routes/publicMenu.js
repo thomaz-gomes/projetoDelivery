@@ -3,6 +3,7 @@ import { prisma } from '../prisma.js'
 import { signToken, authMiddleware } from '../auth.js'
 import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId, resetCustomerAccountPassword, generateAccountPassword, sendCustomerPasswordViaWhatsApp } from '../services/customerAccounts.js'
 import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js'
+import { phoneVariants } from '../messaging/phoneVariants.js'
 import jwt from 'jsonwebtoken'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
 import * as cashbackSvc from '../services/cashback.js'
@@ -813,27 +814,20 @@ publicMenuRouter.post('/:companyId/login', async (req, res) => {
     const digits = String(raw).replace(/\D/g,'')
     if (!digits) return res.status(400).json({ message: 'WhatsApp inválido' })
 
-    // Normalize incoming phone for DB matching (we store numbers without DDI)
-    const phoneClean = normalizePhone(digits);
-    // Try to locate the Customer by whatsapp using multiple heuristics to be compatible
-    // with existing records that may contain leading '55'.
+    // BR phone variants: with/without DDI 55, with/without the 9th digit.
+    // Legacy customer rows (iFood imports, pre-9th-digit) may be stored as
+    // 10 digits while the user types 11 (or vice-versa), so we always
+    // look up against every plausible representation.
+    const variants = phoneVariants(digits)
     let customer = null
     try {
       customer = await prisma.customer.findFirst({
-        where: {
-          companyId,
-          OR: [
-            { whatsapp: phoneClean },
-            { whatsapp: '55' + phoneClean },
-            { whatsapp: { endsWith: phoneClean } },
-            { whatsapp: { contains: phoneClean } }
-          ]
-        }
+        where: { companyId, whatsapp: { in: variants } },
       })
     } catch (e) { /* ignore */ }
 
     if (!customer) {
-      console.log('[public-login] customer not found', { companyId, phoneClean })
+      console.log('[public-login] customer not found', { companyId, digits, variants })
       return res.status(401).json({ message: 'Credenciais inválidas' })
     }
 
@@ -1888,47 +1882,17 @@ publicMenuRouter.post('/:companyId/forgot-password', async (req, res) => {
     // Customer.whatsapp may have been persisted with or without the BR DDI
     // (55) and with/without the 9th digit, depending on whether the row
     // came from public checkout, manual cadastro, or an iFood/Evolution
-    // webhook. Build the canonical variants of the requested phone and
-    // match by `in:` so we don't silently miss valid accounts.
-    const phoneDigits = String(whatsapp || '').replace(/\D/g, '');
-    const variants = new Set();
-    if (phoneDigits) {
-      variants.add(phoneDigits);
-      if (phoneDigits.startsWith('55')) {
-        const rest = phoneDigits.slice(2);
-        variants.add(rest);
-        if (rest.length === 11 && rest[2] === '9') {
-          const ddd = rest.slice(0, 2);
-          variants.add(`55${ddd}${rest.slice(3)}`);
-          variants.add(`${ddd}${rest.slice(3)}`);
-        } else if (rest.length === 10) {
-          const ddd = rest.slice(0, 2);
-          variants.add(`55${ddd}9${rest.slice(2)}`);
-          variants.add(`${ddd}9${rest.slice(2)}`);
-        }
-      } else {
-        variants.add(`55${phoneDigits}`);
-        if (phoneDigits.length === 11 && phoneDigits[2] === '9') {
-          const ddd = phoneDigits.slice(0, 2);
-          variants.add(`55${ddd}${phoneDigits.slice(3)}`);
-          variants.add(`${ddd}${phoneDigits.slice(3)}`);
-        } else if (phoneDigits.length === 10) {
-          const ddd = phoneDigits.slice(0, 2);
-          variants.add(`55${ddd}9${phoneDigits.slice(2)}`);
-          variants.add(`${ddd}9${phoneDigits.slice(2)}`);
-        }
-      }
-    }
-
+    // webhook. Use phoneVariants() so we never silently miss valid accounts.
+    const variants = phoneVariants(whatsapp);
     const cust = await prisma.customer.findFirst({
-      where: { companyId, whatsapp: { in: [...variants] } },
+      where: { companyId, whatsapp: { in: variants } },
       select: { id: true, fullName: true, whatsapp: true },
     });
     // Generic 200 when account is missing — keeps the endpoint from confirming
     // whether a number is registered, which would let an attacker harvest
     // customer phone numbers by polling.
     if (!cust) {
-      console.log('[forgot-password] no customer match', { companyId, phoneDigits, variantCount: variants.size });
+      console.log('[forgot-password] no customer match', { companyId, variants });
       return res.json({ ok: true });
     }
 
@@ -1953,6 +1917,7 @@ publicMenuRouter.post('/:companyId/forgot-password', async (req, res) => {
       customer: cust,
       plainPassword: newPassword,
       lastConversation: lastConv,
+      reason: 'reset',
     });
     if (delivery.status === 'no-channel') {
       return res.status(503).json({ message: 'WhatsApp da loja indisponível no momento. Entre em contato com a loja para redefinir sua senha.' });

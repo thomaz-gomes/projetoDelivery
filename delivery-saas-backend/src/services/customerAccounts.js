@@ -50,7 +50,7 @@ export function generateAccountPassword(){
 //   { status: 'sent', provider: 'EVOLUTION_WA' | 'META_WA' }
 //   { status: 'no-channel' }   — company has no connected WhatsApp at all
 //   { status: 'failed', error } — channel exists but the send threw
-export async function sendCustomerPasswordViaWhatsApp({ companyId, customer, plainPassword, lastConversation = null }){
+export async function sendCustomerPasswordViaWhatsApp({ companyId, customer, plainPassword, lastConversation = null, reason = 'created' }){
   if (!companyId || !customer?.whatsapp || !plainPassword) return { status: 'failed', error: 'missing-args' }
 
   let evoInstance = null
@@ -93,7 +93,10 @@ export async function sendCustomerPasswordViaWhatsApp({ companyId, customer, pla
   // copy on WhatsApp, those decorators come along with the text and break
   // the subsequent login. Double-tap on the bare line selects just the
   // password.
-  const text = `${greeting} 🔐\n\nSua conta foi criada. Use a senha abaixo para entrar e troque-a depois nas configurações da sua conta:\n\nSenha:\n${plainPassword}\n\nSe não foi você quem solicitou, ignore esta mensagem.`
+  const intro = reason === 'reset'
+    ? 'Você pediu para lembrar sua senha. Geramos uma nova:'
+    : 'Sua conta foi criada. Use a senha abaixo para entrar e troque-a depois nas configurações da sua conta:'
+  const text = `${greeting} 🔐\n\n${intro}\n\nSenha:\n${plainPassword}\n\nSe não foi você quem solicitou, ignore esta mensagem.`
 
   try {
     if (evoInstance) {
