@@ -26,12 +26,12 @@
         <div class="sidebar-section">
           
           <select
-            v-model="selectedStoreId"
+            v-model="selectedMenuId"
             class="form-select form-select-sm mb-2"
-            @change="onStoreFilterChange"
+            @change="onMenuFilterChange"
           >
-            <option value="">Todas as lojas</option>
-            <option v-for="s in storeOptions" :key="s.id" :value="s.id">{{ s.name }}</option>
+            <option value="">Todos os cardápios</option>
+            <option v-for="m in menuOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
           </select>
           <div class="d-flex gap-1">
             <button class="btn btn-outline-secondary btn-sm flex-grow-1" @click="loadPositions" :disabled="loadingPositions">
@@ -121,7 +121,7 @@
                   {{ order.address ? '' + order.address : '' }}
                 </div>
                 <div class="text-muted text-truncate" style="font-size:0.72rem">
-                  <span v-if="order.store" class="text-muted fw-normal"> · {{ order.store.name }}</span>
+                  <span v-if="order.menu?.name || order.store?.name" class="text-muted fw-normal"> · {{ order.menu?.name || order.store?.name }}</span>
                 </div>
                 <span class="badge" :class="order.status === 'SAIU_PARA_ENTREGA' ? 'bg-danger' : 'bg-warning text-dark'" style="font-size:0.65rem">
                   {{ order.status === 'SAIU_PARA_ENTREGA' ? 'Saiu p/ entrega' : 'Em preparo' }}
@@ -310,7 +310,7 @@ const positions = ref([])
 const deliveries = ref([])
 const loadingPositions = ref(false)
 const leafletError = ref('')
-const selectedStoreId = ref('')
+const selectedMenuId = ref('')
 
 // Detail modal state
 const detailModalVisible = ref(false)
@@ -335,10 +335,7 @@ function toggleRiderGroup(riderId) {
 }
 
 function riderOrders(riderId) {
-  return deliveries.value.filter(d =>
-    d.riderId === riderId &&
-    (!selectedStoreId.value || d.storeId === selectedStoreId.value)
-  )
+  return deliveries.value.filter(d => d.riderId === riderId && matchesMenuFilter(d))
 }
 
 let map = null
@@ -352,12 +349,19 @@ let pollInterval = null
 let L = null
 let companyCenter = null
 
-// Stores that have active orders
-const storeOptions = computed(() => {
+// Cardápios that have active orders. We filter and identify orders by
+// cardápio (menu) — the store is the geographic container below it and
+// is only used for map centering. Legacy orders without menuId fall
+// back to the store, so they don't disappear from the list.
+const menuOptions = computed(() => {
   const seen = new Map()
   for (const d of deliveries.value) {
-    if (d.store && !seen.has(d.store.id)) {
-      seen.set(d.store.id, { id: d.store.id, name: d.store.name, address: d.store.address })
+    if (d.menu && d.menuId && !seen.has(d.menuId)) {
+      seen.set(d.menuId, { id: d.menuId, name: d.menu.name, storeId: d.storeId })
+    } else if (!d.menuId && d.store && !seen.has(`store:${d.store.id}`)) {
+      // Legacy order with no menuId — surface store name as a fallback bucket
+      // so the operator can still filter it.
+      seen.set(`store:${d.store.id}`, { id: `store:${d.store.id}`, name: d.store.name, storeId: d.store.id })
     }
   }
   return Array.from(seen.values())
@@ -365,11 +369,19 @@ const storeOptions = computed(() => {
 
 const filteredPositions = computed(() => positions.value)
 
+function matchesMenuFilter(d) {
+  if (!selectedMenuId.value) return true
+  if (selectedMenuId.value.startsWith('store:')) {
+    return !d.menuId && d.storeId === selectedMenuId.value.slice(6)
+  }
+  return d.menuId === selectedMenuId.value
+}
+
 const filteredDeliveries = computed(() => {
   return deliveries.value.filter(d =>
     !d.riderId &&
     d.status === 'EM_PREPARO' &&
-    (!selectedStoreId.value || d.storeId === selectedStoreId.value)
+    matchesMenuFilter(d)
   )
 })
 
@@ -472,11 +484,11 @@ function updateDeliveryMarker(order) {
   const addr = order.address || ''
   const statusLabel = order.status === 'SAIU_PARA_ENTREGA' ? 'Saiu p/ entrega' : 'Em preparo'
   const riderName = order.rider?.name || ''
-  const storeName = order.store?.name || ''
+  const cardapioName = order.menu?.name || order.store?.name || ''
   const popupHtml = `
     <div style="min-width:160px">
       <strong>#${display}</strong> — ${statusLabel}<br>
-      ${storeName ? `<small>Loja: ${storeName}</small><br>` : ''}
+      ${cardapioName ? `<small>Cardápio: ${cardapioName}</small><br>` : ''}
       ${customer ? `<small>${customer}</small><br>` : ''}
       ${addr ? `<small class="text-muted">${addr}</small><br>` : ''}
       ${riderName ? `<small>Entregador: ${riderName}</small>` : ''}
@@ -537,9 +549,9 @@ function resolveStoreCenter(store) {
   return null
 }
 
-function onStoreFilterChange() {
+function onMenuFilterChange() {
   if (!map) return
-  if (!selectedStoreId.value) {
+  if (!selectedMenuId.value) {
     // Show all: fit to company center or show all markers
     if (companyCenter) {
       map.setView(companyCenter, 14)
@@ -551,18 +563,22 @@ function onStoreFilterChange() {
   // Hide non-matching delivery markers, show matching
   for (const id of Object.keys(deliveryMarkersMap)) {
     const order = deliveries.value.find(d => d.id === id)
-    if (order && order.storeId !== selectedStoreId.value) {
+    if (order && !matchesMenuFilter(order)) {
       map.removeLayer(deliveryMarkersMap[id])
       delete deliveryMarkersMap[id]
     }
   }
   filteredDeliveries.value.forEach(updateDeliveryMarker)
 
-  // Center on selected store
-  const store = storeOptions.value.find(s => s.id === selectedStoreId.value)
-  if (store) {
-    const coords = resolveStoreCenter(store)
-    if (coords) map.setView(coords, 15)
+  // Resolve the underlying store for the selected cardápio to center the map.
+  // The cardápio itself doesn't carry coordinates — its parent store does.
+  const opt = menuOptions.value.find(o => o.id === selectedMenuId.value)
+  if (opt && opt.storeId) {
+    const order = deliveries.value.find(d => d.storeId === opt.storeId && d.store)
+    if (order && order.store) {
+      const coords = resolveStoreCenter(order.store)
+      if (coords) map.setView(coords, 15)
+    }
   }
 }
 
@@ -656,9 +672,9 @@ async function loadPositions() {
         }
       }
 
-      // Apply store filter for delivery markers
-      const ordersToShow = selectedStoreId.value
-        ? delRes.data.filter(d => d.storeId === selectedStoreId.value)
+      // Apply cardápio filter for delivery markers
+      const ordersToShow = selectedMenuId.value
+        ? delRes.data.filter(matchesMenuFilter)
         : delRes.data
       ordersToShow.forEach(updateDeliveryMarker)
       removeStaleDeliveryMarkers(ordersToShow.map(o => o.id))
@@ -867,11 +883,14 @@ onMounted(async () => {
       }
     }
 
-    // Center on single active store if only one has orders
-    if (storeOptions.value.length === 1) {
-      const store = storeOptions.value[0]
-      const coords = resolveStoreCenter(store)
-      if (coords) map.setView(coords, 15)
+    // Center on the single active cardápio's store if only one is in play
+    if (menuOptions.value.length === 1) {
+      const opt = menuOptions.value[0]
+      const order = deliveries.value.find(d => d.storeId === opt.storeId && d.store)
+      if (order && order.store) {
+        const coords = resolveStoreCenter(order.store)
+        if (coords) map.setView(coords, 15)
+      }
     }
   } catch (e) {
     leafletError.value = e?.message || 'Erro ao inicializar mapa'

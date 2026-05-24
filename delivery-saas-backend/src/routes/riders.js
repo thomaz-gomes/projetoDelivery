@@ -326,6 +326,8 @@ ridersRouter.get('/map/deliveries', requireRole('ADMIN', 'SUPER_ADMIN', 'ATTENDA
         rider: { select: { id: true, name: true } },
         storeId: true,
         store: { select: { id: true, name: true, address: true, latitude: true, longitude: true } },
+        menuId: true,
+        menu: { select: { id: true, name: true } },
         deliveryNeighborhood: true,
         createdAt: true,
       },
