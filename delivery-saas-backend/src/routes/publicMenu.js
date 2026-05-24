@@ -832,12 +832,21 @@ publicMenuRouter.post('/:companyId/login', async (req, res) => {
       })
     } catch (e) { /* ignore */ }
 
-    if (!customer) return res.status(401).json({ message: 'Credenciais inválidas' })
+    if (!customer) {
+      console.log('[public-login] customer not found', { companyId, phoneClean })
+      return res.status(401).json({ message: 'Credenciais inválidas' })
+    }
 
     const acct = await findAccountByCustomerId({ companyId, customerId: customer.id })
-    if (!acct) return res.status(401).json({ message: 'Credenciais inválidas' })
+    if (!acct) {
+      console.log('[public-login] account not found for customer', { companyId, customerId: customer.id })
+      return res.status(401).json({ message: 'Credenciais inválidas' })
+    }
     const ok = await verifyPassword(acct, password)
-    if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' })
+    if (!ok) {
+      console.log('[public-login] bad password', { companyId, customerId: customer.id, accountId: acct.id, passwordLen: String(password || '').length })
+      return res.status(401).json({ message: 'Credenciais inválidas' })
+    }
 
     const token = signToken({ id: customer.id, role: 'CUSTOMER', companyId: companyId, customerId: customer.id, name: customer.name })
     return res.json({ token, customer })

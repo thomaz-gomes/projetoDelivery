@@ -33,9 +33,10 @@ export async function resetCustomerAccountPassword({ accountId, plainPassword })
   return prisma.customerAccount.update({ where: { id: accountId }, data: { password: hashed } })
 }
 
-// 8-char alphanumeric, excluding confusable glyphs (0/O, 1/l/I) so the
-// customer can re-type without guessing.
-const PWD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+// 8-char alphanumeric, excluding confusable glyphs (0/O, 1/I/l/L) so the
+// customer can re-type without guessing. L (capital) is also excluded
+// because in most sans-serif fonts it looks identical to 1 / l.
+const PWD_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
 export function generateAccountPassword(){
   return Array.from(crypto.randomBytes(8)).map(b => PWD_ALPHABET[b % PWD_ALPHABET.length]).join('')
 }
