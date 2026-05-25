@@ -205,6 +205,8 @@ model Rider {
   active           Boolean                @default(true)
   userId           String?                @unique
   user             User?                  @relation(fields: [userId], references: [id])
+  lastHeartbeatAt  DateTime?
+  appType          String?
   orders           Order[]
   account          RiderAccount?
   transactions     RiderTransaction[]

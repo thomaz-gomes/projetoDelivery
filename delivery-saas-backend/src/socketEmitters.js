@@ -217,6 +217,17 @@ export function emitirPosicaoEntregador(companyId, payload) {
   }
 }
 
+// ---- emit: rider-heartbeat ----
+export function emitirHeartbeatEntregador(companyId, payload) {
+  if (!io) return;
+  if (!companyId) return;
+  try {
+    io.to(companyRoom(companyId)).emit('rider-heartbeat', payload);
+  } catch (e) {
+    console.warn('Falha ao emitir rider-heartbeat:', e?.message || e);
+  }
+}
+
 // ---- emit: rider-offline ----
 export function emitirEntregadorOffline(companyId, riderId) {
   if (!io) return;
