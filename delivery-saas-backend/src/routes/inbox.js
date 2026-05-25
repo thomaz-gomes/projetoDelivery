@@ -301,8 +301,33 @@ router.post('/conversations/:id/send', upload.single('media'), async (req, res) 
             code: 'META_WINDOW_EXPIRED',
           });
         }
-        console.error('[inbox] Meta WA send failed:', err);
-        return res.status(500).json({ message: 'Falha ao enviar via Meta', error: err.message });
+        // Surface enough context para o operador entender o motivo: erro do
+        // Graph API (token expirado, phone_number_id inválido, etc.) vem em
+        // err.metaError / err.metaCode (preenchidos por throwMappedError).
+        const metaCode = err?.metaCode || null;
+        const metaErr = err?.metaError || null;
+        console.error('[inbox] Meta WA send failed', {
+          conversationId: conversation.id,
+          accountId: metaAccount.id,
+          to,
+          metaCode,
+          metaError: metaErr,
+          message: err?.message,
+        });
+        // Mapear códigos comuns pra mensagem amigável
+        let friendly = 'Falha ao enviar via Meta';
+        if (metaCode === 190 || /access token/i.test(err?.message || '')) {
+          friendly = 'Token Meta expirado ou inválido — reconecte a conta em Integrações Meta';
+        } else if (metaCode === 100 && /phone_number_id/i.test(metaErr?.message || '')) {
+          friendly = 'phone_number_id da conta Meta inválido — reconecte a conta';
+        } else if (metaErr?.message) {
+          friendly = `Meta: ${metaErr.message}`;
+        }
+        return res.status(500).json({
+          message: friendly,
+          metaCode,
+          error: err.message,
+        });
       }
 
       const message = await prisma.message.create({

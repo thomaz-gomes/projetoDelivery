@@ -85,6 +85,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import { compressImage } from '@/utils/compressImage';
+import Swal from 'sweetalert2';
 import QuickReplyPicker from './QuickReplyPicker.vue';
 
 const props = defineProps({
@@ -236,6 +237,16 @@ async function send() {
     nextTick(() => autoResize());
   } catch (err) {
     console.error('Failed to send', err);
+    // Surface a real mensagem do backend (Meta WA window, token expirado, etc.)
+    const detail = err?.response?.data?.message
+      || err?.message
+      || 'Não foi possível enviar a mensagem.';
+    Swal.fire({
+      icon: 'error',
+      title: 'Falha ao enviar',
+      text: detail,
+      confirmButtonText: 'OK',
+    });
   } finally {
     sending.value = false;
   }
