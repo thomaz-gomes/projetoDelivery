@@ -14,6 +14,7 @@ const MODULE_KEYS = [
   { value: 'WHATSAPP',          label: 'WhatsApp',                 icon: 'bi-whatsapp',          color: 'success' },
   { value: 'FINANCIAL',         label: 'Financeiro',               icon: 'bi-cash-coin',         color: 'warning' },
   { value: 'FISCAL',            label: 'Módulo Fiscal (NF-e/NFC-e)', icon: 'bi-receipt',         color: 'danger' },
+  { value: 'MARKETING_CAMPAIGNS', label: 'Campanhas de Marketing', icon: 'bi-megaphone',       color: 'primary' },
 ]
 
 const modules = ref([])

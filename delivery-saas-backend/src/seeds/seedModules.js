@@ -23,6 +23,7 @@ const ALL_MODULES = [
   { key: 'FINANCIAL',         name: 'Financeiro' },
   { key: 'FISCAL',            name: 'Fiscal' },
   { key: 'CUSTOM_DOMAIN',     name: 'Domínio Próprio' },
+  { key: 'MARKETING_CAMPAIGNS', name: 'Campanhas de Marketing' },
 ];
 
 // Modules every company should have active by default

@@ -20,6 +20,7 @@ const MODULE_KEYS = {
   COUPONS:           { label: 'Cupons',                   icon: 'bi-ticket-perforated', color: 'danger' },
   WHATSAPP:          { label: 'WhatsApp',                 icon: 'bi-whatsapp',          color: 'success' },
   FINANCIAL:         { label: 'Financeiro',               icon: 'bi-cash-coin',         color: 'warning' },
+  MARKETING_CAMPAIGNS: { label: 'Campanhas de Marketing', icon: 'bi-megaphone',         color: 'primary' },
 }
 const keyMeta = (key) => MODULE_KEYS[key] || { label: key, icon: 'bi-box', color: 'secondary' }
 

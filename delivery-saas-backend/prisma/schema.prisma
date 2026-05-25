@@ -1424,6 +1424,7 @@ enum ModuleKey {
   FINANCIAL
   FISCAL
   CUSTOM_DOMAIN
+  MARKETING_CAMPAIGNS
 }
 
 // Feature module that plans can enable/disable
