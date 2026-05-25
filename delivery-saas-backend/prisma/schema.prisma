@@ -163,6 +163,9 @@ model Company {
   marketingCampaignRuns MarketingCampaignRun[]
   marketingMessages     MarketingMessage[]
 
+  // ---- Feature flags (runtime kill switches, e.g. marketing_v1_enabled) ----
+  flags Json @default("{}")
+
   // ---- Error monitoring ----
   errorLogs ErrorLog[]
 
