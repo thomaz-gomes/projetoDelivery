@@ -227,11 +227,39 @@ router.post('/conversations/:id/send', upload.single('media'), async (req, res) 
       if (!conversation.providerAccountId) {
         return res.status(400).json({ message: 'Conversa Meta sem account associada' });
       }
-      const metaAccount = await prisma.metaMessagingAccount.findUnique({
+      let metaAccount = await prisma.metaMessagingAccount.findUnique({
         where: { id: conversation.providerAccountId },
       });
+      // Self-heal: conta antiga deletada (cenário comum de
+      // disconnect + reconnect — gera row nova com ID diferente). Tenta
+      // recuperar via menu.metaWaAccountId que reflete o vínculo atual.
+      if (!metaAccount && conversation.menuId) {
+        const menu = await prisma.menu.findUnique({
+          where: { id: conversation.menuId },
+          select: { metaWaAccountId: true },
+        });
+        if (menu?.metaWaAccountId) {
+          const candidate = await prisma.metaMessagingAccount.findFirst({
+            where: { id: menu.metaWaAccountId, companyId },
+          });
+          if (candidate) {
+            await prisma.conversation.update({
+              where: { id: conversation.id },
+              data: { providerAccountId: candidate.id },
+            });
+            metaAccount = candidate;
+            console.log('[inbox] self-healed conversation.providerAccountId', {
+              conversationId: conversation.id,
+              oldAccountId: conversation.providerAccountId,
+              newAccountId: candidate.id,
+            });
+          }
+        }
+      }
       if (!metaAccount) {
-        return res.status(400).json({ message: 'MetaMessagingAccount não encontrada' });
+        return res.status(400).json({
+          message: 'A conta Meta desta conversa foi removida e não há vínculo automático para reatribuir. Reconecte a conta em Integrações e vincule-a ao cardápio desta conversa.',
+        });
       }
 
       const to = conversation.channelContactId;
@@ -579,11 +607,39 @@ router.post('/conversations/:id/send-quick-reply', async (req, res) => {
       if (!conversation.providerAccountId) {
         return res.status(400).json({ message: 'Conversa Meta sem account associada' });
       }
-      const metaAccount = await prisma.metaMessagingAccount.findUnique({
+      let metaAccount = await prisma.metaMessagingAccount.findUnique({
         where: { id: conversation.providerAccountId },
       });
+      // Self-heal: conta antiga deletada (cenário comum de
+      // disconnect + reconnect — gera row nova com ID diferente). Tenta
+      // recuperar via menu.metaWaAccountId que reflete o vínculo atual.
+      if (!metaAccount && conversation.menuId) {
+        const menu = await prisma.menu.findUnique({
+          where: { id: conversation.menuId },
+          select: { metaWaAccountId: true },
+        });
+        if (menu?.metaWaAccountId) {
+          const candidate = await prisma.metaMessagingAccount.findFirst({
+            where: { id: menu.metaWaAccountId, companyId },
+          });
+          if (candidate) {
+            await prisma.conversation.update({
+              where: { id: conversation.id },
+              data: { providerAccountId: candidate.id },
+            });
+            metaAccount = candidate;
+            console.log('[inbox] self-healed conversation.providerAccountId', {
+              conversationId: conversation.id,
+              oldAccountId: conversation.providerAccountId,
+              newAccountId: candidate.id,
+            });
+          }
+        }
+      }
       if (!metaAccount) {
-        return res.status(400).json({ message: 'MetaMessagingAccount não encontrada' });
+        return res.status(400).json({
+          message: 'A conta Meta desta conversa foi removida e não há vínculo automático para reatribuir. Reconecte a conta em Integrações e vincule-a ao cardápio desta conversa.',
+        });
       }
 
       let content;
