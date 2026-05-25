@@ -438,6 +438,10 @@ model Customer {
   birthday                       DateTime? // data de aniversário
   whatsapp                       String? // telefone principal normalizado (somente dígitos e com DDI)
   phone                          String? // opcional (outro telefone)
+  optInMarketing                 Boolean               @default(false)
+  optInMarketingAt               DateTime?
+  optInMarketingSource           String? // 'checkout' | 'inbound' | 'manual'
+  optOutMarketingAt              DateTime?
   // Valor total acumulado gasto pelo cliente na loja (calculado via pedidos ou importado)
   totalSpent                     Decimal?              @db.Decimal(12, 2)
   // Campos importados (valores financeiros/totais) provenientes de planilhas
