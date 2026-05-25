@@ -1899,16 +1899,11 @@ publicMenuRouter.post('/:companyId/forgot-password', async (req, res) => {
     const account = await findAccountByCustomerId({ companyId, customerId: cust.id });
     if (!account) return res.json({ ok: true });
 
-    // Resolve a connected WhatsApp channel up front (Evolution OR Meta
-    // Cloud). If the company has none we surface 503 instead of resetting
-    // silently — otherwise the customer's password would change without
-    // them ever receiving the new value.
-    const lastConv = await prisma.conversation.findFirst({
-      where: { companyId, customerId: cust.id, channel: 'WHATSAPP' },
-      orderBy: { lastMessageAt: 'desc' },
-      select: { provider: true, providerAccountId: true, instanceName: true },
-    });
-
+    // Resolve a connected WhatsApp channel via sendCustomerPasswordViaWhatsApp
+    // (which delegates to pickConnectedChannel — mirrors the customer's last
+    // conversation when available). If the company has none we surface 503
+    // instead of resetting silently — otherwise the customer's password would
+    // change without them ever receiving the new value.
     const newPassword = generateAccountPassword();
     await resetCustomerAccountPassword({ accountId: account.id, plainPassword: newPassword });
 
@@ -1916,7 +1911,6 @@ publicMenuRouter.post('/:companyId/forgot-password', async (req, res) => {
       companyId,
       customer: cust,
       plainPassword: newPassword,
-      lastConversation: lastConv,
       reason: 'reset',
     });
     if (delivery.status === 'no-channel') {
