@@ -53,6 +53,7 @@ import rasterizeRouter from './routes/rasterize.js'
 import printerSettingRouter from './routes/printerSetting.js'
 import cashRouter from './routes/cash.js'
 import customerGroupsRouter from './routes/customerGroups.js'
+import marketingSegmentsRouter from './routes/marketing/segments.js'
 import cashbackRouter from './routes/cashback/cashback.js'
 import checkoutRouter from './routes/checkout.js'
 import events from './utils/events.js'
@@ -315,6 +316,7 @@ app.use('/custom-domains', customDomainRouter);
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
 app.use('/customer-groups', customerGroupsRouter);
+app.use('/marketing/segments', marketingSegmentsRouter);
 app.use('/qr-action', qrActionRouter);
 app.use('/cashback', requireModule('CASHBACK'), cashbackRouter);
 app.use('/financial', requireModule('FINANCIAL'), financialRouter);
