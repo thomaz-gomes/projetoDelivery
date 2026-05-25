@@ -278,8 +278,14 @@ model Order {
   cashSession   CashSession? @relation(fields: [cashSessionId], references: [id])
   outOfSession  Boolean      @default(false)
 
+  // ---- Marketing attribution (campaign → order) ----
+  attributedCampaignId String?
+  attributedMessageId  String?            @unique
+  attributedCampaign   MarketingCampaign? @relation("OrderAttribution", fields: [attributedCampaignId], references: [id], onDelete: SetNull)
+
   // Index to speed up queries by company + couponCode
   @@index([companyId, couponCode], name: "idx_order_company_coupon")
+  @@index([attributedCampaignId])
 }
 
 // NFC-e / NFe protocol records (stores SEFAZ responses such as protNFe)
@@ -3046,6 +3052,7 @@ model MarketingCampaign {
   createdBy             User?                     @relation("MarketingCampaignsCreated", fields: [createdByUserId], references: [id], onDelete: SetNull)
   runs                  MarketingCampaignRun[]
   messages              MarketingMessage[]
+  attributedOrders      Order[]                   @relation("OrderAttribution")
 
   @@index([companyId, status])
   @@index([scheduleType, status, scheduledFor])
