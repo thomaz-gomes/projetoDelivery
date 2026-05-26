@@ -12,6 +12,7 @@ import { geocodeOrderIfNeeded } from '../utils/geocode.js'
 import { isAvailableNow } from '../services/availability.js'
 import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
 import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js'
+import { attributeOrderToCampaign } from '../services/marketing/attribution.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -1731,6 +1732,11 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
       })
 
     try { console.log('Order created:', { id: created.id, address: created.address, payloadDelivery: created.payload && created.payload.delivery ? created.payload.delivery : null }) } catch(e){}
+
+    // Last-touch attribution to a marketing campaign (fire-and-forget; never blocks checkout)
+    attributeOrderToCampaign(created.id).catch(e =>
+      console.warn('[attribution] failed', e?.message)
+    )
 
     // Async geocode if order has address but no coordinates
     if (created.address && created.latitude == null) {
