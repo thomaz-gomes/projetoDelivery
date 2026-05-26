@@ -2,6 +2,7 @@ import express from 'express'
 import { prisma } from '../../prisma.js'
 import { authMiddleware, requireRole } from '../../auth.js'
 import { requireModuleStrict } from '../../modules.js'
+import { evaluateSegment } from '../../services/marketing/segmentEvaluator.js'
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -300,30 +301,101 @@ router.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
-// Activate: DRAFT -> SCHEDULED
-router.post('/:id/activate', requireRole('ADMIN'), async (req, res) => {
-  const { companyId } = req.user
-  const { id } = req.params
-  const c = await prisma.marketingCampaign.findFirst({ where: { id, companyId } })
-  if (!c) return res.status(404).json({ message: 'Campanha não encontrada' })
-  if (c.status !== 'DRAFT') {
-    return res.status(409).json({ message: `Campanha em status ${c.status} não pode ser ativada` })
+// Pre-flight checks: runs all gates before activation
+async function computePreflight(campaign, companyId) {
+  const issues = []
+
+  // 1. Cloud template check
+  const cloudish = campaign.channel === 'META_WA' || (campaign.channel === 'AUTO' && campaign.templateId)
+  if (cloudish) {
+    if (!campaign.templateId) {
+      issues.push({ severity: 'error', code: 'no_template', msg: 'Template não selecionado' })
+    } else if (campaign.template?.status !== 'APPROVED') {
+      issues.push({
+        severity: 'error',
+        code: 'template_not_approved',
+        msg: `Template está ${campaign.template?.status || 'desconhecido'}, precisa ser APPROVED`,
+      })
+    }
   }
-  // Basic guard: segment still belongs to company (defence in depth)
-  const seg = await prisma.marketingSegment.findFirst({ where: { id: c.segmentId, companyId } })
-  if (!seg) {
-    return res.status(400).json({ message: 'Segmento inválido ou não pertence à empresa' })
-  }
+
+  // 2. Evaluate audience
+  let eligible = 0
   try {
-    const updated = await prisma.marketingCampaign.update({
-      where: { id },
-      data: { status: 'SCHEDULED' },
-    })
-    return res.json(updated)
+    const customerIds = await evaluateSegment({ companyId, ruleJson: campaign.segment.ruleJson })
+    eligible = customerIds.length
   } catch (e) {
-    console.error('Failed to activate campaign:', e?.message || e)
-    return res.status(500).json({ message: 'Falha ao ativar campanha' })
+    issues.push({ severity: 'error', code: 'segment_invalid', msg: `Segmento inválido: ${e.message}` })
   }
+  if (eligible === 0) {
+    issues.push({ severity: 'error', code: 'empty_audience', msg: 'Nenhum cliente elegível na audiência' })
+  }
+
+  // 3. Evolution + large audience warning
+  if (campaign.channel === 'EVOLUTION_WA' && eligible > 50) {
+    issues.push({
+      severity: 'warning',
+      code: 'evo_mass_send',
+      msg: `${eligible} envios via Evolution: risco real de ban. Considere Cloud API.`,
+    })
+  }
+
+  // 4. > 500 confirmation
+  if (eligible > 500) {
+    issues.push({
+      severity: 'confirm',
+      code: 'large_audience',
+      msg: `Audiência grande: ${eligible}. Confirme digitando o número.`,
+    })
+  }
+
+  return { eligible, issues }
+}
+
+// GET /marketing/campaigns/:id/preflight
+router.get('/:id/preflight', async (req, res) => {
+  const companyId = req.user.companyId
+  const { id } = req.params
+  const c = await prisma.marketingCampaign.findFirst({
+    where: { id, companyId },
+    include: { segment: true, template: true },
+  })
+  if (!c) return res.status(404).json({ message: 'Campaign not found' })
+  const result = await computePreflight(c, companyId)
+  res.json(result)
+})
+
+// Activate: DRAFT -> SCHEDULED (tightened with pre-flight checks)
+router.post('/:id/activate', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId
+  const { id } = req.params
+  const { confirmedCount } = req.body || {}
+  const c = await prisma.marketingCampaign.findFirst({
+    where: { id, companyId },
+    include: { segment: true, template: true },
+  })
+  if (!c) return res.status(404).json({ message: 'Campaign not found' })
+  if (c.status !== 'DRAFT') return res.status(400).json({ message: `Cannot activate from status ${c.status}` })
+
+  const preflight = await computePreflight(c, companyId)
+  const errors = preflight.issues.filter(i => i.severity === 'error')
+  if (errors.length) {
+    return res.status(400).json({ message: 'Pre-flight failed', issues: errors, eligible: preflight.eligible })
+  }
+  const confirmNeeded = preflight.issues.find(i => i.code === 'large_audience')
+  if (confirmNeeded && Number(confirmedCount) !== preflight.eligible) {
+    return res.status(400).json({
+      message: 'Audience confirmation required',
+      issues: preflight.issues,
+      eligible: preflight.eligible,
+    })
+  }
+
+  const updated = await prisma.marketingCampaign.update({
+    where: { id },
+    data: { status: 'SCHEDULED' },
+  })
+  res.json(updated)
 })
 
 // Pause: SCHEDULED/RUNNING -> PAUSED
