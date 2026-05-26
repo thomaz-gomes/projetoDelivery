@@ -11,7 +11,7 @@
  * so the math is correct regardless of the container's clock.
  */
 
-const DEFAULT_TZ = 'America/Sao_Paulo';
+export const DEFAULT_TZ = 'America/Sao_Paulo';
 
 /**
  * Computes the offset of `tz` from UTC at the given Date, in milliseconds.

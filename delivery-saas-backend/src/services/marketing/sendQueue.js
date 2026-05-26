@@ -16,6 +16,7 @@
 
 import { prisma } from '../../prisma.js'
 import { evaluateSegment } from './segmentEvaluator.js'
+import { hourInTz, dayKeyInTz, startOfDayInTz, DEFAULT_TZ } from '../../utils/dateTz.js'
 
 const FREQ_CAP_PER_WEEK = 2
 
@@ -25,12 +26,13 @@ const FREQ_CAP_PER_WEEK = 2
  *     reduce ban-pattern detection on the unofficial channel)
  *   - Cloud (META_WA / AUTO): ~200ms baseline; the sender will further
  *     throttle on Meta usage headers when present
- *   - Quiet hours: 08:00 - 21:00 local server time. Out-of-window slots
- *     push to next valid 08:00.
+ *   - Quiet hours: 08:00 - 21:00 in the company's timezone (defaults to
+ *     America/Sao_Paulo). Out-of-window slots push to the next valid
+ *     08:00 in that TZ — NOT the container's UTC clock.
  */
-function computeSendSlots(count, channel) {
+function computeSendSlots(count, channel, tz = DEFAULT_TZ) {
   const slots = []
-  let cursor = nextValidSlot(new Date())
+  let cursor = nextValidSlot(new Date(), tz)
   for (let i = 0; i < count; i++) {
     slots.push(new Date(cursor))
     const isEvo = channel === 'EVOLUTION_WA'
@@ -38,24 +40,32 @@ function computeSendSlots(count, channel) {
       ? Math.floor(Math.random() * 14_000) + 1_000  // 1-15s
       : 200
     cursor = new Date(cursor.getTime() + jitterMs)
-    cursor = nextValidSlot(cursor)
+    cursor = nextValidSlot(cursor, tz)
   }
   return slots
 }
 
-function nextValidSlot(t) {
-  const d = new Date(t)
-  const h = d.getHours()
-  if (h < 8) {
-    d.setHours(8, 0, 0, 0)
-    return d
+/**
+ * Return the next instant ≥ `t` that falls within 08:00–21:00 in `tz`.
+ * Uses Intl-backed helpers from utils/dateTz.js so quiet-hours math is
+ * correct regardless of the Node process timezone (container is UTC).
+ */
+function nextValidSlot(t, tz = DEFAULT_TZ) {
+  const d = t instanceof Date ? new Date(t) : new Date(t)
+  const h = hourInTz(d, tz)
+  if (h >= 8 && h < 21) return d
+
+  // Compute 08:00 in `tz` for "the right day": today if we're still before 08:00,
+  // tomorrow if we're already past 21:00.
+  const dayKey = dayKeyInTz(d, tz)
+  let target = startOfDayInTz(dayKey, tz) // 00:00 local in tz
+  target = new Date(target.getTime() + 8 * 60 * 60 * 1000) // +8h → 08:00 local
+
+  if (target.getTime() <= d.getTime()) {
+    // We're past 08:00 today (meaning h >= 21), roll to tomorrow's 08:00.
+    target = new Date(target.getTime() + 24 * 60 * 60 * 1000)
   }
-  if (h >= 21) {
-    d.setDate(d.getDate() + 1)
-    d.setHours(8, 0, 0, 0)
-    return d
-  }
-  return d
+  return target
 }
 
 /**
@@ -126,7 +136,28 @@ export async function enqueueRun(campaign) {
     return { runId: run.id, queued: 0 }
   }
 
-  const slots = computeSendSlots(candidates.length, campaign.channel)
+  // Resolve company timezone for quiet-hours math. Fall back to the menu's
+  // timezone if the company didn't set one, then DEFAULT_TZ (BRT).
+  let tz = DEFAULT_TZ
+  try {
+    const company = await prisma.company.findUnique({
+      where: { id: campaign.companyId },
+      select: { timezone: true },
+    })
+    if (company?.timezone) {
+      tz = company.timezone
+    } else if (campaign.segmentMenuId) {
+      const menu = await prisma.menu.findUnique({
+        where: { id: campaign.segmentMenuId },
+        select: { timezone: true },
+      })
+      if (menu?.timezone) tz = menu.timezone
+    }
+  } catch (e) {
+    console.warn('[enqueueRun] timezone lookup failed, using default', e?.message)
+  }
+
+  const slots = computeSendSlots(candidates.length, campaign.channel, tz)
 
   // Create messages then queue rows. Use createManyAndReturn if available
   // (Prisma 5.14+); else fall back to two queries.
