@@ -1803,7 +1803,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
 // body: { name, whatsapp, email?, password }
 publicMenuRouter.post('/:companyId/register', async (req, res) => {
   const { companyId } = req.params
-  const { name, whatsapp, email, password } = req.body || {}
+  const { name, whatsapp, email, password, optInMarketing } = req.body || {}
   if (!whatsapp || !password) return res.status(400).json({ message: 'whatsapp e password são obrigatórios' })
   try {
     // ensure company exists
@@ -1824,6 +1824,24 @@ publicMenuRouter.post('/:companyId/register', async (req, res) => {
     }
 
     const account = await createCustomerAccount({ companyId, customerId: customer.id, email, password })
+
+    // Persist explicit marketing opt-in (LGPD: source + timestamp) when the
+    // customer ticked the checkbox in the checkout register sub-form.
+    if (optInMarketing === true) {
+      try {
+        await prisma.customer.update({
+          where: { id: customer.id },
+          data: {
+            optInMarketing: true,
+            optInMarketingAt: new Date(),
+            optInMarketingSource: 'checkout',
+          },
+        })
+      } catch (e) {
+        console.error('[register] falha ao persistir optInMarketing', e)
+      }
+    }
+
     const token = signToken({ accountId: account.id, customerId: account.customerId, companyId, type: 'customer' })
     return res.status(201).json({ account: { id: account.id, email: account.email, customerId: account.customerId }, token, customer })
   } catch (e) {
