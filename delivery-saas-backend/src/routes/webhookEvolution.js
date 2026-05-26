@@ -12,6 +12,7 @@ import { Router } from 'express'
 import { prisma } from '../prisma.js'
 import { routeInbound } from '../messaging/index.js'
 import { persistOutboundEcho } from '../messaging/evolutionOutboundEcho.js'
+import { applyMarketingStatusFromWebhook } from '../services/marketing/messageStatusHooks.js'
 
 const router = Router()
 
@@ -131,6 +132,20 @@ async function handleMessagesUpdate(req, body) {
           conversationId: message.conversationId,
           status: newStatus,
         })
+      }
+      // Mirror onto MarketingMessage (no-op if externalId doesn't match a
+      // marketing send). Wrapped in try/catch so a marketing-side failure
+      // never blocks the inbox status update or the rest of the batch.
+      if (newStatus === 'DELIVERED' || newStatus === 'READ') {
+        try {
+          await applyMarketingStatusFromWebhook(
+            externalId,
+            newStatus === 'READ' ? 'read' : 'delivered',
+            new Date(),
+          )
+        } catch (err) {
+          console.error('[webhookEvolution] marketing status hook failed:', err?.message || err)
+        }
       }
     } catch (err) {
       console.error('[webhookEvolution] Error processing message update:', err)
