@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../../api'
 import RuleBuilder from '../../components/marketing/RuleBuilder.vue'
@@ -20,7 +20,61 @@ const form = ref({
 const preview = ref({ count: null, sample: [], loading: false })
 const saving = ref(false)
 
+// Lookup data provided to RuleBuilder for multi-select rendering. Loaded
+// once on mount — these datasets are small (SMB delivery typically has
+// 50-300 products, < 20 categories, < 100 neighborhoods) so we keep them
+// in memory and filter client-side instead of paging.
+const marketingSources = ref({
+  products:        { options: [], loading: true },
+  categories:      { options: [], loading: true },
+  neighborhoods:   { options: [], loading: true },
+  customerGroups:  { options: [], loading: true },
+  paymentMethods:  { options: [], loading: true },
+})
+provide('marketingSources', marketingSources)
+
+async function loadSources() {
+  const tasks = [
+    api.get('/menu/products').then(({ data }) => {
+      marketingSources.value.products = {
+        options: (data || []).map(p => ({ value: p.id, label: p.name })),
+        loading: false,
+      }
+    }).catch(() => { marketingSources.value.products.loading = false }),
+
+    api.get('/menu/categories').then(({ data }) => {
+      marketingSources.value.categories = {
+        options: (data || []).map(c => ({ value: c.id, label: c.name })),
+        loading: false,
+      }
+    }).catch(() => { marketingSources.value.categories.loading = false }),
+
+    api.get('/neighborhoods').then(({ data }) => {
+      marketingSources.value.neighborhoods = {
+        options: (data || []).map(n => ({ value: n.name, label: n.name })),
+        loading: false,
+      }
+    }).catch(() => { marketingSources.value.neighborhoods.loading = false }),
+
+    api.get('/customer-groups').then(({ data }) => {
+      marketingSources.value.customerGroups = {
+        options: (data || []).map(g => ({ value: g.id, label: g.name })),
+        loading: false,
+      }
+    }).catch(() => { marketingSources.value.customerGroups.loading = false }),
+
+    api.get('/menu/payment-methods').then(({ data }) => {
+      marketingSources.value.paymentMethods = {
+        options: (data || []).filter(p => p.isActive !== false).map(p => ({ value: p.code, label: p.name })),
+        loading: false,
+      }
+    }).catch(() => { marketingSources.value.paymentMethods.loading = false }),
+  ]
+  await Promise.all(tasks)
+}
+
 onMounted(async () => {
+  loadSources()  // fire-and-forget; UI shows "Carregando..." inside the multi-select
   if (isEdit) {
     try {
       const { data } = await api.get(`/marketing/segments/${route.params.id}`)
