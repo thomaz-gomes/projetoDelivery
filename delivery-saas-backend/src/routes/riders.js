@@ -214,9 +214,11 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
     });
     const todayEarnings = todayTxAgg._sum.amount || 0;
 
-    // Today deliveries (completed orders)
+    // Today deliveries (completed orders) — agrupa pelo DIA DE CRIAÇÃO do
+    // pedido. Pedido criado 21/05 23:50 e concluído 22/05 00:10 conta para
+    // 21/05, alinhado com a regra "entrega é do dia que foi criada".
     const todayDeliveries = await prisma.order.count({
-      where: { riderId, status: 'CONCLUIDO', updatedAt: { gte: todayStart } }
+      where: { riderId, status: 'CONCLUIDO', createdAt: { gte: todayStart } }
     });
 
     // Month earnings
@@ -226,9 +228,9 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
     });
     const monthEarnings = monthTxAgg._sum.amount || 0;
 
-    // Month deliveries
+    // Month deliveries — mesma regra: usa createdAt (não updatedAt)
     const monthDeliveries = await prisma.order.count({
-      where: { riderId, status: 'CONCLUIDO', updatedAt: { gte: monthStart } }
+      where: { riderId, status: 'CONCLUIDO', createdAt: { gte: monthStart } }
     });
 
     // Check-in hoje (BRT)
@@ -877,13 +879,14 @@ ridersRouter.get('/ranking', async (req, res) => {
     select: { id: true, name: true, userId: true }
   });
 
-  // Completed orders in period
+  // Completed orders in period — usa createdAt pra alinhar com a regra
+  // "entrega é do dia que foi criada" (não do dia em que foi marcada CONCLUIDO).
   const orders = await prisma.order.findMany({
     where: {
       companyId,
       riderId: { not: null },
       status: 'CONCLUIDO',
-      updatedAt: { gte: dateFrom, lte: dateTo }
+      createdAt: { gte: dateFrom, lte: dateTo }
     },
     select: {
       id: true, riderId: true, closedByIfoodCode: true, updatedAt: true,
@@ -895,14 +898,15 @@ ridersRouter.get('/ranking', async (req, res) => {
     }
   });
 
-  // Canceled orders count by rider
+  // Canceled orders count by rider — mesma regra: createdAt pra agrupar pelo
+  // dia em que o pedido foi criado.
   const canceledCount = await prisma.order.groupBy({
     by: ['riderId'],
     where: {
       companyId,
       riderId: { not: null },
       status: 'CANCELADO',
-      updatedAt: { gte: dateFrom, lte: dateTo }
+      createdAt: { gte: dateFrom, lte: dateTo }
     },
     _count: { id: true }
   });
