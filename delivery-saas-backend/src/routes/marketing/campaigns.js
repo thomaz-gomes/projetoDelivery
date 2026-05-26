@@ -22,6 +22,8 @@ const EDITABLE_FIELDS = [
   'triggerType',
   'triggerParams',
   'channel',
+  'metaWaAccountId',
+  'evolutionInstanceName',
   'templateId',
   'freeText',
   'templateVariableMap',
@@ -31,11 +33,96 @@ const EDITABLE_FIELDS = [
   'couponId',
 ]
 
+// Validates a channel pin: at most one of (metaWaAccountId, evolutionInstanceName)
+// can be set, and the pinned channel must belong to the company. Mutates
+// `data` with the channel + the corresponding ID; returns null on success
+// or a string error to short-circuit.
+async function validateChannelPin({ companyId, metaWaAccountId, evolutionInstanceName, data }) {
+  if (metaWaAccountId && evolutionInstanceName) {
+    return 'Escolha um único canal (Meta OU Evolution), não os dois'
+  }
+  if (metaWaAccountId) {
+    const acc = await prisma.metaMessagingAccount.findFirst({
+      where: { id: metaWaAccountId, companyId, provider: 'META_WA' },
+    })
+    if (!acc) return 'Conta WhatsApp Cloud inválida ou não pertence à empresa'
+    data.metaWaAccountId = metaWaAccountId
+    data.evolutionInstanceName = null
+    data.channel = 'META_WA'
+    return null
+  }
+  if (evolutionInstanceName) {
+    const inst = await prisma.whatsAppInstance.findFirst({
+      where: { instanceName: evolutionInstanceName, companyId },
+    })
+    if (!inst) return 'Instância Evolution inválida ou não pertence à empresa'
+    data.metaWaAccountId = null
+    data.evolutionInstanceName = evolutionInstanceName
+    data.channel = 'EVOLUTION_WA'
+    return null
+  }
+  // Neither set — clear both and leave channel as the caller-provided value
+  // (typically AUTO).
+  data.metaWaAccountId = null
+  data.evolutionInstanceName = null
+  return null
+}
+
 function parseDate(v) {
   if (v === null || v === undefined || v === '') return null
   const d = new Date(v)
   return Number.isFinite(d.getTime()) ? d : undefined // undefined means invalid
 }
+
+// GET /marketing/campaigns/channels
+// Combined list of WhatsApp channels available to the company for pinning
+// to a campaign. Returns one item per Meta Cloud account + one per
+// Evolution instance, normalized to a common shape so the campaign
+// builder can render a single unified dropdown.
+router.get('/channels', async (req, res) => {
+  const { companyId } = req.user
+  try {
+    const [metaAccounts, evoInstances] = await Promise.all([
+      prisma.metaMessagingAccount.findMany({
+        where: { companyId, provider: 'META_WA' },
+        select: { id: true, displayName: true, externalId: true, status: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.whatsAppInstance.findMany({
+        where: { companyId },
+        select: { instanceName: true, displayName: true, status: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ])
+
+    const channels = [
+      ...metaAccounts.map(a => ({
+        key: `meta:${a.id}`,
+        type: 'META_WA',
+        metaWaAccountId: a.id,
+        evolutionInstanceName: null,
+        label: a.displayName || a.externalId,
+        identifier: a.externalId,
+        status: a.status,
+        official: true,
+      })),
+      ...evoInstances.map(i => ({
+        key: `evo:${i.instanceName}`,
+        type: 'EVOLUTION_WA',
+        metaWaAccountId: null,
+        evolutionInstanceName: i.instanceName,
+        label: i.displayName || i.instanceName,
+        identifier: i.instanceName,
+        status: i.status,
+        official: false,
+      })),
+    ]
+    return res.json(channels)
+  } catch (e) {
+    console.error('Failed to list campaign channels:', e?.message || e)
+    return res.status(500).json({ message: 'Falha ao listar canais' })
+  }
+})
 
 // List campaigns
 router.get('/', async (req, res) => {
@@ -93,6 +180,8 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
     triggerType,
     triggerParams,
     channel,
+    metaWaAccountId,
+    evolutionInstanceName,
     templateId,
     freeText,
     templateVariableMap,
@@ -151,6 +240,13 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
     return res.status(400).json({ message: 'conversionWindowHours inválido' })
   }
 
+  // Channel pin validation — when set, overrides `ch` to META_WA / EVOLUTION_WA
+  const channelData = { channel: ch }
+  const chanErr = await validateChannelPin({
+    companyId, metaWaAccountId, evolutionInstanceName, data: channelData,
+  })
+  if (chanErr) return res.status(400).json({ message: chanErr })
+
   try {
     const created = await prisma.marketingCampaign.create({
       data: {
@@ -162,7 +258,9 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
         cronExpression: cronExpression || null,
         triggerType: triggerType || null,
         triggerParams: triggerParams ?? null,
-        channel: ch,
+        channel: channelData.channel,
+        metaWaAccountId: channelData.metaWaAccountId,
+        evolutionInstanceName: channelData.evolutionInstanceName,
         templateId: templateId || null,
         freeText: freeText || null,
         templateVariableMap: templateVariableMap ?? null,
@@ -240,6 +338,34 @@ router.patch('/:id', requireRole('ADMIN'), async (req, res) => {
       case 'channel': {
         if (!VALID_CHANNELS.has(val)) return res.status(400).json({ message: 'channel inválido' })
         data.channel = val
+        break
+      }
+      case 'metaWaAccountId': {
+        if (val) {
+          const acc = await prisma.metaMessagingAccount.findFirst({
+            where: { id: val, companyId, provider: 'META_WA' },
+          })
+          if (!acc) return res.status(400).json({ message: 'Conta WhatsApp Cloud inválida ou não pertence à empresa' })
+          data.metaWaAccountId = val
+          data.evolutionInstanceName = null
+          data.channel = 'META_WA'
+        } else {
+          data.metaWaAccountId = null
+        }
+        break
+      }
+      case 'evolutionInstanceName': {
+        if (val) {
+          const inst = await prisma.whatsAppInstance.findFirst({
+            where: { instanceName: val, companyId },
+          })
+          if (!inst) return res.status(400).json({ message: 'Instância Evolution inválida ou não pertence à empresa' })
+          data.evolutionInstanceName = val
+          data.metaWaAccountId = null
+          data.channel = 'EVOLUTION_WA'
+        } else {
+          data.evolutionInstanceName = null
+        }
         break
       }
       case 'templateId': {
