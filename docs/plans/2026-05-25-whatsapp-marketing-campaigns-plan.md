@@ -3894,3 +3894,73 @@ The following tasks belong to subsequent plans (separate documents to be written
 
 - `superpowers:executing-plans` — to execute this plan task-by-task
 - `superpowers:subagent-driven-development` — if user chooses Subagent-Driven execution
+
+---
+
+## Phase 1 MVP — Validation guide
+
+The feature is built, all migrations are applied to the dev DB, and the
+worker boots when the backend starts (unless `MARKETING_WORKER=off`).
+The feature flag `Company.flags.marketing_v1_enabled` gates the
+operator-facing routes during beta.
+
+### Toggle the flag for a beta company
+
+```
+cd delivery-saas-backend
+node scripts/toggle-marketing-flag.mjs <companyId> on
+```
+
+Cache TTL is 60s — the flag propagates within one minute. Use `off` to
+disable.
+
+### Full E2E smoke test (manual, against dev DB)
+
+1. Pick a beta company, toggle the flag on, and ensure `MARKETING_CAMPAIGNS`
+   is in its enabled modules list (SaaS Admin → Módulos).
+2. Log in as an ADMIN of that company.
+3. Navigate to `Marketing → Segmentos → Novo segmento`. Create:
+   - Name: "Test inactive 30d"
+   - Rule: `lastOrderAt olderThan 30d` AND `optInMarketing = true`
+   - Verify the live count shows non-zero (use a test customer with old order + opt-in).
+4. Navigate to `Marketing → Campanhas → Nova campanha`.
+   - Step 1: pick the segment.
+   - Step 2: choose Evolution + free text "Olá {nome}, sentimos sua falta!"
+     Click "Pré-visualizar com cliente real" — confirm rendered text shows the customer's first name.
+   - Step 3: One-shot, leave `scheduledFor` blank (immediate), window 48h.
+   - Step 4: review, no errors → click "Ativar campanha".
+5. Watch the backend logs for ~30s:
+   - `[marketing-worker] discovered ONE_SHOT due: ...`
+   - `[marketing-worker] enqueued run <runId> for campaign <id> with N messages`
+   - Evolution send logs (existing `evoSendText -> success ...`)
+6. Inspect the DB:
+   ```
+   SELECT id, status, "totalQueued", "totalSent", "finishedAt"
+   FROM "MarketingCampaignRun" ORDER BY "startedAt" DESC LIMIT 1;
+   SELECT id, status, "sentAt" FROM "MarketingMessage" ORDER BY "createdAt" DESC LIMIT 5;
+   ```
+7. Have the test customer place an order via PDV or public checkout within 48h.
+8. Verify attribution:
+   ```
+   SELECT "attributedCampaignId", "attributedMessageId" FROM "Order"
+   WHERE id = '<the-test-order-id>';
+   ```
+9. Visit `/marketing/campaigns/<id>` — the funnel should show 1 conversion.
+
+### Expected outcomes (acceptance criteria)
+
+- Worker discovers + enqueues correctly (logged)
+- Segment evaluator filters by `optInMarketing` (verified via the segment preview count drop when a customer's opt-in is toggled off)
+- Evolution jitter respected (sentAt timestamps spaced 1-15s between messages in the same run)
+- Order created within the window gets `attributedCampaignId` automatically
+- Dashboard shows the funnel populated (`/marketing/campaigns/:id` → Visão geral tab)
+- "Pausar" / "Retomar" / "Cancelar" buttons work; pausing stops enqueueing of new runs but in-flight queue items continue per their schedule (they re-check campaign status before sending)
+- Opt-out (customer replies `PARAR`) sets `optOutMarketingAt`, excludes in-flight messages from future attribution, and triggers an auto-reply confirmation
+- Status webhooks update `MarketingMessage.deliveredAt`/`readAt` (verified by sending from Cloud/Evolution and watching the DB)
+
+### Known V1 limitations (deferred to Phase 2)
+
+- RECURRING and TRIGGER schedule types are stubbed (UI shows them as "em breve")
+- Templates created via Graph API directly from the panel come in Phase 2 (V1 reuses the existing sync-from-Business-Manager flow)
+- Health dashboard at `/marketing/health` deferred
+- Auto-pause is monitored in the worker housekeeping but operator notifications are log-only (no email/in-app yet)
