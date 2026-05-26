@@ -11,6 +11,7 @@ import printQueue from '../printQueue.js'
 import { matchItemsToLocalProducts } from '../utils/integrationMatcher.js'
 import { nextDisplaySimple } from '../utils/displaySimple.js'
 import { resolveMenuForStore } from '../utils/resolveMenuForStore.js'
+import { attributeOrderToCampaign, revokeAttribution } from './marketing/attribution.js'
 
 /**
  * Extrai companyId a partir do merchantId do payload
@@ -873,6 +874,7 @@ export async function processIFoodWebhook(eventId) {
       // Emit socket events depending on create vs update
       try {
         if (res && res.created) {
+          attributeOrderToCampaign(savedOrder.id).catch(() => {});
           console.log('[iFood Processor] emitting novo-pedido for created order', savedOrder && savedOrder.id, 'status:', savedOrder && savedOrder.status);
           emitirNovoPedido(savedOrder);
           // Send iFood chat message for new order (e.g. CONFIRMED after auto-accept)
@@ -912,6 +914,9 @@ export async function processIFoodWebhook(eventId) {
             }
           } catch (e) { /* ignore auto-print errors */ }
         } else if (res && res.statusChanged) {
+          if (res.to === 'CANCELADO') {
+            revokeAttribution(savedOrder.id).catch(() => {});
+          }
           console.log('[iFood Processor] status changed by webhook:', res.from, '->', res.to, 'orderId:', savedOrder && savedOrder.id);
           emitirPedidoAtualizado(savedOrder);
           tryEmitIfoodChat(savedOrder, res.to).catch(() => {});

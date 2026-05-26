@@ -692,6 +692,18 @@
                     <label class="form-label">Senha</label>
                     <input v-model="regForm.password" class="form-control" type="password" autocomplete="new-password" />
                   </div>
+                  <div class="mb-3 form-check">
+                    <input
+                      id="optInMarketing"
+                      v-model="regForm.optInMarketing"
+                      type="checkbox"
+                      class="form-check-input"
+                    />
+                    <label class="form-check-label small" for="optInMarketing">
+                      Quero receber promoções e novidades de <strong>{{ menu?.name || 'esta loja' }}</strong> no WhatsApp
+                    </label>
+                    <div class="form-text small text-muted">Você pode cancelar a qualquer momento respondendo PARAR.</div>
+                  </div>
                   <div class="d-flex justify-content-between align-items-center gap-2">
                     <a href="#" @click.prevent="identityMode = null" class="small" style="text-decoration:none;color:var(--text-secondary);">
                       <i class="bi bi-chevron-left me-1"></i>Voltar
@@ -1907,7 +1919,7 @@ const phoneInput = ref('')
 // Checkout customer tab (legacy state — kept for backward compat with any
 // inline references; no longer used by the redesigned identity step).
 const customerTab = ref('login')
-const regForm = ref({ name: '', whatsapp: '', email: '', password: '' })
+const regForm = ref({ name: '', whatsapp: '', email: '', password: '', optInMarketing: false })
 const loginForm = ref({ phone: '', password: '' })
 const customerFormMsg = ref('')
 const customerFormMsgType = ref('')
@@ -3987,7 +3999,7 @@ async function doRegisterInCheckout() {
   if (!digits || String(digits).length < 10) { customerFormMsg.value = 'Informe um WhatsApp válido (DDD + número)'; customerFormMsgType.value = 'alert-danger'; return }
   customerFormLoading.value = true
   try {
-    const payload = { name, whatsapp: digits, email: regForm.value.email || null, password: regForm.value.password }
+    const payload = { name, whatsapp: digits, email: regForm.value.email || null, password: regForm.value.password, optInMarketing: !!regForm.value.optInMarketing }
     const res = await api.post(`/public/${companyId}/register`, payload)
     if (res && res.data && res.data.token) {
       try { localStorage.setItem(PUBLIC_TOKEN_KEY, res.data.token) } catch(e) {}

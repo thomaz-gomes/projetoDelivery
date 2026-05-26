@@ -35,6 +35,8 @@ export const nav = [
     { name: 'Movimentos de Estoque', to: '/stock-movements', icon: 'bi bi-arrow-repeat', moduleKey: 'stock', lockable: true }
   ] },
   { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', role: 'ADMIN', children: [
+    { name: 'Campanhas', to: '/marketing/campaigns', icon: 'bi bi-broadcast', moduleKey: 'marketing_campaigns', lockable: true },
+    { name: 'Segmentos', to: '/marketing/segments', icon: 'bi bi-people', moduleKey: 'marketing_campaigns', lockable: true },
     { name: 'Studio IA', to: '/marketing/studio-ia', icon: 'bi bi-stars' },
     { name: 'Temas Visuais', to: '/marketing/brand-themes', icon: 'bi bi-palette' },
     { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill', moduleKey: 'affiliates', lockable: true },

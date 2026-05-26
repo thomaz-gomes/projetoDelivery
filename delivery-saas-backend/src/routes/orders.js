@@ -21,6 +21,7 @@ import { startOfDayInTz as dayStartTz, endOfDayInTz as dayEndTz } from '../utils
 import { geocodeOrderIfNeeded } from '../utils/geocode.js';
 import { evaluateDiscountRule } from '../utils/paymentDiscount.js';
 import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js';
+import { attributeOrderToCampaign, revokeAttribution } from '../services/marketing/attribution.js';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -235,7 +236,7 @@ ordersRouter.post('/import', requireRole('ADMIN'), upload.single('file'), async 
           : canal.toLowerCase().includes('aiqfome') ? 'AIQFOME'
           : 'MANUAL';
 
-        await prisma.order.create({
+        const importedOrder = await prisma.order.create({
           data: {
             companyId,
             externalId,
@@ -274,6 +275,9 @@ ordersRouter.post('/import', requireRole('ADMIN'), upload.single('file'), async 
             }
           }
         });
+        attributeOrderToCampaign(importedOrder.id).catch(e =>
+          console.warn('[attribution] failed', e?.message)
+        );
 
         created++;
       } catch (e) {
@@ -684,6 +688,7 @@ ordersRouter.post('/:id/reject', requireRole('ADMIN', 'ATTENDANT', 'STORE'), asy
       },
       include: { items: true, histories: true, rider: true },
     });
+    revokeAttribution(updated.id).catch(() => {});
 
     try {
       await reverseStockMovementForOrder(prisma, updated.id, req?.user?.id || null);
@@ -1020,6 +1025,7 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
 
     // Reversal of stock movement when order is cancelled (any prior state)
     if (status === 'CANCELADO' && existing.status !== 'CANCELADO') {
+      revokeAttribution(updated.id).catch(() => {});
       try {
         await reverseStockMovementForOrder(prisma, updated.id, req?.user?.id || null);
       } catch (e) {
@@ -1429,6 +1435,9 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       },
       include: { items: true, histories: true }
     });
+    attributeOrderToCampaign(created.id).catch(e =>
+      console.warn('[attribution] failed', e?.message)
+    );
 
     // If the PDV order included applied cashback, debit the customer wallet.
     // Best-effort: failures are logged but do not block order creation.

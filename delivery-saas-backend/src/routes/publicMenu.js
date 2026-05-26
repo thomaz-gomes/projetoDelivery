@@ -12,6 +12,7 @@ import { geocodeOrderIfNeeded } from '../utils/geocode.js'
 import { isAvailableNow } from '../services/availability.js'
 import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
 import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js'
+import { attributeOrderToCampaign } from '../services/marketing/attribution.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -1732,6 +1733,11 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
 
     try { console.log('Order created:', { id: created.id, address: created.address, payloadDelivery: created.payload && created.payload.delivery ? created.payload.delivery : null }) } catch(e){}
 
+    // Last-touch attribution to a marketing campaign (fire-and-forget; never blocks checkout)
+    attributeOrderToCampaign(created.id).catch(e =>
+      console.warn('[attribution] failed', e?.message)
+    )
+
     // Async geocode if order has address but no coordinates
     if (created.address && created.latitude == null) {
       geocodeOrderIfNeeded(created.id).catch(() => {})
@@ -1803,7 +1809,7 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
 // body: { name, whatsapp, email?, password }
 publicMenuRouter.post('/:companyId/register', async (req, res) => {
   const { companyId } = req.params
-  const { name, whatsapp, email, password } = req.body || {}
+  const { name, whatsapp, email, password, optInMarketing } = req.body || {}
   if (!whatsapp || !password) return res.status(400).json({ message: 'whatsapp e password são obrigatórios' })
   try {
     // ensure company exists
@@ -1824,6 +1830,24 @@ publicMenuRouter.post('/:companyId/register', async (req, res) => {
     }
 
     const account = await createCustomerAccount({ companyId, customerId: customer.id, email, password })
+
+    // Persist explicit marketing opt-in (LGPD: source + timestamp) when the
+    // customer ticked the checkbox in the checkout register sub-form.
+    if (optInMarketing === true) {
+      try {
+        await prisma.customer.update({
+          where: { id: customer.id },
+          data: {
+            optInMarketing: true,
+            optInMarketingAt: new Date(),
+            optInMarketingSource: 'checkout',
+          },
+        })
+      } catch (e) {
+        console.error('[register] falha ao persistir optInMarketing', e)
+      }
+    }
+
     const token = signToken({ accountId: account.id, customerId: account.customerId, companyId, type: 'customer' })
     return res.status(201).json({ account: { id: account.id, email: account.email, customerId: account.customerId }, token, customer })
   } catch (e) {
@@ -1899,16 +1923,11 @@ publicMenuRouter.post('/:companyId/forgot-password', async (req, res) => {
     const account = await findAccountByCustomerId({ companyId, customerId: cust.id });
     if (!account) return res.json({ ok: true });
 
-    // Resolve a connected WhatsApp channel up front (Evolution OR Meta
-    // Cloud). If the company has none we surface 503 instead of resetting
-    // silently — otherwise the customer's password would change without
-    // them ever receiving the new value.
-    const lastConv = await prisma.conversation.findFirst({
-      where: { companyId, customerId: cust.id, channel: 'WHATSAPP' },
-      orderBy: { lastMessageAt: 'desc' },
-      select: { provider: true, providerAccountId: true, instanceName: true },
-    });
-
+    // Resolve a connected WhatsApp channel via sendCustomerPasswordViaWhatsApp
+    // (which delegates to pickConnectedChannel — mirrors the customer's last
+    // conversation when available). If the company has none we surface 503
+    // instead of resetting silently — otherwise the customer's password would
+    // change without them ever receiving the new value.
     const newPassword = generateAccountPassword();
     await resetCustomerAccountPassword({ accountId: account.id, plainPassword: newPassword });
 
@@ -1916,7 +1935,6 @@ publicMenuRouter.post('/:companyId/forgot-password', async (req, res) => {
       companyId,
       customer: cust,
       plainPassword: newPassword,
-      lastConversation: lastConv,
       reason: 'reset',
     });
     if (delivery.status === 'no-channel') {

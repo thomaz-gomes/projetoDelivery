@@ -69,8 +69,30 @@ const newAddrForm = reactive({
 // Order detail modal
 const selectedOrder = ref(null);
 
+// Marketing opt-in toggle — local mirror of store.current.optInMarketing
+// so the checkbox stays controlled and we can revert on save failure
+// without waiting for a server round-trip.
+const optInMarketing = ref(false);
+
+async function saveMarketingOptIn() {
+  try {
+    await store.update(store.current.id, {
+      optInMarketing: optInMarketing.value,
+      optInMarketingSource: 'manual',
+    });
+    // Refresh so timestamps (optInMarketingAt / optOutMarketingAt) come
+    // back from the server and the legend below the checkbox updates.
+    await store.get(store.current.id);
+    optInMarketing.value = !!store.current.optInMarketing;
+  } catch (e) {
+    optInMarketing.value = !optInMarketing.value; // revert
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Falha ao salvar preferência' });
+  }
+}
+
 onMounted(async () => {
   await store.get(route.params.id);
+  optInMarketing.value = !!store.current?.optInMarketing;
   await loadOrders(1);
   loadCashback();
 });
@@ -492,6 +514,33 @@ async function manualDebit() {
               >
                 Nenhum endereco cadastrado.
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Marketing WhatsApp opt-in/out -->
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h6 class="card-title"><i class="bi bi-megaphone me-1"></i>Marketing WhatsApp</h6>
+              <div class="form-check">
+                <input
+                  id="optInMarketingCheck"
+                  v-model="optInMarketing"
+                  type="checkbox"
+                  class="form-check-input"
+                  @change="saveMarketingOptIn"
+                />
+                <label class="form-check-label" for="optInMarketingCheck">
+                  Cliente autorizou receber campanhas no WhatsApp
+                </label>
+              </div>
+              <small v-if="store.current.optInMarketingAt" class="text-muted d-block mt-1">
+                Origem: {{ store.current.optInMarketingSource || '-' }} &bull; Desde: {{ formatDate(store.current.optInMarketingAt) }}
+              </small>
+              <small v-if="store.current.optOutMarketingAt" class="text-danger d-block mt-1">
+                Opt-out em {{ formatDate(store.current.optOutMarketingAt) }}
+              </small>
             </div>
           </div>
         </div>

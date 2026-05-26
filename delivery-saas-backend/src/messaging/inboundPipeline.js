@@ -15,6 +15,8 @@ import { emitirInboxNewMessage } from '../socketEmitters.js'
 import { runAutomations } from './automations.js'
 import { handleButtonReply } from './buttonReplies.js'
 import { phoneVariants } from './phoneVariants.js'
+import { maybeAutoOptIn, maybeAutoOptOut } from '../services/marketing/optInOptOut.js'
+import { sendOutbound } from './router.js'
 
 export async function process(msg) {
   // 1. Dedup by externalId scoped to companyId
@@ -91,6 +93,40 @@ export async function process(msg) {
     })
   } catch (err) {
     console.warn('[inboundPipeline] failed to emit inbox:new-message', err?.message || err)
+  }
+
+  // 6b. Marketing opt-in/out lifecycle. Tacit-opt-in any customer who messages
+  //     us (Meta permits this while the conversation is active) unless the
+  //     inbound text matches an opt-out keyword (PARAR/STOP/etc.) — in which
+  //     case we flip the customer to opt-out, exclude any in-flight marketing
+  //     attribution, and reply with a best-effort utility confirmation. Send
+  //     failures are swallowed so a marketing-side error never blocks the
+  //     inbox from completing. Guarded with `customerId && messageText` so
+  //     non-message events (e.g. media-only without body, system events) skip
+  //     the opt-out check entirely.
+  const customerId = customer?.id
+  const messageText = message?.body
+  if (customerId && messageText) {
+    try {
+      const optedOut = await maybeAutoOptOut(customerId, messageText)
+      if (optedOut) {
+        try {
+          await sendOutbound({
+            conversationId: updatedConversation.id,
+            content: {
+              type: 'TEXT',
+              text: 'Confirmamos sua remoção da lista de promoções. Você ainda receberá notificações sobre seus pedidos. Para voltar, é só pedir 🙂',
+            },
+          })
+        } catch (_) {
+          // best-effort reply — never block the webhook on a send failure
+        }
+      } else {
+        await maybeAutoOptIn(customerId)
+      }
+    } catch (err) {
+      console.error('[inboundPipeline] opt-in/out hook error', err?.message || err)
+    }
   }
 
   // 7. Pre-automation hook: handle interactive-button taps (reorder etc.).

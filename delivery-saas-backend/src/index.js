@@ -53,6 +53,8 @@ import rasterizeRouter from './routes/rasterize.js'
 import printerSettingRouter from './routes/printerSetting.js'
 import cashRouter from './routes/cash.js'
 import customerGroupsRouter from './routes/customerGroups.js'
+import marketingSegmentsRouter from './routes/marketing/segments.js'
+import marketingCampaignsRouter from './routes/marketing/campaigns.js'
 import cashbackRouter from './routes/cashback/cashback.js'
 import checkoutRouter from './routes/checkout.js'
 import events from './utils/events.js'
@@ -90,6 +92,7 @@ import inboxRouter from './routes/inbox.js'
 import { luccaRouter } from './routes/lucca.js'
 import ifoodChatRouter from './routes/ifoodChat.js'
 import { customDomainResolver } from './middleware/customDomainResolver.js'
+import { startMarketingWorker } from './workers/marketing.js'
 import './cron.js'
 
 const app = express();
@@ -315,6 +318,8 @@ app.use('/custom-domains', customDomainRouter);
 app.use('/settings/printer-setting', printerSettingRouter);
 app.use('/cash', cashRouter);
 app.use('/customer-groups', customerGroupsRouter);
+app.use('/marketing/segments', marketingSegmentsRouter);
+app.use('/marketing/campaigns', marketingCampaignsRouter);
 app.use('/qr-action', qrActionRouter);
 app.use('/cashback', requireModule('CASHBACK'), cashbackRouter);
 app.use('/financial', requireModule('FINANCIAL'), financialRouter);
@@ -882,6 +887,21 @@ export const emitirPosicaoEntregador = _emitirPosicaoEntregador;
 export const emitirHeartbeatEntregador = _emitirHeartbeatEntregador;
 export const emitirEntregadorOffline = _emitirEntregadorOffline;
 export const emitirIfoodChat = _emitirIfoodChat;
+
+// ==============================
+// 📨 Marketing worker
+// ==============================
+// Background worker for WhatsApp marketing campaigns (discover scheduled
+// campaigns, drain the send queue, housekeeping). Runs INSIDE this process
+// via setInterval — no separate worker container needed.
+// Set MARKETING_WORKER=off to disable (useful for one-off CLI scripts).
+if (process.env.MARKETING_WORKER !== 'off') {
+  try {
+    startMarketingWorker();
+  } catch (e) {
+    console.error('Failed to start marketing worker:', e?.message || e);
+  }
+}
 
 // ==============================
 // 🛡️ Global error handler — prevent stack trace leaks to clients

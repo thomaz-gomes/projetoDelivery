@@ -28,6 +28,7 @@ import { getMetaConfig } from '../services/metaConfig.js'
 import { prisma } from '../prisma.js'
 import { routeInbound, routeStatuses } from '../messaging/index.js'
 import { MetaNotConfiguredError } from '../messaging/adapters/base.adapter.js'
+import { applyMarketingStatusFromWebhook } from '../services/marketing/messageStatusHooks.js'
 
 const router = Router()
 
@@ -216,6 +217,43 @@ async function dispatchMeta(payload) {
           code: err?.code,
           message: err?.message || String(err),
         })
+      }
+
+      // Marketing delivered/read receipts. WhatsApp Cloud puts these under
+      // entry.changes[].value.statuses[] (each item carries the wamid we
+      // persisted as MarketingMessage.externalId at send time).
+      try {
+        await dispatchMetaStatuses(entry)
+      } catch (err) {
+        console.error('[webhook/meta] status dispatch failed', {
+          accountId: account.id,
+          message: err?.message || String(err),
+        })
+      }
+    }
+  }
+}
+
+// Walks entry.changes[].value.statuses[] and mirrors delivered/read onto
+// the MarketingMessage row identified by wamid. Each status is wrapped
+// individually so a bad row never aborts the batch — webhook stability
+// is paramount; Meta retries indefinitely on non-200.
+async function dispatchMetaStatuses(entry) {
+  const changes = Array.isArray(entry?.changes) ? entry.changes : []
+  for (const change of changes) {
+    const statuses = Array.isArray(change?.value?.statuses) ? change.value.statuses : []
+    for (const st of statuses) {
+      try {
+        const wamid = st?.id
+        const raw = String(st?.status || '').toLowerCase()
+        if (!wamid || (raw !== 'delivered' && raw !== 'read')) continue
+        const tsSeconds = Number(st?.timestamp)
+        const ts = Number.isFinite(tsSeconds) && tsSeconds > 0
+          ? new Date(tsSeconds * 1000)
+          : new Date()
+        await applyMarketingStatusFromWebhook(wamid, raw, ts)
+      } catch (err) {
+        console.error('[webhook/meta] marketing status hook failed', err?.message || err)
       }
     }
   }

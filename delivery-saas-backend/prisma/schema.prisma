@@ -157,6 +157,15 @@ model Company {
   metaMessagingAccounts MetaMessagingAccount[]
   metaTemplates         MetaTemplate[]
 
+  // ---- Marketing Campaigns ----
+  marketingSegments     MarketingSegment[]
+  marketingCampaigns    MarketingCampaign[]
+  marketingCampaignRuns MarketingCampaignRun[]
+  marketingMessages     MarketingMessage[]
+
+  // ---- Feature flags (runtime kill switches, e.g. marketing_v1_enabled) ----
+  flags Json @default("{}")
+
   // ---- Error monitoring ----
   errorLogs ErrorLog[]
 
@@ -176,23 +185,24 @@ model Company {
 }
 
 model User {
-  id                    String                @id @default(uuid())
-  companyId             String?
-  company               Company?              @relation(fields: [companyId], references: [id])
-  role                  Role
-  name                  String
-  email                 String                @unique
-  whatsapp              String?
-  password              String
-  emailVerified         Boolean               @default(false)
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @default(now()) @updatedAt
-  rider                 Rider?
-  aiTokenUsages         AiTokenUsage[]
-  assignedConversations Conversation[]        @relation("ConversationAssignee")
-  authoredMessages      Message[]             @relation("MessageAuthor")
-  ownedCashSessions     CashSession[]         @relation("CashSessionOwner")
-  operatorCashSessions  CashSessionOperator[] @relation("CashSessionOperators")
+  id                        String                @id @default(uuid())
+  companyId                 String?
+  company                   Company?              @relation(fields: [companyId], references: [id])
+  role                      Role
+  name                      String
+  email                     String                @unique
+  whatsapp                  String?
+  password                  String
+  emailVerified             Boolean               @default(false)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @default(now()) @updatedAt
+  rider                     Rider?
+  aiTokenUsages             AiTokenUsage[]
+  assignedConversations     Conversation[]        @relation("ConversationAssignee")
+  authoredMessages          Message[]             @relation("MessageAuthor")
+  ownedCashSessions         CashSession[]         @relation("CashSessionOwner")
+  operatorCashSessions      CashSessionOperator[] @relation("CashSessionOperators")
+  marketingCampaignsCreated MarketingCampaign[]   @relation("MarketingCampaignsCreated")
 }
 
 model Rider {
@@ -250,10 +260,10 @@ model Order {
   couponCode           String?
   couponDiscount       Decimal?
   paymentDiscount      Decimal? // value frozen at order-creation time for audit
-  discountIfood        Decimal?  // desconto pago pelo iFood (marketplace) — entra no caixa da loja
-  discountMerchant     Decimal?  // desconto absorvido pela loja — NÃO entra no caixa
+  discountIfood        Decimal? // desconto pago pelo iFood (marketplace) — entra no caixa da loja
+  discountMerchant     Decimal? // desconto absorvido pela loja — NÃO entra no caixa
   deliveryFee          Decimal?
-  additionalFees       Decimal?  // taxa de serviço iFood (retida pelo iFood, não entra no caixa da loja)
+  additionalFees       Decimal? // taxa de serviço iFood (retida pelo iFood, não entra no caixa da loja)
   payload              Json?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
@@ -273,8 +283,14 @@ model Order {
   cashSession   CashSession? @relation(fields: [cashSessionId], references: [id])
   outOfSession  Boolean      @default(false)
 
+  // ---- Marketing attribution (campaign → order) ----
+  attributedCampaignId String?
+  attributedMessageId  String?            @unique
+  attributedCampaign   MarketingCampaign? @relation("OrderAttribution", fields: [attributedCampaignId], references: [id], onDelete: SetNull)
+
   // Index to speed up queries by company + couponCode
   @@index([companyId, couponCode], name: "idx_order_company_coupon")
+  @@index([attributedCampaignId])
 }
 
 // NFC-e / NFe protocol records (stores SEFAZ responses such as protNFe)
@@ -382,10 +398,10 @@ model MetaMessagingAccount {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
-  company       Company @relation(fields: [companyId], references: [id])
-  menusAsMetaWa Menu[]  @relation("MenuMetaWa")
-  menusAsFb     Menu[]  @relation("MenuFb")
-  menusAsIg     Menu[]  @relation("MenuIg")
+  company       Company        @relation(fields: [companyId], references: [id])
+  menusAsMetaWa Menu[]         @relation("MenuMetaWa")
+  menusAsFb     Menu[]         @relation("MenuFb")
+  menusAsIg     Menu[]         @relation("MenuIg")
   templates     MetaTemplate[]
 
   @@unique([companyId, provider, externalId])
@@ -399,19 +415,20 @@ model MetaMessagingAccount {
 // `components` armazena o array completo (HEADER / BODY / FOOTER / BUTTONS)
 // pra renderizar preview e descobrir quantos placeholders cada template tem.
 model MetaTemplate {
-  id              String   @id @default(uuid())
-  companyId       String
-  company         Company  @relation(fields: [companyId], references: [id])
-  metaWaAccountId String
-  metaWaAccount   MetaMessagingAccount @relation(fields: [metaWaAccountId], references: [id], onDelete: Cascade)
-  externalId      String   // ID do template na Meta
-  name            String
-  language        String   // ex: "pt_BR", "en_US"
-  category        String   // UTILITY | MARKETING | AUTHENTICATION
-  status          String   // APPROVED | PENDING | REJECTED | PAUSED | DISABLED
-  components      Json
-  syncedAt        DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String               @id @default(uuid())
+  companyId          String
+  company            Company              @relation(fields: [companyId], references: [id])
+  metaWaAccountId    String
+  metaWaAccount      MetaMessagingAccount @relation(fields: [metaWaAccountId], references: [id], onDelete: Cascade)
+  externalId         String // ID do template na Meta
+  name               String
+  language           String // ex: "pt_BR", "en_US"
+  category           String // UTILITY | MARKETING | AUTHENTICATION
+  status             String // APPROVED | PENDING | REJECTED | PAUSED | DISABLED
+  components         Json
+  syncedAt           DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  marketingCampaigns MarketingCampaign[]
 
   @@unique([metaWaAccountId, name, language])
   @@index([companyId])
@@ -432,6 +449,10 @@ model Customer {
   birthday                       DateTime? // data de aniversário
   whatsapp                       String? // telefone principal normalizado (somente dígitos e com DDI)
   phone                          String? // opcional (outro telefone)
+  optInMarketing                 Boolean               @default(false)
+  optInMarketingAt               DateTime?
+  optInMarketingSource           String? // 'checkout' | 'inbound' | 'manual'
+  optOutMarketingAt              DateTime?
   // Valor total acumulado gasto pelo cliente na loja (calculado via pedidos ou importado)
   totalSpent                     Decimal?              @db.Decimal(12, 2)
   // Campos importados (valores financeiros/totais) provenientes de planilhas
@@ -450,6 +471,7 @@ model Customer {
   cashbackWallets                CashbackWallet[]
   groupMemberships               CustomerGroupMember[]
   conversations                  Conversation[]
+  marketingMessages              MarketingMessage[]
 
   @@unique([companyId, cpf], name: "company_cpf")
   @@unique([companyId, whatsapp], name: "company_whatsapp")
@@ -680,12 +702,12 @@ model Store {
 }
 
 model Menu {
-  id             String         @id @default(uuid())
+  id             String             @id @default(uuid())
   storeId        String
-  store          Store          @relation(fields: [storeId], references: [id])
+  store          Store              @relation(fields: [storeId], references: [id])
   name           String
   // optional URL-friendly slug for menu (ex: "festival-de-verao")
-  slug           String?        @unique
+  slug           String?            @unique
   description    String?
   logoUrl        String?
   bannerUrl      String?
@@ -695,56 +717,57 @@ model Menu {
   whatsapp       String?
   timezone       String?
   weeklySchedule Json?
-  open24Hours    Boolean        @default(false)
+  open24Hours    Boolean            @default(false)
   // delivery type switches: enable/disable delivery and pickup independently per menu
-  allowDelivery  Boolean        @default(true)
-  allowPickup    Boolean        @default(true)
-  catalogMode    Boolean        @default(false)
-  isActive       Boolean        @default(true)
-  position       Int            @default(0)
+  allowDelivery  Boolean            @default(true)
+  allowPickup    Boolean            @default(true)
+  catalogMode    Boolean            @default(false)
+  isActive       Boolean            @default(true)
+  position       Int                @default(0)
   categories     MenuCategory[]
   categoryLinks  MenuCategoryMenu[]
   // products optionally assigned to this menu
   products       Product[]
   brandThemes    BrandVisualTheme[]
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
   customDomain   CustomDomain?
 
   // ---- WhatsApp / Inbox ----
-  whatsappInstanceId String?
-  whatsappInstance   WhatsAppInstance? @relation("MenuWhatsAppInstance", fields: [whatsappInstanceId], references: [id])
+  whatsappInstanceId              String?
+  whatsappInstance                WhatsAppInstance?     @relation("MenuWhatsAppInstance", fields: [whatsappInstanceId], references: [id])
   // ---- Meta Messaging (WhatsApp Cloud / Facebook / Instagram) ----
   // Forward-declared FKs for MetaMessagingAccount — wired up by future task.
-  metaWaAccountId    String?
-  metaWaAccount      MetaMessagingAccount? @relation("MenuMetaWa", fields: [metaWaAccountId], references: [id])
-  facebookAccountId  String?
-  facebookAccount    MetaMessagingAccount? @relation("MenuFb", fields: [facebookAccountId], references: [id])
-  instagramAccountId String?
-  instagramAccount   MetaMessagingAccount? @relation("MenuIg", fields: [instagramAccountId], references: [id])
+  metaWaAccountId                 String?
+  metaWaAccount                   MetaMessagingAccount? @relation("MenuMetaWa", fields: [metaWaAccountId], references: [id])
+  facebookAccountId               String?
+  facebookAccount                 MetaMessagingAccount? @relation("MenuFb", fields: [facebookAccountId], references: [id])
+  instagramAccountId              String?
+  instagramAccount                MetaMessagingAccount? @relation("MenuIg", fields: [instagramAccountId], references: [id])
   // Canal preferencial p/ notificações transacionais (status, cashback).
   // Quando null, notify.js usa fallback Evolution-first.
-  primaryChannel     NotificationChannel?
-  outOfHoursReplyId  String?
-  outOfHoursReply    QuickReply?       @relation("MenuOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
-  greetingReplyId    String?
-  greetingReply      QuickReply?       @relation("MenuGreetingReply", fields: [greetingReplyId], references: [id])
+  primaryChannel                  NotificationChannel?
+  outOfHoursReplyId               String?
+  outOfHoursReply                 QuickReply?           @relation("MenuOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
+  greetingReplyId                 String?
+  greetingReply                   QuickReply?           @relation("MenuGreetingReply", fields: [greetingReplyId], references: [id])
   // Saudação dedicada para clientes já cadastrados (com pelo menos um pedido
   // concluído). Quando definida, substitui a saudação genérica para esses
   // clientes na primeira mensagem da janela de 6h.
-  registeredGreetingReplyId String?
-  registeredGreetingReply   QuickReply? @relation("MenuRegisteredGreetingReply", fields: [registeredGreetingReplyId], references: [id])
+  registeredGreetingReplyId       String?
+  registeredGreetingReply         QuickReply?           @relation("MenuRegisteredGreetingReply", fields: [registeredGreetingReplyId], references: [id])
   // Toggle e template do "lembrete do último pedido" enviado logo após a
   // saudação para clientes cadastrados, com botão WhatsApp interativo.
   // Placeholders: {{nome}}, {{itens}}, {{total}}, {{data}}.
-  remindLastOrderEnabled  Boolean @default(false)
-  remindLastOrderTemplate String?
-  conversations      Conversation[]
-  greetingTimeRules  GreetingTimeRule[]
-  orders             Order[]
+  remindLastOrderEnabled          Boolean               @default(false)
+  remindLastOrderTemplate         String?
+  conversations                   Conversation[]
+  greetingTimeRules               GreetingTimeRule[]
+  orders                          Order[]
   // Respostas rápidas com visibilidade restrita a este cardápio. Vazio em
   // QuickReply.menus = global (aparece em todas as conversas).
-  scopedQuickReplies QuickReply[]      @relation("QuickReplyMenus")
+  scopedQuickReplies              QuickReply[]          @relation("QuickReplyMenus")
+  marketingCampaignsBySegmentMenu MarketingCampaign[]   @relation("MarketingCampaignSegmentMenu")
 }
 
 model CustomDomain {
@@ -776,38 +799,38 @@ model FileSource {
 }
 
 model PrinterSetting {
-  id                      String    @id @default(cuid())
-  companyId               String    @unique
-  interface               String    @default("printer:EPSON")
-  type                    String    @default("EPSON")
-  width                   Int       @default(48)
-  headerName              String?   @default("Minha Loja")
-  headerCity              String?   @default("Cidade")
+  id                       String    @id @default(cuid())
+  companyId                String    @unique
+  interface                String    @default("printer:EPSON")
+  type                     String    @default("EPSON")
+  width                    Int       @default(48)
+  headerName               String?   @default("Minha Loja")
+  headerCity               String?   @default("Cidade")
   // Agent token (hashed) used by delivery-print-agent for authentication
-  agentTokenHash          String?
-  agentTokenCreatedAt     DateTime?
+  agentTokenHash           String?
+  agentTokenCreatedAt      DateTime?
   // Extension token (hashed) used by iFood chat browser extension
-  extensionTokenHash      String?
-  extensionTokenCreatedAt DateTime?
+  extensionTokenHash       String?
+  extensionTokenCreatedAt  DateTime?
   // iFood Agent token (hashed) used by iFood Agent Electron app for authentication
-  ifoodAgentTokenHash       String?
-  ifoodAgentTokenCreatedAt  DateTime?
+  ifoodAgentTokenHash      String?
+  ifoodAgentTokenCreatedAt DateTime?
   // Last time any iFood-chat automation client (extension OR agent) was online
-  ifoodAgentLastSeenAt      DateTime?
+  ifoodAgentLastSeenAt     DateTime?
   // Pairing code for simplified agent setup (short-lived, single-use)
-  pairingCode             String?
-  pairingCodeExpiresAt    DateTime?
+  pairingCode              String?
+  pairingCodeExpiresAt     DateTime?
   // Receipt customization
-  receiptTemplate         String? // Custom receipt template with {{placeholders}}. Null = use default.
-  copies                  Int       @default(1) // Number of copies to print per order
-  printerName             String? // Actual system printer name (e.g., "EPSON TM-T20II Receipt")
+  receiptTemplate          String? // Custom receipt template with {{placeholders}}. Null = use default.
+  copies                   Int       @default(1) // Number of copies to print per order
+  printerName              String? // Actual system printer name (e.g., "EPSON TM-T20II Receipt")
   // Optional separate printer for NF-e/fiscal receipts (falls back to printerName if null)
-  fiscalPrinterName       String?
-  fiscalPrinterType       String?
+  fiscalPrinterName        String?
+  fiscalPrinterType        String?
   // Real-time rider tracking feature toggle (company-wide)
-  trackingEnabled         Boolean   @default(false)
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  trackingEnabled          Boolean   @default(false)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 }
 
 model IfoodChatMessage {
@@ -995,37 +1018,37 @@ model RiderAccount {
 }
 
 model RiderTransaction {
-  id        String               @id @default(uuid())
-  riderId   String
-  rider     Rider                @relation(fields: [riderId], references: [id])
-  orderId   String?
-  order     Order?               @relation(fields: [orderId], references: [id])
-  type      RiderTransactionType
-  amount    Decimal
-  date      DateTime // date of transaction (can be used for daily grouping)
-  note      String?
+  id              String                 @id @default(uuid())
+  riderId         String
+  rider           Rider                  @relation(fields: [riderId], references: [id])
+  orderId         String?
+  order           Order?                 @relation(fields: [orderId], references: [id])
+  type            RiderTransactionType
+  amount          Decimal
+  date            DateTime // date of transaction (can be used for daily grouping)
+  note            String?
   // Lifecycle status: fees/bonuses start PENDING, payment offsets are PAID,
   // operator-cancelled rows are CANCELLED (balance reversed).
-  status    RiderTransactionStatus @default(PENDING)
-  paidAt    DateTime?
+  status          RiderTransactionStatus @default(PENDING)
+  paidAt          DateTime?
   // Links a per-row PAID flip to the offsetting payment transaction created
   // by /account/pay so we can show "Paid by period XYZ" / undo it later.
-  paidByTxId  String?
-  paidByTx    RiderTransaction?    @relation("RiderTxPaidBy", fields: [paidByTxId], references: [id])
-  paidTxs     RiderTransaction[]   @relation("RiderTxPaidBy")
-  cancelledAt DateTime?
-  cancelReason String?
-  createdAt DateTime             @default(now())
-  goalAchievement  RiderGoalAchievement?
+  paidByTxId      String?
+  paidByTx        RiderTransaction?      @relation("RiderTxPaidBy", fields: [paidByTxId], references: [id])
+  paidTxs         RiderTransaction[]     @relation("RiderTxPaidBy")
+  cancelledAt     DateTime?
+  cancelReason    String?
+  createdAt       DateTime               @default(now())
+  goalAchievement RiderGoalAchievement?
 
   @@index([riderId, status])
 }
 
 // ---- Rider Goals (Gamification) ----
 model RiderGoal {
-  id                String              @id @default(uuid())
+  id                String                 @id @default(uuid())
   companyId         String
-  company           Company             @relation(fields: [companyId], references: [id])
+  company           Company                @relation(fields: [companyId], references: [id])
   name              String
   description       String?
   ruleType          GoalRuleType
@@ -1038,9 +1061,9 @@ model RiderGoal {
   rewardType        GoalRewardType
   rewardAmount      Decimal?
   rewardDescription String?
-  autoApprove       Boolean             @default(false)
-  active            Boolean             @default(true)
-  createdAt         DateTime            @default(now())
+  autoApprove       Boolean                @default(false)
+  active            Boolean                @default(true)
+  createdAt         DateTime               @default(now())
   assignments       RiderGoalAssignment[]
   achievements      RiderGoalAchievement[]
 
@@ -1048,11 +1071,11 @@ model RiderGoal {
 }
 
 model RiderGoalAssignment {
-  id       String    @id @default(uuid())
-  goalId   String
-  goal     RiderGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  riderId  String
-  rider    Rider     @relation(fields: [riderId], references: [id])
+  id      String    @id @default(uuid())
+  goalId  String
+  goal    RiderGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  riderId String
+  rider   Rider     @relation(fields: [riderId], references: [id])
 
   @@unique([goalId, riderId])
 }
@@ -1101,24 +1124,25 @@ model Affiliate {
 
 // ---- Coupons ----
 model Coupon {
-  id                 String     @id @default(uuid())
+  id                 String              @id @default(uuid())
   companyId          String
-  company            Company    @relation(fields: [companyId], references: [id])
-  code               String     @unique
+  company            Company             @relation(fields: [companyId], references: [id])
+  code               String              @unique
   description        String?
   // Either percentage (0.10 = 10%) or absolute amount (in currency)
-  isPercentage       Boolean    @default(true)
-  value              Decimal    @default(0) // if isPercentage=true this is fraction (0.1), else absolute amount
-  isActive           Boolean    @default(true)
+  isPercentage       Boolean             @default(true)
+  value              Decimal             @default(0) // if isPercentage=true this is fraction (0.1), else absolute amount
+  isActive           Boolean             @default(true)
   affiliateId        String? // optional association
-  affiliate          Affiliate? @relation(fields: [affiliateId], references: [id])
+  affiliate          Affiliate?          @relation(fields: [affiliateId], references: [id])
   // Advanced validation rules
   expiresAt          DateTime? // optional expiration date/time
   maxUses            Int? // maximum number of times this coupon can be used globally
   maxUsesPerCustomer Int? // maximum uses per customer (phone/whatsapp)
   minSubtotal        Decimal? // minimum subtotal required to apply coupon
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  marketingCampaigns MarketingCampaign[]
 
   @@unique([companyId, code], name: "company_coupon_code")
 }
@@ -1155,24 +1179,24 @@ model AffiliatePayment {
 
 // ---- Menu / Cardápio ----
 model MenuCategory {
-  id             String        @id @default(uuid())
-  companyId      String
-  company        Company       @relation(fields: [companyId], references: [id])
+  id              String             @id @default(uuid())
+  companyId       String
+  company         Company            @relation(fields: [companyId], references: [id])
   // optional: associate category to a specific Menu (for multi-menu support)
-  menuId         String?
-  menu           Menu?         @relation(fields: [menuId], references: [id])
-  name           String
-  isActive       Boolean       @default(true)
-  position       Int           @default(0)
-  products       Product[]
-  dadosFiscaisId String?
-  dadosFiscais   DadosFiscais? @relation(fields: [dadosFiscaisId], references: [id])
+  menuId          String?
+  menu            Menu?              @relation(fields: [menuId], references: [id])
+  name            String
+  isActive        Boolean            @default(true)
+  position        Int                @default(0)
+  products        Product[]
+  dadosFiscaisId  String?
+  dadosFiscais    DadosFiscais?      @relation(fields: [dadosFiscaisId], references: [id])
   // Availability scheduling (category-level, takes precedence over product-level)
-  alwaysAvailable Boolean      @default(true)
+  alwaysAvailable Boolean            @default(true)
   weeklySchedule  Json?
-  createdAt      DateTime      @default(now())
-  menuLinks      MenuCategoryMenu[]
-  updatedAt      DateTime      @updatedAt
+  createdAt       DateTime           @default(now())
+  menuLinks       MenuCategoryMenu[]
+  updatedAt       DateTime           @updatedAt
 
   @@index([companyId, name], name: "company_category_name_idx")
 }
@@ -1233,11 +1257,11 @@ model Product {
   productOptionGroups ProductOptionGroup[]
   // options that are linked to this product (inverse relation for Option.linkedProduct)
   linkedOptions       Option[]
-  packagingCost         Decimal?
-  targetMarginPercent   Decimal?
-  isCombo  Boolean @default(false)
-  combo    Combo?
-  comboSlotLinks ComboSlotOption[] @relation("ComboLinkedProduct")
+  packagingCost       Decimal?
+  targetMarginPercent Decimal?
+  isCombo             Boolean              @default(false)
+  combo               Combo?
+  comboSlotLinks      ComboSlotOption[]    @relation("ComboLinkedProduct")
 
   @@index([companyId, integrationCode], name: "company_product_integration_idx")
   @@index([companyId, name], name: "company_product_name_idx")
@@ -1405,6 +1429,7 @@ enum ModuleKey {
   FINANCIAL
   FISCAL
   CUSTOM_DOMAIN
+  MARKETING_CAMPAIGNS
 }
 
 // Feature module that plans can enable/disable
@@ -1715,8 +1740,8 @@ model PaymentMethod {
   ignoreCoupons     Boolean  @default(false)
   generatesCashback Boolean  @default(true)
   alwaysAvailable   Boolean  @default(true)
-  schedule          Json?    // [{day:0..6, enabled, from:"HH:mm", to:"HH:mm"}]
-  allowedOrderTypes Json?    // ["DELIVERY","BALCAO","TAKEOUT"] — null/[] = all
+  schedule          Json? // [{day:0..6, enabled, from:"HH:mm", to:"HH:mm"}]
+  allowedOrderTypes Json? // ["DELIVERY","BALCAO","TAKEOUT"] — null/[] = all
 
   @@unique([companyId, code], name: "company_payment_code_key")
 }
@@ -1806,16 +1831,16 @@ model Ingredient {
   avgCost       Decimal? // nullable average cost per unit
   isComposite   Boolean          @default(false)
   yieldQuantity Decimal?
-  yieldUnit     String?          // GR, KG, ML, L, UN
+  yieldUnit     String? // GR, KG, ML, L, UN
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
   technicalItems     TechnicalSheetItem[]
   // stock movement items referencing this ingredient
   stockMovementItems StockMovementItem[]
-  compositionItems    CompositeIngredientItem[] @relation("CompositeParent")
-  usedInCompositions  CompositeIngredientItem[] @relation("CompositeChild")
-  stockProducts       Product[]                 @relation("ProductStockIngredient")
+  compositionItems   CompositeIngredientItem[] @relation("CompositeParent")
+  usedInCompositions CompositeIngredientItem[] @relation("CompositeChild")
+  stockProducts      Product[]                 @relation("ProductStockIngredient")
 
   @@index([companyId, description], name: "company_ingredient_description_idx")
 }
@@ -1907,15 +1932,15 @@ model StockMovementItem {
 }
 
 model PurchaseImport {
-  id        String  @id @default(uuid())
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id])
-  storeId   String
-  store     Store   @relation(fields: [storeId], references: [id])
-  supplierId      String?
-  supplier        Supplier? @relation(fields: [supplierId], references: [id])
-  source    String // MDE | XML | ACCESS_KEY | RECEIPT_PHOTO
-  status    String  @default("PENDING") // PENDING | MATCHED | APPLIED | ERROR
+  id         String    @id @default(uuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id])
+  storeId    String
+  store      Store     @relation(fields: [storeId], references: [id])
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  source     String // MDE | XML | ACCESS_KEY | RECEIPT_PHOTO
+  status     String    @default("PENDING") // PENDING | MATCHED | APPLIED | ERROR
 
   accessKey    String?   @unique
   nfeNumber    String?
@@ -1942,17 +1967,17 @@ model PurchaseImport {
 }
 
 model Supplier {
-  id          String   @id @default(uuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id])
-  cnpj        String?
-  name        String
-  phone       String?
-  email       String?
-  notes       String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  cnpj      String?
+  name      String
+  phone     String?
+  email     String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   purchaseImports       PurchaseImport[]
   financialTransactions FinancialTransaction[]
@@ -2069,7 +2094,7 @@ model CostCenter {
   children  CostCenter[] @relation("CostCenterParent")
   // DRE classification: REVENUE, COGS, OPEX, TAX, OTHER
   dreGroup  String? // Grupo no DRE (receita bruta, deduções, CMV, despesas operacionais, etc.)
-  natureza    String?   // "FIXA" | "VARIAVEL" | null
+  natureza  String? // "FIXA" | "VARIAVEL" | null
   isActive  Boolean      @default(true)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -2094,7 +2119,7 @@ model RecurringExpense {
   costCenter      CostCenter?       @relation(fields: [costCenterId], references: [id])
   supplierId      String?
   supplier        Supplier?         @relation(fields: [supplierId], references: [id])
-  recurrence      String           // "MONTHLY" | "BIWEEKLY" | "WEEKLY" | "QUARTERLY" | "ANNUAL"
+  recurrence      String // "MONTHLY" | "BIWEEKLY" | "WEEKLY" | "QUARTERLY" | "ANNUAL"
   dayOfMonth      Int?
   notes           String?
   isActive        Boolean           @default(true)
@@ -2129,7 +2154,7 @@ model PaymentGatewayConfig {
   //               crédito no próximo settlementDayOfWeek
   //   "MONTHLY" = orderDate + settlementMonthlyDelay dias, depois próximo
   //               settlementDayOfWeek
-  settlementType         String?  // DAILY | WEEKLY | MONTHLY
+  settlementType         String? // DAILY | WEEKLY | MONTHLY
   // 0=domingo, 1=seg, 2=ter, 3=qua, 4=qui, 5=sex, 6=sab — usado em WEEKLY/MONTHLY
   settlementDayOfWeek    Int?
   // Início do período semanal (default 1 = segunda) — usado em WEEKLY
@@ -2219,8 +2244,8 @@ model FinancialTransaction {
   // Vincula esta transação ao registro de origem (Order, RiderTransaction, AffiliateSale, Coupon, StockMovement, etc.)
   sourceType String? // Ex: "ORDER", "RIDER", "AFFILIATE", "COUPON", "STOCK_PURCHASE", "MANUAL"
   sourceId   String? // ID do registro de origem
-  supplierId            String?
-  supplier              Supplier?              @relation(fields: [supplierId], references: [id])
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
 
   // ---- Estorno ----
   reversedTransactionId String?
@@ -2478,8 +2503,8 @@ model MediaFeedback {
   note      String?
   createdAt DateTime            @default(now())
 
-  @@index([mediaId])
   @@unique([mediaId, userId, reason], name: "uniq_media_user_reason")
+  @@index([mediaId])
 }
 
 // Email verification codes for user registration
@@ -2779,34 +2804,34 @@ enum MessageStatus {
 }
 
 model Conversation {
-  id               String             @id @default(uuid())
-  companyId        String
-  company          Company            @relation(fields: [companyId], references: [id])
-  storeId          String?
-  store            Store?             @relation(fields: [storeId], references: [id])
-  menuId           String?
-  menu             Menu?              @relation(fields: [menuId], references: [id])
-  channel          Channel
-  channelContactId String
-  instanceName     String?
+  id                String             @id @default(uuid())
+  companyId         String
+  company           Company            @relation(fields: [companyId], references: [id])
+  storeId           String?
+  store             Store?             @relation(fields: [storeId], references: [id])
+  menuId            String?
+  menu              Menu?              @relation(fields: [menuId], references: [id])
+  channel           Channel
+  channelContactId  String
+  instanceName      String?
   /// providerAccountId is a logical FK resolved at runtime via `provider`:
   ///   EVOLUTION_WA -> WhatsAppInstance.id
   ///   META_WA / META_FB / META_IG -> MetaMessagingAccount.id
-  provider         MessagingProvider?
+  provider          MessagingProvider?
   providerAccountId String?
-  customerId       String?
-  customer         Customer?          @relation(fields: [customerId], references: [id])
-  assignedUserId   String?
-  assignedUser     User?              @relation("ConversationAssignee", fields: [assignedUserId], references: [id])
-  status           ConversationStatus @default(OPEN)
-  lastMessageAt    DateTime?
-  unreadCount      Int                @default(0)
-  contactName      String?
-  contactAvatarUrl String?
-  tags             String[]           @default([])
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  messages         Message[]
+  customerId        String?
+  customer          Customer?          @relation(fields: [customerId], references: [id])
+  assignedUserId    String?
+  assignedUser      User?              @relation("ConversationAssignee", fields: [assignedUserId], references: [id])
+  status            ConversationStatus @default(OPEN)
+  lastMessageAt     DateTime?
+  unreadCount       Int                @default(0)
+  contactName       String?
+  contactAvatarUrl  String?
+  tags              String[]           @default([])
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  messages          Message[]
 
   @@unique([companyId, channel, channelContactId, providerAccountId], name: "company_channel_contact_account")
   @@index([companyId, status, lastMessageAt])
@@ -2844,29 +2869,29 @@ model Message {
 }
 
 model QuickReply {
-  id            String   @id @default(uuid())
-  companyId     String
-  company       Company  @relation(fields: [companyId], references: [id])
-  shortcut      String?
-  title         String
-  body          String?
-  mediaUrl      String?
-  mediaMimeType String?
-  mediaFileName String?
+  id             String   @id @default(uuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id])
+  shortcut       String?
+  title          String
+  body           String?
+  mediaUrl       String?
+  mediaMimeType  String?
+  mediaFileName  String?
   metaTemplateId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  storesOutOfHours  Store[]            @relation("StoreOutOfHoursReply")
-  storesGreeting    Store[]            @relation("StoreGreetingReply")
-  menusOutOfHours   Menu[]             @relation("MenuOutOfHoursReply")
-  menusGreeting     Menu[]             @relation("MenuGreetingReply")
-  menusRegisteredGreeting Menu[]       @relation("MenuRegisteredGreetingReply")
+  storesOutOfHours        Store[]            @relation("StoreOutOfHoursReply")
+  storesGreeting          Store[]            @relation("StoreGreetingReply")
+  menusOutOfHours         Menu[]             @relation("MenuOutOfHoursReply")
+  menusGreeting           Menu[]             @relation("MenuGreetingReply")
+  menusRegisteredGreeting Menu[]             @relation("MenuRegisteredGreetingReply")
   // Escopo de visibilidade: se vazio, a resposta rápida aparece em todas as
   // conversas da empresa. Se preenchido, só aparece quando a conversa estiver
   // vinculada a um desses cardápios. Many-to-many via _QuickReplyMenus.
-  menus             Menu[]             @relation("QuickReplyMenus")
-  greetingTimeRules GreetingTimeRule[]
+  menus                   Menu[]             @relation("QuickReplyMenus")
+  greetingTimeRules       GreetingTimeRule[]
 
   @@unique([companyId, shortcut])
   @@index([companyId])
@@ -2909,22 +2934,22 @@ model StorePricingDefaults {
 }
 
 model ErrorLog {
-  id           Int       @id @default(autoincrement())
-  fingerprint  String    @unique
-  message      String    @db.Text
-  stack        String?   @db.Text
-  route        String?
-  method       String?
-  statusCode   Int?
-  companyId    String?
-  userId       String?
-  occurrences  Int       @default(1)
-  firstSeen    DateTime  @default(now())
-  lastSeen     DateTime  @default(now())
-  resolved     Boolean   @default(false)
-  resolvedAt   DateTime?
-  resolvedBy   String?
-  company      Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  id          Int       @id @default(autoincrement())
+  fingerprint String    @unique
+  message     String    @db.Text
+  stack       String?   @db.Text
+  route       String?
+  method      String?
+  statusCode  Int?
+  companyId   String?
+  userId      String?
+  occurrences Int       @default(1)
+  firstSeen   DateTime  @default(now())
+  lastSeen    DateTime  @default(now())
+  resolved    Boolean   @default(false)
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  company     Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   @@index([resolved, lastSeen])
   @@index([companyId])
@@ -2937,13 +2962,193 @@ model ErrorLog {
 // API call and redirects to the canonical URL.
 model ShortLink {
   code      String    @id
-  kind      String    // "reorder" today; reserved for future flows
+  kind      String // "reorder" today; reserved for future flows
   companyId String
-  payload   Json      // { orderId, customerId } for reorder kind
+  payload   Json // { orderId, customerId } for reorder kind
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
   @@index([companyId])
   @@index([expiresAt])
+}
+
+// ============================================================================
+// Marketing Campaigns Module
+// ============================================================================
+
+enum MarketingScheduleType {
+  ONE_SHOT
+  RECURRING
+  TRIGGER
+}
+
+enum MarketingCampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum MarketingChannel {
+  META_WA
+  EVOLUTION_WA
+  AUTO
+}
+
+enum MarketingAttributionScope {
+  menu
+  company
+}
+
+enum MarketingMessageStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  OPTED_OUT
+}
+
+model MarketingSegment {
+  id              String              @id @default(uuid())
+  companyId       String
+  company         Company             @relation(fields: [companyId], references: [id])
+  name            String
+  description     String?
+  ruleJson        Json
+  estimatedSize   Int?
+  lastEvaluatedAt DateTime?
+  active          Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  campaigns       MarketingCampaign[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model MarketingCampaign {
+  id                    String                    @id @default(uuid())
+  companyId             String
+  company               Company                   @relation(fields: [companyId], references: [id])
+  segmentId             String
+  segment               MarketingSegment          @relation(fields: [segmentId], references: [id])
+  name                  String
+  scheduleType          MarketingScheduleType
+  scheduledFor          DateTime?
+  cronExpression        String?
+  triggerType           String?
+  triggerParams         Json?
+  channel               MarketingChannel          @default(AUTO)
+  templateId            String?
+  template              MetaTemplate?             @relation(fields: [templateId], references: [id])
+  freeText              String?
+  templateVariableMap   Json?
+  conversionWindowHours Int                       @default(48)
+  conversionStatuses    String[]                  @default(["EM_PREPARO", "PRONTO", "SAIU_PARA_ENTREGA", "CONFIRMACAO_PAGAMENTO", "CONCLUIDO"])
+  attributionScope      MarketingAttributionScope @default(menu)
+  segmentMenuId         String?
+  segmentMenu           Menu?                     @relation("MarketingCampaignSegmentMenu", fields: [segmentMenuId], references: [id], onDelete: SetNull)
+  couponId              String?
+  coupon                Coupon?                   @relation(fields: [couponId], references: [id])
+  status                MarketingCampaignStatus   @default(DRAFT)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  createdByUserId       String?
+  createdBy             User?                     @relation("MarketingCampaignsCreated", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  runs                  MarketingCampaignRun[]
+  messages              MarketingMessage[]
+  attributedOrders      Order[]                   @relation("OrderAttribution")
+
+  @@index([companyId, status])
+  @@index([scheduleType, status, scheduledFor])
+  @@index([segmentMenuId])
+}
+
+model MarketingCampaignRun {
+  id          String             @id @default(uuid())
+  companyId   String
+  company     Company            @relation(fields: [companyId], references: [id])
+  campaignId  String
+  campaign    MarketingCampaign  @relation(fields: [campaignId], references: [id])
+  startedAt   DateTime           @default(now())
+  finishedAt  DateTime?
+  totalQueued Int                @default(0)
+  totalSent   Int                @default(0)
+  totalFailed Int                @default(0)
+  error       String?
+  messages    MarketingMessage[]
+
+  @@index([campaignId, startedAt])
+  @@index([companyId])
+}
+
+// IMPORTANT: customerId is ON DELETE RESTRICT — preserves attribution
+// history. To honour LGPD deletion requests, the application must scrub
+// MarketingMessage rows before deleting the Customer.
+model MarketingMessage {
+  id                      String                 @id @default(uuid())
+  companyId               String
+  company                 Company                @relation(fields: [companyId], references: [id])
+  campaignId              String
+  campaignRunId           String
+  customerId              String
+  customer                Customer               @relation(fields: [customerId], references: [id])
+  campaign                MarketingCampaign      @relation(fields: [campaignId], references: [id])
+  campaignRun             MarketingCampaignRun   @relation(fields: [campaignRunId], references: [id])
+  providerUsed            MarketingChannel
+  providerAccountId       String?
+  instanceName            String?
+  externalId              String?
+  status                  MarketingMessageStatus @default(QUEUED)
+  scheduledFor            DateTime?
+  sentAt                  DateTime?
+  deliveredAt             DateTime?
+  readAt                  DateTime?
+  failedAt                DateTime?
+  errorMessage            String?
+  convertedOrderId        String?
+  convertedAt             DateTime?
+  convertedValue          Decimal?               @db.Decimal(12, 2)
+  attributionLockedAt     DateTime?
+  excludedFromAttribution Boolean                @default(false)
+  attributionSignal       String?
+  createdAt               DateTime               @default(now())
+
+  @@unique([campaignRunId, customerId])
+  @@index([customerId, sentAt(sort: Desc)])
+  @@index([campaignId, status])
+  @@index([sentAt, attributionLockedAt])
+  @@index([companyId])
+}
+
+model MarketingSendQueue {
+  id           String   @id @default(uuid())
+  messageId    String   @unique
+  scheduledFor DateTime
+  lockUntil    DateTime @default(now()) // default: available for pickup immediately
+  attempts     Int      @default(0)
+  lastError    String?
+  createdAt    DateTime @default(now())
+
+  @@index([scheduledFor, lockUntil])
+}
+
+model MarketingTemplateLibrary {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  category      String
+  language      String   @default("pt_BR")
+  description   String
+  useCase       String
+  bodyTemplate  String
+  variableHints Json
+  buttons       Json?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
