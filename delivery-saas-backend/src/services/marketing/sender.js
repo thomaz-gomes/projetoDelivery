@@ -127,12 +127,21 @@ async function processSendJob(job) {
       }
     } else {
       const wa = await import('../../wa.js')
-      await wa.evoSendText({
+      const evoResp = await wa.evoSendText({
         instanceName: provider.instanceName,
         to: wa.normalizePhone(message.customer.whatsapp),
         text: rendered.text,
       })
-      result = { externalId: null }
+      // Evolution (Baileys-style) returns the WhatsApp message identifier as
+      // `key.id`. webhookEvolution.handleMessagesUpdate matches incoming
+      // delivered/read events by this exact field — without capturing it,
+      // the funnel showed zero delivered/read for Evolution-only campaigns.
+      const externalId =
+        evoResp?.key?.id ||
+        evoResp?.id ||
+        evoResp?.messageId ||
+        null
+      result = { externalId }
     }
 
     await prisma.marketingMessage.update({
