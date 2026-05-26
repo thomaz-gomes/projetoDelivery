@@ -424,15 +424,24 @@ model MetaTemplate {
   name               String
   language           String // ex: "pt_BR", "en_US"
   category           String // UTILITY | MARKETING | AUTHENTICATION
-  status             String // APPROVED | PENDING | REJECTED | PAUSED | DISABLED
+  status             String // APPROVED | PENDING | REJECTED | PAUSED | DISABLED | IN_APPEAL
   components         Json
   syncedAt           DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
+  // Submission tracking — populated when the template is created via panel
+  // (not synced from Business Manager). Used by the polling worker to know
+  // which templates to refresh while they're PENDING, and to surface
+  // rejection reasons back to the operator.
+  createdViaApp      Boolean              @default(false)
+  submittedByUserId  String?
+  submittedAt        DateTime?
+  rejectionReason    String?
   marketingCampaigns MarketingCampaign[]
 
   @@unique([metaWaAccountId, name, language])
   @@index([companyId])
   @@index([metaWaAccountId, status])
+  @@index([createdViaApp, status])
 }
 
 model Customer {

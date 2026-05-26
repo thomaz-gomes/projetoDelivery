@@ -202,6 +202,7 @@ const router = createRouter({
   // don't 404 and don't lose the temp token.
   { path: '/settings/meta-integrations', redirect: (to) => ({ path: '/settings/whatsapp-cloud', query: to.query, hash: to.hash }) },
   { path: '/settings/whatsapp-templates', component: () => import('./views/settings/MetaTemplates.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
+  { path: '/settings/whatsapp-templates/new', component: () => import('./views/settings/MetaTemplateNew.vue'), meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/settings/meta-templates', redirect: (to) => ({ path: '/settings/whatsapp-templates', query: to.query, hash: to.hash }) },
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
   { path: '/integrations/new', component: IntegrationForm, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CARDAPIO_COMPLETO' } },
@@ -543,6 +544,7 @@ const PAGE_TITLES = [
   ['/settings/meta-pixel', 'Meta Pixel'],
   ['/settings/whatsapp-cloud', 'WhatsApp Cloud API'],
   ['/settings/whatsapp-templates', 'Templates WhatsApp'],
+  ['/settings/whatsapp-templates/new', 'Novo Template'],
   ['/settings/printer-setup', 'Impressão'],
   ['/settings/rider-tracking', 'Rastreamento de Entregadores'],
   ['/settings/rider-shifts', 'Turnos'],
