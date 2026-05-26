@@ -230,10 +230,13 @@ export const useInboxStore = defineStore('inbox', {
       }
     },
 
-    handleMessageStatus({ messageId, conversationId, status }) {
+    handleMessageStatus({ messageId, conversationId, status, failureReason }) {
       const current = this.messages[conversationId];
       if (current) {
-        const updated = current.map(m => m.id === messageId ? { ...m, status } : m);
+        const updated = current.map(m => m.id === messageId
+          ? { ...m, status, ...(failureReason !== undefined ? { failureReason } : {}) }
+          : m,
+        );
         this.messages = { ...this.messages, [conversationId]: updated };
       }
     },

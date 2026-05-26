@@ -137,6 +137,58 @@ const adapter = {
     return out
   },
 
+  // Extrai eventos de status (sent / delivered / read / failed) que vêm em
+  // value.statuses[] dos webhooks Meta WA. Retorna [{ externalId, status,
+  // failureReason, timestamp }, ...] já normalizado pro nosso enum
+  // MessageStatus. Ignora linhas sem id (defensivo).
+  parseStatuses(entry) {
+    const changes = Array.isArray(entry?.changes) ? entry.changes : []
+    const out = []
+    for (const change of changes) {
+      const value = change?.value
+      if (!value || typeof value !== 'object') continue
+      const statuses = Array.isArray(value.statuses) ? value.statuses : []
+      if (!statuses.length) continue
+
+      for (const st of statuses) {
+        if (!st || typeof st !== 'object') continue
+        const externalId = st.id ? String(st.id) : null
+        if (!externalId) continue
+
+        const raw = String(st.status || '').toLowerCase()
+        let status = null
+        if (raw === 'sent') status = 'SENT'
+        else if (raw === 'delivered') status = 'DELIVERED'
+        else if (raw === 'read') status = 'READ'
+        else if (raw === 'failed') status = 'FAILED'
+        if (!status) continue
+
+        let failureReason = null
+        if (status === 'FAILED') {
+          // Meta cita os erros em st.errors[] (com code + title + message +
+          // error_data.details). Pegamos a primeira pista útil.
+          const first = Array.isArray(st.errors) ? st.errors[0] : null
+          if (first) {
+            const code = first.code != null ? `${first.code}` : null
+            const title = first.title || ''
+            const detail = first.error_data?.details || first.message || ''
+            failureReason = [code, title, detail].filter(Boolean).join(' — ').slice(0, 500)
+          } else {
+            failureReason = 'Falha sem detalhe da Meta'
+          }
+        }
+
+        const tsSeconds = Number(st.timestamp)
+        const timestamp = Number.isFinite(tsSeconds) && tsSeconds > 0
+          ? new Date(tsSeconds * 1000)
+          : new Date()
+
+        out.push({ externalId, status, failureReason, timestamp })
+      }
+    }
+    return out
+  },
+
   // Operator-initiated send via Graph API:
   //   POST https://graph.facebook.com/<vX.Y>/<phone_number_id>/messages
   //   Authorization: Bearer <accessToken>

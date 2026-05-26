@@ -26,7 +26,7 @@ import express from 'express'
 import crypto from 'node:crypto'
 import { getMetaConfig } from '../services/metaConfig.js'
 import { prisma } from '../prisma.js'
-import { routeInbound } from '../messaging/index.js'
+import { routeInbound, routeStatuses } from '../messaging/index.js'
 import { MetaNotConfiguredError } from '../messaging/adapters/base.adapter.js'
 
 const router = Router()
@@ -201,6 +201,22 @@ async function dispatchMeta(payload) {
         code: err?.code,
         message: err?.message || String(err),
       })
+    }
+
+    // Status updates (sent/delivered/read/failed) vêm em value.statuses[].
+    // Hoje só Meta WA emite — FB/IG/Evolution não usam essa rota.
+    if (provider === 'META_WA') {
+      try {
+        await routeStatuses(provider, entry, account)
+      } catch (err) {
+        console.error('[webhook/meta] routeStatuses failed', {
+          provider,
+          externalId,
+          accountId: account.id,
+          code: err?.code,
+          message: err?.message || String(err),
+        })
+      }
     }
   }
 }

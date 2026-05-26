@@ -14,7 +14,7 @@
 
 import { prisma } from '../prisma.js'
 import * as inboundPipeline from './inboundPipeline.js'
-import { emitirInboxNewMessage } from '../socketEmitters.js'
+import { emitirInboxNewMessage, emitirInboxMessageStatus } from '../socketEmitters.js'
 import { MessagingError } from './adapters/base.adapter.js'
 
 // provider (MessagingProvider enum string) → adapter module
@@ -42,6 +42,73 @@ export async function routeInbound(provider, payload, account) {
     } catch (err) {
       console.error('[router.routeInbound] pipeline error', err)
       results.push({ ok: false, error: err.message })
+    }
+  }
+  return results
+}
+
+// Webhook de delivery-status → adapter.parseStatuses → atualiza Message.status
+// (e failureReason quando FAILED). Emite inbox:message-status pra UI atualizar
+// o ícone na bolha em tempo real. Usado hoje só pelo Meta WA — Evolution já
+// emite via webhookEvolution.js direto.
+export async function routeStatuses(provider, payload, account) {
+  const adapter = getAdapter(provider)
+  if (typeof adapter.parseStatuses !== 'function') return []
+  const updates = adapter.parseStatuses(payload, account)
+  if (!updates.length) return []
+
+  const RANK = { PENDING: 0, SENT: 1, DELIVERED: 2, READ: 3, FAILED: 99 }
+
+  const results = []
+  for (const u of updates) {
+    try {
+      // Não regride status: se já estava READ, um DELIVERED atrasado não
+      // sobrescreve. FAILED tem rank alto pra sempre marcar a falha quando
+      // chega (Meta às vezes manda failed depois de sent).
+      const existing = await prisma.message.findFirst({
+        where: { externalId: u.externalId },
+        select: { id: true, conversationId: true, status: true },
+      })
+      if (!existing) { results.push({ ok: false, externalId: u.externalId, error: 'not-found' }); continue }
+
+      const newRank = RANK[u.status] ?? 0
+      const curRank = RANK[existing.status] ?? 0
+      if (newRank < curRank) {
+        results.push({ ok: true, externalId: u.externalId, skipped: 'stale' })
+        continue
+      }
+
+      await prisma.message.update({
+        where: { id: existing.id },
+        data: {
+          status: u.status,
+          ...(u.failureReason ? { failureReason: u.failureReason } : {}),
+        },
+      })
+
+      // Notifica os attendants em tempo real pro ícone na bolha mudar.
+      try {
+        const conv = await prisma.conversation.findUnique({
+          where: { id: existing.conversationId },
+          select: { companyId: true },
+        })
+        if (conv?.companyId) {
+          emitirInboxMessageStatus({
+            companyId: conv.companyId,
+            conversationId: existing.conversationId,
+            messageId: existing.id,
+            status: u.status,
+            failureReason: u.failureReason || null,
+          })
+        }
+      } catch (emitErr) {
+        console.warn('[router.routeStatuses] emit failed', emitErr?.message)
+      }
+
+      results.push({ ok: true, externalId: u.externalId, status: u.status })
+    } catch (err) {
+      console.error('[router.routeStatuses] update error', err)
+      results.push({ ok: false, externalId: u.externalId, error: err.message })
     }
   }
   return results

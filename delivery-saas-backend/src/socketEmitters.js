@@ -268,6 +268,20 @@ export function emitirInboxNewMessage({ companyId, conversation, message }) {
   }
 }
 
+// Atualização de status de uma mensagem outbound (DELIVERED, READ, FAILED).
+// Disparado pelo webhook Meta WA quando chega um evento em value.statuses[].
+// Frontend escuta em 'inbox:message-status' e atualiza o ícone na bolha.
+export function emitirInboxMessageStatus({ companyId, conversationId, messageId, status, failureReason = null }) {
+  if (!io) return;
+  if (!companyId || !messageId) return;
+  try {
+    const payload = { conversationId, messageId, status, failureReason, companyId };
+    io.to(companyRoom(companyId)).emit('inbox:message-status', payload);
+  } catch (e) {
+    console.warn('Falha ao emitir inbox:message-status:', e?.message || e);
+  }
+}
+
 // ---- emit: ifood:chat (to extension sockets only, scoped by company) ----
 // `kind` identifica o tipo de mensagem (CONFIRMED, DISPATCHED, DELIVERED, MANUAL)
 // — usado pela extensão pra TTL e dedup. `createdAt` permite descarte de
