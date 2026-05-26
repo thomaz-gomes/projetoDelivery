@@ -17,7 +17,7 @@ const form = ref({
     rule: { all: [{ field: 'totalSpent', op: '>=', value: 0 }] },
   },
 })
-const preview = ref({ count: null, sample: [], loading: false })
+const preview = ref({ count: null, sample: [], loading: false, incomplete: false })
 const saving = ref(false)
 
 // Lookup data provided to RuleBuilder for multi-select rendering. Loaded
@@ -94,14 +94,39 @@ watch(() => form.value.ruleJson, () => {
   previewTimer = setTimeout(refreshPreview, 500)
 }, { deep: true })
 
+// A rule is "incomplete" when any leaf has an unfilled value (empty array,
+// empty string, null/undefined). The backend validator correctly rejects
+// these (e.g. `orderedProductId in []` → 400), so skip the preview API
+// while the operator is still building the rule — show a "configure"
+// hint instead of a hard error.
+function hasIncompleteLeaf(rule) {
+  if (!rule || typeof rule !== 'object') return true
+  if (Array.isArray(rule.all)) return rule.all.some(hasIncompleteLeaf)
+  if (Array.isArray(rule.any)) return rule.any.some(hasIncompleteLeaf)
+  if (rule.not) return hasIncompleteLeaf(rule.not)
+  // leaf
+  const v = rule.value
+  if (Array.isArray(v)) return v.length === 0
+  if (v === '' || v === null || v === undefined) return true
+  return false
+}
+
 async function refreshPreview() {
   preview.value.loading = true
   try {
+    if (hasIncompleteLeaf(form.value.ruleJson?.rule)) {
+      preview.value.count = null
+      preview.value.sample = []
+      preview.value.incomplete = true
+      return
+    }
+    preview.value.incomplete = false
     const { data } = await api.post('/marketing/segments/preview', { ruleJson: form.value.ruleJson })
     preview.value.count = data.count
     preview.value.sample = data.sample
   } catch (e) {
     preview.value.count = null
+    preview.value.incomplete = false
   } finally { preview.value.loading = false }
 }
 
@@ -160,6 +185,9 @@ async function save() {
               <span class="spinner-border spinner-border-sm me-2"></span>Calculando...
             </strong>
             <strong v-else-if="preview.count !== null">📊 {{ preview.count }} clientes correspondem</strong>
+            <strong v-else-if="preview.incomplete" class="text-muted">
+              <i class="bi bi-pencil-square me-1"></i>Configure as condições para ver a contagem
+            </strong>
             <strong v-else class="text-danger">Erro ao avaliar regras</strong>
           </div>
           <details v-if="preview.sample.length">
