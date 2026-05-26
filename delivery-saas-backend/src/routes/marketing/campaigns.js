@@ -461,4 +461,57 @@ router.post('/:id/cancel', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
+router.get('/:id/stats', async (req, res) => {
+  const companyId = req.user.companyId
+  const { id } = req.params
+  const c = await prisma.marketingCampaign.findFirst({ where: { id, companyId } })
+  if (!c) return res.status(404).json({ message: 'Not found' })
+
+  const breakdown = await prisma.marketingMessage.groupBy({
+    by: ['status'],
+    where: { campaignId: id },
+    _count: { id: true },
+  })
+  const get = (status) => breakdown.find(b => b.status === status)?._count.id || 0
+
+  const sent      = get('SENT') + get('DELIVERED') + get('READ')
+  const delivered = get('DELIVERED') + get('READ')
+  const read      = get('READ')
+
+  const converted = await prisma.marketingMessage.count({
+    where: { campaignId: id, convertedOrderId: { not: null } },
+  })
+  const strong = await prisma.marketingMessage.count({
+    where: { campaignId: id, attributionSignal: 'STRONG' },
+  })
+  const sum = await prisma.marketingMessage.aggregate({
+    where: { campaignId: id, convertedOrderId: { not: null } },
+    _sum: { convertedValue: true },
+  })
+
+  res.json({
+    sent, delivered, read,
+    failed: get('FAILED'),
+    optedOut: get('OPTED_OUT'),
+    converted,
+    convertedStrong: strong,
+    revenue: sum._sum.convertedValue || 0,
+  })
+})
+
+router.get('/:id/messages', async (req, res) => {
+  const companyId = req.user.companyId
+  const { id } = req.params
+  const c = await prisma.marketingCampaign.findFirst({ where: { id, companyId } })
+  if (!c) return res.status(404).json({ message: 'Not found' })
+  const limit = Math.min(Number(req.query.limit || 50), 200)
+  const messages = await prisma.marketingMessage.findMany({
+    where: { campaignId: id },
+    take: limit,
+    orderBy: { createdAt: 'desc' },
+    include: { customer: { select: { id: true, fullName: true, whatsapp: true } } },
+  })
+  res.json(messages)
+})
+
 export default router
