@@ -92,6 +92,7 @@ import inboxRouter from './routes/inbox.js'
 import { luccaRouter } from './routes/lucca.js'
 import ifoodChatRouter from './routes/ifoodChat.js'
 import { customDomainResolver } from './middleware/customDomainResolver.js'
+import { startMarketingWorker } from './workers/marketing.js'
 import './cron.js'
 
 const app = express();
@@ -884,6 +885,21 @@ export const emitirPedidoAtualizado = _emitirPedidoAtualizado;
 export const emitirPosicaoEntregador = _emitirPosicaoEntregador;
 export const emitirEntregadorOffline = _emitirEntregadorOffline;
 export const emitirIfoodChat = _emitirIfoodChat;
+
+// ==============================
+// 📨 Marketing worker
+// ==============================
+// Background worker for WhatsApp marketing campaigns (discover scheduled
+// campaigns, drain the send queue, housekeeping). Runs INSIDE this process
+// via setInterval — no separate worker container needed.
+// Set MARKETING_WORKER=off to disable (useful for one-off CLI scripts).
+if (process.env.MARKETING_WORKER !== 'off') {
+  try {
+    startMarketingWorker();
+  } catch (e) {
+    console.error('Failed to start marketing worker:', e?.message || e);
+  }
+}
 
 // ==============================
 // 🛡️ Global error handler — prevent stack trace leaks to clients
