@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import Swal from 'sweetalert2'
 import api from '../../api'
 import BaseButton from '../../components/BaseButton.vue'
 
+const router = useRouter()
 const loading = ref(false)
 const syncing = ref(false)
 const accounts = ref([])
@@ -112,15 +114,20 @@ onMounted(load)
   <div class="container py-4">
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">Templates WhatsApp</h2>
-      <BaseButton @click="syncTemplates" :loading="syncing" :disabled="loading || !selectedAccountId">
-        <i class="bi bi-arrow-repeat me-1"></i> Sincronizar
-      </BaseButton>
+      <div class="d-flex gap-2">
+        <BaseButton variant="outline" @click="syncTemplates" :loading="syncing" :disabled="loading || !selectedAccountId">
+          <i class="bi bi-arrow-repeat me-1"></i> Sincronizar
+        </BaseButton>
+        <BaseButton variant="primary" @click="router.push('/settings/whatsapp-templates/new')" :disabled="!accounts.length">
+          <i class="bi bi-plus-lg me-1"></i> Novo template
+        </BaseButton>
+      </div>
     </div>
 
     <div class="alert alert-info small mb-3">
       <i class="bi bi-info-circle me-1"></i>
-      Templates são criados e aprovados no <a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business Manager</a> (WhatsApp Manager → Modelos de mensagem).
-      Esta página apenas lista o que já está cadastrado lá e permite usá-lo via API. Use o botão "Sincronizar" depois de criar ou alterar templates.
+      Templates Meta WhatsApp passam por aprovação da Meta antes de poderem ser usados em campanhas. Você pode criar
+      direto aqui ("Novo template") ou cadastrar no <a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business Manager</a> e depois sincronizar.
     </div>
 
     <div class="card p-3 mb-3" v-if="accounts.length">
@@ -178,10 +185,23 @@ onMounted(load)
         </thead>
         <tbody>
           <tr v-for="t in filteredTemplates" :key="t.id">
-            <td><code>{{ t.name }}</code></td>
+            <td>
+              <code>{{ t.name }}</code>
+              <span v-if="t.createdViaApp" class="badge bg-light text-muted ms-1" title="Criado pelo painel">
+                <i class="bi bi-cloud-arrow-up" style="font-size:0.7rem"></i>
+              </span>
+            </td>
             <td><span class="badge bg-light text-dark">{{ t.language }}</span></td>
             <td>{{ categoryLabel(t.category) }}</td>
-            <td><span class="badge" :class="statusBadge(t.status)">{{ t.status }}</span></td>
+            <td>
+              <span class="badge" :class="statusBadge(t.status)">
+                <span v-if="t.status === 'PENDING'" class="spinner-grow spinner-grow-sm me-1" style="width:0.5rem;height:0.5rem"></span>
+                {{ t.status }}
+              </span>
+              <div v-if="t.status === 'REJECTED' && t.rejectionReason" class="small text-danger mt-1" :title="t.rejectionReason">
+                <i class="bi bi-exclamation-circle me-1"></i>{{ t.rejectionReason }}
+              </div>
+            </td>
             <td class="text-center">{{ placeholderCount(t.components) }}</td>
             <td class="text-muted small" style="max-width: 400px;">
               <div class="text-truncate" :title="bodyText(t.components)">{{ bodyText(t.components) }}</div>

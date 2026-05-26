@@ -130,4 +130,167 @@ router.post('/templates/sync', requireRole('ADMIN'), async (req, res) => {
   }
 });
 
+// POST /meta/templates
+// body: { accountId, name, language, category, components }
+//
+// Submete um template novo pra aprovação Meta. O ciclo de vida (PENDING →
+// APPROVED/REJECTED) é assíncrono — o worker faz polling pra refrescar o
+// status. Aqui só persistimos com createdViaApp=true pro polling saber
+// quais templates ele cuida.
+//
+// Validation rules (mirror Meta's docs):
+//   - name: lowercase, digits, underscore only (regex)
+//   - language: enum (pt_BR, en_US, ...) — não validamos lista; Meta rejeita
+//   - category: MARKETING | UTILITY | AUTHENTICATION
+//   - components: array com pelo menos um BODY type
+router.post('/templates', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const userId = req.user.id || req.user.userId || null;
+    const { accountId, name, language, category, components } = req.body || {};
+
+    if (!accountId) return res.status(400).json({ message: 'accountId é obrigatório' });
+    if (!name) return res.status(400).json({ message: 'name é obrigatório' });
+    if (!language) return res.status(400).json({ message: 'language é obrigatório' });
+    if (!category) return res.status(400).json({ message: 'category é obrigatório' });
+    if (!Array.isArray(components) || components.length === 0) {
+      return res.status(400).json({ message: 'components deve ser um array não-vazio' });
+    }
+
+    // Meta rule: name lowercase + digits + underscore only
+    if (!/^[a-z0-9_]+$/.test(name)) {
+      return res.status(400).json({
+        message: 'Nome inválido. Use apenas letras minúsculas, números e underscore (_).',
+      });
+    }
+    const VALID_CATEGORIES = ['MARKETING', 'UTILITY', 'AUTHENTICATION'];
+    if (!VALID_CATEGORIES.includes(category)) {
+      return res.status(400).json({ message: `category deve ser um de: ${VALID_CATEGORIES.join(', ')}` });
+    }
+    // Pelo menos um BODY component (Meta exige)
+    const hasBody = components.some(c => String(c?.type || '').toUpperCase() === 'BODY');
+    if (!hasBody) {
+      return res.status(400).json({ message: 'O template precisa ter pelo menos um componente BODY' });
+    }
+
+    const account = await prisma.metaMessagingAccount.findFirst({
+      where: { id: accountId, companyId, provider: 'META_WA' },
+    });
+    if (!account) return res.status(404).json({ message: 'Conta Meta WA não encontrada' });
+    if (!account.wabaId) {
+      return res.status(400).json({ message: 'Conta sem wabaId — necessário pra criar templates' });
+    }
+
+    // Já existe local com mesmo (account, name, language)? Evita 409 surpresa.
+    const existing = await prisma.metaTemplate.findFirst({
+      where: { metaWaAccountId: account.id, name, language },
+    });
+    if (existing) {
+      return res.status(409).json({
+        message: 'Já existe um template com esse nome e idioma para essa conta. Escolha outro nome.',
+      });
+    }
+
+    // Submete na Meta — erros Graph API mapeiam pra 502 com a mensagem original.
+    let metaResult;
+    try {
+      metaResult = await whatsappMetaAdapter.createTemplate(account, { name, language, category, components });
+    } catch (err) {
+      const metaErr = err?.response?.data?.error || err?.metaError || null;
+      console.error('[meta/templates POST] Graph API erro', metaErr || err?.message);
+      return res.status(502).json({
+        message: metaErr?.message || 'Falha ao submeter template na Meta',
+        meta: metaErr,
+      });
+    }
+
+    // Cache local com flags de submissão. Se Meta já retornou APPROVED (raro,
+    // só pra AUTHENTICATION), respeitamos.
+    const row = await prisma.metaTemplate.create({
+      data: {
+        companyId,
+        metaWaAccountId: account.id,
+        externalId: String(metaResult.id || ''),
+        name,
+        language,
+        category: metaResult.category || category,
+        status: String(metaResult.status || 'PENDING').toUpperCase(),
+        components,
+        createdViaApp: true,
+        submittedByUserId: userId,
+        submittedAt: new Date(),
+      },
+      include: {
+        metaWaAccount: { select: { id: true, displayName: true, externalId: true } },
+      },
+    });
+
+    return res.status(201).json(row);
+  } catch (err) {
+    console.error('[meta/templates POST]', err);
+    return res.status(500).json({ message: 'Erro ao criar template', error: err.message });
+  }
+});
+
+// POST /meta/templates/:id/resubmit
+// Reaproveita o builder pra resubmeter após uma rejeição. Operacional: o
+// operador edita os componentes, mantém o mesmo nome+idioma, e nós
+// re-postamos na Meta. Meta trata como um novo template (gera novo id).
+router.post('/templates/:id/resubmit', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const userId = req.user.id || req.user.userId || null;
+    const { id } = req.params;
+    const { components } = req.body || {};
+
+    if (!Array.isArray(components) || components.length === 0) {
+      return res.status(400).json({ message: 'components deve ser um array não-vazio' });
+    }
+
+    const existing = await prisma.metaTemplate.findFirst({
+      where: { id, companyId },
+      include: { metaWaAccount: true },
+    });
+    if (!existing) return res.status(404).json({ message: 'Template não encontrado' });
+    if (existing.status !== 'REJECTED' && existing.status !== 'DISABLED') {
+      return res.status(400).json({
+        message: `Só é possível resubmeter templates REJECTED ou DISABLED. Status atual: ${existing.status}`,
+      });
+    }
+
+    let metaResult;
+    try {
+      metaResult = await whatsappMetaAdapter.createTemplate(existing.metaWaAccount, {
+        name: existing.name,
+        language: existing.language,
+        category: existing.category,
+        components,
+      });
+    } catch (err) {
+      const metaErr = err?.response?.data?.error || null;
+      return res.status(502).json({
+        message: metaErr?.message || 'Falha ao resubmeter template',
+        meta: metaErr,
+      });
+    }
+
+    const row = await prisma.metaTemplate.update({
+      where: { id: existing.id },
+      data: {
+        externalId: String(metaResult.id || existing.externalId),
+        status: String(metaResult.status || 'PENDING').toUpperCase(),
+        components,
+        rejectionReason: null,
+        submittedByUserId: userId,
+        submittedAt: new Date(),
+        createdViaApp: true,
+      },
+    });
+    return res.json(row);
+  } catch (err) {
+    console.error('[meta/templates/:id/resubmit]', err);
+    return res.status(500).json({ message: 'Erro ao resubmeter template', error: err.message });
+  }
+});
+
 export default router;

@@ -302,6 +302,55 @@ const adapter = {
     return Array.isArray(data?.data) ? data.data : []
   },
 
+  // Submete um template para aprovação na Meta. Retorna { id, status } —
+  // o id é o externalId do template no Meta, status inicial geralmente
+  // PENDING (raramente APPROVED imediato para Authentication category).
+  // Erros Graph API são propagados (caller deve mapear códigos como
+  // 131008 = name already exists, 131009 = invalid components, etc).
+  async createTemplate(account, { name, language, category, components }) {
+    if (!account?.accessToken) {
+      throw new Error('Meta WA adapter: account.accessToken is required')
+    }
+    if (!account?.wabaId) {
+      throw new Error('Meta WA adapter: account.wabaId is required to create templates')
+    }
+    if (!name || !language || !category || !Array.isArray(components)) {
+      throw new Error('Meta WA adapter: name, language, category, components are required')
+    }
+    const token = safeDecrypt(account.accessToken)
+    const { graphVersion } = await getMetaConfig()
+    const url = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(account.wabaId)}/message_templates`
+    const { data } = await axios.post(
+      url,
+      { name, language, category, components },
+      {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        timeout: 30000,
+      }
+    )
+    return {
+      id: data?.id || null,
+      status: data?.status || 'PENDING',
+      category: data?.category || category,
+    }
+  },
+
+  // Fetches a single template by its Meta id (useful for status polling
+  // after submission). Returns the same shape as listTemplates entries.
+  async getTemplate(account, templateId) {
+    if (!account?.accessToken) throw new Error('Meta WA adapter: account.accessToken is required')
+    if (!templateId) throw new Error('Meta WA adapter: templateId is required')
+    const token = safeDecrypt(account.accessToken)
+    const { graphVersion } = await getMetaConfig()
+    const url = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(templateId)}`
+    const { data } = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { fields: 'id,name,language,category,status,components,rejected_reason,quality_score' },
+      timeout: 30000,
+    })
+    return data
+  },
+
   // externalId here is the WhatsApp phone_number_id (matches the value
   // webhookMeta.js extracts from changes[].value.metadata.phone_number_id).
   async resolveAccount(externalId) {
