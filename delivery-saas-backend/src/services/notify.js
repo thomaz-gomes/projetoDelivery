@@ -133,7 +133,7 @@ function buildPhoneVariants(normalized) {
   return [...variants];
 }
 
-async function persistOutboundWhatsappMessage({
+export async function persistOutboundWhatsappMessage({
   companyId,
   provider = 'EVOLUTION_WA',
   providerAccountId = null,

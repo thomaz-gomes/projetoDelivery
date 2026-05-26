@@ -11,13 +11,15 @@
 
 import { prisma } from '../prisma.js'
 import { enqueueRun } from '../services/marketing/sendQueue.js'
+import { drainSendQueue } from '../services/marketing/sender.js'
 
 const TICK_INTERVAL_MS = 30_000
 
 async function tick() {
   try {
     await discoverWork()
-    // Tick 2 (drainSendQueue) and Tick 3 (housekeeping) added in later tasks
+    await drainSendQueue()
+    // Tick 3 (housekeeping) added in Task 1.20
   } catch (e) {
     console.error('[marketing-worker] tick error', e?.message || e)
   }
