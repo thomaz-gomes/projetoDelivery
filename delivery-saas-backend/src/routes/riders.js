@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { assertModuleEnabled } from '../utils/saas.js';
 import { createFinancialEntryForRider } from '../services/financial/orderFinancialBridge.js';
-import { emitirPosicaoEntregador, emitirEntregadorOffline } from '../index.js';
+import { emitirPosicaoEntregador, emitirHeartbeatEntregador, emitirEntregadorOffline } from '../index.js';
 import { getGoalsForRider } from '../services/riderGoals.js';
 import goalsRouter from './goals.js';
 import { startOfDayInTz, endOfDayInTz, dayKeyInTz, listDayKeysInTz } from '../utils/dateTz.js';
@@ -103,8 +103,14 @@ ridersRouter.post('/me/position', requireRole('RIDER'), async (req, res) => {
       create: { riderId, lat, lng, heading: heading ?? null, orderId: orderId ?? null, accuracy: typeof accuracy === 'number' ? accuracy : null },
     });
 
-    // Get rider name for the socket payload
-    const rider = await prisma.rider.findUnique({ where: { id: riderId }, select: { name: true } });
+    // A fresh position also counts as a heartbeat
+    const now = new Date();
+    const appType = typeof req.body?.appType === 'string' ? req.body.appType.slice(0, 16) : null;
+    const rider = await prisma.rider.update({
+      where: { id: riderId },
+      data: { lastHeartbeatAt: now, ...(appType ? { appType } : {}) },
+      select: { name: true, appType: true, lastHeartbeatAt: true },
+    });
 
     // Emit to admin dashboard sockets of this company
     if (!position.hidden) {
@@ -118,6 +124,8 @@ ridersRouter.post('/me/position', requireRole('RIDER'), async (req, res) => {
           orderId: orderId ?? null,
           accuracy: typeof accuracy === 'number' ? accuracy : null,
           updatedAt: position.updatedAt,
+          lastHeartbeatAt: rider?.lastHeartbeatAt || now,
+          appType: rider?.appType || null,
         });
       } catch (e) { /* non-blocking */ }
     }
@@ -142,6 +150,7 @@ ridersRouter.delete('/me/position', requireRole('RIDER'), async (req, res) => {
     if (!riderId) return res.status(400).json({ message: 'riderId não encontrado no token' });
 
     await prisma.riderPosition.deleteMany({ where: { riderId } });
+    await prisma.rider.update({ where: { id: riderId }, data: { lastHeartbeatAt: null } }).catch(() => {});
 
     emitirEntregadorOffline(companyId, riderId);
 
@@ -149,6 +158,35 @@ ridersRouter.delete('/me/position', requireRole('RIDER'), async (req, res) => {
   } catch (e) {
     console.error('DELETE me/position error:', e);
     return res.status(500).json({ message: 'Erro ao remover posição' });
+  }
+});
+
+// POST /riders/me/heartbeat — RIDER only
+// Lightweight liveness signal independent of GPS. Allows the admin map to
+// distinguish "rider stationary" (heartbeat fresh, position stale) from
+// "app dead" (heartbeat stale).
+ridersRouter.post('/me/heartbeat', requireRole('RIDER'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const riderId = req.user.riderId;
+    if (!riderId) return res.status(400).json({ message: 'riderId não encontrado no token' });
+
+    const appType = typeof req.body?.appType === 'string' ? req.body.appType.slice(0, 16) : null;
+    const now = new Date();
+
+    await prisma.rider.update({
+      where: { id: riderId },
+      data: { lastHeartbeatAt: now, appType },
+    });
+
+    try {
+      emitirHeartbeatEntregador(companyId, { riderId, appType, at: now });
+    } catch (e) { /* non-blocking */ }
+
+    return res.json({ ok: true, at: now });
+  } catch (e) {
+    console.error('me/heartbeat error:', e);
+    return res.status(500).json({ message: 'Erro ao registrar heartbeat' });
   }
 });
 
@@ -176,9 +214,11 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
     });
     const todayEarnings = todayTxAgg._sum.amount || 0;
 
-    // Today deliveries (completed orders)
+    // Today deliveries (completed orders) — agrupa pelo DIA DE CRIAÇÃO do
+    // pedido. Pedido criado 21/05 23:50 e concluído 22/05 00:10 conta para
+    // 21/05, alinhado com a regra "entrega é do dia que foi criada".
     const todayDeliveries = await prisma.order.count({
-      where: { riderId, status: 'CONCLUIDO', updatedAt: { gte: todayStart } }
+      where: { riderId, status: 'CONCLUIDO', createdAt: { gte: todayStart } }
     });
 
     // Month earnings
@@ -188,9 +228,9 @@ ridersRouter.get('/me/daily-stats', requireRole('RIDER'), async (req, res) => {
     });
     const monthEarnings = monthTxAgg._sum.amount || 0;
 
-    // Month deliveries
+    // Month deliveries — mesma regra: usa createdAt (não updatedAt)
     const monthDeliveries = await prisma.order.count({
-      where: { riderId, status: 'CONCLUIDO', updatedAt: { gte: monthStart } }
+      where: { riderId, status: 'CONCLUIDO', createdAt: { gte: monthStart } }
     });
 
     // Check-in hoje (BRT)
@@ -276,7 +316,7 @@ ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN', 'ATTENDAN
       const cutoff = new Date(Date.now() - 30 * 60 * 1000);
       const positions = await prisma.riderPosition.findMany({
         where: { rider: { companyId }, hidden: false, updatedAt: { gte: cutoff } },
-        include: { rider: { select: { id: true, name: true } } },
+        include: { rider: { select: { id: true, name: true, lastHeartbeatAt: true, appType: true } } },
         orderBy: { updatedAt: 'desc' },
       });
       return res.json(positions);
@@ -284,7 +324,7 @@ ridersRouter.get('/map/positions', requireRole('ADMIN', 'SUPER_ADMIN', 'ATTENDAN
 
     const positions = await prisma.riderPosition.findMany({
       where: { riderId: { in: activeRiderIds }, hidden: false },
-      include: { rider: { select: { id: true, name: true } } },
+      include: { rider: { select: { id: true, name: true, lastHeartbeatAt: true, appType: true } } },
       orderBy: { updatedAt: 'desc' },
     });
     return res.json(positions);
@@ -839,13 +879,14 @@ ridersRouter.get('/ranking', async (req, res) => {
     select: { id: true, name: true, userId: true }
   });
 
-  // Completed orders in period
+  // Completed orders in period — usa createdAt pra alinhar com a regra
+  // "entrega é do dia que foi criada" (não do dia em que foi marcada CONCLUIDO).
   const orders = await prisma.order.findMany({
     where: {
       companyId,
       riderId: { not: null },
       status: 'CONCLUIDO',
-      updatedAt: { gte: dateFrom, lte: dateTo }
+      createdAt: { gte: dateFrom, lte: dateTo }
     },
     select: {
       id: true, riderId: true, closedByIfoodCode: true, updatedAt: true,
@@ -857,14 +898,15 @@ ridersRouter.get('/ranking', async (req, res) => {
     }
   });
 
-  // Canceled orders count by rider
+  // Canceled orders count by rider — mesma regra: createdAt pra agrupar pelo
+  // dia em que o pedido foi criado.
   const canceledCount = await prisma.order.groupBy({
     by: ['riderId'],
     where: {
       companyId,
       riderId: { not: null },
       status: 'CANCELADO',
-      updatedAt: { gte: dateFrom, lte: dateTo }
+      createdAt: { gte: dateFrom, lte: dateTo }
     },
     _count: { id: true }
   });

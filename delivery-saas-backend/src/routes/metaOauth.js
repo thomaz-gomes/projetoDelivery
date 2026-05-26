@@ -398,8 +398,14 @@ router.delete('/auth/meta/connected/:id', authMiddleware, async (req, res) => {
     if (!acc) return res.status(404).json({ message: 'Integração não encontrada' })
 
     const field = MENU_FK_BY_PROVIDER[acc.provider]
+    // Também limpa Conversation.providerAccountId nas conversas que apontavam
+    // pra essa conta — evita orfanar conversas que vão falhar em sends futuros
+    // com "MetaMessagingAccount não encontrada". O self-heal no inbox tenta
+    // recuperar via menu.metaWaAccountId; quando isso não dá, a conversa
+    // mostra mensagem clara de "conta removida".
     await prisma.$transaction([
       prisma.menu.updateMany({ where: { [field]: acc.id }, data: { [field]: null } }),
+      prisma.conversation.updateMany({ where: { providerAccountId: acc.id }, data: { providerAccountId: null } }),
       prisma.metaMessagingAccount.delete({ where: { id: acc.id } }),
     ])
     return res.json({ ok: true })

@@ -217,6 +217,17 @@ export function emitirPosicaoEntregador(companyId, payload) {
   }
 }
 
+// ---- emit: rider-heartbeat ----
+export function emitirHeartbeatEntregador(companyId, payload) {
+  if (!io) return;
+  if (!companyId) return;
+  try {
+    io.to(companyRoom(companyId)).emit('rider-heartbeat', payload);
+  } catch (e) {
+    console.warn('Falha ao emitir rider-heartbeat:', e?.message || e);
+  }
+}
+
 // ---- emit: rider-offline ----
 export function emitirEntregadorOffline(companyId, riderId) {
   if (!io) return;
@@ -254,6 +265,20 @@ export function emitirInboxNewMessage({ companyId, conversation, message }) {
     io.emit('inbox:new-message:broadcast', payload);
   } catch (e) {
     console.warn('Falha ao emitir inbox:new-message:', e?.message || e);
+  }
+}
+
+// Atualização de status de uma mensagem outbound (DELIVERED, READ, FAILED).
+// Disparado pelo webhook Meta WA quando chega um evento em value.statuses[].
+// Frontend escuta em 'inbox:message-status' e atualiza o ícone na bolha.
+export function emitirInboxMessageStatus({ companyId, conversationId, messageId, status, failureReason = null }) {
+  if (!io) return;
+  if (!companyId || !messageId) return;
+  try {
+    const payload = { conversationId, messageId, status, failureReason, companyId };
+    io.to(companyRoom(companyId)).emit('inbox:message-status', payload);
+  } catch (e) {
+    console.warn('Falha ao emitir inbox:message-status:', e?.message || e);
   }
 }
 

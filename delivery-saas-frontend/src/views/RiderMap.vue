@@ -582,6 +582,37 @@ function onMenuFilterChange() {
   }
 }
 
+// Presence state derived from heartbeat + position age.
+// Returns { state: 'online'|'stale'|'offline', label, color, opacity }
+function derivePresence(pos) {
+  const now = Date.now()
+  const heartbeatAt = pos.lastHeartbeatAt || pos.rider?.lastHeartbeatAt || null
+  const heartbeatMs = heartbeatAt ? new Date(heartbeatAt).getTime() : 0
+  const positionMs = pos.updatedAt ? new Date(pos.updatedAt).getTime() : 0
+  const hbAge = heartbeatMs ? now - heartbeatMs : Infinity
+  const posAge = positionMs ? now - positionMs : Infinity
+
+  if (hbAge > 3 * 60 * 1000) {
+    return { state: 'offline', color: '#6c757d', opacity: 0.45, label: heartbeatMs ? `App inativo há ${formatAge(hbAge)}` : 'Sem sinal do app' }
+  }
+  if (hbAge > 60 * 1000) {
+    return { state: 'stale', color: '#fd7e14', opacity: 0.75, label: `Sinal fraco — heartbeat há ${formatAge(hbAge)}` }
+  }
+  if (posAge > 90 * 1000) {
+    return { state: 'stationary', color: '#0dcaf0', opacity: 1, label: `Parado — posição há ${formatAge(posAge)}` }
+  }
+  return { state: 'online', color: '#198754', opacity: 1, label: 'Online' }
+}
+
+function formatAge(ms) {
+  if (!isFinite(ms)) return '?'
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m}min`
+  return `${Math.round(m / 60)}h`
+}
+
 function updateMarker(pos) {
   if (!map || !L) return
   const riderId = pos.riderId || pos.rider?.id
@@ -593,10 +624,18 @@ function updateMarker(pos) {
   const accuracy = pos.accuracy ? Number(pos.accuracy) : null
   const pending = riderPendingCount(riderId)
   const pendingLabel = pending > 0 ? `<br><small>Pedidos pendentes: <strong>${pending}</strong></small>` : ''
+  const presence = derivePresence(pos)
+  const appTypeLabel = (pos.appType || pos.rider?.appType) === 'web'
+    ? '<br><small class="text-warning">⚠️ Usando web (rastreamento limitado)</small>'
+    : ''
   const popupHtml = `
-    <div style="min-width:140px">
-      <strong>${name}</strong><br>
-      <small class="text-muted">Atualizado: ${formatTime(pos.updatedAt)}</small>
+    <div style="min-width:160px">
+      <strong>${name}</strong>
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${presence.color};margin-left:4px"></span>
+      <br>
+      <small style="color:${presence.color}"><strong>${presence.label}</strong></small><br>
+      <small class="text-muted">Posição: ${formatTime(pos.updatedAt)}</small>
+      ${appTypeLabel}
       ${pendingLabel}
       ${pos.orderId ? `<br><small>Pedido: ${pos.orderId.slice(0,8)}...</small>` : ''}
       ${accuracy ? `<br><small>Precisão: ~${Math.round(accuracy)}m</small>` : ''}
@@ -611,13 +650,14 @@ function updateMarker(pos) {
     markersMap[riderId].setLatLng([lat, lng])
     markersMap[riderId].setIcon(icon)
     markersMap[riderId].getPopup()?.setContent(popupHtml)
-    markersMap[riderId].setOpacity(1)
+    markersMap[riderId].setOpacity(presence.opacity)
   } else {
-    markersMap[riderId] = L.marker([lat, lng], { icon })
+    markersMap[riderId] = L.marker([lat, lng], { icon, opacity: presence.opacity })
       .bindPopup(popupHtml)
       .addTo(map)
   }
   markersMap[riderId]._lastUpdate = new Date(pos.updatedAt || Date.now()).getTime()
+  markersMap[riderId]._lastHeartbeat = pos.lastHeartbeatAt || pos.rider?.lastHeartbeatAt || null
 }
 
 function removeStaleMarkers(activeIds) {
@@ -641,12 +681,11 @@ function checkStaleMarkers() {
     if (ageMs > 30 * 60 * 1000) {
       // 30+ min without update: remove from map
       removeMarker(riderId)
-    } else if (ageMs > 5 * 60 * 1000) {
-      // 5+ min: fade opacity to indicate stale
-      marker.setOpacity(0.5)
-    } else {
-      marker.setOpacity(1)
+      continue
     }
+    // Refresh opacity/popup from heartbeat so staleness updates without a server event
+    const pos = positions.value.find(p => (p.riderId || p.rider?.id) === riderId)
+    if (pos) updateMarker(pos)
   }
 }
 
@@ -713,6 +752,20 @@ function ensureSocket() {
     })
     socket.on('rider-offline', (payload) => {
       if (payload?.riderId) removeMarker(payload.riderId)
+    })
+    socket.on('rider-heartbeat', (payload) => {
+      const riderId = payload?.riderId
+      if (!riderId) return
+      const idx = positions.value.findIndex(p => (p.riderId || p.rider?.id) === riderId)
+      if (idx !== -1) {
+        positions.value[idx] = {
+          ...positions.value[idx],
+          lastHeartbeatAt: payload.at,
+          appType: payload.appType || positions.value[idx].appType,
+        }
+        // Re-render the rider's marker so the badge updates without waiting for a new position
+        updateMarker(positions.value[idx])
+      }
     })
     socket.on('order-updated', (payload) => {
       const hideStatuses = ['CONFIRMACAO_PAGAMENTO', 'CONCLUIDO', 'CANCELADO']

@@ -152,9 +152,8 @@ export async function persistOutboundWhatsappMessage({
   const variants = buildPhoneVariants(normalized);
 
   try {
-    // Match the (companyId, channel, channelContactId, providerAccountId)
-    // unique key so the outbound lands in the same conversation as the
-    // corresponding inbound — same channel and same WhatsApp account.
+    // 1ª tentativa: match exato pela (companyId, channel, channelContactId,
+    // providerAccountId) — mesma WhatsApp account que mandou/recebeu antes.
     let conversation = await prisma.conversation.findFirst({
       where: {
         companyId,
@@ -163,6 +162,39 @@ export async function persistOutboundWhatsappMessage({
         providerAccountId,
       },
     });
+
+    // 2ª tentativa (self-heal): se não casou por providerAccountId mas temos
+    // menuId, procura uma conversa existente do mesmo cliente no mesmo
+    // cardápio. Cobre o caso comum de disconnect+reconnect onde
+    // providerAccountId antigo foi zerado/deletado. Atualiza pra apontar pra
+    // conta nova em vez de criar uma conversa duplicada (que apareceria como
+    // "Aguardando primeira mensagem do cliente").
+    if (!conversation && menuId) {
+      const candidate = await prisma.conversation.findFirst({
+        where: {
+          companyId,
+          channel: 'WHATSAPP',
+          channelContactId: { in: variants },
+          menuId,
+        },
+        orderBy: { lastMessageAt: 'desc' },
+      });
+      if (candidate) {
+        conversation = await prisma.conversation.update({
+          where: { id: candidate.id },
+          data: {
+            providerAccountId,
+            provider,
+            instanceName: instanceName || candidate.instanceName,
+          },
+        });
+        console.log('[notify] re-linked existing conversation to new providerAccountId', {
+          conversationId: conversation.id,
+          oldAccountId: candidate.providerAccountId,
+          newAccountId: providerAccountId,
+        });
+      }
+    }
 
     if (!conversation) {
       try {

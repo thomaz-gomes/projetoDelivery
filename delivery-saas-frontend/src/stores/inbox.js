@@ -177,16 +177,24 @@ export const useInboxStore = defineStore('inbox', {
 
     // Socket.IO event handlers
     handleNewMessage({ conversationId, message, conversation: convData }) {
+      // Quando a mensagem nova é INBOUND, atualiza lastInboundAt em memória.
+      // O backend não inclui esse campo no payload do socket (ele é computado
+      // só no GET /conversations), então sem isso o banner "Aguardando primeira
+      // mensagem do cliente" permanece visível mesmo após o cliente responder.
+      const lastInboundUpdate = message?.direction === 'INBOUND'
+        ? { lastInboundAt: message.createdAt || new Date().toISOString() }
+        : {};
+
       // 1) Update conversations list (reassign array to ensure reactivity)
       const idx = this.conversations.findIndex(c => c.id === conversationId);
       if (idx >= 0) {
         const existing = this.conversations[idx];
-        const merged = { ...existing, ...(convData || {}), messages: [message] };
+        const merged = { ...existing, ...(convData || {}), ...lastInboundUpdate, messages: [message] };
         // Move merged conversation to top
         const newList = [merged, ...this.conversations.filter((_, i) => i !== idx)];
         this.conversations = newList;
       } else if (convData) {
-        this.conversations = [{ ...convData, id: conversationId, messages: [message] }, ...this.conversations];
+        this.conversations = [{ ...convData, ...lastInboundUpdate, id: conversationId, messages: [message] }, ...this.conversations];
       }
 
       // 2) Update loaded messages map (reassign nested array to trigger reactivity)
@@ -222,10 +230,13 @@ export const useInboxStore = defineStore('inbox', {
       }
     },
 
-    handleMessageStatus({ messageId, conversationId, status }) {
+    handleMessageStatus({ messageId, conversationId, status, failureReason }) {
       const current = this.messages[conversationId];
       if (current) {
-        const updated = current.map(m => m.id === messageId ? { ...m, status } : m);
+        const updated = current.map(m => m.id === messageId
+          ? { ...m, status, ...(failureReason !== undefined ? { failureReason } : {}) }
+          : m,
+        );
         this.messages = { ...this.messages, [conversationId]: updated };
       }
     },

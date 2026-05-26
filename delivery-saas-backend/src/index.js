@@ -496,6 +496,7 @@ import {
   emitirNovoPedido as _emitirNovoPedido,
   emitirPedidoAtualizado as _emitirPedidoAtualizado,
   emitirPosicaoEntregador as _emitirPosicaoEntregador,
+  emitirHeartbeatEntregador as _emitirHeartbeatEntregador,
   emitirEntregadorOffline as _emitirEntregadorOffline,
   emitirIfoodChat as _emitirIfoodChat,
 } from './socketEmitters.js';
@@ -883,6 +884,7 @@ events.on('nfe.authorized', (payload) => {
 export const emitirNovoPedido = _emitirNovoPedido;
 export const emitirPedidoAtualizado = _emitirPedidoAtualizado;
 export const emitirPosicaoEntregador = _emitirPosicaoEntregador;
+export const emitirHeartbeatEntregador = _emitirHeartbeatEntregador;
 export const emitirEntregadorOffline = _emitirEntregadorOffline;
 export const emitirIfoodChat = _emitirIfoodChat;
 

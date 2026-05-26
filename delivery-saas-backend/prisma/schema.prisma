@@ -215,6 +215,8 @@ model Rider {
   active           Boolean                @default(true)
   userId           String?                @unique
   user             User?                  @relation(fields: [userId], references: [id])
+  lastHeartbeatAt  DateTime?
+  appType          String?
   orders           Order[]
   account          RiderAccount?
   transactions     RiderTransaction[]
@@ -2853,6 +2855,10 @@ model Message {
   quotedMessageId String?
   transcription   String?
   status          MessageStatus    @default(SENT)
+  // Quando status=FAILED, guarda o motivo retornado pelo provider (ex.: erro
+  // do Meta Cloud API após status webhook). Permite o operador entender no
+  // inbox por que a mensagem não chegou ao destinatário.
+  failureReason   String?
   internal        Boolean          @default(false)
   authorUserId    String?
   authorUser      User?            @relation("MessageAuthor", fields: [authorUserId], references: [id])

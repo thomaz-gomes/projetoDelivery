@@ -26,7 +26,7 @@ import express from 'express'
 import crypto from 'node:crypto'
 import { getMetaConfig } from '../services/metaConfig.js'
 import { prisma } from '../prisma.js'
-import { routeInbound } from '../messaging/index.js'
+import { routeInbound, routeStatuses } from '../messaging/index.js'
 import { MetaNotConfiguredError } from '../messaging/adapters/base.adapter.js'
 import { applyMarketingStatusFromWebhook } from '../services/marketing/messageStatusHooks.js'
 
@@ -204,12 +204,24 @@ async function dispatchMeta(payload) {
       })
     }
 
-    // Marketing delivered/read receipts. WhatsApp Cloud puts these under
-    // entry.changes[].value.statuses[] (each item carries the wamid we
-    // persisted as MarketingMessage.externalId at send time). FB Messenger
-    // and IG don't use this exact shape today — guarded by provider so we
-    // don't churn for non-WA channels until those adapters wire it up.
+    // Status updates (sent/delivered/read/failed) vêm em value.statuses[].
+    // Hoje só Meta WA emite — FB/IG/Evolution não usam essa rota.
     if (provider === 'META_WA') {
+      try {
+        await routeStatuses(provider, entry, account)
+      } catch (err) {
+        console.error('[webhook/meta] routeStatuses failed', {
+          provider,
+          externalId,
+          accountId: account.id,
+          code: err?.code,
+          message: err?.message || String(err),
+        })
+      }
+
+      // Marketing delivered/read receipts. WhatsApp Cloud puts these under
+      // entry.changes[].value.statuses[] (each item carries the wamid we
+      // persisted as MarketingMessage.externalId at send time).
       try {
         await dispatchMetaStatuses(entry)
       } catch (err) {

@@ -1,6 +1,16 @@
 <template>
   <div class="container rider-orders-page" style="padding-top: calc(var(--rider-header-height, 56px) + 12px)">
     <RiderHeader :gps-status="gpsStatus" />
+
+    <div v-if="showWebTrackingWarning" class="alert alert-warning d-flex align-items-start gap-2 py-2 mb-3" role="alert">
+      <i class="bi bi-phone fs-5 mt-1"></i>
+      <div class="flex-grow-1 small">
+        <strong>Você está usando o navegador.</strong>
+        O rastreamento em tempo real pode parar quando a tela apaga. Baixe o app do entregador para o cliente acompanhar sua entrega corretamente.
+      </div>
+      <button class="btn-close btn-sm" aria-label="Fechar" @click="dismissWebWarning"></button>
+    </div>
+
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4>Meus Pedidos</h4>
       <div class="d-flex align-items-center gap-2">
@@ -165,7 +175,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import RiderHeader from '../components/rider/RiderHeader.vue'
 import BottomSheet from '../components/rider/BottomSheet.vue'
 import SkeletonCard from '../components/rider/SkeletonCard.vue'
@@ -177,6 +187,7 @@ import { SOCKET_URL } from '@/config'
 import { normalizeOrderItems } from '../utils/orderUtils.js'
 import Swal from 'sweetalert2'
 import { isNativeApp, startNativeTracking, stopNativeTracking } from '../utils/nativeTracking.js'
+import { isIgnoringBatteryOptimizations, requestIgnoreBatteryOptimizations, openAppSettings } from '../utils/batteryOptimization.js'
 
 const orders = ref([])
 const loading = ref(false)
@@ -202,6 +213,15 @@ const ifoodChatSending = ref({})
 const trackingEnabled = ref(false)
 const activeOrderForTracking = ref(null)
 const gpsStatus = ref('') // 'ok', 'sending', 'error', 'stale'
+
+const webWarningDismissed = ref(localStorage.getItem('webTrackingWarningDismissedAt') === new Date().toDateString())
+const showWebTrackingWarning = computed(() =>
+  !isNativeApp() && trackingEnabled.value && !webWarningDismissed.value
+)
+function dismissWebWarning() {
+  webWarningDismissed.value = true
+  try { localStorage.setItem('webTrackingWarningDismissedAt', new Date().toDateString()) } catch (e) {}
+}
 const gpsLastUpdate = ref(null)
 let watchId = null
 let trackingIntervalId = null
@@ -895,12 +915,74 @@ function stopAutoRefresh() {
   if (autoRefreshId) { clearInterval(autoRefreshId); autoRefreshId = null }
 }
 
+// Heartbeat: lightweight liveness signal, independent of GPS.
+// Lets admin/customer map distinguish "rider stationary" (heartbeat fresh,
+// position stale) from "app dead" (heartbeat stale).
+let heartbeatId = null
+function sendHeartbeat() {
+  if (!trackingEnabled.value) return
+  const appType = isNativeApp() ? 'native' : 'web'
+  api.post('/riders/me/heartbeat', { appType }).catch(() => {})
+}
+function startHeartbeat() {
+  if (heartbeatId) return
+  sendHeartbeat()
+  heartbeatId = setInterval(() => { sendHeartbeat() }, 30000)
+}
+function stopHeartbeat() {
+  if (heartbeatId) { clearInterval(heartbeatId); heartbeatId = null }
+}
+
+async function ensureBatteryWhitelist() {
+  if (!isNativeApp()) return
+  try {
+    const ignoring = await isIgnoringBatteryOptimizations()
+    if (ignoring) return
+
+    const lastPrompt = Number(localStorage.getItem('batteryOptPromptAt') || 0)
+    const cooldownMs = 24 * 60 * 60 * 1000
+    if (lastPrompt && Date.now() - lastPrompt < cooldownMs) return
+    localStorage.setItem('batteryOptPromptAt', String(Date.now()))
+
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'Permita rastreamento contínuo',
+      html:
+        '<div style="text-align:left">Para o cliente acompanhar sua entrega em tempo real, o Android precisa <strong>não desligar</strong> o GPS quando o app fica em segundo plano.<br><br>' +
+        'Toque em <strong>Permitir</strong> e selecione <strong>"Permitir"</strong> na tela do sistema.</div>',
+      showCancelButton: true,
+      confirmButtonText: 'Permitir',
+      cancelButtonText: 'Agora não',
+      reverseButtons: true,
+    })
+    if (result.isConfirmed) {
+      await requestIgnoreBatteryOptimizations()
+      setTimeout(async () => {
+        const ok = await isIgnoringBatteryOptimizations()
+        if (!ok) {
+          const retry = await Swal.fire({
+            icon: 'info',
+            title: 'Não foi liberado',
+            text: 'Abra as configurações do app e libere manualmente em "Bateria".',
+            showCancelButton: true,
+            confirmButtonText: 'Abrir configurações',
+            cancelButtonText: 'Depois',
+          })
+          if (retry.isConfirmed) await openAppSettings()
+        }
+      }, 1500)
+    }
+  } catch (e) { /* non-blocking */ }
+}
+
 onMounted(async () => {
   await checkTrackingStatus()
   // Start GPS tracking immediately if enabled (don't wait for orders)
   if (trackingEnabled.value && navigator.geolocation) {
     startTracking(null)
   }
+  if (trackingEnabled.value) ensureBatteryWhitelist()
+  if (trackingEnabled.value) startHeartbeat()
   load()
   ensureSocket()
   startAutoRefresh()
@@ -910,6 +992,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   stopAutoRefresh()
+  stopHeartbeat()
   stopTracking()
   try { socket && socket.disconnect() } catch (e) {}
   try { window.removeEventListener('open-rider-scanner', externalOpenScannerHandler) } catch (e) {}

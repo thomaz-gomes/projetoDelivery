@@ -90,7 +90,26 @@
       <!-- Time + status -->
       <div class="d-flex align-items-center justify-content-end gap-1 mt-1">
         <small class="text-muted" style="font-size: 0.7rem;">{{ formattedTime }}</small>
-        <i v-if="isOutbound" class="bi" :class="statusIcon" style="font-size: 0.7rem;"></i>
+        <i
+          v-if="isOutbound"
+          class="bi"
+          :class="statusIcon"
+          :title="statusTitle"
+          style="font-size: 0.7rem;"
+        ></i>
+      </div>
+
+      <!-- Failure reason banner (Meta WA failed delivery, etc.) -->
+      <div
+        v-if="isOutbound && message.status === 'FAILED'"
+        class="d-flex align-items-start gap-1 mt-1 small text-danger"
+        style="font-size: 0.72rem; line-height: 1.15;"
+      >
+        <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+        <span>
+          <strong>Não entregue.</strong>
+          <template v-if="message.failureReason"> {{ message.failureReason }}</template>
+        </span>
       </div>
 
       <!-- Hover actions -->
@@ -190,6 +209,18 @@ const statusIcon = computed(() => {
   if (s === 'READ') return 'bi-check-all text-primary';
   if (s === 'FAILED') return 'bi-exclamation-circle text-danger';
   return 'bi-clock text-muted';
+});
+
+const statusTitle = computed(() => {
+  const s = props.message.status;
+  if (s === 'PENDING') return 'Aguardando envio';
+  if (s === 'SENT') return 'Enviada';
+  if (s === 'DELIVERED') return 'Entregue';
+  if (s === 'READ') return 'Lida';
+  if (s === 'FAILED') return props.message.failureReason
+    ? `Falha: ${props.message.failureReason}`
+    : 'Falha ao enviar';
+  return '';
 });
 
 async function copyText() {

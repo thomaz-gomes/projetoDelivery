@@ -32,6 +32,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(BatteryOptimizationPlugin.class);
         super.onCreate(savedInstanceState);
 
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
