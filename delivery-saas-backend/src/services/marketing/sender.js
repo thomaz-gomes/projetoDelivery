@@ -12,6 +12,7 @@
 
 import { prisma } from '../../prisma.js'
 import { pickConnectedChannel } from '../whatsapp/pickChannel.js'
+import { renderTemplate } from './templateRenderer.js'
 
 const MAX_ATTEMPTS = 3
 const META_THROTTLE_BACKOFF_MS = 2_000
@@ -205,7 +206,7 @@ async function resolveChannelForSend(message) {
 }
 
 function renderMessage(message) {
-  // V1 simple rendering. Cloud template variable substitution comes in Task 1.12.
+  // Evolution free text (with simple placeholders)
   const firstName = (message.customer.fullName || '').split(/\s+/)[0] || ''
   let text = message.campaign.freeText || ''
   text = text
@@ -213,13 +214,16 @@ function renderMessage(message) {
     .replace(/\{cliente\}/g, message.customer.fullName || '')
     .replace(/\{cupom\}/g, message.campaign.coupon?.code || '')
 
-  // Cloud template (rendering in Task 1.12; for now pass the bare name with empty components)
+  // Cloud template
   let template = null
-  if (message.campaign.template) {
+  if (message.campaign.template && message.campaign.templateVariableMap) {
+    template = renderTemplate(message, message.campaign.template, message.campaign.templateVariableMap)
+  } else if (message.campaign.template) {
+    // Template selected but no variable mapping — render with empty components
     template = {
       name: message.campaign.template.name,
       languageCode: message.campaign.template.language || 'pt_BR',
-      components: [], // populated by templateRenderer in Task 1.12
+      components: [],
     }
   }
 
