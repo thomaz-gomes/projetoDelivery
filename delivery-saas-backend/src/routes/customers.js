@@ -295,7 +295,7 @@ customersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
 customersRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId;
   const { id } = req.params;
-  const { fullName, cpf, whatsapp, phone } = req.body || {};
+  const { fullName, cpf, whatsapp, phone, optInMarketing, optInMarketingSource } = req.body || {};
 
   // Multi-tenant guard: ensure the target customer belongs to this company.
   const existing = await prisma.customer.findFirst({ where: { id, companyId }, select: { id: true } });
@@ -306,6 +306,20 @@ customersRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
   if (cpf !== undefined) patch.cpf = cpf ? cpf.replace(/\D+/g, '') : null;
   if (whatsapp !== undefined) patch.whatsapp = whatsapp ? normalizePhone(whatsapp) : null;
   if (phone !== undefined) patch.phone = phone ? normalizePhone(phone) : null;
+
+  // Manual marketing opt-in/out toggle (CustomerProfile.vue). Stamps source
+  // and timestamp on opt-in; clears opt-in + records opt-out timestamp on
+  // opt-out so attribution/exclusion logic can see when the customer
+  // withdrew consent.
+  if (optInMarketing === true) {
+    patch.optInMarketing = true;
+    patch.optInMarketingAt = new Date();
+    patch.optInMarketingSource = optInMarketingSource || 'manual';
+    patch.optOutMarketingAt = null;
+  } else if (optInMarketing === false) {
+    patch.optInMarketing = false;
+    patch.optOutMarketingAt = new Date();
+  }
 
   // Pre-check unique fields (companyId+whatsapp, companyId+cpf) so we can
   // return a useful 409 with the conflicting customer id — instead of
