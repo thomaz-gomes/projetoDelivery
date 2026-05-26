@@ -191,6 +191,30 @@ async function processSendJob(job) {
 
 async function resolveChannelForSend(message) {
   const campaign = message.campaign
+
+  // Explicit channel pin takes precedence over the type-only `channel`
+  // field. The campaign create/patch routes set BOTH (channel +
+  // pin) atomically, so reading either is consistent — but the pin is
+  // the authoritative selector when present.
+  if (campaign.metaWaAccountId) {
+    const acc = await prisma.metaMessagingAccount.findUnique({
+      where: { id: campaign.metaWaAccountId },
+    })
+    if (acc && acc.status === 'ACTIVE') {
+      return { type: 'META_WA', account: acc, accountId: acc.id }
+    }
+    return null  // pinned account no longer active — fail loud, no fallback
+  }
+  if (campaign.evolutionInstanceName) {
+    const inst = await prisma.whatsAppInstance.findUnique({
+      where: { instanceName: campaign.evolutionInstanceName },
+    })
+    if (inst && inst.status === 'CONNECTED') {
+      return { type: 'EVOLUTION_WA', instanceName: inst.instanceName }
+    }
+    return null  // pinned instance disconnected — fail loud
+  }
+
   // AUTO: mirror customer's last conversation
   if (campaign.channel === 'AUTO') {
     return pickConnectedChannel({

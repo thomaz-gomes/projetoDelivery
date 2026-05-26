@@ -376,6 +376,7 @@ model WhatsAppInstance {
   stores       Store[]
   // menus assigned to this WhatsApp instance (preferred: link via menu/cardápio)
   menus        Menu[]   @relation("MenuWhatsAppInstance")
+  marketingCampaigns MarketingCampaign[] @relation("MarketingCampaignEvo")
 }
 
 // Polymorphic Meta-provided messaging account: WhatsApp Cloud API,
@@ -398,11 +399,12 @@ model MetaMessagingAccount {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
-  company       Company        @relation(fields: [companyId], references: [id])
-  menusAsMetaWa Menu[]         @relation("MenuMetaWa")
-  menusAsFb     Menu[]         @relation("MenuFb")
-  menusAsIg     Menu[]         @relation("MenuIg")
-  templates     MetaTemplate[]
+  company             Company             @relation(fields: [companyId], references: [id])
+  menusAsMetaWa       Menu[]              @relation("MenuMetaWa")
+  menusAsFb           Menu[]              @relation("MenuFb")
+  menusAsIg           Menu[]              @relation("MenuIg")
+  templates           MetaTemplate[]
+  marketingCampaigns  MarketingCampaign[] @relation("MarketingCampaignMetaWa")
 
   @@unique([companyId, provider, externalId])
   @@index([companyId])
@@ -3044,6 +3046,14 @@ model MarketingCampaign {
   triggerType           String?
   triggerParams         Json?
   channel               MarketingChannel          @default(AUTO)
+  // When the operator pins a specific WhatsApp channel, the underlying
+  // account / instance row is referenced here. Sender uses these to
+  // dispatch without falling back to "any active company channel".
+  // Exactly one of these is set (or neither, for AUTO channel mode).
+  metaWaAccountId       String?
+  metaWaAccount         MetaMessagingAccount?     @relation("MarketingCampaignMetaWa", fields: [metaWaAccountId], references: [id], onDelete: SetNull)
+  evolutionInstanceName String?
+  evolutionInstance     WhatsAppInstance?         @relation("MarketingCampaignEvo", fields: [evolutionInstanceName], references: [instanceName], onDelete: SetNull)
   templateId            String?
   template              MetaTemplate?             @relation(fields: [templateId], references: [id])
   freeText              String?

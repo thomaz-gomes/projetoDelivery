@@ -10,7 +10,12 @@ const step = ref(1)
 const form = ref({
   name: '',
   segmentId: '',
-  channel: 'META_WA',
+  // channelKey is the operator-facing "which WhatsApp" picker. Format:
+  //   "meta:<accountId>" → Cloud API number
+  //   "evo:<instanceName>" → Evolution instance
+  //   "" → AUTO (mirror customer's last conversation)
+  // We derive channel/metaWaAccountId/evolutionInstanceName from this on save.
+  channelKey: '',
   templateId: '',
   freeText: '',
   scheduleType: 'ONE_SHOT',
@@ -21,6 +26,7 @@ const form = ref({
 
 const segments = ref([])
 const audienceCount = ref(null)
+const channels = ref([])           // [{ key, type, label, status, official, ... }]
 const approvedTemplates = ref([])
 const previewText = ref('')
 const previewSeen = ref(false)
@@ -30,6 +36,18 @@ const activating = ref(false)
 const campaignId = ref(null)
 
 const selectedSegment = computed(() => segments.value.find(s => s.id === form.value.segmentId))
+const selectedChannel = computed(() => channels.value.find(c => c.key === form.value.channelKey))
+const channelType = computed(() => selectedChannel.value?.type || 'AUTO')
+const isOfficial = computed(() => selectedChannel.value?.official ?? true)
+
+// Templates filtered to the chosen Meta account (each template belongs to
+// exactly one account — listing all approved would let the operator pick
+// a template that won't render through the chosen number).
+const templatesForChannel = computed(() => {
+  if (channelType.value !== 'META_WA' || !selectedChannel.value?.metaWaAccountId) return []
+  return approvedTemplates.value.filter(t => t.metaWaAccountId === selectedChannel.value.metaWaAccountId)
+})
+
 const needsAudienceConfirm = computed(() => preflight.value.issues.some(i => i.code === 'large_audience'))
 const canActivate = computed(() => {
   if (preflight.value.issues.some(i => i.severity === 'error')) return false
@@ -39,11 +57,13 @@ const canActivate = computed(() => {
 
 onMounted(async () => {
   try {
-    const [segs, tpls] = await Promise.all([
+    const [segs, chans, tpls] = await Promise.all([
       api.get('/marketing/segments'),
+      api.get('/marketing/campaigns/channels').catch(() => ({ data: [] })),
       api.get('/meta/templates').catch(() => ({ data: [] })),
     ])
     segments.value = segs.data
+    channels.value = chans.data
     approvedTemplates.value = (tpls.data || []).filter(t => t.status === 'APPROVED')
   } catch (e) {
     Swal.fire({ icon: 'error', text: 'Falha ao carregar dados iniciais' })
@@ -73,8 +93,8 @@ async function loadPreviewSample() {
       const cust = data.sample[0]
       const firstName = (cust.fullName || '').split(' ')[0] || 'Cliente'
       let txt = form.value.freeText || ''
-      // Cloud preview: just show "Template: <name>" since template variables resolve server-side
-      if (form.value.channel === 'META_WA' || (form.value.channel === 'AUTO' && form.value.templateId)) {
+      // Cloud preview: just show "Template: <name>" — variables resolve server-side
+      if (channelType.value === 'META_WA' || (channelType.value === 'AUTO' && form.value.templateId)) {
         const tpl = approvedTemplates.value.find(t => t.id === form.value.templateId)
         txt = tpl ? `[Template Cloud: ${tpl.name}]\n(O cliente verá o template com variáveis substituídas)` : '(sem template selecionado)'
       } else {
@@ -92,14 +112,24 @@ async function loadPreviewSample() {
   }
 }
 
+function buildChannelPayload() {
+  const ch = selectedChannel.value
+  if (!ch) return { channel: 'AUTO', metaWaAccountId: null, evolutionInstanceName: null }
+  return {
+    channel: ch.type,
+    metaWaAccountId: ch.metaWaAccountId || null,
+    evolutionInstanceName: ch.evolutionInstanceName || null,
+  }
+}
+
 async function persistDraft() {
-  // First time creating: POST. Else PATCH.
+  const chPart = buildChannelPayload()
   const payload = {
     name: form.value.name || `Campanha ${new Date().toLocaleDateString('pt-BR')}`,
     segmentId: form.value.segmentId,
     scheduleType: form.value.scheduleType,
     scheduledFor: form.value.scheduledFor ? new Date(form.value.scheduledFor).toISOString() : null,
-    channel: form.value.channel,
+    ...chPart,
     templateId: form.value.templateId || null,
     freeText: form.value.freeText || null,
     conversionWindowHours: Number(form.value.conversionWindowHours) || 48,
@@ -182,40 +212,69 @@ async function activate() {
         <h5>Mensagem</h5>
 
         <div class="mb-3">
-          <label class="form-label">Canal</label>
-          <div class="form-check">
-            <input id="ch_meta" v-model="form.channel" type="radio" value="META_WA" class="form-check-input"/>
-            <label for="ch_meta" class="form-check-label">Cloud API (oficial, recomendado)</label>
-          </div>
-          <div class="form-check">
-            <input id="ch_evo" v-model="form.channel" type="radio" value="EVOLUTION_WA" class="form-check-input"/>
-            <label for="ch_evo" class="form-check-label">Evolution (não-oficial, risco de banimento)</label>
-          </div>
-          <div class="form-check">
-            <input id="ch_auto" v-model="form.channel" type="radio" value="AUTO" class="form-check-input"/>
-            <label for="ch_auto" class="form-check-label">Automático (espelha último canal usado)</label>
-          </div>
-        </div>
-
-        <div v-if="form.channel === 'META_WA' || form.channel === 'AUTO'" class="mb-3">
-          <label class="form-label">Template aprovado</label>
-          <select v-model="form.templateId" class="form-select">
-            <option value="">Selecione um template...</option>
-            <option v-for="t in approvedTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+          <label class="form-label">Qual WhatsApp vai enviar</label>
+          <select v-model="form.channelKey" class="form-select">
+            <option value="">Automático (espelha último canal usado pelo cliente)</option>
+            <optgroup v-if="channels.filter(c => c.type === 'META_WA').length" label="WhatsApp Cloud API (oficial)">
+              <option v-for="c in channels.filter(ch => ch.type === 'META_WA')" :key="c.key" :value="c.key">
+                {{ c.label }}{{ c.status !== 'ACTIVE' ? ' — ' + c.status : '' }}
+              </option>
+            </optgroup>
+            <optgroup v-if="channels.filter(c => c.type === 'EVOLUTION_WA').length" label="Evolution (não-oficial)">
+              <option v-for="c in channels.filter(ch => ch.type === 'EVOLUTION_WA')" :key="c.key" :value="c.key">
+                {{ c.label }}{{ c.status !== 'CONNECTED' ? ' — ' + c.status : '' }}
+              </option>
+            </optgroup>
           </select>
-          <small v-if="!approvedTemplates.length" class="form-text text-warning">
-            Nenhum template APPROVED encontrado. Crie um em Configurações → Templates WhatsApp.
+          <small v-if="!channels.length" class="form-text text-warning d-block mt-1">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            Nenhum WhatsApp conectado. Conecte um número em
+            <router-link to="/settings/whatsapp-cloud">WhatsApp Cloud API</router-link>
+            ou <router-link to="/settings/whatsapp">Evolution</router-link> antes de criar campanhas.
           </small>
         </div>
 
-        <div v-if="form.channel === 'EVOLUTION_WA'" class="mb-3">
-          <div class="alert alert-warning small">
-            <i class="bi bi-exclamation-triangle me-1"></i>
-            Evolution não é oficial para marketing. WhatsApp pode banir o número se detectar spam.
-          </div>
+        <!-- Evolution ban warning — keeps the operator honest about the risk. -->
+        <div v-if="selectedChannel && !isOfficial" class="alert alert-warning small">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          <strong>{{ selectedChannel.label }}</strong> usa Evolution (não-oficial).
+          O WhatsApp pode banir o número se detectar padrão de spam — use apenas em
+          campanhas pequenas e com mensagens personalizadas. Considere migrar para Cloud API.
+        </div>
+
+        <!-- Cloud API (META_WA pinned OR AUTO mirror): template selector -->
+        <div v-if="channelType === 'META_WA' || (channelType === 'AUTO' && !!form.templateId)" class="mb-3">
+          <label class="form-label">Template aprovado</label>
+          <select v-model="form.templateId" class="form-select">
+            <option value="">Selecione um template...</option>
+            <option
+              v-for="t in (channelType === 'META_WA' ? templatesForChannel : approvedTemplates)"
+              :key="t.id"
+              :value="t.id"
+            >{{ t.name }}</option>
+          </select>
+          <small v-if="channelType === 'META_WA' && !templatesForChannel.length" class="form-text text-warning">
+            Nenhum template APPROVED para este número. Crie um em
+            <router-link to="/settings/whatsapp-templates" target="_blank">Configurações → Templates WhatsApp</router-link>.
+          </small>
+        </div>
+
+        <!-- Evolution: free-text editor -->
+        <div v-if="channelType === 'EVOLUTION_WA'" class="mb-3">
           <label class="form-label">Texto da mensagem</label>
           <textarea v-model="form.freeText" class="form-control" rows="5" placeholder="Olá {nome}, ..."></textarea>
           <small class="form-text">Placeholders: {nome}, {cliente}, {cupom}</small>
+        </div>
+
+        <!-- AUTO mode without a pinned template: show the picker as a hint -->
+        <div v-if="channelType === 'AUTO' && !form.templateId" class="mb-3">
+          <label class="form-label">Template aprovado (opcional — usado se o canal escolhido for Cloud)</label>
+          <select v-model="form.templateId" class="form-select">
+            <option value="">Sem template (apenas Evolution)</option>
+            <option v-for="t in approvedTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+          <label class="form-label mt-2">Texto livre (usado se o canal escolhido for Evolution)</label>
+          <textarea v-model="form.freeText" class="form-control" rows="3" placeholder="Olá {nome}, ..."></textarea>
         </div>
 
         <div class="mt-3">
@@ -285,7 +344,16 @@ async function activate() {
         <div class="mb-3 small">
           <div><strong>Nome:</strong> {{ form.name }}</div>
           <div><strong>Segmento:</strong> {{ selectedSegment?.name }} ({{ preflight.eligible }} clientes)</div>
-          <div><strong>Canal:</strong> {{ form.channel }}</div>
+          <div>
+            <strong>WhatsApp:</strong>
+            <template v-if="selectedChannel">
+              {{ selectedChannel.label }}
+              <span class="badge ms-1" :class="isOfficial ? 'bg-success' : 'bg-warning text-dark'">
+                {{ isOfficial ? 'Cloud (oficial)' : 'Evolution (não-oficial)' }}
+              </span>
+            </template>
+            <template v-else>Automático</template>
+          </div>
           <div><strong>Tipo:</strong> {{ form.scheduleType }} {{ form.scheduledFor ? `• Agendada para ${form.scheduledFor}` : '• Imediato' }}</div>
           <div><strong>Janela de conversão:</strong> {{ form.conversionWindowHours }}h</div>
           <div><strong>Escopo:</strong> {{ form.attributionScope }}</div>
