@@ -19,7 +19,7 @@ async function tick() {
   try {
     await discoverWork()
     await drainSendQueue()
-    // Tick 3 (housekeeping) added in Task 1.20
+    await housekeeping()
   } catch (e) {
     console.error('[marketing-worker] tick error', e?.message || e)
   }
@@ -51,6 +51,93 @@ async function discoverWork() {
     }
   }
   // RECURRING / TRIGGER — deferred to Phase 2
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Housekeeping (Tick 3)
+//
+//   1. closeExpiredAttributionWindows — lock messages whose conversion
+//      window has elapsed so attribution stops scanning them
+//   2. finalizeCompletedRuns — when all messages of a run are terminal,
+//      mark the run finished (and the campaign COMPLETED for ONE_SHOT)
+//   3. autoPauseUnhealthyCampaigns — if a RUNNING campaign produces >5%
+//      failures/opt-outs in 24h on ≥50 sends, auto-pause it
+// ──────────────────────────────────────────────────────────────────
+
+async function housekeeping() {
+  await closeExpiredAttributionWindows()
+  await finalizeCompletedRuns()
+  await autoPauseUnhealthyCampaigns()
+}
+
+async function closeExpiredAttributionWindows() {
+  await prisma.$executeRaw`
+    UPDATE "MarketingMessage" mm
+    SET "attributionLockedAt" = NOW()
+    FROM "MarketingCampaign" mc
+    WHERE mm."campaignId" = mc.id
+      AND mm."attributionLockedAt" IS NULL
+      AND mm."sentAt" IS NOT NULL
+      AND mm."sentAt" + (mc."conversionWindowHours" || ' hours')::interval < NOW()
+  `
+}
+
+async function finalizeCompletedRuns() {
+  const runs = await prisma.marketingCampaignRun.findMany({
+    where: { finishedAt: null },
+    include: { messages: { select: { status: true } } },
+  })
+  for (const run of runs) {
+    const pending = run.messages.filter(
+      m => m.status === 'QUEUED' || m.status === 'SENDING',
+    ).length
+    if (pending === 0) {
+      const sent = run.messages.filter(m =>
+        ['SENT', 'DELIVERED', 'READ'].includes(m.status),
+      ).length
+      const failed = run.messages.filter(m => m.status === 'FAILED').length
+      await prisma.marketingCampaignRun.update({
+        where: { id: run.id },
+        data: { finishedAt: new Date(), totalSent: sent, totalFailed: failed },
+      })
+      const camp = await prisma.marketingCampaign.findUnique({
+        where: { id: run.campaignId },
+      })
+      if (camp?.scheduleType === 'ONE_SHOT' && camp.status === 'RUNNING') {
+        await prisma.marketingCampaign.update({
+          where: { id: camp.id },
+          data: { status: 'COMPLETED' },
+        })
+      }
+    }
+  }
+}
+
+async function autoPauseUnhealthyCampaigns() {
+  const running = await prisma.marketingCampaign.findMany({
+    where: { status: 'RUNNING' },
+  })
+  const dayAgo = new Date(Date.now() - 86400_000)
+  for (const c of running) {
+    const stats = await prisma.marketingMessage.groupBy({
+      by: ['status'],
+      where: { campaignId: c.id, sentAt: { gte: dayAgo } },
+      _count: { id: true },
+    })
+    const total = stats.reduce((s, r) => s + r._count.id, 0)
+    const failed = stats.find(r => r.status === 'FAILED')?._count.id || 0
+    const optedOut = stats.find(r => r.status === 'OPTED_OUT')?._count.id || 0
+    if (total >= 50 && (failed + optedOut) / total > 0.05) {
+      await prisma.marketingCampaign.update({
+        where: { id: c.id },
+        data: { status: 'PAUSED' },
+      })
+      console.warn(
+        '[marketing-worker] auto-paused', c.id,
+        'block-rate', ((failed + optedOut) / total).toFixed(2),
+      )
+    }
+  }
 }
 
 let started = false
