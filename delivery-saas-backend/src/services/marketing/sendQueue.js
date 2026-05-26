@@ -75,6 +75,22 @@ function nextValidSlot(t, tz = DEFAULT_TZ) {
  * @param {object} campaign — must include `segment` if you want to skip an extra round-trip.
  */
 export async function enqueueRun(campaign) {
+  // For ONE_SHOT campaigns, atomically claim the campaign at the top of
+  // enqueueRun by flipping SCHEDULED → RUNNING. If updateMany affects zero
+  // rows another tick already picked this up and we bail out — without this
+  // guard, two overlapping ticks (or two backend instances) would both
+  // enqueue the same ONE_SHOT and double-send.
+  if (campaign.scheduleType === 'ONE_SHOT') {
+    const claim = await prisma.marketingCampaign.updateMany({
+      where: { id: campaign.id, status: 'SCHEDULED' },
+      data: { status: 'RUNNING' },
+    })
+    if (claim.count === 0) {
+      console.log('[marketing-worker] campaign already claimed:', campaign.id)
+      return { runId: null, queued: 0 }
+    }
+  }
+
   // Load segment if not eagerly loaded
   const segment =
     campaign.segment ??
@@ -203,12 +219,8 @@ export async function enqueueRun(campaign) {
     })),
   })
 
-  if (campaign.scheduleType === 'ONE_SHOT') {
-    await prisma.marketingCampaign.update({
-      where: { id: campaign.id },
-      data: { status: 'RUNNING' },
-    })
-  }
+  // (ONE_SHOT campaigns were already flipped to RUNNING at the top of this
+  // function as part of the claim — no second update needed.)
 
   console.log(
     '[marketing-worker] enqueued run', run.id,

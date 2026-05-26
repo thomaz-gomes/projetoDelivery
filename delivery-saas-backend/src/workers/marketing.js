@@ -15,13 +15,26 @@ import { drainSendQueue } from '../services/marketing/sender.js'
 
 const TICK_INTERVAL_MS = 30_000
 
+// Guard against overlapping ticks. setInterval fires every TICK_INTERVAL_MS
+// regardless of how long the previous tick took (slow Meta calls + large
+// queue can blow past 30s), so without this flag two ticks could both see
+// the same SCHEDULED campaign and both call enqueueRun on it.
+let running = false
+
 async function tick() {
+  if (running) {
+    console.log('[marketing-worker] previous tick still running, skipping')
+    return
+  }
+  running = true
   try {
     await discoverWork()
     await drainSendQueue()
     await housekeeping()
   } catch (e) {
     console.error('[marketing-worker] tick error', e?.message || e)
+  } finally {
+    running = false
   }
 }
 
