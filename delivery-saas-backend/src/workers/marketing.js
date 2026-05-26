@@ -10,6 +10,7 @@
 // RECURRING / TRIGGER schedule types are deferred to Phase 2.
 
 import { prisma } from '../prisma.js'
+import { enqueueRun } from '../services/marketing/sendQueue.js'
 
 const TICK_INTERVAL_MS = 30_000
 
@@ -31,10 +32,21 @@ async function discoverWork() {
       scheduleType: 'ONE_SHOT',
       scheduledFor: { lte: now },
     },
+    select: { id: true, name: true },
   })
   for (const c of oneShot) {
     console.log('[marketing-worker] discovered ONE_SHOT due:', c.id, c.name)
-    // enqueueRun(c) — implemented in Task 1.10
+    const full = await prisma.marketingCampaign.findUnique({
+      where: { id: c.id },
+      include: { segment: true },
+    })
+    if (full) {
+      try {
+        await enqueueRun(full)
+      } catch (e) {
+        console.error('[marketing-worker] enqueueRun failed for', c.id, e?.message || e)
+      }
+    }
   }
   // RECURRING / TRIGGER — deferred to Phase 2
 }
