@@ -84,6 +84,27 @@ async function processSendJob(job) {
     return
   }
 
+  // Atomically claim the message: only proceed if we successfully flip
+  // QUEUED → SENDING. Without this, a worker that crashes between a
+  // successful provider call and the SENT update would let another worker
+  // re-fetch the row after lockUntil expires and the recipient would get
+  // the same message twice.
+  //
+  // V1 limitation: a worker that crashes after this transition leaves the
+  // row in SENDING with the queue lock eventually expiring. The next
+  // worker sees SENDING (not QUEUED) and skips — the message will appear
+  // "stuck" and needs human investigation (reset to QUEUED or mark FAILED).
+  // We accept this stale-row risk in exchange for at-most-once delivery.
+  const claimed = await prisma.marketingMessage.updateMany({
+    where: { id: message.id, status: 'QUEUED' },
+    data: { status: 'SENDING' },
+  })
+  if (claimed.count === 0) {
+    // Another worker already claimed the row (or status moved away from QUEUED).
+    await removeFromQueue(job.id)
+    return
+  }
+
   const rendered = renderMessage(message)
 
   try {
@@ -255,6 +276,13 @@ async function handleSendError(job, message, err) {
   if (attempts >= MAX_ATTEMPTS) {
     return failPermanent(message, job, `max attempts: ${err.message}`)
   }
+  // Reset message status back to QUEUED so the next attempt's atomic
+  // QUEUED→SENDING claim succeeds. Without this, retried jobs would be
+  // dropped by the claim check.
+  await prisma.marketingMessage.update({
+    where: { id: message.id },
+    data: { status: 'QUEUED' },
+  })
   const backoffMs = Math.min(30_000 * Math.pow(2, attempts), 10 * 60_000)
   await prisma.marketingSendQueue.update({
     where: { id: job.id },
