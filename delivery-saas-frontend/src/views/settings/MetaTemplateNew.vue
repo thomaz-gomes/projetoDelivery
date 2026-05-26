@@ -275,7 +275,7 @@ async function submit() {
                 maxlength="1024"
               ></textarea>
               <small class="form-text">
-                Até 1024 caracteres. Use {{ '{{1}}' }}, {{ '{{2}}' }}, etc. para variáveis (substituídas no envio).
+                Até 1024 caracteres. Use <code v-pre>{{1}}</code>, <code v-pre>{{2}}</code>, etc. para variáveis (substituídas no envio).
               </small>
               <small v-if="bodyVariables.length > 0" class="d-block mt-1">
                 <span v-if="variablesValid" class="text-success">
@@ -283,7 +283,7 @@ async function submit() {
                 </span>
                 <span v-else class="text-danger">
                   <i class="bi bi-exclamation-triangle me-1"></i>
-                  Variáveis devem ser sequenciais começando em {{ '{{1}}' }} (sem pular números).
+                  Variáveis devem ser sequenciais começando em <code v-pre>{{1}}</code> (sem pular números).
                 </span>
               </small>
             </div>
