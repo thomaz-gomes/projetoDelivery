@@ -21,10 +21,14 @@ const META_THROTTLE_BACKOFF_MS = 2_000
 // (e.g. "/public/uploads/media/<companyId>/<file>"). Evolution and the Meta
 // Cloud API both need an absolute http(s) URL to fetch the asset. Resolve
 // the relative path against the configured public base URL at send time.
+// BACKEND_URL is the codebase-wide convention (also used by routes/inbox.js
+// when serving media URLs to WhatsApp); the others are kept as fallbacks
+// for parity with utils.generateQrUrl.
 function resolveMediaUrl(rawUrl) {
   if (!rawUrl) return null
   if (/^https?:\/\//i.test(rawUrl)) return rawUrl
-  const base = process.env.PUBLIC_API_URL
+  const base = process.env.BACKEND_URL
+    || process.env.PUBLIC_API_URL
     || process.env.SERVER_BASE_URL
     || `http://localhost:${process.env.PORT || 3000}`
   const cleanBase = String(base).replace(/\/$/, '')
