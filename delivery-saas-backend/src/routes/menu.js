@@ -569,7 +569,7 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
   console.log('POST /menu/products called', { body, user: req.user ? { id: req.user.id, companyId: req.user.companyId, role: req.user.role } : null })
 
   try {
-  const { name, description, price = 0, specialTakeoutPrice = undefined, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, stockIngredientId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, featured = false, alwaysAvailable = true, weeklySchedule = null, isCombo = false, combo = null, sku = null } = body
+  const { name, description, price = 0, specialTakeoutPrice = undefined, promoPrice = undefined, categoryId = null, position = 0, isActive = true, image, menuId = null, technicalSheetId = null, stockIngredientId = null, cashbackPercent = undefined, dadosFiscaisId = null, highlightOnSlip = false, featured = false, alwaysAvailable = true, weeklySchedule = null, isCombo = false, combo = null, sku = null } = body
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' })
 
     if (!companyId) {
@@ -602,13 +602,18 @@ router.post('/products', requireRole('ADMIN'), async (req, res) => {
     // receipts from being printed with total 0 when the field was left blank.
     const stoNum = (specialTakeoutPrice === undefined || specialTakeoutPrice === null || specialTakeoutPrice === '') ? null : Number(specialTakeoutPrice)
     const stoFinal = (stoNum !== null && Number.isFinite(stoNum) && stoNum > 0) ? stoNum : null
+    // promoPrice persists only when it's a positive number strictly below the
+    // base price. Anything else (toggle off, blank, zero, >= base) clears it.
+    const priceNum = Number(price) || 0
+    const promoNum = (promoPrice === undefined || promoPrice === null || promoPrice === '') ? null : Number(promoPrice)
+    const promoFinal = (promoNum !== null && Number.isFinite(promoNum) && promoNum > 0 && promoNum < priceNum) ? promoNum : null
     // SKU: 8 dígitos começando em "1". Quando o operador não enviar, geramos
     // automaticamente — assim a NFC-e nunca sai com UUID feio no <cProd>.
     const skuValue = (sku && String(sku).trim()) ? String(sku).trim() : String(10000000 + Math.floor(Math.random() * 10000000))
     let created
     try {
       created = await prisma.$transaction(async (tx) => {
-        const product = await tx.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, sku: skuValue, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null, isCombo: truthyBool(isCombo) } })
+        const product = await tx.product.create({ data: { companyId, name, description, price: Number(price), specialTakeoutPrice: stoFinal, promoPrice: promoFinal, categoryId, position: Number(position), isActive: Boolean(isActive), image: null, menuId, technicalSheetId, stockIngredientId, cashbackPercent: cashbackPercent !== undefined ? Number(cashbackPercent) : null, dadosFiscaisId: dadosFiscaisId || null, highlightOnSlip: Boolean(highlightOnSlip), featured: Boolean(featured), integrationCode, sku: skuValue, alwaysAvailable: alwaysAvailable !== false, weeklySchedule: alwaysAvailable === false ? (weeklySchedule || null) : null, isCombo: truthyBool(isCombo) } })
         if (truthyBool(isCombo) && combo && Array.isArray(combo.slots)) {
           await createComboGraph(tx, product.id, companyId, combo, Number(price))
         }
@@ -683,7 +688,7 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
       return res.status(403).json({ message: 'Atendentes só podem pausar/ativar itens' })
     }
   }
-  const { name, description, price, specialTakeoutPrice, categoryId, position, isActive, image, menuId, technicalSheetId, stockIngredientId, cashbackPercent, dadosFiscaisId, highlightOnSlip, featured, alwaysAvailable, weeklySchedule, isCombo, combo, sku } = req.body || {}
+  const { name, description, price, specialTakeoutPrice, promoPrice, categoryId, position, isActive, image, menuId, technicalSheetId, stockIngredientId, cashbackPercent, dadosFiscaisId, highlightOnSlip, featured, alwaysAvailable, weeklySchedule, isCombo, combo, sku } = req.body || {}
 
   // If the incoming image is a base64 data URL, persist it to disk and replace with public URL
   let imageValue = existing.image
@@ -769,6 +774,16 @@ router.patch('/products/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res
           : (specialTakeoutPrice === null || specialTakeoutPrice === '' || !Number.isFinite(Number(specialTakeoutPrice)) || Number(specialTakeoutPrice) <= 0)
             ? null
             : Number(specialTakeoutPrice),
+        // promoPrice: toggle off / blank / zero / >= base price all clear the
+        // column. Use the new price when provided, falling back to existing.
+        promoPrice: promoPrice === undefined
+          ? existing.promoPrice
+          : (() => {
+              const n = (promoPrice === null || promoPrice === '') ? null : Number(promoPrice)
+              if (n === null || !Number.isFinite(n) || n <= 0) return null
+              const base = price !== undefined ? Number(price) : Number(existing.price)
+              return n < base ? n : null
+            })(),
         categoryId: categoryId !== undefined ? categoryId : existing.categoryId,
         position: position !== undefined ? Number(position) : existing.position,
         isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
@@ -923,6 +938,7 @@ router.post('/products/:id/duplicate', requireRole('ADMIN'), async (req, res) =>
           description: source.description,
           price: source.price,
           specialTakeoutPrice: source.specialTakeoutPrice,
+          promoPrice: source.promoPrice,
           cashbackPercent: source.cashbackPercent,
           categoryId: source.categoryId,
           menuId: source.menuId,

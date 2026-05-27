@@ -1248,6 +1248,10 @@ model Product {
   // specialTakeoutPrice is non-null. Storing as Decimal? keeps existing rows
   // untouched after migration.
   specialTakeoutPrice Decimal?
+  // Optional promotional ("sale") price. Same nullable-as-disabled convention
+  // as specialTakeoutPrice. Enforced 0 < promoPrice < price in the route
+  // handlers; the public menu renders "De {price} por {promoPrice}" when set.
+  promoPrice          Decimal?
   isActive            Boolean              @default(true)
   position            Int                  @default(0)
   cashbackPercent     Decimal?

@@ -114,6 +114,35 @@
               Aplicado em pedidos do tipo <strong>balcão / retirada</strong>.
             </div>
           </div>
+          <div v-if="!form.isCombo" class="col-md-4">
+            <label class="form-label d-block">Preço promocional</label>
+            <div class="form-check form-switch mb-2">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="prodPromoEnabled"
+                v-model="form.promoPriceEnabled"
+                role="switch"
+              />
+              <label class="form-check-label small" for="prodPromoEnabled">
+                {{ form.promoPriceEnabled ? 'Ativado' : 'Desativado' }}
+              </label>
+            </div>
+            <CurrencyInput
+              v-if="form.promoPriceEnabled"
+              v-model="form.promoPrice"
+              inputClass="form-control"
+              placeholder="0,00"
+            />
+            <div v-if="form.promoPriceEnabled" class="small text-muted mt-1">
+              <span v-if="!promoPriceValid" class="text-danger">
+                Deve ser maior que zero e menor que o preço base ({{ formatBRL(Number(form.price || 0)) }}).
+              </span>
+              <span v-else>
+                Exibido no cardápio como <strong>De {{ formatBRL(Number(form.price || 0)) }} por {{ formatBRL(Number(form.promoPrice || 0)) }}</strong>.
+              </span>
+            </div>
+          </div>
           <div v-if="cashbackEnabled" class="col-md-4">
             <label class="form-label">Cashback (%)</label>
             <input type="number" step="0.01" class="form-control" v-model.number="form.cashbackPercent" placeholder="Ex: 3.5" />
@@ -245,11 +274,11 @@
             <div class="mb-4">
               <h6 class="text-uppercase text-muted small mb-2" style="letter-spacing:0.04em;">Precificação</h6>
               <div class="row g-3">
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <CurrencyInput label="Preço do combo" labelClass="form-label" v-model="form.price" inputClass="form-control" placeholder="0,00" />
                   <small class="text-muted">Valor fixo pago pelo cliente, independente das escolhas.</small>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <label class="form-label d-block">Preço especial para o balcão</label>
                   <div class="form-check form-switch mb-2">
                     <input
@@ -271,6 +300,35 @@
                   />
                   <div v-if="form.specialTakeoutPriceEnabled" class="small text-muted mt-1">
                     Aplicado em pedidos do tipo <strong>balcão / retirada</strong>.
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label d-block">Preço promocional</label>
+                  <div class="form-check form-switch mb-2">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="comboPromoEnabled"
+                      v-model="form.promoPriceEnabled"
+                      role="switch"
+                    />
+                    <label class="form-check-label small" for="comboPromoEnabled">
+                      {{ form.promoPriceEnabled ? 'Ativado' : 'Desativado' }}
+                    </label>
+                  </div>
+                  <CurrencyInput
+                    v-if="form.promoPriceEnabled"
+                    v-model="form.promoPrice"
+                    inputClass="form-control"
+                    placeholder="0,00"
+                  />
+                  <div v-if="form.promoPriceEnabled" class="small text-muted mt-1">
+                    <span v-if="!promoPriceValid" class="text-danger">
+                      Deve ser maior que zero e menor que o preço base ({{ formatBRL(Number(form.price || 0)) }}).
+                    </span>
+                    <span v-else>
+                      Exibido como <strong>De {{ formatBRL(Number(form.price || 0)) }} por {{ formatBRL(Number(form.promoPrice || 0)) }}</strong>.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -344,7 +402,14 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, specialTakeoutPriceEnabled: false, specialTakeoutPrice: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, sku: '', marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [], isCombo: false, combo: { slots: [] } })
+const form = ref({ id: null, name: '', description: '', price: 0, specialTakeoutPriceEnabled: false, specialTakeoutPrice: 0, promoPriceEnabled: false, promoPrice: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, sku: '', marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [], isCombo: false, combo: { slots: [] } })
+
+const formatBRL = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n) || 0)
+const promoPriceValid = computed(() => {
+  const promo = Number(form.value.promoPrice || 0)
+  const base = Number(form.value.price || 0)
+  return promo > 0 && promo < base
+})
 const activeTab = ref('general')
 // In edit mode the type is already known; in create mode it's confirmed via the modal.
 const typeConfirmed = ref(isEdit)
@@ -415,6 +480,7 @@ async function load(){
       const p = all.find(x=>x.id===id)
       if(p){
         const stp = p.specialTakeoutPrice !== undefined && p.specialTakeoutPrice !== null ? Number(p.specialTakeoutPrice) : null
+        const pp = p.promoPrice !== undefined && p.promoPrice !== null ? Number(p.promoPrice) : null
         form.value = {
           ...p,
           optionGroupIds: [],
@@ -428,6 +494,8 @@ async function load(){
           // price is persisted. Toggling off in the UI sends specialTakeoutPrice=null.
           specialTakeoutPriceEnabled: stp !== null,
           specialTakeoutPrice: stp !== null ? stp : 0,
+          promoPriceEnabled: pp !== null,
+          promoPrice: pp !== null ? pp : 0,
           isCombo: !!p.isCombo,
           combo: p.combo && Array.isArray(p.combo.slots)
             ? {
@@ -539,6 +607,10 @@ async function save(){
   saving.value = true
   try{
     if(!form.value.name) { error.value = 'Nome é obrigatório'; return }
+    if(form.value.promoPriceEnabled && !promoPriceValid.value){
+      error.value = 'Preço promocional deve ser maior que zero e menor que o preço base.'
+      return
+    }
     if(form.value.isCombo){
       const comboErr = validateCombo()
       if(comboErr){ error.value = comboErr; return }
@@ -551,6 +623,7 @@ async function save(){
       if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
       // Switch off ⇒ explicit null clears the special price; switch on ⇒ send the value.
       payload.specialTakeoutPrice = form.value.specialTakeoutPriceEnabled ? Number(form.value.specialTakeoutPrice || 0) : null
+      payload.promoPrice = form.value.promoPriceEnabled ? Number(form.value.promoPrice || 0) : null
       await api.patch(`/menu/products/${id}`, payload)
       // sync groups
       try{ await api.post(`/menu/products/${id}/option-groups`, { groupIds: form.value.optionGroupIds || [] }) }catch(e){ console.warn('Failed to sync groups', e) }
@@ -572,6 +645,7 @@ async function save(){
   if(form.value.marketplace) payload.marketplace = form.value.marketplace
   if(typeof form.value.cashbackPercent !== 'undefined') payload.cashbackPercent = form.value.cashbackPercent === '' ? null : form.value.cashbackPercent
   if(form.value.specialTakeoutPriceEnabled) payload.specialTakeoutPrice = Number(form.value.specialTakeoutPrice || 0)
+  if(form.value.promoPriceEnabled) payload.promoPrice = Number(form.value.promoPrice || 0)
       const res = await api.post('/menu/products', payload)
       const newId = res.data.id
       // attach groups
