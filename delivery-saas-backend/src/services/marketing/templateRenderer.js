@@ -14,6 +14,19 @@
  */
 export function renderTemplate(message, template, variableMap) {
   const components = []
+
+  // IMAGE header: if the template's HEADER component has format=IMAGE and
+  // the campaign has a mediaUrl set, pass it as the header parameter.
+  // Without the header component in the send payload, Meta rejects the
+  // send because the template was created with a header.
+  const headerComp = (template.components || []).find(c => String(c.type).toUpperCase() === 'HEADER')
+  if (headerComp && String(headerComp.format || '').toUpperCase() === 'IMAGE' && message.campaign?.mediaUrl) {
+    components.push({
+      type: 'header',
+      parameters: [{ type: 'image', image: { link: message.campaign.mediaUrl } }],
+    })
+  }
+
   const bodyVars = Object.keys(variableMap || {})
     .filter(k => /^\d+$/.test(k))
     .sort((a, b) => Number(a) - Number(b))

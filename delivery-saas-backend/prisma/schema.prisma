@@ -3067,6 +3067,11 @@ model MarketingCampaign {
   template              MetaTemplate?             @relation(fields: [templateId], references: [id])
   freeText              String?
   templateVariableMap   Json?
+  // Public URL of an image to attach to every send of this campaign.
+  // Cloud API uses it as the IMAGE header parameter (only works if the
+  // selected template has a HEADER of format IMAGE). Evolution switches
+  // the send to /message/sendMedia with `freeText` as caption.
+  mediaUrl              String?
   conversionWindowHours Int                       @default(48)
   conversionStatuses    String[]                  @default(["EM_PREPARO", "PRONTO", "SAIU_PARA_ENTREGA", "CONFIRMACAO_PAGAMENTO", "CONCLUIDO"])
   attributionScope      MarketingAttributionScope @default(menu)
