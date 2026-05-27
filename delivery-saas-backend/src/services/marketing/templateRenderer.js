@@ -3,10 +3,13 @@
 // Meta Cloud API requires absolute http(s) URLs for header image links.
 // Campaigns persist the local upload path (e.g. "/public/uploads/...") so
 // we resolve it against the configured public base URL at render time.
+// BACKEND_URL is the codebase-wide convention (routes/inbox.js uses it);
+// PUBLIC_API_URL / SERVER_BASE_URL kept for parity with utils.generateQrUrl.
 function resolveMediaUrl(rawUrl) {
   if (!rawUrl) return null
   if (/^https?:\/\//i.test(rawUrl)) return rawUrl
-  const base = process.env.PUBLIC_API_URL
+  const base = process.env.BACKEND_URL
+    || process.env.PUBLIC_API_URL
     || process.env.SERVER_BASE_URL
     || `http://localhost:${process.env.PORT || 3000}`
   const cleanBase = String(base).replace(/\/$/, '')
