@@ -206,7 +206,13 @@
             <div class="featured-card-body">
               <div class="featured-card-name">{{ p.name }}</div>
               <div class="featured-card-footer">
-                <strong class="featured-card-price">{{ formatCurrency(effectiveProductPrice(p)) }}</strong>
+                <strong class="featured-card-price">
+                  <template v-if="isOnPromo(p)">
+                    <span class="price-old">{{ formatCurrency(Number(p.price || 0)) }}</span>
+                    <span class="price-new">{{ formatCurrency(effectiveProductPrice(p)) }}</span>
+                  </template>
+                  <template v-else>{{ formatCurrency(effectiveProductPrice(p)) }}</template>
+                </strong>
                 <button v-if="!isCatalogMode" class="featured-card-add" @click.stop="openProductModal(p)" aria-label="Adicionar">
                   <i class="bi bi-plus"></i>
                 </button>
@@ -264,6 +270,10 @@
                         </div>
                         <strong class="product-price">
                           <span v-if="getStartingPrice(p) > effectiveProductPrice(p)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
+                          <template v-else-if="isOnPromo(p)">
+                            <span class="price-old">{{ formatCurrency(Number(p.price || 0)) }}</span>
+                            <span class="price-new">{{ formatCurrency(effectiveProductPrice(p)) }}</span>
+                          </template>
                           <span v-else>{{ formatCurrency(effectiveProductPrice(p)) }}</span>
                         </strong>
                       </div>
@@ -391,7 +401,13 @@
                 <h5 class="modal-product-name">{{ selectedProduct?.name }}</h5>
                 <div class="modal-product-desc">{{ selectedProduct?.description }}</div>
                 <div class="d-flex align-items-center gap-3 mt-2">
-                  <strong class="modal-product-price">{{ formatCurrency(effectiveProductPrice(selectedProduct)) }}</strong>
+                  <strong class="modal-product-price">
+                    <template v-if="isOnPromo(selectedProduct)">
+                      <span class="price-old">{{ formatCurrency(Number(selectedProduct.price || 0)) }}</span>
+                      <span class="price-new">{{ formatCurrency(effectiveProductPrice(selectedProduct)) }}</span>
+                    </template>
+                    <template v-else>{{ formatCurrency(effectiveProductPrice(selectedProduct)) }}</template>
+                  </strong>
                   <div v-if="getProductCashbackPercent(selectedProduct) > 0" class="cashback-pill">
                     <span class="cashback-coin">$</span>
                     <span>{{ getProductCashbackPercent(selectedProduct) }}% cashback · {{ formatCurrency(effectiveProductPrice(selectedProduct) * getProductCashbackPercent(selectedProduct) / 100) }}</span>
@@ -2869,7 +2885,21 @@ function effectiveProductPrice(p) {
     // Only positive special prices override the regular price.
     if (Number.isFinite(sto) && sto > 0) return sto
   }
-  return Number(p.price || 0)
+  const base = Number(p.price || 0)
+  if (p.promoPrice != null && p.promoPrice !== '') {
+    const promo = Number(p.promoPrice)
+    if (Number.isFinite(promo) && promo > 0 && promo < base) return promo
+  }
+  return base
+}
+// True when the product has a valid promo price AND that promo is the price
+// currently in effect (i.e. specialTakeoutPrice is not overriding it).
+function isOnPromo(p) {
+  if (!p || p.promoPrice == null || p.promoPrice === '') return false
+  const base = Number(p.price || 0)
+  const promo = Number(p.promoPrice)
+  if (!Number.isFinite(promo) || promo <= 0 || promo >= base) return false
+  return effectiveProductPrice(p) === promo
 }
 // Locate a product by id across all loaded categories so we can recompute
 // cart-line prices when the customer flips DELIVERY ↔ PICKUP after items
@@ -5461,6 +5491,15 @@ li.list-group-item.selected, .payment-method.selected {
 .product-desc { font-size: 12.5px; color: var(--pm-text-muted); line-height: 1.4; margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .product-price { font-size: 17px; font-weight: 800; color: var(--brand-dark, #C8102E); letter-spacing: -0.3px; line-height: 1; }
 .product-price small { font-size: 0.75rem; }
+.price-old {
+  display: inline-block;
+  font-size: 0.78em;
+  font-weight: 500;
+  color: var(--pm-muted, #888);
+  text-decoration: line-through;
+  margin-right: 6px;
+}
+.price-new { color: inherit; }
 
 .cashback-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px 4px 7px; border-radius: var(--pm-radius-pill); background: var(--pm-cashback-bg); color: var(--pm-cashback-fg); font-size: 11.5px; font-weight: 600; letter-spacing: -0.1px; border: 1px solid rgba(30,90,30,0.12); margin-bottom: 8px; }
 .cashback-coin { width: 16px; height: 16px; border-radius: 50%; background: var(--pm-cashback-pill); color: #fff; font-size: 10px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
