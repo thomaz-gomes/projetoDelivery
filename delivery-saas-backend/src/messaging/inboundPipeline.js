@@ -78,7 +78,12 @@ export async function process(msg) {
     include: {
       customer: { select: { id: true, fullName: true, whatsapp: true } },
       assignedUser: { select: { id: true, name: true } },
+      // Inbox header renders `conversation.menu?.name || conversation.store?.name`
+      // — must eager-load BOTH or the socket payload arrives with only `store`
+      // loaded, the frontend falls through to the store name, and the operator
+      // sees the wrong brand until a full conversation refresh.
       store: { select: { id: true, name: true } },
+      menu: { select: { id: true, name: true } },
     },
   })
 
