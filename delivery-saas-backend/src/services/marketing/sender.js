@@ -16,6 +16,21 @@ import { renderTemplate } from './templateRenderer.js'
 
 const MAX_ATTEMPTS = 3
 const META_THROTTLE_BACKOFF_MS = 2_000
+
+// Media in the campaign is stored as the local upload path
+// (e.g. "/public/uploads/media/<companyId>/<file>"). Evolution and the Meta
+// Cloud API both need an absolute http(s) URL to fetch the asset. Resolve
+// the relative path against the configured public base URL at send time.
+function resolveMediaUrl(rawUrl) {
+  if (!rawUrl) return null
+  if (/^https?:\/\//i.test(rawUrl)) return rawUrl
+  const base = process.env.PUBLIC_API_URL
+    || process.env.SERVER_BASE_URL
+    || `http://localhost:${process.env.PORT || 3000}`
+  const cleanBase = String(base).replace(/\/$/, '')
+  const cleanPath = String(rawUrl).startsWith('/') ? rawUrl : `/${rawUrl}`
+  return `${cleanBase}${cleanPath}`
+}
 // Permanent Meta-WA error codes (recipient not on WA, window expired, unsupported type, ...)
 const PERMANENT_META_ERROR_CODES = [131026, 131047, 131051]
 
@@ -136,7 +151,7 @@ async function processSendJob(job) {
         evoResp = await wa.evoSendImage({
           instanceName: provider.instanceName,
           to,
-          mediaUrl: message.campaign.mediaUrl,
+          mediaUrl: resolveMediaUrl(message.campaign.mediaUrl),
           caption: rendered.text || '',
         })
       } else {
