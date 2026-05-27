@@ -72,6 +72,11 @@ model Company {
   alwaysOpen           Boolean               @default(true)
   // Toggle per-company to enable/disable Evolution (WhatsApp) integration
   evolutionEnabled     Boolean               @default(false)
+  // Per-customer marketing frequency cap in a rolling 7-day window. When
+  // null, sendQueue.js falls back to the FREQ_CAP_PER_WEEK system default.
+  // Used to override the default 2 — e.g. agencies running heavy promo
+  // cycles can raise it; cautious tenants can lower it.
+  marketingFrequencyCapPerWeek Int?
   // IANA timezone string (ex: "America/Sao_Paulo"). If null, server timezone is used.
   timezone             String?
   // optional per-week schedule: array of { day: 0..6, enabled: boolean, from: "HH:MM"?, to: "HH:MM"? }

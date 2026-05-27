@@ -18,7 +18,8 @@ import { prisma } from '../../prisma.js'
 import { evaluateSegment } from './segmentEvaluator.js'
 import { hourInTz, dayKeyInTz, startOfDayInTz, DEFAULT_TZ } from '../../utils/dateTz.js'
 
-const FREQ_CAP_PER_WEEK = 2
+// Default per-customer 7-day cap when the company has no override set.
+const DEFAULT_FREQ_CAP_PER_WEEK = 2
 
 /**
  * Compute send-slot timestamps for `count` messages of a campaign.
@@ -117,9 +118,19 @@ export async function enqueueRun(campaign) {
     }
   }
 
-  // Frequency cap — max FREQ_CAP_PER_WEEK marketing messages per
-  // customer in a rolling 7-day window (counts across ALL campaigns).
+  // Frequency cap — max N marketing messages per customer in a rolling
+  // 7-day window (counts across ALL campaigns). N comes from the company's
+  // `marketingFrequencyCapPerWeek` override when set, else the system
+  // default. Capped at 0..50 in the company route, so we don't re-validate.
   if (candidates.length > 0) {
+    const companyForCap = await prisma.company.findUnique({
+      where: { id: campaign.companyId },
+      select: { marketingFrequencyCapPerWeek: true },
+    })
+    const cap = (companyForCap?.marketingFrequencyCapPerWeek != null)
+      ? companyForCap.marketingFrequencyCapPerWeek
+      : DEFAULT_FREQ_CAP_PER_WEEK
+
     const sevenDaysAgo = new Date(Date.now() - 7 * 86400_000)
     const recent = await prisma.marketingMessage.groupBy({
       by: ['customerId'],
@@ -127,7 +138,7 @@ export async function enqueueRun(campaign) {
       _count: { id: true },
     })
     const capMap = new Map(recent.map(r => [r.customerId, r._count.id]))
-    candidates = candidates.filter(id => (capMap.get(id) || 0) < FREQ_CAP_PER_WEEK)
+    candidates = candidates.filter(id => (capMap.get(id) || 0) < cap)
   }
 
   const run = await prisma.marketingCampaignRun.create({
