@@ -124,9 +124,14 @@ async function finalizeCompletedRuns() {
         where: { id: run.campaignId },
       })
       if (camp?.scheduleType === 'ONE_SHOT' && camp.status === 'RUNNING') {
+        // Distinguish "completed (some succeeded)" from "completed (everything
+        // failed)". When the run produced zero successful sends but at least
+        // one failure, mark the campaign FAILED so the UI surfaces the
+        // problem instead of showing it as a normal Concluída.
+        const finalStatus = (sent === 0 && failed > 0) ? 'FAILED' : 'COMPLETED'
         await prisma.marketingCampaign.update({
           where: { id: camp.id },
-          data: { status: 'COMPLETED' },
+          data: { status: finalStatus },
         })
       }
     }

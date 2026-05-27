@@ -21,6 +21,7 @@ const STATUS_LABELS = {
   RUNNING:   { label: 'Rodando',   class: 'bg-success' },
   PAUSED:    { label: 'Pausada',   class: 'bg-warning text-dark' },
   COMPLETED: { label: 'Concluída', class: 'bg-dark' },
+  FAILED:    { label: 'Falhou',    class: 'bg-danger' },
   CANCELLED: { label: 'Cancelada', class: 'bg-danger' },
 }
 

@@ -579,7 +579,7 @@ router.post('/:id/cancel', requireRole('ADMIN'), async (req, res) => {
   const { id } = req.params
   const c = await prisma.marketingCampaign.findFirst({ where: { id, companyId } })
   if (!c) return res.status(404).json({ message: 'Campanha não encontrada' })
-  if (['COMPLETED', 'CANCELLED'].includes(c.status)) {
+  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(c.status)) {
     return res.status(409).json({ message: `Campanha em status ${c.status} não pode ser cancelada` })
   }
   try {
