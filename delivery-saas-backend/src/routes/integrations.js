@@ -44,12 +44,53 @@ aiqfomeCallbackRouter.get('/aiqfome/callback', async (req, res) => {
 integrationsRouter.use(authMiddleware);
 integrationsRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
 
+// Include shape for returning menu links with each integration. Keeps the
+// payload light (menu id/name/storeId only) so the UI can render the
+// "cardápios vinculados" section without an extra round-trip.
+const integrationInclude = {
+  menuLinks: {
+    include: { menu: { select: { id: true, name: true, storeId: true } } },
+  },
+};
+
+// Replaces the full set of menu links for an integration.
+// `menuIds` is the authoritative list; `defaultMenuId` (if non-null) is
+// marked as the routing default. All menus must belong to the integration's
+// company. Pass `menuIds = []` to clear all links.
+async function syncIntegrationMenus(integrationId, companyId, menuIds, defaultMenuId) {
+  if (!Array.isArray(menuIds)) return;
+  const uniqueIds = [...new Set(menuIds.filter(Boolean))];
+
+  if (uniqueIds.length > 0) {
+    const owned = await prisma.menu.findMany({
+      where: { id: { in: uniqueIds }, store: { companyId } },
+      select: { id: true },
+    });
+    if (owned.length !== uniqueIds.length) {
+      const ownedSet = new Set(owned.map((m) => m.id));
+      const orphan = uniqueIds.filter((id) => !ownedSet.has(id));
+      throw new Error(`Cardápio(s) não pertencem à empresa: ${orphan.join(', ')}`);
+    }
+  }
+
+  const effectiveDefault = defaultMenuId && uniqueIds.includes(defaultMenuId) ? defaultMenuId : null;
+
+  await prisma.$transaction([
+    prisma.apiIntegrationMenu.deleteMany({ where: { integrationId } }),
+    ...uniqueIds.map((menuId) =>
+      prisma.apiIntegrationMenu.create({
+        data: { integrationId, menuId, isDefault: menuId === effectiveDefault },
+      })
+    ),
+  ]);
+}
+
 // Salvar credenciais de um provider (ex.: IFOOD)
 // Create a new integration for a provider (allow multiple per provider)
 integrationsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { provider, clientId, clientSecret, merchantId, merchantUuid, enabled, storeId, authMode } = req.body || {};
+    const { provider, clientId, clientSecret, merchantId, merchantUuid, enabled, storeId, authMode, menuIds, defaultMenuId } = req.body || {};
     console.log('[Integrations] POST /integrations payload:', { provider, clientId: !!clientId, clientSecret: !!clientSecret, merchantId, merchantUuid, enabled, storeId, authMode });
     if (!provider) return res.status(400).json({ message: 'provider é obrigatório' });
 
@@ -71,7 +112,17 @@ integrationsRouter.post('/', requireRole('ADMIN'), async (req, res) => {
       authMode: authMode || 'AUTH_CODE',
     } });
     console.log('[Integrations] created integration:', { id: created.id, merchantId: created.merchantId, merchantUuid: created.merchantUuid });
-    res.status(201).json(created);
+
+    if (Array.isArray(menuIds)) {
+      try {
+        await syncIntegrationMenus(created.id, companyId, menuIds, defaultMenuId);
+      } catch (e) {
+        return res.status(400).json({ message: e.message });
+      }
+    }
+
+    const full = await prisma.apiIntegration.findUnique({ where: { id: created.id }, include: integrationInclude });
+    res.status(201).json(full);
   } catch (e) {
     console.error('POST /integrations failed', e);
     res.status(500).json({ message: 'Erro ao criar integração', error: e.message });
@@ -92,7 +143,7 @@ integrationsRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       if (!st) return res.status(400).json({ message: 'storeId inválido ou não pertence à empresa' });
     }
     console.log('[Integrations] PUT /integrations payload:', body);
-    const updated = await prisma.apiIntegration.update({ where: { id }, data: {
+    await prisma.apiIntegration.update({ where: { id }, data: {
       clientId: body.clientId ?? existing.clientId,
       clientSecret: body.clientSecret ?? existing.clientSecret,
       merchantId: body.merchantId ?? existing.merchantId,
@@ -103,8 +154,18 @@ integrationsRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
       storeId: body.storeId ?? existing.storeId,
       authMode: body.authMode ?? existing.authMode,
     } });
-    console.log('[Integrations] updated integration:', { id: updated.id, merchantId: updated.merchantId, merchantUuid: updated.merchantUuid });
-    res.json(updated);
+
+    if (Array.isArray(body.menuIds)) {
+      try {
+        await syncIntegrationMenus(id, companyId, body.menuIds, body.defaultMenuId);
+      } catch (e) {
+        return res.status(400).json({ message: e.message });
+      }
+    }
+
+    const full = await prisma.apiIntegration.findUnique({ where: { id }, include: integrationInclude });
+    console.log('[Integrations] updated integration:', { id: full.id, merchantId: full.merchantId, merchantUuid: full.merchantUuid, menus: full.menuLinks?.length });
+    res.json(full);
   } catch (e) {
     console.error('PUT /integrations/:id failed', e);
     res.status(500).json({ message: 'Erro ao atualizar integração', error: e.message });
@@ -200,7 +261,7 @@ integrationsRouter.post('/ifood/sync-merchant-names', requireRole('ADMIN'), asyn
 integrationsRouter.get('/', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const integrations = await prisma.apiIntegration.findMany({ where: { companyId } });
+    const integrations = await prisma.apiIntegration.findMany({ where: { companyId }, include: integrationInclude });
     res.json(integrations);
   } catch (e) {
     res.status(500).json({ message: 'Erro ao listar integrações', error: e.message });
@@ -215,7 +276,7 @@ integrationsRouter.get('/by-id/:id', requireRole('ADMIN'), async (req, res) => {
     const companyId = req.user.companyId;
     // basic UUID v4-ish validation
     if (!id || !/^[0-9a-fA-F-]{36}$/.test(id)) return res.status(400).json({ message: 'id inválido' });
-    const integration = await prisma.apiIntegration.findFirst({ where: { id, companyId } });
+    const integration = await prisma.apiIntegration.findFirst({ where: { id, companyId }, include: integrationInclude });
     if (!integration) return res.status(404).json({ message: 'Integração não encontrada' });
     res.json(integration);
   } catch (e) {
@@ -229,7 +290,7 @@ integrationsRouter.get('/:provider', requireRole('ADMIN'), async (req, res) => {
   try {
     const { provider } = req.params;
     const companyId = req.user.companyId;
-    const rows = await prisma.apiIntegration.findMany({ where: { companyId, provider: provider.toUpperCase() }, orderBy: { createdAt: 'asc' } });
+    const rows = await prisma.apiIntegration.findMany({ where: { companyId, provider: provider.toUpperCase() }, orderBy: { createdAt: 'asc' }, include: integrationInclude });
     res.json(rows || []);
   } catch (e) {
     res.status(500).json({ message: 'Erro ao buscar integrações', error: e.message });

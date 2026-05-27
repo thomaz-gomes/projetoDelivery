@@ -633,6 +633,24 @@ model ApiIntegration {
   // multiple integrations of the same provider per company (multi-store setups)
   paymentMappings        IfoodPaymentMapping[]
   aiqfomePaymentMappings AiqfomePaymentMapping[] @relation("AiqfomePayments")
+  menuLinks              ApiIntegrationMenu[]
+}
+
+// Links an ApiIntegration (sales channel like iFood) to one or more Menus
+// (cardápios). The integration is the umbrella over the cardápios — when an
+// order arrives, the system uses the default-flagged link's menu (and its
+// store) to determine which loja owns the order for fiscal/printing purposes.
+model ApiIntegrationMenu {
+  id            String         @id @default(uuid())
+  integrationId String
+  integration   ApiIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  menuId        String
+  menu          Menu           @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  isDefault     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+
+  @@unique([integrationId, menuId])
+  @@index([menuId])
 }
 
 // Maps iFood payment method codes to company PaymentMethod entries.
@@ -740,6 +758,7 @@ model Menu {
   // products optionally assigned to this menu
   products       Product[]
   brandThemes    BrandVisualTheme[]
+  integrationLinks ApiIntegrationMenu[]
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   customDomain   CustomDomain?

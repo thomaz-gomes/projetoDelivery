@@ -32,9 +32,11 @@ async function resolveCompanyIdFromPayload(payload) {
   const noDashes = cand.replace(/-/g, '');
   const candidates = Array.from(new Set([cand, noDashes]));
 
-  // Try matching merchantId against both merchantId and merchantUuid fields using normalized candidates
-  // Select includes fields reused downstream (auto-populate merchantId, autoAccept check)
-  // to avoid separate queries later.
+  // Try matching merchantId against both merchantId and merchantUuid fields using normalized candidates.
+  // include menuLinks so applyMenuLinkRouting can pick the default cardápio (→ override storeId for NF emission).
+  const integInclude = {
+    menuLinks: { include: { menu: { select: { id: true, name: true, storeId: true } } } },
+  };
   const integ = await prisma.apiIntegration.findFirst({
     where: {
       provider: 'IFOOD',
@@ -43,7 +45,7 @@ async function resolveCompanyIdFromPayload(payload) {
         { merchantUuid: { in: candidates } }
       ]
     },
-    select: { id: true, companyId: true, storeId: true, merchantId: true, merchantUuid: true, merchantName: true, autoAccept: true },
+    include: integInclude,
   });
 
   if (integ) {
@@ -53,10 +55,10 @@ async function resolveCompanyIdFromPayload(payload) {
   // if not found, try fallback: if there is only one IFOOD integration in the system, assume events belong to it
   if (!integ) {
     try {
-      const all = await prisma.apiIntegration.findMany({ where: { provider: 'IFOOD' } });
+      const all = await prisma.apiIntegration.findMany({ where: { provider: 'IFOOD' }, include: integInclude });
       if (all && all.length === 1) {
         console.warn('[iFood Processor] fallback: only one IFOOD integration found; assigning companyId', all[0].companyId);
-        return { companyId: all[0].companyId || null, storeId: all[0].storeId || null, _integ: all[0] };
+        return applyMenuLinkRouting({ companyId: all[0].companyId || null, storeId: all[0].storeId || null, _integ: all[0] });
       }
     } catch (e) { /* ignore */ }
     return null;
@@ -69,11 +71,11 @@ async function resolveCompanyIdFromPayload(payload) {
       const payloadStoreName = payload?.store?.name || null;
       if (payloadStoreId) {
         const s = await prisma.store.findFirst({ where: { companyId: integ.companyId, OR: [{ id: payloadStoreId }, { slug: payloadStoreId }, { cnpj: payloadStoreId }] }, select: { id: true } });
-        if (s) return { companyId: integ.companyId || null, storeId: s.id || null, _integ: integ };
+        if (s) return applyMenuLinkRouting({ companyId: integ.companyId || null, storeId: s.id || null, _integ: integ });
       }
       if (payloadStoreName) {
         const s2 = await prisma.store.findFirst({ where: { companyId: integ.companyId, name: payloadStoreName }, select: { id: true } });
-        if (s2) return { companyId: integ.companyId || null, storeId: s2.id || null, _integ: integ };
+        if (s2) return applyMenuLinkRouting({ companyId: integ.companyId || null, storeId: s2.id || null, _integ: integ });
       }
     } catch (e) {
       console.warn('Failed to infer storeId from payload in iFood webhook processor:', e?.message || e);
@@ -89,7 +91,21 @@ async function resolveCompanyIdFromPayload(payload) {
       if (resolvedStoreId) console.log('iFood webhook processor: sem storeId na integração, usando primeira loja:', resolvedStoreId);
     } catch (e) { /* ignore */ }
   }
-  return { companyId: integ.companyId || null, storeId: resolvedStoreId, _integ: integ };
+  return applyMenuLinkRouting({ companyId: integ.companyId || null, storeId: resolvedStoreId, _integ: integ });
+}
+
+// When the integration has menuLinks (cardápios vinculados), pick the default
+// link (or the only one) and override storeId from its menu.storeId so that
+// NFe emission and per-menu features lock onto the correct loja. Also exposes
+// `menuId` to the caller so upsertOrder can skip the heuristic-based resolver.
+function applyMenuLinkRouting(result) {
+  const integ = result?._integ;
+  const links = Array.isArray(integ?.menuLinks) ? integ.menuLinks : [];
+  if (!links.length) return result;
+  const chosen = links.find(l => l.isDefault) || (links.length === 1 ? links[0] : null);
+  if (!chosen?.menu) return result;
+  console.log('[iFood Processor] routing via menuLink:', { menuId: chosen.menu.id, menuName: chosen.menu.name, storeId: chosen.menu.storeId, isDefault: chosen.isDefault });
+  return { ...result, storeId: chosen.menu.storeId, menuId: chosen.menu.id };
 }
 
 /**
@@ -298,7 +314,7 @@ export function determineStatusFromIFoodEvent(payload, orderObj) {
  */
 import { buildConcatenatedAddress, normalizeDeliveryAddressFromPayload } from './customers.js';
 
-async function upsertOrder({ companyId, mapped, storeId = null, merchantHint = null }) {
+async function upsertOrder({ companyId, mapped, storeId = null, merchantHint = null, forcedMenuId = null }) {
   const exists = mapped.externalId
     ? await prisma.order.findUnique({ where: { externalId: mapped.externalId } })
     : null;
@@ -387,12 +403,10 @@ async function upsertOrder({ companyId, mapped, storeId = null, merchantHint = n
 
     // Every order should carry a menuId so per-menu features (WhatsApp
     // routing, {{loja}} placeholder, automations) resolve correctly.
-    // iFood payloads don't include one, so derive it from the store.
-    // When the store hosts multiple menus (e.g. Almoçaí + Burguer73), pass
-    // the iFood merchant name so we don't cross-tag the order with the
-    // wrong cardápio (which would then route the customer's WhatsApp to
-    // the wrong brand's Cloud API / Evolution instance).
-    const resolvedMenuId = await resolveMenuForStore(storeId, { merchantHint });
+    // When the integration has a default cardápio linked, the resolver
+    // upstream already picked it (forcedMenuId). Otherwise fall back to
+    // the store-based heuristic.
+    const resolvedMenuId = forcedMenuId || await resolveMenuForStore(storeId, { merchantHint });
 
     const initialStatus = mapped.status || 'EM_PREPARO';
     const created = await prisma.order.create({
@@ -590,7 +604,7 @@ export async function processIFoodWebhook(eventId) {
         } catch (e) {}
         throw new Error('Não foi possível determinar companyId a partir do payload (merchantId ausente).');
       }
-      const { companyId, storeId } = resolved;
+      const { companyId, storeId, menuId: forcedMenuId } = resolved;
 
       // Reuse the integration record fetched by resolveCompanyIdFromPayload
       // (already includes id, merchantId, merchantUuid, autoAccept — no extra query needed)
@@ -807,7 +821,7 @@ export async function processIFoodWebhook(eventId) {
         || payload?.order?.merchant?.name
         || payload?.merchant?.name
         || null;
-      const res = await upsertOrder({ companyId, mapped, storeId, merchantHint });
+      const res = await upsertOrder({ companyId, mapped, storeId, merchantHint, forcedMenuId });
       const savedOrder = res && res.order ? res.order : res;
 
       // If upsertOrder skipped creation (e.g. terminal status for non-existing order), mark as processed and return

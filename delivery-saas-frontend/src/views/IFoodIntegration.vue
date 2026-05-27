@@ -10,6 +10,12 @@ const agentStatus = useAgentStatus();
 // ── All integrations ──
 const integrations = ref([]);
 const stores = ref([]);
+const menus = ref([]);
+
+// ── Menu link editor (per integration) ──
+const expandedMenusId = ref(null);
+const menuForm = ref({ menuIds: [], defaultMenuId: null });
+const savingMenus = ref(false);
 
 // ── Inline name editing ──
 const editingNameId = ref(null);
@@ -210,6 +216,52 @@ async function loadStores() {
   catch (e) { console.warn('Failed to load stores', e); }
 }
 
+async function loadMenus() {
+  try { const { data } = await api.get('/menu/menus'); menus.value = Array.isArray(data) ? data : (data?.items || []); }
+  catch (e) { console.warn('Failed to load menus', e); }
+}
+
+function openMenuPanel(integ) {
+  if (expandedMenusId.value === integ.id) { expandedMenusId.value = null; return; }
+  const links = integ.menuLinks || [];
+  menuForm.value = {
+    menuIds: links.map(l => l.menuId),
+    defaultMenuId: links.find(l => l.isDefault)?.menuId || null,
+  };
+  expandedMenusId.value = integ.id;
+}
+
+function toggleMenuSelection(menuId) {
+  const idx = menuForm.value.menuIds.indexOf(menuId);
+  if (idx === -1) {
+    menuForm.value.menuIds.push(menuId);
+    if (!menuForm.value.defaultMenuId) menuForm.value.defaultMenuId = menuId;
+  } else {
+    menuForm.value.menuIds.splice(idx, 1);
+    if (menuForm.value.defaultMenuId === menuId) {
+      menuForm.value.defaultMenuId = menuForm.value.menuIds[0] || null;
+    }
+  }
+}
+
+async function saveMenuLinks(integ) {
+  if (savingMenus.value) return;
+  savingMenus.value = true;
+  try {
+    await api.put(`/integrations/${integ.id}`, {
+      menuIds: menuForm.value.menuIds,
+      defaultMenuId: menuForm.value.defaultMenuId,
+    });
+    Swal.fire({ icon: 'success', text: 'Cardápios atualizados', toast: true, position: 'top-end', timer: 1800, showConfirmButton: false });
+    expandedMenusId.value = null;
+    await load();
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro ao salvar cardápios', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+  } finally {
+    savingMenus.value = false;
+  }
+}
+
 // ── Wizard helpers ──
 const portalUrl = computed(() => {
   if (!wizardLink.value.linkCode) return '';
@@ -377,6 +429,7 @@ async function copyToClipboard(text) {
 
 onMounted(async () => {
   await loadStores();
+  await loadMenus();
   await load();
   // Fetch agent status banner (independent — não bloquear UI)
   agentStatus.fetch();
@@ -477,6 +530,10 @@ onUnmounted(() => { clearRefreshTimers(); });
                 </div>
               </div>
               <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-info" @click="openMenuPanel(integ)" :title="'Cardápios vinculados' + (integ.menuLinks?.length ? ' (' + integ.menuLinks.length + ')' : '')">
+                  <i class="bi bi-card-list"></i>
+                  <span v-if="integ.menuLinks?.length" class="ms-1">{{ integ.menuLinks.length }}</span>
+                </button>
                 <button v-if="!isActive(integ)" class="btn btn-sm btn-outline-primary" @click="openWizardRelink(integ)">
                   <i class="bi bi-link-45deg"></i> Conectar
                 </button>
@@ -489,6 +546,50 @@ onUnmounted(() => { clearRefreshTimers(); });
                 <button class="btn btn-sm btn-outline-secondary" @click="deleteInteg(integ)" title="Remover integração">
                   <i class="bi bi-trash"></i>
                 </button>
+              </div>
+            </div>
+
+            <!-- ═══ MENU LINK EDITOR (collapsible) ═══ -->
+            <div v-if="expandedMenusId === integ.id" class="mt-3 pt-3 border-top">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold small">
+                  <i class="bi bi-card-list me-1"></i>Cardápios vinculados a este canal
+                </div>
+                <small class="text-muted">
+                  <i class="bi bi-star-fill text-warning"></i> = roteamento default
+                </small>
+              </div>
+              <div v-if="menus.length === 0" class="alert alert-light py-2 small mb-2">
+                Nenhum cardápio cadastrado. Crie um cardápio antes de vincular.
+              </div>
+              <div v-else class="d-grid gap-1 mb-3" style="max-height:240px;overflow:auto">
+                <label v-for="m in menus" :key="m.id" class="d-flex align-items-center gap-2 mb-0 small p-1 rounded" style="cursor:pointer">
+                  <input type="checkbox" :checked="menuForm.menuIds.includes(m.id)" @change="toggleMenuSelection(m.id)" class="form-check-input m-0" />
+                  <span class="flex-grow-1">{{ m.name }}</span>
+                  <button
+                    v-if="menuForm.menuIds.includes(m.id)"
+                    type="button"
+                    class="btn btn-link btn-sm p-0"
+                    :class="menuForm.defaultMenuId === m.id ? 'text-warning' : 'text-muted'"
+                    @click.prevent="menuForm.defaultMenuId = m.id"
+                    :title="menuForm.defaultMenuId === m.id ? 'Cardápio default' : 'Definir como default'"
+                  >
+                    <i :class="menuForm.defaultMenuId === m.id ? 'bi bi-star-fill' : 'bi bi-star'"></i>
+                  </button>
+                </label>
+              </div>
+              <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">
+                  <i class="bi bi-info-circle me-1"></i>
+                  Pedidos do iFood vão para a loja do cardápio default. NF será emitida nessa loja.
+                </small>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-sm btn-outline-secondary" @click="expandedMenusId = null">Cancelar</button>
+                  <button class="btn btn-sm btn-primary" @click="saveMenuLinks(integ)" :disabled="savingMenus">
+                    <span v-if="savingMenus" class="spinner-border spinner-border-sm me-1"></span>
+                    Salvar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
