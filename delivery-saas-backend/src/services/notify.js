@@ -361,14 +361,18 @@ async function pickNotificationChannel({ companyId, menuId, storeId, customerId 
   if (menuEvo) return { provider: 'EVOLUTION_WA', account: menuEvo, fallbackEvolution: null };
   if (menuMeta) return { provider: 'META_WA', account: menuMeta, fallbackEvolution: null };
 
-  // 4. Store-specific fallback (no cross-cardápio bleed).
+  // 4. Store-specific fallback — ONLY when no menuId was given (legacy
+  // orders pre-resolveMenuForStore).
   //
-  // Why: enviar pela instância de OUTRO cardápio gera duas confusões para o
-  // cliente (1) o `{{loja}}` exibe o nome da marca errada e (2) a conversa
-  // de resposta aparece no inbox do outro cardápio. Por isso só
-  // consideramos um WhatsApp vinculado à própria loja do pedido — nunca
-  // a "primeira instância CONNECTED da empresa". Sem WA na loja → não envia.
-  if (storeId) {
+  // Quando o pedido vem com cardápio explícito mas esse cardápio NÃO tem
+  // WhatsApp conectado, o operador escolheu deliberadamente "não notificar
+  // por esse cardápio" — não devemos cair na loja-pai pra mandar mesmo
+  // assim (a mensagem chegaria com `{{loja}}` do cardápio sem WA mas pelo
+  // canal da loja, confundindo o cliente e poluindo o inbox da outra
+  // marca). Sem WA no cardápio → não envia, ponto.
+  //
+  // Fallback de loja só permanece pra orders sem menuId nenhum (legado).
+  if (!menuId && storeId) {
     const store = await prisma.store.findUnique({
       where: { id: storeId },
       select: {
