@@ -40,12 +40,19 @@ async function tick() {
 
 async function discoverWork() {
   const now = new Date()
-  // ONE_SHOT campaigns SCHEDULED and due
+  // ONE_SHOT campaigns SCHEDULED and due. The UI lets the operator leave
+  // `scheduledFor` blank to mean "send immediately on activation", which
+  // persists as NULL. Prisma's `lte` filter does not match NULL, so we OR
+  // both branches explicitly — otherwise "immediate" campaigns sit in
+  // SCHEDULED forever.
   const oneShot = await prisma.marketingCampaign.findMany({
     where: {
       status: 'SCHEDULED',
       scheduleType: 'ONE_SHOT',
-      scheduledFor: { lte: now },
+      OR: [
+        { scheduledFor: null },
+        { scheduledFor: { lte: now } },
+      ],
     },
     select: { id: true, name: true },
   })
