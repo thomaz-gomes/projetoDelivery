@@ -92,6 +92,9 @@ export async function persistOutboundEcho(ev, account) {
       customer: { select: { id: true, fullName: true, whatsapp: true } },
       assignedUser: { select: { id: true, name: true } },
       store: { select: { id: true, name: true } },
+      // Inbox header falls back to store.name when menu is undefined —
+      // load both so the socket payload matches the REST GET shape.
+      menu: { select: { id: true, name: true } },
     },
   })
 
