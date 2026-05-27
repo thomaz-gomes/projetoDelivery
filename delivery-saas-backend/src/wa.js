@@ -218,6 +218,45 @@ export async function evoSendLocation({ instanceName, to, latitude, longitude, a
 }
 
 // enviar arquivo/documento (base64) - tenta endpoints conhecidos
+/**
+ * Sends an image via Evolution. Accepts either a public URL or base64
+ * payload (mutually exclusive — URL preferred when the media is already
+ * hosted by us, base64 when the caller has the bytes in memory).
+ *
+ * Mirrors evoSendDocument's retry pattern across endpoint shapes so we
+ * survive minor Evolution build differences.
+ */
+export async function evoSendImage({ instanceName, to, mediaUrl, base64, caption = '', fileName = 'image.jpg' }) {
+  const number = normalizePhone(to);
+  if (!number) throw new Error('Telefone inválido');
+  if (!mediaUrl && !base64) throw new Error('mediaUrl ou base64 obrigatório');
+
+  // Modern Evolution API expects { mediatype, media } where `media` is a URL or base64.
+  const mediaPayload = mediaUrl || base64;
+  const attempts = [
+    {
+      url: `/message/sendMedia/${encodeURIComponent(instanceName)}`,
+      body: { number, mediatype: 'image', media: mediaPayload, caption, fileName },
+      logExtra: `to=${number} via=${mediaUrl ? 'url' : 'base64'}`,
+    },
+    {
+      url: '/message/sendMedia',
+      body: { instanceName, to: number, mediatype: 'image', media: mediaPayload, caption, fileName },
+      logExtra: `to=${number}`,
+    },
+    // Legacy shape some builds expose
+    {
+      url: '/message/sendImage',
+      body: mediaUrl
+        ? { instanceName, to: number, url: mediaUrl, caption }
+        : { instanceName, to: number, base64, caption },
+      logExtra: `to=${number}`,
+    },
+  ];
+
+  return trySendWithCache('evoSendImage', instanceName, attempts);
+}
+
 export async function evoSendDocument({ instanceName, to, base64, filename = 'file.pdf', mimeType = 'application/pdf', caption = '' }) {
   const number = normalizePhone(to);
   if (!number) throw new Error('Telefone inválido');

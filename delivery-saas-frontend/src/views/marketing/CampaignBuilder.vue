@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../../api'
 import BaseButton from '../../components/BaseButton.vue'
+import MediaField from '../../components/MediaLibrary/MediaField.vue'
 import Swal from 'sweetalert2'
 
 const router = useRouter()
@@ -18,6 +19,7 @@ const form = ref({
   channelKey: '',
   templateId: '',
   freeText: '',
+  mediaUrl: null,
   scheduleType: 'ONE_SHOT',
   scheduledFor: '',
   conversionWindowHours: 48,
@@ -46,6 +48,29 @@ const isOfficial = computed(() => selectedChannel.value?.official ?? true)
 const templatesForChannel = computed(() => {
   if (channelType.value !== 'META_WA' || !selectedChannel.value?.metaWaAccountId) return []
   return approvedTemplates.value.filter(t => t.metaWaAccountId === selectedChannel.value.metaWaAccountId)
+})
+
+// Image attachment is only honored when:
+//   - Evolution channel: always (sendMedia with caption)
+//   - Cloud channel: only if the selected template has a HEADER of format=IMAGE
+//     (Meta rejects header parameters that the template wasn't built to accept)
+const selectedTemplate = computed(() => {
+  if (!form.value.templateId) return null
+  return approvedTemplates.value.find(t => t.id === form.value.templateId) || null
+})
+const templateSupportsImage = computed(() => {
+  const tpl = selectedTemplate.value
+  if (!tpl) return false
+  const header = (tpl.components || []).find(c => String(c.type).toUpperCase() === 'HEADER')
+  return header && String(header.format || '').toUpperCase() === 'IMAGE'
+})
+const canAttachImage = computed(() => {
+  if (channelType.value === 'EVOLUTION_WA') return true
+  if (channelType.value === 'META_WA') return templateSupportsImage.value
+  // AUTO: image renders only if the resolved channel happens to be Evolution
+  // OR the chosen template has IMAGE header. Show the field with a hint.
+  if (channelType.value === 'AUTO') return true
+  return false
 })
 
 const needsAudienceConfirm = computed(() => preflight.value.issues.some(i => i.code === 'large_audience'))
@@ -132,6 +157,7 @@ async function persistDraft() {
     ...chPart,
     templateId: form.value.templateId || null,
     freeText: form.value.freeText || null,
+    mediaUrl: form.value.mediaUrl || null,
     conversionWindowHours: Number(form.value.conversionWindowHours) || 48,
     attributionScope: form.value.attributionScope,
   }
@@ -275,6 +301,30 @@ async function activate() {
           </select>
           <label class="form-label mt-2">Texto livre (usado se o canal escolhido for Evolution)</label>
           <textarea v-model="form.freeText" class="form-control" rows="3" placeholder="Olá {nome}, ..."></textarea>
+        </div>
+
+        <!-- Image attachment — biblioteca de mídia / upload -->
+        <div v-if="canAttachImage" class="mb-3">
+          <MediaField
+            v-model="form.mediaUrl"
+            label="Imagem (opcional)"
+            field-id="campaign-media"
+            :crop-aspect="1.91"
+            :target-width="1600"
+            :target-height="836"
+          />
+          <small v-if="channelType === 'META_WA' && !templateSupportsImage" class="form-text text-muted d-block mt-1">
+            <i class="bi bi-info-circle me-1"></i>
+            Selecione um template com cabeçalho do tipo imagem para enviar uma imagem por Cloud API.
+          </small>
+          <small v-else-if="channelType === 'AUTO'" class="form-text text-muted d-block mt-1">
+            <i class="bi bi-info-circle me-1"></i>
+            A imagem será enviada se o canal resolvido for Evolution OU se o template Cloud escolhido tiver cabeçalho de imagem.
+          </small>
+          <small v-else-if="channelType === 'EVOLUTION_WA'" class="form-text text-muted d-block mt-1">
+            <i class="bi bi-info-circle me-1"></i>
+            O texto acima será enviado como legenda da imagem.
+          </small>
         </div>
 
         <div class="mt-3">

@@ -127,11 +127,25 @@ async function processSendJob(job) {
       }
     } else {
       const wa = await import('../../wa.js')
-      const evoResp = await wa.evoSendText({
-        instanceName: provider.instanceName,
-        to: wa.normalizePhone(message.customer.whatsapp),
-        text: rendered.text,
-      })
+      const to = wa.normalizePhone(message.customer.whatsapp)
+      // Evolution path branches by whether the campaign has a media
+      // attachment: image-with-caption uses /message/sendMedia, plain
+      // text uses /message/sendText. The freeText acts as the caption.
+      let evoResp
+      if (message.campaign.mediaUrl) {
+        evoResp = await wa.evoSendImage({
+          instanceName: provider.instanceName,
+          to,
+          mediaUrl: message.campaign.mediaUrl,
+          caption: rendered.text || '',
+        })
+      } else {
+        evoResp = await wa.evoSendText({
+          instanceName: provider.instanceName,
+          to,
+          text: rendered.text,
+        })
+      }
       // Evolution (Baileys-style) returns the WhatsApp message identifier as
       // `key.id`. webhookEvolution.handleMessagesUpdate matches incoming
       // delivered/read events by this exact field — without capturing it,

@@ -27,6 +27,7 @@ const EDITABLE_FIELDS = [
   'templateId',
   'freeText',
   'templateVariableMap',
+  'mediaUrl',
   'conversionWindowHours',
   'attributionScope',
   'segmentMenuId',
@@ -185,6 +186,7 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
     templateId,
     freeText,
     templateVariableMap,
+    mediaUrl,
     conversionWindowHours,
     attributionScope,
     segmentMenuId,
@@ -264,6 +266,7 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
         templateId: templateId || null,
         freeText: freeText || null,
         templateVariableMap: templateVariableMap ?? null,
+        mediaUrl: mediaUrl || null,
         conversionWindowHours: cwh,
         attributionScope: scope,
         segmentMenuId: segmentMenuId || null,
@@ -382,6 +385,10 @@ router.patch('/:id', requireRole('ADMIN'), async (req, res) => {
       }
       case 'templateVariableMap': {
         data.templateVariableMap = val ?? null
+        break
+      }
+      case 'mediaUrl': {
+        data.mediaUrl = val || null
         break
       }
       case 'conversionWindowHours': {
