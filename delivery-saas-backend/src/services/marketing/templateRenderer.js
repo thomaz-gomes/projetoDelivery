@@ -1,5 +1,19 @@
 // src/services/marketing/templateRenderer.js
 
+// Meta Cloud API requires absolute http(s) URLs for header image links.
+// Campaigns persist the local upload path (e.g. "/public/uploads/...") so
+// we resolve it against the configured public base URL at render time.
+function resolveMediaUrl(rawUrl) {
+  if (!rawUrl) return null
+  if (/^https?:\/\//i.test(rawUrl)) return rawUrl
+  const base = process.env.PUBLIC_API_URL
+    || process.env.SERVER_BASE_URL
+    || `http://localhost:${process.env.PORT || 3000}`
+  const cleanBase = String(base).replace(/\/$/, '')
+  const cleanPath = String(rawUrl).startsWith('/') ? rawUrl : `/${rawUrl}`
+  return `${cleanBase}${cleanPath}`
+}
+
 /**
  * Build Cloud API template components from variableMap and message context.
  *
@@ -23,7 +37,7 @@ export function renderTemplate(message, template, variableMap) {
   if (headerComp && String(headerComp.format || '').toUpperCase() === 'IMAGE' && message.campaign?.mediaUrl) {
     components.push({
       type: 'header',
-      parameters: [{ type: 'image', image: { link: message.campaign.mediaUrl } }],
+      parameters: [{ type: 'image', image: { link: resolveMediaUrl(message.campaign.mediaUrl) } }],
     })
   }
 
