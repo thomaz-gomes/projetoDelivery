@@ -14,6 +14,7 @@ export const FIELD_SPECS = {
   avgTicket:         { ops: ['>=', '>', '<=', '<', 'between'],     valueType: 'number' },
   orderedProductId:  { ops: ['in', 'notIn'],                       valueType: 'uuid_array' },
   orderedCategoryId: { ops: ['in', 'notIn'],                       valueType: 'uuid_array' },
+  orderedMenuId:     { ops: ['in', 'notIn'],                       valueType: 'uuid_array' },
   lastProductId:     { ops: ['in', 'notIn'],                       valueType: 'uuid_array' },
   lastOrderTotal:    { ops: ['>=', '<=', 'between'],               valueType: 'number' },
   neighborhood:      { ops: ['in', 'notIn'],                       valueType: 'string_array' },

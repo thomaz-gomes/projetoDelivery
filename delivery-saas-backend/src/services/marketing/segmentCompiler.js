@@ -130,6 +130,16 @@ const HANDLERS = {
     return op === 'in' ? exists : `NOT ${exists}`
   },
 
+  orderedMenuId: (op, value) => {
+    // Matches customers who placed a completed order tied to the given menu.
+    // Order.menuId is populated for direct cardápio orders AND for iFood
+    // orders (via ApiIntegrationMenu default link → upsertOrder forcedMenuId),
+    // so this filter naturally captures both channels.
+    const ids = value.map(escapeUuid).join(',')
+    const exists = `EXISTS (SELECT 1 FROM "Order" o WHERE o."customerId" = c.id AND o.status IN ${COMPLETED_STATUSES} AND o."menuId" IN (${ids}))`
+    return op === 'in' ? exists : `NOT ${exists}`
+  },
+
   lastProductId: (op, value) => {
     // "lastProductId" = any item belonging to the customer's MOST RECENT completed order
     const ids = value.map(escapeUuid).join(',')

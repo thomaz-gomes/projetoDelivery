@@ -18,6 +18,7 @@ const FIELDS = [
   { value: 'avgTicket',        label: 'Ticket médio',          valueType: 'number',   ops: ['>=', '<='] },
   { value: 'orderedProductId', label: 'Comprou produto',       valueType: 'list',     ops: ['in', 'notIn'], source: 'products' },
   { value: 'orderedCategoryId',label: 'Comprou categoria',     valueType: 'list',     ops: ['in', 'notIn'], source: 'categories' },
+  { value: 'orderedMenuId',    label: 'Comprou em cardápio',   valueType: 'list',     ops: ['in', 'notIn'], source: 'menus' },
   { value: 'neighborhood',     label: 'Bairro de entrega',     valueType: 'list',     ops: ['in', 'notIn'], source: 'neighborhoods' },
   { value: 'paymentMethod',    label: 'Forma de pagamento',    valueType: 'list',     ops: ['in', 'notIn'], source: 'paymentMethods' },
   { value: 'birthdayInDays',   label: 'Aniversário em (dias)', valueType: 'int',      ops: ['=', '<='] },

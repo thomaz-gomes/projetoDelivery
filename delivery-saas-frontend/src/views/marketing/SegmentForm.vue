@@ -30,6 +30,7 @@ const marketingSources = ref({
   neighborhoods:   { options: [], loading: true },
   customerGroups:  { options: [], loading: true },
   paymentMethods:  { options: [], loading: true },
+  menus:           { options: [], loading: true },
 })
 provide('marketingSources', marketingSources)
 
@@ -69,6 +70,13 @@ async function loadSources() {
         loading: false,
       }
     }).catch(() => { marketingSources.value.paymentMethods.loading = false }),
+
+    api.get('/menu/menus').then(({ data }) => {
+      marketingSources.value.menus = {
+        options: (data || []).map(m => ({ value: m.id, label: m.name })),
+        loading: false,
+      }
+    }).catch(() => { marketingSources.value.menus.loading = false }),
   ]
   await Promise.all(tasks)
 }
