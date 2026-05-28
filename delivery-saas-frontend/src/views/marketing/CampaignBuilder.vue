@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import api from '../../api'
 import BaseButton from '../../components/BaseButton.vue'
 import MediaField from '../../components/MediaLibrary/MediaField.vue'
+import { assetUrl } from '../../utils/assetUrl.js'
 import Swal from 'sweetalert2'
 
 const router = useRouter()
@@ -413,7 +414,7 @@ async function activate() {
                 <!-- Template (Cloud) preview -->
                 <template v-if="livePreviewMode === 'template' && templateParts">
                   <div v-if="templateParts.headerFormat === 'IMAGE'" class="mb-2">
-                    <img v-if="form.mediaUrl" :src="form.mediaUrl" class="img-fluid rounded" alt="Header" />
+                    <img v-if="form.mediaUrl" :src="assetUrl(form.mediaUrl)" class="img-fluid rounded" alt="Header" />
                     <div v-else class="bg-secondary-subtle text-muted text-center py-4 rounded small">
                       <i class="bi bi-image me-1"></i>Imagem do template
                     </div>
@@ -438,7 +439,7 @@ async function activate() {
 
                 <!-- Free text (Evolution) preview -->
                 <template v-else-if="livePreviewMode === 'freeText'">
-                  <img v-if="form.mediaUrl" :src="form.mediaUrl" class="img-fluid rounded mb-2" alt="Imagem" />
+                  <img v-if="form.mediaUrl" :src="assetUrl(form.mediaUrl)" class="img-fluid rounded mb-2" alt="Imagem" />
                   <div v-if="freeTextPreview" style="white-space:pre-wrap;font-size:0.9rem">{{ freeTextPreview }}</div>
                   <div v-else class="text-muted small fst-italic">Digite a mensagem...</div>
                 </template>
