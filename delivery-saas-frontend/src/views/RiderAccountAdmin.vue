@@ -49,16 +49,16 @@ const selectedAccountId = ref('');
 const financialAccountsLoaded = ref(false);
 const costCenters = ref([]);
 
-// "Novo Lançamento" modal — unifica os 3 fluxos:
-//   PAY    → pagar saldo do período (chama /account/pay)
-//   CREDIT → crédito manual (chama /account/adjust com type=CREDIT)
-//   DEBIT  → débito manual (chama /account/adjust com type=DEBIT)
+// "Novo Lançamento" modal — unifica 2 fluxos:
+//   PAY    → pagar saldo do período (chama /account/pay; Tipo travado em A Pagar)
+//   MANUAL → crédito ou débito manual (chama /account/adjust; Tipo editável,
+//            A Pagar=CREDIT, A Receber=DEBIT)
 // Mesmo layout do modal de FinancialTransactions.vue para consistência visual.
 const showLancamentoModal = ref(false);
-const lancamentoMode = ref('PAY'); // 'PAY' | 'CREDIT' | 'DEBIT'
+const lancamentoMode = ref('PAY'); // 'PAY' | 'MANUAL'
 const lancamentoSaving = ref(false);
 const lancamentoForm = ref({
-  type: 'PAYABLE',          // 'PAYABLE' | 'RECEIVABLE'
+  type: 'PAYABLE',          // 'PAYABLE' (A Pagar / Crédito) | 'RECEIVABLE' (A Receber / Débito)
   description: '',
   grossAmount: 0,
   accountId: '',
@@ -69,14 +69,16 @@ const lancamentoForm = ref({
 
 const lancamentoTitle = computed(() => {
   if (lancamentoMode.value === 'PAY') return 'Pagar período';
-  if (lancamentoMode.value === 'CREDIT') return 'Crédito manual';
-  if (lancamentoMode.value === 'DEBIT') return 'Débito manual';
+  if (lancamentoMode.value === 'MANUAL') {
+    return lancamentoForm.value.type === 'RECEIVABLE' ? 'Débito manual' : 'Crédito manual';
+  }
   return 'Novo lançamento';
 });
 const lancamentoCtaLabel = computed(() => {
   if (lancamentoMode.value === 'PAY') return 'Confirmar pagamento';
-  if (lancamentoMode.value === 'CREDIT') return 'Aplicar crédito';
-  if (lancamentoMode.value === 'DEBIT') return 'Aplicar débito';
+  if (lancamentoMode.value === 'MANUAL') {
+    return lancamentoForm.value.type === 'RECEIVABLE' ? 'Aplicar débito' : 'Aplicar crédito';
+  }
   return 'Salvar';
 });
 
@@ -628,15 +630,16 @@ async function fetchCostCenters() {
   }
 }
 
-// Abre o modal com pre-fill conforme o modo (PAY/CREDIT/DEBIT).
+// Abre o modal com pre-fill conforme o modo (PAY/MANUAL).
+// Em MANUAL o usuário escolhe Tipo (A Pagar=crédito, A Receber=débito) dentro
+// do modal — começa como PAYABLE/crédito por padrão.
 function openLancamentoModal(mode) {
   lancamentoMode.value = mode;
   const isPay = mode === 'PAY';
-  const isDebit = mode === 'DEBIT';
   const fromTxt = filters.value.from || 'início';
   const toTxt = filters.value.to || 'hoje';
 
-  let description = '';
+  let description = 'Lançamento manual';
   let grossAmount = 0;
   if (isPay) {
     if (!datesAreValid.value) {
@@ -654,14 +657,10 @@ function openLancamentoModal(mode) {
     }
     description = `Pagamento de período ${fromTxt} → ${toTxt}`;
     grossAmount = Number(periodBalance.value || 0);
-  } else if (mode === 'CREDIT') {
-    description = 'Crédito manual';
-  } else {
-    description = 'Débito manual';
   }
 
   lancamentoForm.value = {
-    type: isDebit ? 'RECEIVABLE' : 'PAYABLE',
+    type: 'PAYABLE',
     description,
     grossAmount,
     accountId: selectedAccountId.value || '',
@@ -698,7 +697,9 @@ async function saveLancamento() {
       showLancamentoModal.value = false;
       await Swal.fire({ icon: 'success', title: msg, html: details });
     } else {
-      const adjustType = lancamentoMode.value === 'DEBIT' ? 'DEBIT' : 'CREDIT';
+      // Em MANUAL, o tipo escolhido no modal (PAYABLE/RECEIVABLE) decide
+      // se é CREDIT ou DEBIT no endpoint /account/adjust.
+      const adjustType = lancamentoForm.value.type === 'RECEIVABLE' ? 'DEBIT' : 'CREDIT';
       const payload = {
         amount: val,
         type: adjustType,
@@ -735,7 +736,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="p-4 rider-account">
+  <main class="container p-4 rider-account">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="h4 m-0">Extrato do entregador (Admin)</h2>
         <div>
@@ -832,45 +833,49 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- Linha 3: Conta de saída + Pagar + Ações -->
-          <div class="row align-items-end g-3">
-            <!-- Conta de saída -->
-            <div class="col-md-4" v-if="financialAccounts.length > 0">
-              <label class="form-label small mb-1">Conta de saída</label>
+          <!-- Conta de saída (usada pelo pagamento individual no extrato) -->
+          <div class="row align-items-end g-3 mb-3" v-if="financialAccountsLoaded">
+            <div class="col-md-6" v-if="financialAccounts.length > 0">
+              <label class="form-label small mb-1">Conta de saída (padrão)</label>
               <SelectInput
                 v-model="selectedAccountId"
                 :options="financialAccounts.map(a => ({ value: a.id, label: a.name }))"
                 placeholder="Selecione a conta..."
               />
             </div>
-            <div class="col-md-4" v-else-if="financialAccountsLoaded">
+            <div class="col-md-6" v-else>
               <label class="form-label small mb-1">Conta de saída</label>
               <div class="text-muted small p-2 border rounded bg-light">
                 Nenhuma conta cadastrada.
                 <router-link to="/financial/accounts">Cadastrar</router-link>
               </div>
             </div>
+          </div>
 
-            <!-- Botão Pagar -->
-            <div class="col-md-4 d-flex align-items-end">
-              <button
-                class="btn btn-success w-100 py-2"
-                @click="openLancamentoModal('PAY')"
-                :disabled="!datesAreValid || periodBalance <= 0"
-              >
-                PAGAR {{ periodBalance > 0 ? formatCurrency(periodBalance) : '' }}
-              </button>
-            </div>
-
-            <!-- Ações secundárias -->
-            <div class="col-md-4 d-flex gap-2 align-items-end flex-wrap">
-              <button class="btn btn-sm btn-outline-secondary" @click="exportCsv" :disabled="exporting || !datesAreValid">
-                {{ exporting ? 'Exportando...' : 'Exportar CSV' }}
-              </button>
-              <!-- Ferramentas de manutenção (dedupDailyRates / backfillStatus /
-                   backfillBonuses) ficam ocultas até serem necessárias. As funções
-                   continuam no <script setup> para reativação futura. -->
-            </div>
+          <!-- Linha única de ações: Pagar + Crédito/Débito + Exportar CSV -->
+          <div class="d-flex flex-wrap gap-2 align-items-stretch">
+            <button
+              class="btn btn-success py-2"
+              @click="openLancamentoModal('PAY')"
+              :disabled="!datesAreValid || periodBalance <= 0"
+            >
+              PAGAR {{ periodBalance > 0 ? formatCurrency(periodBalance) : '' }}
+            </button>
+            <button
+              class="btn btn-outline-primary py-2"
+              v-if="isAdmin"
+              @click="openLancamentoModal('MANUAL')"
+            >
+              <i class="bi bi-arrow-left-right me-1"></i> Crédito / Débito
+            </button>
+            <button
+              class="btn btn-outline-secondary py-2 ms-auto"
+              @click="exportCsv"
+              :disabled="exporting || !datesAreValid"
+            >
+              <i class="bi bi-download me-1"></i>
+              {{ exporting ? 'Exportando...' : 'Exportar CSV' }}
+            </button>
           </div>
 
           <!-- WhatsApp PDF (linha separada) -->
@@ -930,19 +935,6 @@ onMounted(async () => {
             Sem entregas no período selecionado.
           </div>
         </div>
-      </div>
-
-      <!-- Ações de lançamento financeiro do motoboy -->
-      <div class="d-flex flex-wrap gap-2 mb-3" v-if="isAdmin">
-        <button class="btn btn-outline-success" @click="openLancamentoModal('CREDIT')">
-          <i class="bi bi-plus-circle me-1"></i> Aplicar crédito
-        </button>
-        <button class="btn btn-outline-info" @click="openLancamentoModal('DEBIT')">
-          <i class="bi bi-dash-circle me-1"></i> Aplicar débito
-        </button>
-        <span class="small text-muted align-self-center ms-2">
-          Crédito → <em>A pagar</em> · Débito → <em>A receber</em>. Ambos registrados no módulo financeiro vinculados a este motoboy.
-        </span>
       </div>
 
       <div class="card">
@@ -1067,10 +1059,19 @@ onMounted(async () => {
               <div class="col-md-6">
                 <label class="form-label">Tipo</label>
                 <input
+                  v-if="lancamentoMode === 'PAY'"
                   type="text"
                   class="form-control bg-light"
-                  :value="lancamentoForm.type === 'PAYABLE' ? 'A Pagar' : 'A Receber'"
+                  value="A Pagar"
                   disabled
+                />
+                <SelectInput
+                  v-else
+                  v-model="lancamentoForm.type"
+                  :options="[
+                    { value: 'PAYABLE', label: 'A Pagar (Crédito)' },
+                    { value: 'RECEIVABLE', label: 'A Receber (Débito)' },
+                  ]"
                 />
               </div>
               <div class="col-md-6">
