@@ -867,16 +867,9 @@ onMounted(async () => {
               <button class="btn btn-sm btn-outline-secondary" @click="exportCsv" :disabled="exporting || !datesAreValid">
                 {{ exporting ? 'Exportando...' : 'Exportar CSV' }}
               </button>
-              <button class="btn btn-sm btn-outline-secondary" @click="fetchBalance" :disabled="loading">Atualizar</button>
-              <button class="btn btn-sm btn-outline-warning" @click="dedupDailyRates" :disabled="!isAdmin" title="Remove diárias duplicadas no mesmo dia">
-                Corrigir diárias
-              </button>
-              <button class="btn btn-sm btn-outline-primary" @click="backfillStatus" :disabled="!isAdmin" title="Marca como Pago as taxas que já foram quitadas por pagamentos antigos">
-                Reconciliar histórico
-              </button>
-              <button class="btn btn-sm btn-outline-success" @click="backfillBonuses" :disabled="!isAdmin" title="Gera bônus de check-in retroativos para entregas anteriores ao horário do check-in">
-                Recalcular bônus
-              </button>
+              <!-- Ferramentas de manutenção (dedupDailyRates / backfillStatus /
+                   backfillBonuses) ficam ocultas até serem necessárias. As funções
+                   continuam no <script setup> para reativação futura. -->
             </div>
           </div>
 
