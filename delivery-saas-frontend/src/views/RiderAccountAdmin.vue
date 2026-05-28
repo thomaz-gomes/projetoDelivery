@@ -10,6 +10,7 @@ import Swal from 'sweetalert2';
 import DateInput from '../components/form/date/DateInput.vue';
 import SelectInput from '../components/form/select/SelectInput.vue';
 import TextInput from '../components/form/input/TextInput.vue';
+import CurrencyInput from '../components/form/input/CurrencyInput.vue';
 import BaseChart from '../components/BaseChart.vue';
 
 const route = useRoute();
@@ -628,6 +629,48 @@ async function exportCsv() {
   } finally { exporting.value = false; }
 }
 
+// Aplica um crédito ou débito manual na conta do motoboy.
+// Se selectedAccountId estiver preenchido, a transação financeira gerada
+// pelo bridge é marcada como PAID e move o saldo da conta (CashFlowEntry).
+// Caso contrário, fica como CONFIRMED (pendente) no módulo financeiro.
+async function submitManualAdjustment() {
+  error.value = '';
+  success.value = '';
+  const val = Number(adj.value.amount || 0);
+  if (!val || val === 0) {
+    error.value = 'Informe um valor válido para o ajuste';
+    return;
+  }
+  if (!['CREDIT', 'DEBIT'].includes(adj.value.type)) {
+    error.value = 'Tipo de ajuste inválido';
+    return;
+  }
+
+  adjusting.value = true;
+  try {
+    const payload = {
+      amount: val,
+      type: adj.value.type,
+      note: adj.value.note || undefined,
+      accountId: selectedAccountId.value || undefined,
+    };
+    await api.post(`/riders/${riderId}/account/adjust`, payload);
+    const verb = adj.value.type === 'DEBIT' ? 'Débito' : 'Crédito';
+    success.value = `${verb} aplicado com sucesso${selectedAccountId.value ? ' (registrado no financeiro)' : ' (pendente no financeiro)'}.`;
+    setTimeout(() => (success.value = ''), 5000);
+    // Limpa o form e atualiza saldo + extrato
+    adj.value.amount = '';
+    adj.value.note = '';
+    await fetchBalance();
+    await fetchTransactions();
+  } catch (e) {
+    console.error('submitManualAdjustment failed', e);
+    error.value = e?.response?.data?.message || 'Falha ao aplicar ajuste';
+  } finally {
+    adjusting.value = false;
+  }
+}
+
 onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTransactions(); await fetchFinancialAccounts(); });
 
 </script>
@@ -833,6 +876,47 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
           </div>
           <div v-else-if="!loadingMetrics" class="text-center text-muted small py-3">
             Sem entregas no período selecionado.
+          </div>
+        </div>
+      </div>
+
+      <!-- Crédito / Débito manual -->
+      <div class="card mb-3" v-if="isAdmin">
+        <div class="card-body">
+          <h5 class="card-title mb-3">Crédito / Débito manual</h5>
+          <p class="small text-muted mb-3">
+            Aplica um ajuste no saldo do motoboy e gera o lançamento no módulo financeiro
+            <span class="badge bg-success-subtle text-success">Crédito → Conta a pagar</span>
+            <span class="badge bg-info-subtle text-info ms-1">Débito → Conta a receber</span>.
+            Se uma conta de saída for selecionada, o lançamento é marcado como pago imediatamente e movimenta o saldo da conta.
+          </p>
+          <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+              <CurrencyInput label="Valor" labelClass="form-label small" v-model="adj.amount" inputClass="form-control" placeholder="0,00" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small">Tipo</label>
+              <SelectInput class="form-select" v-model="adj.type">
+                <option value="CREDIT">Crédito</option>
+                <option value="DEBIT">Débito</option>
+              </SelectInput>
+            </div>
+            <div class="col-md-3" v-if="financialAccounts.length > 0">
+              <label class="form-label small">Conta financeira (opcional)</label>
+              <SelectInput
+                v-model="selectedAccountId"
+                :options="[{ value: '', label: '— Pendente (sem movimentar conta) —' }, ...financialAccounts.map(a => ({ value: a.id, label: a.name }))]"
+              />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Observação</label>
+              <TextInput v-model="adj.note" placeholder="Motivo do ajuste (opcional)" inputClass="form-control" />
+            </div>
+          </div>
+          <div class="d-flex justify-content-end mt-3">
+            <button class="btn btn-primary" :disabled="adjusting" @click="submitManualAdjustment">
+              {{ adjusting ? 'Aplicando...' : `Aplicar ${adj.type === 'DEBIT' ? 'débito' : 'crédito'}` }}
+            </button>
           </div>
         </div>
       </div>

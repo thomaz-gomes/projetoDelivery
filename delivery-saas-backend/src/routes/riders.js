@@ -1319,7 +1319,7 @@ ridersRouter.post('/:id/account/adjust', requireRole('ADMIN'), async (req, res) 
   const rider = await prisma.rider.findFirst({ where: { id, companyId } });
   if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
 
-  const { amount, type = 'CREDIT', note } = req.body || {};
+  const { amount, type = 'CREDIT', note, accountId } = req.body || {};
   const val = Number(amount || 0);
   if (!isFinite(val) || val === 0) return res.status(400).json({ message: 'Amount inválido' });
 
@@ -1327,8 +1327,19 @@ ridersRouter.post('/:id/account/adjust', requireRole('ADMIN'), async (req, res) 
 
   const tx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: adjAmount, type: 'MANUAL_ADJUSTMENT', note: note || (type === 'DEBIT' ? 'Débito manual' : 'Crédito manual'), date: new Date() });
 
-  // Bridge: registrar no módulo financeiro
-  try { await createFinancialEntryForRider(tx, companyId); } catch (e) { console.warn('Financial bridge rider error:', e?.message); }
+  // Bridge: registrar no módulo financeiro com a natureza correta.
+  //   CREDIT → PAYABLE (empresa deve ao motoboy)
+  //   DEBIT  → RECEIVABLE (motoboy deve à empresa)
+  // Se accountId for enviado, marca como PAID + cria CashFlowEntry imediatamente;
+  // caso contrário, fica como CONFIRMED (pendente, sem afetar saldo da conta).
+  try {
+    await createFinancialEntryForRider(tx, companyId, accountId || null, {
+      paidNow: !!accountId,
+      direction: type === 'DEBIT' ? 'IN' : 'OUT',
+    });
+  } catch (e) {
+    console.warn('Financial bridge rider error:', e?.message);
+  }
 
   res.json({ ok: true, tx });
 });

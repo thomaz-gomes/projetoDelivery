@@ -311,7 +311,7 @@ export async function createFinancialEntriesForOrder(order) {
  * Chamado quando um RiderTransaction é criado.
  * paidNow=true: cria como PAID + CashFlowEntry + atualiza saldo da conta (usado no endpoint de pagamento).
  */
-export async function createFinancialEntryForRider(riderTransaction, companyId, accountId, { paidNow = false } = {}) {
+export async function createFinancialEntryForRider(riderTransaction, companyId, accountId, { paidNow = false, direction = 'OUT' } = {}) {
   try {
     const existing = await prisma.financialTransaction.findFirst({
       where: { companyId, sourceType: 'RIDER', sourceId: riderTransaction.id },
@@ -333,14 +333,23 @@ export async function createFinancialEntryForRider(riderTransaction, companyId, 
     const amount = Math.abs(Number(riderTransaction.amount));
     const now = new Date();
 
+    // direction = 'OUT' → money leaves company TO rider → PAYABLE / OUTFLOW.
+    // direction = 'IN'  → money comes FROM rider (correction, charge) → RECEIVABLE / INFLOW.
+    const isInbound = direction === 'IN';
+    const txType = isInbound ? 'RECEIVABLE' : 'PAYABLE';
+    const cashFlowType = isInbound ? 'INFLOW' : 'OUTFLOW';
+    const balanceDelta = isInbound ? { increment: amount } : { decrement: amount };
+    const descPrefix = isInbound ? 'Recebimento motoboy' : 'Motoboy';
+    const cashFlowPrefix = isInbound ? 'Recebimento motoboy' : 'Pagamento motoboy';
+
     if (paidNow && resolvedAccountId) {
       await prisma.$transaction(async (tx) => {
         const ft = await tx.financialTransaction.create({
           data: {
             companyId,
-            type: 'PAYABLE',
+            type: txType,
             status: 'PAID',
-            description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
+            description: `${descPrefix} - ${riderTransaction.type} (${riderTransaction.note || ''})`,
             accountId: resolvedAccountId,
             costCenterId: opexCC?.id || null,
             grossAmount: amount,
@@ -357,7 +366,7 @@ export async function createFinancialEntryForRider(riderTransaction, companyId, 
 
         const account = await tx.financialAccount.update({
           where: { id: resolvedAccountId },
-          data: { currentBalance: { decrement: amount } },
+          data: { currentBalance: balanceDelta },
         });
 
         await tx.cashFlowEntry.create({
@@ -365,10 +374,10 @@ export async function createFinancialEntryForRider(riderTransaction, companyId, 
             companyId,
             accountId: resolvedAccountId,
             transactionId: ft.id,
-            type: 'OUTFLOW',
+            type: cashFlowType,
             amount,
             balanceAfter: account.currentBalance,
-            description: `Pagamento motoboy: ${riderTransaction.note || ''}`,
+            description: `${cashFlowPrefix}: ${riderTransaction.note || ''}`,
           },
         });
       });
@@ -376,9 +385,9 @@ export async function createFinancialEntryForRider(riderTransaction, companyId, 
       await prisma.financialTransaction.create({
         data: {
           companyId,
-          type: 'PAYABLE',
+          type: txType,
           status: 'CONFIRMED',
-          description: `Motoboy - ${riderTransaction.type} (${riderTransaction.note || ''})`,
+          description: `${descPrefix} - ${riderTransaction.type} (${riderTransaction.note || ''})`,
           accountId: resolvedAccountId,
           costCenterId: opexCC?.id || null,
           grossAmount: amount,
