@@ -10,7 +10,6 @@ import Swal from 'sweetalert2';
 import DateInput from '../components/form/date/DateInput.vue';
 import SelectInput from '../components/form/select/SelectInput.vue';
 import TextInput from '../components/form/input/TextInput.vue';
-import CurrencyInput from '../components/form/input/CurrencyInput.vue';
 import BaseChart from '../components/BaseChart.vue';
 
 const route = useRoute();
@@ -44,14 +43,42 @@ const total = ref(0);
 const totalPages = ref(1);
 const filters = ref({ from: '', to: '', type: '' });
 
-// manual adjust form
-const adj = ref({ amount: '', type: 'CREDIT', note: '' });
-const adjusting = ref(false);
-
 // financial accounts (loaded if module is active)
 const financialAccounts = ref([]);
 const selectedAccountId = ref('');
 const financialAccountsLoaded = ref(false);
+const costCenters = ref([]);
+
+// "Novo Lançamento" modal — unifica os 3 fluxos:
+//   PAY    → pagar saldo do período (chama /account/pay)
+//   CREDIT → crédito manual (chama /account/adjust com type=CREDIT)
+//   DEBIT  → débito manual (chama /account/adjust com type=DEBIT)
+// Mesmo layout do modal de FinancialTransactions.vue para consistência visual.
+const showLancamentoModal = ref(false);
+const lancamentoMode = ref('PAY'); // 'PAY' | 'CREDIT' | 'DEBIT'
+const lancamentoSaving = ref(false);
+const lancamentoForm = ref({
+  type: 'PAYABLE',          // 'PAYABLE' | 'RECEIVABLE'
+  description: '',
+  grossAmount: 0,
+  accountId: '',
+  costCenterId: '',
+  dueDate: '',
+  notes: '',
+});
+
+const lancamentoTitle = computed(() => {
+  if (lancamentoMode.value === 'PAY') return 'Pagar período';
+  if (lancamentoMode.value === 'CREDIT') return 'Crédito manual';
+  if (lancamentoMode.value === 'DEBIT') return 'Débito manual';
+  return 'Novo lançamento';
+});
+const lancamentoCtaLabel = computed(() => {
+  if (lancamentoMode.value === 'PAY') return 'Confirmar pagamento';
+  if (lancamentoMode.value === 'CREDIT') return 'Aplicar crédito';
+  if (lancamentoMode.value === 'DEBIT') return 'Aplicar débito';
+  return 'Salvar';
+});
 
 // page state and common refs
 const error = ref('');
@@ -434,45 +461,8 @@ const dateValidationMessage = computed(() => {
 
 const datesAreValid = computed(() => !dateValidationMessage.value);
 
-async function pagarPeriodo() {
-  if (!datesAreValid.value) return Swal.fire({ icon: 'error', text: dateValidationMessage.value });
-  if (periodBalance.value <= 0) return Swal.fire({ icon: 'info', text: periodBalance.value === 0 ? 'Saldo no período é R$ 0,00. Nada a pagar.' : 'Valor já pago excede os ganhos neste período.' });
-
-  const from = filters.value.from || null;
-  const to = filters.value.to || null;
-  const acctName = financialAccounts.value.find(a => a.id === selectedAccountId.value)?.name || null;
-  const acctLine = acctName ? `<br><b>Conta de saída:</b> ${acctName}` : '';
-  const paidLine = periodPaid.value > 0 ? `<br><small class="text-muted">Já pago neste período: ${formatCurrency(periodPaid.value)}</small>` : '';
-
-  const res = await Swal.fire({
-    title: 'Confirmar pagamento',
-    html: `<b>Ganho no período:</b> ${formatCurrency(periodEarnings.value)}`
-      + paidLine
-      + `<br><b style="font-size:1.1em">Valor a pagar: ${formatCurrency(periodBalance.value)}</b>`
-      + `<br><b>Período:</b> ${from || 'início'} → ${to || 'hoje'}`
-      + acctLine,
-    icon: 'question',
-    showCancelButton: true,
-    confirmButtonText: `Pagar ${formatCurrency(periodBalance.value)}`,
-    cancelButtonText: 'Cancelar'
-  });
-  if (!res.isConfirmed) return;
-  try {
-    const payload = { from, to, accountId: selectedAccountId.value || null };
-    const { data } = await api.post(`/riders/${riderId}/account/pay`, payload);
-    const totalPaid = Number(data?.total || 0);
-    const txId = data?.tx?.id;
-    const msg = data?.message || 'Pagamento registrado.';
-    const details = `Total pago: <b>${formatCurrency(totalPaid)}</b>` + (txId ? `<br>ID transação: <code>${txId}</code>` : '');
-    await Swal.fire({ icon: 'success', title: msg, html: details });
-    await fetchBalance();
-    await fetchTransactions();
-    await fetchPeriodFees();
-  } catch (e) {
-    console.error('pagarPeriodo failed', e);
-    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao registrar pagamento' });
-  }
-}
+// pagarPeriodo() foi substituído por openLancamentoModal('PAY') + saveLancamento()
+// para alinhar a UX ao modal "Novo Lançamento" do módulo financeiro.
 
 async function backfillBonuses() {
   if (!isAdmin.value) return;
@@ -629,49 +619,118 @@ async function exportCsv() {
   } finally { exporting.value = false; }
 }
 
-// Aplica um crédito ou débito manual na conta do motoboy.
-// Se selectedAccountId estiver preenchido, a transação financeira gerada
-// pelo bridge é marcada como PAID e move o saldo da conta (CashFlowEntry).
-// Caso contrário, fica como CONFIRMED (pendente) no módulo financeiro.
-async function submitManualAdjustment() {
-  error.value = '';
-  success.value = '';
-  const val = Number(adj.value.amount || 0);
-  if (!val || val === 0) {
-    error.value = 'Informe um valor válido para o ajuste';
-    return;
-  }
-  if (!['CREDIT', 'DEBIT'].includes(adj.value.type)) {
-    error.value = 'Tipo de ajuste inválido';
-    return;
-  }
-
-  adjusting.value = true;
+async function fetchCostCenters() {
   try {
-    const payload = {
-      amount: val,
-      type: adj.value.type,
-      note: adj.value.note || undefined,
-      accountId: selectedAccountId.value || undefined,
-    };
-    await api.post(`/riders/${riderId}/account/adjust`, payload);
-    const verb = adj.value.type === 'DEBIT' ? 'Débito' : 'Crédito';
-    success.value = `${verb} aplicado com sucesso${selectedAccountId.value ? ' (registrado no financeiro)' : ' (pendente no financeiro)'}.`;
-    setTimeout(() => (success.value = ''), 5000);
-    // Limpa o form e atualiza saldo + extrato
-    adj.value.amount = '';
-    adj.value.note = '';
-    await fetchBalance();
-    await fetchTransactions();
+    const { data } = await api.get('/financial/cost-centers', { params: { flat: 'true' } });
+    costCenters.value = Array.isArray(data) ? data : [];
   } catch (e) {
-    console.error('submitManualAdjustment failed', e);
-    error.value = e?.response?.data?.message || 'Falha ao aplicar ajuste';
-  } finally {
-    adjusting.value = false;
+    costCenters.value = [];
   }
 }
 
-onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTransactions(); await fetchFinancialAccounts(); });
+// Abre o modal com pre-fill conforme o modo (PAY/CREDIT/DEBIT).
+function openLancamentoModal(mode) {
+  lancamentoMode.value = mode;
+  const isPay = mode === 'PAY';
+  const isDebit = mode === 'DEBIT';
+  const fromTxt = filters.value.from || 'início';
+  const toTxt = filters.value.to || 'hoje';
+
+  let description = '';
+  let grossAmount = 0;
+  if (isPay) {
+    if (!datesAreValid.value) {
+      Swal.fire({ icon: 'error', text: dateValidationMessage.value });
+      return;
+    }
+    if (periodBalance.value <= 0) {
+      Swal.fire({
+        icon: 'info',
+        text: periodBalance.value === 0
+          ? 'Saldo no período é R$ 0,00. Nada a pagar.'
+          : 'Valor já pago excede os ganhos neste período.',
+      });
+      return;
+    }
+    description = `Pagamento de período ${fromTxt} → ${toTxt}`;
+    grossAmount = Number(periodBalance.value || 0);
+  } else if (mode === 'CREDIT') {
+    description = 'Crédito manual';
+  } else {
+    description = 'Débito manual';
+  }
+
+  lancamentoForm.value = {
+    type: isDebit ? 'RECEIVABLE' : 'PAYABLE',
+    description,
+    grossAmount,
+    accountId: selectedAccountId.value || '',
+    costCenterId: '',
+    dueDate: new Date().toISOString().slice(0, 10),
+    notes: '',
+  };
+  showLancamentoModal.value = true;
+}
+
+async function saveLancamento() {
+  error.value = '';
+  success.value = '';
+  const val = Number(lancamentoForm.value.grossAmount || 0);
+  if (!val || val <= 0) {
+    Swal.fire({ icon: 'error', text: 'Informe um valor maior que zero.' });
+    return;
+  }
+
+  lancamentoSaving.value = true;
+  try {
+    if (lancamentoMode.value === 'PAY') {
+      const payload = {
+        from: filters.value.from || null,
+        to: filters.value.to || null,
+        accountId: lancamentoForm.value.accountId || null,
+      };
+      const { data } = await api.post(`/riders/${riderId}/account/pay`, payload);
+      const totalPaid = Number(data?.total || 0);
+      const txId = data?.tx?.id;
+      const msg = data?.message || 'Pagamento registrado.';
+      const details = `Total pago: <b>${formatCurrency(totalPaid)}</b>`
+        + (txId ? `<br>ID transação: <code>${txId}</code>` : '');
+      showLancamentoModal.value = false;
+      await Swal.fire({ icon: 'success', title: msg, html: details });
+    } else {
+      const adjustType = lancamentoMode.value === 'DEBIT' ? 'DEBIT' : 'CREDIT';
+      const payload = {
+        amount: val,
+        type: adjustType,
+        note: lancamentoForm.value.notes || lancamentoForm.value.description || undefined,
+        accountId: lancamentoForm.value.accountId || undefined,
+      };
+      await api.post(`/riders/${riderId}/account/adjust`, payload);
+      const verb = adjustType === 'DEBIT' ? 'Débito' : 'Crédito';
+      showLancamentoModal.value = false;
+      success.value = `${verb} aplicado com sucesso`
+        + (lancamentoForm.value.accountId ? ' (registrado no financeiro).' : ' (pendente no financeiro).');
+      setTimeout(() => (success.value = ''), 5000);
+    }
+    await fetchBalance();
+    await fetchTransactions();
+    await fetchPeriodFees();
+  } catch (e) {
+    console.error('saveLancamento failed', e);
+    error.value = e?.response?.data?.message || 'Falha ao salvar lançamento';
+    Swal.fire({ icon: 'error', text: error.value });
+  } finally {
+    lancamentoSaving.value = false;
+  }
+}
+
+onMounted(async () => {
+  await fetchRider();
+  await fetchBalance();
+  await fetchTransactions();
+  await fetchFinancialAccounts();
+  await fetchCostCenters();
+});
 
 </script>
 
@@ -796,7 +855,7 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
             <div class="col-md-4 d-flex align-items-end">
               <button
                 class="btn btn-success w-100 py-2"
-                @click="pagarPeriodo"
+                @click="openLancamentoModal('PAY')"
                 :disabled="!datesAreValid || periodBalance <= 0"
               >
                 PAGAR {{ periodBalance > 0 ? formatCurrency(periodBalance) : '' }}
@@ -880,45 +939,17 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
         </div>
       </div>
 
-      <!-- Crédito / Débito manual -->
-      <div class="card mb-3" v-if="isAdmin">
-        <div class="card-body">
-          <h5 class="card-title mb-3">Crédito / Débito manual</h5>
-          <p class="small text-muted mb-3">
-            Aplica um ajuste no saldo do motoboy e gera o lançamento no módulo financeiro
-            <span class="badge bg-success-subtle text-success">Crédito → Conta a pagar</span>
-            <span class="badge bg-info-subtle text-info ms-1">Débito → Conta a receber</span>.
-            Se uma conta de saída for selecionada, o lançamento é marcado como pago imediatamente e movimenta o saldo da conta.
-          </p>
-          <div class="row g-2 align-items-end">
-            <div class="col-md-3">
-              <CurrencyInput label="Valor" labelClass="form-label small" v-model="adj.amount" inputClass="form-control" placeholder="0,00" />
-            </div>
-            <div class="col-md-2">
-              <label class="form-label small">Tipo</label>
-              <SelectInput class="form-select" v-model="adj.type">
-                <option value="CREDIT">Crédito</option>
-                <option value="DEBIT">Débito</option>
-              </SelectInput>
-            </div>
-            <div class="col-md-3" v-if="financialAccounts.length > 0">
-              <label class="form-label small">Conta financeira (opcional)</label>
-              <SelectInput
-                v-model="selectedAccountId"
-                :options="[{ value: '', label: '— Pendente (sem movimentar conta) —' }, ...financialAccounts.map(a => ({ value: a.id, label: a.name }))]"
-              />
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small">Observação</label>
-              <TextInput v-model="adj.note" placeholder="Motivo do ajuste (opcional)" inputClass="form-control" />
-            </div>
-          </div>
-          <div class="d-flex justify-content-end mt-3">
-            <button class="btn btn-primary" :disabled="adjusting" @click="submitManualAdjustment">
-              {{ adjusting ? 'Aplicando...' : `Aplicar ${adj.type === 'DEBIT' ? 'débito' : 'crédito'}` }}
-            </button>
-          </div>
-        </div>
+      <!-- Ações de lançamento financeiro do motoboy -->
+      <div class="d-flex flex-wrap gap-2 mb-3" v-if="isAdmin">
+        <button class="btn btn-outline-success" @click="openLancamentoModal('CREDIT')">
+          <i class="bi bi-plus-circle me-1"></i> Aplicar crédito
+        </button>
+        <button class="btn btn-outline-info" @click="openLancamentoModal('DEBIT')">
+          <i class="bi bi-dash-circle me-1"></i> Aplicar débito
+        </button>
+        <span class="small text-muted align-self-center ms-2">
+          Crédito → <em>A pagar</em> · Débito → <em>A receber</em>. Ambos registrados no módulo financeiro vinculados a este motoboy.
+        </span>
       </div>
 
       <div class="card">
@@ -1029,6 +1060,96 @@ onMounted(async () => { await fetchRider(); await fetchBalance(); await fetchTra
         </div>
       </div>
     </main>
+
+    <!-- Modal: lançamento financeiro do motoboy (Pagar / Crédito / Débito) -->
+    <div v-if="showLancamentoModal" class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5)">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">{{ lancamentoTitle }}</h5>
+            <button type="button" class="btn-close" @click="showLancamentoModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Tipo</label>
+                <input
+                  type="text"
+                  class="form-control bg-light"
+                  :value="lancamentoForm.type === 'PAYABLE' ? 'A Pagar' : 'A Receber'"
+                  disabled
+                />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Descrição</label>
+                <TextInput v-model="lancamentoForm.description" placeholder="Ex: Crédito manual" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Valor Bruto (R$)</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  v-model.number="lancamentoForm.grossAmount"
+                  step="0.01"
+                  min="0"
+                  :disabled="lancamentoMode === 'PAY'"
+                />
+                <div v-if="lancamentoMode === 'PAY'" class="form-text small">
+                  Calculado automaticamente a partir do saldo do período.
+                </div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Conta</label>
+                <SelectInput
+                  v-model="lancamentoForm.accountId"
+                  :options="financialAccounts.map(a => ({ value: a.id, label: a.name }))"
+                  placeholder="Selecionar conta"
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Centro de Custo</label>
+                <SelectInput
+                  v-model="lancamentoForm.costCenterId"
+                  :options="costCenters.map(c => ({ value: c.id, label: `${c.code} - ${c.name}` }))"
+                  placeholder="Selecionar"
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Fornecedor</label>
+                <input
+                  type="text"
+                  class="form-control bg-light"
+                  :value="rider ? `Motoboy: ${rider.name}` : 'Motoboy'"
+                  disabled
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Operadora (taxas)</label>
+                <input type="text" class="form-control bg-light" value="Nenhuma (sem taxa)" disabled />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Forma de Pagamento</label>
+                <input type="text" class="form-control bg-light" value="Nenhuma (avulso)" disabled />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Vencimento</label>
+                <input type="date" class="form-control" v-model="lancamentoForm.dueDate" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Observações</label>
+                <textarea class="form-control" v-model="lancamentoForm.notes" rows="2"></textarea>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="showLancamentoModal = false">Cancelar</button>
+            <button class="btn btn-primary" @click="saveLancamento" :disabled="lancamentoSaving">
+              {{ lancamentoSaving ? 'Salvando...' : lancamentoCtaLabel }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 </template>
 
 <style scoped>
