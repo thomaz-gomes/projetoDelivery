@@ -25,12 +25,9 @@ const isAdmin = computed(() => {
   return role === 'ADMIN' || role === 'SUPER_ADMIN';
 });
 
-// send PDF via WhatsApp
-const phoneTo = ref('');
+// send PDF via WhatsApp — telefone agora é coletado num Swal ao clicar
+// no botão "Enviar PDF" (vê sendPdf()), pré-preenchido com rider.whatsapp.
 const sendingPdf = ref(false);
-const useMockUrl = ref(true);
-// compact UI toggle for phone input on small screens
-const showPhoneInput = ref(false);
 
 // paging & filters
 const page = ref(1);
@@ -164,7 +161,6 @@ async function fetchRider() {
   try {
     const { data } = await api.get(`/riders/${riderId}`);
     rider.value = data;
-    if (!phoneTo.value && data?.whatsapp) phoneTo.value = data.whatsapp;
   } catch (e) { console.error('fetchRider failed', e); }
 }
 
@@ -561,20 +557,53 @@ function normalizePhoneForSend(v) {
 }
 
 async function sendPdf() {
-  if (!phoneTo.value) return (error.value = 'Informe o telefone destino');
-  sendingPdf.value = true; error.value = '';
+  if (!datesAreValid.value) {
+    Swal.fire({ icon: 'error', text: dateValidationMessage.value });
+    return;
+  }
+
+  // Pré-preenche com o WhatsApp do motoboy (formato BR limpo, sem +/55).
+  // O usuário pode editar antes de enviar.
+  const defaultPhone = rider.value?.whatsapp || '';
+
+  const { value: input, isConfirmed } = await Swal.fire({
+    title: 'Enviar PDF por WhatsApp',
+    html: `<div class="text-muted small">Período: <b>${filters.value.from || 'início'}</b> → <b>${filters.value.to || 'hoje'}</b></div>`,
+    input: 'tel',
+    inputLabel: 'Telefone do destinatário',
+    inputValue: defaultPhone,
+    inputPlaceholder: '+5511999999999',
+    showCancelButton: true,
+    confirmButtonText: 'Enviar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#198754',
+    inputValidator: (value) => {
+      if (!value) return 'Informe o telefone';
+      if (!normalizePhoneForSend(value)) return 'Telefone inválido';
+      return null;
+    },
+  });
+  if (!isConfirmed) return;
+
+  const normalized = normalizePhoneForSend(input);
+  sendingPdf.value = true;
+  error.value = '';
   try {
-    const normalized = normalizePhoneForSend(phoneTo.value);
-    if (!normalized) return (error.value = 'Telefone inválido');
-    phoneTo.value = normalized;
-    const payload = { phone: phoneTo.value, from: filters.value.from || undefined, to: filters.value.to || undefined, type: filters.value.type || undefined };
+    const payload = {
+      phone: normalized,
+      from: filters.value.from || undefined,
+      to: filters.value.to || undefined,
+      type: filters.value.type || undefined,
+    };
     const { data } = await api.post(`/riders/${riderId}/account/send-report`, payload);
-    success.value = data?.url ? `Relatório gerado. URL: ${data.url}` : 'Relatório enviado com sucesso.';
-    setTimeout(() => (success.value = ''), 8000);
+    const msg = data?.url ? `Relatório gerado. URL: ${data.url}` : 'Relatório enviado com sucesso.';
+    Swal.fire({ icon: 'success', text: msg });
   } catch (e) {
     console.error('sendPdf failed', e);
-    error.value = e?.response?.data?.message || 'Falha ao enviar relatório';
-  } finally { sendingPdf.value = false; }
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao enviar relatório' });
+  } finally {
+    sendingPdf.value = false;
+  }
 }
 
 async function exportCsv() {
@@ -832,22 +861,17 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- Linha única de ações: Conta de saída, Telefone, Pagar, Crédito/Débito,
-               Enviar PDF, Exportar CSV. Em telas estreitas o flex-wrap faz quebrar. -->
+          <!-- Linha única de ações: Conta de saída, Pagar, Crédito/Débito,
+               Enviar PDF, Exportar CSV. Em telas estreitas o flex-wrap quebra.
+               O telefone do destinatário do PDF é coletado num Swal ao clicar. -->
           <div class="d-flex flex-wrap gap-2 align-items-end">
-            <div v-if="financialAccounts.length > 0" style="min-width: 200px; flex: 1 1 200px;">
+            <div v-if="financialAccounts.length > 0" style="min-width: 220px; flex: 1 1 220px;">
               <SelectInput
                 v-model="selectedAccountId"
                 :options="financialAccounts.map(a => ({ value: a.id, label: a.name }))"
                 placeholder="Conta de saída..."
               />
             </div>
-            <TextInput
-              v-model="phoneTo"
-              placeholder="+5511999999999"
-              inputClass="form-control"
-              style="max-width: 200px;"
-            />
             <button
               class="btn btn-success"
               @click="openLancamentoModal('PAY')"
