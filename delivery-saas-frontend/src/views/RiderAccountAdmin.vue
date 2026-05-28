@@ -16,11 +16,7 @@ const route = useRoute();
 const riderId = route.params.id;
 const rider = ref(null);
 
-// inline edit
-const editingId = ref(null);
-const editAmount = ref('');
-const editNote = ref('');
-const savingEdit = ref(false);
+// inline edit foi substituído pelo modal "Editar lançamento" (openEditModal)
 
 // auth + role helpers
 const auth = useAuthStore();
@@ -49,14 +45,16 @@ const selectedAccountId = ref('');
 const financialAccountsLoaded = ref(false);
 const costCenters = ref([]);
 
-// "Novo Lançamento" modal — unifica 2 fluxos:
-//   PAY    → pagar saldo do período (chama /account/pay; Tipo travado em A Pagar)
-//   MANUAL → crédito ou débito manual (chama /account/adjust; Tipo editável,
-//            A Pagar=CREDIT, A Receber=DEBIT)
+// "Novo Lançamento" modal — unifica 4 fluxos:
+//   PAY        → pagar saldo do período           (POST /account/pay)
+//   MANUAL     → crédito ou débito manual         (POST /account/adjust)
+//   PAY_SINGLE → pagar uma linha do extrato       (POST /transactions/:txId/pay)
+//   EDIT       → editar uma linha do extrato      (PATCH /transactions/:txId)
 // Mesmo layout do modal de FinancialTransactions.vue para consistência visual.
 const showLancamentoModal = ref(false);
-const lancamentoMode = ref('PAY'); // 'PAY' | 'MANUAL'
+const lancamentoMode = ref('PAY'); // 'PAY' | 'MANUAL' | 'PAY_SINGLE' | 'EDIT'
 const lancamentoSaving = ref(false);
+const lancamentoTx = ref(null);    // RiderTransaction sendo editada / paga (PAY_SINGLE e EDIT)
 const lancamentoForm = ref({
   type: 'PAYABLE',          // 'PAYABLE' (A Pagar / Crédito) | 'RECEIVABLE' (A Receber / Débito)
   description: '',
@@ -69,6 +67,8 @@ const lancamentoForm = ref({
 
 const lancamentoTitle = computed(() => {
   if (lancamentoMode.value === 'PAY') return 'Pagar período';
+  if (lancamentoMode.value === 'PAY_SINGLE') return 'Pagar lançamento';
+  if (lancamentoMode.value === 'EDIT') return 'Editar lançamento';
   if (lancamentoMode.value === 'MANUAL') {
     return lancamentoForm.value.type === 'RECEIVABLE' ? 'Débito manual' : 'Crédito manual';
   }
@@ -76,11 +76,17 @@ const lancamentoTitle = computed(() => {
 });
 const lancamentoCtaLabel = computed(() => {
   if (lancamentoMode.value === 'PAY') return 'Confirmar pagamento';
+  if (lancamentoMode.value === 'PAY_SINGLE') return 'Pagar';
+  if (lancamentoMode.value === 'EDIT') return 'Salvar alterações';
   if (lancamentoMode.value === 'MANUAL') {
     return lancamentoForm.value.type === 'RECEIVABLE' ? 'Aplicar débito' : 'Aplicar crédito';
   }
   return 'Salvar';
 });
+// Valor bruto é editável só em MANUAL e EDIT.
+const lancamentoAmountDisabled = computed(() => ['PAY', 'PAY_SINGLE'].includes(lancamentoMode.value));
+// Tipo é editável só em MANUAL.
+const lancamentoTypeEditable = computed(() => lancamentoMode.value === 'MANUAL');
 
 // page state and common refs
 const error = ref('');
@@ -283,20 +289,30 @@ function searchTransactions() {
   fetchTransactions();
 }
 
-function startEdit(tx) {
-  if (!isAdmin.value) return;
-  editingId.value = tx.id;
-  editAmount.value = String(tx.amount ?? '');
-  editNote.value = tx.note || '';
+// Substituídas: startEdit/cancelEdit/saveEdit/payTransaction agora abrem o
+// modal unificado com modos EDIT / PAY_SINGLE. As funções abaixo são
+// thin wrappers ao redor de openLancamentoModal.
+
+function openEditModal(tx) {
+  if (!isAdmin.value || !tx?.id) return;
+  if (tx.status === 'CANCELLED') return;
+  lancamentoMode.value = 'EDIT';
+  lancamentoTx.value = tx;
+  const amt = Number(tx.amount || 0);
+  lancamentoForm.value = {
+    // Direção financeira derivada do sinal — só pra exibição. EDIT não muda Tipo.
+    type: amt < 0 ? 'RECEIVABLE' : 'PAYABLE',
+    description: tx.note || typeLabel(tx.type),
+    grossAmount: Math.abs(amt),
+    accountId: '',
+    costCenterId: '',
+    dueDate: tx.date ? new Date(tx.date).toISOString().slice(0, 10) : '',
+    notes: tx.note || '',
+  };
+  showLancamentoModal.value = true;
 }
 
-function cancelEdit() {
-  editingId.value = null;
-  editAmount.value = '';
-  editNote.value = '';
-}
-
-async function payTransaction(tx) {
+function openPaySingleModal(tx) {
   if (!isAdmin.value || !tx?.id) return;
   if (tx.status === 'PAID') {
     Swal.fire({ icon: 'info', text: 'Este lançamento já está pago.' });
@@ -308,33 +324,18 @@ async function payTransaction(tx) {
     Swal.fire({ icon: 'warning', text: 'Apenas lançamentos de valor positivo podem ser pagos individualmente.' });
     return;
   }
-
-  const acctName = financialAccounts.value.find(a => a.id === selectedAccountId.value)?.name || null;
-  const acctLine = acctName ? `<br><b>Conta de saída:</b> ${acctName}` : '';
-
-  const confirmation = await Swal.fire({
-    title: 'Pagar lançamento?',
-    html: `<b>Tipo:</b> ${typeLabel(tx.type)}`
-      + `<br><b>Data:</b> ${formatDateWithOptionalTime(tx.date)}`
-      + `<br><b style="font-size:1.1em">Valor: ${formatCurrency(amt)}</b>`
-      + acctLine,
-    icon: 'question',
-    showCancelButton: true,
-    confirmButtonText: 'Pagar',
-    cancelButtonText: 'Voltar',
-    confirmButtonColor: '#198754',
-  });
-  if (!confirmation.isConfirmed) return;
-
-  try {
-    await api.post(`/riders/${riderId}/transactions/${tx.id}/pay`, { accountId: selectedAccountId.value || null });
-    Swal.fire({ icon: 'success', toast: true, position: 'top-end', timer: 1800, showConfirmButton: false, text: 'Lançamento pago.' });
-    await fetchBalance();
-    await fetchTransactions();
-  } catch (e) {
-    console.error('payTransaction failed', e);
-    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao pagar lançamento' });
-  }
+  lancamentoMode.value = 'PAY_SINGLE';
+  lancamentoTx.value = tx;
+  lancamentoForm.value = {
+    type: 'PAYABLE',
+    description: `Pagamento de ${typeLabel(tx.type)}${tx.note ? ' - ' + tx.note : ''}`,
+    grossAmount: amt,
+    accountId: selectedAccountId.value || '',
+    costCenterId: '',
+    dueDate: new Date().toISOString().slice(0, 10),
+    notes: '',
+  };
+  showLancamentoModal.value = true;
 }
 
 async function cancelTransaction(tx) {
@@ -365,30 +366,6 @@ async function cancelTransaction(tx) {
   } catch (e) {
     console.error('cancelTransaction failed', e);
     Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao cancelar transação' });
-  }
-}
-
-async function saveEdit() {
-  if (!isAdmin.value || !editingId.value) return;
-  savingEdit.value = true;
-  try {
-    const rawAmount = String(editAmount.value).trim().replace(',', '.');
-    const parsedAmount = Number(rawAmount);
-    if (rawAmount === '' || isNaN(parsedAmount)) {
-      Swal.fire({ icon: 'error', text: 'Informe um valor numérico válido (ex: 3.50 ou 3,50).' });
-      return;
-    }
-    const payload = { amount: parsedAmount, note: editNote.value };
-    const { data } = await api.patch(`/riders/${riderId}/transactions/${editingId.value}`, payload);
-    Swal.fire({ icon: 'success', text: 'Transação atualizada.' });
-    await fetchBalance();
-    await fetchTransactions();
-    cancelEdit();
-  } catch (e) {
-    console.error('saveEdit failed', e);
-    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao salvar alteração' });
-  } finally {
-    savingEdit.value = false;
   }
 }
 
@@ -696,6 +673,28 @@ async function saveLancamento() {
         + (txId ? `<br>ID transação: <code>${txId}</code>` : '');
       showLancamentoModal.value = false;
       await Swal.fire({ icon: 'success', title: msg, html: details });
+    } else if (lancamentoMode.value === 'PAY_SINGLE') {
+      const txId = lancamentoTx.value?.id;
+      if (!txId) throw new Error('Transação não selecionada');
+      await api.post(`/riders/${riderId}/transactions/${txId}/pay`, {
+        accountId: lancamentoForm.value.accountId || null,
+      });
+      showLancamentoModal.value = false;
+      Swal.fire({ icon: 'success', toast: true, position: 'top-end', timer: 1800, showConfirmButton: false, text: 'Lançamento pago.' });
+    } else if (lancamentoMode.value === 'EDIT') {
+      const txId = lancamentoTx.value?.id;
+      if (!txId) throw new Error('Transação não selecionada');
+      // Backend PATCH aceita { amount, note }. Preserva o sinal original
+      // (ex: ajustes negativos continuam negativos após edição).
+      const originalAmount = Number(lancamentoTx.value.amount || 0);
+      const signedAmount = originalAmount < 0 ? -val : val;
+      await api.patch(`/riders/${riderId}/transactions/${txId}`, {
+        amount: signedAmount,
+        note: lancamentoForm.value.description || null,
+      });
+      showLancamentoModal.value = false;
+      success.value = 'Lançamento atualizado.';
+      setTimeout(() => (success.value = ''), 4000);
     } else {
       // Em MANUAL, o tipo escolhido no modal (PAYABLE/RECEIVABLE) decide
       // se é CREDIT ou DEBIT no endpoint /account/adjust.
@@ -833,43 +832,46 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- Conta de saída (usada pelo pagamento individual no extrato) -->
-          <div class="row align-items-end g-3 mb-3" v-if="financialAccountsLoaded">
-            <div class="col-md-6" v-if="financialAccounts.length > 0">
-              <label class="form-label small mb-1">Conta de saída (padrão)</label>
+          <!-- Linha única de ações: Conta de saída, Telefone, Pagar, Crédito/Débito,
+               Enviar PDF, Exportar CSV. Em telas estreitas o flex-wrap faz quebrar. -->
+          <div class="d-flex flex-wrap gap-2 align-items-end">
+            <div v-if="financialAccounts.length > 0" style="min-width: 200px; flex: 1 1 200px;">
               <SelectInput
                 v-model="selectedAccountId"
                 :options="financialAccounts.map(a => ({ value: a.id, label: a.name }))"
-                placeholder="Selecione a conta..."
+                placeholder="Conta de saída..."
               />
             </div>
-            <div class="col-md-6" v-else>
-              <label class="form-label small mb-1">Conta de saída</label>
-              <div class="text-muted small p-2 border rounded bg-light">
-                Nenhuma conta cadastrada.
-                <router-link to="/financial/accounts">Cadastrar</router-link>
-              </div>
-            </div>
-          </div>
-
-          <!-- Linha única de ações: Pagar + Crédito/Débito + Exportar CSV -->
-          <div class="d-flex flex-wrap gap-2 align-items-stretch">
+            <TextInput
+              v-model="phoneTo"
+              placeholder="+5511999999999"
+              inputClass="form-control"
+              style="max-width: 200px;"
+            />
             <button
-              class="btn btn-success py-2"
+              class="btn btn-success"
               @click="openLancamentoModal('PAY')"
               :disabled="!datesAreValid || periodBalance <= 0"
             >
               PAGAR {{ periodBalance > 0 ? formatCurrency(periodBalance) : '' }}
             </button>
             <button
-              class="btn btn-outline-primary py-2"
+              class="btn btn-outline-primary"
               v-if="isAdmin"
               @click="openLancamentoModal('MANUAL')"
             >
               <i class="bi bi-arrow-left-right me-1"></i> Crédito / Débito
             </button>
             <button
-              class="btn btn-outline-secondary py-2 ms-auto"
+              class="btn btn-outline-success"
+              @click="sendPdf"
+              :disabled="sendingPdf || !datesAreValid"
+            >
+              <i class="bi bi-whatsapp me-1"></i>
+              {{ sendingPdf ? 'Enviando...' : 'Enviar PDF' }}
+            </button>
+            <button
+              class="btn btn-outline-secondary ms-auto"
               @click="exportCsv"
               :disabled="exporting || !datesAreValid"
             >
@@ -877,13 +879,9 @@ onMounted(async () => {
               {{ exporting ? 'Exportando...' : 'Exportar CSV' }}
             </button>
           </div>
-
-          <!-- WhatsApp PDF (linha separada) -->
-          <div class="d-none d-md-flex align-items-center gap-2 mt-3 pt-3 border-top">
-            <TextInput v-model="phoneTo" placeholder="+5511999999999" inputClass="form-control form-control-sm phone-input" />
-            <button class="btn btn-sm btn-success" @click="sendPdf" :disabled="sendingPdf || !datesAreValid">
-              {{ sendingPdf ? 'Enviando...' : 'Enviar PDF (WhatsApp)' }}
-            </button>
+          <div v-if="financialAccountsLoaded && financialAccounts.length === 0" class="text-muted small mt-2">
+            Nenhuma conta financeira cadastrada.
+            <router-link to="/financial/accounts">Cadastrar</router-link>
           </div>
         </div>
       </div>
@@ -960,21 +958,11 @@ onMounted(async () => {
                 <td>{{ formatDateWithOptionalTime(t.date) }}</td>
                 <td>{{ typeLabel(t.type) }}</td>
                 <td>
-                  <div v-if="isAdmin && editingId === t.id" class="d-flex gap-2 align-items-center">
-                    <input class="form-control form-control-sm" v-model="editAmount" style="width:110px" />
-                    <input class="form-control form-control-sm" v-model="editNote" placeholder="Observação" />
-                    <div class="btn-group">
-                      <button class="btn btn-sm btn-success" @click="saveEdit" :disabled="savingEdit">{{ savingEdit ? 'Salvando...' : 'Salvar' }}</button>
-                      <button class="btn btn-sm btn-outline-secondary" @click="cancelEdit">Cancelar</button>
-                    </div>
-                  </div>
-                  <div v-else>
-                    <span
-                      :class="{ 'text-primary': isAdmin && t.status !== 'CANCELLED', 'text-decoration-line-through': t.status === 'CANCELLED' }"
-                      @click="isAdmin && t.status !== 'CANCELLED' ? startEdit(t) : null"
-                      :style="{ cursor: isAdmin && t.status !== 'CANCELLED' ? 'pointer' : 'default' }"
-                    >{{ formatCurrency(Number(t.amount || 0)) }}</span>
-                  </div>
+                  <span
+                    :class="{ 'text-primary': isAdmin && t.status !== 'CANCELLED', 'text-decoration-line-through': t.status === 'CANCELLED' }"
+                    @click="isAdmin && t.status !== 'CANCELLED' ? openEditModal(t) : null"
+                    :style="{ cursor: isAdmin && t.status !== 'CANCELLED' ? 'pointer' : 'default' }"
+                  >{{ formatCurrency(Number(t.amount || 0)) }}</span>
                 </td>
                 <td>
                   <span class="badge" :class="statusBadge(t.status).cls" :title="t.status === 'PAID' && t.paidAt ? `Pago em ${formatDateWithOptionalTime(t.paidAt)}` : (t.status === 'CANCELLED' && t.cancelReason ? t.cancelReason : null)">
@@ -988,7 +976,7 @@ onMounted(async () => {
                   <div v-if="t.status === 'PENDING'" class="btn-group">
                     <button
                       class="btn btn-sm btn-outline-success"
-                      @click="payTransaction(t)"
+                      @click="openPaySingleModal(t)"
                       :disabled="Number(t.amount || 0) <= 0"
                       title="Pagar lançamento individualmente"
                     >
@@ -996,7 +984,7 @@ onMounted(async () => {
                     </button>
                     <button
                       class="btn btn-sm btn-outline-primary"
-                      @click="startEdit(t)"
+                      @click="openEditModal(t)"
                       title="Editar lançamento"
                     >
                       <i class="bi bi-pencil"></i>
@@ -1058,20 +1046,20 @@ onMounted(async () => {
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Tipo</label>
-                <input
-                  v-if="lancamentoMode === 'PAY'"
-                  type="text"
-                  class="form-control bg-light"
-                  value="A Pagar"
-                  disabled
-                />
                 <SelectInput
-                  v-else
+                  v-if="lancamentoTypeEditable"
                   v-model="lancamentoForm.type"
                   :options="[
                     { value: 'PAYABLE', label: 'A Pagar (Crédito)' },
                     { value: 'RECEIVABLE', label: 'A Receber (Débito)' },
                   ]"
+                />
+                <input
+                  v-else
+                  type="text"
+                  class="form-control bg-light"
+                  :value="lancamentoForm.type === 'RECEIVABLE' ? 'A Receber' : 'A Pagar'"
+                  disabled
                 />
               </div>
               <div class="col-md-6">
@@ -1086,10 +1074,13 @@ onMounted(async () => {
                   v-model.number="lancamentoForm.grossAmount"
                   step="0.01"
                   min="0"
-                  :disabled="lancamentoMode === 'PAY'"
+                  :disabled="lancamentoAmountDisabled"
                 />
                 <div v-if="lancamentoMode === 'PAY'" class="form-text small">
                   Calculado automaticamente a partir do saldo do período.
+                </div>
+                <div v-else-if="lancamentoMode === 'PAY_SINGLE'" class="form-text small">
+                  Valor do lançamento selecionado no extrato.
                 </div>
               </div>
               <div class="col-md-4">
