@@ -162,7 +162,7 @@ const adapter = {
       const data = await evoSendMediaUrl({
         instanceName,
         to,
-        mediaUrl: content.mediaUrl,
+        mediaUrl: toAbsolutePublicUrl(content.mediaUrl),
         filename: content.mediaFileName || 'arquivo',
         mimeType,
         caption,
@@ -185,7 +185,7 @@ const adapter = {
     const data = await evoSendMediaUrl({
       instanceName,
       to,
-      mediaUrl,
+      mediaUrl: toAbsolutePublicUrl(mediaUrl),
       mimeType,
       caption: caption || '',
     })
@@ -427,6 +427,27 @@ async function downloadMediaViaEvolution(instanceName, msg, companyId, mimeType)
   if (!base64) throw new Error('No base64 returned from Evolution API')
 
   return saveBase64Media(base64, companyId, data?.mimetype || mimeType)
+}
+
+// Evolution exige URL absoluta (http/https) ou base64 — não aceita path
+// relativo. QuickReplies e uploads do inbox são salvos com `/public/...`
+// no banco, então qualquer caller que use sendMessage com mediaUrl relativo
+// (automations.sendAutoReply, /transactions/:id/pay com mídia, etc.) caía
+// num 400 "Owned media must be a url or base64". Esta função detecta URL
+// já absoluta e devolve sem mudar; URL relativa recebe o prefixo
+// BACKEND_URL do ambiente. Se BACKEND_URL não estiver setado, loga aviso e
+// devolve a URL como veio (deixa Evolution rejeitar com mensagem clara).
+function toAbsolutePublicUrl(maybeRelative) {
+  if (!maybeRelative) return maybeRelative
+  const value = String(maybeRelative)
+  if (/^https?:\/\//i.test(value)) return value
+  const base = process.env.BACKEND_URL
+  if (!base) {
+    console.warn('[whatsappEvolution.adapter] BACKEND_URL não configurado — mídia com URL relativa será rejeitada pelo Evolution:', value)
+    return value
+  }
+  const path = value.startsWith('/') ? value : `/${value}`
+  return `${base.replace(/\/$/, '')}${path}`
 }
 
 export default adapter

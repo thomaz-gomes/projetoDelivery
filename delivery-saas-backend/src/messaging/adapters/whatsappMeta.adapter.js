@@ -564,46 +564,49 @@ function extractReorderButton(msg) {
 function buildOutboundBody(to, content) {
   const recipient = String(to).replace(/\D/g, '')
   const type = String(content?.type || 'TEXT').toUpperCase()
+  // Meta exige link HTTPS público — relativo (/public/...) cai em erro
+  // genérico de download. Normaliza antes de montar o body.
+  const mediaLink = content?.mediaUrl ? toAbsolutePublicUrl(content.mediaUrl) : null
 
   let body
-  if (type === 'IMAGE' && content?.mediaUrl) {
+  if (type === 'IMAGE' && mediaLink) {
     body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'image',
-      image: { link: content.mediaUrl, caption: content.text || undefined },
+      image: { link: mediaLink, caption: content.text || undefined },
     }
-  } else if (type === 'VIDEO' && content?.mediaUrl) {
+  } else if (type === 'VIDEO' && mediaLink) {
     body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'video',
-      video: { link: content.mediaUrl, caption: content.text || undefined },
+      video: { link: mediaLink, caption: content.text || undefined },
     }
-  } else if (type === 'AUDIO' && content?.mediaUrl) {
+  } else if (type === 'AUDIO' && mediaLink) {
     body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'audio',
-      audio: { link: content.mediaUrl },
+      audio: { link: mediaLink },
     }
-  } else if (type === 'DOCUMENT' && content?.mediaUrl) {
+  } else if (type === 'DOCUMENT' && mediaLink) {
     body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'document',
       document: {
-        link: content.mediaUrl,
+        link: mediaLink,
         caption: content.text || undefined,
         filename: content.mediaFileName || undefined,
       },
     }
-  } else if (type === 'STICKER' && content?.mediaUrl) {
+  } else if (type === 'STICKER' && mediaLink) {
     body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'sticker',
-      sticker: { link: content.mediaUrl },
+      sticker: { link: mediaLink },
     }
   } else if (type === 'LOCATION') {
     const lat = Number(content?.latitude)
@@ -726,6 +729,24 @@ async function downloadAndSaveMetaMedia(mediaId, account, fallbackMime) {
   const { filePath, publicUrl } = buildMediaTarget(account.companyId, meta?.mime_type || fallbackMime)
   fs.writeFileSync(filePath, Buffer.from(bytes))
   return publicUrl
+}
+
+// Meta Graph API exige link HTTPS público — não aceita path relativo
+// (`/public/...`). QuickReplies/uploads salvam URL relativa no banco, então
+// callers como automations.sendAutoReply caíam ao mandar greeting com mídia.
+// Normaliza para absoluta usando BACKEND_URL; se já for absoluta, devolve
+// como veio. Sem BACKEND_URL, loga aviso e devolve original.
+function toAbsolutePublicUrl(maybeRelative) {
+  if (!maybeRelative) return maybeRelative
+  const value = String(maybeRelative)
+  if (/^https?:\/\//i.test(value)) return value
+  const base = process.env.BACKEND_URL
+  if (!base) {
+    console.warn('[whatsappMeta.adapter] BACKEND_URL não configurado — mídia com URL relativa pode ser rejeitada pelo Meta:', value)
+    return value
+  }
+  const path = value.startsWith('/') ? value : `/${value}`
+  return `${base.replace(/\/$/, '')}${path}`
 }
 
 export default adapter
