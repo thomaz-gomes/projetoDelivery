@@ -12,7 +12,7 @@ companiesRouter.get('/company', async (req, res) => {
   const companyId = req.user.companyId
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' })
   try {
-    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, alwaysOpen: true, timezone: true, weeklySchedule: true, street: true, addressNumber: true, addressNeighborhood: true, city: true, state: true, postalCode: true } })
+    const c = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, alwaysOpen: true, timezone: true, weeklySchedule: true, street: true, addressNumber: true, addressNeighborhood: true, city: true, state: true, postalCode: true, marketingFrequencyCapPerWeek: true } })
     if (!c) return res.status(404).json({ message: 'Empresa não encontrada' })
     // If timezone not set, return default Brasilia timezone so UI shows the expected default
     if (!c.timezone) c.timezone = 'America/Sao_Paulo'
@@ -50,7 +50,7 @@ companiesRouter.get('/company', async (req, res) => {
 companiesRouter.patch('/company', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   if (!companyId) return res.status(400).json({ message: 'Usuário sem empresa' })
-  const { alwaysOpen, timezone, weeklySchedule } = req.body || {}
+  const { alwaysOpen, timezone, weeklySchedule, marketingFrequencyCapPerWeek } = req.body || {}
   try {
     const existing = await prisma.company.findUnique({ where: { id: companyId } })
     if (!existing) return res.status(404).json({ message: 'Empresa não encontrada' })
@@ -60,6 +60,21 @@ companiesRouter.patch('/company', requireRole('ADMIN'), async (req, res) => {
     // accept empty strings or null to unset
     if (timezone !== undefined) data.timezone = timezone === '' ? null : timezone
     if (weeklySchedule !== undefined) data.weeklySchedule = weeklySchedule === '' ? null : weeklySchedule
+    // marketingFrequencyCapPerWeek: null/'' clears (back to system default);
+    // otherwise must be an integer in 0..50. 0 effectively disables marketing
+    // sends for this tenant — kept as a valid value so an admin can pause
+    // outbound marketing without removing the integration.
+    if (marketingFrequencyCapPerWeek !== undefined) {
+      if (marketingFrequencyCapPerWeek === null || marketingFrequencyCapPerWeek === '') {
+        data.marketingFrequencyCapPerWeek = null
+      } else {
+        const n = Number(marketingFrequencyCapPerWeek)
+        if (!Number.isInteger(n) || n < 0 || n > 50) {
+          return res.status(400).json({ message: 'marketingFrequencyCapPerWeek deve ser um inteiro entre 0 e 50' })
+        }
+        data.marketingFrequencyCapPerWeek = n
+      }
+    }
 
     // validate weeklySchedule shape if provided
     const validateWeekly = (ws) => {

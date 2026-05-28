@@ -31,6 +31,50 @@
         </div>
       </div>
     </div>
+
+    <div class="card mt-3">
+      <div class="card-body">
+        <h5 class="mb-3">
+          <i class="bi-megaphone me-2"></i>Marketing
+        </h5>
+        <p class="small text-muted mb-3">
+          Limite de mensagens de marketing que cada cliente pode receber numa janela rolante de 7 dias,
+          somando todas as campanhas. Acima deste limite, o cliente é silenciosamente excluído da próxima
+          campanha (proteção anti-spam, ajuda a manter a qualidade da conta no WhatsApp).
+        </p>
+
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Limite por cliente / 7 dias</label>
+            <input
+              type="number"
+              class="form-control"
+              min="0"
+              max="50"
+              :placeholder="`Padrão (${DEFAULT_FREQ_CAP})`"
+              v-model="form.marketingFrequencyCapPerWeek"
+              :disabled="loading"
+            />
+            <div class="form-text">
+              <span v-if="form.marketingFrequencyCapPerWeek === '' || form.marketingFrequencyCapPerWeek == null">
+                Usando o padrão do sistema: <strong>{{ DEFAULT_FREQ_CAP }}</strong>.
+              </span>
+              <span v-else-if="Number(form.marketingFrequencyCapPerWeek) === 0">
+                <strong class="text-danger">0</strong> bloqueia todo envio de marketing.
+              </span>
+              <span v-else>Cada cliente recebe no máximo <strong>{{ form.marketingFrequencyCapPerWeek }}</strong> mensagens por semana.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-primary" :disabled="saving || loading" @click="saveMarketing">
+            <span v-if="saving" class="spinner-border spinner-border-sm me-2"></span>
+            Salvar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -57,7 +101,9 @@ const TIMEZONES = [
   'UTC',
 ]
 
-const form = ref({ timezone: DEFAULT_TZ })
+const DEFAULT_FREQ_CAP = 2
+
+const form = ref({ timezone: DEFAULT_TZ, marketingFrequencyCapPerWeek: '' })
 const loading = ref(false)
 const saving = ref(false)
 
@@ -66,6 +112,7 @@ async function load() {
   try {
     const r = await api.get('/settings/company')
     form.value.timezone = r.data?.timezone || DEFAULT_TZ
+    form.value.marketingFrequencyCapPerWeek = r.data?.marketingFrequencyCapPerWeek ?? ''
   } catch (e) {
     console.warn('Falha ao carregar configurações da empresa', e)
   } finally {
@@ -77,6 +124,21 @@ async function save() {
   saving.value = true
   try {
     await api.patch('/settings/company', { timezone: form.value.timezone })
+    Swal.fire({ icon: 'success', title: 'Salvo', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 })
+  } catch (e) {
+    const msg = e?.response?.data?.message || 'Erro ao salvar'
+    Swal.fire({ icon: 'error', title: 'Erro', text: msg })
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveMarketing() {
+  saving.value = true
+  try {
+    const v = form.value.marketingFrequencyCapPerWeek
+    const payload = { marketingFrequencyCapPerWeek: (v === '' || v == null) ? null : Number(v) }
+    await api.patch('/settings/company', payload)
     Swal.fire({ icon: 'success', title: 'Salvo', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 })
   } catch (e) {
     const msg = e?.response?.data?.message || 'Erro ao salvar'
