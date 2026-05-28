@@ -10,13 +10,18 @@
           <label class="form-label small mb-1">Até</label>
           <input type="date" class="form-control form-control-sm" v-model="filterTo" />
         </div>
-        <div class="col-12 col-md-3">
+        <div class="col-12 col-md-2">
           <label class="form-label small mb-1">Motoboy</label>
           <SelectInput v-model="filterRider" :options="riderOptions" placeholder="Todos" />
         </div>
-        <div class="col-12 col-md-3">
+        <div class="col-6 col-md-2">
           <button class="btn btn-primary btn-sm w-100" @click="load" :disabled="loading">
             <i class="bi bi-search me-1"></i>Buscar
+          </button>
+        </div>
+        <div class="col-6 col-md-2">
+          <button class="btn btn-success btn-sm w-100" @click="openManualCheckin">
+            <i class="bi bi-plus-circle me-1"></i>Check-in manual
           </button>
         </div>
       </div>
@@ -88,6 +93,78 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Modal: check-in manual -->
+    <div v-if="showManualModal" class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5)">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Check-in manual</h5>
+            <button type="button" class="btn-close" @click="closeManualModal"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small text-muted mb-3">
+              Lança um check-in agora mesmo em nome do motoboy, sem validação de localização.
+              Útil quando o motoboy chegou ao ponto mas não conseguiu fazer check-in pelo app.
+            </p>
+
+            <div class="mb-3">
+              <label class="form-label">Motoboy</label>
+              <SelectInput
+                v-model="manualForm.riderId"
+                :options="riders.map(r => ({ value: r.id, label: r.name }))"
+                placeholder="Selecione o motoboy"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Turno</label>
+              <div v-if="loadingShifts" class="text-muted small py-2">
+                <span class="spinner-border spinner-border-sm me-2"></span>Carregando turnos...
+              </div>
+              <div v-else-if="!manualForm.riderId" class="text-muted small">
+                Selecione um motoboy para listar os turnos atribuídos.
+              </div>
+              <div v-else-if="!riderShifts.length" class="alert alert-warning small mb-0">
+                Este motoboy não tem nenhum turno atribuído. Atribua um turno em
+                <router-link to="/settings/rider-shifts">Configurações → Turnos</router-link>.
+              </div>
+              <div v-else-if="riderShifts.length === 1" class="form-control bg-light">
+                {{ riderShifts[0].name }}
+                <span class="text-muted small">({{ riderShifts[0].startTime }} – {{ riderShifts[0].endTime }})</span>
+              </div>
+              <SelectInput
+                v-else
+                v-model="manualForm.shiftId"
+                :options="riderShifts.map(s => ({ value: s.id, label: `${s.name} (${s.startTime} – ${s.endTime})` }))"
+                placeholder="Selecione o turno"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Observação (opcional)</label>
+              <input
+                type="text"
+                class="form-control"
+                v-model="manualForm.note"
+                placeholder="Ex: motoboy sem internet"
+                maxlength="200"
+              />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="closeManualModal">Cancelar</button>
+            <button
+              class="btn btn-primary"
+              @click="submitManualCheckin"
+              :disabled="manualSaving || !canSubmitManual"
+            >
+              {{ manualSaving ? 'Lançando...' : 'Lançar check-in' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </ListCard>
 </template>
 
@@ -116,6 +193,96 @@ const riderOptions = computed(() =>
     riders.value.map(r => ({ value: r.id, label: r.name }))
   )
 );
+
+// Manual check-in modal
+const showManualModal = ref(false);
+const manualSaving = ref(false);
+const loadingShifts = ref(false);
+const riderShifts = ref([]); // turnos atribuídos ao motoboy selecionado
+const manualForm = ref({ riderId: '', shiftId: '', note: '' });
+
+// Habilita "Lançar check-in" só quando os campos obrigatórios estão preenchidos.
+// Quando há exatamente 1 turno atribuído, ele é resolvido em submitManualCheckin
+// (não exige selecionar manualmente no dropdown).
+const canSubmitManual = computed(() => {
+  if (!manualForm.value.riderId) return false;
+  if (loadingShifts.value) return false;
+  if (riderShifts.value.length === 0) return false;
+  if (riderShifts.value.length > 1 && !manualForm.value.shiftId) return false;
+  return true;
+});
+
+function openManualCheckin() {
+  manualForm.value = { riderId: filterRider.value || '', shiftId: '', note: '' };
+  riderShifts.value = [];
+  showManualModal.value = true;
+  if (manualForm.value.riderId) loadRiderShifts(manualForm.value.riderId);
+}
+
+function closeManualModal() {
+  showManualModal.value = false;
+  manualForm.value = { riderId: '', shiftId: '', note: '' };
+  riderShifts.value = [];
+}
+
+async function loadRiderShifts(riderId) {
+  if (!riderId) {
+    riderShifts.value = [];
+    return;
+  }
+  loadingShifts.value = true;
+  try {
+    const { data } = await api.get(`/riders/${riderId}/shifts`);
+    const active = Array.isArray(data) ? data.filter(s => s.active !== false) : [];
+    riderShifts.value = active;
+    // Auto-seleciona quando há apenas um turno disponível.
+    manualForm.value.shiftId = active.length === 1 ? active[0].id : '';
+  } catch (e) {
+    console.error('loadRiderShifts failed', e);
+    riderShifts.value = [];
+  } finally {
+    loadingShifts.value = false;
+  }
+}
+
+// Recarregar turnos sempre que o motoboy mudar no modal.
+watch(() => manualForm.value.riderId, (newId) => {
+  if (showManualModal.value) loadRiderShifts(newId);
+});
+
+async function submitManualCheckin() {
+  if (!canSubmitManual.value) return;
+  const riderId = manualForm.value.riderId;
+  const shiftId = manualForm.value.shiftId
+    || (riderShifts.value.length === 1 ? riderShifts.value[0].id : null);
+  if (!shiftId) {
+    Swal.fire({ icon: 'warning', text: 'Selecione um turno' });
+    return;
+  }
+  manualSaving.value = true;
+  try {
+    await api.post(`/riders/${riderId}/manual-checkin`, {
+      shiftId,
+      note: manualForm.value.note || undefined,
+    });
+    closeManualModal();
+    Swal.fire({
+      icon: 'success',
+      title: 'Check-in lançado',
+      timer: 1500,
+      showConfirmButton: false,
+    });
+    await load();
+  } catch (e) {
+    console.error('submitManualCheckin failed', e);
+    Swal.fire({
+      icon: 'error',
+      text: e.response?.data?.message || 'Falha ao lançar check-in',
+    });
+  } finally {
+    manualSaving.value = false;
+  }
+}
 
 async function load() {
   loading.value = true;

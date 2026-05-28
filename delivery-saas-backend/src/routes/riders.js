@@ -613,6 +613,73 @@ ridersRouter.post('/me/checkin', async (req, res) => {
   res.status(201).json(checkin);
 });
 
+// POST /riders/:id/manual-checkin — operador faz check-in pelo motoboy.
+// Diferente de /me/checkin: não valida localização (lat/lng = 0) e exige
+// ADMIN. Útil quando o motoboy chegou ao ponto mas não conseguiu fazer
+// check-in pelo app (sem GPS, sem internet, app travou, etc.).
+ridersRouter.post('/:id/manual-checkin', requireRole('ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+  const { shiftId, note } = req.body || {};
+  if (!shiftId) return res.status(400).json({ message: 'shiftId é obrigatório' });
+
+  const rider = await prisma.rider.findFirst({ where: { id, companyId, active: true } });
+  if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
+
+  const shift = await prisma.riderShift.findFirst({ where: { id: shiftId, companyId, active: true } });
+  if (!shift) return res.status(400).json({ message: 'Turno não encontrado ou inativo' });
+
+  const assignment = await prisma.riderShiftAssignment.findUnique({
+    where: { riderId_shiftId: { riderId: rider.id, shiftId } }
+  });
+  if (!assignment) return res.status(400).json({ message: 'Motoboy não está atribuído a este turno' });
+
+  // Limites do dia em BRT (UTC-3): mesma lógica do /me/checkin
+  const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+  const nowUTC = new Date();
+  const nowBRT = new Date(nowUTC.getTime() - BRT_OFFSET_MS);
+  const brtMidnight = new Date(nowBRT);
+  brtMidnight.setUTCHours(0, 0, 0, 0);
+  const today = new Date(brtMidnight.getTime() + BRT_OFFSET_MS);
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+  const existing = await prisma.riderCheckin.findFirst({
+    where: { riderId: rider.id, shiftId, checkoutAt: null, checkinAt: { gte: today, lt: tomorrow } }
+  });
+  if (existing) {
+    return res.status(409).json({ message: 'Motoboy já está em turno neste horário', checkin: existing });
+  }
+
+  const operatorName = req.user?.name || req.user?.email || 'operador';
+  const addressNote = note ? ` - ${String(note).slice(0, 200)}` : '';
+  const address = `Check-in manual (${operatorName})${addressNote}`;
+
+  const checkin = await prisma.riderCheckin.create({
+    data: {
+      riderId: rider.id,
+      companyId,
+      shiftId,
+      lat: 0,
+      lng: 0,
+      address,
+      checkinAt: new Date(),
+      distanceMeters: 0,
+    }
+  });
+
+  // Mesmas hooks pós-checkin do fluxo do motoboy: goals + bônus retroativos.
+  try {
+    const { checkGoalsOnEvent } = await import('../services/riderGoals.js');
+    await checkGoalsOnEvent('CHECKIN', rider.id, companyId);
+  } catch (e) { console.warn('[goals] check on manual-checkin failed:', e?.message || e); }
+  try {
+    const { generateMissingCheckinBonusesForDay } = await import('../services/riderAccount.js');
+    await generateMissingCheckinBonusesForDay({ companyId, riderId: rider.id, date: new Date() });
+  } catch (e) { console.warn('[manual-checkin] retroactive bonus generation failed:', e?.message || e); }
+
+  res.status(201).json(checkin);
+});
+
 // POST /riders/me/checkout — motoboy encerra turno ativo manualmente
 ridersRouter.post('/me/checkout', async (req, res) => {
   const userId = req.user.id;
