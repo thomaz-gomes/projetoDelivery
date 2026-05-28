@@ -73,6 +73,59 @@ const canAttachImage = computed(() => {
   return false
 })
 
+// ── Live WhatsApp preview ──
+// Renders the selected Cloud template (header/body/footer/buttons) or the
+// Evolution free-text on the right of Step 2, mirroring the preview UX from
+// the template editor. Cloud {{N}} placeholders and Evolution {nome}/{cliente}/
+// {cupom} are replaced with bracketed labels so the operator sees the message
+// shape without needing a real customer fetch.
+function substituteCloudVars(text) {
+  if (!text) return ''
+  return String(text).replace(/\{\{(\d+)\}\}/g, (_, n) => `[var${n}]`)
+}
+function substituteFreeTextVars(text) {
+  if (!text) return ''
+  return String(text)
+    .replace(/\{nome\}/g, '[Nome]')
+    .replace(/\{cliente\}/g, '[Cliente]')
+    .replace(/\{cupom\}/g, '[Cupom]')
+}
+
+const templateParts = computed(() => {
+  const tpl = selectedTemplate.value
+  if (!tpl) return null
+  const comps = tpl.components || []
+  const header = comps.find(c => String(c.type).toUpperCase() === 'HEADER') || null
+  const body = comps.find(c => String(c.type).toUpperCase() === 'BODY') || null
+  const footer = comps.find(c => String(c.type).toUpperCase() === 'FOOTER') || null
+  const buttonsBlock = comps.find(c => String(c.type).toUpperCase() === 'BUTTONS') || null
+  return {
+    headerFormat: header?.format ? String(header.format).toUpperCase() : null,
+    headerText: header?.format === 'TEXT' ? substituteCloudVars(header.text || '') : '',
+    bodyText: substituteCloudVars(body?.text || ''),
+    footerText: footer?.text || '',
+    buttons: Array.isArray(buttonsBlock?.buttons) ? buttonsBlock.buttons.filter(b => b?.text) : [],
+  }
+})
+
+const livePreviewMode = computed(() => {
+  if (channelType.value === 'META_WA' && form.value.templateId) return 'template'
+  if (channelType.value === 'AUTO' && form.value.templateId) return 'template'
+  if (channelType.value === 'EVOLUTION_WA') return 'freeText'
+  if (channelType.value === 'AUTO' && form.value.freeText) return 'freeText'
+  return null
+})
+
+const livePreviewHint = computed(() => {
+  if (!form.value.channelKey) return 'Selecione um canal acima para começar'
+  if (channelType.value === 'META_WA' && !form.value.templateId) return 'Selecione um template aprovado'
+  if (channelType.value === 'AUTO' && !form.value.templateId && !form.value.freeText) return 'Escolha um template ou digite o texto livre'
+  if (channelType.value === 'EVOLUTION_WA' && !form.value.freeText) return 'Digite o texto da mensagem'
+  return ''
+})
+
+const freeTextPreview = computed(() => substituteFreeTextVars(form.value.freeText))
+
 const needsAudienceConfirm = computed(() => preflight.value.issues.some(i => i.code === 'large_audience'))
 const canActivate = computed(() => {
   if (preflight.value.issues.some(i => i.severity === 'error')) return false
@@ -233,8 +286,10 @@ async function activate() {
     </div>
 
     <!-- Step 2 -->
-    <div v-if="step === 2" class="card">
-      <div class="card-body">
+    <div v-if="step === 2" class="row g-3">
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-body">
         <h5>Mensagem</h5>
 
         <div class="mb-3">
@@ -338,6 +393,62 @@ async function activate() {
         <div class="d-flex justify-content-between mt-4">
           <BaseButton variant="outline" @click="step = 1">← Voltar</BaseButton>
           <BaseButton variant="primary" :disabled="!previewSeen" @click="step = 3">Próximo →</BaseButton>
+        </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live WhatsApp preview (sticky, right column) -->
+      <div class="col-lg-5">
+        <div class="card" style="position:sticky;top:80px">
+          <div class="card-body">
+            <h6 class="card-title mb-3">
+              <i class="bi bi-whatsapp text-success me-1"></i>Pré-visualização
+            </h6>
+            <div style="background:#e5ddd5;padding:16px;border-radius:8px;min-height:220px">
+              <div v-if="!livePreviewMode" class="text-muted small text-center py-4">
+                {{ livePreviewHint }}
+              </div>
+              <div v-else style="background:#fff;border-radius:8px;padding:10px 14px;max-width:340px;box-shadow:0 1px 0.5px rgba(0,0,0,0.13)">
+                <!-- Template (Cloud) preview -->
+                <template v-if="livePreviewMode === 'template' && templateParts">
+                  <div v-if="templateParts.headerFormat === 'IMAGE'" class="mb-2">
+                    <img v-if="form.mediaUrl" :src="form.mediaUrl" class="img-fluid rounded" alt="Header" />
+                    <div v-else class="bg-secondary-subtle text-muted text-center py-4 rounded small">
+                      <i class="bi bi-image me-1"></i>Imagem do template
+                    </div>
+                  </div>
+                  <div v-else-if="templateParts.headerText" class="fw-semibold mb-2" style="font-size:0.92rem">
+                    {{ templateParts.headerText }}
+                  </div>
+
+                  <div v-if="templateParts.bodyText" style="white-space:pre-wrap;font-size:0.9rem">{{ templateParts.bodyText }}</div>
+                  <div v-else class="text-muted small fst-italic">(template sem corpo)</div>
+
+                  <div v-if="templateParts.footerText" class="text-muted mt-2" style="font-size:0.78rem">{{ templateParts.footerText }}</div>
+
+                  <div v-if="templateParts.buttons.length" class="mt-2 pt-2 border-top">
+                    <div v-for="(b, i) in templateParts.buttons" :key="i" class="text-center text-primary small py-1 border-bottom" style="font-size:0.85rem">
+                      <i v-if="String(b.type).toUpperCase() === 'URL'" class="bi bi-box-arrow-up-right me-1"></i>
+                      <i v-else-if="String(b.type).toUpperCase() === 'PHONE_NUMBER'" class="bi bi-telephone me-1"></i>
+                      {{ b.text }}
+                    </div>
+                  </div>
+                </template>
+
+                <!-- Free text (Evolution) preview -->
+                <template v-else-if="livePreviewMode === 'freeText'">
+                  <img v-if="form.mediaUrl" :src="form.mediaUrl" class="img-fluid rounded mb-2" alt="Imagem" />
+                  <div v-if="freeTextPreview" style="white-space:pre-wrap;font-size:0.9rem">{{ freeTextPreview }}</div>
+                  <div v-else class="text-muted small fst-italic">Digite a mensagem...</div>
+                </template>
+              </div>
+            </div>
+            <div class="small text-muted mt-2">
+              <i class="bi bi-info-circle me-1"></i>
+              No envio real, [var1], [Nome], etc. são substituídos pelos dados do cliente.
+            </div>
+          </div>
         </div>
       </div>
     </div>
