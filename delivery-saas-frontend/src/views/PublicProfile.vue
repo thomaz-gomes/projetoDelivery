@@ -149,18 +149,6 @@
       </div>
     </div>
 
-    <!-- Mobile bottom nav -->
-    <nav class="pp-bottom-nav d-lg-none">
-      <button :class="{ active: navActive('/profile') }" class="pp-nav-item" @click.prevent="goProfile">
-        <i class="bi bi-person pp-nav-icon"></i><div class="pp-nav-label">Perfil</div>
-      </button>
-      <button :class="{ active: navActive('/history') }" class="pp-nav-item" @click.prevent="goHistory">
-        <i class="bi bi-journal-text pp-nav-icon"></i><div class="pp-nav-label">Histórico</div>
-      </button>
-      <button :class="{ active: navActive('/menu') }" class="pp-nav-item" @click.prevent="goMenu">
-        <i class="bi bi-grid pp-nav-icon"></i><div class="pp-nav-label">Cardápio</div>
-      </button>
-    </nav>
   </div>
 </template>
 
@@ -362,10 +350,8 @@ function _publicNavigate(pathSuffix, extraQuery = {}){
   }catch(e){ console.warn('_publicNavigate', e) }
 }
 
-function goProfile(){ _publicNavigate('/profile') }
 function goHistory(){ _publicNavigate('/history') }
 function goMenu(){ _publicNavigate('/menu') }
-function navActive(suffix){ try{ return (route.path || '').endsWith(suffix) }catch(e){ return false } }
 </script>
 
 <style scoped>
@@ -382,7 +368,6 @@ function navActive(suffix){ try{ return (route.path || '').endsWith(suffix) }cat
   background: var(--pp-bg);
   min-height: 100vh;
   color: var(--pp-text);
-  padding-bottom: 80px;
 }
 .pp-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -469,22 +454,6 @@ function navActive(suffix){ try{ return (route.path || '').endsWith(suffix) }cat
   border-radius: 12px; font-weight: 600; font-size: 14px; padding: 12px;
 }
 .pp-btn-danger:hover { background: #FFEBEE; color: #C62828; }
-
-/* Bottom nav */
-.pp-bottom-nav {
-  display: flex; position: fixed; left: 0; right: 0; bottom: 0; height: 64px;
-  background: var(--pp-surface); border-top: 1px solid var(--pp-border);
-  z-index: 10800; align-items: center; justify-content: space-around;
-}
-.pp-nav-item {
-  all: unset; cursor: pointer; display: flex; flex-direction: column;
-  align-items: center; gap: 4px; padding: 6px 12px; color: var(--pp-muted);
-}
-.pp-nav-icon { font-size: 20px; line-height: 1; }
-.pp-nav-label { font-size: 11px; }
-.pp-nav-item.active, .pp-nav-item.active .pp-nav-label, .pp-nav-item.active .pp-nav-icon {
-  color: var(--pp-brand) !important; font-weight: 700;
-}
 
 @media (max-width: 576px) {
   .pp-body { padding: 16px 12px; }

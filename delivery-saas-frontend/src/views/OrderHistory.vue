@@ -116,6 +116,12 @@ const loading = ref(false)
 bindLoading(loading)
 const orders = ref([])
 
+// When the customer is already authenticated on this storefront (token in
+// localStorage) and a contact was persisted from the profile/checkout flow,
+// load the history transparently without re-asking for the phone.
+const PUBLIC_TOKEN_KEY = `public_token_${companyId}`
+const PUBLIC_CUSTOMER_KEY = `public_customer_${companyId}`
+
 function statusKey(s){
   if (!s) return ''
   if (s === 'EM_PREPARO') return 'warning'
@@ -167,7 +173,18 @@ function submitPhone(){ if(!phone.value) return; loadHistory(false) }
 function refresh(){ loadHistory(true) }
 function openOrder(o){ router.push({ path: `/public/${companyId}/order/${o.id}`, query: { storeId: storeId.value || undefined, menuId: menuId.value || undefined } }) }
 
-onMounted(()=> { loadHistory(true) })
+onMounted(()=> {
+  try {
+    const token = localStorage.getItem(PUBLIC_TOKEN_KEY)
+    const saved = JSON.parse(localStorage.getItem(PUBLIC_CUSTOMER_KEY) || 'null')
+    if (token && saved?.contact && !phoneQuery) {
+      phone.value = saved.contact
+      loadHistory(false)
+      return
+    }
+  } catch (e) { /* fall through to cookie-based load */ }
+  loadHistory(true)
+})
 if (phoneQuery) loadHistory(false)
 
 function _publicNavigate(pathSuffix, extraQuery = {}){
