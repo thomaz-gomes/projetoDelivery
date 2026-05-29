@@ -1386,13 +1386,18 @@ ridersRouter.post('/:id/account/adjust', requireRole('ADMIN'), async (req, res) 
   const rider = await prisma.rider.findFirst({ where: { id, companyId } });
   if (!rider) return res.status(404).json({ message: 'Entregador não encontrado' });
 
-  const { amount, type = 'CREDIT', note, accountId } = req.body || {};
+  const { amount, type = 'CREDIT', note, accountId, date } = req.body || {};
   const val = Number(amount || 0);
   if (!isFinite(val) || val === 0) return res.status(400).json({ message: 'Amount inválido' });
 
   const adjAmount = type === 'DEBIT' ? -Math.abs(val) : Math.abs(val);
 
-  const tx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: adjAmount, type: 'MANUAL_ADJUSTMENT', note: note || (type === 'DEBIT' ? 'Débito manual' : 'Crédito manual'), date: new Date() });
+  // Operator-provided issue date wins. Falls back to "now" only when
+  // omitted/invalid so older clients keep the previous behavior.
+  const parsedDate = (typeof date === 'string' && date) ? new Date(date) : null;
+  const txDate = parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate : new Date();
+
+  const tx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: adjAmount, type: 'MANUAL_ADJUSTMENT', note: note || (type === 'DEBIT' ? 'Débito manual' : 'Crédito manual'), date: txDate });
 
   // Bridge: registrar no módulo financeiro com a natureza correta.
   //   CREDIT → PAYABLE (empresa deve ao motoboy)

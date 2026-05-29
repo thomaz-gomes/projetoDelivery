@@ -646,6 +646,7 @@ async function saveLancamento() {
         type: adjustType,
         note: lancamentoForm.value.notes || lancamentoForm.value.description || undefined,
         accountId: lancamentoForm.value.accountId || undefined,
+        date: lancamentoForm.value.dueDate || undefined,
       };
       await api.post(`/riders/${riderId}/account/adjust`, payload);
       const verb = adjustType === 'DEBIT' ? 'Débito' : 'Crédito';
