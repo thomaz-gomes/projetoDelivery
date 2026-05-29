@@ -26,6 +26,21 @@ ridersRouter.use(async (req, res, next) => {
   }
 });
 
+// Parse an issue-date string into a Date anchored to BRT midnight. Bare
+// YYYY-MM-DD (what <input type="date"> produces) becomes Date(UTC y-m-d +3h),
+// which is 00:00 BRT same day. Full ISO timestamps pass through native parsing.
+// Returns undefined on missing/invalid input so callers can fall back.
+const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+function parseIssueDateBRT(input) {
+  if (typeof input !== 'string' || !input) return undefined;
+  const ymd = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) {
+    return new Date(Date.UTC(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])) + BRT_OFFSET_MS);
+  }
+  const dt = new Date(input);
+  return isNaN(dt.getTime()) ? undefined : dt;
+}
+
 // Haversine distance in meters
 function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -1392,10 +1407,13 @@ ridersRouter.post('/:id/account/adjust', requireRole('ADMIN'), async (req, res) 
 
   const adjAmount = type === 'DEBIT' ? -Math.abs(val) : Math.abs(val);
 
-  // Operator-provided issue date wins. Falls back to "now" only when
+  // Operator-provided issue date wins. A bare YYYY-MM-DD is interpreted as
+  // BRT midnight (= UTC 03:00 same day) so the date the operator selected
+  // round-trips intact when read back. Without this normalization JS would
+  // parse "2026-05-28" as UTC midnight, which lands on 27/05 21:00 BRT and
+  // shifts every save by one day. Falls back to "now" only when
   // omitted/invalid so older clients keep the previous behavior.
-  const parsedDate = (typeof date === 'string' && date) ? new Date(date) : null;
-  const txDate = parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate : new Date();
+  const txDate = parseIssueDateBRT(date) || new Date();
 
   const tx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: adjAmount, type: 'MANUAL_ADJUSTMENT', note: note || (type === 'DEBIT' ? 'Débito manual' : 'Crédito manual'), date: txDate });
 
@@ -1864,8 +1882,9 @@ ridersRouter.patch('/:id/transactions/:txId', requireRole('ADMIN'), async (req, 
   const newAmount = typeof amount !== 'undefined' ? Number(amount) : undefined;
   // date is the entry's "data de emissão" (when the delivery/service
   // happened), distinct from paidAt. Operator can backdate when recording
-  // an entry the day after the work was done.
-  const newDate = (typeof date === 'string' && date) ? new Date(date) : undefined;
+  // an entry the day after the work was done. YYYY-MM-DD is anchored to
+  // BRT midnight so the date round-trips without shifting one day.
+  const newDate = parseIssueDateBRT(date);
 
   // update tx
   const updated = await prisma.riderTransaction.update({

@@ -4,7 +4,7 @@ import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../api';
 import { formatCurrency } from '../utils/formatters.js';
-import { formatDateWithOptionalTime } from '../utils/dates.js';
+import { formatDateWithOptionalTime, localDateKey } from '../utils/dates.js';
 import { useAuthStore } from '../stores/auth';
 import Swal from 'sweetalert2';
 import DateInput from '../components/form/date/DateInput.vue';
@@ -214,7 +214,7 @@ function openEditModal(tx) {
     grossAmount: Math.abs(amt),
     accountId: '',
     costCenterId: '',
-    dueDate: tx.date ? new Date(tx.date).toISOString().slice(0, 10) : '',
+    dueDate: tx.date ? localDateKey(tx.date) : '',
     notes: tx.note || '',
   };
   showLancamentoModal.value = true;
@@ -240,7 +240,7 @@ function openPaySingleModal(tx) {
     grossAmount: amt,
     accountId: selectedAccountId.value || '',
     costCenterId: '',
-    dueDate: new Date().toISOString().slice(0, 10),
+    dueDate: localDateKey(),
     notes: '',
   };
   showLancamentoModal.value = true;
@@ -583,7 +583,7 @@ function openLancamentoModal(mode) {
     grossAmount,
     accountId: selectedAccountId.value || '',
     costCenterId: '',
-    dueDate: new Date().toISOString().slice(0, 10),
+    dueDate: localDateKey(),
     notes: '',
   };
   showLancamentoModal.value = true;
