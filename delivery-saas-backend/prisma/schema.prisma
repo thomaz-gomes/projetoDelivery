@@ -1833,6 +1833,7 @@ model ProductOptionGroup {
   product   Product     @relation(fields: [productId], references: [id])
   groupId   String
   group     OptionGroup @relation(fields: [groupId], references: [id])
+  position  Int         @default(0)
 
   @@id([productId, groupId])
   @@index([groupId], name: "idx_productoptiongroup_group")

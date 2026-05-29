@@ -378,10 +378,12 @@ router.post('/categories/:id/menus', requireRole('ADMIN'), async (req, res) => {
 })
 
 // POST /menu/reorder — atomic bulk reorder of categories and products
-// Body: { categories?: [{id, position}], products?: [{id, position, categoryId?}] }
+// Body: { categories?: [{id, position}], products?: [{id, position, categoryId?}],
+//         optionGroups?: [{id, position}], options?: [{id, position}],
+//         productOptionGroups?: [{productId, groupId, position}] }
 router.post('/reorder', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
-  const { categories = [], products = [], optionGroups = [], options = [] } = req.body || {}
+  const { categories = [], products = [], optionGroups = [], options = [], productOptionGroups = [] } = req.body || {}
   try {
     await prisma.$transaction(async (tx) => {
       for (const c of Array.isArray(categories) ? categories : []) {
@@ -419,6 +421,16 @@ router.post('/reorder', requireRole('ADMIN'), async (req, res) => {
         const existing = await tx.option.findFirst({ where: { id: o.id, group: { companyId } } })
         if (!existing) continue
         await tx.option.update({ where: { id: o.id }, data: { position: Number(o.position) || 0 } })
+      }
+      for (const pog of Array.isArray(productOptionGroups) ? productOptionGroups : []) {
+        if (!pog?.productId || !pog?.groupId) continue
+        // ensure the product belongs to the company before touching the join row
+        const product = await tx.product.findFirst({ where: { id: pog.productId, companyId } })
+        if (!product) continue
+        await tx.productOptionGroup.update({
+          where: { productId_groupId: { productId: pog.productId, groupId: pog.groupId } },
+          data: { position: Number(pog.position) || 0 },
+        }).catch(() => { /* row may not exist if association was removed mid-edit */ })
       }
     })
     return res.json({ ok: true })
@@ -980,14 +992,21 @@ router.post('/products/:id/duplicate', requireRole('ADMIN'), async (req, res) =>
 
 // ------- Product <-> OptionGroup associations -------
 // GET /products/:id/option-groups -> lists all groups for company and returns attached group ids
+// Response shape: { groups, attachedIds, positions: { [groupId]: position } }
+// `positions` lets the per-product reorder UI render attached groups in the
+// product-specific order; consumers that only need the set use `attachedIds`.
 router.get('/products/:id/option-groups', async (req, res) => {
   const { id } = req.params
   const companyId = req.user.companyId
   try{
     const groups = await prisma.optionGroup.findMany({ where: { companyId }, orderBy: { position: 'asc' } })
-    const attached = await prisma.productOptionGroup.findMany({ where: { productId: id } })
+    const attached = await prisma.productOptionGroup.findMany({
+      where: { productId: id },
+      orderBy: { position: 'asc' },
+    })
     const attachedIds = attached.map(a=>a.groupId)
-    res.json({ groups, attachedIds })
+    const positions = Object.fromEntries(attached.map(a => [a.groupId, a.position]))
+    res.json({ groups, attachedIds, positions })
   }catch(e){ console.error('Error loading product option groups', e); res.status(500).json({ message: 'Erro' }) }
 })
 

@@ -28,7 +28,7 @@
           <!-- Tab: Categorias e Produtos -->
           <div v-show="activeTab === 'menu'" class="row g-0">
             <!-- Categorias -->
-            <div class="col-md-5 border-end reorder-col">
+            <div class="col-md-4 border-end reorder-col">
               <div class="reorder-col-header">
                 <i class="bi bi-folder me-1"></i>Categorias
                 <span class="badge bg-secondary ms-1">{{ localCategories.length }}</span>
@@ -56,7 +56,7 @@
             </div>
 
             <!-- Produtos -->
-            <div class="col-md-7 reorder-col">
+            <div class="col-md-4 border-end reorder-col">
               <div class="reorder-col-header">
                 <i class="bi bi-box-seam me-1"></i>
                 {{ selectedCategory ? `Produtos — ${selectedCategory.name}` : 'Produtos' }}
@@ -66,7 +66,7 @@
               </div>
               <div class="reorder-col-hint">
                 {{ selectedCategory
-                    ? 'Arraste para reordenar dentro da categoria'
+                    ? 'Arraste para reordenar — clique em um produto para ordenar seus conjuntos de opções'
                     : 'Selecione uma categoria à esquerda' }}
               </div>
               <ul ref="productsEl" class="reorder-list list-unstyled mb-0">
@@ -75,6 +75,8 @@
                   :key="p.id"
                   :data-id="p.id"
                   class="reorder-item"
+                  :class="{ 'reorder-item-active': p.id === selectedProductId }"
+                  @click="selectProduct(p.id)"
                 >
                   <i class="bi bi-grip-vertical text-muted me-2 drag-handle"></i>
                   <span class="flex-grow-1">{{ p.name }}</span>
@@ -83,6 +85,43 @@
                 <li v-if="selectedCategory && !filteredProducts.length"
                     class="text-muted small p-3">
                   Nenhum produto nesta categoria.
+                </li>
+              </ul>
+            </div>
+
+            <!-- Conjuntos de opções (por produto) -->
+            <div class="col-md-4 reorder-col">
+              <div class="reorder-col-header">
+                <i class="bi bi-collection me-1"></i>
+                {{ selectedProduct ? `Opções — ${selectedProduct.name}` : 'Conjuntos de opções' }}
+                <span v-if="selectedProduct" class="badge bg-secondary ms-1">
+                  {{ selectedProductGroups.length }}
+                </span>
+              </div>
+              <div class="reorder-col-hint">
+                {{ selectedProduct
+                    ? 'Arraste para reordenar dentro deste produto'
+                    : 'Selecione um produto à esquerda' }}
+              </div>
+              <div v-if="loadingProductGroups" class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-primary"></div>
+              </div>
+              <ul v-else ref="productGroupsEl" class="reorder-list list-unstyled mb-0">
+                <li
+                  v-for="g in selectedProductGroups"
+                  :key="g.groupId"
+                  :data-id="g.groupId"
+                  class="reorder-item"
+                >
+                  <i class="bi bi-grip-vertical text-muted me-2 drag-handle"></i>
+                  <span class="flex-grow-1">{{ g.name }}</span>
+                  <span v-if="g.optionsCount != null" class="badge bg-light text-dark border ms-2">
+                    {{ g.optionsCount }}
+                  </span>
+                </li>
+                <li v-if="selectedProduct && !selectedProductGroups.length"
+                    class="text-muted small p-3">
+                  Nenhum conjunto vinculado a este produto.
                 </li>
               </ul>
             </div>
@@ -206,12 +245,23 @@ const initialProductOrder = props.products
   .slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map(p => `${p.categoryId || 'none'}|${p.id}`);
 
 const selectedCategoryId = ref(localCategories.value[0]?.id || null);
+const selectedProductId = ref(null);
 const saving = ref(false);
 
 const categoriesEl = ref(null);
 const productsEl = ref(null);
+const productGroupsEl = ref(null);
 let categoriesSortable = null;
 let productsSortable = null;
+let productGroupsSortable = null;
+
+// Per-product option group cache. Each entry holds the current ordered list
+// (drag mutates it directly) plus the initial snapshot used by dirty
+// tracking. Cache survives switching between products in the same session
+// so reopening a product doesn't refetch or lose unsaved changes.
+const productGroupsCache = ref({});      // { productId: [{ groupId, name, optionsCount, position }] }
+const initialProductGroupOrder = ref({}); // { productId: ['groupId', ...] } snapshot
+const loadingProductGroups = ref(false);
 
 const selectedCategory = computed(() =>
   localCategories.value.find(c => c.id === selectedCategoryId.value) || null
@@ -230,6 +280,14 @@ const productCountsByCategory = computed(() => {
   }
   return map;
 });
+
+const selectedProduct = computed(() =>
+  localProducts.value.find(p => p.id === selectedProductId.value) || null
+);
+
+const selectedProductGroups = computed(() =>
+  selectedProductId.value ? (productGroupsCache.value[selectedProductId.value] || []) : []
+);
 
 // ── Options tab state ──
 const localOptionGroups = ref([]);
@@ -261,6 +319,13 @@ const dirty = computed(() => {
   if (currentCatOrder.join() !== initialCategoryOrder.join()) return true;
   const currentProdOrder = localProducts.value.map(p => `${p.categoryId || 'none'}|${p.id}`);
   if (currentProdOrder.join() !== initialProductOrder.join()) return true;
+  // Per-product option groups
+  for (const pid of Object.keys(productGroupsCache.value)) {
+    const initial = initialProductGroupOrder.value[pid];
+    if (!initial) continue;
+    const current = productGroupsCache.value[pid].map(g => g.groupId);
+    if (current.join() !== initial.join()) return true;
+  }
   // Options tab
   if (optionsLoaded.value) {
     const currentGroupOrder = localOptionGroups.value.map(g => g.id);
@@ -274,6 +339,70 @@ const dirty = computed(() => {
 // ── Menu tab methods ──
 function selectCategory(id) {
   selectedCategoryId.value = id;
+  selectedProductId.value = null;
+}
+
+async function selectProduct(id) {
+  selectedProductId.value = id;
+  if (!productGroupsCache.value[id]) {
+    loadingProductGroups.value = true;
+    try {
+      const { data } = await api.get(`/menu/products/${id}/option-groups`);
+      const allGroups = data?.groups || [];
+      const attachedIds = data?.attachedIds || [];
+      const positions = data?.positions || {};
+      const groupById = new Map(allGroups.map(g => [g.id, g]));
+      // Build attached-only list ordered by positions (asc), falling back to
+      // the global group order when ProductOptionGroup.position is tied (0).
+      const items = attachedIds
+        .map(gid => {
+          const g = groupById.get(gid);
+          if (!g) return null;
+          return {
+            groupId: gid,
+            name: g.name,
+            optionsCount: Array.isArray(g.options) ? g.options.length : null,
+            position: positions[gid] ?? 0,
+            globalPosition: g.position ?? 0,
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => (a.position - b.position) || (a.globalPosition - b.globalPosition));
+      productGroupsCache.value[id] = items;
+      initialProductGroupOrder.value[id] = items.map(g => g.groupId);
+    } catch (e) {
+      console.error('Erro ao carregar conjuntos do produto', e);
+      productGroupsCache.value[id] = [];
+      initialProductGroupOrder.value[id] = [];
+    } finally {
+      loadingProductGroups.value = false;
+    }
+  }
+  await nextTick();
+  initProductGroupsSortable();
+}
+
+function initProductGroupsSortable() {
+  if (!productGroupsEl.value) return;
+  productGroupsSortable?.destroy();
+  productGroupsSortable = Sortable.create(productGroupsEl.value, {
+    animation: 150,
+    handle: '.drag-handle',
+    onEnd: () => {
+      const pid = selectedProductId.value;
+      if (!pid) return;
+      const ids = Array.from(productGroupsEl.value.children)
+        .filter(el => el.dataset.id)
+        .map(el => el.dataset.id);
+      const byId = new Map((productGroupsCache.value[pid] || []).map(g => [g.groupId, g]));
+      productGroupsCache.value[pid] = ids
+        .map((gid, idx) => {
+          const item = byId.get(gid);
+          return item ? { ...item, position: idx } : null;
+        })
+        .filter(Boolean);
+    },
+  });
 }
 
 function initCategoriesSortable() {
@@ -408,6 +537,7 @@ watch(selectedGroupId, async () => {
 onBeforeUnmount(() => {
   categoriesSortable?.destroy();
   productsSortable?.destroy();
+  productGroupsSortable?.destroy();
   optionGroupsSortable?.destroy();
   optionsSortable?.destroy();
 });
@@ -430,6 +560,15 @@ async function save() {
     for (const key of Object.keys(groupedByCat)) {
       groupedByCat[key].forEach((p, idx) => {
         payload.products.push({ id: p.id, position: idx, categoryId: key === 'none' ? null : key });
+      });
+    }
+    // Per-product option groups — only include products the user actually
+    // touched (loaded from API). Sending all loaded products even untouched
+    // is fine because positions are reassigned 0..N each save.
+    payload.productOptionGroups = [];
+    for (const pid of Object.keys(productGroupsCache.value)) {
+      (productGroupsCache.value[pid] || []).forEach((g, idx) => {
+        payload.productOptionGroups.push({ productId: pid, groupId: g.groupId, position: idx });
       });
     }
     // Options
