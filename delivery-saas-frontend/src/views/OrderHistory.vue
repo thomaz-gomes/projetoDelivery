@@ -177,8 +177,14 @@ onMounted(()=> {
   try {
     const token = localStorage.getItem(PUBLIC_TOKEN_KEY)
     const saved = JSON.parse(localStorage.getItem(PUBLIC_CUSTOMER_KEY) || 'null')
-    if (token && saved?.contact && !phoneQuery) {
-      phone.value = saved.contact
+    // public_customer_${companyId} is written in two shapes:
+    //   - { name, contact }       — by this view after a successful phone-gate
+    //   - { id, name, whatsapp }  — by PublicProfile after login/register
+    // Accept either so a customer who logged in (and never typed the phone
+    // here) still skips the gate.
+    const savedPhone = saved?.contact || saved?.whatsapp || ''
+    if (token && savedPhone && !phoneQuery) {
+      phone.value = savedPhone
       loadHistory(false)
       return
     }
