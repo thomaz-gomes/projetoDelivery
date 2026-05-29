@@ -832,7 +832,7 @@ onMounted(async () => {
           <table class="table table-sm mb-0">
             <thead class="table-light">
               <tr>
-                <th>Data</th>
+                <th>Data de Emissão</th>
                 <th>Tipo</th>
                 <th>Valor</th>
                 <th>Status</th>
@@ -847,7 +847,7 @@ onMounted(async () => {
                 <td :colspan="isAdmin ? 8 : 7" class="text-center text-muted py-4">Nenhuma transação no período.</td>
               </tr>
               <tr v-for="t in transactions" :key="t.id" :class="{ 'text-muted': t.status === 'CANCELLED' }">
-                <td>{{ formatDateWithOptionalTime(t.date) }}</td>
+                <td>{{ formatDateWithOptionalTime(t.date || t.createdAt) }}</td>
                 <td>{{ typeLabel(t.type) }}</td>
                 <td>
                   <span

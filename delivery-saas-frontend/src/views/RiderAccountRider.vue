@@ -298,7 +298,7 @@ onMounted(() => { fetchTransactions(); });
         >
           <div class="flex-grow-1 min-w-0">
             <div class="small text-muted d-flex align-items-center gap-2 mb-1 flex-wrap">
-              <span>{{ formatDateWithOptionalTime(t.date) }}</span>
+              <span>{{ formatDateWithOptionalTime(t.date || t.createdAt) }}</span>
               <span class="badge" :class="riderStatusBadge(t.status).cls" style="font-size:0.65rem">
                 {{ riderStatusBadge(t.status).label }}
               </span>
