@@ -1,5 +1,6 @@
 // src/services/customer.js
 import { prisma } from '../prisma.js';
+import { phoneVariants } from '../messaging/phoneVariants.js';
 
 // normaliza telefone → apenas dígitos; NÃO armazena DDI '55'.
 // The DDI (country code) should be considered only when sending messages.
@@ -85,9 +86,21 @@ export async function findOrCreateCustomer({ companyId, fullName, cpf, whatsapp,
     const nameTrim = String(fullName).trim();
     customer = await prisma.customer.findFirst({ where: { companyId, fullName: nameTrim } });
   }
-  // 4) whatsapp/phone
+  // 4) whatsapp/phone — match across all canonical BR phone variants so a
+  // checkout coming in as "73991429676" (no DDI) finds a legacy row stored
+  // as "557391429676" (with DDI) and vice-versa. Without this, every
+  // alternate-format hit creates a duplicate Customer for the same number.
   if (!customer && whatsappClean) {
-    customer = await prisma.customer.findFirst({ where: { companyId, whatsapp: whatsappClean } });
+    const variants = phoneVariants(whatsappClean);
+    customer = await prisma.customer.findFirst({
+      where: { companyId, OR: [{ whatsapp: { in: variants } }, { phone: { in: variants } }] },
+    });
+  }
+  if (!customer && phoneClean) {
+    const variants = phoneVariants(phoneClean);
+    customer = await prisma.customer.findFirst({
+      where: { companyId, OR: [{ whatsapp: { in: variants } }, { phone: { in: variants } }] },
+    });
   }
 
   // 3) cria se não houver
