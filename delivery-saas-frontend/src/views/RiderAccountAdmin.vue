@@ -632,6 +632,7 @@ async function saveLancamento() {
       await api.patch(`/riders/${riderId}/transactions/${txId}`, {
         amount: signedAmount,
         note: lancamentoForm.value.description || null,
+        date: lancamentoForm.value.dueDate || undefined,
       });
       showLancamentoModal.value = false;
       success.value = 'Lançamento atualizado.';
@@ -1008,7 +1009,7 @@ onMounted(async () => {
                 <input type="text" class="form-control bg-light" value="Nenhuma (avulso)" disabled />
               </div>
               <div class="col-md-6">
-                <label class="form-label">Vencimento</label>
+                <label class="form-label">Data de Emissão</label>
                 <input type="date" class="form-control" v-model="lancamentoForm.dueDate" />
               </div>
               <div class="col-12">

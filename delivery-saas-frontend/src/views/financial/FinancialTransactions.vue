@@ -143,6 +143,10 @@
                 <input type="number" class="form-control" v-model.number="payForm.grossAmount" step="0.01" min="0">
               </div>
               <div class="col-md-6">
+                <label class="form-label">Data de Emissão</label>
+                <input type="date" class="form-control" v-model="payForm.issueDate">
+              </div>
+              <div class="col-md-6">
                 <label class="form-label">Vencimento</label>
                 <input type="date" class="form-control" v-model="payForm.dueDate">
               </div>
@@ -199,6 +203,10 @@
               <div class="col-md-4">
                 <label class="form-label">Valor Bruto (R$)</label>
                 <input type="number" class="form-control" v-model.number="form.grossAmount" step="0.01" min="0">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Data de Emissão</label>
+                <input type="date" class="form-control" v-model="form.issueDate">
               </div>
               <div class="col-md-4">
                 <label class="form-label">Conta</label>
@@ -290,11 +298,11 @@ export default {
       saving: false,
       showPayModal: false,
       payingSaving: false,
-      payForm: { id: '', type: '', description: '', grossAmount: 0, dueDate: '', accountId: '', payAmount: 0, paidDate: '', notes: '' },
+      payForm: { id: '', type: '', description: '', grossAmount: 0, issueDate: '', dueDate: '', accountId: '', payAmount: 0, paidDate: '', notes: '' },
       // Default the date range to "today" (local TZ) so the page lands on
       // the current day's movements instead of the entire history.
       filters: { type: '', status: '', dueDateFrom: localDateKey(), dueDateTo: localDateKey(), sourceType: '', accountId: '', search: '' },
-      form: { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d', supplierId: '' },
+      form: { type: 'PAYABLE', description: '', grossAmount: 0, issueDate: localDateKey(), dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d', supplierId: '' },
       installmentPreview: [],
       installmentOptions: Array.from({ length: 24 }, (_, i) => ({ value: i + 1, label: `${i + 1}x` })),
       boletoTemplateOptions: [
@@ -423,7 +431,7 @@ export default {
         await api.post('/financial/transactions', payload);
         this.showForm = false;
         this.installmentPreview = [];
-        this.form = { type: 'PAYABLE', description: '', grossAmount: 0, dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d', supplierId: '' };
+        this.form = { type: 'PAYABLE', description: '', grossAmount: 0, issueDate: localDateKey(), dueDate: '', accountId: '', costCenterId: '', gatewayConfigId: '', notes: '', payablePaymentMethodId: '', purchaseDate: '', installmentCount: 1, boletoTemplate: '30d', supplierId: '' };
         await this.load();
       } catch (e) {
         alert(e.response?.data?.message || 'Erro ao criar');
@@ -458,6 +466,7 @@ export default {
         type: tx.type,
         description: tx.description,
         grossAmount: Number(tx.grossAmount),
+        issueDate: tx.issueDate ? tx.issueDate.slice(0, 10) : today,
         dueDate: tx.dueDate ? tx.dueDate.slice(0, 10) : '',
         accountId: tx.accountId || '',
         costCenterId: tx.costCenterId || '',
@@ -474,6 +483,7 @@ export default {
         type: tx.type,
         description: tx.description,
         grossAmount: Number(tx.grossAmount),
+        issueDate: tx.issueDate ? tx.issueDate.slice(0, 10) : localDateKey(),
         dueDate: tx.dueDate ? tx.dueDate.slice(0, 10) : '',
         accountId: tx.accountId || '',
         costCenterId: tx.costCenterId || '',
@@ -502,6 +512,7 @@ export default {
             accountId: this.payForm.accountId,
             costCenterId: this.payForm.costCenterId || null,
             paidDate: this.payForm.paidDate,
+            issueDate: this.payForm.issueDate || undefined,
             notes: this.payForm.notes,
             description: this.payForm.description,
           });
@@ -511,6 +522,7 @@ export default {
             description: this.payForm.description,
             grossAmount: this.payForm.grossAmount,
             dueDate: this.payForm.dueDate,
+            issueDate: this.payForm.issueDate || undefined,
             accountId: this.payForm.accountId,
             costCenterId: this.payForm.costCenterId || null,
             notes: this.payForm.notes,

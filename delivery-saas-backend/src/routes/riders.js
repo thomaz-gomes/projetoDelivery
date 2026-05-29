@@ -1855,11 +1855,22 @@ ridersRouter.patch('/:id/transactions/:txId', requireRole('ADMIN'), async (req, 
   const existing = await prisma.riderTransaction.findFirst({ where: { id: txId, riderId: id } });
   if (!existing) return res.status(404).json({ message: 'Transação não encontrada' });
 
-  const { amount, note } = req.body || {};
+  const { amount, note, date } = req.body || {};
   const newAmount = typeof amount !== 'undefined' ? Number(amount) : undefined;
+  // date is the entry's "data de emissão" (when the delivery/service
+  // happened), distinct from paidAt. Operator can backdate when recording
+  // an entry the day after the work was done.
+  const newDate = (typeof date === 'string' && date) ? new Date(date) : undefined;
 
   // update tx
-  const updated = await prisma.riderTransaction.update({ where: { id: txId }, data: { note: typeof note === 'string' ? note : existing.note, amount: typeof newAmount === 'number' && !isNaN(newAmount) ? newAmount : existing.amount } });
+  const updated = await prisma.riderTransaction.update({
+    where: { id: txId },
+    data: {
+      note: typeof note === 'string' ? note : existing.note,
+      amount: typeof newAmount === 'number' && !isNaN(newAmount) ? newAmount : existing.amount,
+      ...(newDate && !isNaN(newDate.getTime()) ? { date: newDate } : {}),
+    },
+  });
 
   // adjust account balance by delta
   if (typeof newAmount === 'number' && !isNaN(newAmount)) {

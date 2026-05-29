@@ -139,7 +139,7 @@ router.post('/', async (req, res) => {
     const companyId = req.user.companyId;
     const {
       type, description, accountId, costCenterId, gatewayConfigId,
-      grossAmount, dueDate, sourceType, sourceId, notes,
+      grossAmount, dueDate, issueDate, sourceType, sourceId, notes,
       recurrence, installmentNumber, totalInstallments, parentTransactionId,
       payablePaymentMethodId, installments, supplierId,
     } = req.body;
@@ -147,6 +147,11 @@ router.post('/', async (req, res) => {
     if (!type || !description || !grossAmount || !dueDate) {
       return res.status(400).json({ message: 'type, description, grossAmount e dueDate são obrigatórios' });
     }
+
+    // issueDate is optional — operator can backdate when recording an entry
+    // for a delivery/service that happened earlier. Falls back to the schema
+    // default (now()) when omitted so old clients keep working unchanged.
+    const issueDateValue = issueDate ? new Date(issueDate) : undefined;
 
     // ── Multi-installment creation ──────────────────────────────────────────
     if (Array.isArray(installments) && installments.length > 1) {
@@ -166,6 +171,7 @@ router.post('/', async (req, res) => {
             feeAmount: 0,
             netAmount: Number(grossAmount),
             dueDate: new Date(dueDate),
+            ...(issueDateValue ? { issueDate: issueDateValue } : {}),
             sourceType: sourceType || 'MANUAL',
             sourceId: sourceId || null,
             notes: notes || null,
@@ -206,6 +212,7 @@ router.post('/', async (req, res) => {
               feeAmount: childFee,
               netAmount: childNet,
               dueDate: new Date(inst.dueDate),
+              ...(issueDateValue ? { issueDate: issueDateValue } : {}),
               expectedDate: childExpected,
               sourceType: sourceType || 'MANUAL',
               sourceId: sourceId || null,
@@ -257,6 +264,7 @@ router.post('/', async (req, res) => {
         feeAmount,
         netAmount,
         dueDate: new Date(dueDate),
+        ...(issueDateValue ? { issueDate: issueDateValue } : {}),
         expectedDate,
         sourceType: sourceType || 'MANUAL',
         sourceId: sourceId || null,
@@ -290,7 +298,7 @@ router.put('/:id', async (req, res) => {
 
     const {
       description, accountId, costCenterId, gatewayConfigId,
-      grossAmount, dueDate, status, notes,
+      grossAmount, dueDate, issueDate, status, notes,
     } = req.body;
 
     const data = { updatedBy: req.user.id };
@@ -300,6 +308,7 @@ router.put('/:id', async (req, res) => {
     if (notes !== undefined) data.notes = notes;
     if (status !== undefined) data.status = status;
     if (dueDate !== undefined) data.dueDate = new Date(dueDate);
+    if (issueDate !== undefined) data.issueDate = new Date(issueDate);
 
     // Recalcular taxas se grossAmount ou gatewayConfigId mudou
     if (grossAmount !== undefined || gatewayConfigId !== undefined) {
@@ -417,7 +426,7 @@ router.put('/:id/edit-payment', async (req, res) => {
       return res.status(400).json({ message: 'Somente transações pagas podem ter o pagamento editado' });
     }
 
-    const { amount, accountId, costCenterId, paidDate, notes, description } = req.body;
+    const { amount, accountId, costCenterId, paidDate, issueDate, notes, description } = req.body;
     const newAmount = amount !== undefined ? Number(amount) : Number(existing.paidAmount);
     const newAccountId = accountId || existing.accountId;
 
@@ -474,6 +483,7 @@ router.put('/:id/edit-payment', async (req, res) => {
       if (description !== undefined) txData.description = description;
       if (notes !== undefined) txData.notes = notes;
       if (paidDate) txData.paidAt = new Date(paidDate);
+      if (issueDate) txData.issueDate = new Date(issueDate);
 
       const fullyPaid = newAmount >= Number(existing.netAmount);
       txData.status = fullyPaid ? 'PAID' : 'PARTIALLY';
