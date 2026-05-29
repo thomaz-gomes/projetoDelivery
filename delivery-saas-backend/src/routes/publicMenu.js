@@ -2032,6 +2032,16 @@ publicMenuRouter.get('/:companyId/orders', async (req, res) => {
       }
     } catch (e) { /* ignore */ }
   }
+  // If we still have no phone, fall back to the public Bearer token issued
+  // by /:companyId/login. resolvePublicCustomerFromReq decodes it, looks up
+  // the customer, and gives us a phone number — so a freshly-logged-in
+  // customer hitting /history works without ever typing the WhatsApp again.
+  if (!phone) {
+    try {
+      const c = await resolvePublicCustomerFromReq(req, companyId)
+      if (c?.whatsapp) phone = String(c.whatsapp).trim()
+    } catch (e) { /* ignore */ }
+  }
   if (!phone) return res.status(400).json({ message: 'Informe o número de WhatsApp (phone) para consultar histórico' })
   try {
     const orders = await prisma.order.findMany({ where: { companyId, customerPhone: phone }, orderBy: { createdAt: 'desc' }, include: { items: true } })
