@@ -836,6 +836,27 @@ customersRouter.post('/merge', requireRole('ADMIN'), async (req, res) => {
         await tx.menuEvent.updateMany({ where: { customerId: { in: validIds } }, data: { customerId: primaryId } });
       } catch (e) { /* ignore */ }
 
+      // Transfer marketing messages — added when the WhatsApp campaigns
+      // module shipped; without this every customer who ever received a
+      // template message blocks the merge with an FK error from the
+      // diagnostic below. The campaignRunId+customerId unique index means
+      // collisions are possible if both customers received the same run:
+      // detach the conflict from the merged row and delete it so the
+      // primary keeps its row, since the FK is ON DELETE RESTRICT.
+      try {
+        const incoming = await tx.marketingMessage.findMany({ where: { customerId: { in: validIds } } });
+        for (const m of incoming) {
+          const conflict = await tx.marketingMessage.findFirst({
+            where: { campaignRunId: m.campaignRunId, customerId: primaryId },
+          });
+          if (conflict) {
+            try { await tx.marketingMessage.delete({ where: { id: m.id } }); } catch (e) { /* ignore */ }
+          } else {
+            try { await tx.marketingMessage.update({ where: { id: m.id }, data: { customerId: primaryId } }); } catch (e) { /* ignore */ }
+          }
+        }
+      } catch (e) { /* ignore if table missing */ }
+
       // Diagnostic: check for any remaining FK references before delete
       const tables = await tx.$queryRawUnsafe(`
         SELECT table_name, column_name
