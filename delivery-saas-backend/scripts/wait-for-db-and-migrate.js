@@ -41,6 +41,51 @@ async function waitForDb(retries = 120, delay = 3000) {
       console.warn('  Orphan FK cleanup warning (non-fatal):', e?.message)
     }
 
+    // The Menu.whatsappInstanceId / Menu.metaWaAccountId @unique constraints
+    // (added in feat(whatsapp-integration) 34f6c059) fail when historical data
+    // has the same instance/account linked to multiple cardápios. Auto-resolve
+    // BEFORE the push runs so the deploy completes: per shared FK value, keep
+    // the menu with the highest completed-order count linked (tiebreaker:
+    // oldest createdAt — preserves the longest-running attribution), null out
+    // the rest. Idempotent — when no duplicates remain it's a no-op.
+    console.log('Resolving duplicate Menu.whatsappInstanceId / Menu.metaWaAccountId links...')
+    for (const fkField of ['whatsappInstanceId', 'metaWaAccountId']) {
+      try {
+        const dups = await prisma.$queryRawUnsafe(
+          `SELECT "${fkField}" AS fk_value, COUNT(*)::int AS cnt FROM "Menu" WHERE "${fkField}" IS NOT NULL GROUP BY "${fkField}" HAVING COUNT(*) > 1`
+        )
+        if (!Array.isArray(dups) || dups.length === 0) {
+          console.log(`  ${fkField}: nenhum duplicado`)
+          continue
+        }
+        console.log(`  ${fkField}: ${dups.length} valor(es) compartilhado(s)`)
+        for (const d of dups) {
+          const fkValue = d.fk_value
+          const candidates = await prisma.$queryRawUnsafe(
+            `SELECT m.id, m.name, m."createdAt", COUNT(o.id)::int AS order_count
+             FROM "Menu" m
+             LEFT JOIN "Order" o ON o."menuId" = m.id AND o.status IN ('EM_PREPARO','PRONTO','SAIU_PARA_ENTREGA','CONFIRMACAO_PAGAMENTO','CONCLUIDO')
+             WHERE m."${fkField}" = $1
+             GROUP BY m.id, m.name, m."createdAt"
+             ORDER BY COUNT(o.id) DESC, m."createdAt" ASC`,
+            fkValue
+          )
+          if (!Array.isArray(candidates) || candidates.length <= 1) continue
+          const [winner, ...losers] = candidates
+          console.log(`    valor ${fkValue}: vencedor "${winner.name}" (${winner.order_count} pedido(s))`)
+          for (const l of losers) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE "Menu" SET "${fkField}" = NULL WHERE id = $1`,
+              l.id
+            )
+            console.log(`      desvinculado "${l.name}" (${l.order_count} pedido(s))`)
+          }
+        }
+      } catch (e) {
+        console.warn(`  ${fkField} dedupe warning (non-fatal):`, e?.message)
+      }
+    }
+
     console.log('Running prisma db push...')
     execSync('npx prisma db push --skip-generate', { stdio: 'inherit', env: process.env })
 
