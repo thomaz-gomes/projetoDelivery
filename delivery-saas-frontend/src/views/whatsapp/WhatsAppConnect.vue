@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import api from '../../api';
 import Swal from 'sweetalert2'; // opcional (você já usa sweetalert2 no projeto)
 
@@ -329,6 +329,11 @@ onMounted(async () => {
   }
 });
 
+onBeforeUnmount(() => {
+  stopPolling();
+  stopManagePoll();
+});
+
 // assignStores removed; use modal-based assignModal(inst) instead
 
 async function toggleEvolution(next) {
@@ -346,118 +351,110 @@ async function toggleEvolution(next) {
   }
 }
 
-// Per-instance management modal: shows status, QR and controls
-async function manageModal(inst) {
-  const name = inst.instanceName;
+// ── Bootstrap modal de Gerenciar instância ──
+// Estado totalmente reativo: status e QR vão para refs e o template renderiza,
+// sem manipulação de DOM no didOpen. Status auto-atualiza a cada 3s enquanto
+// o modal estiver aberto e a instância NÃO estiver CONNECTED; quando conecta,
+// o QR some e a UI mostra um banner verde.
+const manageModalState = ref({
+  open: false,
+  instance: null,
+  status: '...',
+  qrUrl: '',
+  loadingStatus: false,
+  loadingQr: false,
+});
+let manageModalPollTimer = null;
 
-  async function fetchQrFor() {
-    const resp = await api.get(`/wa/instances/${encodeURIComponent(name)}/qr`, {
+async function fetchManageStatus() {
+  const inst = manageModalState.value.instance;
+  if (!inst) return;
+  manageModalState.value.loadingStatus = true;
+  try {
+    const { data } = await api.get(`/wa/instances/${encodeURIComponent(inst.instanceName)}/status`);
+    manageModalState.value.status = data.status || 'UNKNOWN';
+  } catch (e) {
+    console.warn('fetchManageStatus failed', e?.message || e);
+    manageModalState.value.status = 'UNKNOWN';
+  } finally {
+    manageModalState.value.loadingStatus = false;
+  }
+}
+
+async function fetchManageQr() {
+  const inst = manageModalState.value.instance;
+  if (!inst) return;
+  manageModalState.value.loadingQr = true;
+  try {
+    const resp = await api.get(`/wa/instances/${encodeURIComponent(inst.instanceName)}/qr`, {
       validateStatus: () => true,
       headers: { 'Cache-Control': 'no-cache' },
     });
-    if (resp.status === 204) return null;
-    if (resp.status >= 400) throw new Error('Falha ao obter QR');
+    if (resp.status === 204) { manageModalState.value.qrUrl = ''; return; }
+    if (resp.status >= 400) { manageModalState.value.qrUrl = ''; return; }
     const rawQr = resp.data?.dataUrl || resp.data?.qrcode || resp.data;
-    return normalizeQrUrl(rawQr);
+    manageModalState.value.qrUrl = normalizeQrUrl(rawQr);
+  } catch (e) {
+    console.warn('fetchManageQr failed', e?.message || e);
+    manageModalState.value.qrUrl = '';
+  } finally {
+    manageModalState.value.loadingQr = false;
   }
+}
 
-  async function fetchStatusFor() {
-    const { data } = await api.get(`/wa/instances/${encodeURIComponent(name)}/status`);
-    return data.status || 'UNKNOWN';
-  }
+function stopManagePoll() {
+  if (manageModalPollTimer) { clearInterval(manageModalPollTimer); manageModalPollTimer = null; }
+}
 
-  let statusText = '...';
-  let qrUrl = null;
-  try { statusText = await fetchStatusFor(); } catch (_) { statusText = 'UNKNOWN'; }
-  try { qrUrl = await fetchQrFor(); } catch (_) { qrUrl = null; }
-  const stepsHtml = `
-    <div style="display:flex;flex-direction:column;gap:12px;font-family:inherit;color:#222;">
-      ${["Abra o WhatsApp no seu celular.",
-         "Toque em <b>Mais opções</b> • no Android ou em <b>Configurações</b> no iPhone.",
-         "Toque em <b>Dispositivos conectados</b> e, em seguida, em <b>Conectar dispositivo</b>.",
-         "Escaneie o QR code para confirmar."].map((text, idx) => `
-        <div style="display:flex;gap:12px;align-items:flex-start;">
-          <div style="min-width:36px;min-height:36px;border-radius:50%;border:2px solid #1f7a5a;color:#0b6b52;display:flex;align-items:center;justify-content:center;font-weight:700;background:#fff;box-shadow:none;">${idx+1}</div>
-          <div style="line-height:1.3;">${text}</div>
-        </div>
-      `).join('')}
-
-      <div style="margin-top:8px;color:#6c757d;">
-        <strong style="color:#222;display:block;margin-bottom:6px;">Dicas</strong>
-        <ul style="margin:0;padding-left:20px;color:#6c757d;">
-          <li>Mantenha o aparelho conectado à internet.</li>
-          <li>Evite abrir o WhatsApp Web em outros PCs ao mesmo tempo.</li>
-          <li>Se o status travar em <i>QRCODE/PAIRING</i>, recarregue o QR.</li>
-        </ul>
-      </div>
-    </div>
-  `;
-
-  const html = `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:260px;">${stepsHtml}</div>
-      <div style="width:320px;flex:0 0 320px;">
-        <div><div class="mb-2">Status: <strong id="sw-status">${statusText}</strong></div></div>
-        <div id="sw-qr-box" class="mt-2">${qrUrl ? `<img id="sw-qr-img" src="${qrUrl}" style="max-width:280px;" />` : '<div class="text-muted">QR não disponível</div>'}</div>
-        <div class="mt-3 d-flex gap-2">
-          <button id="sw-btn-fetch-qr" class="btn btn-outline-secondary btn-sm">Carregar QR</button>
-          <button id="sw-btn-fetch-status" class="btn btn-outline-secondary btn-sm">Atualizar status</button>
-        </div>
-        <div class="mt-2 d-flex gap-2">
-          <button id="sw-btn-assign" class="btn btn-primary btn-sm">Atribuir/Reconfigurar</button>
-          <button id="sw-btn-remove" class="btn btn-danger btn-sm">Remover</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  await Swal.fire({
-    title: inst.displayName || inst.instanceName,
-    html,
-    showCloseButton: true,
-    showConfirmButton: false,
-    width: '900px',
-    didOpen: () => {
-      const btnQr = document.getElementById('sw-btn-fetch-qr');
-      const btnStatus = document.getElementById('sw-btn-fetch-status');
-      const btnAssign = document.getElementById('sw-btn-assign');
-      const btnRemove = document.getElementById('sw-btn-remove');
-
-      btnQr?.addEventListener('click', async () => {
-        btnQr.disabled = true;
-        try {
-          const q = await fetchQrFor();
-          const box = document.getElementById('sw-qr-box');
-          box.innerHTML = q ? `<img id="sw-qr-img" src="${q}" style="max-width:280px;" />` : '<div class="text-muted">QR não disponível</div>';
-        } catch (e) {
-          console.error('fetchQrFor failed', e);
-          Swal.showValidationMessage('Falha ao carregar QR');
-        } finally { btnQr.disabled = false; }
-      });
-
-      btnStatus?.addEventListener('click', async () => {
-        btnStatus.disabled = true;
-        try {
-          const s = await fetchStatusFor();
-          const el = document.getElementById('sw-status');
-          if (el) el.textContent = s;
-        } catch (e) { console.error('fetchStatusFor failed', e); }
-        finally { btnStatus.disabled = false; }
-      });
-
-      btnAssign?.addEventListener('click', async () => {
-        await assignModal(inst);
-        // refresh status/qr in modal
-        try { const s = await fetchStatusFor(); const el = document.getElementById('sw-status'); if (el) el.textContent = s; } catch (_) {}
-        try { const q = await fetchQrFor(); const box = document.getElementById('sw-qr-box'); if (box) box.innerHTML = q ? `<img id="sw-qr-img" src="${q}" style="max-width:280px;" />` : '<div class="text-muted">QR não disponível</div>'; } catch (_) {}
-      });
-
-      btnRemove?.addEventListener('click', async () => {
-        await deleteInstance(inst);
-        Swal.close();
-      });
+function startManagePoll() {
+  stopManagePoll();
+  manageModalPollTimer = setInterval(async () => {
+    if (!manageModalState.value.open) { stopManagePoll(); return; }
+    await fetchManageStatus();
+    if (manageModalState.value.status === 'CONNECTED') {
+      manageModalState.value.qrUrl = '';
+    } else if (!manageModalState.value.qrUrl) {
+      await fetchManageQr();
     }
-  });
+  }, 3000);
+}
+
+async function openManageModal(inst) {
+  manageModalState.value = {
+    open: true,
+    instance: inst,
+    status: inst.status || '...',
+    qrUrl: '',
+    loadingStatus: false,
+    loadingQr: false,
+  };
+  await fetchManageStatus();
+  if (manageModalState.value.status !== 'CONNECTED') await fetchManageQr();
+  startManagePoll();
+}
+
+function closeManageModal() {
+  stopManagePoll();
+  manageModalState.value.open = false;
+}
+
+async function manageDeleteInstance() {
+  const inst = manageModalState.value.instance;
+  if (!inst) return;
+  await deleteInstance(inst);
+  closeManageModal();
+}
+
+async function manageOpenAssign() {
+  const inst = manageModalState.value.instance;
+  if (!inst) return;
+  await openAssignModal(inst);
+}
+
+// Wrapper backward-compat: callers existentes (botão Gerenciar do card) e o
+// próprio assignModal usam esse nome.
+async function manageModal(inst) {
+  await openManageModal(inst);
 }
 </script>
 
@@ -528,6 +525,101 @@ async function manageModal(inst) {
 
         <div v-else-if="instances.length > 0" class="text-secondary">
           Nenhuma instância selecionada. Crie uma para começar.
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Modal: Gerenciar instância (status + QR + ações) ═══ -->
+    <div v-if="manageModalState.open" class="modal d-block" tabindex="-1" role="dialog"
+         @click.self="closeManageModal" style="background:rgba(0,0,0,0.5)">
+      <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="bi bi-whatsapp text-success me-2"></i>{{ manageModalState.instance?.displayName || manageModalState.instance?.instanceName }}
+              <span v-if="manageModalState.instance?.menu" class="badge bg-info text-dark ms-2" style="font-size:0.7rem;font-weight:500">
+                <i class="bi bi-card-list me-1"></i>{{ manageModalState.instance.menu.name }}
+              </span>
+              <span v-else class="badge bg-warning text-dark ms-2" style="font-size:0.7rem;font-weight:500">
+                Sem cardápio
+              </span>
+            </h5>
+            <button type="button" class="btn-close" @click="closeManageModal"></button>
+          </div>
+          <div class="modal-body">
+            <!-- Banner verde quando CONNECTED -->
+            <div v-if="manageModalState.status === 'CONNECTED'" class="alert alert-success d-flex align-items-center mb-3">
+              <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+              <div>
+                <div class="fw-semibold">WhatsApp conectado</div>
+                <div class="small">Esta instância está pronta para enviar e receber mensagens.</div>
+              </div>
+            </div>
+
+            <div class="row g-3">
+              <!-- Coluna esquerda: passos -->
+              <div class="col-md-7">
+                <div class="text-muted small mb-2">PARA CONECTAR</div>
+                <ol class="mc-steps">
+                  <li><i class="bi bi-phone me-1"></i>Abra o WhatsApp no seu celular.</li>
+                  <li>Toque em <strong>Mais opções</strong> (⋮) no Android ou em <strong>Configurações</strong> no iPhone.</li>
+                  <li>Toque em <strong>Dispositivos conectados</strong> e depois em <strong>Conectar dispositivo</strong>.</li>
+                  <li>Escaneie o QR ao lado para confirmar.</li>
+                </ol>
+                <div class="mt-3 small text-muted">
+                  <strong class="d-block text-dark mb-1">Dicas</strong>
+                  <ul class="mb-0 ps-3">
+                    <li>Mantenha o aparelho conectado à internet.</li>
+                    <li>Evite abrir o WhatsApp Web em outros PCs ao mesmo tempo.</li>
+                    <li>Se o status travar em <em>QRCODE/PAIRING</em>, clique em <em>Carregar QR</em>.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Coluna direita: status + QR + ações -->
+              <div class="col-md-5">
+                <div class="mc-status-box mb-2">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted small">Status</span>
+                    <button class="btn btn-link btn-sm p-0" @click="fetchManageStatus" :disabled="manageModalState.loadingStatus" title="Atualizar status">
+                      <i class="bi bi-arrow-clockwise" :class="{ 'mc-spin': manageModalState.loadingStatus }"></i>
+                    </button>
+                  </div>
+                  <div class="fw-bold" :class="manageModalState.status === 'CONNECTED' ? 'text-success' : 'text-warning'">
+                    {{ manageModalState.status }}
+                  </div>
+                </div>
+
+                <div v-if="manageModalState.status !== 'CONNECTED'" class="mc-qr-box">
+                  <div v-if="manageModalState.qrUrl">
+                    <img :src="manageModalState.qrUrl" alt="QR Code" class="mc-qr-image" />
+                  </div>
+                  <div v-else-if="manageModalState.loadingQr" class="text-center text-muted py-4">
+                    <div class="spinner-border spinner-border-sm me-1"></div>
+                    Carregando QR...
+                  </div>
+                  <div v-else class="text-center text-muted py-4 small">
+                    <i class="bi bi-qr-code fs-1 d-block mb-2 text-secondary"></i>
+                    QR não disponível
+                  </div>
+                  <button class="btn btn-outline-secondary btn-sm w-100 mt-2" @click="fetchManageQr" :disabled="manageModalState.loadingQr">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Carregar QR
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer d-flex justify-content-between">
+            <button class="btn btn-outline-danger btn-sm" @click="manageDeleteInstance">
+              <i class="bi bi-trash me-1"></i>Remover instância
+            </button>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-secondary btn-sm" @click="closeManageModal">Fechar</button>
+              <button class="btn btn-primary btn-sm" @click="manageOpenAssign">
+                <i class="bi bi-card-list me-1"></i>Vincular cardápio
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -614,5 +706,64 @@ async function manageModal(inst) {
 @media (max-width: 767px) {
   .step-num { min-width: 32px; min-height: 32px; }
   .qr-box { max-width: 220px; }
+}
+
+/* Manage modal — passos numerados, status box, QR */
+.mc-steps {
+  list-style: none;
+  counter-reset: mc;
+  padding-left: 0;
+  margin: 0;
+}
+.mc-steps li {
+  counter-increment: mc;
+  position: relative;
+  padding: 6px 0 6px 36px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.mc-steps li::before {
+  content: counter(mc);
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #1f7a5a;
+  color: #0b6b52;
+  background: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mc-status-box {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.mc-qr-box {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.mc-qr-image {
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+.mc-spin {
+  animation: mc-rot 0.8s linear infinite;
+  display: inline-block;
+}
+@keyframes mc-rot {
+  to { transform: rotate(360deg); }
 }
 </style>
