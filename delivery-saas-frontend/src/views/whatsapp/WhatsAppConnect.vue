@@ -50,53 +50,80 @@ async function loadMenus() {
   }
 }
 
-// (inline wizard removed; use modal flows instead)
+// ── Bootstrap modal de Atribuir/Reconfigurar instância ──
+// Cada instância só pode estar vinculada a UM cardápio (Menu.whatsappInstanceId
+// @unique), então o select é single. O modal exibe o vínculo atual no topo,
+// lista quais opções estão em uso por outros cardápios (desabilita-as) e
+// devolve 409 amigável se rolar conflito por race.
+const assignModalState = ref({ open: false, instance: null, menuId: '', saving: false, error: '' });
 
-async function assignModal(inst) {
-  const selId = 'sw-select-menus';
-  const chkId = 'sw-assign-all';
-  const html = `
-    <div class="mb-2"><strong>Instância:</strong> ${inst.instanceName}</div>
-    <div class="form-check mb-2"><input id="${chkId}" class="form-check-input" type="checkbox" /> <label class="form-check-label">Atribuir a todos os cardápios</label></div>
-    <div><label class="form-label">Escolha cardápios (Ctrl/Cmd+click para múltipla)</label>
-      <select id="${selId}" multiple style="width:100%;min-height:150px;">
-        ${menus.value.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
-      </select>
-    </div>
-  `;
+// Calculado on-the-fly: pra cada menu, descobre se já tem outra instância
+// linkada (consulta API quando o modal abre).
+const menuLinkOwners = ref({}); // { [menuId]: 'instanceName' | null }
 
-  const result = await Swal.fire({
-    title: 'Atribuir/Reconfigurar instância',
-    html,
-    showCancelButton: true,
-    confirmButtonText: 'Atribuir',
-    focusConfirm: false,
-    preConfirm: () => {
-      const all = document.getElementById(chkId).checked;
-      const sel = Array.from(document.getElementById(selId).selectedOptions || []).map(o => o.value);
-      if (!all && sel.length === 0) {
-        Swal.showValidationMessage('Selecione ao menos um cardápio ou marque "Atribuir a todos"');
-        return false;
-      }
-      return { all, menuIds: sel };
-    }
-  });
-
-  if (!result || !result.isConfirmed) return;
-  const body = result.value.all ? { all: true } : { menuIds: result.value.menuIds };
+async function refreshMenuLinkOwners() {
+  // /wa/instances já vem com menu populado por instância — inverte o índice.
   try {
-    await api.post(`/wa/instances/${encodeURIComponent(inst.instanceName)}/assign-menus`, body);
-    await Swal.fire('OK', 'Atribuição realizada com sucesso', 'success');
-    await loadInstances();
-  } catch (err) {
-    console.error('Erro ao atribuir cardápios via modal:', err);
-    if (err?.response?.status === 409) {
-      const conflicts = err.response.data?.conflictMenuIds || [];
-      await Swal.fire('Conflito', `Alguns cardápios já têm outra instância atribuída: ${conflicts.join(', ')}`, 'warning');
-    } else {
-      await Swal.fire('Erro', err?.response?.data?.message || err?.message || 'Falha ao atribuir cardápios', 'error');
+    const { data } = await api.get('/wa/instances');
+    const owners = {};
+    for (const inst of (data || [])) {
+      if (inst.menu?.id) owners[inst.menu.id] = inst.instanceName;
     }
+    menuLinkOwners.value = owners;
+  } catch (e) { menuLinkOwners.value = {}; }
+}
+
+async function openAssignModal(inst) {
+  assignModalState.value = {
+    open: true,
+    instance: inst,
+    menuId: inst.menu?.id || '',
+    saving: false,
+    error: '',
+  };
+  await refreshMenuLinkOwners();
+}
+
+function closeAssignModal() {
+  if (assignModalState.value.saving) return;
+  assignModalState.value.open = false;
+  assignModalState.value.error = '';
+}
+
+async function submitAssignModal() {
+  const st = assignModalState.value;
+  if (!st.instance) return;
+  st.saving = true;
+  st.error = '';
+  try {
+    const body = st.menuId ? { menuIds: [st.menuId] } : { menuIds: [] };
+    // menuIds vazio sinaliza "desvincular"; o backend hoje rejeita isso, então
+    // pra desvincular precisamos chamar a UI do MenuEdit. Por enquanto exigimos
+    // um cardápio selecionado.
+    if (!st.menuId) {
+      st.error = 'Selecione um cardápio para vincular.';
+      st.saving = false;
+      return;
+    }
+    await api.post(`/wa/instances/${encodeURIComponent(st.instance.instanceName)}/assign-menus`, body);
+    st.open = false;
+    await loadInstances();
+    Swal.fire({ icon: 'success', title: 'Vínculo atualizado', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+  } catch (err) {
+    console.error('assign modal error:', err);
+    if (err?.response?.status === 409) {
+      st.error = err.response.data?.message || 'Este cardápio já tem outra instância vinculada.';
+    } else {
+      st.error = err?.response?.data?.message || err?.message || 'Falha ao salvar';
+    }
+  } finally {
+    st.saving = false;
   }
+}
+
+// Compat: chamadas internas existentes (manageModal) continuam usando assignModal()
+async function assignModal(inst) {
+  await openAssignModal(inst);
 }
 
 async function createInstance() {
@@ -116,20 +143,27 @@ async function createInstance() {
   });
   if (!name) return;
 
-  // Step 2: configuration + assign
-  const selId = 'sw-create-select-menus';
+  // Step 2: configuração + vínculo a UM cardápio (1:1 com schema @unique).
+  // Busca o estado atual de vínculos pra desabilitar cardápios já em uso.
+  await refreshMenuLinkOwners();
   const dispId = 'sw-create-display-name';
-  const chkId = 'sw-create-assign-all';
+  const selId = 'sw-create-select-menu';
   const html = `
-    <div class="mb-2"><strong>Instância:</strong> ${name}</div>
-    <div class="mb-3"><label class="form-label">Nome exibido (opcional)</label>
+    <div class="mb-3 text-start"><strong>Instância:</strong> ${name}</div>
+    <div class="mb-3 text-start"><label class="form-label">Nome exibido (opcional)</label>
       <input id="${dispId}" class="form-control" value="${name}" />
     </div>
-    <div class="form-check mb-2"><input id="${chkId}" class="form-check-input" type="checkbox" /> <label class="form-check-label">Atribuir a todos os cardápios</label></div>
-    <div><label class="form-label">Escolha cardápios (Ctrl/Cmd+click para múltipla)</label>
-      <select id="${selId}" multiple style="width:100%;min-height:150px;">
-        ${menus.value.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
+    <div class="text-start"><label class="form-label">Cardápio vinculado</label>
+      <select id="${selId}" class="form-select">
+        <option value="">— Sem vínculo (atribuir depois) —</option>
+        ${menus.value.map(m => {
+          const owner = menuLinkOwners.value[m.id];
+          const disabled = !!owner;
+          const label = disabled ? `${m.name} — em uso por "${owner}"` : m.name;
+          return `<option value="${m.id}" ${disabled ? 'disabled' : ''}>${label}</option>`;
+        }).join('')}
       </select>
+      <div class="form-text">Cada instância só pode atender um cardápio.</div>
     </div>
   `;
 
@@ -137,18 +171,13 @@ async function createInstance() {
     title: 'Configurar instância',
     html,
     showCancelButton: true,
-    confirmButtonText: 'Criar e atribuir',
+    confirmButtonText: 'Criar',
     cancelButtonText: 'Cancelar',
     focusConfirm: false,
     preConfirm: () => {
       const displayName = document.getElementById(dispId).value || name;
-      const all = document.getElementById(chkId).checked;
-      const sel = Array.from(document.getElementById(selId).selectedOptions || []).map(o => o.value);
-      if (!all && sel.length === 0) {
-        Swal.showValidationMessage('Selecione ao menos um cardápio ou marque "Atribuir a todos"');
-        return false;
-      }
-      return { displayName, all, menuIds: sel };
+      const menuId = document.getElementById(selId).value || null;
+      return { displayName, menuId };
     }
   });
   if (!res || !res.isConfirmed) return;
@@ -157,11 +186,15 @@ async function createInstance() {
   try {
     // create instance
     await api.post('/wa/instances', { instanceName: name, displayName: res.value.displayName || name });
-    // assign menus
-    if (res.value.all) {
-      await api.post(`/wa/instances/${encodeURIComponent(name)}/assign-menus`, { all: true });
-    } else if (res.value.menuIds && res.value.menuIds.length) {
-      await api.post(`/wa/instances/${encodeURIComponent(name)}/assign-menus`, { menuIds: res.value.menuIds });
+    // bind to a menu when picked
+    if (res.value.menuId) {
+      try {
+        await api.post(`/wa/instances/${encodeURIComponent(name)}/assign-menus`, { menuIds: [res.value.menuId] });
+      } catch (assignErr) {
+        // não falha a criação se o vínculo conflitar — operador resolve depois
+        console.warn('Vínculo opcional falhou (instância já criada):', assignErr?.response?.data || assignErr);
+        await Swal.fire('Atenção', 'Instância criada, mas o vínculo com cardápio falhou: ' + (assignErr?.response?.data?.message || 'conflito'), 'warning');
+      }
     }
 
     await loadInstances();
@@ -169,7 +202,7 @@ async function createInstance() {
     await fetchStatus();
     await fetchQr();
     startPolling();
-    await Swal.fire('OK', 'Instância criada e atribuída.', 'success');
+    await Swal.fire('OK', 'Instância criada.', 'success');
   } catch (err) {
     console.error('Erro ao criar instância:', err);
     const msg = err?.response?.data?.message || err?.message || 'Erro interno ao criar instância';
@@ -457,15 +490,24 @@ async function manageModal(inst) {
             <div v-for="inst in instances" :key="inst.id" class="card" :class="inst.status === 'CONNECTED' ? 'border-success' : 'border-secondary'">
               <div class="card-body py-3">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                  <div class="d-flex align-items-center gap-3">
+                  <div class="d-flex align-items-center gap-3 flex-wrap">
                     <div>
                       <div class="fw-semibold">{{ inst.displayName || inst.instanceName }}</div>
                       <div class="text-muted small">{{ inst.instanceName }} — {{ inst.status }}</div>
                     </div>
                     <span v-if="inst.status === 'CONNECTED'" class="badge bg-success">Conectado</span>
                     <span v-else class="badge bg-secondary">{{ inst.status || 'Desconectado' }}</span>
+                    <span v-if="inst.menu" class="badge bg-info text-dark" :title="`Cardápio vinculado: ${inst.menu.name}`">
+                      <i class="bi bi-card-list me-1"></i>{{ inst.menu.name }}
+                    </span>
+                    <span v-else class="badge bg-warning text-dark" title="Esta instância não está atendendo nenhum cardápio">
+                      <i class="bi bi-exclamation-triangle me-1"></i>Sem cardápio
+                    </span>
                   </div>
                     <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @click="openAssignModal(inst)" title="Vincular a um cardápio">
+                      <i class="bi bi-card-list"></i> Vincular
+                    </button>
                     <button class="btn btn-sm btn-outline-primary" @click="manageModal(inst)">Gerenciar</button>
                     <button class="btn btn-sm btn-outline-danger" @click="deleteInstance(inst)">Remover</button>
                   </div>
@@ -486,6 +528,64 @@ async function manageModal(inst) {
 
         <div v-else-if="instances.length > 0" class="text-secondary">
           Nenhuma instância selecionada. Crie uma para começar.
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Modal: Vincular cardápio à instância ═══ -->
+    <!-- z-index 1100 fica acima do Swal Manage modal (1060) caso o operador
+         abra esse fluxo de dentro do botão "Atribuir/Reconfigurar" do Gerenciar. -->
+    <div v-if="assignModalState.open" class="modal d-block" tabindex="-1" role="dialog"
+         @click.self="closeAssignModal" style="background:rgba(0,0,0,0.5);z-index:1100;">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="bi bi-card-list me-2"></i>Vincular cardápio
+            </h5>
+            <button type="button" class="btn-close" @click="closeAssignModal" :disabled="assignModalState.saving"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3 small">
+              <div><strong>Instância:</strong> {{ assignModalState.instance?.displayName || assignModalState.instance?.instanceName }}</div>
+              <div class="text-muted">
+                Vínculo atual:
+                <span v-if="assignModalState.instance?.menu" class="badge bg-info text-dark">
+                  {{ assignModalState.instance.menu.name }}
+                </span>
+                <span v-else class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Nenhum</span>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Cardápio que esta instância vai atender</label>
+              <select class="form-select" v-model="assignModalState.menuId" :disabled="assignModalState.saving">
+                <option value="">— Selecione um cardápio —</option>
+                <option
+                  v-for="m in menus"
+                  :key="m.id"
+                  :value="m.id"
+                  :disabled="!!menuLinkOwners[m.id] && menuLinkOwners[m.id] !== assignModalState.instance?.instanceName"
+                >
+                  {{ m.name }}<template v-if="menuLinkOwners[m.id] && menuLinkOwners[m.id] !== assignModalState.instance?.instanceName"> — em uso por "{{ menuLinkOwners[m.id] }}"</template>
+                </option>
+              </select>
+              <div class="form-text">
+                Cada instância só pode atender um cardápio. Opções desabilitadas já estão em uso por outras instâncias.
+              </div>
+            </div>
+            <div v-if="assignModalState.error" class="alert alert-danger py-2 mb-0 small">
+              <i class="bi bi-exclamation-triangle me-1"></i>{{ assignModalState.error }}
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline-secondary" @click="closeAssignModal" :disabled="assignModalState.saving">
+              Cancelar
+            </button>
+            <button class="btn btn-primary" :disabled="assignModalState.saving || !assignModalState.menuId" @click="submitAssignModal">
+              <span v-if="assignModalState.saving" class="spinner-border spinner-border-sm me-1"></span>
+              Salvar vínculo
+            </button>
+          </div>
         </div>
       </div>
     </div>
