@@ -1217,15 +1217,19 @@ function normalizeOrder(o){
     paymentMethod,
     isPrepaid,
     closedByIfoodCode: !!(o.closedByIfoodCode || o.payload?.closedByIfoodCode),
-    // storeName and channelLabel: prefer explicit store name and a human-friendly channel label
-    // prefer the related store name from the related store object, or from the
-    // payload (public orders may include payload.store.name). Do NOT fallback to company.
+    // storeName: nome da "origem" do pedido. Ordem de precedência:
+    //   1) merchant name vindo do payload iFood (marca cadastrada no iFood)
+    //   2) merchantName cravado na ApiIntegration (set por admin/auto-sync)
+    //   3) **menu.name** — o cardápio é a unidade de origem real do pedido.
+    //      Vale tanto pra "Cardápio digital" quanto pra qualquer canal vinculado
+    //      a um cardápio (iFood com integração-cardápio, PDV usando cardápio,
+    //      etc). Nunca devolver loja se há cardápio: hierarquicamente o cardápio
+    //      está abaixo da loja e identifica melhor o canal de venda.
+    //   4) store.name — só quando o pedido genuinamente não tem cardápio (legado)
     storeName: (function() {
       try {
-        // iFood orders carry merchant name directly in the order payload
         const payloadMerchantName = o.payload?.order?.merchant?.name;
         if (payloadMerchantName) return payloadMerchantName;
-        // Fallback: merchantName saved on the linked integration (set by admin or auto-sync)
         if (Array.isArray(o.store?.apiIntegrations) && o.store.apiIntegrations.length) {
           const payloadMerchantId = o.payload?.merchantId || o.payload?.order?.merchant?.id;
           if (payloadMerchantId) {
@@ -1237,6 +1241,7 @@ function normalizeOrder(o){
           const any = o.store.apiIntegrations.find(a => a.merchantName);
           if (any?.merchantName) return any.merchantName;
         }
+        if (o.menu?.name) return o.menu.name;
         return (o.store && o.store.name) || null;
       } catch (e) { return null; }
     })(),
