@@ -351,14 +351,19 @@ router.get('/auth/meta/connected', authMiddleware, async (req, res) => {
       where: { companyId: req.user.companyId },
       orderBy: [{ provider: 'asc' }, { createdAt: 'asc' }],
       include: {
-        menusAsMetaWa: { select: { id: true, name: true } },
-        menusAsFb:     { select: { id: true, name: true } },
-        menusAsIg:     { select: { id: true, name: true } },
+        // META_WA is now 1:1 with a single menu (schema @unique). The other
+        // providers keep their M:N back-relations because Menu.facebookAccountId
+        // and Menu.instagramAccountId are not yet @unique. Coerce the META_WA
+        // singular result into a one-or-zero array below so the existing
+        // accounts.menus contract on the response stays unchanged.
+        menuAsMetaWa: { select: { id: true, name: true } },
+        menusAsFb:    { select: { id: true, name: true } },
+        menusAsIg:    { select: { id: true, name: true } },
       },
     })
     const accounts = rows.map((r) => {
       const menus = (
-        r.provider === 'META_WA' ? r.menusAsMetaWa :
+        r.provider === 'META_WA' ? (r.menuAsMetaWa ? [r.menuAsMetaWa] : []) :
         r.provider === 'META_FB' ? r.menusAsFb :
         r.provider === 'META_IG' ? r.menusAsIg : []
       ) || []

@@ -195,7 +195,11 @@ waRouter.post('/instances/:name/assign-stores', requireRole('ADMIN'), async (req
 	res.json({ ok: true, assignedStoreIds: idsToUpdate });
 });
 
-// Atribuir uma instância a um ou mais cardápios (menus). Body: { menuIds: ["id1"] } ou { all: true }
+// Vincular instância a UM cardápio. Body: { menuIds: ["id"] } (1 elemento) ou
+// { all: true } quando a empresa só tem um cardápio.
+// Schema agora garante 1:1 entre instância e cardápio (Menu.whatsappInstanceId
+// @unique), então rejeitamos vínculo a múltiplos cardápios com mensagem clara
+// em vez de deixar o Prisma estourar P2002.
 waRouter.post('/instances/:name/assign-menus', requireRole('ADMIN'), async (req, res) => {
 	const companyId = req.user.companyId;
 	const { name } = req.params;
@@ -207,21 +211,28 @@ waRouter.post('/instances/:name/assign-menus', requireRole('ADMIN'), async (req,
 	let menus = [];
 	if (all) {
 		menus = await prisma.menu.findMany({ where: { store: { companyId } }, select: { id: true, whatsappInstanceId: true } });
+		if (menus.length > 1) return res.status(400).json({ message: 'A empresa tem mais de um cardápio. Informe menuIds com exatamente um id.' });
 	} else {
 		if (!Array.isArray(menuIds) || menuIds.length === 0) return res.status(400).json({ message: 'menuIds obrigatório ou use all: true' });
+		if (menuIds.length > 1) return res.status(400).json({ message: 'Cada integração WhatsApp pode ser vinculada a apenas UM cardápio.' });
 		menus = await prisma.menu.findMany({ where: { id: { in: menuIds }, store: { companyId } }, select: { id: true, whatsappInstanceId: true } });
-		if (menus.length !== menuIds.length) return res.status(404).json({ message: 'Um ou mais cardápios não foram encontrados' });
+		if (menus.length !== menuIds.length) return res.status(404).json({ message: 'Cardápio não encontrado' });
 	}
 
-	const conflicts = menus.filter(m => m.whatsappInstanceId && m.whatsappInstanceId !== instance.id).map(m => m.id);
-	if (conflicts.length > 0) return res.status(409).json({ ok: false, message: 'Alguns cardápios já têm outra instância atribuída', conflictMenuIds: conflicts });
+	if (menus.length === 0) return res.json({ ok: true, assignedMenuIds: [] });
 
-	const idsToUpdate = menus.map(m => m.id);
-	if (idsToUpdate.length === 0) return res.json({ ok: true, assignedMenuIds: [] });
+	const target = menus[0];
+	if (target.whatsappInstanceId && target.whatsappInstanceId !== instance.id) {
+		return res.status(409).json({ ok: false, message: 'O cardápio já tem outra instância atribuída', conflictMenuIds: [target.id] });
+	}
 
-	await prisma.menu.updateMany({ where: { id: { in: idsToUpdate } }, data: { whatsappInstanceId: instance.id } });
+	// Esta instância já está em outro cardápio? Bloqueia (1:1).
+	const otherMenu = await prisma.menu.findFirst({ where: { whatsappInstanceId: instance.id, NOT: { id: target.id } }, select: { id: true, name: true } });
+	if (otherMenu) return res.status(409).json({ ok: false, message: `Esta instância já está vinculada ao cardápio "${otherMenu.name}".`, conflictMenuIds: [otherMenu.id] });
 
-	res.json({ ok: true, assignedMenuIds: idsToUpdate });
+	await prisma.menu.update({ where: { id: target.id }, data: { whatsappInstanceId: instance.id } });
+
+	res.json({ ok: true, assignedMenuIds: [target.id] });
 });
 
 // Enviar texto (verifica toggle por empresa da instância)

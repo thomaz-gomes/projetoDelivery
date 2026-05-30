@@ -209,7 +209,31 @@ router.patch('/menus/:id', requireRole('ADMIN', 'ATTENDANT'), async (req, res) =
   let finalWeeklySchedule = weeklySchedule !== undefined ? weeklySchedule : existing.weeklySchedule
   if (finalOpen24Hours) finalWeeklySchedule = null
 
-  const updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, bannerUrl: bannerUrl ?? existing.bannerUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, whatsappInstanceId: finalWhatsappInstanceId, metaWaAccountId: finalMetaWaAccountId, primaryChannel: finalPrimaryChannel, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: finalWeeklySchedule, open24Hours: finalOpen24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
+  // Pre-check: each WhatsApp integration can be linked to at most one menu
+  // (schema @unique). When the operator picks an instance/account already
+  // bound to a sibling menu, give a clear error instead of letting Prisma
+  // raise a generic P2002.
+  if (finalWhatsappInstanceId && finalWhatsappInstanceId !== existing.whatsappInstanceId) {
+    const owner = await prisma.menu.findFirst({ where: { whatsappInstanceId: finalWhatsappInstanceId, NOT: { id } }, select: { id: true, name: true } })
+    if (owner) return res.status(409).json({ message: `Esta integração WhatsApp já está vinculada ao cardápio "${owner.name}". Desvincule lá primeiro.` })
+  }
+  if (finalMetaWaAccountId && finalMetaWaAccountId !== existing.metaWaAccountId) {
+    const owner = await prisma.menu.findFirst({ where: { metaWaAccountId: finalMetaWaAccountId, NOT: { id } }, select: { id: true, name: true } })
+    if (owner) return res.status(409).json({ message: `Esta conta WhatsApp Cloud já está vinculada ao cardápio "${owner.name}". Desvincule lá primeiro.` })
+  }
+
+  let updated
+  try {
+    updated = await prisma.menu.update({ where: { id }, data: { name: name ?? existing.name, description: description ?? existing.description, storeId: storeId !== undefined ? storeId : existing.storeId, logoUrl: logoUrl ?? existing.logoUrl, bannerUrl: bannerUrl ?? existing.bannerUrl, isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive, position: position !== undefined ? Number(position) : existing.position, slug: slugValue, address: address !== undefined ? address : existing.address, phone: phone !== undefined ? phone : existing.phone, whatsapp: whatsapp !== undefined ? whatsapp : existing.whatsapp, whatsappInstanceId: finalWhatsappInstanceId, metaWaAccountId: finalMetaWaAccountId, primaryChannel: finalPrimaryChannel, timezone: timezone !== undefined ? timezone : existing.timezone, weeklySchedule: finalWeeklySchedule, open24Hours: finalOpen24Hours, allowDelivery: finalAllowDelivery, allowPickup: finalAllowPickup, catalogMode: finalCatalogMode } })
+  } catch (err) {
+    // Race condition safety net for the pre-check above.
+    if (err?.code === 'P2002' && Array.isArray(err?.meta?.target)) {
+      const t = err.meta.target
+      if (t.includes('whatsappInstanceId')) return res.status(409).json({ message: 'Esta integração WhatsApp já está vinculada a outro cardápio.' })
+      if (t.includes('metaWaAccountId')) return res.status(409).json({ message: 'Esta conta WhatsApp Cloud já está vinculada a outro cardápio.' })
+    }
+    throw err
+  }
 
   // Emit real-time socket event so public menus react immediately when a menu is toggled
   try {

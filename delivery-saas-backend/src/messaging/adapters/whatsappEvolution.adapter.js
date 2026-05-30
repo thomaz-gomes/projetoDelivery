@@ -45,8 +45,9 @@ const adapter = {
     // fall back to the first active menu under the first store so the
     // conversation always carries a menuId — per-menu automations and
     // template placeholders depend on it.
-    const directMenuId = account?.menus?.[0]?.id || null
-    const directMenuStoreId = account?.menus?.[0]?.storeId || null
+    // 1:1 menu link as of schema migration; `account.menu` is at most one.
+    const directMenuId = account?.menu?.id || null
+    const directMenuStoreId = account?.menu?.storeId || null
     const firstStore = account?.stores?.[0] || null
     const storeFallbackMenuId = firstStore?.menus?.[0]?.id || null
     const menuId = directMenuId || storeFallbackMenuId
@@ -197,7 +198,8 @@ const adapter = {
     return prisma.whatsAppInstance.findFirst({
       where: { instanceName: externalId },
       include: {
-        menus: { select: { id: true, storeId: true }, take: 1 },
+        // 1:1 link as of schema migration; was menus[take:1].
+        menu: { select: { id: true, storeId: true } },
         // Eager-load the first active menu of the first store so parseInbound
         // can fall back to menu-via-store when no direct menu link exists.
         stores: {

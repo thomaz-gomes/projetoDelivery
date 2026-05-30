@@ -173,7 +173,9 @@ async function dispatchMeta(payload) {
       account = await prisma.metaMessagingAccount.findFirst({
         where: { provider, externalId },
         include: {
-          menusAsMetaWa: { select: { id: true, storeId: true } },
+          // META_WA is 1:1 with a single menu (schema @unique). FB/IG keep
+          // M:N back-relations until those FKs gain their own @unique.
+          menuAsMetaWa: { select: { id: true, storeId: true } },
           menusAsFb: { select: { id: true, storeId: true } },
           menusAsIg: { select: { id: true, storeId: true } },
         },

@@ -379,8 +379,9 @@ model WhatsAppInstance {
   updatedAt    DateTime @updatedAt
   // stores assigned to this WhatsApp instance (one instance -> many stores)
   stores       Store[]
-  // menus assigned to this WhatsApp instance (preferred: link via menu/cardápio)
-  menus        Menu[]   @relation("MenuWhatsAppInstance")
+  // 1:1 link to the menu/cardápio that owns this WhatsApp instance.
+  // Enforced by @unique on Menu.whatsappInstanceId.
+  menu         Menu?    @relation("MenuWhatsAppInstance")
   marketingCampaigns MarketingCampaign[] @relation("MarketingCampaignEvo")
 }
 
@@ -405,7 +406,9 @@ model MetaMessagingAccount {
   updatedAt          DateTime          @updatedAt
 
   company             Company             @relation(fields: [companyId], references: [id])
-  menusAsMetaWa       Menu[]              @relation("MenuMetaWa")
+  // 1:1 link to the menu/cardápio that owns this Cloud API account.
+  // Enforced by @unique on Menu.metaWaAccountId.
+  menuAsMetaWa        Menu?               @relation("MenuMetaWa")
   menusAsFb           Menu[]              @relation("MenuFb")
   menusAsIg           Menu[]              @relation("MenuIg")
   templates           MetaTemplate[]
@@ -769,11 +772,15 @@ model Menu {
   customDomain   CustomDomain?
 
   // ---- WhatsApp / Inbox ----
-  whatsappInstanceId              String?
+  // Each WhatsApp integration (Evolution instance or Meta Cloud account)
+  // can be linked to at most ONE cardápio. notify.js routes by menuId, so
+  // sharing an integration across menus would force the operator to choose
+  // a single "primary" menu anyway and silently break the others.
+  whatsappInstanceId              String?               @unique
   whatsappInstance                WhatsAppInstance?     @relation("MenuWhatsAppInstance", fields: [whatsappInstanceId], references: [id])
   // ---- Meta Messaging (WhatsApp Cloud / Facebook / Instagram) ----
   // Forward-declared FKs for MetaMessagingAccount — wired up by future task.
-  metaWaAccountId                 String?
+  metaWaAccountId                 String?               @unique
   metaWaAccount                   MetaMessagingAccount? @relation("MenuMetaWa", fields: [metaWaAccountId], references: [id])
   facebookAccountId               String?
   facebookAccount                 MetaMessagingAccount? @relation("MenuFb", fields: [facebookAccountId], references: [id])

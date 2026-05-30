@@ -66,7 +66,8 @@ async function handleMessagesUpsert(body, instanceName) {
   const account = await prisma.whatsAppInstance.findUnique({
     where: { instanceName },
     include: {
-      menus: { select: { id: true, storeId: true }, take: 1 },
+      // 1:1 link as of schema migration; was menus[take:1].
+      menu: { select: { id: true, storeId: true } },
       // Also eager-load the first active menu of the first store so the
       // adapter can fall back to menu-via-store when the instance is linked
       // only to a Store (no direct Menu link). Without this, conversations
