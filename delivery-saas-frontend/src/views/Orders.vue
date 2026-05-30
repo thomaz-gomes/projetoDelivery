@@ -1230,7 +1230,11 @@ function normalizeOrder(o){
       try {
         const payloadMerchantName = o.payload?.order?.merchant?.name;
         if (payloadMerchantName) return payloadMerchantName;
-        if (Array.isArray(o.store?.apiIntegrations) && o.store.apiIntegrations.length) {
+        // O fallback de merchantName só é válido pra pedidos iFood. Sem o
+        // gate por customerSource, um pedido do Cardápio Digital numa loja
+        // que tem integração iFood acabava sendo etiquetado com o nome da
+        // integração (ex: "Boulevard Foods") em vez do cardápio dele.
+        if (o.customerSource === 'IFOOD' && Array.isArray(o.store?.apiIntegrations) && o.store.apiIntegrations.length) {
           const payloadMerchantId = o.payload?.merchantId || o.payload?.order?.merchant?.id;
           if (payloadMerchantId) {
             const matched = o.store.apiIntegrations.find(a =>
