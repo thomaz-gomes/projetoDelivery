@@ -142,7 +142,12 @@ waRouter.get('/instances', requireRole('ADMIN'), async (req, res) => {
 	const companyId = req.user.companyId;
 	const instances = await prisma.whatsAppInstance.findMany({
 		where: { companyId },
-		orderBy: { createdAt: 'desc' }
+		orderBy: { createdAt: 'desc' },
+		include: {
+			// 1:1 link as of schema migration. UI uses this to disable the option
+			// in another menu's dropdown when this instance is already taken.
+			menu: { select: { id: true, name: true } },
+		},
 	});
 
 	// Consultar status real de cada instância na Evolution API

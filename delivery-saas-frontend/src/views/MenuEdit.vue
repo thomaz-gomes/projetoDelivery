@@ -61,19 +61,32 @@
               <select class="form-select" v-model="form.whatsappChannel">
                 <option :value="null">— Sem WhatsApp vinculado —</option>
                 <optgroup v-if="waInstances.length" label="Evolution API (não-oficial)">
-                  <option v-for="inst in waInstances" :key="'evo-' + inst.id" :value="'EVO:' + inst.id">
-                    {{ inst.instanceName }}<span v-if="inst.status !== 'CONNECTED'"> ({{ inst.status }})</span>
+                  <option
+                    v-for="inst in waInstances"
+                    :key="'evo-' + inst.id"
+                    :value="'EVO:' + inst.id"
+                    :disabled="isChannelTakenByOtherMenu(inst.menu)"
+                    :title="isChannelTakenByOtherMenu(inst.menu) ? `Já vinculada ao cardápio &quot;${inst.menu.name}&quot;` : ''"
+                  >
+                    {{ inst.instanceName }}<span v-if="inst.status !== 'CONNECTED'"> ({{ inst.status }})</span><span v-if="isChannelTakenByOtherMenu(inst.menu)"> — em uso por "{{ inst.menu.name }}"</span>
                   </option>
                 </optgroup>
                 <optgroup v-if="metaWaAccounts.length" label="WhatsApp Cloud (Meta — oficial)">
-                  <option v-for="acc in metaWaAccounts" :key="'meta-' + acc.id" :value="'META:' + acc.id">
-                    {{ acc.displayName || acc.externalId }}
+                  <option
+                    v-for="acc in metaWaAccounts"
+                    :key="'meta-' + acc.id"
+                    :value="'META:' + acc.id"
+                    :disabled="isChannelTakenByOtherMenu(acc.menus && acc.menus[0])"
+                    :title="isChannelTakenByOtherMenu(acc.menus && acc.menus[0]) ? `Já vinculada ao cardápio &quot;${acc.menus[0].name}&quot;` : ''"
+                  >
+                    {{ acc.displayName || acc.externalId }}<span v-if="isChannelTakenByOtherMenu(acc.menus && acc.menus[0])"> — em uso por "{{ acc.menus[0].name }}"</span>
                   </option>
                 </optgroup>
               </select>
               <div class="form-text">
                 Cada cardápio só pode ter UM número de WhatsApp vinculado. Notificações de pedido,
-                cashback e bot deste cardápio passam por ele.
+                cashback e bot deste cardápio passam por ele. Canais já atribuídos a outro cardápio
+                aparecem desabilitados — desvincule de lá primeiro pra reaproveitar.
               </div>
             </div>
 
@@ -394,6 +407,17 @@ function encodeWhatsappChannel(d) {
   if (d?.metaWaAccountId) return 'META:' + d.metaWaAccountId
   if (d?.whatsappInstanceId) return 'EVO:' + d.whatsappInstanceId
   return null
+}
+
+// Each WhatsApp integration is 1:1 with a menu (schema @unique). Hide the
+// option for instances/accounts already taken by another menu so the
+// operator can't pick a channel that would 409 on save. We still SHOW the
+// option (disabled + grayed out) so they understand why it's unavailable
+// and know which cardápio currently owns it.
+function isChannelTakenByOtherMenu(linkedMenu) {
+  if (!linkedMenu || !linkedMenu.id) return false
+  if (!form.value.id) return true // new menu: any linked channel is unavailable
+  return String(linkedMenu.id) !== String(form.value.id)
 }
 
 async function load(){
