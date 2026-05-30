@@ -3676,6 +3676,13 @@ function pulseButton() {
                   <span v-if="normalizeOrder(o).phoneLocalizer" class="oc-chip oc-chip--ifood" title="Localizador do pedido iFood"><i class="bi bi-hash"></i> {{ normalizeOrder(o).phoneLocalizer }}</span>
                   <span v-if="normalizeOrder(o).ifoodConfirmationCode" class="oc-chip oc-chip--ifood" title="Código de confirmação iFood"><i class="bi bi-key"></i> {{ normalizeOrder(o).ifoodConfirmationCode }}</span>
                   <span class="oc-chip"><i class="bi bi-credit-card"></i> {{ normalizeOrder(o).paymentMethod }}<template v-if="normalizeOrder(o).paymentChange"> · Troco para: {{ formatCurrency(normalizeOrder(o).paymentChange) }}<template v-if="changeDue(o) > 0"> ({{ formatCurrency(changeDue(o)) }})</template></template></span>
+                  <span
+                    v-if="!normalizeOrder(o).isPrepaid && Number(o.total || 0) > 0"
+                    class="oc-chip oc-chip--collect"
+                    title="Valor que o motoboy deve receber do cliente"
+                  >
+                    <i class="bi bi-cash-coin"></i> Cobrar {{ formatCurrency(Number(o.total || 0)) }}
+                  </span>
                   <template v-if="ridersEnabled">
                     <span class="oc-chip">
                       <i class="bi bi-person-badge"></i> {{ o.rider ? o.rider.name : '—' }}
@@ -4296,6 +4303,15 @@ function pulseButton() {
   white-space: nowrap;
 }
 .oc-chip i { font-size: 0.65rem; color: #888; }
+/* "Cobrar do cliente" chip — destacado pra agilizar conferência de caixa. */
+.oc-chip--collect {
+  background: #e8f5e9;
+  color: #1b5e20;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+.oc-chip--collect i { color: #1b5e20; }
 .oc-wa-btn { font-size: 0.7rem; line-height: 1; }
 
 /* Address */
