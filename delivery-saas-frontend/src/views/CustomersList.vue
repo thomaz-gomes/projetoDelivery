@@ -28,19 +28,140 @@ const limit = ref(20)
 const offset = ref(0)
 const total = ref(0)
 
+// ── Filtro por tier (alimentado pelos cards no topo) ──
+const tierFilter = ref('')
+const tierCounts = ref({ novo: 0, regular: 0, fiel: 0, vip: 0, em_risco: 0 })
+const tierCountsTotal = ref(0)
+const hasAnyFilter = computed(() => Boolean(q.value) || Boolean(tierFilter.value))
+
+const TIER_DEFS = [
+  { key: 'novo',     label: 'Novos',     icon: 'bi-stars' },
+  { key: 'regular',  label: 'Regulares', icon: 'bi-star' },
+  { key: 'fiel',     label: 'Fiéis',     icon: 'bi-star-half' },
+  { key: 'vip',      label: 'VIP',       icon: 'bi-trophy' },
+  { key: 'em_risco', label: 'Em Risco',  icon: 'bi-exclamation-triangle' },
+]
+
+async function loadTierCounts() {
+  try {
+    const data = await store.fetchTierCounts()
+    tierCounts.value = data?.counts || {}
+    tierCountsTotal.value = data?.total || 0
+  } catch (e) { console.warn('Falha ao carregar contagens de tier', e?.message || e) }
+}
+
+function selectTier(key) {
+  // Clica no card já ativo → desativa o filtro
+  tierFilter.value = (tierFilter.value === key) ? '' : key
+  offset.value = 0
+  load()
+}
+
 const load = async () => {
   loading.value = true
   error.value = ''
   try{
     const token = localStorage.getItem('token')
     if(!token){ router.push({ path: '/login', query: { redirect: '/customers' } }); return }
-    await store.fetch({ q: q.value, skip: offset.value, take: limit.value })
+    await store.fetch({ q: q.value, skip: offset.value, take: limit.value, tier: tierFilter.value })
     total.value = store.total
   }catch(e){ console.error('Failed to fetch customers', e); error.value = e?.response?.data?.message || 'Falha ao carregar clientes' }
   finally{ loading.value = false }
 }
 
-onMounted(()=> load())
+onMounted(()=> { load(); loadTierCounts() })
+
+// ── Bulk select ──
+// Guarda Customer inteiro (não só id) pra sobreviver à paginação e à troca
+// de filtro: ao mudar de página, a seleção da página anterior permanece e
+// ainda temos `.whatsapp` pra filtrar no submit. selectedIds é Set derivado
+// pra fazer os v-for/checked O(1).
+const selectedMap = ref(new Map())
+const selectedIds = computed(() => new Set(selectedMap.value.keys()))
+const selectionCount = computed(() => selectedMap.value.size)
+const selectedWithWhatsApp = computed(() =>
+  Array.from(selectedMap.value.values()).filter(c => !!(c.whatsapp || c.phone))
+)
+const pageAllSelected = computed(() => {
+  if (!displayed.value.length) return false
+  return displayed.value.every(c => selectedMap.value.has(c.id))
+})
+
+function toggleCustomer(id) {
+  const m = new Map(selectedMap.value)
+  if (m.has(id)) {
+    m.delete(id)
+  } else {
+    const c = displayed.value.find(x => x.id === id)
+    if (c) m.set(id, c)
+  }
+  selectedMap.value = m
+}
+function togglePageAll() {
+  const m = new Map(selectedMap.value)
+  if (pageAllSelected.value) {
+    displayed.value.forEach(c => m.delete(c.id))
+  } else {
+    displayed.value.forEach(c => m.set(c.id, c))
+  }
+  selectedMap.value = m
+}
+function clearSelection() { selectedMap.value = new Map() }
+
+// ── Modal "Criar lista" (segmento de marketing fixado nos selecionados) ──
+const showCreateListModal = ref(false)
+const createListForm = ref({ name: '', description: '' })
+const creatingList = ref(false)
+
+function openCreateListModal() {
+  createListForm.value = {
+    name: `Lista de clientes (${selectionCount.value}) — ${new Date().toLocaleDateString('pt-BR')}`,
+    description: '',
+  }
+  showCreateListModal.value = true
+}
+function closeCreateListModal() {
+  if (creatingList.value) return
+  showCreateListModal.value = false
+}
+async function submitCreateList() {
+  const ids = selectedWithWhatsApp.value.map(c => c.id)
+  if (!ids.length) {
+    Swal.fire({ icon: 'warning', text: 'Nenhum cliente selecionado tem WhatsApp cadastrado.' })
+    return
+  }
+  if (!createListForm.value.name.trim()) {
+    Swal.fire({ icon: 'warning', text: 'Informe um nome para a lista.' })
+    return
+  }
+  creatingList.value = true
+  try {
+    const ruleJson = {
+      rule: {
+        all: [
+          { field: 'customerId', op: 'in', value: ids },
+        ],
+      },
+    }
+    await api.post('/marketing/segments', {
+      name: createListForm.value.name.trim(),
+      description: createListForm.value.description.trim() || null,
+      ruleJson,
+    })
+    showCreateListModal.value = false
+    clearSelection()
+    await Swal.fire({
+      icon: 'success',
+      title: 'Lista criada',
+      html: `Segmento <strong>${createListForm.value.name}</strong> criado com <strong>${ids.length}</strong> contato(s). Use no Marketing → Campanhas para enviar.`,
+    })
+  } catch (e) {
+    console.error('createList error', e)
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || e?.message || 'Falha ao criar lista' })
+  } finally {
+    creatingList.value = false
+  }
+}
 
 function goNew(){ router.push('/customers/new') }
 function goProfile(id){ router.push(`/customers/${id}`) }
@@ -65,7 +186,7 @@ async function onImport(e){
   }
 }
 
-const resetFilters = () => { q.value=''; offset.value=0; load() }
+const resetFilters = () => { q.value=''; tierFilter.value=''; offset.value=0; load() }
 const nextPage = () => { if(offset.value + limit.value < total.value){ offset.value += limit.value; load() } }
 const prevPage = () => { if(offset.value > 0){ offset.value = Math.max(0, offset.value - limit.value); load() } }
 
@@ -219,6 +340,36 @@ async function performMerge(){
     </template>
 
     <template #default>
+      <!-- ═══ Tier cards (clique pra filtrar) ═══ -->
+      <div class="tier-cards mb-3">
+        <button
+          v-for="t in TIER_DEFS"
+          :key="t.key"
+          type="button"
+          class="tier-card"
+          :class="['tier-card--' + t.key, { active: tierFilter === t.key }]"
+          @click="selectTier(t.key)"
+        >
+          <div class="tier-card-icon"><i :class="['bi', t.icon]"></i></div>
+          <div class="tier-card-body">
+            <div class="tier-card-label">{{ t.label }}</div>
+            <div class="tier-card-count">{{ tierCounts[t.key] || 0 }}</div>
+          </div>
+        </button>
+      </div>
+
+      <!-- ═══ Filtros ativos + limpar ═══ -->
+      <div v-if="hasAnyFilter" class="d-flex align-items-center gap-2 mb-3 small">
+        <span class="text-muted">Filtros ativos:</span>
+        <span v-if="tierFilter" class="badge bg-light text-dark border">
+          {{ (TIER_DEFS.find(t => t.key === tierFilter) || {}).label }}
+        </span>
+        <span v-if="q" class="badge bg-light text-dark border">Busca: "{{ q }}"</span>
+        <button class="btn btn-sm btn-link p-0 ms-auto" @click="resetFilters">
+          <i class="bi bi-x-circle me-1"></i>Limpar filtro
+        </button>
+      </div>
+
       <div v-if="loading" class="text-center py-4">
         <div class="spinner-border spinner-border-sm text-secondary me-2"></div>
         Carregando...
@@ -229,6 +380,16 @@ async function performMerge(){
           <table class="table table-hover align-middle mb-0 customers-table">
             <thead>
               <tr>
+                <th style="width:34px">
+                  <input
+                    type="checkbox"
+                    class="form-check-input"
+                    :checked="pageAllSelected"
+                    @change="togglePageAll"
+                    @click.stop
+                    title="Selecionar todos da página"
+                  />
+                </th>
                 <th>Cliente</th>
                 <th>WhatsApp</th>
                 <th class="text-center">Pedidos</th>
@@ -238,7 +399,15 @@ async function performMerge(){
               </tr>
             </thead>
             <tbody>
-              <tr v-for="c in displayed" :key="c.id" class="customer-row" @click="goProfile(c.id)">
+              <tr v-for="c in displayed" :key="c.id" class="customer-row" :class="{ 'row-selected': selectedIds.has(c.id) }" @click="goProfile(c.id)">
+                <td @click.stop>
+                  <input
+                    type="checkbox"
+                    class="form-check-input"
+                    :checked="selectedIds.has(c.id)"
+                    @change="toggleCustomer(c.id)"
+                  />
+                </td>
                 <td>
                   <div class="d-flex align-items-center gap-2">
                     <div class="customer-avatar" :style="{ background: tierBgColors[c.stats?.tier] || '#f0f0f0', color: tierColors[c.stats?.tier] || '#666' }">
@@ -291,7 +460,7 @@ async function performMerge(){
                 </td>
               </tr>
               <tr v-if="total === 0">
-                <td colspan="6" class="text-center text-secondary py-4">Nenhum cliente encontrado.</td>
+                <td colspan="7" class="text-center text-secondary py-4">Nenhum cliente encontrado.</td>
               </tr>
             </tbody>
           </table>
@@ -311,6 +480,75 @@ async function performMerge(){
       </div>
     </template>
   </ListCard>
+
+  <!-- ═══ Bulk Action Bar — aparece quando há seleção ═══ -->
+  <transition name="bulk-bar">
+    <div v-if="selectionCount > 0" class="bulk-action-bar">
+      <div class="d-flex align-items-center gap-3 w-100">
+        <span class="fw-semibold">{{ selectionCount }} cliente(s) selecionado(s)</span>
+        <button class="btn btn-sm btn-outline-light" @click="clearSelection">
+          <i class="bi bi-x-lg me-1"></i>Limpar seleção
+        </button>
+        <div class="ms-auto d-flex gap-2">
+          <button class="btn btn-light btn-sm" @click="openCreateListModal" :disabled="!selectedWithWhatsApp.length">
+            <i class="bi bi-whatsapp me-1"></i>Criar lista
+            <span v-if="selectedWithWhatsApp.length !== selectionCount" class="badge bg-warning text-dark ms-1" :title="`Apenas ${selectedWithWhatsApp.length} têm WhatsApp cadastrado`">
+              {{ selectedWithWhatsApp.length }} c/ WA
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- ═══ Modal: Criar lista (segmento de marketing) ═══ -->
+  <div v-if="showCreateListModal" class="modal d-block" tabindex="-1"
+       @click.self="closeCreateListModal" style="background:rgba(0,0,0,0.5)">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-whatsapp text-success me-2"></i>Criar lista de contatos
+          </h5>
+          <button type="button" class="btn-close" @click="closeCreateListModal" :disabled="creatingList"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-info py-2 small mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            Será criado um <strong>segmento de marketing</strong> com os clientes selecionados que têm WhatsApp.
+            Use no Marketing → Campanhas para disparar mensagens.
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Nome da lista</label>
+            <input v-model="createListForm.name" class="form-control" placeholder="Ex: Clientes VIP — Maio 2026" :disabled="creatingList" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Descrição (opcional)</label>
+            <textarea v-model="createListForm.description" class="form-control" rows="2" placeholder="Para que serve esta lista?" :disabled="creatingList"></textarea>
+          </div>
+          <div class="d-flex justify-content-between small">
+            <span class="text-muted">Selecionados</span>
+            <strong>{{ selectionCount }}</strong>
+          </div>
+          <div class="d-flex justify-content-between small">
+            <span class="text-muted">Com WhatsApp (entrarão na lista)</span>
+            <strong :class="selectedWithWhatsApp.length === 0 ? 'text-danger' : 'text-success'">{{ selectedWithWhatsApp.length }}</strong>
+          </div>
+          <div v-if="selectedWithWhatsApp.length < selectionCount" class="alert alert-warning py-2 small mt-2 mb-0">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            {{ selectionCount - selectedWithWhatsApp.length }} cliente(s) sem WhatsApp serão ignorados.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" @click="closeCreateListModal" :disabled="creatingList">Cancelar</button>
+          <button class="btn btn-primary" :disabled="creatingList || !createListForm.name.trim() || !selectedWithWhatsApp.length" @click="submitCreateList">
+            <span v-if="creatingList" class="spinner-border spinner-border-sm me-1"></span>
+            Criar lista
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Merge Modal -->
   <div v-if="showMerge" class="merge-modal-backdrop">
@@ -453,4 +691,87 @@ async function performMerge(){
 }
 .merge-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:1050}
 .merge-modal{width:720px;max-width:95%;}
+
+/* Tier cards (filtro por classificação) */
+.tier-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.tier-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.15s, border-color 0.15s;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.tier-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  border-color: #d0d7e0;
+}
+.tier-card.active {
+  border-color: var(--bs-primary, #0d6efd);
+  box-shadow: 0 0 0 3px rgba(13,110,253,0.12);
+}
+.tier-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+.tier-card-body { display: flex; flex-direction: column; line-height: 1.1; }
+.tier-card-label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.03em; }
+.tier-card-count { font-size: 1.4rem; font-weight: 700; color: #212529; }
+
+.tier-card--novo     .tier-card-icon { background: rgba(13,110,253,0.10); color: #0d6efd; }
+.tier-card--regular  .tier-card-icon { background: rgba(255,193,7,0.15);  color: #b8860b; }
+.tier-card--fiel     .tier-card-icon { background: rgba(13,110,253,0.10); color: #0d6efd; }
+.tier-card--vip      .tier-card-icon { background: rgba(25,135,84,0.12);  color: #198754; }
+.tier-card--em_risco .tier-card-icon { background: rgba(220,53,69,0.10);  color: #dc3545; }
+
+/* Linha selecionada */
+.customer-row.row-selected {
+  background-color: rgba(13,110,253,0.05) !important;
+}
+
+/* Barra de ação em massa (fixa no rodapé) */
+.bulk-action-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1040;
+  min-width: 540px;
+  max-width: 92vw;
+  background: #212529;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  display: flex;
+  align-items: center;
+}
+.bulk-bar-enter-active, .bulk-bar-leave-active {
+  transition: transform 0.18s, opacity 0.18s;
+}
+.bulk-bar-enter-from, .bulk-bar-leave-to {
+  transform: translate(-50%, 30px);
+  opacity: 0;
+}
+.bulk-bar-enter-to, .bulk-bar-leave-from {
+  transform: translateX(-50%);
+  opacity: 1;
+}
 </style>

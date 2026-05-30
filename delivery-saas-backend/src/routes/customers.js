@@ -57,14 +57,96 @@ function computeCustomerStats(orders) {
   return { totalSpent, totalOrders, lastOrderDate, favoriteItem, ...tierInfo };
 }
 
+// GET /customers/tier-counts — quantos clientes em cada tier.
+// Aggregação única para alimentar os cards de filtro na tela de clientes.
+// Mantém a mesma lógica de tier do enrichment em GET /customers (linhas
+// 122-137), só que em SQL puro pra evitar carregar todos os Customer rows
+// só pra contar.
+customersRouter.get('/tier-counts', async (req, res) => {
+  const companyId = req.user.companyId;
+  const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  try {
+    const rows = await prisma.$queryRaw`
+      WITH stats AS (
+        SELECT
+          c.id,
+          COUNT(o.id)::int AS total_orders,
+          COUNT(CASE WHEN o.status = 'CONCLUIDO' THEN 1 END)::int AS completed_total,
+          MAX(CASE WHEN o.status = 'CONCLUIDO' THEN o."createdAt" END) AS last_completed,
+          COUNT(CASE WHEN o.status = 'CONCLUIDO' AND o."createdAt" >= ${d30} THEN 1 END)::int AS completed_30d
+        FROM "Customer" c
+        LEFT JOIN "Order" o ON o."customerId" = c.id
+        WHERE c."companyId" = ${companyId}
+        GROUP BY c.id
+      ),
+      classified AS (
+        SELECT
+          CASE
+            WHEN total_orders <= 1 THEN 'novo'
+            WHEN completed_total = 0 THEN 'em_risco'
+            WHEN last_completed IS NULL OR last_completed < ${d30} THEN 'em_risco'
+            WHEN completed_30d >= 8 THEN 'vip'
+            WHEN completed_30d >= 4 THEN 'fiel'
+            ELSE 'regular'
+          END AS tier
+        FROM stats
+      )
+      SELECT tier, COUNT(*)::int AS count FROM classified GROUP BY tier
+    `;
+    const counts = { novo: 0, regular: 0, fiel: 0, vip: 0, em_risco: 0 };
+    let total = 0;
+    for (const r of rows) {
+      counts[r.tier] = r.count;
+      total += r.count;
+    }
+    res.json({ total, counts });
+  } catch (e) {
+    console.error('GET /customers/tier-counts error', e);
+    res.status(500).json({ message: 'Falha ao calcular contagens', error: e?.message });
+  }
+});
+
 // Listagem com paginação simples
 customersRouter.get('/', async (req, res) => {
   const companyId = req.user.companyId;
   const take = Math.min(Number(req.query.take || 50), 200);
   const skip = Math.max(Number(req.query.skip || 0), 0);
   const search = String(req.query.q || '').trim();
+  const tierFilter = String(req.query.tier || '').trim();
+  const validTiers = ['novo', 'regular', 'fiel', 'vip', 'em_risco'];
 
   const where = { companyId };
+
+  // Quando o operador clica num card de tier, restringe a paginação aos ids
+  // que se encaixam — a classificação acontece em SQL (mesma CTE do
+  // tier-counts) e devolvemos a lista de ids matching pra alimentar o where.
+  if (tierFilter && validTiers.includes(tierFilter)) {
+    const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const rows = await prisma.$queryRaw`
+      WITH stats AS (
+        SELECT
+          c.id,
+          COUNT(o.id)::int AS total_orders,
+          COUNT(CASE WHEN o.status = 'CONCLUIDO' THEN 1 END)::int AS completed_total,
+          MAX(CASE WHEN o.status = 'CONCLUIDO' THEN o."createdAt" END) AS last_completed,
+          COUNT(CASE WHEN o.status = 'CONCLUIDO' AND o."createdAt" >= ${d30} THEN 1 END)::int AS completed_30d
+        FROM "Customer" c
+        LEFT JOIN "Order" o ON o."customerId" = c.id
+        WHERE c."companyId" = ${companyId}
+        GROUP BY c.id
+      )
+      SELECT id FROM stats WHERE
+        CASE
+          WHEN total_orders <= 1 THEN 'novo'
+          WHEN completed_total = 0 THEN 'em_risco'
+          WHEN last_completed IS NULL OR last_completed < ${d30} THEN 'em_risco'
+          WHEN completed_30d >= 8 THEN 'vip'
+          WHEN completed_30d >= 4 THEN 'fiel'
+          ELSE 'regular'
+        END = ${tierFilter}
+    `;
+    where.id = { in: rows.map(r => r.id) };
+  }
   if (search) {
     // Se a busca parece ser um número (telefone), busca apenas em campos de telefone
     const isPhone = /^\d+$/.test(search);

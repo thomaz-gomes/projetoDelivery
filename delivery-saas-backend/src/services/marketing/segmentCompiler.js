@@ -205,6 +205,16 @@ const HANDLERS = {
     return op === 'in' ? exists : `NOT ${exists}`
   },
 
+  customerId: (op, value) => {
+    // Pins the segment to a fixed list of customers. Used by the "Criar
+    // lista" action on the customers screen — operator picks N customers,
+    // we persist a segment with `{ field: 'customerId', op: 'in', value: [ids] }`
+    // so the rule survives and re-evaluates correctly if a campaign reuses it.
+    const ids = value.map(escapeUuid).join(',')
+    const cond = `c.id IN (${ids})`
+    return op === 'in' ? cond : `NOT (${cond})`
+  },
+
   cashbackBalance: (op, value) => {
     // CashbackWallet has `clientId` (not customerId) per schema
     const sub = `(SELECT COALESCE(SUM(cw.balance), 0) FROM "CashbackWallet" cw WHERE cw."clientId" = c.id)`

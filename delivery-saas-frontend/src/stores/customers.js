@@ -12,16 +12,22 @@ export const useCustomersStore = defineStore('customers', {
     ordersLoading: false,
   }),
   actions: {
-    async fetch({ q = '', skip = 0, take = 50 } = {}) {
+    async fetch({ q = '', skip = 0, take = 50, tier = '' } = {}) {
       this.loading = true;
       try {
-        const { data } = await api.get('/customers', { params: { q, skip, take } });
+        const params = { q, skip, take };
+        if (tier) params.tier = tier;
+        const { data } = await api.get('/customers', { params });
         this.list = data.rows;
         this.total = data.total;
         return data;
       } finally {
         this.loading = false;
       }
+    },
+    async fetchTierCounts() {
+      const { data } = await api.get('/customers/tier-counts');
+      return data;
     },
     async get(id) {
       const { data } = await api.get(`/customers/${id}`);
