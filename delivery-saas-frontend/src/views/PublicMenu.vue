@@ -4425,10 +4425,19 @@ onMounted(async ()=>{
 
     // Persist storeId/menuId as soon as the payload is applied so that
     // navigating to profile/history and back preserves the store context.
+    // IMPORTANT: when the API returns a menu, always re-sync menuId.value
+    // (and the localStorage key) to that menu's id, even if menuId.value
+    // already holds something. Otherwise a stale id cached from a previous
+    // visit to a sibling menu wins over the menu the customer is actually
+    // browsing — checkout then attributes the order to the wrong cardápio
+    // and WhatsApp notifications route through the wrong canal.
     try {
-      if (!menuId.value && data.menu && data.menu.id) {
-        menuId.value = String(data.menu.id)
-        localStorage.setItem(menuStorageKey, String(data.menu.id))
+      if (data.menu && data.menu.id) {
+        const apiMenuId = String(data.menu.id)
+        if (menuId.value !== apiMenuId) {
+          menuId.value = apiMenuId
+          try { localStorage.setItem(menuStorageKey, apiMenuId) } catch (e) { /* ignore */ }
+        }
       }
       if (!storeId.value && data.menu && data.menu.storeId) {
         storeId.value = String(data.menu.storeId)
@@ -5078,9 +5087,16 @@ async function submitOrder(){
       payload.storeId = String(storeId.value)
     } catch(e) { /* ignore */ }
   }
-  if (menuId.value) {
-    try { payload.menuId = String(menuId.value) } catch(e) { /* ignore */ }
-  }
+  // The currently-loaded menu (menu.value.id) is the truth — that's what the
+  // customer is actually browsing. Prefer it over menuId.value, which may
+  // hold a stale id from a previous visit before the re-sync ran.
+  try {
+    if (menu && menu.value && menu.value.id) {
+      payload.menuId = String(menu.value.id)
+    } else if (menuId.value) {
+      payload.menuId = String(menuId.value)
+    }
+  } catch (e) { /* ignore */ }
 
   // If the page didn't include storeId/menuId query params, try to derive them
   // from the loaded `menu` or `company` objects returned by the public menu API.
