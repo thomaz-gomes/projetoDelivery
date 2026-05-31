@@ -84,9 +84,15 @@ ordersRouter.get('/', async (req, res) => {
         menu: { select: { id: true, name: true } },
       };
 
+  // Hard cap to keep the kanban from melting on companies with years of
+  // history when no date filter is sent. Frontend can opt into a larger
+  // window via ?take=N (sales history paginates via from/to).
+  const takeRaw = Number(req.query.take);
+  const take = Number.isFinite(takeRaw) && takeRaw > 0 ? Math.min(takeRaw, 2000) : 1000;
   const orders = await prisma.order.findMany({
     where,
     orderBy: { createdAt: 'desc' },
+    take,
     include,
   });
 
@@ -99,20 +105,48 @@ ordersRouter.get('/', async (req, res) => {
         o.displaySimple = String(o.displaySimple).padStart(2, '0');
       }
     } else {
-      // Some orders lack persisted displaySimple. For stability we compute each missing
-      // displaySimple based on the count of orders created up to that order on the same day
-      // (this ensures the visual number does not depend on the filtered set returned).
+      // Some orders lack persisted displaySimple. Replace the previous
+      // N parallel count() calls (one per missing-row, fan-out in a
+      // Promise.all) with a single window-function query that ranks each
+      // affected day in one pass. The old shape caused a thundering herd
+      // on big companies and was the main cause of the 15s timeout on
+      // /orders.
       try {
-        await Promise.all(orders.map(async (o) => {
-          if (o.displaySimple != null) {
-            o.displaySimple = String(o.displaySimple).padStart(2, '0');
-            return;
+        const missing = orders.filter(o => o.displaySimple == null);
+        const missingIds = missing.map(o => o.id);
+        if (missingIds.length) {
+          const tz = orders.find(o => o.company?.timezone)?.company?.timezone || 'America/Sao_Paulo';
+          const rows = await prisma.$queryRaw`
+            WITH affected_days AS (
+              SELECT DISTINCT (("createdAt" AT TIME ZONE ${tz})::date) AS day, "companyId"
+              FROM "Order" WHERE id = ANY(${missingIds}::uuid[])
+            ),
+            day_orders AS (
+              SELECT o.id,
+                ROW_NUMBER() OVER (
+                  PARTITION BY ((o."createdAt" AT TIME ZONE ${tz})::date), o."companyId"
+                  ORDER BY o."createdAt" ASC
+                )::int AS seq
+              FROM "Order" o
+              JOIN affected_days a
+                ON ((o."createdAt" AT TIME ZONE ${tz})::date) = a.day
+                AND o."companyId" = a."companyId"
+            )
+            SELECT id, seq FROM day_orders WHERE id = ANY(${missingIds}::uuid[])
+          `;
+          const seqMap = new Map(rows.map(r => [r.id, r.seq]));
+          for (const o of orders) {
+            if (o.displaySimple != null) {
+              o.displaySimple = String(o.displaySimple).padStart(2, '0');
+            } else {
+              o.displaySimple = String(seqMap.get(o.id) || 0).padStart(2, '0');
+            }
           }
-          const d = new Date(o.createdAt || o.updatedAt || Date.now());
-          const startOfDay = startOfDayForDateInTz(d, o.company?.timezone);
-          const count = await prisma.order.count({ where: { companyId: o.companyId, createdAt: { gte: startOfDay, lte: d } } });
-          o.displaySimple = String(count).padStart(2, '0');
-        }));
+        } else {
+          for (const o of orders) {
+            o.displaySimple = String(o.displaySimple).padStart(2, '0');
+          }
+        }
       } catch (e) {
         console.warn('Failed to compute displaySimple for orders list (fallback to in-memory sequence)', e?.message || e);
         // fallback: assign sequential numbers by createdAt order (best-effort)

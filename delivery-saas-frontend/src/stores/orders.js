@@ -13,7 +13,11 @@ export const useOrdersStore = defineStore('orders', {
     async fetch() {
       this.loading = true;
       try {
-        const { data } = await api.get('/orders');
+        // light=true skips histories + customer.addresses + full company on
+        // the include — the kanban view doesn't read any of them. With those
+        // out, the response shrinks a lot and the 15s axios timeout stops
+        // tripping on busy companies.
+        const { data } = await api.get('/orders', { params: { light: true } });
         // Defensive: ensure backend returned an array. If not, try to
         // accept common wrapper shapes ({ orders: [...] }) or fallback
         // to an empty array and log for easier debugging.
