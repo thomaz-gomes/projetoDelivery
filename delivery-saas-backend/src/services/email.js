@@ -72,7 +72,43 @@ export async function sendVerificationCode(email, code) {
 }
 
 /**
- * Send NF-e XML as email attachment.
+ * Send NF-e DANFE PDF as email attachment.
+ * The PDF buffer comes pre-rendered (pdfFromHtml.renderHtmlToPdf).
+ */
+export async function sendNfePdfEmail(toEmail, { pdfBuffer, nProt, orderDisplay }) {
+  const t = await getTransporter();
+  const config = await getSmtpConfig();
+
+  const filename = `nfe-${nProt || orderDisplay || 'danfe'}.pdf`;
+  const subject = `NF-e ${nProt ? `Protocolo ${nProt}` : orderDisplay ? `Pedido ${orderDisplay}` : ''} — Documento Fiscal Eletrônico`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #1a1a1a; margin-bottom: 8px;">Nota Fiscal Eletrônica</h2>
+      <p style="color: #555; font-size: 15px;">Segue em anexo o DANFE (PDF) da NF-e${nProt ? ` (Protocolo: <strong>${nProt}</strong>)` : ''}.</p>
+      <p style="color: #888; font-size: 13px;">Guarde este documento para sua contabilidade.</p>
+    </div>
+  `;
+
+  if (!t) {
+    console.log(`[email] NF-e DANFE PDF (${filename}, ${pdfBuffer?.length || 0} bytes) would be sent to ${toEmail} — SMTP not configured`);
+    return { accepted: [toEmail], messageId: 'console-' + Date.now() };
+  }
+
+  const info = await t.sendMail({
+    from: config.from,
+    to: toEmail,
+    subject,
+    html,
+    attachments: [{ filename, content: pdfBuffer, contentType: 'application/pdf' }],
+  });
+
+  console.log(`[email] NF-e DANFE PDF sent to ${toEmail} (messageId: ${info.messageId})`);
+  return info;
+}
+
+/**
+ * Send NF-e XML as email attachment. (Legacy — kept for callers that still
+ * want raw XML; UI now uses sendNfePdfEmail for the customer-facing flow.)
  */
 export async function sendNfeXmlEmail(toEmail, { xml, nProt, orderDisplay }) {
   const t = await getTransporter();

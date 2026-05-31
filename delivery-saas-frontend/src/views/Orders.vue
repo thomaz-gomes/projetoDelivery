@@ -1697,7 +1697,7 @@ async function imprimirDanfe(order) {
 
 async function sendNfeEmail(order) {
   const { value: email, isConfirmed } = await Swal.fire({
-    title: 'Enviar NF-e por e-mail',
+    title: 'Enviar NF-e em PDF por e-mail',
     input: 'email',
     inputLabel: 'Endereço de e-mail',
     inputPlaceholder: 'cliente@exemplo.com',
@@ -1713,6 +1713,22 @@ async function sendNfeEmail(order) {
     Swal.fire({ icon: 'success', title: 'E-mail enviado', text: email, timer: 3000, toast: true, position: 'top-end', showConfirmButton: false })
   } catch (e) {
     Swal.fire({ icon: 'error', title: 'Erro ao enviar e-mail', text: e.response?.data?.error || e.message })
+  }
+}
+
+async function downloadNfePdf(order) {
+  try {
+    const resp = await api.get(`/nfe/danfe-pdf/${order.id}`, { responseType: 'blob' })
+    const cd = resp.headers['content-disposition'] || ''
+    const match = cd.match(/filename="([^"]+)"/)
+    const filename = match ? match[1] : `nfe-${order.displaySimple || order.id}.pdf`
+    const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url; a.download = filename
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Erro ao baixar PDF', text: e.response?.data?.error || e.message })
   }
 }
 
@@ -4038,8 +4054,11 @@ function pulseButton() {
               <button type="button" class="btn btn-sm btn-success" @click="imprimirDanfe(selectedOrder)" title="Imprimir DANFE na impressora fiscal">
                 <i class="bi bi-printer-fill"></i> Imprimir DANFE
               </button>
-              <button type="button" class="btn btn-sm btn-outline-primary" @click="sendNfeEmail(selectedOrder)" title="Enviar XML por e-mail">
-                <i class="bi bi-envelope"></i> Enviar por e-mail
+              <button type="button" class="btn btn-sm btn-outline-primary" @click="sendNfeEmail(selectedOrder)" title="Enviar DANFE em PDF por e-mail">
+                <i class="bi bi-envelope"></i> Enviar PDF por e-mail
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" @click="downloadNfePdf(selectedOrder)" title="Baixar DANFE em PDF">
+                <i class="bi bi-file-pdf"></i> Baixar PDF
               </button>
               <button type="button" class="btn btn-sm btn-outline-secondary" @click="downloadNfeXml(selectedOrder)" title="Baixar XML">
                 <i class="bi bi-download"></i> Baixar XML
