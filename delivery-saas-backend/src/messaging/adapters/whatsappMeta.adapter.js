@@ -256,6 +256,10 @@ const adapter = {
     const { graphVersion } = await getMetaConfig()
     const url = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(account.externalId)}/messages`
 
+    const normalizedComponents = Array.isArray(components)
+      ? components.map(normalizeTemplateMediaLinks)
+      : []
+
     const body = {
       messaging_product: 'whatsapp',
       to: String(to).replace(/\D/g, ''),
@@ -263,7 +267,7 @@ const adapter = {
       template: {
         name,
         language: { code: languageCode || 'pt_BR' },
-        ...(Array.isArray(components) && components.length ? { components } : {}),
+        ...(normalizedComponents.length ? { components: normalizedComponents } : {}),
       },
     }
 
@@ -748,6 +752,41 @@ function toAbsolutePublicUrl(maybeRelative) {
   }
   const path = value.startsWith('/') ? value : `/${value}`
   return `${base.replace(/\/$/, '')}${path}`
+}
+
+// Templates podem ter mídia no HEADER (image/video/document). A Meta exige
+// link HTTPS público no `parameters[].image.link` / `.video.link` / .document.link.
+// Esta função percorre os components do template, aplica toAbsolutePublicUrl
+// nesses links e devolve uma cópia normalizada. Aceita formato Graph API:
+//   {
+//     type: 'header',
+//     parameters: [
+//       { type: 'image', image: { link: '...' } },
+//       { type: 'video', video: { link: '...' } },
+//       { type: 'document', document: { link: '...', filename: '...' } },
+//     ]
+//   }
+// Componentes sem mídia (body com texto, button, etc.) passam intactos.
+function normalizeTemplateMediaLinks(component) {
+  if (!component || typeof component !== 'object') return component
+  if (!Array.isArray(component.parameters)) return component
+
+  const normalizedParams = component.parameters.map((p) => {
+    if (!p || typeof p !== 'object') return p
+    const kind = String(p.type || '').toLowerCase()
+    if (kind === 'image' && p.image?.link) {
+      return { ...p, image: { ...p.image, link: toAbsolutePublicUrl(p.image.link) } }
+    }
+    if (kind === 'video' && p.video?.link) {
+      return { ...p, video: { ...p.video, link: toAbsolutePublicUrl(p.video.link) } }
+    }
+    if (kind === 'document' && p.document?.link) {
+      return { ...p, document: { ...p.document, link: toAbsolutePublicUrl(p.document.link) } }
+    }
+    return p
+  })
+
+  return { ...component, parameters: normalizedParams }
 }
 
 export default adapter
