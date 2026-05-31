@@ -12,6 +12,7 @@ import { geocodeOrderIfNeeded } from '../utils/geocode.js'
 import { isAvailableNow } from '../services/availability.js'
 import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
 import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js'
+import { resolveNeighborhood } from '../services/neighborhoodResolver.js'
 import { attributeOrderToCampaign } from '../services/marketing/attribution.js'
 
 export const publicMenuRouter = express.Router()
@@ -1245,14 +1246,15 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
   // subtotal (use sanitized items)
   const subtotal = items.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0)
 
-    // find neighborhood delivery fee — shared normalization keeps geocoded
-    // phrases ("Centro, Eunápolis"), accent variants and punctuation aligned
-    // with what the frontend showed the customer.
-    const neighborhoods = await prisma.neighborhood.findMany({ where: { companyId } })
+    // find neighborhood delivery fee via the resolver — fast path for known
+    // aliases, fuzzy match for new inputs that look like a canonical
+    // neighborhood, and enqueue unknown text into NeighborhoodAlias.PENDING
+    // so the admin classifies it once. The daily validation script is
+    // therefore unnecessary — any new text surfaces in the admin UI.
     let deliveryFee = 0
     if (address.neighborhood) {
-      const match = findNeighborhoodMatch(neighborhoods, address.neighborhood)
-      if (match) deliveryFee = Number(match.deliveryFee || 0)
+      const resolved = await resolveNeighborhood(companyId, address.neighborhood)
+      deliveryFee = Number(resolved.deliveryFee || 0)
     }
 
     // Apply free delivery when subtotal meets the configured threshold

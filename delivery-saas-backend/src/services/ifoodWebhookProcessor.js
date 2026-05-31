@@ -5,6 +5,7 @@ import { upsertCustomerFromIfood } from '../services/customers.js';
 import { emitirNovoPedido, emitirPedidoAtualizado, app } from '../index.js';
 import { notifyCustomerStatus, notifyCustomerOrderSummary } from './notify.js';
 import { tryEmitIfoodChat } from './ifoodChatEmitter.js';
+import { resolveNeighborhood } from './neighborhoodResolver.js';
 import buildAndPersistStockMovementFromOrderItems, { reverseStockMovementForOrder } from './stockFromOrder.js';
 import { canTransition } from '../stateMachine.js';
 import printQueue from '../printQueue.js'
@@ -329,7 +330,22 @@ async function upsertOrder({ companyId, mapped, storeId = null, merchantHint = n
     customerId: mapped.customerId || null,
     customerPhone: mapped.customerPhone,
     address: buildConcatenatedAddress(mapped.raw) || mapped.address,
-    deliveryNeighborhood: (mapped.raw?.order?.delivery?.deliveryAddress?.neighborhood) || (mapped.raw?.delivery?.deliveryAddress?.neighborhood) || (normalizeDeliveryAddressFromPayload(mapped.raw || {})?.neighborhood) || exists?.deliveryNeighborhood || null,
+    deliveryNeighborhood: (function() {
+      // Original extraction chain — preserved verbatim — then we fire a
+      // fire-and-forget capture into NeighborhoodAlias so the iFood
+      // payload's bairro shows up in the admin queue if it doesn't match
+      // anything cadastrado. The deliveryNeighborhood field itself still
+      // gets the raw text; classification is async.
+      const raw =
+        (mapped.raw?.order?.delivery?.deliveryAddress?.neighborhood) ||
+        (mapped.raw?.delivery?.deliveryAddress?.neighborhood) ||
+        (normalizeDeliveryAddressFromPayload(mapped.raw || {})?.neighborhood) ||
+        exists?.deliveryNeighborhood || null;
+      if (raw && companyId) {
+        resolveNeighborhood(companyId, raw).catch(() => {});
+      }
+      return raw;
+    })(),
     latitude: mapped.latitude,
     longitude: mapped.longitude,
     total: mapped.total,

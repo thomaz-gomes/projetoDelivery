@@ -21,6 +21,7 @@ import { startOfDayInTz as dayStartTz, endOfDayInTz as dayEndTz } from '../utils
 import { geocodeOrderIfNeeded } from '../utils/geocode.js';
 import { evaluateDiscountRule } from '../utils/paymentDiscount.js';
 import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js';
+import { resolveNeighborhood } from '../services/neighborhoodResolver.js';
 import { attributeOrderToCampaign, revokeAttribution } from '../services/marketing/attribution.js';
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -219,6 +220,12 @@ ordersRouter.post('/import', requireRole('ADMIN'), upload.single('file'), async 
         const riderFee = Number(r[16]) || 0;
         const riderName = String(r[17] || '').trim();
         const bairro = String(r[18] || '').trim() || null;
+        // Capture into NeighborhoodAlias (PENDING or CLASSIFIED) so unknown
+        // bairros from the legacy spreadsheet land in the admin queue. The
+        // import preserves the spreadsheet's own deliveryFee — we don't
+        // overwrite it from the lookup; this call is purely for the
+        // side-effect of populating the alias table.
+        if (bairro) { resolveNeighborhood(companyId, bairro).catch(() => {}); }
         const cep = String(r[19] || '').trim() || null;
         const acrescimo = Number(r[20]) || 0;
         const motivoAcrescimo = String(r[21] || '').trim() || null;
@@ -1245,18 +1252,18 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       return s + (base + optsSum) * qty;
     }, 0);
 
-    // neighborhood delivery fee — use the shared matcher so accents,
-    // whitespace and punctuation variants resolve the same way as in
-    // publicMenu, the inbox order wizard and the retroactive rider script.
-    // Without this, a bairro typed exactly as cadastrado but with a missing
-    // accent (or an extra trailing space) fell through to deliveryFee = 0.
+    // neighborhood delivery fee — goes through the resolver, which hits the
+    // alias cache first, falls back to the canonical fuzzy match, and
+    // enqueues unknown strings as PENDING for admin classification. Behavior
+    // is unchanged when a known neighborhood matches; we only added the
+    // "unknown text gets captured" side-effect that retires the daily
+    // validation script.
     let deliveryFee = 0;
     try {
       const neighName = String(address?.neighborhood || address?.neigh || '').trim();
       if (neighName) {
-        const neighRows = await prisma.neighborhood.findMany({ where: { companyId } });
-        const matched = findNeighborhoodMatch(neighRows, neighName);
-        if (matched) deliveryFee = Number(matched.deliveryFee || 0);
+        const resolved = await resolveNeighborhood(companyId, neighName);
+        deliveryFee = Number(resolved.deliveryFee || 0);
       }
     } catch (e) { deliveryFee = 0; }
 

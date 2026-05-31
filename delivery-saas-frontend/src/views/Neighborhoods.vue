@@ -18,6 +18,70 @@
       </div>
     </div>
 
+    <!-- Pending aliases queue — surfaces neighborhoods seen on orders that
+         don't match anything cadastrado. Replaces the old daily validation
+         script: classify each once and from then on it's automatic. -->
+    <div v-if="pendingCount > 0" class="card mb-4 border-warning">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <h6 class="fw-semibold mb-0">
+            <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+            Bairros pendentes de classificação
+            <span class="badge bg-warning text-dark ms-2">{{ pendingCount }}</span>
+          </h6>
+          <small class="text-muted">
+            Pedidos chegaram com bairros que não bateram com nenhum cadastrado. Mapeie pra um canônico e nunca mais aparece.
+          </small>
+        </div>
+        <div v-if="loadingAliases" class="text-muted small">Carregando...</div>
+        <div v-else class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Texto recebido</th>
+                <th class="text-center" style="width:120px">Ocorrências</th>
+                <th style="width:80px">Última</th>
+                <th>Mapear para</th>
+                <th style="width:140px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="alias in pendingAliases" :key="alias.id">
+                <td><code class="text-dark">{{ alias.rawSample }}</code></td>
+                <td class="text-center">
+                  <span class="badge bg-light text-dark border">{{ alias.occurrences }}</span>
+                </td>
+                <td class="text-muted small">
+                  {{ alias.lastSeenAt ? new Date(alias.lastSeenAt).toLocaleDateString('pt-BR') : '—' }}
+                </td>
+                <td>
+                  <select class="form-select form-select-sm" v-model="aliasSelectMap[alias.id]">
+                    <option value="">— Escolha um bairro —</option>
+                    <option v-for="n in list" :key="n.id" :value="n.id">{{ n.name }}</option>
+                  </select>
+                </td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <button
+                      class="btn btn-sm btn-primary"
+                      :disabled="!aliasSelectMap[alias.id]"
+                      @click="classifyAlias(alias, aliasSelectMap[alias.id])"
+                      title="Salvar vínculo"
+                    >
+                      <i class="bi bi-check-lg"></i> Mapear
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="ignoreAlias(alias)" title="Ignorar este texto">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <ListCard
       title="Bairros"
       icon="bi bi-geo-alt"
@@ -327,6 +391,57 @@ const retro = ref({
 const importing = ref(false)
 const importProgress = ref({ total: 0, done: 0, errors: [] })
 
+// ── Pending aliases (fila preenchida pelo resolver no backend) ──
+const pendingAliases = ref([])
+const loadingAliases = ref(false)
+const pendingCount = computed(() => pendingAliases.value.length)
+
+async function fetchPendingAliases() {
+  loadingAliases.value = true
+  try {
+    const { data } = await api.get('/neighborhoods/aliases', { params: { status: 'PENDING' } })
+    pendingAliases.value = Array.isArray(data?.rows) ? data.rows : []
+  } catch (e) {
+    console.warn('Falha ao carregar bairros pendentes', e?.message || e)
+    pendingAliases.value = []
+  } finally {
+    loadingAliases.value = false
+  }
+}
+
+async function classifyAlias(alias, neighborhoodId) {
+  if (!neighborhoodId) return
+  try {
+    await api.post(`/neighborhoods/aliases/${alias.id}/classify`, { neighborhoodId })
+    pendingAliases.value = pendingAliases.value.filter(a => a.id !== alias.id)
+    Swal.fire({ icon: 'success', text: 'Bairro classificado', toast: true, position: 'top-end', timer: 1800, showConfirmButton: false })
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao classificar' })
+  }
+}
+
+async function ignoreAlias(alias) {
+  const res = await Swal.fire({
+    icon: 'question',
+    title: 'Ignorar bairro?',
+    html: `O texto <strong>"${alias.rawSample}"</strong> não voltará a aparecer na fila. Pedidos com esse bairro continuam com taxa zero até você cadastrar um bairro canônico que o reconheça.`,
+    showCancelButton: true,
+    confirmButtonText: 'Sim, ignorar',
+    cancelButtonText: 'Cancelar',
+  })
+  if (!res.isConfirmed) return
+  try {
+    await api.post(`/neighborhoods/aliases/${alias.id}/ignore`)
+    pendingAliases.value = pendingAliases.value.filter(a => a.id !== alias.id)
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Falha ao ignorar' })
+  }
+}
+
+// Cada alias tem seu próprio dropdown; aliasSelectMap.value[alias.id] guarda
+// a escolha. Mapa compartilhado pra evitar reflow da lista inteira no input.
+const aliasSelectMap = ref({})
+
 async function fetchList() {
   loading.value = true
   try {
@@ -556,7 +671,7 @@ async function handleFileImport(file) {
   }
 }
 
-onMounted(() => { fetchList(); fetchSettings() })
+onMounted(() => { fetchList(); fetchSettings(); fetchPendingAliases() })
 </script>
 
 <style scoped>

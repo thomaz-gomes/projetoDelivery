@@ -43,6 +43,7 @@ model Company {
   users                User[]
   riders               Rider[]
   neighborhoods        Neighborhood[]
+  neighborhoodAliases  NeighborhoodAlias[]
   orders               Order[]
   nfeProtocols         NfeProtocol[]
   whatsAppInstances    WhatsAppInstance[]
@@ -988,12 +989,56 @@ model Neighborhood {
   companyId   String
   company     Company  @relation(fields: [companyId], references: [id])
   name        String
-  aliases     Json? // array of other names (optional)
+  aliases     Json? // array of other names (optional) — legacy inline list
   deliveryFee Decimal  @default(0)
   riderFee    Decimal  @default(0)
   createdAt   DateTime @default(now())
+  // Aliases learned from ingestion. The legacy `aliases` JSON column above
+  // stays around as a seed source; new aliases all land here so they get
+  // status tracking, occurrence counters, and admin classification flow.
+  aliasRows   NeighborhoodAlias[]
 
   @@index([companyId, name], name: "company_neighborhood_name_idx")
+}
+
+// Mirror table that captures every distinct neighborhood label seen during
+// order ingestion. When a Customer/iFood/PDV input matches a canonical
+// Neighborhood (via findNeighborhoodMatch), we auto-create a row with
+// status=CLASSIFIED so the next occurrence of the same raw text resolves in
+// O(1) without re-running the fuzzy match. When nothing matches, we land a
+// status=PENDING row so the admin can map it once — and from then on
+// every future order with the same text resolves automatically. The daily
+// "validate neighborhoods" script becomes unnecessary because the
+// classification work is incremental and surfaced in the admin UI.
+enum NeighborhoodAliasStatus {
+  PENDING    // operator hasn't classified yet — orders default to 0 fee
+  CLASSIFIED // mapped to a canonical Neighborhood
+  IGNORED    // operator decided this isn't worth mapping (typo, garbage)
+}
+
+model NeighborhoodAlias {
+  id             String                  @id @default(uuid())
+  companyId      String
+  company        Company                 @relation(fields: [companyId], references: [id])
+  // Canonical, accent-stripped, lowercase, non-alphanumeric removed form of
+  // the raw text — what we match against. Same shape as
+  // utils/neighborhoodMatch.js#normalizeForMatch produces. Unique per
+  // company so the same store never accumulates duplicates.
+  rawInput       String
+  // The original text exactly as ingested (first occurrence), preserved for
+  // display in the admin queue so the operator can recognize it.
+  rawSample      String
+  neighborhoodId String?
+  neighborhood   Neighborhood?           @relation(fields: [neighborhoodId], references: [id])
+  status         NeighborhoodAliasStatus @default(PENDING)
+  occurrences    Int                     @default(1)
+  firstSeenAt    DateTime                @default(now())
+  lastSeenAt     DateTime                @default(now())
+  resolvedAt     DateTime?
+  resolvedBy     String? // userId who classified
+
+  @@unique([companyId, rawInput], name: "company_alias_raw_input_idx")
+  @@index([companyId, status])
 }
 
 enum RiderTransactionType {
