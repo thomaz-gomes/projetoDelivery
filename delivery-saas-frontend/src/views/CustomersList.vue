@@ -28,11 +28,12 @@ const limit = ref(20)
 const offset = ref(0)
 const total = ref(0)
 
-// ── Filtro por tier (alimentado pelos cards no topo) ──
+// ── Filtros ──
 const tierFilter = ref('')
+const onlyWhatsApp = ref(false)
 const tierCounts = ref({ novo: 0, regular: 0, fiel: 0, vip: 0, em_risco: 0 })
 const tierCountsTotal = ref(0)
-const hasAnyFilter = computed(() => Boolean(q.value) || Boolean(tierFilter.value))
+const hasAnyFilter = computed(() => Boolean(q.value) || Boolean(tierFilter.value) || onlyWhatsApp.value)
 
 const TIER_DEFS = [
   { key: 'novo',     label: 'Novos',     icon: 'bi-stars' },
@@ -44,7 +45,7 @@ const TIER_DEFS = [
 
 async function loadTierCounts() {
   try {
-    const data = await store.fetchTierCounts()
+    const data = await store.fetchTierCounts({ hasWhatsApp: onlyWhatsApp.value })
     tierCounts.value = data?.counts || {}
     tierCountsTotal.value = data?.total || 0
   } catch (e) { console.warn('Falha ao carregar contagens de tier', e?.message || e) }
@@ -57,13 +58,28 @@ function selectTier(key) {
   load()
 }
 
+// Quando troca o filtro de WhatsApp, recarrega lista E contagens (os cards
+// passam a refletir só os clientes com contato).
+function toggleOnlyWhatsApp() {
+  onlyWhatsApp.value = !onlyWhatsApp.value
+  offset.value = 0
+  load()
+  loadTierCounts()
+}
+
 const load = async () => {
   loading.value = true
   error.value = ''
   try{
     const token = localStorage.getItem('token')
     if(!token){ router.push({ path: '/login', query: { redirect: '/customers' } }); return }
-    await store.fetch({ q: q.value, skip: offset.value, take: limit.value, tier: tierFilter.value })
+    await store.fetch({
+      q: q.value,
+      skip: offset.value,
+      take: limit.value,
+      tier: tierFilter.value,
+      hasWhatsApp: onlyWhatsApp.value,
+    })
     total.value = store.total
   }catch(e){ console.error('Failed to fetch customers', e); error.value = e?.response?.data?.message || 'Falha ao carregar clientes' }
   finally{ loading.value = false }
@@ -186,7 +202,7 @@ async function onImport(e){
   }
 }
 
-const resetFilters = () => { q.value=''; tierFilter.value=''; offset.value=0; load() }
+const resetFilters = () => { q.value=''; tierFilter.value=''; onlyWhatsApp.value=false; offset.value=0; load(); loadTierCounts() }
 const nextPage = () => { if(offset.value + limit.value < total.value){ offset.value += limit.value; load() } }
 const prevPage = () => { if(offset.value > 0){ offset.value = Math.max(0, offset.value - limit.value); load() } }
 
@@ -358,11 +374,28 @@ async function performMerge(){
         </button>
       </div>
 
+      <!-- ═══ Toggle: somente clientes com WhatsApp ═══ -->
+      <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <button
+          type="button"
+          class="btn btn-sm"
+          :class="onlyWhatsApp ? 'btn-success' : 'btn-outline-success'"
+          @click="toggleOnlyWhatsApp"
+          :title="onlyWhatsApp ? 'Clique para ver todos os clientes' : 'Filtrar para somente clientes com WhatsApp/telefone'"
+        >
+          <i class="bi bi-whatsapp me-1"></i>
+          {{ onlyWhatsApp ? 'Somente com WhatsApp' : 'Filtrar por WhatsApp' }}
+        </button>
+      </div>
+
       <!-- ═══ Filtros ativos + limpar ═══ -->
       <div v-if="hasAnyFilter" class="d-flex align-items-center gap-2 mb-3 small">
         <span class="text-muted">Filtros ativos:</span>
         <span v-if="tierFilter" class="badge bg-light text-dark border">
           {{ (TIER_DEFS.find(t => t.key === tierFilter) || {}).label }}
+        </span>
+        <span v-if="onlyWhatsApp" class="badge bg-success-subtle text-success border border-success">
+          <i class="bi bi-whatsapp me-1"></i>Com WhatsApp
         </span>
         <span v-if="q" class="badge bg-light text-dark border">Busca: "{{ q }}"</span>
         <button class="btn btn-sm btn-link p-0 ms-auto" @click="resetFilters">

@@ -65,6 +65,10 @@ function computeCustomerStats(orders) {
 customersRouter.get('/tier-counts', async (req, res) => {
   const companyId = req.user.companyId;
   const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  // Mesmo filtro hasWhatsApp do GET /customers — garante que os cards do
+  // topo refletem a base que realmente vai aparecer na lista quando o
+  // toggle está ligado.
+  const hasWhatsApp = String(req.query.hasWhatsApp || '').toLowerCase() === 'true';
   try {
     const rows = await prisma.$queryRaw`
       WITH stats AS (
@@ -77,6 +81,9 @@ customersRouter.get('/tier-counts', async (req, res) => {
         FROM "Customer" c
         LEFT JOIN "Order" o ON o."customerId" = c.id
         WHERE c."companyId" = ${companyId}
+          AND (${!hasWhatsApp}::boolean OR
+               (c.whatsapp IS NOT NULL AND c.whatsapp <> '') OR
+               (c.phone IS NOT NULL AND c.phone <> ''))
         GROUP BY c.id
       ),
       classified AS (
@@ -113,9 +120,22 @@ customersRouter.get('/', async (req, res) => {
   const skip = Math.max(Number(req.query.skip || 0), 0);
   const search = String(req.query.q || '').trim();
   const tierFilter = String(req.query.tier || '').trim();
+  const hasWhatsApp = String(req.query.hasWhatsApp || '').toLowerCase() === 'true';
   const validTiers = ['novo', 'regular', 'fiel', 'vip', 'em_risco'];
 
   const where = { companyId };
+
+  // Restringe à base com contato WhatsApp/telefone preenchido — usado pelo
+  // fluxo "Criar lista de campanhas" pra mostrar só quem é alvo viável.
+  // Aceita whatsapp OU phone porque o cadastro legado às vezes guarda o
+  // número no `phone` (e o frontend já trata os dois como equivalentes em
+  // outras rotinas).
+  if (hasWhatsApp) {
+    where.OR = (where.OR || []).concat([
+      { whatsapp: { not: null, notIn: [''] } },
+      { phone: { not: null, notIn: [''] } },
+    ]);
+  }
 
   // Quando o operador clica num card de tier, restringe a paginação aos ids
   // que se encaixam — a classificação acontece em SQL (mesma CTE do

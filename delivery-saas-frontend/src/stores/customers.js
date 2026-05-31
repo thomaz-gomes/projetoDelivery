@@ -12,11 +12,12 @@ export const useCustomersStore = defineStore('customers', {
     ordersLoading: false,
   }),
   actions: {
-    async fetch({ q = '', skip = 0, take = 50, tier = '' } = {}) {
+    async fetch({ q = '', skip = 0, take = 50, tier = '', hasWhatsApp = false } = {}) {
       this.loading = true;
       try {
         const params = { q, skip, take };
         if (tier) params.tier = tier;
+        if (hasWhatsApp) params.hasWhatsApp = true;
         const { data } = await api.get('/customers', { params });
         this.list = data.rows;
         this.total = data.total;
@@ -25,8 +26,10 @@ export const useCustomersStore = defineStore('customers', {
         this.loading = false;
       }
     },
-    async fetchTierCounts() {
-      const { data } = await api.get('/customers/tier-counts');
+    async fetchTierCounts({ hasWhatsApp = false } = {}) {
+      const params = {};
+      if (hasWhatsApp) params.hasWhatsApp = true;
+      const { data } = await api.get('/customers/tier-counts', { params });
       return data;
     },
     async get(id) {
