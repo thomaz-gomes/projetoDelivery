@@ -496,7 +496,17 @@ ordersRouter.post('/:id/complete', requireRole('RIDER'), async (req, res) => {
     if (isPrepaid) {
       try {
         if (updated.riderId) {
-          await riderAccountService.addDeliveryAndDailyIfNeeded({ companyId: updated.companyId, riderId: updated.riderId, orderId: updated.id, orderDate: updated.updatedAt || new Date() });
+          // BUG histórico: a chamada não passava neighborhoodName, então
+          // findNeighborhoodForName(undefined) retornava null e o rider ficava
+          // com fee=0. Isso alimentava o modal "Taxas retroativas" todo dia.
+          // Agora repassamos o bairro denormalizado do próprio pedido.
+          await riderAccountService.addDeliveryAndDailyIfNeeded({
+            companyId: updated.companyId,
+            riderId: updated.riderId,
+            orderId: updated.id,
+            neighborhoodName: updated.deliveryNeighborhood || null,
+            orderDate: updated.updatedAt || new Date(),
+          });
         }
       } catch (e) { console.error('[complete/prepaid] rider credit error:', e?.message); }
       try { await createFinancialEntriesForOrder(updated); } catch (e) { console.error('[complete/prepaid] financial error:', e?.message); }

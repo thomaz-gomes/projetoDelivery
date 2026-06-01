@@ -14,8 +14,14 @@ function toDateOnlyBRT(d) {
 
 export async function findNeighborhoodForName(companyId, candidateName) {
   if (!candidateName) return null;
-  const neighborhoods = await prisma.neighborhood.findMany({ where: { companyId } });
-  return findNeighborhoodMatch(neighborhoods, candidateName);
+  // Roteia pelo resolveNeighborhood pra herdar o cache do NeighborhoodAlias
+  // (hit O(1) na repetição) e pra enfileirar como PENDING qualquer texto que
+  // não bater com nenhum cadastrado. Isso transforma o crédito do motoboy
+  // num caminho que aproveita a aprendizagem da fila — em vez de re-rodar
+  // a fuzzy match toda hora e silenciosamente devolver null.
+  const { resolveNeighborhood } = await import('./neighborhoodResolver.js');
+  const resolved = await resolveNeighborhood(companyId, candidateName);
+  return resolved.neighborhood;
 }
 
 export async function addRiderTransaction({ companyId, riderId, orderId = null, amount = 0, type = 'DELIVERY_FEE', date = new Date(), note = null, status = null }) {
