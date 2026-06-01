@@ -387,13 +387,92 @@ async function pickNotificationChannel({ companyId, menuId, storeId, customerId 
   return null;
 }
 
+// Constrói o array `parameters[]` do BODY do template baseado no tipo de
+// notificação e no contexto. A ORDEM dos placeholders aqui é a contrato com
+// quem cria o template no Meta Business Manager — se mudar aqui, os
+// templates aprovados precisam ser ajustados / re-aprovados.
+//
+// Convenções (sempre TEXT params, escape de pipe/newline feito pelo adapter):
+//   EM_PREPARO / SAIU_PARA_ENTREGA / CONCLUIDO / CANCELADO /
+//   CONFIRMACAO_PAGAMENTO:
+//     {{1}} nome do cliente   {{2}} número do pedido (ex: #77)   {{3}} loja
+//   ORDER_SUMMARY:
+//     {{1}} nome   {{2}} número do pedido   {{3}} loja
+//   RIDER_ASSIGNED:
+//     {{1}} pedido   {{2}} cliente   {{3}} endereço   {{4}} mapa
+//   CASHBACK_CREDIT:
+//     {{1}} nome   {{2}} valor ganho (formatado)   {{3}} saldo total (formatado)
+const TEMPLATE_PARAM_BUILDERS = {
+  EM_PREPARO: (ctx) => [textParam(ctx.customerName), textParam(ctx.orderLabel), textParam(ctx.shopName)],
+  SAIU_PARA_ENTREGA: (ctx) => [textParam(ctx.customerName), textParam(ctx.orderLabel), textParam(ctx.shopName)],
+  CONCLUIDO: (ctx) => [textParam(ctx.customerName), textParam(ctx.orderLabel), textParam(ctx.shopName)],
+  CANCELADO: (ctx) => [textParam(ctx.customerName), textParam(ctx.orderLabel), textParam(ctx.shopName)],
+  CONFIRMACAO_PAGAMENTO: (ctx) => [textParam(ctx.customerName), textParam(ctx.orderLabel), textParam(ctx.shopName)],
+  ORDER_SUMMARY: (ctx) => [textParam(ctx.customerName), textParam(ctx.orderLabel), textParam(ctx.shopName)],
+  RIDER_ASSIGNED: (ctx) => [textParam(ctx.orderLabel), textParam(ctx.customerName), textParam(ctx.address), textParam(ctx.mapsLink)],
+  CASHBACK_CREDIT: (ctx) => [textParam(ctx.customerName), textParam(ctx.amountFormatted), textParam(ctx.balanceFormatted)],
+};
+
+function textParam(value) {
+  // Meta rejeita parâmetro vazio; mandar espaço quando faltar dado.
+  return { type: 'text', text: (value == null || value === '') ? ' ' : String(value) };
+}
+
+// Tenta enviar via template aprovado quando o Meta rejeitou texto livre.
+// Retorna { externalId } se sucesso, null se mapping/template não disponível
+// ou se a chamada falhou (caller fala pra fallback Evolution em seguida).
+async function trySendViaTemplate({ companyId, notificationType, account, to, context }) {
+  if (!companyId || !notificationType) return null;
+  const mapping = await prisma.notificationTemplateMapping.findUnique({
+    where: { companyId_notificationType: { companyId, notificationType } },
+    include: {
+      metaTemplate: {
+        select: { name: true, language: true, status: true },
+      },
+    },
+  });
+  if (!mapping) {
+    console.warn('[notify] sem mapping de template para', notificationType);
+    return null;
+  }
+  if (mapping.metaTemplate.status !== 'APPROVED') {
+    console.warn('[notify] template mapeado não está APPROVED:', mapping.metaTemplate.name, mapping.metaTemplate.status);
+    return null;
+  }
+  const builder = TEMPLATE_PARAM_BUILDERS[notificationType];
+  if (!builder) {
+    console.warn('[notify] nenhum builder de params para', notificationType);
+    return null;
+  }
+  const components = [{ type: 'body', parameters: builder(context || {}) }];
+  try {
+    const result = await whatsappMetaAdapter.sendTemplate(account, to, {
+      name: mapping.metaTemplate.name,
+      languageCode: mapping.metaTemplate.language,
+      components,
+    });
+    return { externalId: result?.externalId || null };
+  } catch (err) {
+    console.error('[notify] envio de template falhou:', err?.message || err);
+    return null;
+  }
+}
+
 // Send a TEXT notification via the provider chosen by pickNotificationChannel.
-// If Meta returns MetaWindowExpiredError and a fallback Evolution instance is
-// available, automatically retry via Evolution so the customer still gets the
-// message. Returns { provider, providerAccountId, instanceName, externalId,
-// fallbackUsed? } describing what actually went out — caller uses this to
-// persist the OUTBOUND Message in the right Conversation.
-async function sendNotificationText({ provider, account, to, text, fallbackEvolution = null }) {
+// Cascade quando Meta rejeitar por janela de 24h:
+//   1) tenta template aprovado mapeado para este tipo de notificação
+//   2) tenta Evolution como fallback se houver
+//   3) re-lança o erro original se nada funcionar
+// Returns { provider, providerAccountId, instanceName, externalId,
+// templateUsed?, fallbackUsed? } describing what actually went out.
+async function sendNotificationText({
+  provider,
+  account,
+  to,
+  text,
+  fallbackEvolution = null,
+  templateFallback = null,
+}) {
   if (provider === 'META_WA') {
     try {
       const result = await whatsappMetaAdapter.sendMessage(account, to, { type: 'TEXT', text });
@@ -404,16 +483,42 @@ async function sendNotificationText({ provider, account, to, text, fallbackEvolu
         externalId: result?.externalId || null,
       };
     } catch (err) {
-      if (err instanceof MetaWindowExpiredError && fallbackEvolution) {
-        console.warn('[notify] Meta 24h window expired — falling back to Evolution', { to });
-        await evoSendText({ instanceName: fallbackEvolution.instanceName, to, text });
-        return {
-          provider: 'EVOLUTION_WA',
-          providerAccountId: fallbackEvolution.id,
-          instanceName: fallbackEvolution.instanceName,
-          externalId: null,
-          fallbackUsed: true,
-        };
+      if (err instanceof MetaWindowExpiredError) {
+        // 1. Tenta template aprovado pra este tipo de notificação
+        if (templateFallback?.notificationType) {
+          console.warn('[notify] Meta 24h window expired — tentando template', {
+            to,
+            notificationType: templateFallback.notificationType,
+          });
+          const tplResult = await trySendViaTemplate({
+            companyId: account.companyId,
+            notificationType: templateFallback.notificationType,
+            account,
+            to,
+            context: templateFallback.context,
+          });
+          if (tplResult) {
+            return {
+              provider: 'META_WA',
+              providerAccountId: account.id,
+              instanceName: null,
+              externalId: tplResult.externalId,
+              templateUsed: true,
+            };
+          }
+        }
+        // 2. Cai pra Evolution se disponível
+        if (fallbackEvolution) {
+          console.warn('[notify] template indisponível — caindo para Evolution', { to });
+          await evoSendText({ instanceName: fallbackEvolution.instanceName, to, text });
+          return {
+            provider: 'EVOLUTION_WA',
+            providerAccountId: fallbackEvolution.id,
+            instanceName: fallbackEvolution.instanceName,
+            externalId: null,
+            fallbackUsed: true,
+          };
+        }
       }
       throw err;
     }
@@ -535,8 +640,17 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
         to: phone,
         text,
         fallbackEvolution: channel.fallbackEvolution,
+        templateFallback: {
+          notificationType: 'RIDER_ASSIGNED',
+          context: {
+            orderLabel,
+            customerName,
+            address: addressText,
+            mapsLink,
+          },
+        },
       });
-      console.log('[notifyRiderAssigned] send result', { provider: sent.provider, fallbackUsed: !!sent.fallbackUsed });
+      console.log('[notifyRiderAssigned] send result', { provider: sent.provider, fallbackUsed: !!sent.fallbackUsed, templateUsed: !!sent.templateUsed });
       await persistOutboundWhatsappMessage({
         companyId: order.companyId,
         provider: sent.provider,
@@ -670,8 +784,18 @@ Fique tranquilo(a) que vou enviar as atualizações do status do seu pedido por 
         to: phone,
         text,
         fallbackEvolution: channel.fallbackEvolution,
+        templateFallback: {
+          // newStatus pode ser EM_PREPARO / SAIU_PARA_ENTREGA / CONCLUIDO /
+          // CANCELADO / CONFIRMACAO_PAGAMENTO — bate 1-pra-1 com NotificationType.
+          notificationType: newStatus,
+          context: {
+            customerName,
+            orderLabel: shortId,
+            shopName,
+          },
+        },
       });
-      console.log('[notifyCustomerStatus] send result', { provider: sent.provider, fallbackUsed: !!sent.fallbackUsed });
+      console.log('[notifyCustomerStatus] send result', { provider: sent.provider, fallbackUsed: !!sent.fallbackUsed, templateUsed: !!sent.templateUsed });
       await persistOutboundWhatsappMessage({
         companyId: order.companyId,
         provider: sent.provider,
@@ -795,8 +919,16 @@ export async function notifyCustomerOrderSummary(orderId) {
         to: phone,
         text,
         fallbackEvolution: channel.fallbackEvolution,
+        templateFallback: {
+          notificationType: 'ORDER_SUMMARY',
+          context: {
+            customerName,
+            orderLabel: shortId,
+            shopName,
+          },
+        },
       });
-      console.log('[notifyCustomerOrderSummary] send result', { provider: sent.provider, fallbackUsed: !!sent.fallbackUsed });
+      console.log('[notifyCustomerOrderSummary] send result', { provider: sent.provider, fallbackUsed: !!sent.fallbackUsed, templateUsed: !!sent.templateUsed });
       await persistOutboundWhatsappMessage({
         companyId: order.companyId,
         provider: sent.provider,
@@ -910,6 +1042,14 @@ Use seu cashback no próximo pedido. 😊`;
         to: phone,
         text,
         fallbackEvolution: channel.fallbackEvolution,
+        templateFallback: {
+          notificationType: 'CASHBACK_CREDIT',
+          context: {
+            customerName: customer?.fullName || '',
+            amountFormatted: fmtCurrency(amount),
+            balanceFormatted: fmtCurrency(newBalance),
+          },
+        },
       });
       await persistOutboundWhatsappMessage({
         companyId,

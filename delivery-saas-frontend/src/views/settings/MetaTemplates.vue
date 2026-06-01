@@ -97,6 +97,7 @@ async function syncTemplates() {
       showConfirmButton: false,
     })
     await load()
+    await loadMappings()
   } catch (err) {
     console.error('[MetaTemplates] sync failed:', err)
     const metaErr = err?.response?.data?.meta
@@ -107,7 +108,102 @@ async function syncTemplates() {
   }
 }
 
-onMounted(load)
+// ─── Mapeamento de notificações → templates ────────────────────────────────
+//
+// Cada tipo de notificação transacional (status de pedido, cashback, etc.)
+// pode receber um template aprovado como fallback. Quando o Meta WA rejeita
+// um envio de texto livre por janela 24h expirada (erro 131047), o notify.js
+// busca o template mapeado aqui e envia via sendTemplate em vez de cair pra
+// Evolution. Mapeamento por empresa (compartilhado entre cardápios).
+const NOTIFICATION_LABELS = {
+  EM_PREPARO: 'Pedido em preparo',
+  SAIU_PARA_ENTREGA: 'Saiu para entrega',
+  CONCLUIDO: 'Pedido concluído',
+  CANCELADO: 'Pedido cancelado',
+  CONFIRMACAO_PAGAMENTO: 'Confirmação de pagamento',
+  ORDER_SUMMARY: 'Resumo do pedido (criação)',
+  RIDER_ASSIGNED: 'Motoboy atribuído (mensagem ao entregador)',
+  CASHBACK_CREDIT: 'Cashback creditado',
+}
+
+// Placeholders esperados em cada template (ordem importa — combinam com
+// TEMPLATE_PARAM_BUILDERS em notify.js). Mostrado na UI como dica pra quem
+// criar/aprovar o template no Meta Business Manager.
+const NOTIFICATION_PLACEHOLDERS = {
+  EM_PREPARO: '{{1}} nome  ·  {{2}} nº do pedido  ·  {{3}} loja',
+  SAIU_PARA_ENTREGA: '{{1}} nome  ·  {{2}} nº do pedido  ·  {{3}} loja',
+  CONCLUIDO: '{{1}} nome  ·  {{2}} nº do pedido  ·  {{3}} loja',
+  CANCELADO: '{{1}} nome  ·  {{2}} nº do pedido  ·  {{3}} loja',
+  CONFIRMACAO_PAGAMENTO: '{{1}} nome  ·  {{2}} nº do pedido  ·  {{3}} loja',
+  ORDER_SUMMARY: '{{1}} nome  ·  {{2}} nº do pedido  ·  {{3}} loja',
+  RIDER_ASSIGNED: '{{1}} pedido  ·  {{2}} cliente  ·  {{3}} endereço  ·  {{4}} mapa',
+  CASHBACK_CREDIT: '{{1}} nome  ·  {{2}} valor ganho  ·  {{3}} saldo',
+}
+
+const supportedTypes = ref([])
+const mappings = ref([]) // [{ notificationType, metaTemplateId }, ...]
+const savingMappings = ref(false)
+
+// Lista de templates APPROVED da conta selecionada — só esses podem ser usados.
+const approvedTemplates = computed(() =>
+  templates.value.filter(t =>
+    t.status === 'APPROVED' &&
+    (!selectedAccountId.value || t.metaWaAccountId === selectedAccountId.value)
+  )
+)
+
+async function loadMappings() {
+  try {
+    const { data } = await api.get('/meta/notification-mappings')
+    supportedTypes.value = data?.supportedTypes || []
+    const dict = {}
+    for (const m of (data?.mappings || [])) {
+      dict[m.notificationType] = m.metaTemplateId
+    }
+    // Garante uma linha pra cada tipo suportado, mesmo sem mapping ainda.
+    mappings.value = (data?.supportedTypes || []).map(t => ({
+      notificationType: t,
+      metaTemplateId: dict[t] || '',
+    }))
+  } catch (err) {
+    console.error('[MetaTemplates] loadMappings failed:', err)
+  }
+}
+
+async function saveMappings() {
+  savingMappings.value = true
+  try {
+    // Envia tudo (entradas vazias removem o mapping no backend)
+    const payload = {
+      mappings: mappings.value.map(m => ({
+        notificationType: m.notificationType,
+        metaTemplateId: m.metaTemplateId || null,
+      })),
+    }
+    await api.put('/meta/notification-mappings', payload)
+    await Swal.fire({
+      icon: 'success',
+      title: 'Mapeamentos salvos',
+      timer: 1500,
+      showConfirmButton: false,
+    })
+    await loadMappings()
+  } catch (err) {
+    console.error('[MetaTemplates] saveMappings failed:', err)
+    await Swal.fire({
+      icon: 'error',
+      title: 'Erro ao salvar mapeamentos',
+      text: err?.response?.data?.message || err.message,
+    })
+  } finally {
+    savingMappings.value = false
+  }
+}
+
+onMounted(async () => {
+  await load()
+  await loadMappings()
+})
 </script>
 
 <template>
@@ -209,6 +305,57 @@ onMounted(load)
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Mapeamento de notificações → template aprovado -->
+    <div v-if="accounts.length" class="card p-3 mt-4">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="mb-0">Mapear notificações para templates</h5>
+        <BaseButton @click="saveMappings" :loading="savingMappings" :disabled="loading || !mappings.length">
+          <i class="bi bi-save me-1"></i> Salvar mapeamentos
+        </BaseButton>
+      </div>
+      <p class="small text-muted mb-3">
+        Quando uma notificação transacional for rejeitada pela Meta por janela de 24h expirada
+        (erro <code>131047</code>), o sistema envia automaticamente o template aprovado abaixo no
+        lugar do texto livre. Os placeholders precisam estar na ordem indicada.
+      </p>
+
+      <div v-if="!approvedTemplates.length" class="alert alert-warning small mb-0">
+        Nenhum template <strong>APPROVED</strong> nesta conta ainda. Sincronize acima e/ou crie/aprove
+        templates no <a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business Manager</a>.
+      </div>
+
+      <div v-else class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 28%">Notificação</th>
+              <th style="width: 32%">Placeholders esperados</th>
+              <th>Template aprovado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="m in mappings" :key="m.notificationType">
+              <td>
+                <strong>{{ NOTIFICATION_LABELS[m.notificationType] || m.notificationType }}</strong>
+                <div class="small text-muted"><code>{{ m.notificationType }}</code></div>
+              </td>
+              <td class="small text-muted">
+                <code>{{ NOTIFICATION_PLACEHOLDERS[m.notificationType] || '—' }}</code>
+              </td>
+              <td>
+                <select class="form-select form-select-sm" v-model="m.metaTemplateId">
+                  <option value="">— Não mapear (cai para Evolution se houver) —</option>
+                  <option v-for="t in approvedTemplates" :key="t.id" :value="t.id">
+                    {{ t.name }} ({{ t.language }})
+                  </option>
+                </select>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>

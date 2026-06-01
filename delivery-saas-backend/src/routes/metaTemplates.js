@@ -293,4 +293,119 @@ router.post('/templates/:id/resubmit', requireRole('ADMIN'), async (req, res) =>
   }
 });
 
+// Tipos de notificação suportados pelo fallback de template.
+// Mantém em sincronia com o enum NotificationType do schema e com
+// TEMPLATE_PARAM_BUILDERS em services/notify.js.
+const NOTIFICATION_TYPES = [
+  'EM_PREPARO',
+  'SAIU_PARA_ENTREGA',
+  'CONCLUIDO',
+  'CANCELADO',
+  'CONFIRMACAO_PAGAMENTO',
+  'ORDER_SUMMARY',
+  'RIDER_ASSIGNED',
+  'CASHBACK_CREDIT',
+];
+
+// GET /meta/notification-mappings
+// Lista os mapeamentos atuais da empresa (tipo de notificação → template).
+router.get('/notification-mappings', async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const mappings = await prisma.notificationTemplateMapping.findMany({
+      where: { companyId },
+      include: {
+        metaTemplate: {
+          select: { id: true, name: true, language: true, status: true, components: true },
+        },
+      },
+    });
+    return res.json({ mappings, supportedTypes: NOTIFICATION_TYPES });
+  } catch (err) {
+    console.error('[meta/notification-mappings GET]', err);
+    return res.status(500).json({ message: 'Erro ao listar mapeamentos', error: err.message });
+  }
+});
+
+// PUT /meta/notification-mappings
+// body: { mappings: [{ notificationType, metaTemplateId | null }, ...] }
+// Substitui o conjunto inteiro de mapeamentos da empresa (upsert/delete por
+// tipo). metaTemplateId=null remove o mapeamento daquele tipo.
+router.put('/notification-mappings', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const { mappings } = req.body || {};
+    if (!Array.isArray(mappings)) {
+      return res.status(400).json({ message: 'mappings deve ser um array' });
+    }
+
+    // Validação por linha antes de mexer no DB
+    for (const m of mappings) {
+      if (!NOTIFICATION_TYPES.includes(m?.notificationType)) {
+        return res.status(400).json({ message: `notificationType inválido: ${m?.notificationType}` });
+      }
+    }
+
+    // Carrega templates referenciados pra validar ownership + status APPROVED
+    const templateIds = mappings.map(m => m.metaTemplateId).filter(Boolean);
+    if (templateIds.length) {
+      const templates = await prisma.metaTemplate.findMany({
+        where: { id: { in: templateIds }, companyId },
+        select: { id: true, status: true },
+      });
+      const foundIds = new Set(templates.map(t => t.id));
+      for (const id of templateIds) {
+        if (!foundIds.has(id)) {
+          return res.status(400).json({ message: `Template não encontrado ou pertence a outra empresa: ${id}` });
+        }
+      }
+      // Não bloqueia se template não está APPROVED; só avisa via warn — o
+      // mapping fica salvo e o caller (notify.js) decide o que fazer.
+      const notApproved = templates.filter(t => t.status !== 'APPROVED').map(t => t.id);
+      if (notApproved.length) {
+        console.warn('[meta/notification-mappings] mapeamentos para templates não-APPROVED:', notApproved);
+      }
+    }
+
+    // Apply diffs num transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const ops = [];
+      for (const m of mappings) {
+        if (!m.metaTemplateId) {
+          // remover mapeamento existente daquele tipo, se houver
+          ops.push(tx.notificationTemplateMapping.deleteMany({
+            where: { companyId, notificationType: m.notificationType },
+          }));
+        } else {
+          ops.push(tx.notificationTemplateMapping.upsert({
+            where: {
+              companyId_notificationType: { companyId, notificationType: m.notificationType },
+            },
+            create: {
+              companyId,
+              notificationType: m.notificationType,
+              metaTemplateId: m.metaTemplateId,
+            },
+            update: { metaTemplateId: m.metaTemplateId },
+          }));
+        }
+      }
+      await Promise.all(ops);
+      return tx.notificationTemplateMapping.findMany({
+        where: { companyId },
+        include: {
+          metaTemplate: {
+            select: { id: true, name: true, language: true, status: true },
+          },
+        },
+      });
+    });
+
+    return res.json({ mappings: result, supportedTypes: NOTIFICATION_TYPES });
+  } catch (err) {
+    console.error('[meta/notification-mappings PUT]', err);
+    return res.status(500).json({ message: 'Erro ao salvar mapeamentos', error: err.message });
+  }
+});
+
 export default router;

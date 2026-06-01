@@ -162,6 +162,7 @@ model Company {
   // ---- Meta Messaging (WhatsApp Cloud / Facebook / Instagram) ----
   metaMessagingAccounts MetaMessagingAccount[]
   metaTemplates         MetaTemplate[]
+  notificationTemplateMappings NotificationTemplateMapping[]
 
   // ---- Marketing Campaigns ----
   marketingSegments     MarketingSegment[]
@@ -448,11 +449,46 @@ model MetaTemplate {
   submittedAt        DateTime?
   rejectionReason    String?
   marketingCampaigns MarketingCampaign[]
+  notificationMappings NotificationTemplateMapping[]
 
   @@unique([metaWaAccountId, name, language])
   @@index([companyId])
   @@index([metaWaAccountId, status])
   @@index([createdViaApp, status])
+}
+
+// Tipo de notificação transacional que pode cair fora da janela de 24h da Meta
+// e por isso precisa de template aprovado pra continuar funcionando. Os
+// valores espelham os status/eventos disparados pelas funções em notify.js.
+enum NotificationType {
+  EM_PREPARO
+  SAIU_PARA_ENTREGA
+  CONCLUIDO
+  CANCELADO
+  CONFIRMACAO_PAGAMENTO
+  ORDER_SUMMARY
+  RIDER_ASSIGNED
+  CASHBACK_CREDIT
+}
+
+// Mapeia cada tipo de notificação transacional ao template aprovado que será
+// usado quando o Meta rejeitar texto livre por janela de 24h expirada
+// (erro 131047). O template precisa estar APPROVED na WABA e seus placeholders
+// devem seguir a ordem documentada por tipo (ver TEMPLATE_PARAM_BUILDERS em
+// notify.js). Um mapping por empresa por tipo — config compartilhada entre
+// cardápios da mesma empresa.
+model NotificationTemplateMapping {
+  id               String           @id @default(uuid())
+  companyId        String
+  company          Company          @relation(fields: [companyId], references: [id])
+  notificationType NotificationType
+  metaTemplateId   String
+  metaTemplate     MetaTemplate     @relation(fields: [metaTemplateId], references: [id], onDelete: Cascade)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([companyId, notificationType])
+  @@index([companyId])
 }
 
 model Customer {
