@@ -11,6 +11,7 @@ import { transcribeAudio } from '../services/aiProvider.js';
 import { buildReorderSuggestionBody } from '../services/reorderHelpers.js';
 import whatsappMetaAdapter from '../messaging/adapters/whatsappMeta.adapter.js';
 import { MetaWindowExpiredError } from '../messaging/adapters/base.adapter.js';
+import { composeFormattedAddress } from '../services/customers.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -1448,8 +1449,11 @@ router.post('/customer/:id/addresses', async (req, res) => {
     const customer = await prisma.customer.findFirst({ where: { id: req.params.id, companyId }, select: { id: true } });
     if (!customer) return res.status(404).json({ message: 'Cliente não encontrado' });
     const { label, street, number, complement, neighborhood, reference, observation, city, state, postalCode } = req.body;
+    const canonicalFormatted = composeFormattedAddress({
+      street, number, complement, neighborhood, city, state, postalCode,
+    });
     const address = await prisma.customerAddress.create({
-      data: { customerId: customer.id, label: label || null, street: street || null, number: number || null, complement: complement || null, neighborhood: neighborhood || null, reference: reference || null, observation: observation || null, city: city || null, state: state || null, postalCode: postalCode || null, isDefault: true },
+      data: { customerId: customer.id, label: label || null, street: street || null, number: number || null, complement: complement || null, neighborhood: neighborhood || null, reference: reference || null, observation: observation || null, city: city || null, state: state || null, postalCode: postalCode || null, formatted: canonicalFormatted || null, isDefault: true },
     });
     await prisma.customerAddress.updateMany({ where: { customerId: customer.id, isDefault: true, NOT: { id: address.id } }, data: { isDefault: false } });
     res.status(201).json(address);

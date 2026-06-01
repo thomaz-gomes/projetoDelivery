@@ -13,6 +13,24 @@ export function normalizePhone(n) {
   return digits;
 }
 
+// Canonical "formatted" string built from already-parsed address components.
+// Use this whenever components (street/number/neighborhood/...) are available so
+// CustomerAddress.formatted follows a single, predictable shape across origins
+// (manual entry, Nominatim reverse-geocode, iFood/Aiqfome webhooks, PDV).
+// Returns null when there's no street — callers should then fall back to whatever
+// raw "formatted" string came in the payload.
+export function composeFormattedAddress({ street, number, complement, neighborhood, city, state, postalCode } = {}) {
+  const streetPart = [street, number].filter(Boolean).join(', ').trim();
+  if (!streetPart) return null;
+  const parts = [streetPart];
+  if (complement) parts.push(complement);
+  if (neighborhood) parts.push(neighborhood);
+  const cityState = [city, state].filter(Boolean).join(' - ');
+  if (cityState) parts.push(cityState);
+  if (postalCode) parts.push(postalCode);
+  return parts.join(', ');
+}
+
 function mapAddressFromPayload(payload) {
   // iFood payloads may wrap everything inside `order` — handle both structures
   const a = payload?.order?.delivery?.deliveryAddress || payload?.delivery?.deliveryAddress || {};
@@ -22,17 +40,26 @@ function mapAddressFromPayload(payload) {
   const lngRawRaw = (c && (c.longitude !== undefined && c.longitude !== null)) ? c.longitude : (a.longitude ?? null);
   const latRaw = (latRawRaw === '' || latRawRaw === undefined) ? null : latRawRaw;
   const lngRaw = (lngRawRaw === '' || lngRawRaw === undefined) ? null : lngRawRaw;
-  return {
-    formatted: a.formattedAddress || a.formatted || null,
+  const components = {
     street: a.streetName || a.street || null,
     number: a.streetNumber || a.number || null,
     complement: a.complement || a.complemento || null,
     neighborhood: a.neighborhood || a.neigh || null,
-    reference: a.reference || a.referencePoint || a.referencia || null,
-    observation: a.note || a.notes || a.observation || a.observacao || null,
     city: a.city || null,
     state: a.state || null,
     postalCode: a.postalCode || a.zip || null,
+  };
+  return {
+    formatted: composeFormattedAddress(components) || a.formattedAddress || a.formatted || null,
+    street: components.street,
+    number: components.number,
+    complement: components.complement,
+    neighborhood: components.neighborhood,
+    reference: a.reference || a.referencePoint || a.referencia || null,
+    observation: a.note || a.notes || a.observation || a.observacao || null,
+    city: components.city,
+    state: components.state,
+    postalCode: components.postalCode,
     country: a.country || 'BR',
     latitude: (latRaw === null) ? null : (Number.isFinite(Number(latRaw)) ? Number(latRaw) : null),
     longitude: (lngRaw === null) ? null : (Number.isFinite(Number(lngRaw)) ? Number(lngRaw) : null),

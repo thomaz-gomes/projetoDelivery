@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import { requireModuleStrict } from '../modules.js';
-import { normalizePhone, findOrCreateCustomer } from '../services/customers.js';
+import { normalizePhone, findOrCreateCustomer, composeFormattedAddress } from '../services/customers.js';
 import { createCustomerAccount, findAccountByCustomerId, generateAccountPassword, sendCustomerPasswordViaWhatsApp } from '../services/customerAccounts.js';
 
 export const customersRouter = express.Router();
@@ -499,6 +499,9 @@ customersRouter.post('/:id/addresses', requireRole('ADMIN'), async (req, res) =>
     }
   }
 
+  const canonicalFormatted = composeFormattedAddress({
+    street, number, complement, neighborhood, state, postalCode,
+  });
   const created = await prisma.customerAddress.create({ data: {
     customerId: customer.id,
     label: label || null,
@@ -511,7 +514,7 @@ customersRouter.post('/:id/addresses', requireRole('ADMIN'), async (req, res) =>
     city: null,
     state: state || null,
     postalCode: postalCode || null,
-    formatted: formatted || null,
+    formatted: canonicalFormatted || formatted || null,
     latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : null,
     longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : null,
     isDefault: true,

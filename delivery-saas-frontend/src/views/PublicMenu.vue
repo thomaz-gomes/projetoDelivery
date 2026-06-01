@@ -4117,12 +4117,21 @@ async function useMyLocation(){
     // compute a short, useful formatted address (keep full display_name too)
     _newAddrFull.value = j.display_name || ''
     const addr = j.address || {}
-    _newAddrFormatted.value = addr.road || addr.pedestrian || addr.neighbourhood || addr.suburb || j.display_name || `${lat.toFixed(6)}, ${lon.toFixed(6)}`
+    // Only accept real street names (road/pedestrian) in the "rua" field. Falling
+    // back to display_name dumped the entire "Rua X, 100, Bairro, Cidade - UF, CEP"
+    // string into formattedAddress, polluting CustomerAddress.formatted downstream.
+    const streetName = addr.road || addr.pedestrian || ''
+    _newAddrFormatted.value = streetName
     _newAddrNumber.value = addr.house_number || ''
     _newAddrNeighborhood.value = addr.suburb || addr.neighbourhood || addr.city_district || addr.village || addr.town || addr.city || ''
     if(!_newAddrNeighborhood.value && addr.county) _newAddrNeighborhood.value = addr.county
     _newAddrLat.value = lat
     _newAddrLon.value = lon
+    if(!streetName){
+      clientError.value = 'Não conseguimos identificar sua rua a partir da localização. Digite o endereço manualmente.'
+      showNewAddressForm.value = true
+      return
+    }
     // try to match the geocoded neighborhood to our canonical list via public match endpoint
     try{
       if(_newAddrNeighborhood.value && neighborhoodsList.value && neighborhoodsList.value.length){

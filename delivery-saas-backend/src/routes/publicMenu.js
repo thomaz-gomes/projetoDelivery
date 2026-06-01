@@ -2,7 +2,7 @@ import express from 'express'
 import { prisma } from '../prisma.js'
 import { signToken, authMiddleware } from '../auth.js'
 import { createCustomerAccount, findAccountByEmail, verifyPassword, findAccountByCustomerId, resetCustomerAccountPassword, generateAccountPassword, sendCustomerPasswordViaWhatsApp } from '../services/customerAccounts.js'
-import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress } from '../services/customers.js'
+import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPayload, buildConcatenatedAddress, composeFormattedAddress } from '../services/customers.js'
 import { phoneVariants } from '../messaging/phoneVariants.js'
 import jwt from 'jsonwebtoken'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
@@ -2148,6 +2148,15 @@ publicMenuRouter.post('/:companyId/addresses', async (req, res) => {
       }
     }
 
+    const canonicalFormatted = composeFormattedAddress({
+      street: body.street,
+      number: body.number,
+      complement: body.complement,
+      neighborhood: body.neighborhood,
+      city: body.city,
+      state: body.state,
+      postalCode: body.postalCode,
+    });
     const created = await prisma.customerAddress.create({ data: {
       customerId: customer.id,
       label: body.label || null,
@@ -2158,7 +2167,7 @@ publicMenuRouter.post('/:companyId/addresses', async (req, res) => {
       city: body.city || null,
       state: body.state || null,
       postalCode: body.postalCode || null,
-      formatted: body.formatted || null,
+      formatted: canonicalFormatted || body.formatted || null,
       latitude: Number.isFinite(Number(body.latitude)) ? Number(body.latitude) : null,
       longitude: Number.isFinite(Number(body.longitude)) ? Number(body.longitude) : null,
       isDefault: true,
