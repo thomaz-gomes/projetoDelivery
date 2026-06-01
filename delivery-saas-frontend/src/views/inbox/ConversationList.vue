@@ -121,6 +121,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useInboxStore } from '@/stores/inbox';
 import { useAuthStore } from '@/stores/auth';
 import api from '@/api';
+import Swal from 'sweetalert2';
 import ConversationItem from './ConversationItem.vue';
 
 const emit = defineEmits(['select']);
@@ -198,24 +199,85 @@ function onSearchBlur() {
   setTimeout(() => { searchOpen.value = false; }, 150);
 }
 
+// Pergunta ao operador qual integração WhatsApp deve conduzir o chat.
+// Comportamento adaptativo:
+//   - Nenhuma integração configurada → alerta e retorna null (aborta)
+//   - 1 integração → retorna ela sem perguntar (UX limpa quando não há ambiguidade)
+//   - 2+ integrações → mostra Swal com select pra escolher
+// Retorna { provider, accountId, displayName } ou null se cancelado/sem opção.
+async function pickIntegration() {
+  let integrations = [];
+  try {
+    integrations = await inboxStore.fetchWhatsappIntegrations();
+  } catch (e) {
+    await Swal.fire({ icon: 'error', text: 'Erro ao carregar integrações: ' + (e?.message || e) });
+    return null;
+  }
+  if (!integrations.length) {
+    await Swal.fire({
+      icon: 'warning',
+      title: 'Nenhuma integração WhatsApp configurada',
+      text: 'Cadastre uma instância Evolution ou conecte uma conta Meta WhatsApp Cloud antes de iniciar conversas.',
+    });
+    return null;
+  }
+  if (integrations.length === 1) return integrations[0];
+
+  const inputOptions = {};
+  for (const i of integrations) {
+    const providerLabel = i.provider === 'META_WA' ? 'Meta Cloud' : 'Evolution';
+    const menuLabel = i.menu ? ` · ${i.menu.name}` : '';
+    inputOptions[i.accountId] = `${i.displayName} — ${providerLabel}${menuLabel}`;
+  }
+  const { value, isConfirmed } = await Swal.fire({
+    title: 'Qual integração?',
+    text: 'Selecione qual número WhatsApp vai conduzir esta conversa.',
+    input: 'select',
+    inputOptions,
+    inputPlaceholder: 'Escolha um número...',
+    showCancelButton: true,
+    confirmButtonText: 'Iniciar',
+    cancelButtonText: 'Cancelar',
+    inputValidator: (v) => !v && 'Selecione uma integração',
+  });
+  if (!isConfirmed) return null;
+  return integrations.find(i => i.accountId === value) || null;
+}
+
 async function onPickResult(r) {
   try {
     if (r.type === 'contact' && r.conversation) {
-      // Existing conversation — ensure store has it then open. If the row was
-      // CLOSED, the list (filtered by OPEN) won't have it; start-conversation
-      // reopens server-side and returns the updated row.
+      // Conversa existente — abre direto. Quando estava CLOSED/arquivada, o
+      // start-conversation server-side reabre. Passa providerAccountId pra
+      // garantir que a MESMA conversa é reaberta (e não cria-se outra em
+      // outra integração).
       const inStore = inboxStore.conversations.some(c => c.id === r.conversation.id);
       let convId = r.conversation.id;
       if (!inStore || r.conversation.status !== 'OPEN') {
-        const conv = await inboxStore.startConversation({ customerId: r.customer.id });
+        const conv = await inboxStore.startConversation({
+          customerId: r.customer.id,
+          providerAccountId: r.conversation.providerAccountId || undefined,
+        });
         convId = conv?.id || convId;
       }
       emit('select', convId);
     } else if (r.type === 'contact') {
-      const conv = await inboxStore.startConversation({ customerId: r.customer.id });
+      // Cliente existente sem conversa — pergunta integração antes de criar.
+      const integration = await pickIntegration();
+      if (!integration) return;
+      const conv = await inboxStore.startConversation({
+        customerId: r.customer.id,
+        providerAccountId: integration.accountId,
+      });
       if (conv?.id) emit('select', conv.id);
     } else if (r.type === 'new-number') {
-      const conv = await inboxStore.startConversation({ whatsapp: r.whatsapp });
+      // Novo número — pergunta integração antes de criar Customer + conversa.
+      const integration = await pickIntegration();
+      if (!integration) return;
+      const conv = await inboxStore.startConversation({
+        whatsapp: r.whatsapp,
+        providerAccountId: integration.accountId,
+      });
       if (conv?.id) emit('select', conv.id);
     }
   } finally {

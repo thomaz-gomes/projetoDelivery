@@ -130,14 +130,25 @@ export const useInboxStore = defineStore('inbox', {
       return Array.isArray(data) ? data : [];
     },
 
-    async startConversation({ customerId, whatsapp } = {}) {
-      const { data } = await api.post('/inbox/start-conversation', { customerId, whatsapp });
+    async startConversation({ customerId, whatsapp, providerAccountId } = {}) {
+      const { data } = await api.post('/inbox/start-conversation', {
+        customerId,
+        whatsapp,
+        providerAccountId,
+      });
       if (data && data.id) {
         const idx = this.conversations.findIndex(c => c.id === data.id);
         if (idx >= 0) this.conversations[idx] = { ...this.conversations[idx], ...data };
         else this.conversations.unshift(data);
       }
       return data;
+    },
+
+    // Lista as integrações WhatsApp (Evolution + Meta) ativas na empresa
+    // pra UI usar como picker antes de iniciar conversa.
+    async fetchWhatsappIntegrations() {
+      const { data } = await api.get('/inbox/whatsapp-integrations');
+      return Array.isArray(data?.integrations) ? data.integrations : [];
     },
 
     async fetchQuickReplies() {

@@ -1282,7 +1282,7 @@ router.get('/search-contacts', async (req, res) => {
       const variants = buildPhoneVariants(c.whatsapp || '');
       const conversation = await prisma.conversation.findFirst({
         where: { companyId, channel: 'WHATSAPP', channelContactId: { in: variants } },
-        select: { id: true, status: true, lastMessageAt: true },
+        select: { id: true, status: true, lastMessageAt: true, provider: true, providerAccountId: true },
         orderBy: { lastMessageAt: 'desc' },
       });
       return { type: 'contact', customer: c, conversation };
@@ -1300,22 +1300,99 @@ router.get('/search-contacts', async (req, res) => {
   }
 });
 
+// ─── 12c-bis. GET /whatsapp-integrations — Lista as integrações WA da empresa
+//
+// Retorna todas as contas WhatsApp ativas (Evolution e Meta WA) para o
+// operador escolher qual canal vai abrir a conversa em /start-conversation.
+// Inclui status e telefone/identificador para a UI exibir.
+router.get('/whatsapp-integrations', async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+
+    const [evoInstances, metaAccounts] = await Promise.all([
+      prisma.whatsAppInstance.findMany({
+        where: { companyId },
+        include: { menu: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.metaMessagingAccount.findMany({
+        where: { companyId, provider: 'META_WA' },
+        include: { menuAsMetaWa: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+
+    const integrations = [
+      ...evoInstances.map((i) => ({
+        provider: 'EVOLUTION_WA',
+        accountId: i.id,
+        displayName: i.displayName || i.instanceName,
+        identifier: i.instanceName,
+        status: i.status,
+        menu: i.menu || null,
+      })),
+      ...metaAccounts.map((a) => ({
+        provider: 'META_WA',
+        accountId: a.id,
+        displayName: a.displayName || a.externalId,
+        identifier: a.externalId,
+        status: a.status,
+        menu: a.menuAsMetaWa || null,
+      })),
+    ];
+
+    return res.json({ integrations });
+  } catch (err) {
+    console.error('[inbox] GET /whatsapp-integrations error:', err);
+    return res.status(500).json({ message: 'Erro ao listar integrações', error: err.message });
+  }
+});
+
 // ─── 12d. POST /start-conversation — Open existing or create a new WhatsApp Conversation
 //
-// Body: { customerId?, whatsapp? }
+// Body: { customerId?, whatsapp?, providerAccountId? }
 //
 // - If customerId is given, the conversation is anchored to that customer.
 // - Otherwise, whatsapp (digits, with or without DDI) is normalized and the
 //   matching Customer is found via buildPhoneVariants. If still none, a new
 //   Customer is created silently with fullName = whatsapp.
-// - We look up the WhatsApp Conversation for that contact (any status). If
-//   found: status flips to OPEN (reopen behavior) and the existing row is
-//   returned. If not found: a new Conversation is created with status=OPEN
-//   and channelContactId = normalized phone with DDI.
+// - providerAccountId é opcional mas RECOMENDADO: identifica qual integração
+//   (Evolution WhatsAppInstance.id ou Meta MetaMessagingAccount.id) vai
+//   conduzir o chat. Quando passado, a conversa é gravada com o
+//   provider/providerAccountId correspondente — o que garante (a) a chave
+//   única respeita a integração, e (b) sends futuros chegam pelo canal certo.
+// - Lookup considera providerAccountId: conversas em integrações diferentes
+//   pra mesmo telefone permanecem separadas (ex: Burguer73 Meta e Lanchão
+//   Evolution mantêm históricos isolados).
 router.post('/start-conversation', async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    let { customerId, whatsapp } = req.body || {};
+    let { customerId, whatsapp, providerAccountId } = req.body || {};
+
+    // Resolve provider a partir do providerAccountId (se fornecido). Valida
+    // ownership: a conta tem que pertencer à mesma empresa do operador.
+    let provider = null;
+    let instanceName = null;
+    if (providerAccountId) {
+      const evo = await prisma.whatsAppInstance.findFirst({
+        where: { id: providerAccountId, companyId },
+        select: { id: true, instanceName: true },
+      });
+      if (evo) {
+        provider = 'EVOLUTION_WA';
+        instanceName = evo.instanceName;
+      } else {
+        const meta = await prisma.metaMessagingAccount.findFirst({
+          where: { id: providerAccountId, companyId, provider: 'META_WA' },
+          select: { id: true },
+        });
+        if (meta) {
+          provider = 'META_WA';
+        } else {
+          return res.status(400).json({ message: 'Integração não encontrada ou pertence a outra empresa' });
+        }
+      }
+    }
 
     let customer = null;
     if (customerId) {
@@ -1343,15 +1420,29 @@ router.post('/start-conversation', async (req, res) => {
     const variants = buildPhoneVariants(phoneDigits);
     const canonicalContactId = phoneDigits.startsWith('55') ? phoneDigits : '55' + phoneDigits;
 
-    let conversation = await prisma.conversation.findFirst({
-      where: { companyId, channel: 'WHATSAPP', channelContactId: { in: variants } },
-    });
+    // Lookup: quando providerAccountId é fornecido, filtra por ele pra que
+    // integrações diferentes (Burguer73 Meta / Lanchão Evolution) mantenham
+    // históricos isolados pro mesmo telefone — alinhado com o unique key.
+    const whereLookup = {
+      companyId,
+      channel: 'WHATSAPP',
+      channelContactId: { in: variants },
+    };
+    if (providerAccountId) whereLookup.providerAccountId = providerAccountId;
+
+    let conversation = await prisma.conversation.findFirst({ where: whereLookup });
 
     if (conversation) {
       // Reopen if it was closed/archived. Always ensure the customer is linked.
+      // Também backfill provider/providerAccountId/instanceName quando o
+      // operador escolhe uma integração e a conversa existente ainda não
+      // tinha esses campos preenchidos.
       const updates = {};
       if (conversation.status !== 'OPEN') updates.status = 'OPEN';
       if (!conversation.customerId) updates.customerId = customer.id;
+      if (provider && !conversation.provider) updates.provider = provider;
+      if (providerAccountId && !conversation.providerAccountId) updates.providerAccountId = providerAccountId;
+      if (instanceName && !conversation.instanceName) updates.instanceName = instanceName;
       if (Object.keys(updates).length) {
         conversation = await prisma.conversation.update({
           where: { id: conversation.id },
@@ -1366,6 +1457,9 @@ router.post('/start-conversation', async (req, res) => {
           channelContactId: canonicalContactId,
           customerId: customer.id,
           contactName: customer.fullName || null,
+          provider,
+          providerAccountId: providerAccountId || null,
+          instanceName,
           status: 'OPEN',
           unreadCount: 0,
         },
