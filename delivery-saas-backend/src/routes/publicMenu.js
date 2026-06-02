@@ -6,6 +6,7 @@ import { findOrCreateCustomer, normalizePhone, normalizeDeliveryAddressFromPaylo
 import { phoneVariants } from '../messaging/phoneVariants.js'
 import jwt from 'jsonwebtoken'
 import { resolvePublicCustomerFromReq } from './publicHelpers.js'
+import { resolveFreeDelivery } from './neighborhoods.js'
 import * as cashbackSvc from '../services/cashback.js'
 import { nextDisplaySimple } from '../utils/displaySimple.js'
 import { geocodeOrderIfNeeded } from '../utils/geocode.js'
@@ -629,19 +630,24 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
 })
 
 // GET /public/:companyId/neighborhoods
-// Public endpoint to list neighborhoods and delivery fees for a company (used by the public checkout)
+// Public endpoint to list neighborhoods and delivery fees for a company.
+// Aceita ?menuId=... pra que o cardápio com regra própria de frete grátis
+// (Menu.freeDeliveryEnabled) tenha seu override aplicado já na exibição —
+// senão o usuário veria "frete a partir de R$ X" do default da empresa
+// mesmo navegando num cardápio com regra diferente.
 publicMenuRouter.get('/:companyId/neighborhoods', async (req, res) => {
   const { companyId } = req.params
+  const menuId = (req.query.menuId && String(req.query.menuId)) || null
   try {
-    const [rows, company] = await Promise.all([
+    const [rows, fd] = await Promise.all([
       prisma.neighborhood.findMany({ where: { companyId }, orderBy: { name: 'asc' } }),
-      prisma.company.findUnique({ where: { id: companyId }, select: { freeDeliveryEnabled: true, freeDeliveryMinOrder: true } }),
+      resolveFreeDelivery({ companyId, menuId }),
     ])
     const neighborhoods = (rows || []).map(r => ({ id: r.id, name: r.name, deliveryFee: Number(r.deliveryFee || 0), aliases: Array.isArray(r.aliases) ? r.aliases : [] }))
     return res.json({
       neighborhoods,
-      freeDeliveryEnabled: company?.freeDeliveryEnabled ?? false,
-      freeDeliveryMinOrder: company?.freeDeliveryMinOrder != null ? Number(company.freeDeliveryMinOrder) : null,
+      freeDeliveryEnabled: fd.enabled,
+      freeDeliveryMinOrder: fd.minOrder,
     })
   } catch (e) {
     console.error('Error loading public neighborhoods', e)
@@ -1257,11 +1263,13 @@ publicMenuRouter.post('/:companyId/orders', async (req, res) => {
       deliveryFee = Number(resolved.deliveryFee || 0)
     }
 
-    // Apply free delivery when subtotal meets the configured threshold
+    // Apply free delivery when subtotal meets the configured threshold.
+    // Menu override (Menu.freeDeliveryEnabled NÃO null) tem precedência sobre
+    // o default da empresa. `menuId` veio do payload (linha ~1115).
     if (deliveryFee > 0) {
       try {
-        const comp = await prisma.company.findUnique({ where: { id: companyId }, select: { freeDeliveryEnabled: true, freeDeliveryMinOrder: true } })
-        if (comp?.freeDeliveryEnabled && comp?.freeDeliveryMinOrder != null && subtotal >= Number(comp.freeDeliveryMinOrder)) {
+        const fd = await resolveFreeDelivery({ companyId, menuId })
+        if (fd.enabled && fd.minOrder != null && subtotal >= fd.minOrder) {
           deliveryFee = 0
         }
       } catch(e) { /* non-blocking */ }

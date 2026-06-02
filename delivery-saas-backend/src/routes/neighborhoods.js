@@ -4,6 +4,37 @@ import { authMiddleware, requireRole } from '../auth.js';
 import { requireModuleStrict } from '../modules.js';
 import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js';
 
+// Helper exportado pra routes/orders.js e routes/publicMenu.js aplicarem a
+// mesma regra de frete grátis. Menu sobrescreve a empresa quando seu campo
+// freeDeliveryEnabled NÃO é null (true ou false). Quando o menu deixa null,
+// herda da empresa.
+export async function resolveFreeDelivery({ companyId, menuId }) {
+  if (menuId && companyId) {
+    // Filtra por companyId (via Menu.store.companyId) pra evitar override
+    // cross-company quando um requestedMenuId malicioso é fornecido.
+    const menu = await prisma.menu.findFirst({
+      where: { id: menuId, store: { companyId } },
+      select: { freeDeliveryEnabled: true, freeDeliveryMinOrder: true },
+    });
+    if (menu && menu.freeDeliveryEnabled !== null && menu.freeDeliveryEnabled !== undefined) {
+      return {
+        enabled: !!menu.freeDeliveryEnabled,
+        minOrder: menu.freeDeliveryMinOrder != null ? Number(menu.freeDeliveryMinOrder) : null,
+        source: 'menu',
+      };
+    }
+  }
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { freeDeliveryEnabled: true, freeDeliveryMinOrder: true },
+  });
+  return {
+    enabled: company?.freeDeliveryEnabled ?? false,
+    minOrder: company?.freeDeliveryMinOrder != null ? Number(company.freeDeliveryMinOrder) : null,
+    source: 'company',
+  };
+}
+
 export const neighborhoodsRouter = express.Router();
 neighborhoodsRouter.use(authMiddleware);
 neighborhoodsRouter.use(requireModuleStrict('CARDAPIO_COMPLETO'));
@@ -54,6 +85,78 @@ neighborhoodsRouter.patch('/settings', requireRole('ADMIN'), async (req, res) =>
     },
   });
   res.json({
+    freeDeliveryEnabled: updated.freeDeliveryEnabled,
+    freeDeliveryMinOrder: updated.freeDeliveryMinOrder != null ? Number(updated.freeDeliveryMinOrder) : null,
+  });
+});
+
+// GET /neighborhoods/settings/menus — lista o frete grátis por cardápio
+// Retorna 1 linha por cardápio da empresa com freeDeliveryEnabled = true |
+// false | null (null = herda da empresa).
+neighborhoodsRouter.get('/settings/menus', async (req, res) => {
+  const companyId = req.user.companyId;
+  const menus = await prisma.menu.findMany({
+    where: { store: { companyId } },
+    select: {
+      id: true,
+      name: true,
+      freeDeliveryEnabled: true,
+      freeDeliveryMinOrder: true,
+      store: { select: { id: true, name: true } },
+    },
+    orderBy: [{ store: { name: 'asc' } }, { position: 'asc' }, { name: 'asc' }],
+  });
+  res.json(
+    menus.map((m) => ({
+      menuId: m.id,
+      menuName: m.name,
+      storeName: m.store?.name || null,
+      freeDeliveryEnabled: m.freeDeliveryEnabled, // pode ser true/false/null (null = herda)
+      freeDeliveryMinOrder: m.freeDeliveryMinOrder != null ? Number(m.freeDeliveryMinOrder) : null,
+    })),
+  );
+});
+
+// PATCH /neighborhoods/settings/menus/:menuId — sobrescreve a regra de
+// frete grátis pra UM cardápio. Body aceita:
+//   { freeDeliveryEnabled: true | false | null, freeDeliveryMinOrder: number | null }
+// null em enabled significa "voltar a herdar da empresa".
+neighborhoodsRouter.patch('/settings/menus/:menuId', requireRole('ADMIN'), async (req, res) => {
+  const companyId = req.user.companyId;
+  const { menuId } = req.params;
+  const menu = await prisma.menu.findFirst({
+    where: { id: menuId, store: { companyId } },
+    select: { id: true },
+  });
+  if (!menu) return res.status(404).json({ message: 'Cardápio não encontrado' });
+
+  const { freeDeliveryEnabled, freeDeliveryMinOrder } = req.body || {};
+  // Aceita explicitamente true, false ou null. Outros valores rejeitados.
+  const enabledValue =
+    freeDeliveryEnabled === true ? true :
+    freeDeliveryEnabled === false ? false :
+    freeDeliveryEnabled === null ? null : undefined;
+  if (enabledValue === undefined) {
+    return res.status(400).json({ message: 'freeDeliveryEnabled deve ser true, false ou null' });
+  }
+  const minOrderValue =
+    enabledValue === true && freeDeliveryMinOrder != null
+      ? Number(freeDeliveryMinOrder)
+      : null;
+  if (minOrderValue != null && (isNaN(minOrderValue) || minOrderValue < 0)) {
+    return res.status(400).json({ message: 'freeDeliveryMinOrder inválido' });
+  }
+
+  const updated = await prisma.menu.update({
+    where: { id: menuId },
+    data: {
+      freeDeliveryEnabled: enabledValue,
+      freeDeliveryMinOrder: minOrderValue,
+    },
+    select: { id: true, freeDeliveryEnabled: true, freeDeliveryMinOrder: true },
+  });
+  res.json({
+    menuId: updated.id,
     freeDeliveryEnabled: updated.freeDeliveryEnabled,
     freeDeliveryMinOrder: updated.freeDeliveryMinOrder != null ? Number(updated.freeDeliveryMinOrder) : null,
   });

@@ -826,6 +826,13 @@ model Menu {
   // Canal preferencial p/ notificações transacionais (status, cashback).
   // Quando null, notify.js usa fallback Evolution-first.
   primaryChannel                  NotificationChannel?
+  // Regra de frete grátis por cardápio (override do default da empresa em
+  // Company.freeDeliveryEnabled/freeDeliveryMinOrder). Quando freeDeliveryEnabled
+  // é NULL o cardápio herda da empresa; quando true/false usa o próprio valor.
+  // freeDeliveryMinOrder pode ser null mesmo com enabled=true (significa "todo
+  // pedido com frete vira gratuito").
+  freeDeliveryEnabled             Boolean?
+  freeDeliveryMinOrder            Decimal?
   outOfHoursReplyId               String?
   outOfHoursReply                 QuickReply?           @relation("MenuOutOfHoursReply", fields: [outOfHoursReplyId], references: [id])
   greetingReplyId                 String?

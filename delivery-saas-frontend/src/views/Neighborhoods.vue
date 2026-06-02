@@ -1,9 +1,9 @@
 <template>
-  <div>
-    <!-- Free Delivery Settings -->
+  <div class="container py-3">
+    <!-- Free Delivery Settings — default da empresa -->
     <div class="card mb-4">
       <div class="card-body">
-        <h6 class="fw-semibold mb-3"><i class="bi bi-truck me-2 text-primary"></i>Entrega Grátis</h6>
+        <h6 class="fw-semibold mb-3"><i class="bi bi-truck me-2 text-primary"></i>Entrega Grátis (default da empresa)</h6>
         <div class="form-check form-switch mb-3">
           <input class="form-check-input" type="checkbox" id="freeDeliveryToggle" v-model="freeSettings.enabled" />
           <label class="form-check-label fw-semibold" for="freeDeliveryToggle">Ativar entrega grátis</label>
@@ -15,6 +15,61 @@
         <BaseButton variant="primary" size="sm" :loading="savingSettings" @click="saveSettings">
           <i class="bi bi-check-lg me-1"></i>Salvar configuração
         </BaseButton>
+      </div>
+    </div>
+
+    <!-- Regras por cardápio (override do default da empresa) -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-semibold mb-0">
+            <i class="bi bi-card-checklist me-2 text-success"></i>Por cardápio
+          </h6>
+          <BaseButton variant="success" size="sm" :loading="savingMenuRules" @click="saveMenuRules" :disabled="!menuRulesDirty">
+            <i class="bi bi-check-lg me-1"></i>Salvar regras
+          </BaseButton>
+        </div>
+        <p class="small text-muted mb-3">
+          Cardápios marcados como <em>"Herda do default"</em> seguem a regra acima.
+          Para sobrescrever, escolha <em>"Ativado"</em> ou <em>"Desativado"</em> no cardápio específico.
+        </p>
+        <div v-if="loadingMenuRules" class="text-muted small">Carregando cardápios...</div>
+        <div v-else-if="!menuRules.length" class="alert alert-light border small mb-0">
+          Nenhum cardápio cadastrado nesta empresa.
+        </div>
+        <div v-else class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Cardápio</th>
+                <th>Loja</th>
+                <th style="width:180px">Modo</th>
+                <th style="width:180px">Pedido mínimo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="m in menuRules" :key="m.menuId">
+                <td class="fw-semibold">{{ m.menuName }}</td>
+                <td class="text-muted small">{{ m.storeName || '—' }}</td>
+                <td>
+                  <select class="form-select form-select-sm" v-model="m.modeUi" @change="onModeChange(m)">
+                    <option value="inherit">Herda do default</option>
+                    <option value="on">Ativado</option>
+                    <option value="off">Desativado</option>
+                  </select>
+                </td>
+                <td>
+                  <CurrencyInput
+                    v-if="m.modeUi === 'on'"
+                    v-model="m.minOrderUi"
+                    placeholder="0,00"
+                  />
+                  <span v-else class="text-muted small">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -356,6 +411,112 @@ async function saveSettings() {
   }
 }
 
+// ─── Regras por cardápio (override do default da empresa) ──────────────────
+//
+// Cada linha tem 2 campos persistidos no backend:
+//   - freeDeliveryEnabled: true | false | null  (null = herda)
+//   - freeDeliveryMinOrder: number | null       (só faz sentido com enabled=true)
+// Pra UI fica mais simples expor um único `modeUi` (inherit | on | off) que
+// mapeia 1-1 com null/true/false, e o `minOrderUi` como string formatada BRL.
+// Snapshot inicial fica em `menuRulesOriginal` pra calcular dirty.
+
+const menuRules = ref([])
+const menuRulesOriginal = ref([])
+const loadingMenuRules = ref(false)
+const savingMenuRules = ref(false)
+
+function enabledToMode(value) {
+  if (value === true) return 'on'
+  if (value === false) return 'off'
+  return 'inherit'
+}
+function modeToEnabled(mode) {
+  if (mode === 'on') return true
+  if (mode === 'off') return false
+  return null
+}
+function formatBRL(n) {
+  if (n == null) return ''
+  return String(n).replace('.', ',')
+}
+
+async function fetchMenuRules() {
+  loadingMenuRules.value = true
+  try {
+    const { data } = await api.get('/neighborhoods/settings/menus')
+    const rows = (Array.isArray(data) ? data : []).map((m) => ({
+      menuId: m.menuId,
+      menuName: m.menuName,
+      storeName: m.storeName,
+      freeDeliveryEnabled: m.freeDeliveryEnabled,
+      freeDeliveryMinOrder: m.freeDeliveryMinOrder,
+      modeUi: enabledToMode(m.freeDeliveryEnabled),
+      minOrderUi: m.freeDeliveryMinOrder != null ? formatBRL(m.freeDeliveryMinOrder) : '',
+    }))
+    menuRules.value = rows
+    menuRulesOriginal.value = rows.map((r) => ({ ...r }))
+  } catch (e) {
+    console.warn('Falha ao carregar regras por cardápio', e)
+    Swal.fire({ icon: 'error', text: 'Erro ao carregar regras por cardápio' })
+  } finally {
+    loadingMenuRules.value = false
+  }
+}
+
+function onModeChange(m) {
+  // Ao virar pra "off" ou "inherit", limpa o valor exibido (UX). O server
+  // já joga null automaticamente quando enabled !== true.
+  if (m.modeUi !== 'on') m.minOrderUi = ''
+}
+
+const menuRulesDirty = computed(() => {
+  if (menuRulesOriginal.value.length !== menuRules.value.length) return true
+  for (let i = 0; i < menuRules.value.length; i++) {
+    const cur = menuRules.value[i]
+    const orig = menuRulesOriginal.value[i]
+    if (cur.modeUi !== orig.modeUi) return true
+    if (cur.modeUi === 'on') {
+      const curMin = parseFloat(String(cur.minOrderUi || 0).replace(',', '.')) || 0
+      const origMin = orig.freeDeliveryMinOrder != null ? Number(orig.freeDeliveryMinOrder) : 0
+      if (curMin !== origMin) return true
+    }
+  }
+  return false
+})
+
+async function saveMenuRules() {
+  savingMenuRules.value = true
+  try {
+    const toUpdate = []
+    for (let i = 0; i < menuRules.value.length; i++) {
+      const cur = menuRules.value[i]
+      const orig = menuRulesOriginal.value[i]
+      const changed =
+        cur.modeUi !== orig.modeUi ||
+        (cur.modeUi === 'on' &&
+          (parseFloat(String(cur.minOrderUi || 0).replace(',', '.')) || 0) !==
+            (orig.freeDeliveryMinOrder != null ? Number(orig.freeDeliveryMinOrder) : 0))
+      if (changed) toUpdate.push(cur)
+    }
+    if (!toUpdate.length) return
+    for (const m of toUpdate) {
+      const enabled = modeToEnabled(m.modeUi)
+      const minOrder =
+        enabled === true ? parseFloat(String(m.minOrderUi || 0).replace(',', '.')) || 0 : null
+      await api.patch(`/neighborhoods/settings/menus/${m.menuId}`, {
+        freeDeliveryEnabled: enabled,
+        freeDeliveryMinOrder: minOrder,
+      })
+    }
+    Swal.fire({ icon: 'success', text: 'Regras por cardápio salvas', timer: 1500, showConfirmButton: false })
+    await fetchMenuRules()
+  } catch (e) {
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao salvar regras por cardápio' })
+  } finally {
+    savingMenuRules.value = false
+  }
+}
+
 const displayed = computed(() => {
   if (!q.value) return list.value || []
   const term = q.value.toLowerCase()
@@ -671,7 +832,7 @@ async function handleFileImport(file) {
   }
 }
 
-onMounted(() => { fetchList(); fetchSettings(); fetchPendingAliases() })
+onMounted(() => { fetchList(); fetchSettings(); fetchPendingAliases(); fetchMenuRules() })
 </script>
 
 <style scoped>

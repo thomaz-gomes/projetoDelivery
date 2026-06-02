@@ -12,6 +12,7 @@ import { trackAffiliateSale } from '../services/affiliates.js';
 import * as cashbackSvc from '../services/cashback.js';
 import { canTransition } from '../stateMachine.js';
 import { notifyRiderAssigned, notifyCustomerStatus, notifyCustomerOrderSummary } from '../services/notify.js';
+import { resolveFreeDelivery } from './neighborhoods.js';
 import riderAccountService from '../services/riderAccount.js';
 import { buildAndPersistStockMovementFromOrderItems, reverseStockMovementForOrder } from '../services/stockFromOrder.js';
 import { createFinancialEntriesForOrder } from '../services/financial/orderFinancialBridge.js';
@@ -1277,11 +1278,14 @@ ordersRouter.post('/', requireRole('ADMIN', 'ATTENDANT'), async (req, res) => {
       }
     } catch (e) { deliveryFee = 0; }
 
-    // Apply free delivery when subtotal meets the configured threshold
+    // Apply free delivery when subtotal meets the configured threshold.
+    // Menu override (Menu.freeDeliveryEnabled NÃO null) tem precedência sobre
+    // o default da empresa. requestedMenuId vem do body; o helper valida
+    // ownership (companyId) antes de honrar o override.
     if (deliveryFee > 0) {
       try {
-        const comp = await prisma.company.findUnique({ where: { id: companyId }, select: { freeDeliveryEnabled: true, freeDeliveryMinOrder: true } });
-        if (comp?.freeDeliveryEnabled && comp?.freeDeliveryMinOrder != null && subtotal >= Number(comp.freeDeliveryMinOrder)) {
+        const fd = await resolveFreeDelivery({ companyId, menuId: requestedMenuId });
+        if (fd.enabled && fd.minOrder != null && subtotal >= fd.minOrder) {
           deliveryFee = 0;
         }
       } catch(e) { /* non-blocking */ }
