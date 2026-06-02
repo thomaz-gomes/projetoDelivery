@@ -1,5 +1,31 @@
 <template>
   <div class="container py-3">
+    <!-- Tabs: Bairros (lista + pendências) | Entrega grátis (empresa + por cardápio) -->
+    <ul class="nav nav-tabs mb-3" role="tablist">
+      <li class="nav-item">
+        <button
+          :class="['nav-link', { active: activeTab === 'list' }]"
+          type="button"
+          @click="activeTab = 'list'"
+        >
+          <i class="bi bi-geo-alt me-1"></i>Bairros
+          <span v-if="pendingCount > 0" class="badge bg-warning text-dark ms-1">{{ pendingCount }}</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button
+          :class="['nav-link', { active: activeTab === 'free-delivery' }]"
+          type="button"
+          @click="activeTab = 'free-delivery'"
+        >
+          <i class="bi bi-truck me-1"></i>Entrega grátis
+        </button>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <!-- ABA: Entrega grátis -->
+      <div :class="['tab-pane', { 'show active': activeTab === 'free-delivery' }]">
     <!-- Free Delivery Settings — default da empresa -->
     <div class="card mb-4">
       <div class="card-body">
@@ -72,7 +98,11 @@
         </div>
       </div>
     </div>
+      </div>
+      <!-- /ABA Entrega grátis -->
 
+      <!-- ABA: Bairros (lista + pendências de aliases) -->
+      <div :class="['tab-pane', { 'show active': activeTab === 'list' }]">
     <!-- Pending aliases queue — surfaces neighborhoods seen on orders that
          don't match anything cadastrado. Replaces the old daily validation
          script: classify each once and from then on it's automatic. -->
@@ -210,6 +240,10 @@
         </div>
       </template>
     </ListCard>
+      </div>
+      <!-- /ABA Bairros -->
+    </div>
+    <!-- /tab-content -->
 
     <!-- Form Modal -->
     <div v-if="showForm" class="modal-backdrop" @click.self="closeForm">
@@ -379,6 +413,9 @@ const list = ref([])
 const q = ref('')
 const loading = ref(false)
 bindLoading(loading)
+
+// Aba ativa no nav-tabs do topo: 'list' (default) | 'free-delivery'.
+const activeTab = ref('list')
 
 // Free delivery settings
 const freeSettings = ref({ enabled: false, minOrder: '0,00' })
