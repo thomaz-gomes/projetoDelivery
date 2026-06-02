@@ -3518,24 +3518,21 @@ function pulseButton() {
             <h5 class="card-title mb-1">
              Novo Pedido
             </h5>
-            
+
           </div>
         </div>
-          <div class="row">
-            <div class="col-12 col-sm-6"><TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control mb-2" /></div>
-            <div class="col-6 col-sm-3">
-              <button type="button" class="btn btn-primary  w-100" @click="openPdv">
-                <i class="bi bi-plus-lg"></i>&nbsp;Entrega
-                </button>
-            </div>
-            <div class="col-6 col-sm-3">
-            <button type="button" class="btn btn-outline-primary  w-100" @click="openBalcao" title="Pedido balcão">
-            <i class="bi bi-plus-lg"></i> &nbsp;Balcão
-            </button>
-
-            </div>
-          </div>           
-         
+        <!-- Plain flex row (Chefiz Desktop): phone input grows, buttons auto-width -->
+        <div class="orders-new-row d-flex flex-wrap align-items-center gap-2">
+          <div class="orders-new-input">
+            <TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control" />
+          </div>
+          <button type="button" class="orders-new-btn orders-new-btn--filled" @click="openPdv">
+            <i class="bi bi-plus-lg"></i> Entrega
+          </button>
+          <button type="button" class="orders-new-btn orders-new-btn--outline" @click="openBalcao" title="Pedido balcão">
+            <i class="bi bi-plus-lg"></i> Balcão
+          </button>
+        </div>
         </div>
       </div>
     </div>
@@ -4837,16 +4834,69 @@ button.btn.advance {
   box-shadow: 0 2px 6px rgba(137,209,54,0.30);
 }
 
-/* Single filter row: toggles + advanced inputs share one wrapping flex.
-   On desktop CSS `order` pushes the toggles to the END of the row.
-   On mobile the toggles stay on top (DOM order) and advanced inputs
-   stack vertically below — visible only when expanded. */
-.orders-filter-row > .orders-adv-control { flex: 1 1 180px; min-width: 0; }
-.orders-filter-row > .orders-adv-control--num { flex: 0 1 130px; }
-.orders-filter-row > .orders-adv-control--name { flex: 2 1 280px; } /* wider, grows 2x */
+/* ── "Novo Pedido" row (Chefiz Desktop layout) ─────────────────────────
+   Plain flex: phone input grows, Entrega + Balcão buttons sit at
+   natural content width — never half-row each like the old grid. */
+.orders-new-row { row-gap: 8px; }
+.orders-new-input { flex: 1 1 340px; min-width: 0; }
+.orders-new-input > div { width: 100%; }  /* TextInput's outer wrapper */
+.orders-new-input .form-control {
+  height: 44px;
+  border-radius: 11px;
+  background: #f4f5f7;
+  border: 1px solid #e9ecf1;
+  font-size: 0.9rem;
+}
+.orders-new-input .form-control:focus {
+  background: #fff;
+  border-color: #89D136;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.16);
+}
+.orders-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 11px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  flex-grow: 0;
+  transition: background .12s, border-color .12s;
+}
+.orders-new-btn--filled {
+  background: #89D136;
+  color: #fff;
+  border: none;
+  box-shadow: 0 2px 6px rgba(137,209,54,0.30);
+}
+.orders-new-btn--filled:hover { background: #6DAE1E; }
+.orders-new-btn--outline {
+  background: #fff;
+  color: #5f7d10;
+  border: 1.5px solid #89D136;
+}
+.orders-new-btn--outline:hover { background: rgba(137,209,54,0.10); }
+@media (max-width: 575.98px) {
+  /* On very narrow phones, let the buttons share the row 50/50 */
+  .orders-new-input { flex: 1 1 100%; }
+  .orders-new-btn { flex: 1 1 calc(50% - 4px); justify-content: center; }
+}
+
+/* ── Filter row: toggles + advanced inputs share one row ────────────────
+   On desktop: one line — input sizes shrink to fit, toggles pushed to end.
+   On mobile: toggles+Filtros button on top, advanced inputs stack below. */
+.orders-filter-row > .orders-adv-control { flex: 1 1 160px; min-width: 0; max-width: 220px; }
+.orders-filter-row > .orders-adv-control--num { flex: 0 1 120px; max-width: 150px; }
+.orders-filter-row > .orders-adv-control--name { flex: 2 1 220px; max-width: 320px; } /* widest input */
 .orders-filter-row > .orders-adv-control > div { width: 100%; } /* TextInput wrapper */
 
 @media (min-width: 769px) {
+  /* Force one line on desktop (controls shrink rather than wrap) */
+  .orders-filter-row { flex-wrap: nowrap !important; }
   /* Push Entrega/Retirada to the end of the row */
   .orders-filter-row > .orders-toggle { order: 10; }
   /* The mobile spacer doesn't take any space on desktop */
@@ -4861,7 +4911,10 @@ button.btn.advance {
   /* Each advanced control takes full row width when shown */
   .orders-filter-row > .orders-adv-control,
   .orders-filter-row > .orders-adv-control--num,
-  .orders-filter-row > .orders-adv-control--name { flex: 1 1 100% !important; }
+  .orders-filter-row > .orders-adv-control--name {
+    flex: 1 1 100% !important;
+    max-width: none !important;
+  }
   .orders-filter-row--expanded { row-gap: 8px !important; }
 }
 
