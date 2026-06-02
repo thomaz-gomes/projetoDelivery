@@ -4629,4 +4629,560 @@ button.btn.advance {
   display: inline-block;
   vertical-align: middle;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHEFIZ DESIGN OVERLAY — overrides above to match the Chefiz Pedidos look.
+   Status palette mirrors the design:
+     novos/EM_PREPARO        → amber  #e08a1e / soft #fdf2e0
+     entrega/SAIU_PARA       → blue   #2b6fe0 / soft #e7f0fe
+     pagamento/CONFIRMACAO   → purple #9a5cd0 / soft #f3ebfb
+     concluido/CONCLUIDO     → green  #2e8c5a / soft #e6f4ec
+     cancelado/CANCELADO     → red    #e23b3b / soft #fdecec
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Page canvas — neutral Chefiz background */
+.container-fluid.p-4 {
+  background: #f4f5f7;
+  min-height: 100%;
+}
+
+/* ── Header ── */
+.container-fluid.p-4 > header {
+  margin-bottom: 18px !important;
+}
+.container-fluid.p-4 > header h2 {
+  font-size: 1.45rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.4px;
+  color: #1d2330;
+}
+/* Lime status dot next to the title (uses existing socket badge slot) */
+.container-fluid.p-4 > header h2 .badge.bg-success {
+  width: 11px !important;
+  height: 11px !important;
+  border-radius: 50% !important;
+  background: #89D136 !important;
+  box-shadow: 0 0 0 4px rgba(137,209,54,0.22);
+  border: none !important;
+  right: -16px !important;
+  bottom: 6px !important;
+}
+
+/* Sound + printer buttons styled as Chefiz pills */
+.container-fluid.p-4 > header .btn-sm {
+  height: 40px;
+  border-radius: 11px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 0 14px;
+}
+.container-fluid.p-4 > header .btn-outline-primary,
+.container-fluid.p-4 > header .btn-primary {
+  background: #fff;
+  border: 1px solid #e9ecf1 !important;
+  color: #5a6373 !important;
+}
+.container-fluid.p-4 > header .btn-primary {
+  color: #2e8c5a !important;
+}
+.container-fluid.p-4 > header .btn-primary .badge.bg-success {
+  background: transparent !important;
+  color: #2e8c5a !important;
+  padding: 0 !important;
+  margin-left: 6px;
+  font-size: 0.72rem !important;
+  font-weight: 700;
+}
+.container-fluid.p-4 > header .btn-primary .badge.bg-success::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #2e8c5a;
+  box-shadow: 0 0 0 3px rgba(46,140,90,0.18);
+  vertical-align: middle;
+}
+
+/* ── Novo Pedido + Procurar pedido cards (compact Chefiz cards) ── */
+.container-fluid.p-4 .card[style*="border:none"],
+.container-fluid.p-4 .filters-bar.card {
+  background: #fff !important;
+  border: 1px solid #e9ecf1 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  margin-bottom: 14px !important;
+}
+.container-fluid.p-4 .card .card-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #5a6373;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.container-fluid.p-4 .card .form-control {
+  background: #f4f5f7;
+  border: 1px solid #e9ecf1;
+  border-radius: 11px;
+  height: 44px;
+  font-size: 0.9rem;
+}
+.container-fluid.p-4 .card .form-control:focus {
+  background: #fff;
+  border-color: #89D136;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.16);
+}
+/* Entrega button (lime) */
+.container-fluid.p-4 .card .btn-primary {
+  background: #89D136 !important;
+  border: none !important;
+  color: #fff !important;
+  border-radius: 11px;
+  height: 44px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 6px rgba(137,209,54,0.30);
+}
+.container-fluid.p-4 .card .btn-primary:hover {
+  background: #6DAE1E !important;
+}
+/* Balcão button (outline lime) */
+.container-fluid.p-4 .card .btn-outline-primary {
+  background: #fff !important;
+  border: 1.5px solid #89D136 !important;
+  color: #5f7d10 !important;
+  border-radius: 11px;
+  height: 44px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.container-fluid.p-4 .card .btn-outline-primary:hover {
+  background: rgba(137,209,54,0.10) !important;
+}
+
+/* Select / TextInput in filters bar */
+.container-fluid.p-4 .filters-bar .form-select,
+.container-fluid.p-4 .filters-bar .form-control {
+  height: 44px;
+  border-radius: 11px;
+  background: #fff;
+  border: 1px solid #e9ecf1;
+  font-size: 0.9rem;
+  color: #1d2330;
+}
+.container-fluid.p-4 .filters-bar .form-select:focus,
+.container-fluid.p-4 .filters-bar .form-control:focus {
+  border-color: #89D136;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.16);
+}
+
+/* ── Mobile status tabs (Chefiz pill row) ── */
+.container-fluid.p-4 .filters-bar .action-chip {
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  border: 1.5px solid #e9ecf1;
+  background: #fff;
+  color: #5a6373;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.container-fluid.p-4 .filters-bar .action-chip--active {
+  background: #89D136;
+  border-color: #89D136;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(137,209,54,0.30);
+}
+
+/* ── Entrega / Retirada toggles (Chefiz checkbox+icon) ── */
+.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 {
+  background: #fff;
+  border: 1px solid #e9ecf1;
+  border-radius: 14px;
+  padding: 8px 14px;
+  margin-bottom: 14px !important;
+  gap: 10px !important;
+}
+.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1.5px solid #e9ecf1;
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check:has(input:checked) {
+  background: rgba(137,209,54,0.10);
+  border-color: #89D136;
+}
+.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check-input {
+  width: 18px;
+  height: 18px;
+  margin: 0 !important;
+  border-radius: 5px;
+  border: 2px solid #cfd5dd;
+  cursor: pointer;
+}
+.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check-input:checked {
+  background-color: #89D136;
+  border-color: #89D136;
+}
+.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check:has(input:checked) .form-check-label {
+  color: #5f7d10;
+  font-weight: 700;
+}
+.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check-label {
+  color: #5a6373;
+  font-weight: 600;
+  font-size: 0.84rem !important;
+}
+
+/* ── Kanban board ── */
+.orders-board .boards { padding: 0; gap: 14px; }
+.orders-column {
+  background: #fff !important;
+  flex: 1 1 0 !important;
+  min-width: 280px;
+  border: 1px solid #e9ecf1 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+  display: flex;
+  flex-direction: column;
+}
+.orders-column .card-header {
+  background: #fff !important;
+  border-bottom: 1px solid #f0f2f5 !important;
+  padding: 14px 16px !important;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1d2330;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+/* Column status dot prefixed before the title */
+.orders-column .card-header::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e08a1e;
+  flex-shrink: 0;
+}
+.orders-column[data-status="SAIU_PARA_ENTREGA"] .card-header::before { background: #2b6fe0; }
+.orders-column[data-status="CONFIRMACAO_PAGAMENTO"] .card-header::before { background: #9a5cd0; }
+.orders-column[data-status="CONCLUIDO"] .card-header::before { background: #2e8c5a; }
+.orders-column[data-status="CANCELADO"] .card-header::before { background: #e23b3b; }
+.orders-column[data-status="EM_PREPARO"] .card-header::before { background: #e08a1e; }
+
+.orders-column .card-header .badge.bg-secondary {
+  background: #f4f5f7 !important;
+  color: #5a6373 !important;
+  font-weight: 800;
+  font-size: 0.78rem !important;
+  height: 22px;
+  min-width: 26px;
+  border-radius: 11px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Status-tinted count badge */
+.orders-column[data-status="EM_PREPARO"] .card-header .badge.bg-secondary { background: #fdf2e0 !important; color: #e08a1e !important; }
+.orders-column[data-status="SAIU_PARA_ENTREGA"] .card-header .badge.bg-secondary { background: #e7f0fe !important; color: #2b6fe0 !important; }
+.orders-column[data-status="CONFIRMACAO_PAGAMENTO"] .card-header .badge.bg-secondary { background: #f3ebfb !important; color: #9a5cd0 !important; }
+.orders-column[data-status="CONCLUIDO"] .card-header .badge.bg-secondary { background: #e6f4ec !important; color: #2e8c5a !important; }
+
+.orders-column .list {
+  padding: 12px !important;
+  background: transparent;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.orders-column .list > .card.card-body { margin-bottom: 0 !important; }
+
+/* ── Order card (Chefiz card) ── */
+.order-card {
+  background: #fff !important;
+  border: 1px solid #e9ecf1 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+  padding: 0 !important;
+  overflow: visible;
+}
+.order-card:hover {
+  border-color: #cfd5dd !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
+}
+.order-card > .card-body {
+  padding: 14px !important;
+  cursor: grab;
+}
+
+/* Header row: #id pill colored by status + name + channel */
+.order-card .oc-header { gap: 8px; align-items: center; margin-bottom: 8px; }
+.order-card .oc-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1d2330;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.order-card .oc-title::first-letter { font-weight: 800; }
+.order-card .oc-customer-name { font-weight: 700; }
+.order-card .oc-channel {
+  font-size: 0.7rem;
+  color: #929aa8;
+  font-weight: 600;
+  max-width: 130px;
+  text-align: right;
+}
+
+/* Info chip row */
+.order-card .oc-info { gap: 6px 12px; margin-bottom: 8px; }
+.order-card .oc-chip {
+  font-size: 0.78rem;
+  color: #5a6373;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.order-card .oc-chip i { color: #929aa8; font-size: 0.78rem; }
+.order-card .oc-chip--ifood {
+  background: rgba(234,29,44,0.08);
+  color: #ea1d2c;
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-weight: 700;
+}
+.order-card .oc-chip--ifood i { color: #ea1d2c; }
+.order-card .oc-chip--collect {
+  background: #fdf2e0;
+  color: #e08a1e;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 3px 10px;
+}
+.order-card .oc-chip--collect i { color: #e08a1e; }
+
+/* Address row */
+.order-card .oc-address {
+  font-size: 0.78rem;
+  color: #5a6373;
+  font-weight: 500;
+  margin: 4px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.order-card .oc-address::before {
+  content: '\F1A1';
+  font-family: 'bootstrap-icons';
+  font-size: 0.85rem;
+  color: #929aa8;
+  flex-shrink: 0;
+}
+
+/* Time + total row */
+.order-card .d-flex.justify-content-between { align-items: center; }
+.order-card .oc-time {
+  font-size: 0.75rem;
+  color: #929aa8;
+  font-weight: 600;
+}
+.order-card .oc-total {
+  font-weight: 800 !important;
+  font-size: 1.05rem !important;
+  color: #2e8c5a !important;
+}
+
+/* Footer with rounded icon buttons */
+.order-card .oc-footer {
+  border-top: 1px solid #f0f2f5 !important;
+  padding-top: 10px !important;
+  margin-top: 10px;
+  gap: 8px;
+}
+.order-card .oc-actions { gap: 5px; }
+.order-card .oc-actions .btn {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  border-radius: 9px;
+  border: 1px solid #e9ecf1;
+  background: #fff;
+  color: #5a6373;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem !important;
+  transition: background .12s, border-color .12s;
+}
+.order-card .oc-actions .btn:hover {
+  background: #f4f5f7;
+  border-color: #cfd5dd;
+}
+/* keep the wider "Avançar" / "Pronto" buttons readable */
+.order-card .oc-actions .btn.advance,
+.order-card .oc-actions .btn-info,
+.order-card .oc-actions .btn-success.btn-sm:not([title="Imprimir cupom fiscal"]) {
+  width: auto;
+  padding: 0 12px !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  gap: 4px;
+}
+.order-card .oc-actions .btn.advance {
+  background: #89D136 !important;
+  color: #fff !important;
+  border-color: #89D136;
+  box-shadow: 0 2px 6px rgba(137,209,54,0.30);
+}
+.order-card .oc-actions .btn-outline-success { color: #2e8c5a; border-color: rgba(46,140,90,0.40); }
+.order-card .oc-actions .btn-success { background: #2e8c5a !important; border-color: #2e8c5a; color: #fff; }
+.order-card .oc-actions .btn-outline-danger { color: #e23b3b; border-color: rgba(226,59,59,0.30); }
+
+/* Selected card */
+.order-card.selected {
+  background: rgba(137,209,54,0.06) !important;
+  border-color: #89D136 !important;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.16) !important;
+}
+
+/* Custom checkbox → lime */
+.order-checkbox input:checked + .order-checkbox-mark {
+  background: #89D136 !important;
+  border-color: #89D136 !important;
+}
+.order-checkbox:hover .order-checkbox-mark {
+  border-color: #89D136 !important;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.18) !important;
+}
+
+/* ── Order details modal (Chefiz detail sheet) ── */
+.od-modal {
+  border-radius: 18px !important;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+}
+.od-modal-header {
+  background: linear-gradient(135deg, #e9f6ec, #dcefe2) !important;
+  padding: 18px 20px !important;
+  border-bottom: 1px solid #e9ecf1 !important;
+}
+.od-order-badge {
+  background: #2e8c5a !important;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.05rem;
+  padding: 8px 14px;
+  border-radius: 11px;
+}
+.od-customer-name { font-weight: 800; font-size: 1.05rem; color: #1d2330; }
+.od-customer-phone { font-size: 0.82rem; color: #5a6373; font-weight: 500; }
+.od-info-bar {
+  padding: 11px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e9ecf1;
+  font-size: 0.8rem;
+  color: #5a6373;
+  font-weight: 500;
+}
+.od-info-item i { color: #929aa8; }
+.od-section {
+  padding: 14px 20px !important;
+  border-top: 8px solid #f4f5f7 !important;
+  border-bottom: none !important;
+}
+.od-section:first-of-type { border-top: none !important; }
+.od-section-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #5a6373;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.od-section-title i { color: #5a6373; }
+.od-item-price,
+.od-pay-total .od-pay-value { color: #2e8c5a !important; }
+.od-pay-total .od-pay-value { font-weight: 800; font-size: 1.15rem; }
+.od-modal-footer {
+  padding: 12px 14px !important;
+  gap: 8px;
+  border-top: 1px solid #e9ecf1;
+}
+.od-modal-footer .btn {
+  height: 52px;
+  border-radius: 12px !important;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.od-modal-footer .btn-primary,
+.od-modal-footer .btn-success {
+  background: #89D136 !important;
+  border-color: #89D136 !important;
+  color: #fff !important;
+  box-shadow: 0 3px 10px rgba(137,209,54,0.30);
+}
+
+/* ── Bulk actions bar (lime treatment) ── */
+.bulk-actions-bar {
+  background: #1d2330 !important;
+  padding: 12px 20px !important;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.20) !important;
+}
+.bulk-actions-bar .btn-primary {
+  background: #89D136 !important;
+  border-color: #89D136 !important;
+  color: #fff !important;
+}
+.bulk-actions-bar .btn-success {
+  background: #2e8c5a !important;
+  border-color: #2e8c5a !important;
+}
+
+/* ── Pending acceptance + no-cash boxes (Chefiz palette) ── */
+.pending-acceptance-box {
+  border-color: #e08a1e !important;
+  background: #fdf2e0 !important;
+  border-radius: 14px !important;
+}
+.pending-header { background: #e08a1e !important; color: #fff !important; }
+.no-cash-box {
+  border-color: #e23b3b !important;
+  background: #fdecec !important;
+  border-radius: 14px !important;
+}
+.no-cash-header { background: #e23b3b !important; }
+
+/* ── Responsive: mobile ── */
+@media (max-width: 768px) {
+  .container-fluid.p-4 { padding: 12px !important; }
+  .container-fluid.p-4 > header h2 { font-size: 1.25rem !important; }
+  .container-fluid.p-4 > header .btn-sm { height: 36px; padding: 0 10px; }
+  .orders-board .boards { padding: 0; }
+  .orders-column { min-width: 100% !important; flex: 1 1 100% !important; }
+  /* Mobile bulk bar reserves room for the app's bottom nav, if present */
+  .bulk-actions-bar { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0)) !important; }
+  /* Inputs in the row at the top get full width */
+  .container-fluid.p-4 .filters-bar .d-flex.align-items-center.gap-2 { flex-wrap: wrap; }
+  .container-fluid.p-4 .filters-bar .d-flex.align-items-center.gap-2 > * { min-width: calc(50% - 6px); }
+}
+
 </style>
