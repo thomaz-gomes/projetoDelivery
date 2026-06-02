@@ -1364,6 +1364,20 @@ const cartState = computed(() => ({
   couponLoading: couponLoading.value,
   cartLength: cart.value.length,
   paymentMethodCode: paymentMethodCode.value,
+  // Items propagados pro parent montar mensagens (ex: ContactPanel envia
+  // resumo do pedido pro cliente). Cada item: { name, quantity, price,
+  // notes, options: [{ name, price, quantity }] }.
+  items: cart.value.map((it) => ({
+    name: it.name,
+    quantity: Number(it.quantity || 1),
+    price: Number(it.price || 0),
+    notes: it.notes || null,
+    options: Array.isArray(it.options) ? it.options.map((o) => ({
+      name: o.name,
+      price: Number(o.price || 0),
+      quantity: Number(o.quantity || 1),
+    })) : [],
+  })),
 }));
 watch(cartState, (val) => { emit('cart-update', val); }, { deep: true, immediate: true });
 

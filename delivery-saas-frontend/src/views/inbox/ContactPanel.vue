@@ -316,6 +316,7 @@ const emptyCart = () => ({
   subtotal: 0, deliveryFee: 0, totalWithDelivery: 0,
   couponApplied: false, couponDiscount: 0, couponInfo: null,
   couponError: '', couponLoading: false, cartLength: 0, paymentMethodCode: '',
+  items: [],
 });
 const cart = ref(emptyCart());
 
@@ -331,7 +332,32 @@ const sendingTotal = ref(false);
 function buildTotalMessageLines() {
   const lines = [];
   const greetingName = customerName.value ? customerName.value.split(' ')[0] : '';
-  lines.push(`Olá${greetingName ? ' ' + greetingName : ''}! Segue o total do seu pedido:`);
+  lines.push(`Olá${greetingName ? ' ' + greetingName : ''}! Segue o resumo do seu pedido:`);
+
+  // Itens do carrinho — só aparecem se houver pelo menos 1
+  const items = Array.isArray(cart.value.items) ? cart.value.items : [];
+  if (items.length) {
+    lines.push('');
+    lines.push('*Itens:*');
+    for (const it of items) {
+      const qty = Number(it.quantity || 1);
+      const unitPrice = Number(it.price || 0);
+      lines.push(`➡ ${qty}x ${it.name} — ${formatCurrency(unitPrice * qty)}`);
+      // Opções/adicionais do item (sabores, complementos, etc)
+      if (Array.isArray(it.options) && it.options.length) {
+        for (const opt of it.options) {
+          const optQty = Number(opt.quantity || 1);
+          const optPrice = Number(opt.price || 0);
+          const priceSuffix = optPrice > 0 ? ` (+${formatCurrency(optPrice * optQty)})` : '';
+          lines.push(`   • ${optQty > 1 ? optQty + 'x ' : ''}${opt.name}${priceSuffix}`);
+        }
+      }
+      if (it.notes) {
+        lines.push(`   _Obs:_ ${it.notes}`);
+      }
+    }
+  }
+
   lines.push('');
   lines.push(`Subtotal: ${formatCurrency(cart.value.subtotal)}`);
   if (orderType.value === 'DELIVERY' && cart.value.deliveryFee) {
