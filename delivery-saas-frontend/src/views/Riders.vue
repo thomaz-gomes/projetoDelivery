@@ -13,10 +13,22 @@ const router = useRouter();
 const loading = ref(false)
 const error = ref('')
 const balances = ref({})
+const togglingActive = ref({}) // id -> bool, evita doubleclick no switch
 
 // filters & pagination (CouponsList pattern)
+// filterActive padrão "Ativos" (true) — empresas com motoboys terceirizados
+// têm listas muito grandes, e o operador 99% do tempo quer ver só ativos.
+// O valor é persistido em localStorage pra sobreviver entre navegações.
+const FILTER_STORAGE_KEY = 'riders.filterActive'
+function loadInitialFilter() {
+  try {
+    const saved = localStorage.getItem(FILTER_STORAGE_KEY)
+    if (saved === 'true' || saved === 'false' || saved === '') return saved
+  } catch (_) { /* ignore */ }
+  return 'true'
+}
 const q = ref('')
-const filterActive = ref('')
+const filterActive = ref(loadInitialFilter())
 const limit = ref(20)
 const offset = ref(0)
 const total = ref(0)
@@ -27,10 +39,10 @@ const load = async () => {
   loading.value = true
   error.value = ''
   try{
-    await store.fetch() // keep existing store fetching
-    // compute total and reset pagination if needed
+    // Sempre busca incluindo inativos — o filtro é aplicado no client,
+    // permitindo trocar entre Ativos/Inativos/Todos sem novo fetch.
+    await store.fetch({ includeInactive: true, force: true })
     let list = store.riders || []
-    // apply simple client-side filters (name / whatsapp / active)
     if(q.value) list = list.filter(r => (r.name||'').toLowerCase().includes(q.value.toLowerCase()) || (r.whatsapp||'').includes(q.value))
     if(filterActive.value !== '') list = list.filter(r => String(!!r.active) === String(filterActive.value))
     total.value = list.length
@@ -40,6 +52,43 @@ const load = async () => {
     }
   }catch(e){ console.error(e); error.value = 'Falha ao carregar entregadores' }
   finally{ loading.value = false }
+}
+
+// Persiste a mudança do filtro sem precisar refetch (lista já tem inativos).
+function onFilterActiveChange() {
+  try { localStorage.setItem(FILTER_STORAGE_KEY, filterActive.value) } catch (_) { /* ignore */ }
+  offset.value = 0
+}
+
+// Toggle active sem sair da página. Atualiza otimisticamente; em erro reverte.
+async function toggleActive(r) {
+  if (togglingActive.value[r.id]) return
+  const newActive = !r.active
+  // Confirmação só ao desativar (ativar é trivial).
+  if (!newActive) {
+    const res = await Swal.fire({
+      title: 'Desativar entregador?',
+      text: `${r.name} não aparecerá mais nas listas de despacho. Você pode reativar a qualquer momento.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Desativar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc3545',
+    })
+    if (!res.isConfirmed) return
+  }
+  togglingActive.value[r.id] = true
+  const prev = r.active
+  r.active = newActive // otimista
+  try {
+    await api.patch(`/riders/${r.id}`, { active: newActive })
+  } catch (e) {
+    console.error(e)
+    r.active = prev // reverte
+    Swal.fire({ icon: 'error', text: e.response?.data?.message || 'Erro ao alterar status' })
+  } finally {
+    togglingActive.value[r.id] = false
+  }
 }
 
 function goNew(){ router.push('/riders/new') }
@@ -91,7 +140,12 @@ const resetPassword = async (r) => {
   }
 }
 
-const resetFilters = () => { q.value=''; filterActive.value=''; offset.value=0; load() }
+const resetFilters = () => {
+  q.value = ''
+  filterActive.value = 'true' // volta ao default (só Ativos)
+  try { localStorage.setItem(FILTER_STORAGE_KEY, 'true') } catch (_) {}
+  offset.value = 0
+}
 const nextPage = () => { if(offset.value + limit.value < total.value) { offset.value += limit.value } }
 const prevPage = () => { offset.value = Math.max(0, offset.value - limit.value) }
 
@@ -124,10 +178,10 @@ const formatBalance = (id) => {
           <TextInput v-model="q" placeholder="Buscar nome ou WhatsApp..." inputClass="form-control" />
         </div>
         <div class="col-md-3">
-          <SelectInput  class="form-select"  v-model="filterActive"  @change="load">
+          <SelectInput class="form-select" v-model="filterActive" @change="onFilterActiveChange">
+            <option value="true">Apenas ativos</option>
+            <option value="false">Apenas inativos</option>
             <option value="">Todos</option>
-            <option value="true">Ativos</option>
-            <option value="false">Inativos</option>
           </SelectInput>
         </div>
         <div class="col-md-2 d-flex align-items-center">
@@ -147,28 +201,53 @@ const formatBalance = (id) => {
                 <th>Nome</th>
                 <th>WhatsApp</th>
                 <th>Saldo</th>
-                <th style="width:140px">Ações</th>
+                <th class="text-center" style="width:80px">Ativo</th>
+                <th class="text-end" style="width:160px">Ações</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="r in displayed" :key="r.id">
+              <tr v-for="r in displayed" :key="r.id" :class="{ 'text-muted': !r.active }">
                 <td>
-                  <div><strong>{{ r.name }}</strong></div>
+                  <div>
+                    <strong>{{ r.name }}</strong>
+                    <span v-if="!r.active" class="badge bg-secondary ms-2">Inativo</span>
+                  </div>
                   <div class="desc small text-muted">{{ r.email || '' }}</div>
                 </td>
                 <td>{{ r.whatsapp || '-' }}</td>
                 <td>R$ {{ formatBalance(r.id) }}</td>
-                <td>
-                  <div class="d-flex">
-                    <button class="btn btn-sm btn-light me-2" @click="goAccount(r.id)">Conta</button>
-                    <button class="btn btn-sm btn-outline-secondary me-2" @click="goEdit(r.id)"><i class="bi bi-pencil-square"></i></button>
-                    <button class="btn btn-sm btn-outline-warning me-2" v-if="isAdmin" @click="resetPassword(r)">Reset Senha</button>
-                    <button class="btn btn-sm btn-outline-danger" v-if="isAdmin" @click="remove(r)"><i class="bi bi-trash"></i></button>
+                <td class="text-center">
+                  <div class="form-check form-switch d-flex justify-content-center m-0">
+                    <input
+                      type="checkbox"
+                      class="form-check-input"
+                      role="switch"
+                      :checked="r.active"
+                      :disabled="!!togglingActive[r.id]"
+                      @change="toggleActive(r)"
+                      :title="r.active ? 'Desativar entregador' : 'Ativar entregador'"
+                    />
+                  </div>
+                </td>
+                <td class="text-end">
+                  <div class="btn-group btn-group-sm" role="group">
+                    <button class="btn btn-outline-secondary" @click="goAccount(r.id)" title="Conta / Extrato">
+                      <i class="bi bi-wallet2"></i>
+                    </button>
+                    <button class="btn btn-outline-primary" @click="goEdit(r.id)" title="Editar entregador">
+                      <i class="bi bi-pencil-square"></i>
+                    </button>
+                    <button class="btn btn-outline-warning" v-if="isAdmin" @click="resetPassword(r)" title="Resetar senha">
+                      <i class="bi bi-key"></i>
+                    </button>
+                    <button class="btn btn-outline-danger" v-if="isAdmin" @click="remove(r)" title="Remover entregador">
+                      <i class="bi bi-trash"></i>
+                    </button>
                   </div>
                 </td>
               </tr>
               <tr v-if="total === 0">
-                <td colspan="4" class="text-center text-secondary py-4">Nenhum entregador encontrado.</td>
+                <td colspan="5" class="text-center text-secondary py-4">Nenhum entregador encontrado.</td>
               </tr>
             </tbody>
           </table>

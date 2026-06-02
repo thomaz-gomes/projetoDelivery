@@ -4,9 +4,10 @@ import api from '../api';
 export const useRidersStore = defineStore('riders', {
   state: () => ({ riders: [], loaded: false }),
   actions: {
-    async fetch() {
-      if (this.loaded) return;
-      const { data } = await api.get('/riders');
+    async fetch({ includeInactive = false, force = false } = {}) {
+      if (this.loaded && !force) return;
+      const params = includeInactive ? { includeInactive: 'true' } : {};
+      const { data } = await api.get('/riders', { params });
       this.riders = data || [];
       this.loaded = true;
     },
