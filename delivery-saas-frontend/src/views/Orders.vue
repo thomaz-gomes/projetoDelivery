@@ -3510,7 +3510,7 @@ function pulseButton() {
     <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
 
         <div class="row">
-          <div class="col-sm-6">
+          <div class="col-12">
               <div class="card mb-4" style="border:none;">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between">
@@ -3540,7 +3540,7 @@ function pulseButton() {
       </div>
     </div>
 
-          <div class="col-sm-6">
+          <div class="col-12">
 
               <div class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;">
     <div class="card-body w-100">
@@ -4841,6 +4841,12 @@ button.btn.advance {
   box-shadow: 0 2px 6px rgba(137,209,54,0.30);
 }
 
+/* Toggle row — Entrega + Retirada + Filtros stay on a single line,
+   even on narrow phones. */
+.orders-toggle-row {
+  flex-wrap: nowrap !important;
+}
+
 /* ── Entrega / Retirada toggle buttons (faithful to Chefiz FilterToggle) ── */
 .orders-toggle {
   display: inline-flex;
@@ -4857,6 +4863,7 @@ button.btn.advance {
   cursor: pointer;
   transition: background .12s, border-color .12s, color .12s;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .orders-toggle:hover { background: #f4f5f7; }
 .orders-toggle--on {
@@ -4941,6 +4948,12 @@ button.btn.advance {
   .orders-adv-filters > * { width: 100%; }
   .orders-adv-filters .form-select,
   .orders-adv-filters .form-control { min-width: 0 !important; }
+  /* Tighten the Entrega/Retirada toggles on phones so they sit on the same
+     row as the Filtros button even on 360px viewports. */
+  .orders-toggle { padding: 0 10px; gap: 6px; font-size: 0.8rem; }
+  .orders-toggle__check { width: 18px; height: 18px; }
+  .orders-toggle__ic { font-size: 0.9rem; }
+  .orders-filters-toggle { padding: 0 9px; gap: 5px; }
 }
 
 /* ── Kanban board ── */
