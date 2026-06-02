@@ -5159,6 +5159,19 @@ button.btn.advance {
 .order-card .oc-actions .btn-outline-success { color: #2e8c5a; border-color: rgba(46,140,90,0.40); }
 .order-card .oc-actions .btn-success { background: #2e8c5a !important; border-color: #2e8c5a; color: #fff; }
 .order-card .oc-actions .btn-outline-danger { color: #e23b3b; border-color: rgba(226,59,59,0.30); }
+/* "Pronto" / takeout-advance button — Chefiz blue (matches the "Entrega"
+   kanban color). Bootstrap's btn-info has lower specificity than my
+   generic .btn override above, so restore it explicitly. */
+.order-card .oc-actions .btn-info {
+  background: #2b6fe0 !important;
+  border-color: #2b6fe0 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(43,111,224,0.30);
+}
+.order-card .oc-actions .btn-info:hover {
+  background: #2058c4 !important;
+  border-color: #2058c4 !important;
+}
 
 /* Selected card */
 .order-card.selected {
