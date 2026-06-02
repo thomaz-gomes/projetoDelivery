@@ -2,23 +2,28 @@
   <div class="d-flex flex-column h-100 bg-white" style="min-height:0">
 
     <!-- Step indicator (only when order active) -->
-    <div v-if="customerId && draft?.active" class="px-3 py-2 border-bottom bg-light d-flex align-items-center gap-1" style="flex-shrink:0">
+    <div v-if="customerId && draft?.active" class="contact-stepper">
       <template v-for="(label, i) in activeStepLabels" :key="i">
-        <div class="d-flex align-items-center gap-1 flex-shrink-0">
+        <div class="contact-stepper__item">
           <span
-            class="rounded-circle d-inline-flex align-items-center justify-content-center fw-bold"
-            style="width:20px;height:20px;font-size:0.65rem;flex-shrink:0"
-            :style="panelStep===i+1 ? 'background:#0d6efd;color:#fff' : panelStep>i+1 ? 'background:#198754;color:#fff' : 'background:#dee2e6;color:#6c757d'"
+            class="contact-stepper__dot"
+            :class="{
+              'contact-stepper__dot--active': panelStep === i+1,
+              'contact-stepper__dot--done': panelStep > i+1,
+            }"
           >
-            <i v-if="panelStep>i+1" class="bi bi-check" style="font-size:0.6rem"></i>
+            <i v-if="panelStep > i+1" class="bi bi-check"></i>
             <span v-else>{{ i+1 }}</span>
           </span>
-          <span class="small" :class="panelStep===i+1 ? 'fw-semibold' : 'text-muted'" style="font-size:0.7rem;white-space:nowrap">{{ label }}</span>
+          <span
+            class="contact-stepper__label"
+            :class="{ 'contact-stepper__label--active': panelStep === i+1 }"
+          >{{ label }}</span>
         </div>
-        <div v-if="i < activeStepLabels.length-1" style="flex:1;height:1px;min-width:6px;background:#dee2e6"></div>
+        <span v-if="i < activeStepLabels.length-1" class="contact-stepper__sep"></span>
       </template>
-      <button class="btn btn-link btn-sm p-0 text-danger ms-2 flex-shrink-0" @click="cancelOrder" title="Cancelar pedido">
-        <i class="bi bi-x-lg" style="font-size:0.75rem"></i>
+      <button class="contact-stepper__cancel" @click="cancelOrder" title="Cancelar pedido">
+        <i class="bi bi-x-lg"></i>
       </button>
     </div>
 
@@ -567,4 +572,78 @@ function formatDate(d) {
 <style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* ── Pedido stepper (Chefiz-styled) ── */
+.contact-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #fff;
+  border-bottom: 1px solid #e9ecf1;
+  flex-shrink: 0;
+}
+.contact-stepper__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.contact-stepper__dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e9ecf1;
+  color: #929aa8;
+  font-weight: 700;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.contact-stepper__dot--active {
+  background: var(--success, #89D136);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(137, 209, 54, 0.18);
+}
+.contact-stepper__dot--done {
+  background: #6dae1e;
+  color: #fff;
+}
+.contact-stepper__dot i { font-size: 0.7rem; }
+
+.contact-stepper__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #929aa8;
+  white-space: nowrap;
+}
+.contact-stepper__label--active { color: #1d2330; }
+
+.contact-stepper__sep {
+  flex: 1;
+  height: 1px;
+  min-width: 6px;
+  background: #e9ecf1;
+}
+
+.contact-stepper__cancel {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: #fdecec;
+  color: #e23b3b;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  transition: background .12s;
+}
+.contact-stepper__cancel:hover { background: #f9d8d8; }
 </style>
