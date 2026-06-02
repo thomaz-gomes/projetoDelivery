@@ -515,6 +515,14 @@ function logout() {
   router.replace('/login');
 }
 
+// Dispara o evento global que LuccaChat.vue está escutando (substitui o FAB
+// flutuante que existia antes). Usado pelo atalho de ajuda no topbar.
+function openLuccaAssistant() {
+  try {
+    window.dispatchEvent(new CustomEvent('open-lucca'));
+  } catch (e) { /* defensive — ignora se window indisponível */ }
+}
+
 // UI state for off-canvas, quick shortcuts and add-link modal
 const offCanvasOpen = ref(false);
 const SHORTCUTS_KEY = 'sidebar-quick-shortcuts';
@@ -739,7 +747,17 @@ function selectMenuOption(opt){
           </template>
         </div>
 
-        
+        <!-- Atalho de ajuda — abre o assistente (Lucca) via evento window
+             capturado por LuccaChat. Mesmo estilo dos shortcuts do topbar. -->
+        <button
+          type="button"
+          class="btn btn-light p-2 shortcut-btn ms-2 d-none d-sm-inline-flex align-items-center justify-content-center"
+          title="Falar com o Lucca (assistente)"
+          aria-label="Abrir assistente Lucca"
+          @click.prevent="openLuccaAssistant()"
+        >
+          <i class="bi bi-question-circle" style="font-size:1.3rem;"></i>
+        </button>
 
         <div class="d-none d-sm-block dropdown ms-3">
           <button ref="quickMenuBtn" class="btn btn-light dropdown-toggle" type="button" id="quickMenuDropdown" @click.prevent="quickMenuOpen = !quickMenuOpen" :aria-expanded="quickMenuOpen">

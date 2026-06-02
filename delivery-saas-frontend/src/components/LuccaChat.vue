@@ -1,15 +1,8 @@
 <template>
   <div v-if="showWidget" class="lucca-widget">
-    <button
-      v-if="!chatOpen"
-      type="button"
-      class="lucca-fab"
-      title="Falar com o Lucca"
-      @click="chatOpen = true"
-    >
-      <i class="bi bi-chat-dots-fill"></i>
-    </button>
-
+    <!-- O botão flutuante (FAB) foi removido. O painel agora é aberto por
+         um atalho no topbar (Sidebar.vue) que dispara o evento window
+         'open-lucca' — capturado por um listener registrado no onMounted. -->
     <div v-if="chatOpen" class="lucca-panel">
       <div class="lucca-header">
         <div class="d-flex align-items-center gap-2">
@@ -57,7 +50,7 @@
 </template>
 
 <script>
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api.js'
 
@@ -81,11 +74,22 @@ export default {
       return true
     })
 
+    // Listener pro atalho no topbar (Sidebar.vue) disparar a abertura.
+    // window.dispatchEvent(new CustomEvent('open-lucca')) abre o painel.
+    function handleOpenLucca() {
+      if (showWidget.value) chatOpen.value = true
+    }
+
     onMounted(() => {
       try {
         const saved = sessionStorage.getItem('lucca-history')
         if (saved) messages.value = JSON.parse(saved)
       } catch (e) { /* ignore */ }
+      window.addEventListener('open-lucca', handleOpenLucca)
+    })
+
+    onUnmounted(() => {
+      window.removeEventListener('open-lucca', handleOpenLucca)
     })
 
     watch(messages, (val) => {
@@ -159,26 +163,6 @@ export default {
   right: 24px;
   z-index: 1050;
   font-family: inherit;
-}
-
-.lucca-fab {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: #89d136;
-  color: #fff;
-  border: none;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-  font-size: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-.lucca-fab:hover {
-  transform: scale(1.08);
-  box-shadow: 0 6px 24px rgba(0,0,0,0.3);
 }
 
 .lucca-panel {
