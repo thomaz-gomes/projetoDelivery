@@ -5018,6 +5018,12 @@ button.btn.advance {
   box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
   padding: 0 !important;
   overflow: visible;
+  /* Each card sizes to its own content — never stretches to fill the
+     column. The markup uses `card card-body` on the same element, which
+     inherits Bootstrap's `flex: 1 1 auto`, so we have to undo the grow
+     factor explicitly when sitting inside the kanban flex column. */
+  flex: 0 0 auto !important;
+  align-self: stretch;
 }
 .order-card:hover {
   border-color: #cfd5dd !important;
