@@ -1,39 +1,39 @@
 <template>
-  <div
-    class="d-flex align-items-center p-2 border-bottom"
-    :class="{ 'bg-light': selected }"
-    style="cursor: pointer;"
+  <button
+    type="button"
+    class="conv-row"
+    :class="{ 'conv-row--active': selected, 'conv-row--unread': conversation.unreadCount > 0 }"
     @click="$emit('click')"
   >
-    <!-- Avatar -->
-    <div
-      class="rounded-circle d-flex align-items-center justify-content-center text-white fw-semibold flex-shrink-0"
-      :style="{ width: '40px', height: '40px', backgroundColor: avatarColor, fontSize: '0.9rem' }"
-    >
-      {{ initials }}
+    <!-- Avatar with channel badge overlay -->
+    <div class="conv-row__avatar-wrap">
+      <div
+        class="conv-row__avatar"
+        :style="{ backgroundColor: avatarColor }"
+      >
+        {{ initials }}
+      </div>
+      <ChannelBadge
+        v-if="conversation.channel"
+        :channel="conversation.channel"
+        :provider="conversation.provider"
+        class="conv-row__channel"
+      />
     </div>
 
     <!-- Content -->
-    <div class="flex-grow-1 ms-2 min-width-0">
-      <div class="d-flex justify-content-between align-items-baseline">
-        <span class="text-truncate small">
-          <ChannelBadge
-            v-if="conversation.channel"
-            :channel="conversation.channel"
-            :provider="conversation.provider"
-            class="me-1"
-          />
-          <span class="fw-semibold">{{ displayName }}</span>
-          <span v-if="phoneDisplay" class="text-muted ms-1" style="font-size: 0.7rem;">· {{ phoneDisplay }}</span>
-        </span>
-        <small class="text-muted flex-shrink-0 ms-1" style="font-size: 0.7rem;">{{ timeAgo }}</small>
+    <div class="conv-row__body">
+      <div class="conv-row__top">
+        <span class="conv-row__name">{{ displayName }}</span>
+        <span class="conv-row__time">{{ timeAgo }}</span>
       </div>
-      <div class="d-flex justify-content-between align-items-center">
-        <small class="text-muted text-truncate">{{ preview }}</small>
-        <span v-if="conversation.unreadCount > 0" class="badge bg-success rounded-pill ms-1">{{ conversation.unreadCount }}</span>
+      <div v-if="phoneDisplay" class="conv-row__phone">{{ phoneDisplay }}</div>
+      <div class="conv-row__bottom">
+        <span class="conv-row__preview">{{ preview }}</span>
+        <span v-if="conversation.unreadCount > 0" class="conv-row__badge">{{ conversation.unreadCount }}</span>
       </div>
     </div>
-  </div>
+  </button>
 </template>
 
 <script setup>
@@ -56,7 +56,6 @@ const displayName = computed(() => {
 });
 
 const phoneDisplay = computed(() => {
-  // Only show phone next to name if name is NOT the phone itself
   const phone = props.conversation.channelContactId || '';
   if (!phone) return '';
   if (displayName.value === phone) return '';
@@ -104,3 +103,119 @@ const timeAgo = computed(() => {
   return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 });
 </script>
+
+<style scoped>
+.conv-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 11px 16px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid #f0f2f5;
+  cursor: pointer;
+  transition: background .1s;
+}
+.conv-row:hover { background: #f6f7f9; }
+.conv-row:active { background: #eef0f3; }
+
+.conv-row--active {
+  background: rgba(137, 209, 54, 0.10);
+  border-left-color: var(--success, #89D136);
+}
+.conv-row--active:hover { background: rgba(137, 209, 54, 0.14); }
+
+.conv-row__avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.conv-row__avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.conv-row__channel {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff;
+  box-sizing: content-box;
+}
+.conv-row__channel :deep(i) { font-size: 0.6rem; }
+
+.conv-row__body {
+  flex: 1;
+  min-width: 0;
+}
+.conv-row__top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.conv-row__name {
+  font-weight: 600;
+  font-size: 0.91rem;
+  color: #1d2330;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.conv-row--unread .conv-row__name { font-weight: 700; }
+
+.conv-row__time {
+  font-size: 0.72rem;
+  color: #929aa8;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.conv-row__phone {
+  font-size: 0.72rem;
+  color: #929aa8;
+  margin: 1px 0 3px;
+  line-height: 1.1;
+}
+.conv-row__bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.conv-row__preview {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.81rem;
+  color: #5a6373;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.conv-row--unread .conv-row__preview {
+  color: #1d2330;
+  font-weight: 600;
+}
+.conv-row__badge {
+  flex-shrink: 0;
+  background: var(--success, #89D136);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+</style>

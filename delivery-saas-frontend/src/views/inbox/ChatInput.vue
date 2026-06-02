@@ -1,7 +1,7 @@
 <template>
-  <div class="border-top bg-white p-2" :class="{ 'bg-warning-subtle': inboxStore.internalMode }">
+  <div class="chat-input" :class="{ 'chat-input--internal': inboxStore.internalMode }">
     <!-- Reply preview -->
-    <div v-if="replyToMessage" class="d-flex align-items-center mb-2 p-2 bg-light rounded border-start border-3 border-primary">
+    <div v-if="replyToMessage" class="chat-input__reply">
       <div class="flex-grow-1 small">
         <div class="fw-semibold" style="font-size: 0.7rem;">Respondendo a {{ replyAuthorLabel }}</div>
         <div class="text-truncate text-muted">{{ replyPreview }}</div>
@@ -10,26 +10,28 @@
     </div>
 
     <!-- File preview -->
-    <div v-if="selectedFile" class="d-flex align-items-center gap-2 mb-2 p-2 bg-light rounded small">
+    <div v-if="selectedFile" class="chat-input__file">
       <i class="bi bi-file-earmark"></i>
       <span class="text-truncate">{{ selectedFile.name }}</span>
       <span v-if="compressing" class="text-muted">(comprimindo...)</span>
       <button class="btn btn-sm btn-close ms-auto" @click="clearFile"></button>
     </div>
 
-    <!-- Quick reply chips (filtradas pelo cardapio da conversa) -->
-    <div v-if="visibleQuickReplies.length && !inboxStore.internalMode && !disabled" class="d-flex gap-1 mb-2 overflow-auto pb-1" style="scrollbar-width: thin;">
+    <!-- Quick reply chips row (filtradas pelo cardapio da conversa) -->
+    <div
+      v-if="visibleQuickReplies.length && !inboxStore.internalMode && !disabled"
+      class="chat-input__qreplies qreplies"
+    >
       <button
         v-for="reply in visibleQuickReplies"
         :key="reply.id"
-        class="btn btn-sm btn-outline-secondary text-nowrap"
-        style="font-size: 0.75rem; flex-shrink: 0;"
+        class="qchip"
         :disabled="sending"
         :title="reply.body || reply.mediaFileName || reply.title"
         @click="sendQuickReply(reply)"
       >
-        <i class="bi" :class="reply.mediaUrl ? 'bi-paperclip' : 'bi-lightning-charge'"></i>
-        <span class="ms-1">{{ reply.title || reply.shortcut }}</span>
+        <i class="bi" :class="reply.mediaUrl ? 'bi-paperclip qchip__icon--accent' : 'bi-lightning-charge-fill qchip__icon--accent'"></i>
+        <span>{{ reply.title || reply.shortcut }}</span>
       </button>
     </div>
 
@@ -37,45 +39,53 @@
     <QuickReplyPicker v-if="showQuickReplies" :filter="quickReplyFilter" :replies="visibleQuickReplies" @select="onQuickReplySelect" />
 
     <!-- Input row -->
-    <div class="d-flex align-items-end gap-2">
+    <div class="chat-input__row">
       <!-- Internal mode toggle -->
       <button
-        class="btn btn-sm"
-        :class="inboxStore.internalMode ? 'btn-warning' : 'btn-light'"
+        class="chat-input__icon-btn"
+        :class="{ 'chat-input__icon-btn--active-warn': inboxStore.internalMode }"
         :title="inboxStore.internalMode ? 'Modo nota interna ativo' : 'Ativar nota interna'"
         :disabled="disabled"
         @click="inboxStore.toggleInternalMode()"
       >
-        <i class="bi bi-lock"></i>
+        <i class="bi bi-lock-fill"></i>
       </button>
 
       <!-- Attach -->
-      <button class="btn btn-sm btn-light" @click="triggerFileInput" :disabled="disabled || sending || inboxStore.internalMode">
-        <i class="bi bi-paperclip" style="font-size: 1.2rem;"></i>
+      <button
+        class="chat-input__icon-btn"
+        :disabled="disabled || sending || inboxStore.internalMode"
+        title="Anexar arquivo"
+        @click="triggerFileInput"
+      >
+        <i class="bi bi-paperclip"></i>
       </button>
       <input ref="fileInput" type="file" class="d-none" accept="image/*,.pdf,.doc,.docx" @change="onFileSelected" />
 
-      <!-- Textarea -->
-      <textarea
-        ref="textareaRef"
-        v-model="text"
-        class="form-control form-control-sm"
-        rows="1"
-        :placeholder="disabled ? 'Envio livre indisponível para esta conversa' : (inboxStore.internalMode ? 'Escrever nota interna (não enviada ao cliente)...' : 'Digite uma mensagem...')"
-        style="max-height: 120px; resize: none;"
-        :disabled="disabled"
-        @keydown="onKeydown"
-        @input="autoResize"
-        @paste="onPaste"
-      ></textarea>
+      <!-- Pill textarea -->
+      <div class="chat-input__pill">
+        <textarea
+          ref="textareaRef"
+          v-model="text"
+          rows="1"
+          :placeholder="disabled ? 'Envio livre indisponível para esta conversa' : (inboxStore.internalMode ? 'Escrever nota interna (não enviada ao cliente)…' : 'Digite uma mensagem…')"
+          :disabled="disabled"
+          @keydown="onKeydown"
+          @input="autoResize"
+          @paste="onPaste"
+        ></textarea>
+      </div>
 
-      <!-- Send -->
-      <button class="btn btn-sm" :class="inboxStore.internalMode ? 'btn-warning' : 'btn-success'"
+      <!-- Send (circular) -->
+      <button
+        class="chat-input__send"
+        :class="{ 'chat-input__send--warn': inboxStore.internalMode }"
         :disabled="disabled || (!text.trim() && !selectedFile) || sending"
+        :title="inboxStore.internalMode ? 'Salvar nota interna' : 'Enviar mensagem'"
         @click="send"
       >
         <i v-if="sending" class="bi bi-arrow-repeat spin"></i>
-        <i v-else class="bi" :class="inboxStore.internalMode ? 'bi-lock-fill' : 'bi-send'"></i>
+        <i v-else class="bi" :class="inboxStore.internalMode ? 'bi-lock-fill' : 'bi-send-fill'"></i>
       </button>
     </div>
   </div>
@@ -105,10 +115,6 @@ const showQuickReplies = computed(() => text.value.startsWith('/') && text.value
 const quickReplyFilter = computed(() => text.value.slice(1));
 const quickReplies = computed(() => inboxStore.quickReplies || []);
 
-// Filtra pelo cardápio da conversa ativa:
-//  - reply.menus vazio = global → sempre visível
-//  - reply.menus.length > 0 → só visível se o menuId da conversa estiver na lista
-//  - conversa sem menuId → só mostra os globais (não dá pra inferir escopo)
 const visibleQuickReplies = computed(() => {
   const conv = inboxStore.activeConversation;
   const menuId = conv?.menuId || conv?.menu?.id || null;
@@ -168,14 +174,12 @@ function clearFile() {
 }
 
 function onQuickReplySelect(reply) {
-  // If the quick reply has media, send it directly (media can't be previewed in textarea)
   if (reply.mediaUrl) {
     text.value = '';
     nextTick(() => autoResize());
     sendQuickReply(reply);
     return;
   }
-  // Text-only: fill the input so the operator can edit before sending
   text.value = reply.body || '';
   nextTick(() => autoResize());
 }
@@ -237,7 +241,6 @@ async function send() {
     nextTick(() => autoResize());
   } catch (err) {
     console.error('Failed to send', err);
-    // Surface a real mensagem do backend (Meta WA window, token expirado, etc.)
     const detail = err?.response?.data?.message
       || err?.message
       || 'Não foi possível enviar a mensagem.';
@@ -264,7 +267,6 @@ async function sendQuickReply(reply) {
   }
 }
 
-// Listen for files dropped on ChatPanel
 function onDropFile(e) {
   if (e.detail) setFile(e.detail);
 }
@@ -274,6 +276,148 @@ onUnmounted(() => window.removeEventListener('inbox-drop-file', onDropFile));
 </script>
 
 <style scoped>
+.chat-input {
+  background: #fff;
+  border-top: 1px solid #e9ecf1;
+  padding: 0 0 10px;
+  flex-shrink: 0;
+}
+.chat-input--internal { background: #fff8e1; }
+
+.chat-input__reply,
+.chat-input__file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin: 8px 18px 0;
+  background: #f4f5f7;
+  border-radius: 8px;
+  border-left: 3px solid var(--primary, #105784);
+}
+.chat-input__file { border-left-color: #929aa8; }
+
+/* ── Quick replies row (horizontal scroll with slim visible scrollbar) ── */
+.chat-input__qreplies {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 10px 18px 8px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cfd5dd transparent;
+}
+.chat-input__qreplies::-webkit-scrollbar { height: 6px; }
+.chat-input__qreplies::-webkit-scrollbar-thumb {
+  background: #cfd5dd;
+  border-radius: 3px;
+}
+
+.qchip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid #e9ecf1;
+  border-radius: 17px;
+  background: #fff;
+  color: #3a4150;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .1s;
+}
+.qchip:hover { background: #f3f5f7; }
+.qchip:disabled { opacity: 0.5; cursor: default; }
+.qchip__icon--accent { color: #f3a712; font-size: 0.85rem; }
+
+/* ── Input row ── */
+.chat-input__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 18px 0;
+}
+
+.chat-input__icon-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  color: #5a6373;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background .12s;
+}
+.chat-input__icon-btn:hover:not(:disabled) { background: #f0f2f5; }
+.chat-input__icon-btn:disabled { opacity: 0.5; cursor: default; }
+.chat-input__icon-btn--active-warn {
+  background: #fff3c2;
+  color: #b6850b;
+}
+
+.chat-input__pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  background: #f4f5f7;
+  border-radius: 22px;
+}
+.chat-input__pill textarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  font-size: 0.94rem;
+  color: #1d2330;
+  line-height: 1.4;
+  max-height: 120px;
+  padding: 0;
+}
+.chat-input__pill textarea::placeholder { color: #929aa8; }
+.chat-input--internal .chat-input__pill { background: #fff3c2; }
+
+.chat-input__send {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: var(--success, #89D136);
+  color: #fff;
+  font-size: 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(109, 174, 30, 0.35);
+  transition: background .12s, transform .08s;
+}
+.chat-input__send:hover:not(:disabled) { background: var(--success-dark, #6DAE1E); }
+.chat-input__send:active:not(:disabled) { transform: scale(0.96); }
+.chat-input__send:disabled {
+  background: #cfd5dd;
+  box-shadow: none;
+  cursor: default;
+}
+.chat-input__send--warn {
+  background: #f3a712;
+  box-shadow: 0 2px 6px rgba(243, 167, 18, 0.35);
+}
+.chat-input__send--warn:hover:not(:disabled) { background: #d28e08; }
+
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>

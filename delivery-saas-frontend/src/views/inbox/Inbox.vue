@@ -1,16 +1,15 @@
 <template>
-  <div class="d-flex h-100" style="overflow: hidden;">
-    <!-- List panel: 360px wide, hide on mobile when chat is active -->
+  <div class="inbox-shell">
+    <!-- List panel: 340px wide, hide on mobile when chat is active -->
     <div
-      class="border-end bg-white d-flex flex-column"
+      class="inbox-shell__sidebar"
       :class="{ 'd-none d-md-flex': inboxStore.activeConversationId }"
-      style="width: 360px; min-width: 300px; flex-shrink: 0; min-height: 0;"
     >
       <ConversationList @select="selectConversation" />
     </div>
     <!-- Chat + contact panel (shown when conversation selected) -->
     <template v-if="inboxStore.activeConversationId">
-      <div class="flex-grow-1 d-flex flex-column" :key="'chat-' + inboxStore.activeConversationId">
+      <div class="inbox-shell__chat" :key="'chat-' + inboxStore.activeConversationId">
         <ChatPanel
           :conversation-id="inboxStore.activeConversationId"
           @back="inboxStore.activeConversationId = null"
@@ -19,8 +18,7 @@
       </div>
       <div
         v-if="showContactPanel"
-        class="border-start d-none d-md-flex flex-column"
-        style="width: 350px; min-width: 320px; flex-shrink: 0;"
+        class="inbox-shell__contact d-none d-md-flex"
         :key="'contact-' + inboxStore.activeConversationId"
       >
         <ContactPanel :conversation-id="inboxStore.activeConversationId" />
@@ -28,10 +26,10 @@
     </template>
     <!-- Empty state on desktop (when no conversation selected) -->
     <template v-else>
-      <div class="flex-grow-1 d-none d-md-flex align-items-center justify-content-center text-muted">
+      <div class="inbox-shell__empty d-none d-md-flex">
         <div class="text-center">
-          <i class="bi bi-chat-left-dots" style="font-size: 3rem;"></i>
-          <p class="mt-2">Selecione uma conversa</p>
+          <i class="bi bi-chat-left-dots inbox-shell__empty-icon"></i>
+          <p class="mt-3 mb-0">Selecione uma conversa</p>
         </div>
       </div>
     </template>
@@ -219,4 +217,53 @@ onUnmounted(() => {
 <style scoped>
 /* Main content responsive padding */
 .main-content { padding:0 !important; }
+
+.inbox-shell {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: #f4f5f7;
+}
+
+.inbox-shell__sidebar {
+  width: 340px;
+  min-width: 300px;
+  flex-shrink: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #e9ecf1;
+}
+
+.inbox-shell__chat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.inbox-shell__contact {
+  width: 350px;
+  min-width: 320px;
+  flex-shrink: 0;
+  flex-direction: column;
+  background: #fff;
+  border-left: 1px solid #e9ecf1;
+}
+
+.inbox-shell__empty {
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: #929aa8;
+}
+.inbox-shell__empty-icon {
+  font-size: 3rem;
+  color: #cfd5dd;
+}
+
+@media (max-width: 767.98px) {
+  .inbox-shell__sidebar { width: 100%; min-width: 0; border-right: none; }
+}
 </style>
