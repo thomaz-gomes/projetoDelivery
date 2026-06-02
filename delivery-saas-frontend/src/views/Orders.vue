@@ -3566,8 +3566,15 @@ function pulseButton() {
         </button>
       </div>
 
-      <!-- Row 1: Entrega/Retirada toggles + Filtros collapse button (mobile only) -->
-      <div class="orders-toggle-row d-flex align-items-center gap-2 mb-2">
+      <!-- Single filter row: Entrega/Retirada toggles + rider/payment/Nº/name.
+           DOM order = toggles first (mobile needs them on top, then Filtros
+           button, then advanced fields below when expanded). On desktop the
+           toggles are pushed to the END of the row via CSS `order` so the
+           sequence reads: rider | payment | Nº | name | Entrega | Retirada. -->
+      <div
+        class="orders-filter-row d-flex flex-wrap align-items-center gap-2"
+        :class="{ 'orders-filter-row--expanded': showAdvancedFilters }"
+      >
         <button
           type="button"
           class="orders-toggle"
@@ -3588,7 +3595,7 @@ function pulseButton() {
           <i class="bi bi-bag orders-toggle__ic"></i>
           <span class="orders-toggle__label">Retirada</span>
         </button>
-        <div class="flex-grow-1"></div>
+        <div class="flex-grow-1 d-md-none orders-spacer"></div>
         <!-- Filtros (icon-only) — mobile collapse button -->
         <button
           type="button"
@@ -3602,41 +3609,30 @@ function pulseButton() {
           <span v-if="activeAdvancedFiltersCount" class="orders-filters-toggle__badge">{{ activeAdvancedFiltersCount }}</span>
           <i class="bi bi-chevron-down orders-filters-toggle__chev" :class="{ 'orders-filters-toggle__chev--open': showAdvancedFilters }"></i>
         </button>
-      </div>
 
-      <!-- Row 2: advanced filters — always shown on desktop, collapse on mobile -->
-      <div
-        class="orders-adv-filters d-flex align-items-center gap-2"
-        :class="{ 'd-none d-md-flex': !showAdvancedFilters }"
-      >
+        <!-- Advanced controls: hidden on mobile unless expanded.
+             Each one is wrapped in a div so we can flex-size them. -->
         <template v-if="ridersEnabled">
-        <SelectInput
-           v-model="selectedRider"
-          class="form-select form-select"
-          style="min-width: 200px;"
-        >
-          <option value="TODOS">Todos os entregadores</option>
-          <!-- normalize option values to strings to avoid type-mismatch when comparing ids -->
-          <option v-for="r in store.riders" :key="r.id" :value="String(r.id)">
-            {{ r.name }}
-          </option>
-        </SelectInput>
+          <div class="orders-adv-control">
+            <SelectInput v-model="selectedRider" class="form-select">
+              <option value="TODOS">Todos os entregadores</option>
+              <!-- normalize option values to strings to avoid type-mismatch when comparing ids -->
+              <option v-for="r in store.riders" :key="r.id" :value="String(r.id)">{{ r.name }}</option>
+            </SelectInput>
+          </div>
         </template>
-
-        <SelectInput
-          v-model="selectedPaymentMethod"
-          class="form-select form-select"
-          style="min-width: 180px;"
-        >
-          <option value="TODOS">Todas as formas</option>
-          <option v-for="pm in availablePaymentMethods" :key="pm" :value="pm">
-            {{ pm }}
-          </option>
-        </SelectInput>
-
-        <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control form-control" />
-        <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control form-control" />
-
+        <div class="orders-adv-control">
+          <SelectInput v-model="selectedPaymentMethod" class="form-select">
+            <option value="TODOS">Todas as formas</option>
+            <option v-for="pm in availablePaymentMethods" :key="pm" :value="pm">{{ pm }}</option>
+          </SelectInput>
+        </div>
+        <div class="orders-adv-control orders-adv-control--num">
+          <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control" />
+        </div>
+        <div class="orders-adv-control orders-adv-control--name">
+          <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control" />
+        </div>
       </div>
     </div>
 
@@ -4841,10 +4837,32 @@ button.btn.advance {
   box-shadow: 0 2px 6px rgba(137,209,54,0.30);
 }
 
-/* Toggle row — Entrega + Retirada + Filtros stay on a single line,
-   even on narrow phones. */
-.orders-toggle-row {
-  flex-wrap: nowrap !important;
+/* Single filter row: toggles + advanced inputs share one wrapping flex.
+   On desktop CSS `order` pushes the toggles to the END of the row.
+   On mobile the toggles stay on top (DOM order) and advanced inputs
+   stack vertically below — visible only when expanded. */
+.orders-filter-row > .orders-adv-control { flex: 1 1 180px; min-width: 0; }
+.orders-filter-row > .orders-adv-control--num { flex: 0 1 130px; }
+.orders-filter-row > .orders-adv-control--name { flex: 2 1 280px; } /* wider, grows 2x */
+.orders-filter-row > .orders-adv-control > div { width: 100%; } /* TextInput wrapper */
+
+@media (min-width: 769px) {
+  /* Push Entrega/Retirada to the end of the row */
+  .orders-filter-row > .orders-toggle { order: 10; }
+  /* The mobile spacer doesn't take any space on desktop */
+  .orders-filter-row > .orders-spacer { display: none !important; }
+}
+
+@media (max-width: 768px) {
+  /* Mobile: hide advanced controls unless the row is expanded */
+  .orders-filter-row:not(.orders-filter-row--expanded) > .orders-adv-control {
+    display: none !important;
+  }
+  /* Each advanced control takes full row width when shown */
+  .orders-filter-row > .orders-adv-control,
+  .orders-filter-row > .orders-adv-control--num,
+  .orders-filter-row > .orders-adv-control--name { flex: 1 1 100% !important; }
+  .orders-filter-row--expanded { row-gap: 8px !important; }
 }
 
 /* ── Entrega / Retirada toggle buttons (faithful to Chefiz FilterToggle) ── */
@@ -4942,14 +4960,9 @@ button.btn.advance {
 }
 .orders-filters-toggle__chev--open { transform: rotate(180deg); }
 
-/* Mobile: advanced filters become a stacked column when expanded */
+/* Tighten the Entrega/Retirada toggles on phones so they sit on the same
+   row as the Filtros button even on 360px viewports. */
 @media (max-width: 768px) {
-  .orders-adv-filters { flex-direction: column; align-items: stretch !important; gap: 8px !important; margin-top: 6px; }
-  .orders-adv-filters > * { width: 100%; }
-  .orders-adv-filters .form-select,
-  .orders-adv-filters .form-control { min-width: 0 !important; }
-  /* Tighten the Entrega/Retirada toggles on phones so they sit on the same
-     row as the Filtros button even on 360px viewports. */
   .orders-toggle { padding: 0 10px; gap: 6px; font-size: 0.8rem; }
   .orders-toggle__check { width: 18px; height: 18px; }
   .orders-toggle__ic { font-size: 0.9rem; }
@@ -5309,9 +5322,6 @@ button.btn.advance {
   .orders-column { min-width: 100% !important; flex: 1 1 100% !important; }
   /* Mobile bulk bar reserves room for the app's bottom nav, if present */
   .bulk-actions-bar { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0)) !important; }
-  /* Inputs in the row at the top get full width */
-  .container-fluid.p-4 .filters-bar .d-flex.align-items-center.gap-2 { flex-wrap: wrap; }
-  .container-fluid.p-4 .filters-bar .d-flex.align-items-center.gap-2 > * { min-width: calc(50% - 6px); }
 }
 
 </style>
