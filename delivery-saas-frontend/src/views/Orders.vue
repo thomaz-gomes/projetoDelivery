@@ -5219,15 +5219,29 @@ button.btn.advance {
   background: #f4f5f7;
   border-color: #cfd5dd;
 }
-/* keep the wider "Avançar" / "Pronto" buttons readable */
+/* keep the wider "Avançar" / "Pronto" / "Retirado" buttons readable
+   AND visually the same height — explicit min/max height + flex centering
+   so the bag-check vs arrow-right icons don't make one look taller. */
 .order-card .oc-actions .btn.advance,
 .order-card .oc-actions .btn-info,
 .order-card .oc-actions .btn-success.btn-sm:not([title="Imprimir cupom fiscal"]) {
   width: auto;
-  padding: 0 12px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 14px !important;
   font-size: 0.78rem !important;
   font-weight: 700 !important;
-  gap: 4px;
+  gap: 5px;
+  line-height: 1;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+.order-card .oc-actions .btn.advance i,
+.order-card .oc-actions .btn-info i,
+.order-card .oc-actions .btn-success.btn-sm:not([title="Imprimir cupom fiscal"]) i {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 .order-card .oc-actions .btn.advance {
   background: #89D136 !important;
