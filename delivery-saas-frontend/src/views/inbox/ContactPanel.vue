@@ -163,9 +163,21 @@
         <span>Desconto</span>
         <span>-{{ formatCurrency(cart.couponDiscount) }}</span>
       </div>
-      <div class="d-flex justify-content-between fw-semibold mb-3 pt-1" style="border-top:1px solid #dee2e6">
+      <div class="d-flex justify-content-between align-items-center fw-semibold mb-3 pt-1" style="border-top:1px solid #dee2e6">
         <span>Total</span>
-        <span>{{ formatCurrency(cart.totalWithDelivery) }}</span>
+        <div class="d-flex align-items-center gap-2">
+          <span>{{ formatCurrency(cart.totalWithDelivery) }}</span>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-success p-1"
+            :disabled="!cart.totalWithDelivery || sendingTotal"
+            @click="confirmSendTotal"
+            title="Enviar total ao cliente pelo WhatsApp"
+            style="line-height: 1;"
+          >
+            <i class="bi" :class="sendingTotal ? 'bi-hourglass-split' : 'bi-whatsapp'"></i>
+          </button>
+        </div>
       </div>
 
       <!-- Navigation -->
@@ -309,6 +321,82 @@ const cart = ref(emptyCart());
 
 function onCartUpdate(state) {
   cart.value = { ...cart.value, ...state };
+}
+
+// "Enviar total ao cliente" — abre confirmação com o breakdown do pedido
+// (subtotal, taxa de entrega, desconto, total) e ao confirmar dispara uma
+// mensagem de texto na conversa atual com o total + forma de pagamento.
+const sendingTotal = ref(false);
+
+function buildTotalMessageLines() {
+  const lines = [];
+  const greetingName = customerName.value ? customerName.value.split(' ')[0] : '';
+  lines.push(`Olá${greetingName ? ' ' + greetingName : ''}! Segue o total do seu pedido:`);
+  lines.push('');
+  lines.push(`Subtotal: ${formatCurrency(cart.value.subtotal)}`);
+  if (orderType.value === 'DELIVERY' && cart.value.deliveryFee) {
+    lines.push(`Taxa de entrega: ${formatCurrency(cart.value.deliveryFee)}`);
+  }
+  if (cart.value.couponApplied && cart.value.couponDiscount) {
+    lines.push(`Desconto: -${formatCurrency(cart.value.couponDiscount)}`);
+  }
+  lines.push(`*Total: ${formatCurrency(cart.value.totalWithDelivery)}*`);
+  if (cart.value.paymentMethodCode) {
+    lines.push('');
+    lines.push(`Forma de pagamento: ${cart.value.paymentMethodCode}`);
+  }
+  return lines;
+}
+
+async function confirmSendTotal() {
+  if (!props.conversationId) return;
+  if (!cart.value?.totalWithDelivery) {
+    Swal.fire({ icon: 'warning', text: 'Carrinho vazio — adicione produtos primeiro.' });
+    return;
+  }
+
+  const previewLines = buildTotalMessageLines();
+  // Renderização HTML do preview no Swal — escapa quebras e negrito visual
+  const previewHtml = previewLines
+    .map(l => l
+      .replace(/\*(.+?)\*/g, '<strong>$1</strong>')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;'))
+    .join('<br>');
+
+  const { isConfirmed } = await Swal.fire({
+    title: 'Enviar total ao cliente?',
+    html: `<div class="text-start small" style="font-family: monospace; white-space: pre-wrap;">${previewHtml}</div>`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Enviar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#198754',
+  });
+  if (!isConfirmed) return;
+
+  sendingTotal.value = true;
+  try {
+    // O texto enviado é o mesmo do preview (sem o HTML, com *negrito* literal
+    // que vira negrito no WhatsApp).
+    const body = buildTotalMessageLines().join('\n');
+    await inboxStore.sendMessage(props.conversationId, { type: 'TEXT', body });
+    Swal.fire({
+      icon: 'success',
+      title: 'Enviado',
+      timer: 1500,
+      showConfirmButton: false,
+      toast: true,
+      position: 'top-end',
+    });
+  } catch (e) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Erro ao enviar',
+      text: e?.response?.data?.message || e?.message || 'Falha desconhecida',
+    });
+  } finally {
+    sendingTotal.value = false;
+  }
 }
 
 // Can user proceed to next step?
