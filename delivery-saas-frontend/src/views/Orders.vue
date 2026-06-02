@@ -206,6 +206,18 @@ const searchOrderNumber = ref('');
 const searchCustomerName = ref('');
 const filterEntrega = ref(true);
 const filterRetirada = ref(true);
+// Collapsible advanced filters on mobile (Chefiz Pedidos Mobile pattern):
+// Entrega/Retirada toggles + the "Filtros" button stay visible; rider /
+// payment / Nº pedido / Nome cliente collapse behind it.
+const showAdvancedFilters = ref(false);
+const activeAdvancedFiltersCount = computed(() => {
+  let n = 0;
+  if (selectedRider.value && selectedRider.value !== 'TODOS') n++;
+  if (selectedPaymentMethod.value && selectedPaymentMethod.value !== 'TODOS') n++;
+  if (searchOrderNumber.value && searchOrderNumber.value.trim()) n++;
+  if (searchCustomerName.value && searchCustomerName.value.trim()) n++;
+  return n;
+});
 let audio = null;
 const now = ref(Date.now());
 // connection state for a dev-friendly badge (moved to module scope so computed can access it)
@@ -3537,7 +3549,7 @@ function pulseButton() {
             <h5 class="card-title mb-1">
              Procurar pedido
             </h5>
-            
+
           </div>
         </div>
   <!-- Filtros de status (visível apenas em dispositivos pequenos) -->
@@ -3554,11 +3566,52 @@ function pulseButton() {
         </button>
       </div>
 
-      <!-- Filtros adicionais -->
-      <div class="d-flex align-items-center gap-2">
+      <!-- Row 1: Entrega/Retirada toggles + Filtros collapse button (mobile only) -->
+      <div class="orders-toggle-row d-flex align-items-center gap-2 mb-2">
+        <button
+          type="button"
+          class="orders-toggle"
+          :class="{ 'orders-toggle--on': filterEntrega }"
+          @click="filterEntrega = !filterEntrega"
+        >
+          <span class="orders-toggle__check"><i v-if="filterEntrega" class="bi bi-check-lg"></i></span>
+          <i class="bi bi-bicycle orders-toggle__ic"></i>
+          <span class="orders-toggle__label">Entrega</span>
+        </button>
+        <button
+          type="button"
+          class="orders-toggle"
+          :class="{ 'orders-toggle--on': filterRetirada }"
+          @click="filterRetirada = !filterRetirada"
+        >
+          <span class="orders-toggle__check"><i v-if="filterRetirada" class="bi bi-check-lg"></i></span>
+          <i class="bi bi-bag orders-toggle__ic"></i>
+          <span class="orders-toggle__label">Retirada</span>
+        </button>
+        <div class="flex-grow-1"></div>
+        <!-- Filtros (icon-only) — mobile collapse button -->
+        <button
+          type="button"
+          class="orders-filters-toggle d-md-none"
+          :class="{ 'orders-filters-toggle--on': showAdvancedFilters || activeAdvancedFiltersCount }"
+          :aria-expanded="showAdvancedFilters"
+          title="Filtros avançados"
+          @click="showAdvancedFilters = !showAdvancedFilters"
+        >
+          <i class="bi bi-funnel"></i>
+          <span v-if="activeAdvancedFiltersCount" class="orders-filters-toggle__badge">{{ activeAdvancedFiltersCount }}</span>
+          <i class="bi bi-chevron-down orders-filters-toggle__chev" :class="{ 'orders-filters-toggle__chev--open': showAdvancedFilters }"></i>
+        </button>
+      </div>
+
+      <!-- Row 2: advanced filters — always shown on desktop, collapse on mobile -->
+      <div
+        class="orders-adv-filters d-flex align-items-center gap-2"
+        :class="{ 'd-none d-md-flex': !showAdvancedFilters }"
+      >
         <template v-if="ridersEnabled">
-        <SelectInput 
-           v-model="selectedRider" 
+        <SelectInput
+           v-model="selectedRider"
           class="form-select form-select"
           style="min-width: 200px;"
         >
@@ -3586,24 +3639,12 @@ function pulseButton() {
 
       </div>
     </div>
-    
+
           </div>
           </div>
-      
+
     </div>
-    <!-- 🔍 Filtros + Som -->
-    
-    <!-- Filtros por tipo de pedido -->
-    <div class="d-flex align-items-center gap-3 mb-3">
-      <label class="form-check form-check-inline d-flex align-items-center gap-1 mb-0" style="cursor:pointer">
-        <input type="checkbox" class="form-check-input" v-model="filterEntrega" />
-        <span class="form-check-label" style="font-size:0.85rem"><i class="bi bi-bicycle me-1"></i>Entrega</span>
-      </label>
-      <label class="form-check form-check-inline d-flex align-items-center gap-1 mb-0" style="cursor:pointer">
-        <input type="checkbox" class="form-check-input" v-model="filterRetirada" />
-        <span class="form-check-label" style="font-size:0.85rem"><i class="bi bi-bag me-1"></i>Retirada</span>
-      </label>
-    </div>
+    <!-- Filtros Entrega/Retirada agora vivem dentro do card "Procurar pedido" (acima) -->
 
     <!-- Pending acceptance box (iFood orders awaiting manual accept) -->
     <div v-if="pendingOrders.length > 0" class="pending-acceptance-box mb-3">
@@ -4800,50 +4841,106 @@ button.btn.advance {
   box-shadow: 0 2px 6px rgba(137,209,54,0.30);
 }
 
-/* ── Entrega / Retirada toggles (Chefiz checkbox+icon) ── */
-.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 {
-  background: #fff;
-  border: 1px solid #e9ecf1;
-  border-radius: 14px;
-  padding: 8px 14px;
-  margin-bottom: 14px !important;
-  gap: 10px !important;
-}
-.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check {
+/* ── Entrega / Retirada toggle buttons (faithful to Chefiz FilterToggle) ── */
+.orders-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 38px;
-  padding: 0 12px;
-  border: 1.5px solid #e9ecf1;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
   border-radius: 11px;
+  border: 1.5px solid #e9ecf1;
+  background: #fff;
+  color: #5a6373;
+  font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background .12s, border-color .12s;
+  transition: background .12s, border-color .12s, color .12s;
+  white-space: nowrap;
 }
-.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check:has(input:checked) {
+.orders-toggle:hover { background: #f4f5f7; }
+.orders-toggle--on {
   background: rgba(137,209,54,0.10);
   border-color: #89D136;
+  color: #5f7d10;
 }
-.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check-input {
-  width: 18px;
-  height: 18px;
-  margin: 0 !important;
-  border-radius: 5px;
-  border: 2px solid #cfd5dd;
-  cursor: pointer;
+.orders-toggle__check {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid #e9ecf1;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  transition: background .12s, border-color .12s;
 }
-.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check-input:checked {
-  background-color: #89D136;
+.orders-toggle--on .orders-toggle__check {
+  background: #89D136;
   border-color: #89D136;
 }
-.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check:has(input:checked) .form-check-label {
-  color: #5f7d10;
-  font-weight: 700;
-}
-.container-fluid.p-4 > .d-flex.align-items-center.gap-3.mb-3 .form-check-label {
+.orders-toggle__check i { line-height: 1; font-weight: 800; }
+.orders-toggle__ic {
+  font-size: 1rem;
   color: #5a6373;
-  font-weight: 600;
-  font-size: 0.84rem !important;
+  transition: color .12s;
+}
+.orders-toggle--on .orders-toggle__ic { color: #5f7d10; }
+.orders-toggle__label { line-height: 1; }
+
+/* ── "Filtros" collapse button (icon-only on mobile) ── */
+.orders-filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 11px;
+  border-radius: 11px;
+  border: 1.5px solid #e9ecf1;
+  background: #fff;
+  color: #5a6373;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.orders-filters-toggle:hover { background: #f4f5f7; }
+.orders-filters-toggle--on {
+  background: rgba(137,209,54,0.10);
+  border-color: #89D136;
+  color: #5f7d10;
+}
+.orders-filters-toggle > .bi-funnel { font-size: 1.05rem; line-height: 1; }
+.orders-filters-toggle__badge {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  padding: 0 5px;
+  background: #89D136;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.orders-filters-toggle__chev {
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: transform .15s ease;
+}
+.orders-filters-toggle__chev--open { transform: rotate(180deg); }
+
+/* Mobile: advanced filters become a stacked column when expanded */
+@media (max-width: 768px) {
+  .orders-adv-filters { flex-direction: column; align-items: stretch !important; gap: 8px !important; margin-top: 6px; }
+  .orders-adv-filters > * { width: 100%; }
+  .orders-adv-filters .form-select,
+  .orders-adv-filters .form-control { min-width: 0 !important; }
 }
 
 /* ── Kanban board ── */
