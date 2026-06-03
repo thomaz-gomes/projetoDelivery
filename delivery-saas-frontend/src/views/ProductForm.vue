@@ -272,11 +272,42 @@
 
           <div v-if="form.isCombo" :class="['tab-pane', activeTab === 'combo' ? 'show active' : '']" id="combo" role="tabpanel" aria-labelledby="tab-combo">
             <div class="mb-4">
+              <h6 class="text-uppercase text-muted small mb-2" style="letter-spacing:0.04em;">Formação de preço</h6>
+              <div class="d-flex flex-wrap gap-3 mb-3">
+                <label class="form-check d-flex align-items-start gap-2 combo-mode-card" :class="{ 'combo-mode-card--active': form.combo.pricingMode === 'FIXED' }">
+                  <input class="form-check-input mt-1" type="radio" name="comboPricingMode" value="FIXED" v-model="form.combo.pricingMode" />
+                  <span>
+                    <strong>Preço fixo</strong>
+                    <span class="d-block small text-muted">O cliente paga o "Preço do combo" definido abaixo, independente das escolhas. Valor declarado de cada slot é distribuído manualmente.</span>
+                  </span>
+                </label>
+                <label class="form-check d-flex align-items-start gap-2 combo-mode-card" :class="{ 'combo-mode-card--active': form.combo.pricingMode === 'VARIABLE' }">
+                  <input class="form-check-input mt-1" type="radio" name="comboPricingMode" value="VARIABLE" v-model="form.combo.pricingMode" />
+                  <span>
+                    <strong>Preço variável</strong>
+                    <span class="d-block small text-muted">O total cobrado vem da soma das escolhas. Um slot precisa ser marcado como <strong>âncora</strong> (preço fixo); os demais valores fiscais são distribuídos proporcionalmente na NF-e.</span>
+                  </span>
+                </label>
+              </div>
+
               <h6 class="text-uppercase text-muted small mb-2" style="letter-spacing:0.04em;">Precificação</h6>
               <div class="row g-3">
                 <div class="col-md-4">
-                  <CurrencyInput label="Preço do combo" labelClass="form-label" v-model="form.price" inputClass="form-control" placeholder="0,00" />
-                  <small class="text-muted">Valor fixo pago pelo cliente, independente das escolhas.</small>
+                  <CurrencyInput
+                    :label="form.combo.pricingMode === 'VARIABLE' ? 'Preço a partir de' : 'Preço do combo'"
+                    labelClass="form-label"
+                    v-model="form.price"
+                    inputClass="form-control"
+                    placeholder="0,00"
+                  />
+                  <small class="text-muted">
+                    <template v-if="form.combo.pricingMode === 'VARIABLE'">
+                      Exibido no menu como "a partir de". Não é cobrado; o cliente paga a soma das escolhas.
+                    </template>
+                    <template v-else>
+                      Valor fixo pago pelo cliente, independente das escolhas.
+                    </template>
+                  </small>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label d-block">Preço especial para o balcão</label>
@@ -302,7 +333,9 @@
                     Aplicado em pedidos do tipo <strong>balcão / retirada</strong>.
                   </div>
                 </div>
-                <div class="col-md-4">
+                <!-- Preço promocional só faz sentido em combo FIXED (em VARIABLE o cliente
+                     já paga a soma das escolhas, não há valor "cheio" pra dar desconto). -->
+                <div v-if="form.combo.pricingMode !== 'VARIABLE'" class="col-md-4">
                   <label class="form-label d-block">Preço promocional</label>
                   <div class="form-check form-switch mb-2">
                     <input
@@ -344,6 +377,7 @@
                 :company-id="companyId"
                 :exclude-product-id="id || null"
                 :preco-combo="Number(form.price || 0)"
+                :pricing-mode="form.combo.pricingMode"
               />
             </div>
           </div>
@@ -402,7 +436,7 @@ const router = useRouter()
 const id = route.params.id || null
 const isEdit = Boolean(id)
 
-const form = ref({ id: null, name: '', description: '', price: 0, specialTakeoutPriceEnabled: false, specialTakeoutPrice: 0, promoPriceEnabled: false, promoPrice: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, sku: '', marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [], isCombo: false, combo: { slots: [] } })
+const form = ref({ id: null, name: '', description: '', price: 0, specialTakeoutPriceEnabled: false, specialTakeoutPrice: 0, promoPriceEnabled: false, promoPrice: 0, position: 0, isActive: true, highlightOnSlip: false, image: null, optionGroupIds: [], categoryId: null, technicalSheetId: null, stockIngredientId: null, cashbackPercent: null, dadosFiscaisId: null, sku: '', marketplace: null, marketplaceCalc: null, alwaysAvailable: true, weeklySchedule: [], isCombo: false, combo: { pricingMode: 'FIXED', slots: [] } })
 
 const formatBRL = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n) || 0)
 const promoPriceValid = computed(() => {
@@ -432,7 +466,9 @@ const canGenerateDesc = computed(() => !!form.value.name?.trim() && !!form.value
 function chooseType(isCombo) {
   form.value.isCombo = !!isCombo
   if (form.value.isCombo && !form.value.combo) {
-    form.value.combo = { slots: [] }
+    form.value.combo = { pricingMode: 'FIXED', slots: [] }
+  } else if (form.value.isCombo && form.value.combo && !form.value.combo.pricingMode) {
+    form.value.combo.pricingMode = 'FIXED'
   }
   typeConfirmed.value = true
 }
@@ -499,11 +535,13 @@ async function load(){
           isCombo: !!p.isCombo,
           combo: p.combo && Array.isArray(p.combo.slots)
             ? {
+                pricingMode: p.combo.pricingMode === 'VARIABLE' ? 'VARIABLE' : 'FIXED',
                 slots: p.combo.slots.map(s => ({
                   name: s.name || '',
                   minSelect: typeof s.minSelect === 'number' ? s.minSelect : 1,
                   maxSelect: typeof s.maxSelect === 'number' ? s.maxSelect : 1,
                   vUnComDeclarado: s.vUnComDeclarado !== undefined && s.vUnComDeclarado !== null ? Number(s.vUnComDeclarado) : 0,
+                  isPriceAnchor: !!s.isPriceAnchor,
                   options: Array.isArray(s.options)
                     ? s.options.map(o => ({
                         linkedProductId: o.linkedProductId || '',
@@ -554,26 +592,44 @@ function cancel(){
 }
 
 function buildComboPayload() {
+  const mode = form.value.combo?.pricingMode === 'VARIABLE' ? 'VARIABLE' : 'FIXED'
   const slots = (form.value.combo?.slots || []).map(s => ({
     name: (s.name || '').trim(),
     minSelect: typeof s.minSelect === 'number' ? s.minSelect : 1,
     maxSelect: typeof s.maxSelect === 'number' ? s.maxSelect : 1,
     vUnComDeclarado: Number(s.vUnComDeclarado || 0),
+    // Only meaningful in VARIABLE mode; the backend ignores the flag in FIXED.
+    isPriceAnchor: mode === 'VARIABLE' ? !!s.isPriceAnchor : false,
     options: (s.options || []).map(o => ({
       linkedProductId: o.linkedProductId,
       integrationCode: o.integrationCode ? String(o.integrationCode).trim() : null,
     })),
   }))
-  return { slots }
+  return { pricingMode: mode, slots }
 }
 
 function validateCombo() {
   const slots = form.value.combo?.slots || []
+  const mode = form.value.combo?.pricingMode === 'VARIABLE' ? 'VARIABLE' : 'FIXED'
   if (slots.length === 0) return 'Combo precisa ter ao menos um slot.'
   const precoCombo = Number(form.value.price || 0)
+
+  // FIXED: precoCombo > 0 obrigatório (é o que o cliente paga).
+  // VARIABLE: precoCombo > 0 ainda exigido como "a partir de" exibido no menu.
   if (!Number.isFinite(precoCombo) || precoCombo <= 0) {
-    return 'Informe o preço do combo antes de validar os slots.'
+    return mode === 'VARIABLE'
+      ? 'Informe o "preço a partir de" do combo (exibido no menu como referência).'
+      : 'Informe o preço do combo antes de validar os slots.'
   }
+
+  // VARIABLE-specific structural rules
+  if (mode === 'VARIABLE') {
+    if (slots.length < 2) return 'Combo variável precisa de pelo menos 2 slots (1 âncora + 1 ou mais variáveis).'
+    const anchorCount = slots.filter(s => s.isPriceAnchor).length
+    if (anchorCount === 0) return 'Combo variável precisa de um slot marcado como âncora (preço fixo).'
+    if (anchorCount > 1) return 'Combo variável só pode ter UM slot âncora. Desmarque os demais.'
+  }
+
   let somaDeclarada = 0
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i]
@@ -584,20 +640,31 @@ function validateCombo() {
     if (!Number.isFinite(max) || max < 1) return `Slot ${i + 1}: máximo inválido.`
     if (max < min) return `Slot ${i + 1}: máximo deve ser >= mínimo.`
     const v = Number(s.vUnComDeclarado)
-    if (!Number.isFinite(v) || v <= 0) return `Slot ${i + 1}: informe o valor declarado.`
-    somaDeclarada += v
+    // In VARIABLE mode the anchor's vUnCom is required; non-anchor slots have
+    // their vUnCom computed at NF-e time (0 is acceptable as a sentinel).
+    const requireVUn = mode === 'FIXED' || (mode === 'VARIABLE' && s.isPriceAnchor)
+    if (requireVUn && (!Number.isFinite(v) || v <= 0)) {
+      return mode === 'VARIABLE' && s.isPriceAnchor
+        ? `Slot ${i + 1} (âncora): informe o valor fixo.`
+        : `Slot ${i + 1}: informe o valor declarado.`
+    }
+    if (requireVUn) somaDeclarada += v
     if (!Array.isArray(s.options) || s.options.length === 0) return `Slot ${i + 1} (${s.name}) sem opções.`
     for (let j = 0; j < s.options.length; j++) {
       const o = s.options[j]
       if (!o.linkedProductId) return `Slot ${i + 1} / opção ${j + 1}: selecione um produto.`
     }
   }
-  // soma dos valores declarados não pode ultrapassar o preço pago pelo cliente
-  // (a NFC-e não pode declarar mais do que entrou no caixa).
-  const somaArred = Math.round(somaDeclarada * 100) / 100
-  const precoArred = Math.round(precoCombo * 100) / 100
-  if (somaArred > precoArred) {
-    return `Soma dos valores declarados (R$ ${somaArred.toFixed(2)}) excede o preço do combo (R$ ${precoArred.toFixed(2)}).`
+
+  // FIXED mode: soma dos valores declarados não pode ultrapassar o preço cobrado
+  // (a NFC-e não pode declarar mais do que entrou no caixa). VARIABLE não rege
+  // por essa soma — cada pedido recalcula proporcionalmente o vUnCom.
+  if (mode === 'FIXED') {
+    const somaArred = Math.round(somaDeclarada * 100) / 100
+    const precoArred = Math.round(precoCombo * 100) / 100
+    if (somaArred > precoArred) {
+      return `Soma dos valores declarados (R$ ${somaArred.toFixed(2)}) excede o preço do combo (R$ ${precoArred.toFixed(2)}).`
+    }
   }
   return null
 }
@@ -677,6 +744,16 @@ onMounted(()=> load())
 watch(() => form.value.technicalSheetId, (v) => { if (v) form.value.stockIngredientId = null })
 watch(() => form.value.stockIngredientId, (v) => { if (v) form.value.technicalSheetId = null })
 
+// When switching to VARIABLE combo, promotional price stops applying — clear
+// it so we don't ship a stale promoPrice that the public menu would ignore
+// anyway (Phase A confirmed promo is only honored for FIXED combos).
+watch(() => form.value.combo?.pricingMode, (mode) => {
+  if (mode === 'VARIABLE' && form.value.isCombo) {
+    form.value.promoPriceEnabled = false
+    form.value.promoPrice = 0
+  }
+})
+
 watch(() => form.value.menuId, async (newMenuId, oldMenuId) => {
   if(newMenuId === oldMenuId) return
   await loadCategories()
@@ -712,6 +789,23 @@ const cmvPercent = computed(() => {
 </script>
 
 <style scoped>
+/* Combo pricing-mode picker (FIXED / VARIABLE) */
+.combo-mode-card {
+  flex: 1 1 320px;
+  min-width: 280px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border-color, #e6e6e6);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.combo-mode-card:hover { background: var(--bg-hover, #f0f0f0); }
+.combo-mode-card--active {
+  border-color: var(--primary, #105784);
+  background: rgba(16, 87, 132, 0.06);
+}
+
 .type-choice-card {
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
