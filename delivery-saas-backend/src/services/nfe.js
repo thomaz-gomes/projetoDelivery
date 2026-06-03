@@ -4,6 +4,7 @@ import path from 'path'
 import fs from 'fs'
 import { createRequire } from 'module'
 import { decryptText } from '../utils/secretStore.js'
+import { rateioCombo } from '../utils/comboRateio.js'
 
 const require = createRequire(import.meta.url)
 const nfeModule = require('../../nfe-module/dist/index.js')
@@ -626,12 +627,29 @@ export async function emitNfeFromOrder(orderId) {
 
   const tpAmb = fiscalConfig.nfeEnvironment === 'production' ? '1' : '2'
 
-  // Load fiscal data for each product (with category as fallback)
-  const productIds = order.items.filter(i => i.productId).map(i => i.productId)
+  // Load fiscal data for each product referenced anywhere in the order — both
+  // top-level items AND any productId referenced by combo_slot/addon options.
+  // The combo expansion uses linked-product price (VARIABLE combos) and linked
+  // product dadosFiscais (every combo), so they must be in the productMap too.
+  // The `combo.slots` include is harmless for non-combo products (returns null)
+  // but lets the VARIABLE-mode rateio look up isPriceAnchor + vUnComDeclarado.
+  const productIdSet = new Set()
+  for (const item of order.items) {
+    if (item.productId) productIdSet.add(item.productId)
+    const opts = Array.isArray(item.options) ? item.options : []
+    for (const opt of opts) {
+      if (opt?.productId) productIdSet.add(opt.productId)
+    }
+  }
+  const productIds = Array.from(productIdSet)
   const products = productIds.length
     ? await prisma.product.findMany({
         where: { id: { in: productIds } },
-        include: { dadosFiscais: true, category: { include: { dadosFiscais: true } } }
+        include: {
+          dadosFiscais: true,
+          category: { include: { dadosFiscais: true } },
+          combo: { include: { slots: true } },
+        }
       })
     : []
   const productMap = new Map(products.map(p => [p.id, p]))
@@ -757,8 +775,90 @@ export async function emitNfeFromOrder(orderId) {
     const fiscal = mergeFiscal(prod?.dadosFiscais, prod?.category?.dadosFiscais)
     const qty = Number(item.quantity) || 0
     const basePrice = Number(item.price) || 0
+    const allOptions = Array.isArray(item.options) ? item.options : []
 
-    const hasOptions = Array.isArray(item.options) && item.options.length > 0
+    // ── Combo expansion (Phase E) ──────────────────────────────────────────
+    // When the OrderItem is a combo with combo_slot entries, the parent
+    // <det> is suppressed and each slot becomes its own <det> with vUnCom
+    // distributed proportionally. FIXED combos use each slot's declared
+    // vUnComDeclarado as the rateio reference; VARIABLE combos pin the
+    // anchor slot to anchor.vUnComDeclarado and use the chosen options'
+    // linkedProduct.price for the rest.
+    if (prod?.isCombo === true) {
+      const slots = allOptions.filter((o) => o.kind === 'combo_slot')
+      const addons = allOptions.filter((o) => o.kind === 'addon' || !o.kind)
+      if (slots.length > 0) {
+        const pricingMode = prod?.combo?.pricingMode || 'FIXED'
+        const comboSlots = prod?.combo?.slots || []
+        const anchorSlot = pricingMode === 'VARIABLE'
+          ? comboSlots.find((s) => s.isPriceAnchor)
+          : null
+
+        let slotsForRateio
+        if (anchorSlot) {
+          const anchorEntries = slots.filter((s) => s.slotId === anchorSlot.id)
+          const anchorPerEntry = anchorEntries.length > 0
+            ? Number(anchorSlot.vUnComDeclarado || 0) / anchorEntries.length
+            : 0
+          slotsForRateio = slots.map((s) => {
+            if (s.slotId === anchorSlot.id) {
+              return { id: s.optionId || s.productId, vUnComReferencia: anchorPerEntry }
+            }
+            const linkedProd = s.productId ? productMap.get(s.productId) : null
+            return { id: s.optionId || s.productId, vUnComReferencia: Number(linkedProd?.price || 0) }
+          })
+        } else {
+          slotsForRateio = slots.map((s) => ({
+            id: s.optionId || s.productId,
+            vUnComReferencia: Number(s.vUnComDeclarado ?? s.vUnComReferencia) || 0,
+          }))
+        }
+
+        const rateios = rateioCombo({
+          precoCombo: basePrice,
+          slots: slotsForRateio,
+          quantity: qty || 1,
+        })
+
+        slots.forEach((slot, sIdx) => {
+          const r = rateios[sIdx]
+          const linkedProd = slot.productId ? productMap.get(slot.productId) : null
+          const linkedFiscal = mergeFiscal(linkedProd?.dadosFiscais, linkedProd?.category?.dadosFiscais)
+          const line = buildLine({
+            name: slot.name || linkedProd?.name || 'Item do combo',
+            qty: r.qCom,
+            unitPrice: r.vUnCom,
+            prod: linkedProd,
+            fiscal: linkedFiscal,
+            idxFallback: det.length + 1,
+          })
+          // Pin vProd to the rateio result so rounding tail lands cleanly.
+          line.prod.vProd = Number(r.vProd).toFixed(2)
+          det.push(line)
+        })
+
+        for (const opt of addons) {
+          const optQtyPerParent = Number(opt.quantity ?? opt.qty ?? 1) || 1
+          const optTotalQty = optQtyPerParent * (qty || 1)
+          const optPrice = Number(opt.price) || 0
+          if (optTotalQty <= 0 || optPrice <= 0) continue
+          const linkedProd = opt.productId ? productMap.get(opt.productId) : prod
+          const linkedFiscal = mergeFiscal(linkedProd?.dadosFiscais, linkedProd?.category?.dadosFiscais)
+          det.push(buildLine({
+            name: opt.name || 'Adicional',
+            qty: optTotalQty,
+            unitPrice: optPrice,
+            prod: linkedProd,
+            fiscal: linkedFiscal,
+            idxFallback: det.length + 1,
+          }))
+        }
+        return // skip the legacy guarda-chuva + options loop for this item.
+      }
+      // Combo without combo_slot entries falls through to legacy behavior.
+    }
+
+    const hasOptions = allOptions.length > 0
     // Produtos "guarda-chuva" (ex. categoria "Refrigerantes" com base R$ 0,01
     // usada só para satisfazer o vUnCom>0 da SEFAZ) são suprimidos quando há
     // opcionais — o que o cliente realmente comprou serão as próximas linhas.
