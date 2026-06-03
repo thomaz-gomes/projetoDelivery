@@ -184,7 +184,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                     include: {
                       options: {
                         include: {
-                          linkedProduct: { select: { id: true, name: true, price: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
+                          linkedProduct: { select: { id: true, name: true, price: true, image: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                         },
                         orderBy: { position: 'asc' }
                       }
@@ -227,7 +227,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                     include: {
                       options: {
                         include: {
-                          linkedProduct: { select: { id: true, name: true, price: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
+                          linkedProduct: { select: { id: true, name: true, price: true, image: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                         },
                         orderBy: { position: 'asc' }
                       }
@@ -327,7 +327,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                               include: {
                                 options: {
                                   include: {
-                                    linkedProduct: { select: { id: true, name: true, price: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
+                                    linkedProduct: { select: { id: true, name: true, price: true, image: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                                   },
                                   orderBy: { position: 'asc' }
                                 }
@@ -458,7 +458,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                   include: {
                     options: {
                       include: {
-                        linkedProduct: { select: { id: true, name: true, price: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
+                        linkedProduct: { select: { id: true, name: true, price: true, image: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                       },
                       orderBy: { position: 'asc' }
                     }
@@ -493,7 +493,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                   include: {
                     options: {
                       include: {
-                        linkedProduct: { select: { id: true, name: true, price: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
+                        linkedProduct: { select: { id: true, name: true, price: true, image: true, isActive: true, alwaysAvailable: true, weeklySchedule: true } }
                       },
                       orderBy: { position: 'asc' }
                     }

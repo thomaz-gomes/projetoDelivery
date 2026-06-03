@@ -453,6 +453,9 @@
                     <div v-for="opt in (slot.options || [])" :key="opt.id" class="mb-2">
                       <div class="d-flex justify-content-between align-items-center option-row">
                         <div class="d-flex align-items-center gap-2 option-left">
+                          <div v-if="opt.linkedProduct && opt.linkedProduct.image" class="option-thumb">
+                            <img :src="assetUrl(opt.linkedProduct.image)" :alt="opt.linkedProduct.name || 'Produto'" loading="lazy" />
+                          </div>
                           <div class="option-meta">
                             <div class="option-name">{{ opt.linkedProduct?.name || 'Opção' }}</div>
                             <small v-if="opt.linkedProduct && opt.linkedProduct.isActive === false" class="text-danger">Indisponível</small>
@@ -7170,6 +7173,25 @@ body { padding-bottom: 110px; }
 /* ===== Edit cart item button ===== */
 .btn-edit-item { display: inline-flex; align-items: center; gap: 2px; background: none; border: none; padding: 2px 4px; font-size: 11px; color: var(--pm-text-muted); cursor: pointer; border-radius: 6px; line-height: 1; flex-shrink: 0; }
 .btn-edit-item:hover { color: var(--brand, #105784); background: rgba(0,0,0,0.04); }
+
+/* ===== Combo option thumbnail (linked product photo) ===== */
+.option-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--pm-surface-alt, #f4f5f7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.option-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 
 /* ===== Combo fixed-N slot — quantity stepper ===== */
 .qty-stepper {
