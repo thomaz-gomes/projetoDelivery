@@ -1401,15 +1401,33 @@ model Product {
   @@index([companyId, name], name: "company_product_name_idx")
 }
 
+// Pricing mode for combo products.
+//   FIXED     — Combo has a fixed Product.price; each slot's vUnComDeclarado
+//               is set manually and their sum must equal Product.price.
+//   VARIABLE  — Combo total is computed from the customer's slot choices
+//               (sum of selected options' linkedProduct.price). Exactly one
+//               slot is marked isPriceAnchor=true; that slot's vUnComDeclarado
+//               is its fixed NF-e amount. The remaining slots' vUnCom values
+//               are distributed proportionally at order time to fit the
+//               actual paid total. Product.price stays as "a partir de R$ X"
+//               reference shown in the menu.
+enum ComboPricingMode {
+  FIXED
+  VARIABLE
+}
+
 model Combo {
-  id        String      @id @default(uuid())
-  productId String      @unique
-  product   Product     @relation(fields: [productId], references: [id])
-  companyId String
-  company   Company     @relation(fields: [companyId], references: [id])
-  slots     ComboSlot[]
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id          String            @id @default(uuid())
+  productId   String            @unique
+  product     Product           @relation(fields: [productId], references: [id])
+  companyId   String
+  company     Company           @relation(fields: [companyId], references: [id])
+  // FIXED is backward-compatible with all existing combos; VARIABLE opts
+  // into the new "sum of chosen items" pricing flow.
+  pricingMode ComboPricingMode  @default(FIXED)
+  slots       ComboSlot[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   @@index([companyId])
 }
@@ -1423,8 +1441,15 @@ model ComboSlot {
   maxSelect       Int               @default(1)
   position        Int               @default(0)
   // Valor declarado (vUnCom) que cada componente deste slot terá na NFC-e.
-  // Aplicado igualmente a qualquer opção escolhida dentro deste slot.
+  // FIXED  combo: applied to every selected option in this slot.
+  // VARIABLE combo: only meaningful when isPriceAnchor=true — represents the
+  //   anchor slot's fixed price (cliente paga este valor + soma dos demais
+  //   itens; na NF-e este valor é vUnCom do slot âncora).
   vUnComDeclarado Decimal
+  // Marks the unique anchor slot of a VARIABLE combo. Exactly one ComboSlot
+  // per Combo must have isPriceAnchor=true when its parent Combo.pricingMode
+  // is VARIABLE; enforced server-side, not at the database layer.
+  isPriceAnchor   Boolean           @default(false)
   options         ComboSlotOption[]
 
   @@index([comboId])
