@@ -693,7 +693,15 @@ onMounted(async () => {
   } catch (e) {}
   // listen to resize to update mobile flag
   try {
-    resizeHandler = () => { isMobile.value = window.innerWidth < 768 };
+    resizeHandler = () => {
+      const wasMobile = isMobile.value;
+      isMobile.value = window.innerWidth < 768;
+      // Re-init Sortable when crossing the breakpoint so drag-and-drop
+      // turns on/off correctly (disabled on mobile, enabled on desktop).
+      if (wasMobile !== isMobile.value) {
+        nextTick(() => initDragAndDrop()).catch(() => {});
+      }
+    };
     window.addEventListener('resize', resizeHandler);
   } catch (e) {}
   // inicia atualização de tempo para durações
@@ -2876,6 +2884,11 @@ function initDragAndDrop(){
   // remove any existing instances
   for (const s of sortableInstances) try { s.destroy() } catch(e) {}
   sortableInstances.length = 0;
+
+  // No drag-and-drop on mobile — touch users move orders via the per-card
+  // "Avançar" / "Pronto" / "Retirado" buttons. Avoids accidental drags
+  // while scrolling the kanban tabs.
+  if (isMobile.value) return;
 
   const groups = document.querySelectorAll('.orders-column .list');
   groups.forEach((el) => {
