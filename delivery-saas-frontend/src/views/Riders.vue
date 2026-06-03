@@ -101,6 +101,83 @@ const remove = async (r) => {
   try{ await api.delete(`/riders/${r.id}`); await load(); Swal.fire({ icon:'success', text:'Entregador removido' }) }catch(e){ console.error(e); Swal.fire({ icon:'error', text: e.response?.data?.message || 'Erro ao remover' }) }
 }
 
+// Lançar check-in manual a partir da listagem. Fluxo idêntico ao da tela
+// /reports/rider-checkins (mesmos endpoints), só que disparado por rider
+// individual sem precisar mudar de página.
+const manualCheckin = async (r) => {
+  if (!r || !r.id) return
+  // Busca os turnos do entregador. Se nenhum estiver cadastrado, avisa pra
+  // configurar em Settings → Turnos antes de tentar lançar.
+  let shifts = []
+  try {
+    const { data } = await api.get(`/riders/${r.id}/shifts`)
+    shifts = (Array.isArray(data) ? data : []).filter(s => s.active !== false)
+  } catch (e) { console.error('loadRiderShifts failed', e) }
+  if (!shifts.length) {
+    await Swal.fire({
+      icon: 'warning',
+      title: 'Sem turnos cadastrados',
+      html: 'Esse entregador não tem turnos atribuídos. Configure em <strong>Configurações → Turnos</strong> antes de lançar um check-in manual.',
+    })
+    return
+  }
+  const optionsHtml = shifts
+    .map(s => `<option value="${s.id}">${escapeHtmlForSwal(s.name)} (${s.startTime} – ${s.endTime})</option>`)
+    .join('')
+  const { value } = await Swal.fire({
+    title: `Check-in manual — ${r.name}`,
+    html: `
+      <div class="text-start">
+        <label class="form-label small fw-semibold">Turno *</label>
+        <select id="swal-shift" class="form-select">${optionsHtml}</select>
+        <label class="form-label small fw-semibold mt-3">Observação (opcional)</label>
+        <input id="swal-note" type="text" class="form-control" maxlength="200" placeholder="Ex: motoboy sem internet" />
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: 'Lançar check-in',
+    cancelButtonText: 'Cancelar',
+    focusConfirm: false,
+    didOpen: () => {
+      // Pre-select the single shift when there's only one — same behavior as
+      // RiderCheckins.vue's modal.
+      const sel = document.getElementById('swal-shift')
+      if (sel && shifts.length === 1) sel.value = shifts[0].id
+    },
+    preConfirm: () => {
+      const sel = document.getElementById('swal-shift')
+      const note = document.getElementById('swal-note')
+      const shiftId = sel ? sel.value : ''
+      if (!shiftId) { Swal.showValidationMessage('Selecione um turno'); return false }
+      return { shiftId, note: note ? note.value.trim() : '' }
+    },
+  })
+  if (!value) return
+  try {
+    await api.post(`/riders/${r.id}/manual-checkin`, {
+      shiftId: value.shiftId,
+      note: value.note || undefined,
+    })
+    Swal.fire({
+      icon: 'success',
+      title: 'Check-in lançado',
+      timer: 1500,
+      showConfirmButton: false,
+    })
+  } catch (e) {
+    console.error('manualCheckin failed', e)
+    Swal.fire({
+      icon: 'error',
+      text: e.response?.data?.message || 'Falha ao lançar check-in',
+    })
+  }
+}
+
+function escapeHtmlForSwal(s) {
+  if (s == null) return ''
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 const resetPassword = async (r) => {
   const { value: pw } = await Swal.fire({
     title: `Resetar senha - ${r.name}`,
@@ -233,6 +310,9 @@ const formatBalance = (id) => {
                   <div class="btn-group btn-group-sm" role="group">
                     <button class="btn btn-outline-secondary" @click="goAccount(r.id)" title="Conta / Extrato">
                       <i class="bi bi-wallet2"></i>
+                    </button>
+                    <button class="btn btn-outline-success" @click="manualCheckin(r)" title="Lançar check-in manual">
+                      <i class="bi bi-clipboard-check"></i>
                     </button>
                     <button class="btn btn-outline-primary" @click="goEdit(r.id)" title="Editar entregador">
                       <i class="bi bi-pencil-square"></i>
