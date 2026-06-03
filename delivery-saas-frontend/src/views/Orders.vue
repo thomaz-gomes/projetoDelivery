@@ -4689,53 +4689,160 @@ button.btn.advance {
   font-weight: 800 !important;
   letter-spacing: -0.4px;
   color: #1d2330;
+  position: relative;
+  padding-right: 22px; /* room for the lime status dot */
 }
-/* Lime status dot next to the title (uses existing socket badge slot) */
-.container-fluid.p-4 > header h2 .badge.bg-success {
-  width: 11px !important;
-  height: 11px !important;
-  border-radius: 50% !important;
-  background: #89D136 !important;
+/* Always-visible lime status dot to the right of "Pedidos" */
+.container-fluid.p-4 > header h2::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #89D136;
   box-shadow: 0 0 0 4px rgba(137,209,54,0.22);
-  border: none !important;
-  right: -16px !important;
-  bottom: 6px !important;
 }
+/* Hide the legacy conditional socket badge — the ::after dot replaces it */
+.container-fluid.p-4 > header h2 .badge { display: none !important; }
 
-/* Sound + printer buttons styled as Chefiz pills */
+/* ── Header buttons (faithful to Chefiz Pedidos top bar) ── */
 .container-fluid.p-4 > header .btn-sm {
   height: 40px;
   border-radius: 11px;
   font-weight: 600;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.container-fluid.p-4 > header .btn-outline-primary,
-.container-fluid.p-4 > header .btn-primary {
-  background: #fff;
+
+/* Sound button (icon-only, square 40x40) — filled green when ON,
+   tinted green when OFF. Identified by its title attribute. */
+.container-fluid.p-4 > header button[title="Som de novos pedidos"] {
+  width: 40px;
+  height: 40px;
+  padding: 0 !important;
+  justify-content: center;
+}
+.container-fluid.p-4 > header button[title="Som de novos pedidos"].btn-primary {
+  background: #2e8c5a !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(46,140,90,0.30);
+}
+.container-fluid.p-4 > header button[title="Som de novos pedidos"].btn-primary i {
+  color: #fff !important;
+  font-size: 1.05rem;
+}
+.container-fluid.p-4 > header button[title="Som de novos pedidos"].btn-outline-secondary {
+  background: rgba(46,140,90,0.10) !important;
+  border: none !important;
+  color: #2e8c5a !important;
+}
+.container-fluid.p-4 > header button[title="Som de novos pedidos"].btn-outline-secondary i {
+  color: #2e8c5a !important;
+  font-size: 1.05rem;
+}
+
+/* Impressora pill — white with inline lime dot + "Conectada" green text */
+.container-fluid.p-4 > header button[title="Configurar impressora"] {
+  background: #fff !important;
   border: 1px solid #e9ecf1 !important;
   color: #5a6373 !important;
 }
-.container-fluid.p-4 > header .btn-primary {
-  color: #2e8c5a !important;
+.container-fluid.p-4 > header button[title="Configurar impressora"] i.bi-printer {
+  color: #5a6373 !important;
+  font-size: 1rem;
 }
-.container-fluid.p-4 > header .btn-primary .badge.bg-success {
+.container-fluid.p-4 > header button[title="Configurar impressora"] .badge.bg-success {
   background: transparent !important;
   color: #2e8c5a !important;
   padding: 0 !important;
-  margin-left: 6px;
-  font-size: 0.72rem !important;
+  margin-left: 8px !important;
+  font-size: 0.78rem !important;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.container-fluid.p-4 > header .btn-primary .badge.bg-success::before {
+.container-fluid.p-4 > header button[title="Configurar impressora"] .badge.bg-success::before {
   content: '';
   display: inline-block;
   width: 8px; height: 8px;
-  margin-right: 6px;
   border-radius: 50%;
   background: #2e8c5a;
   box-shadow: 0 0 0 3px rgba(46,140,90,0.18);
   vertical-align: middle;
+}
+
+/* Test print button — clean white pill */
+.container-fluid.p-4 > header button[title="Enviar comanda de teste"] {
+  background: #fff !important;
+  border: 1px solid #e9ecf1 !important;
+  color: #5a6373 !important;
+}
+.container-fluid.p-4 > header button[title="Enviar comanda de teste"] i {
+  color: #5a6373 !important;
+  font-size: 1rem;
+}
+
+/* ── CashControl (Caixa) — solid green Chefiz pill ──
+   :deep() reaches into the child component's scoped subtree. */
+.container-fluid.p-4 > header :deep(.cash-control) {
+  margin-left: 0 !important;
+}
+.container-fluid.p-4 > header :deep(.cash-control .btn) {
+  height: 40px !important;
+  padding: 0 14px !important;
+  border-radius: 11px !important;
+  font-weight: 700 !important;
+  font-size: 0.85rem !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+}
+.container-fluid.p-4 > header :deep(.cash-control .btn-secondary) {
+  background: #2e8c5a !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(46,140,90,0.30);
+}
+.container-fluid.p-4 > header :deep(.cash-control .btn-secondary i) {
+  color: #fff !important;
+  font-size: 1rem;
+}
+.container-fluid.p-4 > header :deep(.cash-control .btn-secondary .badge.bg-success) {
+  background: transparent !important;
+  color: #fff !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-weight: 800 !important;
+  font-size: 0.9rem !important;
+}
+.container-fluid.p-4 > header :deep(.cash-control .btn-secondary small.text-muted) {
+  color: rgba(255,255,255,0.85) !important;
+  font-weight: 600 !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.3px;
+  margin-left: 4px !important;
+}
+.container-fluid.p-4 > header :deep(.cash-control .btn-secondary::after) {
+  content: '\F282';
+  font-family: 'bootstrap-icons';
+  font-size: 0.95rem;
+  color: #fff;
+  margin-left: 2px;
+  line-height: 1;
+}
+/* "Abrir Caixa" — outline green when no session active */
+.container-fluid.p-4 > header :deep(.cash-control .btn-outline-secondary) {
+  background: #fff !important;
+  border: 1.5px solid #2e8c5a !important;
+  color: #2e8c5a !important;
 }
 
 /* ── Novo Pedido + Procurar pedido cards (compact Chefiz cards) ── */
