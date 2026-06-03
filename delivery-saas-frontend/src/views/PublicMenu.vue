@@ -207,7 +207,11 @@
               <div class="featured-card-name">{{ p.name }}</div>
               <div class="featured-card-footer">
                 <strong class="featured-card-price">
-                  <template v-if="isOnPromo(p)">
+                  <template v-if="isVariableCombo(p)">
+                    <small style="font-weight:500;font-size:0.7em;">A partir de</small>
+                    {{ formatCurrency(effectiveProductPrice(p)) }}
+                  </template>
+                  <template v-else-if="isOnPromo(p)">
                     <span class="price-old">{{ formatCurrency(Number(p.price || 0)) }}</span>
                     <span class="price-new">{{ formatCurrency(effectiveProductPrice(p)) }}</span>
                   </template>
@@ -269,7 +273,8 @@
                           <span>{{ getProductCashbackPercent(p) }}% cashback · {{ formatCurrency(effectiveProductPrice(p) * getProductCashbackPercent(p) / 100) }}</span>
                         </div>
                         <strong class="product-price">
-                          <span v-if="getStartingPrice(p) > effectiveProductPrice(p)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
+                          <span v-if="isVariableCombo(p)"><small>A partir de</small> {{ formatCurrency(effectiveProductPrice(p)) }}</span>
+                          <span v-else-if="getStartingPrice(p) > effectiveProductPrice(p)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
                           <template v-else-if="isOnPromo(p)">
                             <span class="price-old">{{ formatCurrency(Number(p.price || 0)) }}</span>
                             <span class="price-new">{{ formatCurrency(effectiveProductPrice(p)) }}</span>
@@ -402,7 +407,11 @@
                 <div class="modal-product-desc">{{ selectedProduct?.description }}</div>
                 <div class="d-flex align-items-center gap-3 mt-2">
                   <strong class="modal-product-price">
-                    <template v-if="isOnPromo(selectedProduct)">
+                    <template v-if="isVariableCombo(selectedProduct)">
+                      <small class="text-muted me-1" style="font-weight:500;font-size:0.8em;">A partir de</small>
+                      {{ formatCurrency(modalVariableTotal) }}
+                    </template>
+                    <template v-else-if="isOnPromo(selectedProduct)">
                       <span class="price-old">{{ formatCurrency(Number(selectedProduct.price || 0)) }}</span>
                       <span class="price-new">{{ formatCurrency(effectiveProductPrice(selectedProduct)) }}</span>
                     </template>
@@ -410,7 +419,7 @@
                   </strong>
                   <div v-if="getProductCashbackPercent(selectedProduct) > 0" class="cashback-pill">
                     <span class="cashback-coin">$</span>
-                    <span>{{ getProductCashbackPercent(selectedProduct) }}% cashback · {{ formatCurrency(effectiveProductPrice(selectedProduct) * getProductCashbackPercent(selectedProduct) / 100) }}</span>
+                    <span>{{ getProductCashbackPercent(selectedProduct) }}% cashback · {{ formatCurrency((isVariableCombo(selectedProduct) ? modalVariableTotal : effectiveProductPrice(selectedProduct)) * getProductCashbackPercent(selectedProduct) / 100) }}</span>
                   </div>
                 </div>
               </div>
@@ -2570,6 +2579,13 @@ const editingCartIndex = ref(-1)
 // combo product slot selections — map slotId -> optionId (string for radio/max=1) or array of optionIds (checkbox/max>1)
 const comboSelections = ref({})
 
+// Live total of the open VARIABLE combo modal; recomputes whenever the
+// customer picks/unpicks a slot option. Falls back to 0 outside a variable
+// combo context (caller already gates with isVariableCombo()).
+const modalVariableTotal = computed(() => {
+  return variableComboTotal(selectedProduct.value, comboSelections.value)
+})
+
 // Clear required warning for a combo slot when its selection changes.
 function onSlotChange(slot){
   try{
@@ -2959,6 +2975,37 @@ function effectiveProductPrice(p) {
   }
   return base
 }
+
+// ── Variable combo helpers ──
+// True when the product is a combo configured to compute its total from the
+// customer's slot choices (Phase B introduced pricingMode = VARIABLE).
+function isVariableCombo(p) {
+  return !!(p && p.isCombo && p.combo && p.combo.pricingMode === 'VARIABLE')
+}
+// Compute the running total of a variable combo from the current slot
+// selections: anchor slot contributes its fixed vUnComDeclarado; each non-
+// anchor slot contributes the sum of its selected options' linkedProduct
+// prices (price 0 when the linked product is missing).
+function variableComboTotal(p, selectionsMap) {
+  if (!isVariableCombo(p)) return 0
+  const slots = (p.combo && p.combo.slots) || []
+  let total = 0
+  for (const slot of slots) {
+    if (slot.isPriceAnchor) {
+      total += Number(slot.vUnComDeclarado || 0)
+      continue
+    }
+    const raw = selectionsMap ? selectionsMap[slot.id] : null
+    const ids = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : [])
+    for (const oid of ids) {
+      const opt = (slot.options || []).find(o => o.id === oid)
+      if (opt && opt.linkedProduct && opt.linkedProduct.price != null) {
+        total += Number(opt.linkedProduct.price || 0)
+      }
+    }
+  }
+  return total
+}
 // True when the product has a valid promo price AND that promo is the price
 // currently in effect (i.e. specialTakeoutPrice is not overriding it).
 function isOnPromo(p) {
@@ -3021,14 +3068,21 @@ function addToCartWithOptions(p, selections, qty=1, observation='', comboOptions
     }
   }
   const selectedOptions = [...(Array.isArray(comboOptions) ? comboOptions : []), ...addonOptions]
-  const unitPrice = effectiveProductPrice(p) + optionsTotal
+  // VARIABLE combo: the unit price is the sum of the customer's chosen items
+  // (anchor's fixed value + non-anchor selected linkedProduct prices) plus any
+  // addon group options. FIXED combos and regular products keep using the
+  // effective base price.
+  const comboBase = isVariableCombo(p)
+    ? variableComboTotal(p, comboSelections.value)
+    : effectiveProductPrice(p)
+  const unitPrice = comboBase + optionsTotal
   const obs = (observation || '').trim() || null
   // try to merge with existing line that has same productId+options+observation
   const idx = findCartIndex(p.id, selectedOptions, obs || '')
   if(idx >= 0){ cart.value[idx].quantity += qty }
   else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, observation: obs, image: p.image || null, categoryId: p.categoryId || null }) }
   // Meta Pixel: track add to cart
-  try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: effectiveProductPrice(p), options: selectedOptions }, qty) }catch(e){}
+  try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: comboBase, options: selectedOptions }, qty) }catch(e){}
   try{ trackMenuEvent(companyId, menuId.value, 'ADD_TO_CART', { productId: p.id }) }catch(e){}
 }
 
@@ -3357,7 +3411,10 @@ function confirmAddFromModal(){
         }
         // Combo slots come before addons; their price contribution is 0 (already in product.price).
         const finalOptions = [...comboOptions, ...selectedOptions]
-        const unitPrice = effectiveProductPrice(p) + optionsTotal
+        const comboBase = isVariableCombo(p)
+          ? variableComboTotal(p, comboSelections.value)
+          : effectiveProductPrice(p)
+        const unitPrice = comboBase + optionsTotal
         const obs = (modalObservation.value || '').trim() || null
         cart.value[editingCartIndex.value] = { ...existingItem, price: unitPrice, quantity: modalQty.value, options: finalOptions, observation: obs }
       }

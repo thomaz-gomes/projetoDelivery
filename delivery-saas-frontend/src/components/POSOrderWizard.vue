@@ -165,7 +165,10 @@
                   </div>
                   <div class="product-card-body">
                     <div class="product-card-name">{{ p.name }}</div>
-                    <div class="product-card-price">{{ formatCurrency(effectiveProductPrice(p)) }}</div>
+                    <div class="product-card-price">
+                      <template v-if="isVariableCombo(p)"><small class="text-muted" style="font-size:0.75em;">A partir de </small>{{ formatCurrency(effectiveProductPrice(p)) }}</template>
+                      <template v-else>{{ formatCurrency(effectiveProductPrice(p)) }}</template>
+                    </div>
                   </div>
                 </button>
               </div>
@@ -238,8 +241,15 @@
           <div class="pos-options-panel d-flex flex-column">
               <div class="pos-options-body" ref="optionsBodyRef">
               <div class="d-flex justify-content-between align-items-start mb-3">
-                <div>
-                  <h6 class="fw-semibold m-0">{{ activeProduct?.name }} <span class="text-muted small">{{ formatCurrency(activeProduct?.price) }}</span></h6>
+                <div>                  <h6 class="fw-semibold m-0">
+                    {{ activeProduct?.name }}
+                    <span class="text-muted small">
+                      <template v-if="isVariableCombo(activeProduct)">
+                        <small style="font-weight:500;">A partir de</small> {{ formatCurrency(activeProduct?.price) }}
+                      </template>
+                      <template v-else>{{ formatCurrency(activeComboBase) }}</template>
+                    </span>
+                  </h6>
                 </div>
                 <button class="btn btn-sm btn-outline-secondary d-sm-none" @click="closeOptions" aria-label="Fechar">✕</button>
               </div>
@@ -869,8 +879,35 @@ function effectiveProductPrice(p) {
   }
   return base
 }
+function isVariableCombo(p) {
+  return !!(p && p.isCombo && p.combo && p.combo.pricingMode === 'VARIABLE')
+}
+function variableComboTotal(p, selectionsMap) {
+  if (!isVariableCombo(p)) return 0
+  const slots = (p.combo && p.combo.slots) || []
+  let total = 0
+  for (const slot of slots) {
+    if (slot.isPriceAnchor) {
+      total += Number(slot.vUnComDeclarado || 0)
+      continue
+    }
+    const raw = selectionsMap ? selectionsMap[slot.id] : null
+    const ids = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : [])
+    for (const oid of ids) {
+      const opt = (slot.options || []).find(o => o.id === oid)
+      if (opt && opt.linkedProduct && opt.linkedProduct.price != null) {
+        total += Number(opt.linkedProduct.price || 0)
+      }
+    }
+  }
+  return total
+}
+const activeComboBase = computed(() => {
+  const p = activeProduct.value
+  return isVariableCombo(p) ? variableComboTotal(p, comboSelections.value) : effectiveProductPrice(p)
+})
 const optionModalTotal = computed(()=> {
-  const unitPrice = effectiveProductPrice(activeProduct.value);
+  const unitPrice = activeComboBase.value;
   const optsPerUnit = chosenOptions.value.reduce((s,o)=> s + (Number(o.price||0) * (Number(o.quantity||1) || 1)),0);
   return (unitPrice + optsPerUnit) * (Number(optionQty.value) || 1);
 });
@@ -920,7 +957,9 @@ function confirmOptionsAdd(){
   }
 
   const allOptions = chosenOptions.value.map(o => ({ id: o.id, name: o.name, price: Number(o.price||0), quantity: Number(o.quantity||1) })).concat(comboOptions);
-  const payload = { name: activeProduct.value.name, quantity: optionQty.value, price: effectiveProductPrice(activeProduct.value), productId: activeProduct.value?.id || null, notes: optionNote.value || null, options: allOptions };
+  // VARIABLE combo: unit price is the live sum (activeComboBase). FIXED combos
+  // and regular products keep the previous effectiveProductPrice behavior.
+  const payload = { name: activeProduct.value.name, quantity: optionQty.value, price: activeComboBase.value, productId: activeProduct.value?.id || null, notes: optionNote.value || null, options: allOptions };
   if(editingIndex.value !== null && typeof editingIndex.value !== 'undefined'){
     // update existing item
     cart.value.splice(editingIndex.value, 1, payload);
