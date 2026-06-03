@@ -3658,7 +3658,7 @@ function pulseButton() {
     <div v-else-if="store.orders && store.orders.length > 0" class="orders-board">
       <div class="boards d-flex gap-3 overflow-auto justify-content-between">
         <div class="orders-column card" v-for="col in (isMobile ? COLUMNS.filter(c => c.key === selectedStatus) : COLUMNS)" :key="col.key" :data-status="col.key">
-          <div class="card-header d-flex align-items-center justify-content-between">
+          <div class="card-header d-flex align-items-center">
             <div class="fw-semibold">{{ col.label }}</div>
             <div><span class="badge bg-secondary">{{ columnOrders(col.key).length }}</span></div>
           </div>
