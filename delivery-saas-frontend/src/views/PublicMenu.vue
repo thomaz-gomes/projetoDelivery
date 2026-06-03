@@ -425,7 +425,7 @@
                 
 
               <!-- Combo slots (when product is a combo) -->
-              <div v-if="selectedProduct?.isCombo && selectedProduct?.combo?.slots?.length" class="mb-4">
+              <div v-if="selectedProduct?.isCombo && selectedProduct?.combo?.slots?.length" class="mb-4 px-3">
                 <div
                   v-for="slot in selectedProduct.combo.slots"
                   :key="slot.id"
@@ -470,6 +470,30 @@
                             :disabled="opt.linkedProduct && opt.linkedProduct.isActive === false"
                             @change="onSlotChange(slot)"
                           />
+                          <!-- Fixed-N slot (min === max && max > 1): numeric stepper so the
+                               customer can choose the same item more than once. -->
+                          <div
+                            v-else-if="slot.minSelect === slot.maxSelect && slot.maxSelect > 1"
+                            class="qty-stepper"
+                            role="group"
+                            :aria-label="'Quantidade de ' + (opt.linkedProduct?.name || 'opção')"
+                          >
+                            <button
+                              type="button"
+                              class="qty-stepper__btn"
+                              :disabled="optionCount(slot.id, opt.id) <= 0 || (opt.linkedProduct && opt.linkedProduct.isActive === false)"
+                              @click="decOption(slot, opt.id)"
+                              aria-label="Diminuir"
+                            >−</button>
+                            <span class="qty-stepper__val">{{ optionCount(slot.id, opt.id) }}</span>
+                            <button
+                              type="button"
+                              class="qty-stepper__btn"
+                              :disabled="totalChosenForSlot(slot.id) >= slot.maxSelect || (opt.linkedProduct && opt.linkedProduct.isActive === false)"
+                              @click="incOption(slot, opt.id)"
+                              aria-label="Aumentar"
+                            >+</button>
+                          </div>
                           <input
                             v-else
                             class="form-check-input"
@@ -487,7 +511,7 @@
                 </div>
               </div>
 
-              <div v-if="selectedProduct?.optionGroups && selectedProduct.optionGroups.length">
+              <div v-if="selectedProduct?.optionGroups && selectedProduct.optionGroups.length" class="px-3">
                 <div v-for="g in selectedProduct.optionGroups" :key="g.id" :id="'grp-'+g.id" :class="['mb-3', requiredWarnings[g.id] ? 'required-fail' : '']">
                   <div class="d-flex justify-content-between align-items-center mb-2 group-header">
                     <div>
@@ -2550,6 +2574,46 @@ function onSlotChange(slot){
     delete requiredWarnings[key]
     delete requiredMessages[key]
   }catch(e){}
+}
+
+// ── Fixed-N slot helpers (slot.minSelect === slot.maxSelect && max > 1) ──
+// The selection model stays the same shape (array of option IDs for max>1),
+// but for fixed-N slots we allow REPEATED IDs to represent picking the same
+// item more than once. The cart-confirmation loop already iterates each
+// occurrence, so the rest of the flow needs no changes.
+function optionCount(slotId, optId){
+  const raw = comboSelections.value[slotId]
+  if (!Array.isArray(raw)) return 0
+  let n = 0
+  for (const x of raw) if (x === optId) n++
+  return n
+}
+
+function totalChosenForSlot(slotId){
+  const raw = comboSelections.value[slotId]
+  if (Array.isArray(raw)) return raw.length
+  return raw ? 1 : 0
+}
+
+function incOption(slot, optId){
+  const cap = Number(slot.maxSelect || 0)
+  if (cap > 0 && totalChosenForSlot(slot.id) >= cap) return
+  const arr = Array.isArray(comboSelections.value[slot.id])
+    ? comboSelections.value[slot.id].slice()
+    : []
+  arr.push(optId)
+  comboSelections.value[slot.id] = arr
+  onSlotChange(slot)
+}
+
+function decOption(slot, optId){
+  const arr = Array.isArray(comboSelections.value[slot.id])
+    ? comboSelections.value[slot.id].slice()
+    : []
+  const idx = arr.lastIndexOf(optId)
+  if (idx >= 0) arr.splice(idx, 1)
+  comboSelections.value[slot.id] = arr
+  onSlotChange(slot)
 }
 
 function showTip(key, msg, ms = 1400){
@@ -7106,5 +7170,48 @@ body { padding-bottom: 110px; }
 /* ===== Edit cart item button ===== */
 .btn-edit-item { display: inline-flex; align-items: center; gap: 2px; background: none; border: none; padding: 2px 4px; font-size: 11px; color: var(--pm-text-muted); cursor: pointer; border-radius: 6px; line-height: 1; flex-shrink: 0; }
 .btn-edit-item:hover { color: var(--brand, #105784); background: rgba(0,0,0,0.04); }
+
+/* ===== Combo fixed-N slot — quantity stepper ===== */
+.qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--pm-border, #e6e6e6);
+  border-radius: 999px;
+  overflow: hidden;
+  background: #fff;
+  flex-shrink: 0;
+}
+.qty-stepper__btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--pm-text, #212529);
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.12s;
+}
+.qty-stepper__btn:not(:disabled):hover {
+  background: var(--pm-surface-alt, #f4f5f7);
+}
+.qty-stepper__btn:disabled {
+  color: var(--pm-text-muted, #adb5bd);
+  cursor: default;
+}
+.qty-stepper__val {
+  min-width: 26px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--pm-text, #212529);
+  padding: 0 4px;
+  line-height: 30px;
+}
 
 </style>

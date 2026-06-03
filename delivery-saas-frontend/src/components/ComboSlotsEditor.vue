@@ -106,20 +106,12 @@
             <div class="row g-2 align-items-end">
               <div class="col-10 col-md-11">
                 <label class="form-label small mb-1">Produto</label>
-                <SelectInput
+                <ProductPicker
                   :model-value="opt.linkedProductId"
-                  class="form-control"
-                  @update:model-value="(v) => (opt.linkedProductId = v)"
-                >
-                  <option value="">— Selecione um produto —</option>
-                  <option
-                    v-for="p in availableProducts"
-                    :key="p.id"
-                    :value="p.id"
-                  >
-                    {{ p.name }} — R$ {{ Number(p.price || 0).toFixed(2) }}
-                  </option>
-                </SelectInput>
+                  :products="availableProducts"
+                  placeholder="— Selecione um produto —"
+                  @update:model-value="(v) => (opt.linkedProductId = v || '')"
+                />
               </div>
               <div class="col-2 col-md-1 d-flex justify-content-end">
                 <BaseIconButton
@@ -160,7 +152,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import api from '../api'
 import TextInput from './form/input/TextInput.vue'
-import SelectInput from './form/select/SelectInput.vue'
+import ProductPicker from './form/select/ProductPicker.vue'
 import CurrencyInput from './form/input/CurrencyInput.vue'
 import BaseIconButton from './BaseIconButton.vue'
 
