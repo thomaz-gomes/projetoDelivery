@@ -3461,68 +3461,50 @@ function pulseButton() {
 <template>
   <div>
   <div class="container-fluid p-4">
-    <header class="d-flex flex-wrap align-items-center justify-content-between mb-4 gap-3">
-      <div class="d-flex align-items-center">
-        <h2 class="fs-4 fw-semibold m-0" style="position:relative;">Pedidos
-        <!-- dev-only socket status badge -->
-        <div style="position: absolute;width: 12px;height: 12px;border: 2px solid rgb(255, 255, 255);padding: 0px !important;right: -10px;bottom: 4px;" v-if="socketConnection" class="ms-3 badge" :class="{
-          'bg-success': socketConnection.status === 'connected',
-          'bg-warning text-dark': socketConnection.status === 'reconnecting',
-          'bg-danger': socketConnection.status === 'error' || socketConnection.status === 'disconnected',
-          'bg-secondary': socketConnection.status === 'connecting' || socketConnection.status === 'idle'
-        }">
-         <!-- {{ 'Socket: ' + socketStatusLabel }}
-          <small v-if="socketConnection.url" class="d-block text-truncate" style="max-width:200px;">{{ socketConnection.url.replace(/^https?:\/\//, '') }}</small> -->
-          <small v-if="socketConnection.url" class="d-block text-truncate" ></small>
-          
-      </div></h2>
-      </div>
-      
-      <!-- Dev: quick test print button -->
-      <div class="ms-2 d-flex gap-2 align-items-center">
-        
-        <!-- 🔊 Botão de som -->
-        <button
-          ref="soundButton"
-          type="button"
-          class="btn btn-sm d-none d-sm-flex"
-          :class="playSound ? 'btn-primary' : 'btn-outline-secondary'"
-          @click="toggleSound"
-          title="Som de novos pedidos"
-        >
-          <i
-            :class="playSound ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute-fill'"
-            class=""
-          ></i>
-        </button>
-
-        <button type="button" :class="['btn btn-sm', printerConnected ? 'btn-primary' : 'btn-outline-primary']" @click="showPrinterConfig = true" title="Configurar impressora">
-          <i class="bi bi-printer"></i>&nbsp;Impressora
-          <span v-if="printerConnected" class="badge bg-success ms-2" style="font-size:0.65rem; vertical-align:middle">Conectada</span>
-        </button>
-        <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
-          <i class="bi bi-printer"></i>&nbsp;Teste Impressão
-        </button>
-        <CashControl />
-      </div>
-    </header>
-    <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
-    <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
-
-        <div class="row">
-          <div class="col-12">
-              <div class="card mb-4" style="border:none;">
+    <!-- Unified Pedidos toolbar card — title + actions + Novo Pedido + filters all together -->
+    <div class="orders-toolbar card mb-4" style="border:none;">
       <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between">
-          <div>
-            <h5 class="card-title mb-1">
-             Novo Pedido
-            </h5>
 
-          </div>
+        <!-- Top row: title + sound + Impressora + Caixa -->
+        <div class="orders-toolbar__top d-flex flex-wrap align-items-center gap-2 mb-3">
+          <h2 class="fs-4 fw-semibold m-0 orders-toolbar__title" style="position:relative;">Pedidos
+            <!-- dev-only socket status badge (hidden via CSS; ::after dot replaces it) -->
+            <div style="position: absolute;width: 12px;height: 12px;border: 2px solid rgb(255, 255, 255);padding: 0px !important;right: -10px;bottom: 4px;" v-if="socketConnection" class="ms-3 badge" :class="{
+              'bg-success': socketConnection.status === 'connected',
+              'bg-warning text-dark': socketConnection.status === 'reconnecting',
+              'bg-danger': socketConnection.status === 'error' || socketConnection.status === 'disconnected',
+              'bg-secondary': socketConnection.status === 'connecting' || socketConnection.status === 'idle'
+            }">
+              <small v-if="socketConnection.url" class="d-block text-truncate" ></small>
+            </div>
+          </h2>
+          <div class="flex-grow-1"></div>
+          <!-- Sound -->
+          <button
+            ref="soundButton"
+            type="button"
+            class="btn btn-sm d-none d-sm-flex"
+            :class="playSound ? 'btn-primary' : 'btn-outline-secondary'"
+            @click="toggleSound"
+            title="Som de novos pedidos"
+          >
+            <i :class="playSound ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute-fill'"></i>
+          </button>
+          <!-- Impressora -->
+          <button type="button" :class="['btn btn-sm', printerConnected ? 'btn-primary' : 'btn-outline-primary']" @click="showPrinterConfig = true" title="Configurar impressora">
+            <i class="bi bi-printer"></i>&nbsp;Impressora
+            <span v-if="printerConnected" class="badge bg-success ms-2" style="font-size:0.65rem; vertical-align:middle">Conectada</span>
+          </button>
+          <!-- Test print (dev) -->
+          <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
+            <i class="bi bi-printer"></i>&nbsp;Teste Impressão
+          </button>
+          <!-- Caixa -->
+          <CashControl />
         </div>
-        <!-- Plain flex row (Chefiz Desktop): phone input grows, buttons auto-width -->
-        <div class="orders-new-row d-flex flex-wrap align-items-center gap-2">
+
+        <!-- Novo Pedido: phone input + Entrega/Balcão buttons -->
+        <div class="orders-new-row d-flex flex-wrap align-items-center gap-2 mb-3">
           <div class="orders-new-input">
             <TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control" />
           </div>
@@ -3533,111 +3515,86 @@ function pulseButton() {
             <i class="bi bi-plus-lg"></i> Balcão
           </button>
         </div>
+
+        <!-- Mobile-only status pills -->
+        <div class="d-inline-flex gap-2 d-md-none pb-2 w-100 overflow-auto mb-3">
+          <button
+            v-for="s in statusFiltersMobile"
+            :key="s.value"
+            type="button"
+            class="action-chip"
+            :class="{ 'action-chip--active': selectedStatus === s.value }"
+            @click="selectedStatus = s.value"
+          >
+            {{ s.label }}
+          </button>
         </div>
-      </div>
-    </div>
 
-          <div class="col-12">
-
-              <div class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;">
-    <div class="card-body w-100">
-      <div class="d-flex align-items-center justify-content-between">
-          <div>
-            <h5 class="card-title mb-1">
-             Procurar pedido
-            </h5>
-
-          </div>
-        </div>
-  <!-- Filtros de status (visível apenas em dispositivos pequenos) -->
-  <div class="d-inline-flex gap-2 d-md-none pb-2 w-100 overflow-auto mb-3">
-        <button
-          v-for="s in statusFiltersMobile"
-          :key="s.value"
-          type="button"
-          class="action-chip"
-          :class="{ 'action-chip--active': selectedStatus === s.value }"
-          @click="selectedStatus = s.value"
+        <!-- Filter row: Entrega/Retirada toggles + rider/payment/Nº/name -->
+        <div
+          class="orders-filter-row d-flex flex-wrap align-items-center gap-2"
+          :class="{ 'orders-filter-row--expanded': showAdvancedFilters }"
         >
-          {{ s.label }}
-        </button>
-      </div>
+          <button
+            type="button"
+            class="orders-toggle"
+            :class="{ 'orders-toggle--on': filterEntrega }"
+            @click="filterEntrega = !filterEntrega"
+          >
+            <span class="orders-toggle__check"><i v-if="filterEntrega" class="bi bi-check-lg"></i></span>
+            <i class="bi bi-bicycle orders-toggle__ic"></i>
+            <span class="orders-toggle__label">Entrega</span>
+          </button>
+          <button
+            type="button"
+            class="orders-toggle"
+            :class="{ 'orders-toggle--on': filterRetirada }"
+            @click="filterRetirada = !filterRetirada"
+          >
+            <span class="orders-toggle__check"><i v-if="filterRetirada" class="bi bi-check-lg"></i></span>
+            <i class="bi bi-bag orders-toggle__ic"></i>
+            <span class="orders-toggle__label">Retirada</span>
+          </button>
+          <div class="flex-grow-1 d-md-none orders-spacer"></div>
+          <button
+            type="button"
+            class="orders-filters-toggle d-md-none"
+            :class="{ 'orders-filters-toggle--on': showAdvancedFilters || activeAdvancedFiltersCount }"
+            :aria-expanded="showAdvancedFilters"
+            title="Filtros avançados"
+            @click="showAdvancedFilters = !showAdvancedFilters"
+          >
+            <i class="bi bi-funnel"></i>
+            <span v-if="activeAdvancedFiltersCount" class="orders-filters-toggle__badge">{{ activeAdvancedFiltersCount }}</span>
+            <i class="bi bi-chevron-down orders-filters-toggle__chev" :class="{ 'orders-filters-toggle__chev--open': showAdvancedFilters }"></i>
+          </button>
 
-      <!-- Single filter row: Entrega/Retirada toggles + rider/payment/Nº/name.
-           DOM order = toggles first (mobile needs them on top, then Filtros
-           button, then advanced fields below when expanded). On desktop the
-           toggles are pushed to the END of the row via CSS `order` so the
-           sequence reads: rider | payment | Nº | name | Entrega | Retirada. -->
-      <div
-        class="orders-filter-row d-flex flex-wrap align-items-center gap-2"
-        :class="{ 'orders-filter-row--expanded': showAdvancedFilters }"
-      >
-        <button
-          type="button"
-          class="orders-toggle"
-          :class="{ 'orders-toggle--on': filterEntrega }"
-          @click="filterEntrega = !filterEntrega"
-        >
-          <span class="orders-toggle__check"><i v-if="filterEntrega" class="bi bi-check-lg"></i></span>
-          <i class="bi bi-bicycle orders-toggle__ic"></i>
-          <span class="orders-toggle__label">Entrega</span>
-        </button>
-        <button
-          type="button"
-          class="orders-toggle"
-          :class="{ 'orders-toggle--on': filterRetirada }"
-          @click="filterRetirada = !filterRetirada"
-        >
-          <span class="orders-toggle__check"><i v-if="filterRetirada" class="bi bi-check-lg"></i></span>
-          <i class="bi bi-bag orders-toggle__ic"></i>
-          <span class="orders-toggle__label">Retirada</span>
-        </button>
-        <div class="flex-grow-1 d-md-none orders-spacer"></div>
-        <!-- Filtros (icon-only) — mobile collapse button -->
-        <button
-          type="button"
-          class="orders-filters-toggle d-md-none"
-          :class="{ 'orders-filters-toggle--on': showAdvancedFilters || activeAdvancedFiltersCount }"
-          :aria-expanded="showAdvancedFilters"
-          title="Filtros avançados"
-          @click="showAdvancedFilters = !showAdvancedFilters"
-        >
-          <i class="bi bi-funnel"></i>
-          <span v-if="activeAdvancedFiltersCount" class="orders-filters-toggle__badge">{{ activeAdvancedFiltersCount }}</span>
-          <i class="bi bi-chevron-down orders-filters-toggle__chev" :class="{ 'orders-filters-toggle__chev--open': showAdvancedFilters }"></i>
-        </button>
-
-        <!-- Advanced controls: hidden on mobile unless expanded.
-             Each one is wrapped in a div so we can flex-size them. -->
-        <template v-if="ridersEnabled">
+          <template v-if="ridersEnabled">
+            <div class="orders-adv-control">
+              <SelectInput v-model="selectedRider" class="form-select">
+                <option value="TODOS">Todos os entregadores</option>
+                <option v-for="r in store.riders" :key="r.id" :value="String(r.id)">{{ r.name }}</option>
+              </SelectInput>
+            </div>
+          </template>
           <div class="orders-adv-control">
-            <SelectInput v-model="selectedRider" class="form-select">
-              <option value="TODOS">Todos os entregadores</option>
-              <!-- normalize option values to strings to avoid type-mismatch when comparing ids -->
-              <option v-for="r in store.riders" :key="r.id" :value="String(r.id)">{{ r.name }}</option>
+            <SelectInput v-model="selectedPaymentMethod" class="form-select">
+              <option value="TODOS">Todas as formas</option>
+              <option v-for="pm in availablePaymentMethods" :key="pm" :value="pm">{{ pm }}</option>
             </SelectInput>
           </div>
-        </template>
-        <div class="orders-adv-control">
-          <SelectInput v-model="selectedPaymentMethod" class="form-select">
-            <option value="TODOS">Todas as formas</option>
-            <option v-for="pm in availablePaymentMethods" :key="pm" :value="pm">{{ pm }}</option>
-          </SelectInput>
-        </div>
-        <div class="orders-adv-control orders-adv-control--num">
-          <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control" />
-        </div>
-        <div class="orders-adv-control orders-adv-control--name">
-          <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control" />
+          <div class="orders-adv-control orders-adv-control--num">
+            <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control" />
+          </div>
+          <div class="orders-adv-control orders-adv-control--name">
+            <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control" />
+          </div>
         </div>
       </div>
     </div>
 
-          </div>
-          </div>
-
-    </div>
-    <!-- Filtros Entrega/Retirada agora vivem dentro do card "Procurar pedido" (acima) -->
+    <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
+    <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
 
     <!-- Pending acceptance box (iFood orders awaiting manual accept) -->
     <div v-if="pendingOrders.length > 0" class="pending-acceptance-box mb-3">
@@ -4681,10 +4638,10 @@ button.btn.advance {
 }
 
 /* ── Header ── */
-.container-fluid.p-4 > header {
+.container-fluid.p-4 .orders-toolbar__top {
   margin-bottom: 18px !important;
 }
-.container-fluid.p-4 > header h2 {
+.container-fluid.p-4 .orders-toolbar__top h2 {
   font-size: 1.45rem !important;
   font-weight: 800 !important;
   letter-spacing: -0.4px;
@@ -4693,7 +4650,7 @@ button.btn.advance {
   padding-right: 22px; /* room for the lime status dot */
 }
 /* Always-visible lime status dot to the right of "Pedidos" */
-.container-fluid.p-4 > header h2::after {
+.container-fluid.p-4 .orders-toolbar__top h2::after {
   content: '';
   position: absolute;
   right: 0;
@@ -4706,10 +4663,10 @@ button.btn.advance {
   box-shadow: 0 0 0 4px rgba(137,209,54,0.22);
 }
 /* Hide the legacy conditional socket badge — the ::after dot replaces it */
-.container-fluid.p-4 > header h2 .badge { display: none !important; }
+.container-fluid.p-4 .orders-toolbar__top h2 .badge { display: none !important; }
 
 /* ── Header buttons (faithful to Chefiz Pedidos top bar) ── */
-.container-fluid.p-4 > header .btn-sm {
+.container-fluid.p-4 .orders-toolbar__top .btn-sm {
   height: 40px;
   border-radius: 11px;
   font-weight: 600;
@@ -4722,43 +4679,43 @@ button.btn.advance {
 
 /* Sound button (icon-only, square 40x40) — filled green when ON,
    tinted green when OFF. Identified by its title attribute. */
-.container-fluid.p-4 > header button[title="Som de novos pedidos"] {
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"] {
   width: 40px;
   height: 40px;
   padding: 0 !important;
   justify-content: center;
 }
-.container-fluid.p-4 > header button[title="Som de novos pedidos"].btn-primary {
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"].btn-primary {
   background: #2e8c5a !important;
   border: none !important;
   color: #fff !important;
   box-shadow: 0 2px 6px rgba(46,140,90,0.30);
 }
-.container-fluid.p-4 > header button[title="Som de novos pedidos"].btn-primary i {
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"].btn-primary i {
   color: #fff !important;
   font-size: 1.05rem;
 }
-.container-fluid.p-4 > header button[title="Som de novos pedidos"].btn-outline-secondary {
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"].btn-outline-secondary {
   background: rgba(46,140,90,0.10) !important;
   border: none !important;
   color: #2e8c5a !important;
 }
-.container-fluid.p-4 > header button[title="Som de novos pedidos"].btn-outline-secondary i {
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"].btn-outline-secondary i {
   color: #2e8c5a !important;
   font-size: 1.05rem;
 }
 
 /* Impressora pill — white with inline lime dot + "Conectada" green text */
-.container-fluid.p-4 > header button[title="Configurar impressora"] {
+.container-fluid.p-4 .orders-toolbar__top button[title="Configurar impressora"] {
   background: #fff !important;
   border: 1px solid #e9ecf1 !important;
   color: #5a6373 !important;
 }
-.container-fluid.p-4 > header button[title="Configurar impressora"] i.bi-printer {
+.container-fluid.p-4 .orders-toolbar__top button[title="Configurar impressora"] i.bi-printer {
   color: #5a6373 !important;
   font-size: 1rem;
 }
-.container-fluid.p-4 > header button[title="Configurar impressora"] .badge.bg-success {
+.container-fluid.p-4 .orders-toolbar__top button[title="Configurar impressora"] .badge.bg-success {
   background: transparent !important;
   color: #2e8c5a !important;
   padding: 0 !important;
@@ -4769,7 +4726,7 @@ button.btn.advance {
   align-items: center;
   gap: 6px;
 }
-.container-fluid.p-4 > header button[title="Configurar impressora"] .badge.bg-success::before {
+.container-fluid.p-4 .orders-toolbar__top button[title="Configurar impressora"] .badge.bg-success::before {
   content: '';
   display: inline-block;
   width: 8px; height: 8px;
@@ -4780,22 +4737,22 @@ button.btn.advance {
 }
 
 /* Test print button — clean white pill */
-.container-fluid.p-4 > header button[title="Enviar comanda de teste"] {
+.container-fluid.p-4 .orders-toolbar__top button[title="Enviar comanda de teste"] {
   background: #fff !important;
   border: 1px solid #e9ecf1 !important;
   color: #5a6373 !important;
 }
-.container-fluid.p-4 > header button[title="Enviar comanda de teste"] i {
+.container-fluid.p-4 .orders-toolbar__top button[title="Enviar comanda de teste"] i {
   color: #5a6373 !important;
   font-size: 1rem;
 }
 
 /* ── CashControl (Caixa) — solid green Chefiz pill ──
    :deep() reaches into the child component's scoped subtree. */
-.container-fluid.p-4 > header :deep(.cash-control) {
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control) {
   margin-left: 0 !important;
 }
-.container-fluid.p-4 > header :deep(.cash-control .btn) {
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn) {
   height: 40px !important;
   padding: 0 14px !important;
   border-radius: 11px !important;
@@ -4805,17 +4762,17 @@ button.btn.advance {
   align-items: center;
   gap: 8px;
 }
-.container-fluid.p-4 > header :deep(.cash-control .btn-secondary) {
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary) {
   background: #2e8c5a !important;
   border: none !important;
   color: #fff !important;
   box-shadow: 0 2px 6px rgba(46,140,90,0.30);
 }
-.container-fluid.p-4 > header :deep(.cash-control .btn-secondary i) {
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary i) {
   color: #fff !important;
   font-size: 1rem;
 }
-.container-fluid.p-4 > header :deep(.cash-control .btn-secondary .badge.bg-success) {
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary .badge.bg-success) {
   background: transparent !important;
   color: #fff !important;
   padding: 0 !important;
@@ -4823,14 +4780,14 @@ button.btn.advance {
   font-weight: 800 !important;
   font-size: 0.9rem !important;
 }
-.container-fluid.p-4 > header :deep(.cash-control .btn-secondary small.text-muted) {
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary small.text-muted) {
   color: rgba(255,255,255,0.85) !important;
   font-weight: 600 !important;
   font-size: 0.72rem !important;
   letter-spacing: 0.3px;
   margin-left: 4px !important;
 }
-.container-fluid.p-4 > header :deep(.cash-control .btn-secondary::after) {
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary::after) {
   content: '\F282';
   font-family: 'bootstrap-icons';
   font-size: 0.95rem;
@@ -4839,7 +4796,7 @@ button.btn.advance {
   line-height: 1;
 }
 /* "Abrir Caixa" — outline green when no session active */
-.container-fluid.p-4 > header :deep(.cash-control .btn-outline-secondary) {
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-outline-secondary) {
   background: #fff !important;
   border: 1.5px solid #2e8c5a !important;
   color: #2e8c5a !important;
@@ -5490,8 +5447,8 @@ button.btn.advance {
 /* ── Responsive: mobile ── */
 @media (max-width: 768px) {
   .container-fluid.p-4 { padding: 12px !important; }
-  .container-fluid.p-4 > header h2 { font-size: 1.25rem !important; }
-  .container-fluid.p-4 > header .btn-sm { height: 36px; padding: 0 10px; }
+  .container-fluid.p-4 .orders-toolbar__top h2 { font-size: 1.25rem !important; }
+  .container-fluid.p-4 .orders-toolbar__top .btn-sm { height: 36px; padding: 0 10px; }
   .orders-board .boards { padding: 0; }
   .orders-column { min-width: 100% !important; flex: 1 1 100% !important; }
   /* Mobile bulk bar reserves room for the app's bottom nav, if present */
