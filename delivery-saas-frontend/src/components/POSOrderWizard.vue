@@ -744,13 +744,22 @@ function isTakeoutOrderTypePos(t) {
 }
 function effectiveProductPrice(p) {
   if (!p) return 0
+  // Priority mirrors PublicMenu.effectiveProductPrice:
+  //   1) specialTakeoutPrice when the order is takeout (balcão/retirada)
+  //   2) promoPrice when active and strictly less than the base price
+  //   3) base price
   if (isTakeoutOrderTypePos(orderType.value) && p.specialTakeoutPrice != null && p.specialTakeoutPrice !== '') {
     const sto = Number(p.specialTakeoutPrice)
     // Zero is treated as "no special price" so a product accidentally saved
     // with 0 (toggle on, blank field) does not zero-out balcão receipts.
     if (Number.isFinite(sto) && sto > 0) return sto
   }
-  return Number(p.price || 0)
+  const base = Number(p.price || 0)
+  if (p.promoPrice != null && p.promoPrice !== '') {
+    const promo = Number(p.promoPrice)
+    if (Number.isFinite(promo) && promo > 0 && promo < base) return promo
+  }
+  return base
 }
 const optionModalTotal = computed(()=> {
   const unitPrice = effectiveProductPrice(activeProduct.value);
