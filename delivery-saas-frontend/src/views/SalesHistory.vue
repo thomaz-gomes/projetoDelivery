@@ -220,7 +220,14 @@
                   </button>
                 </td>
                 <td class="text-end">
-                  <button class="btn btn-sm btn-outline-primary" @click="viewDetails(o)">Ver</button>
+                  <div class="btn-group btn-group-sm" role="group">
+                    <button class="btn btn-outline-secondary" @click="reprintReceipt(o)" title="Reimprimir comanda">
+                      <i class="bi bi-printer"></i>
+                    </button>
+                    <button class="btn btn-outline-primary" @click="viewDetails(o)" title="Ver detalhes">
+                      Ver
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="displayed.length === 0">
@@ -320,6 +327,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import Swal from 'sweetalert2';
 import api from '../api';
+import printService from '../services/printService.js';
 import SelectInput from '../components/form/select/SelectInput.vue';
 import { formatDate } from '../utils/dates.js';
 import DateInput from '../components/form/date/DateInput.vue';
@@ -602,6 +610,38 @@ function reset(){
 
 function viewDetails(o){
   router.push({ path: `/sales/${o.id}` });
+}
+
+// Reimpressão de comanda — busca o pedido completo (a listagem usa light=true
+// e portanto não carrega itens/payload necessários pra impressão) e enfileira
+// no agente via printService, mesmo caminho usado pelo botão de impressão da
+// tela /orders.
+async function reprintReceipt(o) {
+  if (!o || !o.id) return
+  try {
+    const { data: full } = await api.get(`/orders/${o.id}`)
+    const target = full || o
+    const num = formatOrderNumber(target)
+    const res = await printService.enqueuePrint(target)
+    if (res && res.status === 'printed') {
+      Swal.fire({ icon: 'success', title: 'Comanda reimpressa', text: `Pedido #${num} impresso com sucesso.`, timer: 2500, toast: true, position: 'top-end', showConfirmButton: false })
+    } else if (res && res.status === 'queued') {
+      Swal.fire({ icon: 'info', title: 'Pedido enfileirado', text: `Pedido #${num} enfileirado para impressão.`, timer: 3000, toast: true, position: 'top-end', showConfirmButton: false })
+    } else {
+      Swal.fire({ icon: 'warning', title: 'Solicitação enviada', text: `Pedido #${num} enviado para processamento.`, timer: 2500, toast: true, position: 'top-end', showConfirmButton: false })
+    }
+  } catch (err) {
+    console.error('reprintReceipt failed', err)
+    Swal.fire({
+      icon: 'error',
+      title: 'Erro ao reimprimir',
+      text: err?.response?.data?.message || 'Falha ao reimprimir comanda. Verifique a conexão com o agente de impressão.',
+      timer: 4000,
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+    })
+  }
 }
 
 const visiblePages = computed(() => {
