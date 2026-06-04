@@ -562,11 +562,26 @@ function formatAddress(o){
 function getPaymentMethod(o){
   if(!o) return ''
   try{
-    const payment = o.payment || o.paymentMethod || o.payload?.payment || o.payload?.rawPayload?.payment
-    if(!payment) return ''
-    const method = (payment.method || payment.methodCode || payment.name || payment.type || '').toString()
+    // Prefer paymentConfirmed (operator override at CONFIRMACAO_PAGAMENTO).
+    // When multiple forms were used, show the one with the highest amount.
+    const confirmed = Array.isArray(o.payload?.paymentConfirmed) && o.payload.paymentConfirmed.length
+      ? o.payload.paymentConfirmed
+      : null
+    let methodStr = ''
+    if (confirmed) {
+      const primary = confirmed.reduce((best, p) => (!best || Number(p.amount || 0) > Number(best.amount || 0)) ? p : best, null)
+      methodStr = String(primary?.method || '')
+      if (confirmed.length > 1) {
+        const others = confirmed.filter(p => p !== primary).map(p => String(p.method || '')).filter(Boolean)
+        if (others.length) methodStr += ' + ' + others.join(' + ')
+      }
+    } else {
+      const payment = o.payment || o.paymentMethod || o.payload?.payment || o.payload?.rawPayload?.payment
+      if(!payment) return ''
+      methodStr = (payment.method || payment.methodCode || payment.name || payment.type || '').toString()
+    }
     const labels = { 'PIX':'PIX', 'CREDIT_CARD':'Cartão de Crédito', 'DEBIT_CARD':'Cartão de Débito', 'CASH':'Dinheiro', 'MONEY':'Dinheiro', 'VOUCHER':'Vale', 'ONLINE':'Online', 'Dinheiro':'Dinheiro', 'Crédito':'Crédito' }
-    return labels[method] || method || ''
+    return methodStr.split(' + ').map(m => labels[m] || m).filter(Boolean).join(' + ')
   }catch(e){ return '' }
 }
 

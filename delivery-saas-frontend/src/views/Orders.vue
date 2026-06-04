@@ -1007,29 +1007,43 @@ function normalizeOrder(o){
 
   const items = normalizeOrderItems(o);
   // payment method: try common places
-  // Priority: own payment field → iFood payments object (handles event-envelope and flat) → legacy array → PDV
+  // Priority (highest → lowest):
+  //   0) paymentConfirmed — operator override at CONFIRMACAO_PAGAMENTO step.
+  //      Trumps everything because it reflects what was ACTUALLY paid, not what
+  //      was originally selected by the customer. Without this, a customer who
+  //      chose PIX but paid in cash would always show "PIX" in the UI and NF-e.
+  //   1) iFood payments object (handles event-envelope and flat shapes)
+  //   2) o.payment / payload.payment / payload.payments (PDV & legacy shapes)
   let paymentMethod = '—';
-  // iFood first: payments is an object { methods: [], prepaid } at payload.order.payments or payload.payments
-  const ifoodPay = resolveIfoodPayments(o);
-  if (ifoodPay && (ifoodPay.methods?.length || ifoodPay.prepaid != null)) {
-    const methods = ifoodPay.methods || [];
-    if (methods.length > 0) {
-      paymentMethod = methods.map(m => {
-        let label = m._systemLabel || translatePaymentMethod(m.method || m.type || '', m.card?.brand);
-        if (m.prepaid === true) label += ' (pago online)';
-        else if (m.prepaid === false) label += ' (cobrar do cliente)';
-        return label;
-      }).filter(Boolean).join(' + ') || paymentMethod;
-    } else if (ifoodPay.prepaid) {
-      paymentMethod = 'Pré-pago (pago online)';
+  const confirmedPays = Array.isArray(o.payload?.paymentConfirmed) && o.payload.paymentConfirmed.length
+    ? o.payload.paymentConfirmed : null;
+  if (confirmedPays) {
+    paymentMethod = confirmedPays
+      .map(p => translatePaymentMethod(String(p.method || ''), null))
+      .filter(Boolean).join(' + ') || paymentMethod;
+  } else {
+    // iFood first: payments is an object { methods: [], prepaid } at payload.order.payments or payload.payments
+    const ifoodPay = resolveIfoodPayments(o);
+    if (ifoodPay && (ifoodPay.methods?.length || ifoodPay.prepaid != null)) {
+      const methods = ifoodPay.methods || [];
+      if (methods.length > 0) {
+        paymentMethod = methods.map(m => {
+          let label = m._systemLabel || translatePaymentMethod(m.method || m.type || '', m.card?.brand);
+          if (m.prepaid === true) label += ' (pago online)';
+          else if (m.prepaid === false) label += ' (cobrar do cliente)';
+          return label;
+        }).filter(Boolean).join(' + ') || paymentMethod;
+      } else if (ifoodPay.prepaid) {
+        paymentMethod = 'Pré-pago (pago online)';
+      }
+    } else if (o.payment && (o.payment.methodCode || o.payment.method)) {
+      paymentMethod = translatePaymentMethod(o.payment.methodCode || o.payment.method || String(o.payment.amount || ''), o.payment.card?.brand);
+    } else if (o.payload && o.payload.payment) {
+      paymentMethod = translatePaymentMethod(o.payload.payment.methodCode || o.payload.payment.method || o.payload.payment.type || paymentMethod, o.payload.payment.card?.brand);
+    } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0]) {
+      const m = o.payload.payments[0];
+      paymentMethod = translatePaymentMethod(m.method || m.type || paymentMethod, m.card?.brand);
     }
-  } else if (o.payment && (o.payment.methodCode || o.payment.method)) {
-    paymentMethod = translatePaymentMethod(o.payment.methodCode || o.payment.method || String(o.payment.amount || ''), o.payment.card?.brand);
-  } else if (o.payload && o.payload.payment) {
-    paymentMethod = translatePaymentMethod(o.payload.payment.methodCode || o.payload.payment.method || o.payload.payment.type || paymentMethod, o.payload.payment.card?.brand);
-  } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0]) {
-    const m = o.payload.payments[0];
-    paymentMethod = translatePaymentMethod(m.method || m.type || paymentMethod, m.card?.brand);
   }
 
   // coupon

@@ -912,8 +912,17 @@ export async function emitNfeFromOrder(orderId) {
 
   const vProd = det.reduce((s, d) => s + Number(d.prod.vProd), 0)
 
-  const paymentRaw = order.payload?.payment || order.payload?.rawPayload?.payment || {}
-  const methodKey = paymentRaw.method || paymentRaw.methodCode || paymentRaw.type || ''
+  // Prefer paymentConfirmed when the operator changed the payment method at
+  // CONFIRMACAO_PAGAMENTO → CONCLUIDO. Fall back to the original payload.payment
+  // for orders without a confirmed overwrite (older orders or flows that skip
+  // the confirmation step).
+  const confirmed = Array.isArray(order.payload?.paymentConfirmed) && order.payload.paymentConfirmed.length
+    ? order.payload.paymentConfirmed
+    : null
+  const paymentRaw = confirmed
+    ? confirmed.reduce((best, p) => (!best || Number(p.amount || 0) > Number(best.amount || 0)) ? p : best, null)
+    : (order.payload?.payment || order.payload?.rawPayload?.payment || {})
+  const methodKey = paymentRaw?.method || paymentRaw?.methodCode || paymentRaw?.type || ''
 
   // Resolve the company's PaymentMethod by code/name to pick up the
   // accurate tPag, card brand and intermediary CNPJ. The static PAYMENT_MAP
