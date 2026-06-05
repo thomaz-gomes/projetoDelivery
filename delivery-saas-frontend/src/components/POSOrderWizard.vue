@@ -1227,7 +1227,7 @@ async function finalize(){
   finalizing.value = true;
   finalizeError.value = '';
   try {
-    const itemsPayload = cart.value.map(it => ({ name: it.name, quantity: it.quantity, price: it.price, notes: it.notes||null, options: it.options||null }));
+    const itemsPayload = cart.value.map(it => ({ productId: it.productId || null, name: it.name, quantity: it.quantity, price: it.price, notes: it.notes||null, options: it.options||null }));
     // Para pedido balcão sem identificação, usa nome genérico
     const customerNameFinal = newCustomerName.value.trim() || (orderType.value === 'BALCAO' ? 'Cliente Balcão' : '');
     const body = { customerName: customerNameFinal, customerPhone: phoneDigits.value || null, orderType: orderType.value, address: orderType.value==='DELIVERY' ? addr.value : null, items: itemsPayload, payment: { methodCode: paymentMethodCode.value, amount: totalWithDelivery.value, changeFor: changeFor.value }, menuId: selectedMenuId.value || undefined, storeId: selectedStoreId.value || undefined, discountMerchant: manualDiscount.value > 0 ? manualDiscount.value : undefined, additionalFees: surcharge.value > 0 ? surcharge.value : undefined, appliedCashback: appliedCashback.value > 0 ? appliedCashback.value : undefined };

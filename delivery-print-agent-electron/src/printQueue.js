@@ -81,6 +81,11 @@ async function _handleJob(item) {
   const { order, isTest } = item;
   if (!_printerManager) throw new Error('PrinterManager não inicializado');
 
+  // [DIAG] log temporário para diagnóstico de impressão setorial
+  if (!isTest && Array.isArray(order.items)) {
+    logger.info(`[diag] pedido ${_jobId(order)} — ${order.items.length} item(s): ${JSON.stringify(order.items.map(i => ({ nome: i.name, cat: i.category || null, pid: i.productId || null })))}`);
+  }
+
   // Determinar quais impressoras recebem esse pedido
   const targets = isTest && item.order._printerId
     ? _printerManager.getPrinterById(item.order._printerId)
