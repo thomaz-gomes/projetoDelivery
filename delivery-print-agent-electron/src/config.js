@@ -35,7 +35,9 @@ const DEFAULT_CONFIG = {
  * {
  *   id: string,              // UUID gerado localmente
  *   alias: string,           // Ex: "Cozinha 1", "Bar", "Expedição"
- *   categories: string[],    // Ex: ["food","drink"] ou ["all"]
+ *   categories: string[],    // Categorias aceitas: ["all"] = tudo; ex: ["lanches","bebidas"] = setorial.
+ *                            // Nomes devem bater com MenuCategory.name (case-insensitive) no banco.
+ *                            // Itens sem productId (ex: iFood sem match) vão apenas para impressoras "all".
  *   interface: 'network' | 'usb' | 'serial',
  *   // Network:
  *   host: string,            // IP da impressora
