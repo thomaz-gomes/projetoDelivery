@@ -335,7 +335,11 @@ async function performMerge(){
     await load()
     Swal.fire({ icon:'success', text:'Clientes combinados com sucesso' })
     closeMergeModal()
-  }catch(e){ console.error(e); Swal.fire({ icon:'error', text: String(e?.message || e || 'Falha ao combinar clientes') }) }
+  }catch(e){
+    console.error(e)
+    const detail = e?.response?.data?.error || e?.response?.data?.message
+    Swal.fire({ icon:'error', text: detail || String(e?.message || e || 'Falha ao combinar clientes') })
+  }
 }
 </script>
 

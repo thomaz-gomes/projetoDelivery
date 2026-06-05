@@ -64,15 +64,21 @@ Obs: {{obs_pedido}}
 {{/if}}
 [ROW:Qt.Descricao|Valor]
 [SEP]
-{{#each items}}{{size_item_nome}}
+{{#each items}}[FONT:A]
+[SIZE:1]
 [BOLD:on]
-[ROW:{{qtd}}  {{nome}}|{{preco_val}}]
+{{qtd}}x  {{nome}}
+[ALIGN:right]
+{{preco_val}}
+[ALIGN:left]
 [BOLD:off]
-{{size_item_opcao}}
+[FONT:B]
+[SIZE:1x2]
 {{#if tem_opcoes}}{{opcoes}}
 {{/if}}{{#if obs}}   ** {{obs}} **
-{{/if}}
-{{/each}}[SIZE:1x2]
+{{/if}}[FEED:1]
+{{/each}}[FONT:B]
+[SIZE:1x2]
 [SEP]
 [BOLD:on]
 [ROW:Quantidade de itens:|{{total_itens_count}}]
@@ -138,15 +144,21 @@ Obs: {{obs_pedido}}
 {{/if}}
 [ROW:Qt.Descr.|Valor]
 [SEP]
-{{#each items}}{{size_item_nome}}
+{{#each items}}[FONT:A]
+[SIZE:1]
 [BOLD:on]
-[ROW:{{qtd}} {{nome}}|{{preco_val}}]
+{{qtd}}x  {{nome}}
+[ALIGN:right]
+{{preco_val}}
+[ALIGN:left]
 [BOLD:off]
-{{size_item_opcao}}
+[FONT:B]
+[SIZE:1x2]
 {{#if tem_opcoes}}{{opcoes}}
 {{/if}}{{#if obs}}   ** {{obs}} **
-{{/if}}
-{{/each}}[SIZE:1x2]
+{{/if}}[FEED:1]
+{{/each}}[FONT:B]
+[SIZE:1x2]
 [SEP]
 [ROW:Qtd itens:|{{total_itens_count}}]
 

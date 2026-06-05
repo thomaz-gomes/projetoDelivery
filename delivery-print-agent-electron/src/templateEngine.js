@@ -446,9 +446,9 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
             }))
           : (order.items || []);
 
-        // Tamanho configurável — só altera charSize se explicitamente definido no bloco
-        const rawNameSize = block.itemNameSize || null;
-        const rawOptSize  = block.itemOptionSize || null;
+        // Tamanho — bloco tem prioridade, senão usa printer.itemNameSize/itemOptionSize
+        const rawNameSize = block.itemNameSize || printer.itemNameSize || null;
+        const rawOptSize  = block.itemOptionSize || printer.itemOptionSize || null;
         const nameSize = rawNameSize ? _parseSize(rawNameSize) : null;
         const optSize  = rawOptSize  ? _parseSize(rawOptSize) : null;
         let curItemW = 1; // multiplicador de largura ativo
@@ -465,23 +465,34 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
           const itemTotal  = (basePrice * qty) + (optsTotal * qty);
           const priceVal   = _fmtN(itemTotal);
 
-          // SIZE do nome (se configurado) — apenas LARGURA dobrada reduz colunas (altura não)
+          // Nome do item em SIZE configurado, quebra limpa por palavras
           if (nameSize) {
             parts.push(ESCPos.charSize(nameSize.w, nameSize.h));
             curItemW = Math.max(1, nameSize.w);
           }
           parts.push(ESCPos.bold(true));
           const nameCols = Math.floor((cols - margin) / curItemW);
-          const qtyPrefix = `${qty}  `;
-          parts.push(..._rowWithWrap(qtyPrefix + name, priceVal, nameCols, margin, charset, qtyPrefix.length));
+          const qtyPrefix = `${qty}x  `;
+          const fullName = qtyPrefix + name;
+          const nameIndent = _autoIndentForLine(fullName);
+          const nameWrapped = _wrapLinesWithIndent(fullName, nameCols, nameIndent);
+          for (const nl of nameWrapped) {
+            if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+            parts.push(ESCPos.text(nl, charset));
+          }
           parts.push(ESCPos.bold(false));
+          // Preço à direita usando align nativo — sem padding manual
+          parts.push(ESCPos.charSize(1, 1));
+          parts.push(ESCPos.align('right'));
+          if (margin > 0) parts.push(ESCPos.marginLeft(margin));
+          parts.push(ESCPos.text(priceVal, charset));
+          parts.push(ESCPos.align('left'));
 
-          // SIZE dos opcionais — se configurado usa o valor, senão reseta para normal
+          // Complementos imediatamente após o nome (sem espaço entre eles)
           if (optSize) {
             parts.push(ESCPos.charSize(optSize.w, optSize.h));
             curItemW = Math.max(1, optSize.w);
           } else if (nameSize) {
-            // Nome tinha tamanho custom, opcionais não — resetar para normal
             parts.push(ESCPos.charSize(1, 1));
             curItemW = 1;
           }
@@ -495,7 +506,6 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
               const optName  = opt.name || '';
               const oqty     = Number(opt.quantity || 1);
               const optText = `${oqty}x ${optName}`;
-              // Quebra por palavras (com hífen forçado quando palavra única excede)
               let rest = optText;
               while (rest.length > 0) {
                 const { chunk, consumed } = _wordBreakSmart(rest, maxOpt);
@@ -515,6 +525,9 @@ function _renderBlocks(blocks, order, printer, header, cols, margin, charset) {
             if (margin > 0) parts.push(ESCPos.marginLeft(margin));
             parts.push(ESCPos.text(obsPad, charset));
           }
+
+          // Linha em branco entre itens
+          parts.push(ESCPos.feed(2));
         }
         // Reset SIZE se alterou
         if (nameSize || optSize) parts.push(ESCPos.charSize(1, 1));

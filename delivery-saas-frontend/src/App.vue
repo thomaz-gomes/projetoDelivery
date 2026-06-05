@@ -508,7 +508,13 @@ function goToRiderQr(){
 /* Inbox route: zero padding so the inbox can use full available area */
 .main-content--flush { padding: 0 !important; }
 @media (max-width: 767.98px) {
-  .main-content--flush { padding-top: 52px !important; } /* keep mobile header offset */
+  .main-content--flush {
+    padding-top: 52px !important; /* keep mobile header offset */
+    /* Fill viewport: override desktop topbar's 64px deduction since on mobile
+       the topbar is position:fixed and doesn't take flex space. */
+    max-height: 100vh !important;
+    height: 100vh !important;
+  }
 }
 /* Apply Sidebar color scheme and typography to mobile offcanvas list */
 .mobile-links-list { background: #89d136; padding: 8px 10px; border-radius: 8px; }
