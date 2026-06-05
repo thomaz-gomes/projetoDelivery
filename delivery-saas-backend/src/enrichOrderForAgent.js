@@ -266,6 +266,7 @@ export async function enrichOrderForAgent(order) {
     // 6. Resolver categoria dos itens (sector printing: cozinha vs. bar, etc.)
     if (Array.isArray(order.items) && order.items.length > 0) {
       try {
+        // 6a. Resolver por productId (caminho primário)
         const productIds = [...new Set(
           order.items
             .filter(item => item.productId && item.category == null)
@@ -286,6 +287,28 @@ export async function enrichOrderForAgent(order) {
           for (const item of order.items) {
             if (!item.productId || item.category != null) continue
             const prod = productMap[item.productId]
+            if (prod && prod.category) {
+              item.categoryId = prod.category.id
+              item.category = prod.category.name.toLowerCase()
+              item.categories = [prod.category.name.toLowerCase()]
+            }
+          }
+        }
+
+        // 6b. Fallback: resolver por nome quando productId ausente (ex: PDV sem fix de frontend)
+        const uncategorized = order.items.filter(i => !i.productId && i.category == null && i.name)
+        if (uncategorized.length > 0 && companyId) {
+          const names = [...new Set(uncategorized.map(i => i.name))]
+          const byName = await prisma.product.findMany({
+            where: { companyId, name: { in: names } },
+            select: { name: true, category: { select: { id: true, name: true } } }
+          })
+          const nameMap = {}
+          for (const prod of byName) {
+            if (prod.category) nameMap[prod.name] = prod
+          }
+          for (const item of uncategorized) {
+            const prod = nameMap[item.name]
             if (prod && prod.category) {
               item.categoryId = prod.category.id
               item.category = prod.category.name.toLowerCase()
