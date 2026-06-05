@@ -201,6 +201,13 @@ try {
   setInterval(() => { checkConnectivity().catch(()=>{}); }, 30000);
 } catch(e){}
 
+// Called on logout so the printer indicator resets for the incoming session
+export function reset() {
+  connected = false;
+  connectingPromise = null;
+  queue.length = 0;
+}
+
 // ================================
 // 🔧 Printer configuration helpers
 // ================================
@@ -236,5 +243,6 @@ export default {
   formatOrderText,
   getPrinterConfig,
   setPrinterConfig,
+  reset,
   getPrintRoute: () => 'agent',
 };
