@@ -126,6 +126,27 @@ async function _handleJob(item) {
   for (const printer of targets) {
     if (!printer.enabled) continue;
 
+    // ── Filtro setorial ────────────────────────────────────────────────────────
+    const isSetorial = Array.isArray(printer.categories)
+      && printer.categories.length > 0
+      && !printer.categories.includes('all');
+
+    let itemsForPrinter = order.items;
+    if (isSetorial && Array.isArray(order.items)) {
+      const printerCats = printer.categories.map(c => String(c).toLowerCase());
+      itemsForPrinter = order.items.filter(item => {
+        const itemCat  = item.category ? String(item.category).toLowerCase() : null;
+        const itemCats = Array.isArray(item.categories)
+          ? item.categories.map(c => String(c).toLowerCase())
+          : [];
+        return printerCats.some(c => c === itemCat || itemCats.includes(c));
+      });
+      if (itemsForPrinter.length === 0) {
+        logger.info(`[queue] Impressora "${printer.alias}" sem itens para este pedido — pulando.`);
+        continue;
+      }
+    }
+
     try {
       // Jobs fiscais: usar o receiptTemplate enviado pelo backend (DANFE gerado em agentPrint.js)
       // em vez do template padrão da impressora.
@@ -139,7 +160,7 @@ async function _handleJob(item) {
           : { ...printer, template: cfg.receiptTemplate || printer.template };
 
       // Injetar cabeçalho local se o pedido não trouxe do backend
-      const o = { ...order };
+      const o = { ...order, items: itemsForPrinter };
       if (!o.headerName && cfg.headerName) o.headerName = cfg.headerName;
       if (!o.headerCity && cfg.headerCity) o.headerCity = cfg.headerCity;
 
