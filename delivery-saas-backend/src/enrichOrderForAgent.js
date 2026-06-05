@@ -263,6 +263,39 @@ export async function enrichOrderForAgent(order) {
       order.frontendUrl = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '') || null
     }
 
+    // 6. Resolver categoria dos itens (sector printing: cozinha vs. bar, etc.)
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      try {
+        const productIds = order.items
+          .filter(item => item.productId && !item.category)
+          .map(item => item.productId)
+
+        if (productIds.length > 0) {
+          const products = await prisma.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, category: { select: { id: true, name: true } } }
+          })
+
+          const productMap = {}
+          for (const prod of products) {
+            productMap[prod.id] = prod
+          }
+
+          for (const item of order.items) {
+            if (!item.productId || item.category) continue
+            const prod = productMap[item.productId]
+            if (prod && prod.category) {
+              item.categoryId = prod.category.id
+              item.category = prod.category.name.toLowerCase()
+              item.categories = [prod.category.name.toLowerCase()]
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('enrichOrderForAgent: category resolution failed:', e?.message)
+      }
+    }
+
     order._enriched = true
   } catch (e) {
     console.warn('enrichOrderForAgent failed:', e && e.message)
