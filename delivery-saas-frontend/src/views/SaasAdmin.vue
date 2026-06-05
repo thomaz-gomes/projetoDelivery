@@ -159,6 +159,9 @@ function statusLabel(s) {
                 <router-link to="/saas/ai-usage" class="btn btn-outline-info text-start">
                   <i class="bi bi-graph-up me-2"></i>Uso de IA & Tokens
                 </router-link>
+                <router-link to="/saas/evolution-config" class="btn btn-outline-success text-start">
+                  <i class="bi bi-whatsapp me-2"></i>Evolution API
+                </router-link>
                 <button class="btn btn-outline-warning text-start" @click="resetAllCredits" :disabled="resettingCredits">
                   <span v-if="resettingCredits" class="spinner-border spinner-border-sm me-2"></span>
                   <i v-else class="bi bi-arrow-clockwise me-2"></i>Resetar Créditos de IA
