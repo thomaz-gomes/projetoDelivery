@@ -36,6 +36,7 @@ export const nav = [
   ] },
   { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', role: 'ADMIN', children: [
     { name: 'Campanhas', to: '/marketing/campaigns', icon: 'bi bi-broadcast', moduleKey: 'marketing_campaigns', lockable: true },
+    { name: 'Avisos no Cardápio', to: '/marketing/menu-notifications', icon: 'bi bi-megaphone' },
     { name: 'Segmentos', to: '/marketing/segments', icon: 'bi bi-people', moduleKey: 'marketing_campaigns', lockable: true },
     { name: 'Studio IA', to: '/marketing/studio-ia', icon: 'bi bi-stars' },
     { name: 'Temas Visuais', to: '/marketing/brand-themes', icon: 'bi bi-palette' },
