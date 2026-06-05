@@ -99,3 +99,7 @@ test('buildPublicAnnouncement: includes only banner fields when bannerEnabled', 
   assert.equal(out.bannerText, 'BUY NOW')
   assert.equal(out.popupMessage, undefined)
 })
+
+test('buildPublicAnnouncement: undefined when row missing returns null', () => {
+  assert.equal(buildPublicAnnouncement(undefined), null)
+})
