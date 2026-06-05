@@ -40,13 +40,12 @@ function getTargetPrinters(order) {
     return _printers.filter(p => p.enabled);
   }
 
-  const orderCategories = _extractCategories(order);
-
+  // Roteamento: passa o pedido para todas as impressoras habilitadas.
+  // A filtragem de itens por categoria é responsabilidade do printQueue._handleJob.
   return _printers.filter((p) => {
     if (!p.enabled) return false;
     if (!p.categories || p.categories.length === 0) return false;
-    if (p.categories.includes('all')) return true;
-    return p.categories.some((c) => orderCategories.includes(c));
+    return true;
   });
 }
 

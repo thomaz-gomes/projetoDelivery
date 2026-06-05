@@ -127,7 +127,9 @@ async function _handleJob(item) {
     if (!printer.enabled) continue;
 
     // ── Filtro setorial ────────────────────────────────────────────────────────
-    const isSetorial = Array.isArray(printer.categories)
+    // isTest bypassa o filtro: itens de teste não têm productId/category
+    const isSetorial = !isTest
+      && Array.isArray(printer.categories)
       && printer.categories.length > 0
       && !printer.categories.includes('all');
 
