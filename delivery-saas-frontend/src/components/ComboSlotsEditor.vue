@@ -10,8 +10,9 @@
       Nenhum slot configurado. Adicione um slot para definir os componentes deste combo.
     </div>
 
+    <!-- Helper banners differ per pricing mode -->
     <div
-      v-if="slots.length > 0 && precoComboNum > 0"
+      v-if="!isVariable && slots.length > 0 && precoComboNum > 0"
       :class="['alert', 'py-2', 'small', 'mb-3', somaExcede ? 'alert-danger' : 'alert-secondary']"
     >
       <i :class="['bi', somaExcede ? 'bi-exclamation-triangle-fill' : 'bi-info-circle', 'me-1']"></i>
@@ -24,17 +25,44 @@
         — resta R$ {{ restanteDisponivel.toFixed(2) }} para distribuir.
       </span>
     </div>
+    <div
+      v-else-if="isVariable && slots.length > 0"
+      :class="['alert', 'py-2', 'small', 'mb-3', anchorCount === 1 ? 'alert-secondary' : 'alert-warning']"
+    >
+      <i :class="['bi', anchorCount === 1 ? 'bi-info-circle' : 'bi-exclamation-triangle-fill', 'me-1']"></i>
+      <strong>Combo variável:</strong>
+      <template v-if="anchorCount === 0">
+        marque um dos slots como <strong>âncora</strong> (preço fixo) para validar o combo.
+      </template>
+      <template v-else-if="anchorCount > 1">
+        só pode haver UM slot âncora — desmarque os demais.
+      </template>
+      <template v-else>
+        o cliente paga
+        <strong>R$ {{ anchorFixedValue.toFixed(2) }}</strong> do slot âncora + soma dos itens dos demais slots.
+        Na NF-e os valores são distribuídos proporcionalmente.
+      </template>
+    </div>
 
     <div
       v-for="(slot, sIdx) in slots"
       :key="sIdx"
-      :class="['card', 'mb-3', 'combo-slot-card', somaExcede ? 'combo-slot-card--invalid' : '']"
+      :class="[
+        'card',
+        'mb-3',
+        'combo-slot-card',
+        (!isVariable && somaExcede) ? 'combo-slot-card--invalid' : '',
+        (isVariable && slot.isPriceAnchor) ? 'combo-slot-card--anchor' : '',
+      ]"
     >
       <div class="card-body">
         <div class="d-flex align-items-center mb-3 gap-2">
           <div class="combo-slot-badge">
             <i class="bi bi-collection me-1"></i>
             Slot {{ sIdx + 1 }}
+            <span v-if="isVariable && slot.isPriceAnchor" class="combo-slot-badge__anchor-tag" title="Slot âncora">
+              <i class="bi bi-pin-angle-fill"></i> âncora
+            </span>
           </div>
           <div class="flex-grow-1">
             <TextInput
@@ -50,6 +78,21 @@
           >
             <i class="bi bi-trash"></i>
           </BaseIconButton>
+        </div>
+
+        <!-- Anchor selector (VARIABLE only) -->
+        <div v-if="isVariable" class="form-check mb-3">
+          <input
+            class="form-check-input"
+            type="radio"
+            :name="'combo-anchor-' + uid"
+            :id="'combo-anchor-' + sIdx"
+            :checked="!!slot.isPriceAnchor"
+            @change="setAnchorSlot(sIdx)"
+          />
+          <label class="form-check-label small" :for="'combo-anchor-' + sIdx">
+            <strong>Slot âncora</strong> — preço fixo. O cliente paga este valor + soma dos itens dos demais slots.
+          </label>
         </div>
 
         <div class="row g-2 mb-3">
@@ -71,15 +114,30 @@
               v-model.number="slot.maxSelect"
             />
           </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label small mb-1">Valor declarado (NFC-e)</label>
+          <!-- vUnCom: always shown in FIXED mode; in VARIABLE shown only for the anchor slot. -->
+          <div v-if="!isVariable || slot.isPriceAnchor" class="col-12 col-md-6">
+            <label class="form-label small mb-1">
+              <template v-if="isVariable && slot.isPriceAnchor">Valor fixo deste slot (R$)</template>
+              <template v-else>Valor declarado (NFC-e)</template>
+            </label>
             <CurrencyInput
               v-model="slot.vUnComDeclarado"
-              :inputClass="'form-control form-control-sm' + (somaExcede ? ' is-invalid' : '')"
+              :inputClass="'form-control form-control-sm' + ((!isVariable && somaExcede) ? ' is-invalid' : '')"
               placeholder="0,00"
             />
-            <small :class="somaExcede ? 'text-danger' : 'text-muted'">
-              Valor que cada opção deste slot terá no `&lt;vUnCom&gt;` da nota fiscal.
+            <small :class="(!isVariable && somaExcede) ? 'text-danger' : 'text-muted'">
+              <template v-if="isVariable && slot.isPriceAnchor">
+                Vai para o &lt;vUnCom&gt; do slot âncora na NF-e (valor fixo, não rateado).
+              </template>
+              <template v-else>
+                Valor que cada opção deste slot terá no &lt;vUnCom&gt; da nota fiscal.
+              </template>
+            </small>
+          </div>
+          <div v-else class="col-12 col-md-6 d-flex align-items-end">
+            <small class="text-muted fst-italic">
+              <i class="bi bi-info-circle me-1"></i>
+              Valor fiscal calculado automaticamente no momento da emissão (rateio proporcional).
             </small>
           </div>
         </div>
@@ -106,20 +164,12 @@
             <div class="row g-2 align-items-end">
               <div class="col-10 col-md-11">
                 <label class="form-label small mb-1">Produto</label>
-                <SelectInput
+                <ProductPicker
                   :model-value="opt.linkedProductId"
-                  class="form-control"
-                  @update:model-value="(v) => (opt.linkedProductId = v)"
-                >
-                  <option value="">— Selecione um produto —</option>
-                  <option
-                    v-for="p in availableProducts"
-                    :key="p.id"
-                    :value="p.id"
-                  >
-                    {{ p.name }} — R$ {{ Number(p.price || 0).toFixed(2) }}
-                  </option>
-                </SelectInput>
+                  :products="availableProducts"
+                  placeholder="— Selecione um produto —"
+                  @update:model-value="(v) => (opt.linkedProductId = v || '')"
+                />
               </div>
               <div class="col-2 col-md-1 d-flex justify-content-end">
                 <BaseIconButton
@@ -160,7 +210,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import api from '../api'
 import TextInput from './form/input/TextInput.vue'
-import SelectInput from './form/select/SelectInput.vue'
+import ProductPicker from './form/select/ProductPicker.vue'
 import CurrencyInput from './form/input/CurrencyInput.vue'
 import BaseIconButton from './BaseIconButton.vue'
 
@@ -169,7 +219,11 @@ const props = defineProps({
   companyId: { type: String, default: null },
   excludeProductId: { type: String, default: null },
   precoCombo: { type: [Number, String], default: 0 },
+  // 'FIXED' (default, historical) or 'VARIABLE' (sum-of-choices + 1 anchor slot)
+  pricingMode: { type: String, default: 'FIXED' },
 })
+
+const isVariable = computed(() => props.pricingMode === 'VARIABLE')
 
 const emit = defineEmits(['update:modelValue'])
 
@@ -188,6 +242,7 @@ function normalizeSlots(arr) {
           s?.vUnComDeclarado !== undefined && s?.vUnComDeclarado !== null
             ? Number(s.vUnComDeclarado)
             : 0,
+        isPriceAnchor: !!s?.isPriceAnchor,
         options: Array.isArray(s?.options)
           ? s.options.map(o => ({
               linkedProductId: o?.linkedProductId || '',
@@ -196,6 +251,15 @@ function normalizeSlots(arr) {
           : [],
       }))
     : []
+}
+
+// Toggling the anchor radio on one slot must clear the flag from every other
+// slot (invariant: at most one anchor per combo). Called when the user
+// clicks an anchor radio in VARIABLE mode.
+function setAnchorSlot(sIdx) {
+  for (let i = 0; i < slots.value.length; i++) {
+    slots.value[i].isPriceAnchor = i === sIdx
+  }
 }
 
 function hydrate() {
@@ -247,6 +311,18 @@ const restanteDisponivel = computed(() => {
   return Math.max(0, precoComboNum.value - somaDeclarada.value)
 })
 
+// ── VARIABLE-mode helpers ──
+const anchorCount = computed(() =>
+  (slots.value || []).filter(s => s.isPriceAnchor).length
+)
+const anchorFixedValue = computed(() => {
+  const a = (slots.value || []).find(s => s.isPriceAnchor)
+  return a ? Number(a.vUnComDeclarado || 0) : 0
+})
+// Unique id to namespace the anchor radio group per ComboSlotsEditor instance
+// — prevents collisions if multiple editors mount in the same page.
+const uid = Math.random().toString(36).slice(2, 8)
+
 async function loadProducts() {
   loading.value = true
   try {
@@ -266,6 +342,7 @@ function addSlot() {
     minSelect: 1,
     maxSelect: 1,
     vUnComDeclarado: 0,
+    isPriceAnchor: false,
     options: [],
   })
 }
@@ -304,6 +381,21 @@ onMounted(() => {
   border-color: var(--danger, #dc3545);
   box-shadow: 0 0 0 1px var(--danger, #dc3545) inset;
 }
+.combo-slot-card--anchor {
+  border-color: var(--success-dark, #6dae1e);
+  background: rgba(137, 209, 54, 0.04);
+}
+.combo-slot-badge__anchor-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.22);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.combo-slot-badge__anchor-tag i { margin-right: 2px; }
 
 .combo-slot-badge {
   display: inline-flex;

@@ -1,16 +1,17 @@
 <template>
-  <div class="d-flex flex-column h-100" style="min-height: 0;">
-    <!-- Search + Store filter -->
-    <div class="p-2 border-bottom d-flex gap-2 position-relative">
-      <div class="flex-grow-1 position-relative">
+  <div class="inbox-list">
+    <!-- Search + Lojas (side-by-side, like Chefiz) -->
+    <div class="inbox-list__filters">
+      <div class="inbox-list__search-wrap">
+        <i class="bi bi-search inbox-list__search-icon"></i>
         <input
           type="text"
           v-model="searchInput"
           @input="onSearchInput"
           @focus="onSearchFocus"
           @blur="onSearchBlur"
-          placeholder="Buscar contato por nome ou número..."
-          class="form-control form-control-sm"
+          placeholder="Buscar contato"
+          class="inbox-list__search-input"
         />
         <!-- Search results dropdown -->
         <div
@@ -49,58 +50,62 @@
           </template>
         </div>
       </div>
-      <select v-model="filters.storeId" @change="onFiltersChange" class="form-select form-select-sm" style="width: auto; max-width: 140px;">
-        <option :value="null">Todas as lojas</option>
-        <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
-      </select>
+
+      <div class="inbox-list__store-wrap">
+        <select v-model="filters.storeId" @change="onFiltersChange" class="inbox-list__store-select">
+          <option :value="null">Lojas</option>
+          <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
+        </select>
+        <i class="bi bi-chevron-down inbox-list__store-caret"></i>
+      </div>
     </div>
 
-    <!-- Filter row 0: channel chips -->
-    <div class="d-flex gap-1 px-2 pt-2 flex-wrap">
+    <!-- Segmented status switcher -->
+    <div class="inbox-list__segment-row">
+      <div class="inbox-segment">
+        <button
+          v-for="opt in statusOptions"
+          :key="opt.value"
+          class="inbox-segment__btn"
+          :class="{ 'inbox-segment__btn--active': filters.status === opt.value }"
+          @click="setStatus(opt.value)"
+        >{{ opt.label }}</button>
+      </div>
+    </div>
+
+    <!-- Chips (channels + mine + unread, like Chefiz) -->
+    <div class="inbox-list__chips qreplies">
+      <button
+        class="inbox-chip"
+        :class="{ 'inbox-chip--active': filters.unread }"
+        @click="toggleUnread"
+      >
+        <i class="bi bi-circle-fill" style="font-size: 0.5rem;"></i>
+        Não lidas
+        <span v-if="unreadCount" class="inbox-chip__count">{{ unreadCount }}</span>
+      </button>
+      <button
+        class="inbox-chip"
+        :class="{ 'inbox-chip--active': filters.mine }"
+        @click="toggleMine"
+      >
+        <i class="bi bi-person"></i>
+        Minhas
+        <span v-if="mineCount" class="inbox-chip__count">{{ mineCount }}</span>
+      </button>
       <button
         v-for="opt in channelOptions"
         :key="opt.value ?? 'all'"
-        class="btn btn-sm"
-        :class="filters.channel === opt.value ? 'btn-primary' : 'btn-outline-secondary'"
+        class="inbox-chip"
+        :class="{ 'inbox-chip--active': filters.channel === opt.value }"
         @click="setChannel(opt.value)"
       >
-        <i v-if="opt.icon" :class="['bi', opt.icon, 'me-1']"></i>{{ opt.label }}
-      </button>
-    </div>
-
-    <!-- Filter row 1: status -->
-    <div class="d-flex gap-1 px-2 pt-2">
-      <button
-        v-for="opt in statusOptions"
-        :key="opt.value"
-        class="btn btn-sm flex-fill"
-        :class="filters.status === opt.value ? 'btn-primary' : 'btn-outline-secondary'"
-        @click="setStatus(opt.value)"
-      >{{ opt.label }}</button>
-    </div>
-
-    <!-- Filter row 2: chips -->
-    <div class="d-flex gap-1 px-2 py-2 align-items-center flex-wrap">
-      <button
-        class="btn btn-sm"
-        :class="filters.mine ? 'btn-info text-white' : 'btn-outline-secondary'"
-        @click="toggleMine"
-      >
-        <i class="bi bi-person"></i> Minhas
-        <span v-if="mineCount" class="badge bg-light text-dark ms-1">{{ mineCount }}</span>
-      </button>
-      <button
-        class="btn btn-sm"
-        :class="filters.unread ? 'btn-success text-white' : 'btn-outline-secondary'"
-        @click="toggleUnread"
-      >
-        <i class="bi bi-circle-fill" style="font-size: 0.5rem;"></i> Não lidas
-        <span v-if="unreadCount" class="badge bg-light text-dark ms-1">{{ unreadCount }}</span>
+        <i v-if="opt.icon" :class="['bi', opt.icon]"></i>{{ opt.label }}
       </button>
     </div>
 
     <!-- List -->
-    <div class="flex-grow-1 overflow-auto" style="min-height: 0;">
+    <div class="inbox-list__items">
       <div v-if="inboxStore.loading" class="text-center py-3 text-muted small">Carregando...</div>
       <ConversationItem
         v-for="conv in inboxStore.conversations"
@@ -178,7 +183,7 @@ function onSearchInput() {
     const myToken = ++searchToken;
     try {
       const data = await inboxStore.searchContacts(q);
-      if (myToken !== searchToken) return; // stale
+      if (myToken !== searchToken) return;
       searchResults.value = data;
     } catch (e) {
       if (myToken !== searchToken) return;
@@ -195,16 +200,9 @@ function onSearchFocus() {
 }
 
 function onSearchBlur() {
-  // Delay so click on a result (mousedown) registers before the dropdown closes.
   setTimeout(() => { searchOpen.value = false; }, 150);
 }
 
-// Pergunta ao operador qual integração WhatsApp deve conduzir o chat.
-// Comportamento adaptativo:
-//   - Nenhuma integração configurada → alerta e retorna null (aborta)
-//   - 1 integração → retorna ela sem perguntar (UX limpa quando não há ambiguidade)
-//   - 2+ integrações → mostra Swal com select pra escolher
-// Retorna { provider, accountId, displayName } ou null se cancelado/sem opção.
 async function pickIntegration() {
   let integrations = [];
   try {
@@ -247,10 +245,6 @@ async function pickIntegration() {
 async function onPickResult(r) {
   try {
     if (r.type === 'contact' && r.conversation) {
-      // Conversa existente — abre direto. Quando estava CLOSED/arquivada, o
-      // start-conversation server-side reabre. Passa providerAccountId pra
-      // garantir que a MESMA conversa é reaberta (e não cria-se outra em
-      // outra integração).
       const inStore = inboxStore.conversations.some(c => c.id === r.conversation.id);
       let convId = r.conversation.id;
       if (!inStore || r.conversation.status !== 'OPEN') {
@@ -262,7 +256,6 @@ async function onPickResult(r) {
       }
       emit('select', convId);
     } else if (r.type === 'contact') {
-      // Cliente existente sem conversa — pergunta integração antes de criar.
       const integration = await pickIntegration();
       if (!integration) return;
       const conv = await inboxStore.startConversation({
@@ -271,7 +264,6 @@ async function onPickResult(r) {
       });
       if (conv?.id) emit('select', conv.id);
     } else if (r.type === 'new-number') {
-      // Novo número — pergunta integração antes de criar Customer + conversa.
       const integration = await pickIntegration();
       if (!integration) return;
       const conv = await inboxStore.startConversation({
@@ -323,15 +315,168 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.inbox-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #fff;
+}
+
+/* ── Search + Lojas row ── */
+.inbox-list__filters {
+  display: flex;
+  gap: 8px;
+  padding: 14px 16px 8px;
+  position: relative;
+}
+.inbox-list__search-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  background: #f4f5f7;
+  border-radius: 11px;
+  padding: 0 12px;
+  min-width: 0;
+}
+.inbox-list__search-icon {
+  color: #929aa8;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+.inbox-list__search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.875rem;
+  color: #1d2330;
+}
+.inbox-list__search-input::placeholder { color: #929aa8; }
+
+.inbox-list__store-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.inbox-list__store-select {
+  height: 42px;
+  padding: 0 26px 0 12px;
+  background: #f4f5f7;
+  border: 1px solid #e9ecf1;
+  border-radius: 11px;
+  color: #5a6373;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  max-width: 130px;
+}
+.inbox-list__store-caret {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: #5a6373;
+  pointer-events: none;
+}
+
+/* ── Segmented status switcher ── */
+.inbox-list__segment-row {
+  padding: 0 16px 8px;
+}
+.inbox-segment {
+  display: flex;
+  background: #f4f5f7;
+  border-radius: 11px;
+  padding: 3px;
+}
+.inbox-segment__btn {
+  flex: 1;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #5a6373;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.inbox-segment__btn--active {
+  background: var(--success, #89D136);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+/* ── Chips row ── */
+.inbox-list__chips {
+  display: flex;
+  gap: 7px;
+  padding: 0 16px 8px;
+  overflow-x: auto;
+}
+.inbox-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #e9ecf1;
+  border-radius: 15px;
+  background: #fff;
+  color: #5a6373;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .1s, border-color .1s;
+}
+.inbox-chip:hover { background: #f3f5f7; }
+.inbox-chip--active {
+  background: rgba(137, 209, 54, 0.14);
+  border-color: var(--success, #89D136);
+  color: #4a6f0d;
+}
+.inbox-chip__count {
+  background: #e23b3b;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ── List ── */
+.inbox-list__items {
+  flex: 1;
+  overflow-y: auto;
+  border-top: 1px solid #f0f2f5;
+  min-height: 0;
+}
+
+/* ── Search dropdown (preserved layout) ── */
 .search-dropdown {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 4px);
   left: 0;
   right: 0;
-  margin-top: 4px;
   background: #fff;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
+  border: 1px solid #e9ecf1;
+  border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   max-height: 320px;
   overflow-y: auto;
@@ -341,13 +486,13 @@ onMounted(async () => {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid #f1f3f5;
+  border-bottom: 1px solid #f0f2f5;
 }
 .search-dropdown__item:last-child { border-bottom: 0; }
-.search-dropdown__item:hover { background: #f8f9fa; }
+.search-dropdown__item:hover { background: #f6f7f9; }
 .search-dropdown__hint {
   padding: 10px 12px;
   font-size: 0.85rem;

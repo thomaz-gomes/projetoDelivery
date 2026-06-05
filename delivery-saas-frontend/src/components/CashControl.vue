@@ -491,6 +491,20 @@ onMounted(() => {
     });
   }
 
+  // Reset immediately on logout so the previous company's session doesn't show
+  const onLoggedOut = () => {
+    currentSession.value = null;
+    invalidateCashSummary();
+    if (cashSocket) { cashSocket.disconnect(); cashSocket = null; }
+  };
+  // Reload session when a new user logs in (handles account switching without full reload)
+  const onLoggedIn = () => {
+    invalidateCashSummary();
+    loadCurrentSession().catch(() => {});
+  };
+  window.addEventListener('app:user-logged-out', onLoggedOut);
+  window.addEventListener('app:user-logged-in', onLoggedIn);
+
   // close dropdown on outside click
   const outside = (ev) => {
     try {
@@ -501,6 +515,8 @@ onMounted(() => {
   document.addEventListener('click', outside);
   onUnmounted(() => {
     try { document.removeEventListener('click', outside); } catch (e) {}
+    window.removeEventListener('app:user-logged-out', onLoggedOut);
+    window.removeEventListener('app:user-logged-in', onLoggedIn);
     if (cashSocket) { cashSocket.disconnect(); cashSocket = null; }
   });
 });

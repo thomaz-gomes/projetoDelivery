@@ -787,13 +787,26 @@ ordersRouter.patch('/:id/status', requireRole('ADMIN', 'ATTENDANT', 'STORE'), as
       }
     }
 
-    // If payments provided, persist them into payload.paymentConfirmed (merge with existing payload)
+    // If payments provided, persist them into payload.paymentConfirmed AND
+    // update payload.payment.method to the confirmed form so that all
+    // downstream consumers (NF-e, SalesHistory, normalizeOrder) read the
+    // actual payment and not the original customer-selected method.
+    // When multiple forms are used, the one with the highest amount is
+    // promoted to payload.payment.method (primary form for NF-e).
     let updateData = { status, histories: { create: historyCreate } };
     if (payments) {
       try {
         const current = await prisma.order.findUnique({ where: { id }, select: { payload: true } });
         const currentPayload = (current && current.payload) ? current.payload : {};
-        const newPayload = Object.assign({}, currentPayload, { paymentConfirmed: payments });
+        // Primary method = highest-amount payment in the confirmed list.
+        const primary = payments.reduce((best, p) => (!best || Number(p.amount || 0) > Number(best.amount || 0)) ? p : best, null);
+        const updatedPayment = primary
+          ? Object.assign({}, currentPayload.payment || {}, { method: String(primary.method), methodCode: String(primary.method), amount: Number(primary.amount || 0) })
+          : currentPayload.payment || {};
+        const newPayload = Object.assign({}, currentPayload, {
+          paymentConfirmed: payments,
+          payment: updatedPayment,
+        });
         updateData.payload = newPayload;
       } catch (e) { console.warn('Failed to merge paymentConfirmed into payload', e && e.message); }
     }

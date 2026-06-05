@@ -207,7 +207,11 @@
               <div class="featured-card-name">{{ p.name }}</div>
               <div class="featured-card-footer">
                 <strong class="featured-card-price">
-                  <template v-if="isOnPromo(p)">
+                  <template v-if="isVariableCombo(p)">
+                    <small style="font-weight:500;font-size:0.7em;">A partir de</small>
+                    {{ formatCurrency(effectiveProductPrice(p)) }}
+                  </template>
+                  <template v-else-if="isOnPromo(p)">
                     <span class="price-old">{{ formatCurrency(Number(p.price || 0)) }}</span>
                     <span class="price-new">{{ formatCurrency(effectiveProductPrice(p)) }}</span>
                   </template>
@@ -269,7 +273,8 @@
                           <span>{{ getProductCashbackPercent(p) }}% cashback · {{ formatCurrency(effectiveProductPrice(p) * getProductCashbackPercent(p) / 100) }}</span>
                         </div>
                         <strong class="product-price">
-                          <span v-if="getStartingPrice(p) > effectiveProductPrice(p)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
+                          <span v-if="isVariableCombo(p)"><small>A partir de</small> {{ formatCurrency(effectiveProductPrice(p)) }}</span>
+                          <span v-else-if="getStartingPrice(p) > effectiveProductPrice(p)"><small>A partir de</small> {{ formatCurrency(getStartingPrice(p)) }}</span>
                           <template v-else-if="isOnPromo(p)">
                             <span class="price-old">{{ formatCurrency(Number(p.price || 0)) }}</span>
                             <span class="price-new">{{ formatCurrency(effectiveProductPrice(p)) }}</span>
@@ -402,7 +407,11 @@
                 <div class="modal-product-desc">{{ selectedProduct?.description }}</div>
                 <div class="d-flex align-items-center gap-3 mt-2">
                   <strong class="modal-product-price">
-                    <template v-if="isOnPromo(selectedProduct)">
+                    <template v-if="isVariableCombo(selectedProduct)">
+                      <small class="text-muted me-1" style="font-weight:500;font-size:0.8em;">A partir de</small>
+                      {{ formatCurrency(modalVariableTotal) }}
+                    </template>
+                    <template v-else-if="isOnPromo(selectedProduct)">
                       <span class="price-old">{{ formatCurrency(Number(selectedProduct.price || 0)) }}</span>
                       <span class="price-new">{{ formatCurrency(effectiveProductPrice(selectedProduct)) }}</span>
                     </template>
@@ -410,7 +419,7 @@
                   </strong>
                   <div v-if="getProductCashbackPercent(selectedProduct) > 0" class="cashback-pill">
                     <span class="cashback-coin">$</span>
-                    <span>{{ getProductCashbackPercent(selectedProduct) }}% cashback · {{ formatCurrency(effectiveProductPrice(selectedProduct) * getProductCashbackPercent(selectedProduct) / 100) }}</span>
+                    <span>{{ getProductCashbackPercent(selectedProduct) }}% cashback · {{ formatCurrency((isVariableCombo(selectedProduct) ? modalVariableTotal : effectiveProductPrice(selectedProduct)) * getProductCashbackPercent(selectedProduct) / 100) }}</span>
                   </div>
                 </div>
               </div>
@@ -425,7 +434,7 @@
                 
 
               <!-- Combo slots (when product is a combo) -->
-              <div v-if="selectedProduct?.isCombo && selectedProduct?.combo?.slots?.length" class="mb-4">
+              <div v-if="selectedProduct?.isCombo && selectedProduct?.combo?.slots?.length" class="mb-4 px-3">
                 <div
                   v-for="slot in selectedProduct.combo.slots"
                   :key="slot.id"
@@ -453,6 +462,9 @@
                     <div v-for="opt in (slot.options || [])" :key="opt.id" class="mb-2">
                       <div class="d-flex justify-content-between align-items-center option-row">
                         <div class="d-flex align-items-center gap-2 option-left">
+                          <div v-if="opt.linkedProduct && opt.linkedProduct.image" class="option-thumb">
+                            <img :src="assetUrl(opt.linkedProduct.image)" :alt="opt.linkedProduct.name || 'Produto'" loading="lazy" />
+                          </div>
                           <div class="option-meta">
                             <div class="option-name">{{ opt.linkedProduct?.name || 'Opção' }}</div>
                             <small v-if="opt.linkedProduct && opt.linkedProduct.isActive === false" class="text-danger">Indisponível</small>
@@ -470,6 +482,30 @@
                             :disabled="opt.linkedProduct && opt.linkedProduct.isActive === false"
                             @change="onSlotChange(slot)"
                           />
+                          <!-- Fixed-N slot (min === max && max > 1): numeric stepper so the
+                               customer can choose the same item more than once. -->
+                          <div
+                            v-else-if="slot.minSelect === slot.maxSelect && slot.maxSelect > 1"
+                            class="qty-stepper"
+                            role="group"
+                            :aria-label="'Quantidade de ' + (opt.linkedProduct?.name || 'opção')"
+                          >
+                            <button
+                              type="button"
+                              class="qty-stepper__btn"
+                              :disabled="optionCount(slot.id, opt.id) <= 0 || (opt.linkedProduct && opt.linkedProduct.isActive === false)"
+                              @click="decOption(slot, opt.id)"
+                              aria-label="Diminuir"
+                            >−</button>
+                            <span class="qty-stepper__val">{{ optionCount(slot.id, opt.id) }}</span>
+                            <button
+                              type="button"
+                              class="qty-stepper__btn"
+                              :disabled="totalChosenForSlot(slot.id) >= slot.maxSelect || (opt.linkedProduct && opt.linkedProduct.isActive === false)"
+                              @click="incOption(slot, opt.id)"
+                              aria-label="Aumentar"
+                            >+</button>
+                          </div>
                           <input
                             v-else
                             class="form-check-input"
@@ -487,7 +523,7 @@
                 </div>
               </div>
 
-              <div v-if="selectedProduct?.optionGroups && selectedProduct.optionGroups.length">
+              <div v-if="selectedProduct?.optionGroups && selectedProduct.optionGroups.length" class="px-3">
                 <div v-for="g in selectedProduct.optionGroups" :key="g.id" :id="'grp-'+g.id" :class="['mb-3', requiredWarnings[g.id] ? 'required-fail' : '']">
                   <div class="d-flex justify-content-between align-items-center mb-2 group-header">
                     <div>
@@ -2543,6 +2579,13 @@ const editingCartIndex = ref(-1)
 // combo product slot selections — map slotId -> optionId (string for radio/max=1) or array of optionIds (checkbox/max>1)
 const comboSelections = ref({})
 
+// Live total of the open VARIABLE combo modal; recomputes whenever the
+// customer picks/unpicks a slot option. Falls back to 0 outside a variable
+// combo context (caller already gates with isVariableCombo()).
+const modalVariableTotal = computed(() => {
+  return variableComboTotal(selectedProduct.value, comboSelections.value)
+})
+
 // Clear required warning for a combo slot when its selection changes.
 function onSlotChange(slot){
   try{
@@ -2550,6 +2593,46 @@ function onSlotChange(slot){
     delete requiredWarnings[key]
     delete requiredMessages[key]
   }catch(e){}
+}
+
+// ── Fixed-N slot helpers (slot.minSelect === slot.maxSelect && max > 1) ──
+// The selection model stays the same shape (array of option IDs for max>1),
+// but for fixed-N slots we allow REPEATED IDs to represent picking the same
+// item more than once. The cart-confirmation loop already iterates each
+// occurrence, so the rest of the flow needs no changes.
+function optionCount(slotId, optId){
+  const raw = comboSelections.value[slotId]
+  if (!Array.isArray(raw)) return 0
+  let n = 0
+  for (const x of raw) if (x === optId) n++
+  return n
+}
+
+function totalChosenForSlot(slotId){
+  const raw = comboSelections.value[slotId]
+  if (Array.isArray(raw)) return raw.length
+  return raw ? 1 : 0
+}
+
+function incOption(slot, optId){
+  const cap = Number(slot.maxSelect || 0)
+  if (cap > 0 && totalChosenForSlot(slot.id) >= cap) return
+  const arr = Array.isArray(comboSelections.value[slot.id])
+    ? comboSelections.value[slot.id].slice()
+    : []
+  arr.push(optId)
+  comboSelections.value[slot.id] = arr
+  onSlotChange(slot)
+}
+
+function decOption(slot, optId){
+  const arr = Array.isArray(comboSelections.value[slot.id])
+    ? comboSelections.value[slot.id].slice()
+    : []
+  const idx = arr.lastIndexOf(optId)
+  if (idx >= 0) arr.splice(idx, 1)
+  comboSelections.value[slot.id] = arr
+  onSlotChange(slot)
 }
 
 function showTip(key, msg, ms = 1400){
@@ -2892,6 +2975,37 @@ function effectiveProductPrice(p) {
   }
   return base
 }
+
+// ── Variable combo helpers ──
+// True when the product is a combo configured to compute its total from the
+// customer's slot choices (Phase B introduced pricingMode = VARIABLE).
+function isVariableCombo(p) {
+  return !!(p && p.isCombo && p.combo && p.combo.pricingMode === 'VARIABLE')
+}
+// Compute the running total of a variable combo from the current slot
+// selections: anchor slot contributes its fixed vUnComDeclarado; each non-
+// anchor slot contributes the sum of its selected options' linkedProduct
+// prices (price 0 when the linked product is missing).
+function variableComboTotal(p, selectionsMap) {
+  if (!isVariableCombo(p)) return 0
+  const slots = (p.combo && p.combo.slots) || []
+  let total = 0
+  for (const slot of slots) {
+    if (slot.isPriceAnchor) {
+      total += Number(slot.vUnComDeclarado || 0)
+      continue
+    }
+    const raw = selectionsMap ? selectionsMap[slot.id] : null
+    const ids = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : [])
+    for (const oid of ids) {
+      const opt = (slot.options || []).find(o => o.id === oid)
+      if (opt && opt.linkedProduct && opt.linkedProduct.price != null) {
+        total += Number(opt.linkedProduct.price || 0)
+      }
+    }
+  }
+  return total
+}
 // True when the product has a valid promo price AND that promo is the price
 // currently in effect (i.e. specialTakeoutPrice is not overriding it).
 function isOnPromo(p) {
@@ -2954,14 +3068,21 @@ function addToCartWithOptions(p, selections, qty=1, observation='', comboOptions
     }
   }
   const selectedOptions = [...(Array.isArray(comboOptions) ? comboOptions : []), ...addonOptions]
-  const unitPrice = effectiveProductPrice(p) + optionsTotal
+  // VARIABLE combo: the unit price is the sum of the customer's chosen items
+  // (anchor's fixed value + non-anchor selected linkedProduct prices) plus any
+  // addon group options. FIXED combos and regular products keep using the
+  // effective base price.
+  const comboBase = isVariableCombo(p)
+    ? variableComboTotal(p, comboSelections.value)
+    : effectiveProductPrice(p)
+  const unitPrice = comboBase + optionsTotal
   const obs = (observation || '').trim() || null
   // try to merge with existing line that has same productId+options+observation
   const idx = findCartIndex(p.id, selectedOptions, obs || '')
   if(idx >= 0){ cart.value[idx].quantity += qty }
   else { cart.value.push({ lineId: _makeLineId(), productId: p.id, name: p.name, price: unitPrice, quantity: qty, options: selectedOptions, observation: obs, image: p.image || null, categoryId: p.categoryId || null }) }
   // Meta Pixel: track add to cart
-  try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: effectiveProductPrice(p), options: selectedOptions }, qty) }catch(e){}
+  try{ trackPixelAddToCart({ id: p.id, productId: p.id, name: p.name, price: comboBase, options: selectedOptions }, qty) }catch(e){}
   try{ trackMenuEvent(companyId, menuId.value, 'ADD_TO_CART', { productId: p.id }) }catch(e){}
 }
 
@@ -3290,7 +3411,10 @@ function confirmAddFromModal(){
         }
         // Combo slots come before addons; their price contribution is 0 (already in product.price).
         const finalOptions = [...comboOptions, ...selectedOptions]
-        const unitPrice = effectiveProductPrice(p) + optionsTotal
+        const comboBase = isVariableCombo(p)
+          ? variableComboTotal(p, comboSelections.value)
+          : effectiveProductPrice(p)
+        const unitPrice = comboBase + optionsTotal
         const obs = (modalObservation.value || '').trim() || null
         cart.value[editingCartIndex.value] = { ...existingItem, price: unitPrice, quantity: modalQty.value, options: finalOptions, observation: obs }
       }
@@ -7106,5 +7230,67 @@ body { padding-bottom: 110px; }
 /* ===== Edit cart item button ===== */
 .btn-edit-item { display: inline-flex; align-items: center; gap: 2px; background: none; border: none; padding: 2px 4px; font-size: 11px; color: var(--pm-text-muted); cursor: pointer; border-radius: 6px; line-height: 1; flex-shrink: 0; }
 .btn-edit-item:hover { color: var(--brand, #105784); background: rgba(0,0,0,0.04); }
+
+/* ===== Combo option thumbnail (linked product photo) ===== */
+.option-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--pm-surface-alt, #f4f5f7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.option-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ===== Combo fixed-N slot — quantity stepper ===== */
+.qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--pm-border, #e6e6e6);
+  border-radius: 999px;
+  overflow: hidden;
+  background: #fff;
+  flex-shrink: 0;
+}
+.qty-stepper__btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--pm-text, #212529);
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.12s;
+}
+.qty-stepper__btn:not(:disabled):hover {
+  background: var(--pm-surface-alt, #f4f5f7);
+}
+.qty-stepper__btn:disabled {
+  color: var(--pm-text-muted, #adb5bd);
+  cursor: default;
+}
+.qty-stepper__val {
+  min-width: 26px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--pm-text, #212529);
+  padding: 0 4px;
+  line-height: 30px;
+}
 
 </style>

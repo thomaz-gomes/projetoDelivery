@@ -1,16 +1,22 @@
 <template>
-  <div class="d-flex h-100" style="overflow: hidden;">
-    <!-- List panel: 360px wide, hide on mobile when chat is active -->
+  <div
+    class="inbox-shell"
+    :class="{ 'inbox-shell--mobile-active': inboxStore.activeConversationId }"
+  >
+    <!-- List panel: 340px wide, hide on mobile when chat is active -->
     <div
-      class="border-end bg-white d-flex flex-column"
+      class="inbox-shell__sidebar"
       :class="{ 'd-none d-md-flex': inboxStore.activeConversationId }"
-      style="width: 360px; min-width: 300px; flex-shrink: 0; min-height: 0;"
     >
       <ConversationList @select="selectConversation" />
     </div>
     <!-- Chat + contact panel (shown when conversation selected) -->
     <template v-if="inboxStore.activeConversationId">
-      <div class="flex-grow-1 d-flex flex-column" :key="'chat-' + inboxStore.activeConversationId">
+      <div
+        class="inbox-shell__chat"
+        :class="{ 'd-none d-md-flex': mobileTab !== 'chat' }"
+        :key="'chat-' + inboxStore.activeConversationId"
+      >
         <ChatPanel
           :conversation-id="inboxStore.activeConversationId"
           @back="inboxStore.activeConversationId = null"
@@ -18,20 +24,48 @@
         />
       </div>
       <div
-        v-if="showContactPanel"
-        class="border-start d-none d-md-flex flex-column"
-        style="width: 350px; min-width: 320px; flex-shrink: 0;"
+        v-if="showContactPanel || mobileTab === 'order'"
+        class="inbox-shell__contact"
+        :class="{
+          'd-none d-md-flex': mobileTab !== 'order',
+          'd-flex': mobileTab === 'order',
+        }"
         :key="'contact-' + inboxStore.activeConversationId"
       >
         <ContactPanel :conversation-id="inboxStore.activeConversationId" />
       </div>
+
+      <!-- Mobile bottom tab bar (Conversa ↔ Pedido) -->
+      <nav class="inbox-mobile-tabs d-md-none">
+        <button
+          type="button"
+          class="inbox-mobile-tabs__btn"
+          :class="{ 'inbox-mobile-tabs__btn--active': mobileTab === 'chat' }"
+          @click="mobileTab = 'chat'"
+        >
+          <i class="bi bi-chat-dots inbox-mobile-tabs__icon"></i>
+          <span class="inbox-mobile-tabs__label">Conversa</span>
+        </button>
+        <button
+          type="button"
+          class="inbox-mobile-tabs__btn"
+          :class="{ 'inbox-mobile-tabs__btn--active': mobileTab === 'order' }"
+          @click="mobileTab = 'order'"
+        >
+          <span class="inbox-mobile-tabs__icon-wrap">
+            <i class="bi bi-bag inbox-mobile-tabs__icon"></i>
+            <span v-if="hasActiveOrder" class="inbox-mobile-tabs__dot"></span>
+          </span>
+          <span class="inbox-mobile-tabs__label">Pedido</span>
+        </button>
+      </nav>
     </template>
     <!-- Empty state on desktop (when no conversation selected) -->
     <template v-else>
-      <div class="flex-grow-1 d-none d-md-flex align-items-center justify-content-center text-muted">
+      <div class="inbox-shell__empty d-none d-md-flex">
         <div class="text-center">
-          <i class="bi bi-chat-left-dots" style="font-size: 3rem;"></i>
-          <p class="mt-2">Selecione uma conversa</p>
+          <i class="bi bi-chat-left-dots inbox-shell__empty-icon"></i>
+          <p class="mt-3 mb-0">Selecione uma conversa</p>
         </div>
       </div>
     </template>
@@ -39,7 +73,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { io } from 'socket.io-client';
 import { SOCKET_URL } from '@/config';
 import { useInboxStore } from '@/stores/inbox';
@@ -52,12 +86,27 @@ const inboxStore = useInboxStore();
 const authStore = useAuthStore();
 
 const showContactPanel = ref(true);
+const mobileTab = ref('chat');
+
+const hasActiveOrder = computed(() => {
+  const id = inboxStore.activeConversationId;
+  if (!id) return false;
+  return !!inboxStore.orderDrafts?.[id]?.active;
+});
+
+watch(
+  () => inboxStore.activeConversationId,
+  (id) => {
+    if (id) mobileTab.value = 'chat';
+  },
+);
 
 let socket = null;
 let beepAudio = null;
 
 async function selectConversation(conversationId) {
   inboxStore.activeConversationId = conversationId;
+  mobileTab.value = 'chat';
   inboxStore.markAsRead(conversationId).catch(() => {});
 
   // Fetch customer data for contact panel
@@ -219,4 +268,126 @@ onUnmounted(() => {
 <style scoped>
 /* Main content responsive padding */
 .main-content { padding:0 !important; }
+
+.inbox-shell {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: #f4f5f7;
+}
+
+.inbox-shell__sidebar {
+  width: 340px;
+  min-width: 300px;
+  flex-shrink: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #e9ecf1;
+}
+
+.inbox-shell__chat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.inbox-shell__contact {
+  width: 350px;
+  min-width: 320px;
+  flex-shrink: 0;
+  flex-direction: column;
+  background: #fff;
+  border-left: 1px solid #e9ecf1;
+}
+
+.inbox-shell__empty {
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: #929aa8;
+}
+.inbox-shell__empty-icon {
+  font-size: 3rem;
+  color: #cfd5dd;
+}
+
+@media (max-width: 767.98px) {
+  .inbox-shell__sidebar { width: 100%; min-width: 0; border-right: none; }
+
+  /* When mobile-active, reserve bottom space for the tab bar */
+  .inbox-shell--mobile-active { padding-bottom: 60px; }
+
+  /* Mobile contact panel: full-width, no left border */
+  .inbox-shell__contact {
+    width: 100%;
+    min-width: 0;
+    border-left: none;
+    flex: 1;
+  }
+}
+
+/* ── Mobile bottom tabs (Conversa ↔ Pedido) ── */
+.inbox-mobile-tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1030;
+  display: flex;
+  height: 60px;
+  background: #fff;
+  border-top: 1px solid #e9ecf1;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.inbox-mobile-tabs__btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  color: #929aa8;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .12s;
+  position: relative;
+}
+.inbox-mobile-tabs__btn--active {
+  color: var(--success, #89D136);
+}
+.inbox-mobile-tabs__btn--active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 18%;
+  right: 18%;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--success, #89D136);
+}
+.inbox-mobile-tabs__icon { font-size: 1.25rem; line-height: 1; }
+.inbox-mobile-tabs__label { line-height: 1; }
+.inbox-mobile-tabs__icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.inbox-mobile-tabs__dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success, #89D136);
+  box-shadow: 0 0 0 2px #fff;
+}
 </style>

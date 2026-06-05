@@ -23,8 +23,7 @@
     <!-- Messages area -->
     <div
       ref="messagesContainer"
-      class="flex-grow-1 overflow-auto px-3 py-2"
-      style="background: #efeae2;"
+      class="chat-canvas flex-grow-1 overflow-auto px-3 py-3"
       @scroll="onScroll"
     >
       <!-- Loading older -->
@@ -37,8 +36,8 @@
       </div>
 
       <template v-for="(item, idx) in groupedItems" :key="idx">
-        <div v-if="item.type === 'separator'" class="text-center my-3">
-          <span class="badge bg-light text-dark">{{ item.label }}</span>
+        <div v-if="item.type === 'separator'" class="chat-date-sep">
+          <span class="chat-date-sep__pill">{{ String(item.label).toUpperCase() }}</span>
         </div>
         <ChatBubble
           v-else
@@ -270,19 +269,41 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.chat-canvas {
+  background: #ece4da;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-date-sep {
+  display: flex;
+  justify-content: center;
+  margin: 2px 0 6px;
+}
+.chat-date-sep__pill {
+  background: rgba(255, 255, 255, 0.85);
+  color: #5a6373;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 14px;
+  border-radius: 10px;
+  letter-spacing: 0.4px;
+}
+
 .drag-overlay {
   position: absolute;
-  top: 56px;
+  top: 62px;
   left: 0;
   right: 0;
   bottom: 80px;
-  background: rgba(13, 110, 253, 0.1);
-  border: 3px dashed #0d6efd;
+  background: rgba(137, 209, 54, 0.10);
+  border: 3px dashed var(--success, #89D136);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
   pointer-events: none;
-  color: #0d6efd;
+  color: #6dae1e;
 }
 </style>

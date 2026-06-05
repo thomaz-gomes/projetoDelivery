@@ -165,7 +165,10 @@
                   </div>
                   <div class="product-card-body">
                     <div class="product-card-name">{{ p.name }}</div>
-                    <div class="product-card-price">{{ formatCurrency(effectiveProductPrice(p)) }}</div>
+                    <div class="product-card-price">
+                      <template v-if="isVariableCombo(p)"><small class="text-muted" style="font-size:0.75em;">A partir de </small>{{ formatCurrency(effectiveProductPrice(p)) }}</template>
+                      <template v-else>{{ formatCurrency(effectiveProductPrice(p)) }}</template>
+                    </div>
                   </div>
                 </button>
               </div>
@@ -238,8 +241,15 @@
           <div class="pos-options-panel d-flex flex-column">
               <div class="pos-options-body" ref="optionsBodyRef">
               <div class="d-flex justify-content-between align-items-start mb-3">
-                <div>
-                  <h6 class="fw-semibold m-0">{{ activeProduct?.name }} <span class="text-muted small">{{ formatCurrency(activeProduct?.price) }}</span></h6>
+                <div>                  <h6 class="fw-semibold m-0">
+                    {{ activeProduct?.name }}
+                    <span class="text-muted small">
+                      <template v-if="isVariableCombo(activeProduct)">
+                        <small style="font-weight:500;">A partir de</small> {{ formatCurrency(activeProduct?.price) }}
+                      </template>
+                      <template v-else>{{ formatCurrency(activeComboBase) }}</template>
+                    </span>
+                  </h6>
                 </div>
                 <button class="btn btn-sm btn-outline-secondary d-sm-none" @click="closeOptions" aria-label="Fechar">✕</button>
               </div>
@@ -250,6 +260,66 @@
               </div>
 
                 <div class="options-scroll">
+                <!-- Combo slots (rendered first when the product is a combo) -->
+                <div v-if="activeProduct?.isCombo && activeProduct?.combo?.slots?.length" class="mb-3">
+                  <div
+                    v-for="slot in activeProduct.combo.slots"
+                    :key="slot.id"
+                    :id="'combo-slot-' + slot.id"
+                    :class="['option-section', 'mb-3', requiredWarnings['combo-slot-' + slot.id] ? 'required-fail' : '']"
+                  >
+                    <div class="d-flex align-items-center justify-content-between option-section-header">
+                      <span class="option-section-title">
+                        {{ slot.name }}
+                        <small class="text-muted ms-2">
+                          <template v-if="slot.minSelect === slot.maxSelect">Escolha {{ slot.minSelect }}</template>
+                          <template v-else>{{ slot.minSelect }} a {{ slot.maxSelect }}</template>
+                        </small>
+                      </span>
+                      <span v-if="requiredWarnings['combo-slot-' + slot.id]" class="badge bg-danger">OBRIGATÓRIO</span>
+                      <span v-else-if="(slot.minSelect || 0) > 0" class="badge bg-secondary">Obrigatório</span>
+                    </div>
+                    <div class="option-group-card">
+                      <div v-for="opt in (slot.options || [])" :key="opt.id" class="option-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                          <div class="option-meta">
+                            <div class="option-name">{{ opt.linkedProduct?.name || 'Opção' }}</div>
+                          </div>
+                          <div>
+                            <input
+                              v-if="slot.maxSelect === 1"
+                              class="form-check-input"
+                              type="radio"
+                              :name="'pos-combo-slot-' + slot.id"
+                              :id="'pos-combo-opt-' + opt.id"
+                              :value="opt.id"
+                              v-model="comboSelections[slot.id]"
+                              @change="onSlotChangePOS(slot)"
+                            />
+                            <div
+                              v-else-if="slot.minSelect === slot.maxSelect && slot.maxSelect > 1"
+                              class="d-inline-flex align-items-center gap-2"
+                            >
+                              <button type="button" class="btn btn-sm btn-outline-secondary" :disabled="optionCountPOS(slot.id, opt.id) <= 0" @click="decOptionPOS(slot, opt.id)">-</button>
+                              <span class="fw-bold" style="min-width:18px;text-align:center;">{{ optionCountPOS(slot.id, opt.id) }}</span>
+                              <button type="button" class="btn btn-sm btn-primary" :disabled="totalChosenForSlotPOS(slot.id) >= slot.maxSelect" @click="incOptionPOS(slot, opt.id)">+</button>
+                            </div>
+                            <input
+                              v-else
+                              class="form-check-input"
+                              type="checkbox"
+                              :id="'pos-combo-opt-' + opt.id"
+                              :value="opt.id"
+                              v-model="comboSelections[slot.id]"
+                              @change="onSlotChangePOS(slot)"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div v-if="activeProduct?.optionGroups?.length">
                   <div v-for="g in activeProduct.optionGroups" :key="g.id" :id="'grp-'+g.id" class="option-section mb-3">
                     <div class="d-flex align-items-center justify-content-between option-section-header">
@@ -487,6 +557,9 @@ const chosenOptions = ref([]);
 const editingIndex = ref(null);
 const requiredWarnings = ref({});
 const optionsBodyRef = ref(null);
+// Combo slot selections — map slotId → option id (string when slot.maxSelect===1)
+// or array of option ids (when maxSelect > 1). Mirrors PublicMenu.comboSelections.
+const comboSelections = ref({});
 const neighborhoods = ref([]);
 const neighborhoodsLoading = ref(false);
 const freeDeliveryEnabled = ref(false);
@@ -645,7 +718,52 @@ const validAddress = computed(()=> {
 function next(){ step.value++; if(step.value===3) loadMenu(); }
 function prev(){ step.value--; }
 
-function selectProduct(p){ activeProduct.value = p; showOptions.value = true; optionQty.value=1; chosenOptions.value=[]; optionNote.value=''; }
+function selectProduct(p){
+  activeProduct.value = p;
+  showOptions.value = true;
+  optionQty.value = 1;
+  chosenOptions.value = [];
+  optionNote.value = '';
+  // Reset combo slot selections; pre-initialise each slot's entry shape based
+  // on maxSelect (radio vs checkbox/list) so v-model bindings get a consistent
+  // first-render value.
+  const slotMap = {};
+  if (p && p.isCombo && p.combo && Array.isArray(p.combo.slots)) {
+    for (const slot of p.combo.slots) {
+      slotMap[slot.id] = (slot.maxSelect === 1) ? '' : [];
+    }
+  }
+  comboSelections.value = slotMap;
+}
+
+// ── Combo helpers (mirror PublicMenu) ──
+function optionCountPOS(slotId, optId) {
+  const raw = comboSelections.value[slotId];
+  if (!Array.isArray(raw)) return 0;
+  let n = 0; for (const x of raw) if (x === optId) n++; return n;
+}
+function totalChosenForSlotPOS(slotId) {
+  const raw = comboSelections.value[slotId];
+  if (Array.isArray(raw)) return raw.length;
+  return raw ? 1 : 0;
+}
+function incOptionPOS(slot, optId) {
+  const cap = Number(slot.maxSelect || 0);
+  if (cap > 0 && totalChosenForSlotPOS(slot.id) >= cap) return;
+  const arr = Array.isArray(comboSelections.value[slot.id]) ? comboSelections.value[slot.id].slice() : [];
+  arr.push(optId);
+  comboSelections.value[slot.id] = arr;
+  try { delete requiredWarnings.value['combo-slot-' + slot.id]; } catch (e) {}
+}
+function decOptionPOS(slot, optId) {
+  const arr = Array.isArray(comboSelections.value[slot.id]) ? comboSelections.value[slot.id].slice() : [];
+  const idx = arr.lastIndexOf(optId);
+  if (idx >= 0) arr.splice(idx, 1);
+  comboSelections.value[slot.id] = arr;
+}
+function onSlotChangePOS(slot) {
+  try { delete requiredWarnings.value['combo-slot-' + slot.id]; } catch (e) {}
+}
 
 // Fallback: alguns produtos antigos só têm o arquivo original (.jpg/.png),
 // sem a variante _thumb.webp. Quando o thumb falha, troca para a URL bruta.
@@ -744,16 +862,52 @@ function isTakeoutOrderTypePos(t) {
 }
 function effectiveProductPrice(p) {
   if (!p) return 0
+  // Priority mirrors PublicMenu.effectiveProductPrice:
+  //   1) specialTakeoutPrice when the order is takeout (balcão/retirada)
+  //   2) promoPrice when active and strictly less than the base price
+  //   3) base price
   if (isTakeoutOrderTypePos(orderType.value) && p.specialTakeoutPrice != null && p.specialTakeoutPrice !== '') {
     const sto = Number(p.specialTakeoutPrice)
     // Zero is treated as "no special price" so a product accidentally saved
     // with 0 (toggle on, blank field) does not zero-out balcão receipts.
     if (Number.isFinite(sto) && sto > 0) return sto
   }
-  return Number(p.price || 0)
+  const base = Number(p.price || 0)
+  if (p.promoPrice != null && p.promoPrice !== '') {
+    const promo = Number(p.promoPrice)
+    if (Number.isFinite(promo) && promo > 0 && promo < base) return promo
+  }
+  return base
 }
+function isVariableCombo(p) {
+  return !!(p && p.isCombo && p.combo && p.combo.pricingMode === 'VARIABLE')
+}
+function variableComboTotal(p, selectionsMap) {
+  if (!isVariableCombo(p)) return 0
+  const slots = (p.combo && p.combo.slots) || []
+  let total = 0
+  for (const slot of slots) {
+    if (slot.isPriceAnchor) {
+      total += Number(slot.vUnComDeclarado || 0)
+      continue
+    }
+    const raw = selectionsMap ? selectionsMap[slot.id] : null
+    const ids = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : [])
+    for (const oid of ids) {
+      const opt = (slot.options || []).find(o => o.id === oid)
+      if (opt && opt.linkedProduct && opt.linkedProduct.price != null) {
+        total += Number(opt.linkedProduct.price || 0)
+      }
+    }
+  }
+  return total
+}
+const activeComboBase = computed(() => {
+  const p = activeProduct.value
+  return isVariableCombo(p) ? variableComboTotal(p, comboSelections.value) : effectiveProductPrice(p)
+})
 const optionModalTotal = computed(()=> {
-  const unitPrice = effectiveProductPrice(activeProduct.value);
+  const unitPrice = activeComboBase.value;
   const optsPerUnit = chosenOptions.value.reduce((s,o)=> s + (Number(o.price||0) * (Number(o.quantity||1) || 1)),0);
   return (unitPrice + optsPerUnit) * (Number(optionQty.value) || 1);
 });
@@ -763,7 +917,49 @@ function confirmOptionsAdd(){
   if(!activeProduct.value) return;
   // validate required groups before adding
   if(!validateOptionGroups()) return;
-  const payload = { name: activeProduct.value.name, quantity: optionQty.value, price: effectiveProductPrice(activeProduct.value), productId: activeProduct.value?.id || null, notes: optionNote.value || null, options: chosenOptions.value.map(o=>({ id: o.id, name: o.name, price: Number(o.price||0), quantity: Number(o.quantity||1) })) };
+
+  // ── Combo slot validation + payload (combo_slot entries injected as options) ──
+  const comboOptions = [];
+  const p = activeProduct.value;
+  if (p && p.isCombo && p.combo && Array.isArray(p.combo.slots)) {
+    for (const slot of p.combo.slots) {
+      const raw = comboSelections.value[slot.id];
+      const selectedIds = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : []);
+      const total = selectedIds.length;
+      const minSel = Number(slot.minSelect || 0);
+      const maxSel = Number(slot.maxSelect || 0);
+      if (total < minSel) {
+        try { requiredWarnings.value['combo-slot-' + slot.id] = true; } catch (e) {}
+        try { Swal.fire({ icon: 'warning', text: `Slot "${slot.name}": escolha ao menos ${minSel} opção(ões).` }); } catch (e) {}
+        return;
+      }
+      if (maxSel > 0 && total > maxSel) {
+        try { Swal.fire({ icon: 'warning', text: `Slot "${slot.name}": máximo ${maxSel} opção(ões).` }); } catch (e) {}
+        return;
+      }
+      const slotDeclarado = Number(slot.vUnComDeclarado || 0);
+      for (const oid of selectedIds) {
+        const opt = (slot.options || []).find(o => o.id === oid);
+        if (!opt) continue;
+        comboOptions.push({
+          kind: 'combo_slot',
+          slotId: slot.id,
+          slotName: slot.name,
+          optionId: opt.id,
+          id: opt.id, // backward-compatible findCartIndex / _optionsKey
+          productId: opt.linkedProductId || (opt.linkedProduct && opt.linkedProduct.id) || null,
+          name: (opt.linkedProduct && opt.linkedProduct.name) || 'Opção',
+          price: 0, // combo slots don't add to subtotal in FIXED mode
+          vUnComDeclarado: slotDeclarado,
+        });
+      }
+    }
+  }
+
+  const allOptions = chosenOptions.value.map(o => ({ id: o.id, name: o.name, price: Number(o.price||0), quantity: Number(o.quantity||1) })).concat(comboOptions);
+  // VARIABLE combo: unit price is the live sum (activeComboBase). FIXED combos
+  // and regular products keep the previous effectiveProductPrice behavior.
+  const payload = { name: activeProduct.value.name, quantity: optionQty.value, price: activeComboBase.value, productId: activeProduct.value?.id || null, notes: optionNote.value || null, options: allOptions };
   if(editingIndex.value !== null && typeof editingIndex.value !== 'undefined'){
     // update existing item
     cart.value.splice(editingIndex.value, 1, payload);

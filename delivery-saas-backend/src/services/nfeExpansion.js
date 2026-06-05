@@ -131,12 +131,47 @@ export function expandOrderItemsToDet(orderItems, productMap, _opts = {}) {
       const addons = options.filter((o) => o.kind === 'addon' || !o.kind)
 
       if (slots.length > 0) {
-        // Rateio fiscal: distribui o preço do combo proporcionalmente
-        // ao vUnComDeclarado de cada slot.
-        const slotsForRateio = slots.map((s) => ({
-          id: s.optionId || s.productId,
-          vUnComReferencia: Number(s.vUnComDeclarado ?? s.vUnComReferencia) || 0,
-        }))
+        // Resolve the per-slot reference used for rateio. Two cases:
+        //
+        //   FIXED combos (default, legacy): every slot exposes vUnComDeclarado
+        //     in its combo_slot payload; the rateio scales the parent price
+        //     across slots proportionally to those declared values.
+        //
+        //   VARIABLE combos (Phase B+): the parent price = anchor.vUnCom +
+        //     sum(non-anchor chosen options' linkedProduct.price). The anchor
+        //     slot contributes anchor.vUnComDeclarado (fixed); each non-anchor
+        //     entry contributes its linkedProduct.price. With those refs the
+        //     proportional rateio reduces to fator ≈ 1, so each slot keeps
+        //     its natural value while the rounding tail absorbs any drift.
+        const pricingMode = prod?.combo?.pricingMode || 'FIXED'
+        const comboSlots = prod?.combo?.slots || []
+        const anchorSlot = pricingMode === 'VARIABLE'
+          ? comboSlots.find((s) => s.isPriceAnchor)
+          : null
+
+        let slotsForRateio
+        if (anchorSlot) {
+          // Split the anchor's fixed amount across however many times the
+          // customer picked from that slot (fixed-N anchors are rare but
+          // permitted by the schema).
+          const anchorEntries = slots.filter((s) => s.slotId === anchorSlot.id)
+          const anchorPerEntry = anchorEntries.length > 0
+            ? Number(anchorSlot.vUnComDeclarado || 0) / anchorEntries.length
+            : 0
+          slotsForRateio = slots.map((s) => {
+            if (s.slotId === anchorSlot.id) {
+              return { id: s.optionId || s.productId, vUnComReferencia: anchorPerEntry }
+            }
+            const linkedProd = s.productId ? productMap.get(s.productId) : null
+            const ref = Number(linkedProd?.price || 0)
+            return { id: s.optionId || s.productId, vUnComReferencia: ref }
+          })
+        } else {
+          slotsForRateio = slots.map((s) => ({
+            id: s.optionId || s.productId,
+            vUnComReferencia: Number(s.vUnComDeclarado ?? s.vUnComReferencia) || 0,
+          }))
+        }
 
         // Cadastro inconsistente (somaRef=0) deve falhar visivelmente:
         // melhor o emissor abortar do que emitir nota com valores chutados.

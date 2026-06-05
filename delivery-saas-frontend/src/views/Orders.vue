@@ -206,6 +206,18 @@ const searchOrderNumber = ref('');
 const searchCustomerName = ref('');
 const filterEntrega = ref(true);
 const filterRetirada = ref(true);
+// Collapsible advanced filters on mobile (Chefiz Pedidos Mobile pattern):
+// Entrega/Retirada toggles + the "Filtros" button stay visible; rider /
+// payment / Nº pedido / Nome cliente collapse behind it.
+const showAdvancedFilters = ref(false);
+const activeAdvancedFiltersCount = computed(() => {
+  let n = 0;
+  if (selectedRider.value && selectedRider.value !== 'TODOS') n++;
+  if (selectedPaymentMethod.value && selectedPaymentMethod.value !== 'TODOS') n++;
+  if (searchOrderNumber.value && searchOrderNumber.value.trim()) n++;
+  if (searchCustomerName.value && searchCustomerName.value.trim()) n++;
+  return n;
+});
 let audio = null;
 const now = ref(Date.now());
 // connection state for a dev-friendly badge (moved to module scope so computed can access it)
@@ -681,7 +693,15 @@ onMounted(async () => {
   } catch (e) {}
   // listen to resize to update mobile flag
   try {
-    resizeHandler = () => { isMobile.value = window.innerWidth < 768 };
+    resizeHandler = () => {
+      const wasMobile = isMobile.value;
+      isMobile.value = window.innerWidth < 768;
+      // Re-init Sortable when crossing the breakpoint so drag-and-drop
+      // turns on/off correctly (disabled on mobile, enabled on desktop).
+      if (wasMobile !== isMobile.value) {
+        nextTick(() => initDragAndDrop()).catch(() => {});
+      }
+    };
     window.addEventListener('resize', resizeHandler);
   } catch (e) {}
   // inicia atualização de tempo para durações
@@ -987,29 +1007,43 @@ function normalizeOrder(o){
 
   const items = normalizeOrderItems(o);
   // payment method: try common places
-  // Priority: own payment field → iFood payments object (handles event-envelope and flat) → legacy array → PDV
+  // Priority (highest → lowest):
+  //   0) paymentConfirmed — operator override at CONFIRMACAO_PAGAMENTO step.
+  //      Trumps everything because it reflects what was ACTUALLY paid, not what
+  //      was originally selected by the customer. Without this, a customer who
+  //      chose PIX but paid in cash would always show "PIX" in the UI and NF-e.
+  //   1) iFood payments object (handles event-envelope and flat shapes)
+  //   2) o.payment / payload.payment / payload.payments (PDV & legacy shapes)
   let paymentMethod = '—';
-  // iFood first: payments is an object { methods: [], prepaid } at payload.order.payments or payload.payments
-  const ifoodPay = resolveIfoodPayments(o);
-  if (ifoodPay && (ifoodPay.methods?.length || ifoodPay.prepaid != null)) {
-    const methods = ifoodPay.methods || [];
-    if (methods.length > 0) {
-      paymentMethod = methods.map(m => {
-        let label = m._systemLabel || translatePaymentMethod(m.method || m.type || '', m.card?.brand);
-        if (m.prepaid === true) label += ' (pago online)';
-        else if (m.prepaid === false) label += ' (cobrar do cliente)';
-        return label;
-      }).filter(Boolean).join(' + ') || paymentMethod;
-    } else if (ifoodPay.prepaid) {
-      paymentMethod = 'Pré-pago (pago online)';
+  const confirmedPays = Array.isArray(o.payload?.paymentConfirmed) && o.payload.paymentConfirmed.length
+    ? o.payload.paymentConfirmed : null;
+  if (confirmedPays) {
+    paymentMethod = confirmedPays
+      .map(p => translatePaymentMethod(String(p.method || ''), null))
+      .filter(Boolean).join(' + ') || paymentMethod;
+  } else {
+    // iFood first: payments is an object { methods: [], prepaid } at payload.order.payments or payload.payments
+    const ifoodPay = resolveIfoodPayments(o);
+    if (ifoodPay && (ifoodPay.methods?.length || ifoodPay.prepaid != null)) {
+      const methods = ifoodPay.methods || [];
+      if (methods.length > 0) {
+        paymentMethod = methods.map(m => {
+          let label = m._systemLabel || translatePaymentMethod(m.method || m.type || '', m.card?.brand);
+          if (m.prepaid === true) label += ' (pago online)';
+          else if (m.prepaid === false) label += ' (cobrar do cliente)';
+          return label;
+        }).filter(Boolean).join(' + ') || paymentMethod;
+      } else if (ifoodPay.prepaid) {
+        paymentMethod = 'Pré-pago (pago online)';
+      }
+    } else if (o.payment && (o.payment.methodCode || o.payment.method)) {
+      paymentMethod = translatePaymentMethod(o.payment.methodCode || o.payment.method || String(o.payment.amount || ''), o.payment.card?.brand);
+    } else if (o.payload && o.payload.payment) {
+      paymentMethod = translatePaymentMethod(o.payload.payment.methodCode || o.payload.payment.method || o.payload.payment.type || paymentMethod, o.payload.payment.card?.brand);
+    } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0]) {
+      const m = o.payload.payments[0];
+      paymentMethod = translatePaymentMethod(m.method || m.type || paymentMethod, m.card?.brand);
     }
-  } else if (o.payment && (o.payment.methodCode || o.payment.method)) {
-    paymentMethod = translatePaymentMethod(o.payment.methodCode || o.payment.method || String(o.payment.amount || ''), o.payment.card?.brand);
-  } else if (o.payload && o.payload.payment) {
-    paymentMethod = translatePaymentMethod(o.payload.payment.methodCode || o.payload.payment.method || o.payload.payment.type || paymentMethod, o.payload.payment.card?.brand);
-  } else if (o.payload && o.payload.payments && Array.isArray(o.payload.payments) && o.payload.payments[0]) {
-    const m = o.payload.payments[0];
-    paymentMethod = translatePaymentMethod(m.method || m.type || paymentMethod, m.card?.brand);
   }
 
   // coupon
@@ -2865,6 +2899,11 @@ function initDragAndDrop(){
   for (const s of sortableInstances) try { s.destroy() } catch(e) {}
   sortableInstances.length = 0;
 
+  // No drag-and-drop on mobile — touch users move orders via the per-card
+  // "Avançar" / "Pronto" / "Retirado" buttons. Avoids accidental drags
+  // while scrolling the kanban tabs.
+  if (isMobile.value) return;
+
   const groups = document.querySelectorAll('.orders-column .list');
   groups.forEach((el) => {
     const s = Sortable.create(el, {
@@ -3449,161 +3488,140 @@ function pulseButton() {
 <template>
   <div>
   <div class="container-fluid p-4">
-    <header class="d-flex flex-wrap align-items-center justify-content-between mb-4 gap-3">
-      <div class="d-flex align-items-center">
-        <h2 class="fs-4 fw-semibold m-0" style="position:relative;">Pedidos
-        <!-- dev-only socket status badge -->
-        <div style="position: absolute;width: 12px;height: 12px;border: 2px solid rgb(255, 255, 255);padding: 0px !important;right: -10px;bottom: 4px;" v-if="socketConnection" class="ms-3 badge" :class="{
-          'bg-success': socketConnection.status === 'connected',
-          'bg-warning text-dark': socketConnection.status === 'reconnecting',
-          'bg-danger': socketConnection.status === 'error' || socketConnection.status === 'disconnected',
-          'bg-secondary': socketConnection.status === 'connecting' || socketConnection.status === 'idle'
-        }">
-         <!-- {{ 'Socket: ' + socketStatusLabel }}
-          <small v-if="socketConnection.url" class="d-block text-truncate" style="max-width:200px;">{{ socketConnection.url.replace(/^https?:\/\//, '') }}</small> -->
-          <small v-if="socketConnection.url" class="d-block text-truncate" ></small>
-          
-      </div></h2>
-      </div>
-      
-      <!-- Dev: quick test print button -->
-      <div class="ms-2 d-flex gap-2 align-items-center">
-        
-        <!-- 🔊 Botão de som -->
-        <button
-          ref="soundButton"
-          type="button"
-          class="btn btn-sm d-none d-sm-flex"
-          :class="playSound ? 'btn-primary' : 'btn-outline-secondary'"
-          @click="toggleSound"
-          title="Som de novos pedidos"
-        >
-          <i
-            :class="playSound ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute-fill'"
-            class=""
-          ></i>
-        </button>
+    <!-- Unified Pedidos toolbar card — title + actions + Novo Pedido + filters all together -->
+    <div class="orders-toolbar card mb-4" style="border:none;">
+      <div class="card-body">
 
-        <button type="button" :class="['btn btn-sm', printerConnected ? 'btn-primary' : 'btn-outline-primary']" @click="showPrinterConfig = true" title="Configurar impressora">
-          <i class="bi bi-printer"></i>&nbsp;Impressora
-          <span v-if="printerConnected" class="badge bg-success ms-2" style="font-size:0.65rem; vertical-align:middle">Conectada</span>
-        </button>
-        <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
-          <i class="bi bi-printer"></i>&nbsp;Teste Impressão
-        </button>
-        <CashControl />
+        <!-- Top row: title + sound + Impressora + Caixa -->
+        <div class="orders-toolbar__top d-flex flex-wrap align-items-center gap-2 mb-3">
+          <h2 class="fs-4 fw-semibold m-0 orders-toolbar__title" style="position:relative;">Pedidos
+            <!-- dev-only socket status badge (hidden via CSS; ::after dot replaces it) -->
+            <div style="position: absolute;width: 12px;height: 12px;border: 2px solid rgb(255, 255, 255);padding: 0px !important;right: -10px;bottom: 4px;" v-if="socketConnection" class="ms-3 badge" :class="{
+              'bg-success': socketConnection.status === 'connected',
+              'bg-warning text-dark': socketConnection.status === 'reconnecting',
+              'bg-danger': socketConnection.status === 'error' || socketConnection.status === 'disconnected',
+              'bg-secondary': socketConnection.status === 'connecting' || socketConnection.status === 'idle'
+            }">
+              <small v-if="socketConnection.url" class="d-block text-truncate" ></small>
+            </div>
+          </h2>
+          <div class="flex-grow-1"></div>
+          <!-- Sound -->
+          <button
+            ref="soundButton"
+            type="button"
+            class="btn btn-sm d-none d-sm-flex"
+            :class="playSound ? 'btn-primary' : 'btn-outline-secondary'"
+            @click="toggleSound"
+            title="Som de novos pedidos"
+          >
+            <i :class="playSound ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute-fill'"></i>
+          </button>
+          <!-- Impressora -->
+          <button type="button" :class="['btn btn-sm', printerConnected ? 'btn-primary' : 'btn-outline-primary']" @click="showPrinterConfig = true" title="Configurar impressora">
+            <i class="bi bi-printer"></i>&nbsp;Impressora
+            <span v-if="printerConnected" class="badge bg-success ms-2" style="font-size:0.65rem; vertical-align:middle">Conectada</span>
+          </button>
+          <!-- Test print (dev) -->
+          <button v-if="printingEnabled" type="button" class="btn btn-sm btn-outline-primary" @click="sendTestPrint" title="Enviar comanda de teste">
+            <i class="bi bi-printer"></i>&nbsp;Teste Impressão
+          </button>
+          <!-- Caixa -->
+          <CashControl />
+        </div>
+
+        <!-- Novo Pedido: phone input + Entrega/Balcão buttons -->
+        <div class="orders-new-row d-flex flex-wrap align-items-center gap-2 mb-3">
+          <div class="orders-new-input">
+            <TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control" />
+          </div>
+          <button type="button" class="orders-new-btn orders-new-btn--filled" @click="openPdv">
+            <i class="bi bi-plus-lg"></i> Entrega
+          </button>
+          <button type="button" class="orders-new-btn orders-new-btn--outline" @click="openBalcao" title="Pedido balcão">
+            <i class="bi bi-plus-lg"></i> Balcão
+          </button>
+        </div>
+
+        <!-- Mobile-only status pills -->
+        <div class="d-inline-flex gap-2 d-md-none pb-2 w-100 overflow-auto mb-3">
+          <button
+            v-for="s in statusFiltersMobile"
+            :key="s.value"
+            type="button"
+            class="action-chip"
+            :class="{ 'action-chip--active': selectedStatus === s.value }"
+            @click="selectedStatus = s.value"
+          >
+            {{ s.label }}
+          </button>
+        </div>
+
+        <!-- Filter row: Entrega/Retirada toggles + rider/payment/Nº/name -->
+        <div
+          class="orders-filter-row d-flex flex-wrap align-items-center gap-2"
+          :class="{ 'orders-filter-row--expanded': showAdvancedFilters }"
+        >
+          <button
+            type="button"
+            class="orders-toggle"
+            :class="{ 'orders-toggle--on': filterEntrega }"
+            @click="filterEntrega = !filterEntrega"
+          >
+            <span class="orders-toggle__check"><i v-if="filterEntrega" class="bi bi-check-lg"></i></span>
+            <i class="bi bi-bicycle orders-toggle__ic"></i>
+            <span class="orders-toggle__label">Entrega</span>
+          </button>
+          <button
+            type="button"
+            class="orders-toggle"
+            :class="{ 'orders-toggle--on': filterRetirada }"
+            @click="filterRetirada = !filterRetirada"
+          >
+            <span class="orders-toggle__check"><i v-if="filterRetirada" class="bi bi-check-lg"></i></span>
+            <i class="bi bi-bag orders-toggle__ic"></i>
+            <span class="orders-toggle__label">Retirada</span>
+          </button>
+          <div class="flex-grow-1 d-md-none orders-spacer"></div>
+          <button
+            type="button"
+            class="orders-filters-toggle d-md-none"
+            :class="{ 'orders-filters-toggle--on': showAdvancedFilters || activeAdvancedFiltersCount }"
+            :aria-expanded="showAdvancedFilters"
+            title="Filtros avançados"
+            @click="showAdvancedFilters = !showAdvancedFilters"
+          >
+            <i class="bi bi-funnel"></i>
+            <span v-if="activeAdvancedFiltersCount" class="orders-filters-toggle__badge">{{ activeAdvancedFiltersCount }}</span>
+            <i class="bi bi-chevron-down orders-filters-toggle__chev" :class="{ 'orders-filters-toggle__chev--open': showAdvancedFilters }"></i>
+          </button>
+
+          <template v-if="ridersEnabled">
+            <div class="orders-adv-control">
+              <SelectInput v-model="selectedRider" class="form-select">
+                <option value="TODOS">Todos os entregadores</option>
+                <option v-for="r in store.riders" :key="r.id" :value="String(r.id)">{{ r.name }}</option>
+              </SelectInput>
+            </div>
+          </template>
+          <div class="orders-adv-control">
+            <SelectInput v-model="selectedPaymentMethod" class="form-select">
+              <option value="TODOS">Todas as formas</option>
+              <option v-for="pm in availablePaymentMethods" :key="pm" :value="pm">{{ pm }}</option>
+            </SelectInput>
+          </div>
+          <div class="orders-adv-control orders-adv-control--num">
+            <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control" />
+          </div>
+          <div class="orders-adv-control orders-adv-control--name">
+            <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control" />
+          </div>
+        </div>
       </div>
-    </header>
+    </div>
+
     <PrinterConfig v-model:visible="showPrinterConfig" @saved="onPrinterSaved" />
     <POSOrderWizard v-model:visible="showPdv" :initialPhone="newOrderPhone" :preset="pdvPreset" @created="onPdvCreated" @update:visible="handlePdvVisibleChange" />
-
-        <div class="row">
-          <div class="col-sm-6">
-              <div class="card mb-4" style="border:none;">
-      <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between">
-          <div>
-            <h5 class="card-title mb-1">
-             Novo Pedido
-            </h5>
-            
-          </div>
-        </div>
-          <div class="row">
-            <div class="col-12 col-sm-6"><TextInput v-model="newOrderPhone" placeholder="Digite o telefone do cliente e comece um novo pedido." inputClass="form-control mb-2" /></div>
-            <div class="col-6 col-sm-3">
-              <button type="button" class="btn btn-primary  w-100" @click="openPdv">
-                <i class="bi bi-plus-lg"></i>&nbsp;Entrega
-                </button>
-            </div>
-            <div class="col-6 col-sm-3">
-            <button type="button" class="btn btn-outline-primary  w-100" @click="openBalcao" title="Pedido balcão">
-            <i class="bi bi-plus-lg"></i> &nbsp;Balcão
-            </button>
-
-            </div>
-          </div>           
-         
-        </div>
-      </div>
-    </div>
-
-          <div class="col-sm-6">
-
-              <div class="filters-bar card d-flex flex-wrap justify-content-between gap-3 mb-4" style="border:none;">
-    <div class="card-body w-100">
-      <div class="d-flex align-items-center justify-content-between">
-          <div>
-            <h5 class="card-title mb-1">
-             Procurar pedido
-            </h5>
-            
-          </div>
-        </div>
-  <!-- Filtros de status (visível apenas em dispositivos pequenos) -->
-  <div class="d-inline-flex gap-2 d-md-none pb-2 w-100 overflow-auto mb-3">
-        <button
-          v-for="s in statusFiltersMobile"
-          :key="s.value"
-          type="button"
-          class="action-chip"
-          :class="{ 'action-chip--active': selectedStatus === s.value }"
-          @click="selectedStatus = s.value"
-        >
-          {{ s.label }}
-        </button>
-      </div>
-
-      <!-- Filtros adicionais -->
-      <div class="d-flex align-items-center gap-2">
-        <template v-if="ridersEnabled">
-        <SelectInput 
-           v-model="selectedRider" 
-          class="form-select form-select"
-          style="min-width: 200px;"
-        >
-          <option value="TODOS">Todos os entregadores</option>
-          <!-- normalize option values to strings to avoid type-mismatch when comparing ids -->
-          <option v-for="r in store.riders" :key="r.id" :value="String(r.id)">
-            {{ r.name }}
-          </option>
-        </SelectInput>
-        </template>
-
-        <SelectInput
-          v-model="selectedPaymentMethod"
-          class="form-select form-select"
-          style="min-width: 180px;"
-        >
-          <option value="TODOS">Todas as formas</option>
-          <option v-for="pm in availablePaymentMethods" :key="pm" :value="pm">
-            {{ pm }}
-          </option>
-        </SelectInput>
-
-        <TextInput v-model="searchOrderNumber" placeholder="Nº pedido" inputClass="form-control form-control" />
-        <TextInput v-model="searchCustomerName" placeholder="Nome do cliente" inputClass="form-control form-control" />
-
-      </div>
-    </div>
-    
-          </div>
-          </div>
-      
-    </div>
-    <!-- 🔍 Filtros + Som -->
-    
-    <!-- Filtros por tipo de pedido -->
-    <div class="d-flex align-items-center gap-3 mb-3">
-      <label class="form-check form-check-inline d-flex align-items-center gap-1 mb-0" style="cursor:pointer">
-        <input type="checkbox" class="form-check-input" v-model="filterEntrega" />
-        <span class="form-check-label" style="font-size:0.85rem"><i class="bi bi-bicycle me-1"></i>Entrega</span>
-      </label>
-      <label class="form-check form-check-inline d-flex align-items-center gap-1 mb-0" style="cursor:pointer">
-        <input type="checkbox" class="form-check-input" v-model="filterRetirada" />
-        <span class="form-check-label" style="font-size:0.85rem"><i class="bi bi-bag me-1"></i>Retirada</span>
-      </label>
-    </div>
 
     <!-- Pending acceptance box (iFood orders awaiting manual accept) -->
     <div v-if="pendingOrders.length > 0" class="pending-acceptance-box mb-3">
@@ -3667,7 +3685,7 @@ function pulseButton() {
     <div v-else-if="store.orders && store.orders.length > 0" class="orders-board">
       <div class="boards d-flex gap-3 overflow-auto justify-content-between">
         <div class="orders-column card" v-for="col in (isMobile ? COLUMNS.filter(c => c.key === selectedStatus) : COLUMNS)" :key="col.key" :data-status="col.key">
-          <div class="card-header d-flex align-items-center justify-content-between">
+          <div class="card-header d-flex align-items-center">
             <div class="fw-semibold">{{ col.label }}</div>
             <div><span class="badge bg-secondary">{{ columnOrders(col.key).length }}</span></div>
           </div>
@@ -4629,4 +4647,839 @@ button.btn.advance {
   display: inline-block;
   vertical-align: middle;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHEFIZ DESIGN OVERLAY — overrides above to match the Chefiz Pedidos look.
+   Status palette mirrors the design:
+     novos/EM_PREPARO        → amber  #e08a1e / soft #fdf2e0
+     entrega/SAIU_PARA       → blue   #2b6fe0 / soft #e7f0fe
+     pagamento/CONFIRMACAO   → purple #9a5cd0 / soft #f3ebfb
+     concluido/CONCLUIDO     → green  #2e8c5a / soft #e6f4ec
+     cancelado/CANCELADO     → red    #e23b3b / soft #fdecec
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Page canvas — neutral Chefiz background */
+.container-fluid.p-4 {
+  background: #f4f5f7;
+  min-height: 100%;
+}
+
+/* ── Header ── */
+.container-fluid.p-4 .orders-toolbar__top {
+  margin-bottom: 18px !important;
+}
+.container-fluid.p-4 .orders-toolbar__top h2 {
+  font-size: 1.45rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.4px;
+  color: #1d2330;
+  position: relative;
+  padding-right: 22px; /* room for the lime status dot */
+}
+/* Always-visible lime status dot to the right of "Pedidos" */
+.container-fluid.p-4 .orders-toolbar__top h2::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #89D136;
+  box-shadow: 0 0 0 4px rgba(137,209,54,0.22);
+}
+/* Hide the legacy conditional socket badge — the ::after dot replaces it */
+.container-fluid.p-4 .orders-toolbar__top h2 .badge { display: none !important; }
+
+/* ── Header buttons (faithful to Chefiz Pedidos top bar) ── */
+.container-fluid.p-4 .orders-toolbar__top .btn-sm {
+  height: 40px;
+  border-radius: 11px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Sound button (icon-only, square 40x40) — filled green when ON,
+   tinted green when OFF. Identified by its title attribute. */
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"] {
+  width: 40px;
+  height: 40px;
+  padding: 0 !important;
+  justify-content: center;
+}
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"].btn-primary {
+  background: #2e8c5a !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(46,140,90,0.30);
+}
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"].btn-primary i {
+  color: #fff !important;
+  font-size: 1.05rem;
+}
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"].btn-outline-secondary {
+  background: rgba(46,140,90,0.10) !important;
+  border: none !important;
+  color: #2e8c5a !important;
+}
+.container-fluid.p-4 .orders-toolbar__top button[title="Som de novos pedidos"].btn-outline-secondary i {
+  color: #2e8c5a !important;
+  font-size: 1.05rem;
+}
+
+/* Impressora pill — white with inline lime dot + "Conectada" green text */
+.container-fluid.p-4 .orders-toolbar__top button[title="Configurar impressora"] {
+  background: #fff !important;
+  border: 1px solid #e9ecf1 !important;
+  color: #5a6373 !important;
+}
+.container-fluid.p-4 .orders-toolbar__top button[title="Configurar impressora"] i.bi-printer {
+  color: #5a6373 !important;
+  font-size: 1rem;
+}
+.container-fluid.p-4 .orders-toolbar__top button[title="Configurar impressora"] .badge.bg-success {
+  background: transparent !important;
+  color: #2e8c5a !important;
+  padding: 0 !important;
+  margin-left: 8px !important;
+  font-size: 0.78rem !important;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.container-fluid.p-4 .orders-toolbar__top button[title="Configurar impressora"] .badge.bg-success::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #2e8c5a;
+  box-shadow: 0 0 0 3px rgba(46,140,90,0.18);
+  vertical-align: middle;
+}
+
+/* Test print button — clean white pill */
+.container-fluid.p-4 .orders-toolbar__top button[title="Enviar comanda de teste"] {
+  background: #fff !important;
+  border: 1px solid #e9ecf1 !important;
+  color: #5a6373 !important;
+}
+.container-fluid.p-4 .orders-toolbar__top button[title="Enviar comanda de teste"] i {
+  color: #5a6373 !important;
+  font-size: 1rem;
+}
+
+/* ── CashControl (Caixa) — solid green Chefiz pill ──
+   :deep() reaches into the child component's scoped subtree. */
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control) {
+  margin-left: 0 !important;
+}
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn) {
+  height: 40px !important;
+  padding: 0 14px !important;
+  border-radius: 11px !important;
+  font-weight: 700 !important;
+  font-size: 0.85rem !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+}
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary) {
+  background: #2e8c5a !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(46,140,90,0.30);
+}
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary i) {
+  color: #fff !important;
+  font-size: 1rem;
+}
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary .badge.bg-success) {
+  background: transparent !important;
+  color: #fff !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-weight: 800 !important;
+  font-size: 0.9rem !important;
+}
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary small.text-muted) {
+  color: rgba(255,255,255,0.85) !important;
+  font-weight: 600 !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.3px;
+  margin-left: 4px !important;
+}
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-secondary::after) {
+  content: '\F282';
+  font-family: 'bootstrap-icons';
+  font-size: 0.95rem;
+  color: #fff;
+  margin-left: 2px;
+  line-height: 1;
+}
+/* "Abrir Caixa" — outline green when no session active */
+.container-fluid.p-4 .orders-toolbar__top :deep(.cash-control .btn-outline-secondary) {
+  background: #fff !important;
+  border: 1.5px solid #2e8c5a !important;
+  color: #2e8c5a !important;
+}
+
+/* ── Novo Pedido + Procurar pedido cards (compact Chefiz cards) ── */
+.container-fluid.p-4 .card[style*="border:none"],
+.container-fluid.p-4 .filters-bar.card {
+  background: #fff !important;
+  border: 1px solid #e9ecf1 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  margin-bottom: 14px !important;
+}
+.container-fluid.p-4 .card .card-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #5a6373;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.container-fluid.p-4 .card .form-control {
+  background: #f4f5f7;
+  border: 1px solid #e9ecf1;
+  border-radius: 11px;
+  height: 44px;
+  font-size: 0.9rem;
+}
+.container-fluid.p-4 .card .form-control:focus {
+  background: #fff;
+  border-color: #89D136;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.16);
+}
+/* Entrega button (lime) */
+.container-fluid.p-4 .card .btn-primary {
+  background: #89D136 !important;
+  border: none !important;
+  color: #fff !important;
+  border-radius: 11px;
+  height: 44px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 6px rgba(137,209,54,0.30);
+}
+.container-fluid.p-4 .card .btn-primary:hover {
+  background: #6DAE1E !important;
+}
+/* Balcão button (outline lime) */
+.container-fluid.p-4 .card .btn-outline-primary {
+  background: #fff !important;
+  border: 1.5px solid #89D136 !important;
+  color: #5f7d10 !important;
+  border-radius: 11px;
+  height: 44px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.container-fluid.p-4 .card .btn-outline-primary:hover {
+  background: rgba(137,209,54,0.10) !important;
+}
+
+/* Select / TextInput in filters bar */
+.container-fluid.p-4 .filters-bar .form-select,
+.container-fluid.p-4 .filters-bar .form-control {
+  height: 44px;
+  border-radius: 11px;
+  background: #fff;
+  border: 1px solid #e9ecf1;
+  font-size: 0.9rem;
+  color: #1d2330;
+}
+.container-fluid.p-4 .filters-bar .form-select:focus,
+.container-fluid.p-4 .filters-bar .form-control:focus {
+  border-color: #89D136;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.16);
+}
+
+/* ── Mobile status tabs (Chefiz pill row) ── */
+.container-fluid.p-4 .filters-bar .action-chip {
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  border: 1.5px solid #e9ecf1;
+  background: #fff;
+  color: #5a6373;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.container-fluid.p-4 .filters-bar .action-chip--active {
+  background: #89D136;
+  border-color: #89D136;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(137,209,54,0.30);
+}
+
+/* ── "Novo Pedido" row (Chefiz Desktop layout) ─────────────────────────
+   Plain flex: phone input grows, Entrega + Balcão buttons sit at
+   natural content width — never half-row each like the old grid. */
+.orders-new-row { row-gap: 8px; }
+.orders-new-input { flex: 1 1 340px; min-width: 0; }
+.orders-new-input > div { width: 100%; }  /* TextInput's outer wrapper */
+.orders-new-input .form-control {
+  height: 44px;
+  border-radius: 11px;
+  background: #f4f5f7;
+  border: 1px solid #e9ecf1;
+  font-size: 0.9rem;
+}
+.orders-new-input .form-control:focus {
+  background: #fff;
+  border-color: #89D136;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.16);
+}
+.orders-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 11px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  flex-grow: 0;
+  transition: background .12s, border-color .12s;
+}
+.orders-new-btn--filled {
+  background: #89D136;
+  color: #fff;
+  border: none;
+  box-shadow: 0 2px 6px rgba(137,209,54,0.30);
+}
+.orders-new-btn--filled:hover { background: #6DAE1E; }
+.orders-new-btn--outline {
+  background: #fff;
+  color: #5f7d10;
+  border: 1.5px solid #89D136;
+}
+.orders-new-btn--outline:hover { background: rgba(137,209,54,0.10); }
+@media (max-width: 575.98px) {
+  /* On very narrow phones, let the buttons share the row 50/50 */
+  .orders-new-input { flex: 1 1 100%; }
+  .orders-new-btn { flex: 1 1 calc(50% - 4px); justify-content: center; }
+}
+
+/* ── Filter row: toggles + advanced inputs share one row ────────────────
+   On desktop: one line — input sizes shrink to fit, toggles pushed to end.
+   On mobile: toggles+Filtros button on top, advanced inputs stack below. */
+.orders-filter-row > .orders-adv-control { flex: 1 1 160px; min-width: 0; max-width: 220px; }
+.orders-filter-row > .orders-adv-control--num { flex: 0 1 120px; max-width: 150px; }
+.orders-filter-row > .orders-adv-control--name { flex: 2 1 220px; max-width: 320px; } /* widest input */
+.orders-filter-row > .orders-adv-control > div { width: 100%; } /* TextInput wrapper */
+
+@media (min-width: 769px) {
+  /* Force one line on desktop (controls shrink rather than wrap) */
+  .orders-filter-row { flex-wrap: nowrap !important; }
+  /* Push Entrega/Retirada to the end of the row */
+  .orders-filter-row > .orders-toggle { order: 10; }
+  /* The mobile spacer doesn't take any space on desktop */
+  .orders-filter-row > .orders-spacer { display: none !important; }
+}
+
+@media (max-width: 768px) {
+  /* Mobile: hide advanced controls unless the row is expanded */
+  .orders-filter-row:not(.orders-filter-row--expanded) > .orders-adv-control {
+    display: none !important;
+  }
+  /* Each advanced control takes full row width when shown */
+  .orders-filter-row > .orders-adv-control,
+  .orders-filter-row > .orders-adv-control--num,
+  .orders-filter-row > .orders-adv-control--name {
+    flex: 1 1 100% !important;
+    max-width: none !important;
+  }
+  .orders-filter-row--expanded { row-gap: 8px !important; }
+}
+
+/* ── Entrega / Retirada toggle buttons (faithful to Chefiz FilterToggle) ── */
+.orders-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 11px;
+  border: 1.5px solid #e9ecf1;
+  background: #fff;
+  color: #5a6373;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.orders-toggle:hover { background: #f4f5f7; }
+.orders-toggle--on {
+  background: rgba(137,209,54,0.10);
+  border-color: #89D136;
+  color: #5f7d10;
+}
+.orders-toggle__check {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid #e9ecf1;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  transition: background .12s, border-color .12s;
+}
+.orders-toggle--on .orders-toggle__check {
+  background: #89D136;
+  border-color: #89D136;
+}
+.orders-toggle__check i { line-height: 1; font-weight: 800; }
+.orders-toggle__ic {
+  font-size: 1rem;
+  color: #5a6373;
+  transition: color .12s;
+}
+.orders-toggle--on .orders-toggle__ic { color: #5f7d10; }
+.orders-toggle__label { line-height: 1; }
+
+/* ── "Filtros" collapse button (icon-only on mobile) ── */
+.orders-filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 11px;
+  border-radius: 11px;
+  border: 1.5px solid #e9ecf1;
+  background: #fff;
+  color: #5a6373;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.orders-filters-toggle:hover { background: #f4f5f7; }
+.orders-filters-toggle--on {
+  background: rgba(137,209,54,0.10);
+  border-color: #89D136;
+  color: #5f7d10;
+}
+.orders-filters-toggle > .bi-funnel { font-size: 1.05rem; line-height: 1; }
+.orders-filters-toggle__badge {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  padding: 0 5px;
+  background: #89D136;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.orders-filters-toggle__chev {
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: transform .15s ease;
+}
+.orders-filters-toggle__chev--open { transform: rotate(180deg); }
+
+/* Tighten the Entrega/Retirada toggles on phones so they sit on the same
+   row as the Filtros button even on 360px viewports. */
+@media (max-width: 768px) {
+  .orders-toggle { padding: 0 10px; gap: 6px; font-size: 0.8rem; }
+  .orders-toggle__check { width: 18px; height: 18px; }
+  .orders-toggle__ic { font-size: 0.9rem; }
+  .orders-filters-toggle { padding: 0 9px; gap: 5px; }
+}
+
+/* ── Kanban board ── */
+.orders-board .boards { padding: 0; gap: 14px; }
+.orders-column {
+  background: #fff !important;
+  flex: 1 1 0 !important;
+  min-width: 280px;
+  border: 1px solid #e9ecf1 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+  display: flex;
+  flex-direction: column;
+}
+.orders-column .card-header {
+  background: #fff !important;
+  border-bottom: 1px solid #f0f2f5 !important;
+  padding: 14px 16px !important;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1d2330;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+/* Column status dot prefixed before the title */
+.orders-column .card-header::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e08a1e;
+  flex-shrink: 0;
+}
+.orders-column[data-status="SAIU_PARA_ENTREGA"] .card-header::before { background: #2b6fe0; }
+.orders-column[data-status="CONFIRMACAO_PAGAMENTO"] .card-header::before { background: #9a5cd0; }
+.orders-column[data-status="CONCLUIDO"] .card-header::before { background: #2e8c5a; }
+.orders-column[data-status="CANCELADO"] .card-header::before { background: #e23b3b; }
+.orders-column[data-status="EM_PREPARO"] .card-header::before { background: #e08a1e; }
+
+.orders-column .card-header .badge.bg-secondary {
+  background: #f4f5f7 !important;
+  color: #5a6373 !important;
+  font-weight: 800;
+  font-size: 0.78rem !important;
+  height: 22px;
+  min-width: 26px;
+  border-radius: 11px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Status-tinted count badge */
+.orders-column[data-status="EM_PREPARO"] .card-header .badge.bg-secondary { background: #fdf2e0 !important; color: #e08a1e !important; }
+.orders-column[data-status="SAIU_PARA_ENTREGA"] .card-header .badge.bg-secondary { background: #e7f0fe !important; color: #2b6fe0 !important; }
+.orders-column[data-status="CONFIRMACAO_PAGAMENTO"] .card-header .badge.bg-secondary { background: #f3ebfb !important; color: #9a5cd0 !important; }
+.orders-column[data-status="CONCLUIDO"] .card-header .badge.bg-secondary { background: #e6f4ec !important; color: #2e8c5a !important; }
+
+.orders-column .list {
+  padding: 12px !important;
+  background: transparent;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.orders-column .list > .card.card-body { margin-bottom: 0 !important; }
+
+/* ── Order card (Chefiz card) ── */
+.order-card {
+  background: #fff !important;
+  border: 1px solid #e9ecf1 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+  padding: 0 !important;
+  overflow: visible;
+  /* Each card sizes to its own content — never stretches to fill the
+     column. The markup uses `card card-body` on the same element, which
+     inherits Bootstrap's `flex: 1 1 auto`, so we have to undo the grow
+     factor explicitly when sitting inside the kanban flex column. */
+  flex: 0 0 auto !important;
+  align-self: stretch;
+}
+.order-card:hover {
+  border-color: #cfd5dd !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
+}
+.order-card > .card-body {
+  padding: 14px !important;
+  cursor: grab;
+}
+
+/* Header row: #id pill colored by status + name + channel */
+.order-card .oc-header { gap: 8px; align-items: center; margin-bottom: 8px; }
+.order-card .oc-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1d2330;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.order-card .oc-title::first-letter { font-weight: 800; }
+.order-card .oc-customer-name { font-weight: 700; }
+.order-card .oc-channel {
+  font-size: 0.7rem;
+  color: #929aa8;
+  font-weight: 600;
+  max-width: 130px;
+  text-align: right;
+}
+
+/* Info chip row */
+.order-card .oc-info { gap: 6px 12px; margin-bottom: 8px; }
+.order-card .oc-chip {
+  font-size: 0.78rem;
+  color: #5a6373;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.order-card .oc-chip i { color: #929aa8; font-size: 0.78rem; }
+.order-card .oc-chip--ifood {
+  background: rgba(234,29,44,0.08);
+  color: #ea1d2c;
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-weight: 700;
+}
+.order-card .oc-chip--ifood i { color: #ea1d2c; }
+.order-card .oc-chip--collect {
+  background: #fdf2e0;
+  color: #e08a1e;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 3px 10px;
+}
+.order-card .oc-chip--collect i { color: #e08a1e; }
+
+/* Address row */
+.order-card .oc-address {
+  font-size: 0.78rem;
+  color: #5a6373;
+  font-weight: 500;
+  margin: 4px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.order-card .oc-address::before {
+  content: '\F1A1';
+  font-family: 'bootstrap-icons';
+  font-size: 0.85rem;
+  color: #929aa8;
+  flex-shrink: 0;
+}
+
+/* Time + total row */
+.order-card .d-flex.justify-content-between { align-items: center; }
+.order-card .oc-time {
+  font-size: 0.75rem;
+  color: #929aa8;
+  font-weight: 600;
+}
+.order-card .oc-total {
+  font-weight: 800 !important;
+  font-size: 1.05rem !important;
+  color: #2e8c5a !important;
+}
+
+/* Footer with rounded icon buttons */
+.order-card .oc-footer {
+  border-top: 1px solid #f0f2f5 !important;
+  padding-top: 10px !important;
+  margin-top: 10px;
+  gap: 8px;
+}
+.order-card .oc-actions { gap: 5px; }
+.order-card .oc-actions .btn {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  border-radius: 9px;
+  border: 1px solid #e9ecf1;
+  background: #fff;
+  color: #5a6373;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem !important;
+  transition: background .12s, border-color .12s;
+}
+.order-card .oc-actions .btn:hover {
+  background: #f4f5f7;
+  border-color: #cfd5dd;
+}
+/* keep the wider "Avançar" / "Pronto" / "Retirado" buttons readable
+   AND visually the same height — explicit min/max height + flex centering
+   so the bag-check vs arrow-right icons don't make one look taller. */
+.order-card .oc-actions .btn.advance,
+.order-card .oc-actions .btn-info,
+.order-card .oc-actions .btn-success.btn-sm:not([title="Imprimir cupom fiscal"]) {
+  width: auto;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 14px !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  gap: 5px;
+  line-height: 1;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+.order-card .oc-actions .btn.advance i,
+.order-card .oc-actions .btn-info i,
+.order-card .oc-actions .btn-success.btn-sm:not([title="Imprimir cupom fiscal"]) i {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.order-card .oc-actions .btn.advance {
+  background: #89D136 !important;
+  color: #fff !important;
+  border-color: #89D136;
+  box-shadow: 0 2px 6px rgba(137,209,54,0.30);
+}
+.order-card .oc-actions .btn-outline-success { color: #2e8c5a; border-color: rgba(46,140,90,0.40); }
+.order-card .oc-actions .btn-success { background: #2e8c5a !important; border-color: #2e8c5a; color: #fff; }
+.order-card .oc-actions .btn-outline-danger { color: #e23b3b; border-color: rgba(226,59,59,0.30); }
+/* "Pronto" / takeout-advance button — Chefiz blue (matches the "Entrega"
+   kanban color). Bootstrap's btn-info has lower specificity than my
+   generic .btn override above, so restore it explicitly. */
+.order-card .oc-actions .btn-info {
+  background: #2b6fe0 !important;
+  border-color: #2b6fe0 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(43,111,224,0.30);
+}
+.order-card .oc-actions .btn-info:hover {
+  background: #2058c4 !important;
+  border-color: #2058c4 !important;
+}
+
+/* Selected card */
+.order-card.selected {
+  background: rgba(137,209,54,0.06) !important;
+  border-color: #89D136 !important;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.16) !important;
+}
+
+/* Custom checkbox → lime */
+.order-checkbox input:checked + .order-checkbox-mark {
+  background: #89D136 !important;
+  border-color: #89D136 !important;
+}
+.order-checkbox:hover .order-checkbox-mark {
+  border-color: #89D136 !important;
+  box-shadow: 0 0 0 3px rgba(137,209,54,0.18) !important;
+}
+
+/* ── Order details modal (Chefiz detail sheet) ── */
+.od-modal {
+  border-radius: 18px !important;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+}
+.od-modal-header {
+  background: linear-gradient(135deg, #e9f6ec, #dcefe2) !important;
+  padding: 18px 20px !important;
+  border-bottom: 1px solid #e9ecf1 !important;
+}
+.od-order-badge {
+  background: #2e8c5a !important;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.05rem;
+  padding: 8px 14px;
+  border-radius: 11px;
+}
+.od-customer-name { font-weight: 800; font-size: 1.05rem; color: #1d2330; }
+.od-customer-phone { font-size: 0.82rem; color: #5a6373; font-weight: 500; }
+.od-info-bar {
+  padding: 11px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e9ecf1;
+  font-size: 0.8rem;
+  color: #5a6373;
+  font-weight: 500;
+}
+.od-info-item i { color: #929aa8; }
+.od-section {
+  padding: 14px 20px !important;
+  border-top: 8px solid #f4f5f7 !important;
+  border-bottom: none !important;
+}
+.od-section:first-of-type { border-top: none !important; }
+.od-section-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #5a6373;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.od-section-title i { color: #5a6373; }
+.od-item-price,
+.od-pay-total .od-pay-value { color: #2e8c5a !important; }
+.od-pay-total .od-pay-value { font-weight: 800; font-size: 1.15rem; }
+.od-modal-footer {
+  padding: 12px 14px !important;
+  gap: 8px;
+  border-top: 1px solid #e9ecf1;
+}
+.od-modal-footer .btn {
+  height: 52px;
+  border-radius: 12px !important;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.od-modal-footer .btn-primary,
+.od-modal-footer .btn-success {
+  background: #89D136 !important;
+  border-color: #89D136 !important;
+  color: #fff !important;
+  box-shadow: 0 3px 10px rgba(137,209,54,0.30);
+}
+
+/* ── Bulk actions bar (lime treatment) ── */
+.bulk-actions-bar {
+  background: #1d2330 !important;
+  padding: 12px 20px !important;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.20) !important;
+}
+.bulk-actions-bar .btn-primary {
+  background: #89D136 !important;
+  border-color: #89D136 !important;
+  color: #fff !important;
+}
+.bulk-actions-bar .btn-success {
+  background: #2e8c5a !important;
+  border-color: #2e8c5a !important;
+}
+
+/* ── Pending acceptance + no-cash boxes (Chefiz palette) ── */
+.pending-acceptance-box {
+  border-color: #e08a1e !important;
+  background: #fdf2e0 !important;
+  border-radius: 14px !important;
+}
+.pending-header { background: #e08a1e !important; color: #fff !important; }
+.no-cash-box {
+  border-color: #e23b3b !important;
+  background: #fdecec !important;
+  border-radius: 14px !important;
+}
+.no-cash-header { background: #e23b3b !important; }
+
+/* ── Responsive: mobile ── */
+@media (max-width: 768px) {
+  .container-fluid.p-4 { padding: 12px !important; }
+  .container-fluid.p-4 .orders-toolbar__top h2 { font-size: 1.25rem !important; }
+  .container-fluid.p-4 .orders-toolbar__top .btn-sm { height: 36px; padding: 0 10px; }
+  .orders-board .boards { padding: 0; }
+  .orders-column { min-width: 100% !important; flex: 1 1 100% !important; }
+  /* Mobile bulk bar reserves room for the app's bottom nav, if present */
+  .bulk-actions-bar { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0)) !important; }
+}
+
 </style>

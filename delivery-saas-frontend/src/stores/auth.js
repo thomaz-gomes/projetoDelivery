@@ -63,7 +63,19 @@ export const useAuthStore = defineStore('auth', {
       this.token = null;
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      // Clear print-agent auth so next session gets a fresh connectivity check
+      localStorage.removeItem('agentToken');
+      try {
+        const cfg = JSON.parse(localStorage.getItem('printerConfig') || '{}');
+        delete cfg.agentToken;
+        localStorage.setItem('printerConfig', JSON.stringify(cfg));
+      } catch (e) {}
+      try { printService.reset(); } catch (e) {}
+      // Clear cash-session cache so incoming company doesn't see stale data
+      try { sessionStorage.removeItem('cashSummary_v1'); } catch (e) {}
       try { useRidersStore().reset(); } catch(e) {}
+      // Notify components (CashControl, etc.) to reset their state
+      try { window.dispatchEvent(new CustomEvent('app:user-logged-out')); } catch (e) {}
     }
   }
 });
